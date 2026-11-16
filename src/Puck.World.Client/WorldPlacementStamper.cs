@@ -552,22 +552,18 @@ public static class WorldPlacementStamper {
         return (hiddenOpaque, (any ? glassHidden : null));
     }
 
-    // The spacing a creation's text runs ask their bake for, in world units, by WorldShapeDetail's rule for a thin feature,
-    // its half thickness: the lesser of a run's relief (its half depth, as extruded) and half its stroke, about a tenth of
-    // its em in a regular weight (TextStrokeEms). A stroke two cells wide keeps a sample inside it wherever the lattice
-    // falls; one about a cell wide loses letters. A text instance declares it (SdfInstanceRange.Detail), static here or
-    // pooled (WorldCreationInstances).
+    // The spacing a creation's text runs ask their bake for, in world units: the finest of their runs'
+    // (SdfProgramBuilder.GlyphDetail). A text instance declares it (SdfInstanceRange.Detail), static here or pooled
+    // (WorldCreationInstances).
     internal static float TextDetail(CreationDocument creation, float scale) {
         var detail = float.PositiveInfinity;
 
         foreach (var run in (creation.TextRuns ?? [])) {
-            detail = MathF.Min(x: detail, y: MathF.Min(x: (run.Depth ?? 0.02f), y: (0.5f * TextStrokeEms * run.EmHeight)));
+            detail = MathF.Min(x: detail, y: SdfProgramBuilder.GlyphDetail(extrudeHalfDepth: (run.Relief * scale), worldEmHeight: (run.EmHeight * scale)));
         }
 
-        return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
+        return (float.IsFinite(f: detail) ? detail : 0f);
     }
-    // A regular weight's stroke, in ems.
-    private const float TextStrokeEms = 0.1f;
     // A warped field stays separate from its neighbours under the existing static bake partition.
     internal static bool BakesAlone(ShapeDocument shape) => ShapePointOps.NeedsScope(shape: shape);
 
@@ -590,10 +586,11 @@ public static class WorldPlacementStamper {
         }
         // A scoped creation's noise relief declares its own spacing (CreationNoiseDocument.DetailSpacing): the shapes'
         // bounds size its lattice by the creation's extent, which steps over relief a few cells long.
-        private static float ReliefDetail(float detail, CreationNoiseDocument? noise, float scale) =>
-            Finer(a: detail, b: ((noise is null) ? 0f : (noise.DetailSpacing() * scale)));
-        // The finer of two declared spacings, either zero for none.
-        private static float Finer(float a, float b) => ((b <= 0f) ? a : ((a <= 0f) ? b : MathF.Min(x: a, y: b)));
+        private static float ReliefDetail(float detail, CreationNoiseDocument? noise, float scale) {
+            var relief = ((noise is null) ? 0f : (noise.DetailSpacing() * scale));
+
+            return ((relief <= 0f) ? detail : ((detail <= 0f) ? relief : MathF.Min(x: detail, y: relief)));
+        }
         // The creation's glass shapes, one static instance of their own after the opaque shapes and text: their own
         // group, so they never bake with an opaque shape, carve or are carved by one, and draw in the glass pass. They
         // take a field scope of their own only when one of them composes by something other than a union, so a hollow
@@ -754,17 +751,15 @@ public static class WorldPlacementStamper {
             // noiseless creation bakes as its own detailed group after it, as in the per-shape branch above. A creation
             // whose every shown shape is glass has no opaque instance for the text to stay in, so it goes apart too.
             var anyOpaque = ((hiddenOpaque is null) || (Array.IndexOf(array: hiddenOpaque, value: false) >= 0));
-            var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)))));
+            var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => run.Engraves))));
 
             if (anyOpaque) {
-                // Text that stays among the shapes declares its glyphs' detail there too, as it does apart.
+                // Text that stays among the shapes declares its detail through its glyphs (SdfInstanceRange.Glyphs), so it
+                // refines its own box and not the whole creation.
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin),
-                    detail: Finer(
-                        a: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale),
-                        b: ((hasText && !textApart) ? TextDetail(creation: creation, scale: placement.Scale) : 0f)
-                    )
+                    detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale)
                 );
                 if (scoped) {
                     _ = builder.PushField(compose: SdfBlendOp.Union);

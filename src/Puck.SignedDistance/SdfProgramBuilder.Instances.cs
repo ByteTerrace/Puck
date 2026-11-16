@@ -295,7 +295,7 @@ public sealed partial class SdfProgramBuilder {
         var parts = m_openInstanceParts;
         var fitted = false;
         // A static instance's glyphs, alone or among shapes they carve or stand on, keep the box they span.
-        var glyphBox = (((m_openInstanceGlyphs is { } held) && !m_openInstanceIsDynamic && (held.Slot == -1)) ? (held.Low, held.High) : ((Vector3 Low, Vector3 High)?)null);
+        var glyphSpan = (((m_openInstanceGlyphs is { } held) && !m_openInstanceIsDynamic && (held.Slot == -1)) ? new SdfGlyphSpan(Detail: held.Detail, High: held.High, Low: held.Low) : (SdfGlyphSpan?)null);
 
         if ((m_openInstanceGlyphs is { } glyphs) && (glyphs.Instructions == (m_instructions.Count - m_openInstanceFirst))) {
             if (!m_openInstanceIsDynamic && (glyphs.Slot == -1) && (box is null)) {
@@ -317,7 +317,7 @@ public sealed partial class SdfProgramBuilder {
             Active: m_openInstanceActive,
             BakesWithPrevious: m_openInstanceBakesWithPrevious,
             Detail: m_openInstanceDetail
-        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, GlyphBox = glyphBox, HeightField = m_openInstanceHeightField, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
+        ) { BakesSeparately = m_openInstanceBakesSeparately, BoundInSlotFrame = m_openInstanceBoundInSlotFrame, Box = box, Fitted = fitted, Glyphs = glyphSpan, HeightField = m_openInstanceHeightField, Parts = parts, RestPoseSkin = m_openInstanceRestPoseSkin });
 
         ResetOpenInstance();
 

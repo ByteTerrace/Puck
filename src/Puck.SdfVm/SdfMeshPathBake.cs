@@ -1557,38 +1557,49 @@ public sealed partial class SdfMeshPathBake {
     // lattice that refinement cannot take to its detail is spaced MaxDetailRefinement details apart instead, as budgeted
     // as a union's (BudgetedLattice), so its refinement reaches what it declares: a line of lettering is long and thin, and
     // a feature narrower than a fine cell is lost or bridged by the contour. Its box holds its surface, so the finer
-    // lattice costs only the cells that box spans. Within its glyphs' box (SdfMeshBakeGroup.GlyphBox, or a fitted text
-    // group's own) it refines every cell its surface can enter, since a glyph's field is a bound past its atlas band
-    // (SdfLatticeRegion.Bound).
+    // lattice costs only the cells that box spans. Its glyphs (SdfMeshBakeGroup.Glyphs, or a fitted text group's own box)
+    // are a region of their own at their own detail, in which every cell the surface can enter refines, since a glyph's
+    // field is a bound past its atlas band (SdfLatticeRegion.Bound); the rest of the group refines toward its own detail,
+    // so lettering engraved in a large creation refines that creation's surface no finer than the creation asks.
     private static FinalLattice OwnFinal(Group group) {
         var lattice = (Lattice(gradients: true, group: group, longest: FinalSamples, minimum: FinalMinimum) with { Gradients = false });
-        var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
-        var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
-
         var coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
-        // The group's tier floors the spacing its detail asks: a view that resolves no finer cell is baked none.
+        // The group's tier floors every spacing it asks: a view that resolves no finer cell is baked none.
         var tierCell = SdfMeshTier.Cell(tier: group.Tier);
-        var detail = MathF.Max(x: group.Detail, y: tierCell);
+        // A fitted group holding glyphs is text alone: its glyphs' box is its own (a dynamic one's included), at its detail.
+        var glyphs = (group.Glyphs ?? ((group.Fitted && group.Geometry.ContainsGlyph && (group.Detail > 0f)) ? new SdfGlyphSpan(Detail: group.Detail, High: group.High, Low: group.Low) : null));
+        var detail = ((group.Detail > 0f) ? MathF.Max(x: group.Detail, y: tierCell) : float.PositiveInfinity);
+        var glyphDetail = ((glyphs is { Detail: > 0f } span) ? MathF.Max(x: span.Detail, y: tierCell) : float.PositiveInfinity);
+        var finest = MathF.Min(x: detail, y: glyphDetail);
 
-        if (group.Fitted && (group.Detail > 0f) && ((detail * MaxDetailRefinement) < coarse)) {
-            lattice = BudgetedLattice(group: group, widest: coarse, finest: (detail * MaxDetailRefinement));
+        if (group.Fitted && float.IsFinite(f: finest) && ((finest * MaxDetailRefinement) < coarse)) {
+            lattice = BudgetedLattice(group: group, widest: coarse, finest: (finest * MaxDetailRefinement));
             coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
         }
 
         // A detail at or past the lattice's own spacing is one the lattice already resolves, as a union's member's is.
-        if (!(group.Detail > 0f) || (detail >= coarse) || (high.X < low.X) || (high.Y < low.Y) || (high.Z < low.Z)) {
+        var regions = new List<SdfLatticeRegion>(capacity: 2);
+        var low = Vector3.Max(value1: group.Low, value2: group.DetailLow);
+        var high = Vector3.Min(value1: group.High, value2: group.DetailHigh);
+
+        if ((detail < coarse) && (low.X <= high.X) && (low.Y <= high.Y) && (low.Z <= high.Z)) {
+            regions.Add(item: new SdfLatticeRegion(Factor: RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: detail), High: high, Low: low));
+        }
+        if ((glyphs is { } box) && (glyphDetail < coarse)) {
+            var glyphLow = Vector3.Max(value1: group.Low, value2: box.Low);
+            var glyphHigh = Vector3.Min(value1: group.High, value2: box.High);
+
+            if ((glyphLow.X <= glyphHigh.X) && (glyphLow.Y <= glyphHigh.Y) && (glyphLow.Z <= glyphHigh.Z)) {
+                regions.Add(item: new SdfLatticeRegion(Bound: true, Factor: RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: glyphDetail), High: glyphHigh, Low: glyphLow));
+            }
+        }
+        if (regions.Count == 0) {
             return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) { TierCell = tierCell };
         }
 
-        // A fitted group holding glyphs is text alone, its glyphs' box its own (a dynamic one's included).
-        var glyphs = (group.GlyphBox ?? ((group.Fitted && group.Geometry.ContainsGlyph) ? (group.Low, group.High) : null));
-        SdfLatticeRegion[] regions = (glyphs is { } box)
-            ? [new SdfLatticeRegion(High: high, Low: low), new SdfLatticeRegion(High: Vector3.Min(value1: high, value2: box.High), Low: Vector3.Max(value1: low, value2: box.Low), Bound: true)]
-            : [new SdfLatticeRegion(High: high, Low: low)];
-
         return new FinalLattice(lattice: lattice, allocator: group.Allocator, owner: group.Memory) {
-            Factor = RegionFactor(coarse: coarse, most: MaxDetailRefinement, spacing: detail),
-            Regions = regions,
+            Factor = regions.Max(selector: static region => region.Factor),
+            Regions = [.. regions],
             TierCell = tierCell,
         };
     }

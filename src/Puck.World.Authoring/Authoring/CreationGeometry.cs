@@ -109,7 +109,7 @@ public static class CreationGeometry {
             var runReach = ((run.Position.Length() + MathF.Max(
                 x: horizontal,
                 y: vertical
-            )) + (run.Depth ?? 0.02f));
+            )) + run.Relief);
 
             reach = MathF.Max(
                 x: reach,

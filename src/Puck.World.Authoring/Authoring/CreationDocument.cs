@@ -331,7 +331,8 @@ public sealed record CreationNoiseDocument(
 /// <param name="Position">The run's anchor centre on the host surface (workbench space).</param>
 /// <param name="Rotation">The run plane's orientation (local +X advance, +Y ascent, +Z the relief normal).</param>
 /// <param name="EmHeight">The world height of one em, in the creation's own (pre-placement) units.</param>
-/// <param name="Depth">The glyph extrude half-depth — the relief the slab straddles the surface by (null = a thin default).</param>
+/// <param name="Depth">The glyph extrude half-depth — the relief the slab straddles the surface by (null =
+/// <see cref="DefaultDepth"/>).</param>
 /// <param name="Mode"><c>engrave</c> (Subtraction — a carved recess) or <c>emboss</c> (Union — proud relief); null = emboss.</param>
 /// <param name="Material">The palette slot the letters shade with (null = 0).</param>
 /// <param name="Font">The world text catalog font name; null selects that catalog's default font.</param>
@@ -381,6 +382,16 @@ public sealed record TextRunDocument(
     public const string ModeEmboss = "emboss";
     /// <summary>The engrave mode name (Subtraction — a carved recess).</summary>
     public const string ModeEngrave = "engrave";
+    /// <summary>The relief a run without a <see cref="Depth"/> takes, in the creation's own units.</summary>
+    public const float DefaultDepth = 0.02f;
+    /// <summary>Gets the run's relief, the half depth its glyph slab straddles its surface by, in the creation's own
+    /// units.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public float Relief => (Depth ?? DefaultDepth);
+    /// <summary>Gets whether the run carves its letters into the surface (<see cref="ModeEngrave"/>) rather than raising
+    /// them from it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool Engraves => string.Equals(a: Mode, b: ModeEngrave, comparisonType: StringComparison.Ordinal);
 
     /// <summary>The number of glyph shapes this run expands to for the per-stamp shape budget — its non-whitespace
     /// Unicode scalar count, a conservative upper bound of the atlas's laid-out placements (which skip whitespace and

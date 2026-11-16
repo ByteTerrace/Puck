@@ -22,7 +22,7 @@ public static partial class CreationMotion {
 
         if (blend.Blend is not (SdfBlendOp.SmoothUnion or SdfBlendOp.SmoothIntersection or SdfBlendOp.SmoothSubtraction)) { return Refuse(why: "blend has no continuous share"); }
         if (!(k > 0f)) { return Refuse(why: "smooth radius is zero"); }
-        if ((document.TextRuns ?? []).Any(predicate: run => (run.Mode == TextRunDocument.ModeEngrave))) { return Refuse(why: "CPU field does not read glyphs; engraving follows rigid owner surfaces"); }
+        if ((document.TextRuns ?? []).Any(predicate: static run => run.Engraves)) { return Refuse(why: "CPU field does not read glyphs; engraving follows rigid owner surfaces"); }
         if (shapes.Any(predicate: s => ((s.Group == blend.Group) && (s.Profile is { Kind: SdfPrismProfileKind.Polygon })))) { return Refuse(why: "CPU field does not read regular polygons"); }
         var parents = new int[shapes.Count];
 

@@ -14,7 +14,7 @@ public sealed partial class WorldCreationInstances {
             return false;
         }
         for (var index = 0; (index < runs.Count); index++) {
-            if (string.Equals(a: runs[index].Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)) {
+            if (runs[index].Engraves) {
                 return false;
             }
         }
