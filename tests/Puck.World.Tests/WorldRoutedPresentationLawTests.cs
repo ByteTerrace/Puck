@@ -148,6 +148,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
 
         public bool IsEntityActive(int index) => (index == 0);
         public WorldEntityAddress EntityAddress(int index) => new(Authority: Away, Generation: 1, Index: index);
+        public int PoseEpoch(int index) => 0;
         public string? PlacementId(int index) => null;
         public Vector3 PreviousPosition(int index) => AwayPose;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;

@@ -10,12 +10,10 @@ internal static partial class CreationFixtures {
     /// over the flat code-built document carrying it and one look naming it.</summary>
     /// <param name="creation">The canonical prototype the body wears.</param>
     /// <param name="bodyScale">The body's look scale.</param>
-    /// <param name="probeWorstCase">Whether to emit the pool's worst-case capacity probe instead of live state.</param>
-    /// <param name="maxPlacementScale">The placement-scale ceiling the pool sizes its reach by, or
-    /// <see langword="null"/> for <paramref name="bodyScale"/>.</param>
+
     /// <param name="articulated">Whether to exercise articulated emission even for a stationary fixture.</param>
     /// <returns>The built program, without an instance grid.</returns>
-    public static SdfProgram EmitPool(WorldPrototype creation, float bodyScale, bool probeWorstCase = false, float? maxPlacementScale = null, bool articulated = true) {
+    public static SdfProgram EmitPool(WorldPrototype creation, float bodyScale, bool articulated = true) {
         // Exercise articulated field emission even when this shape fixture has no moving parts.
         // Rigid template sharing and copy scaling have their own end-to-end tests.
         if (articulated && WorldRigidAssets.IsRigid(creation)) {
@@ -51,8 +49,6 @@ internal static partial class CreationFixtures {
         pool.Emit(
             builder: builder,
             colors: WorldBakedColors.Of(definition: definition),
-            probeWorstCase: probeWorstCase,
-            maxPlacementScale: (maxPlacementScale ?? bodyScale),
             slotBase: 0
         );
 

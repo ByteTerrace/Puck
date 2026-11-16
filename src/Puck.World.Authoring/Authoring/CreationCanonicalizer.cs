@@ -916,7 +916,7 @@ public static partial class CreationCanonicalizer {
                 ));
             }
             // A domain-bearing shape with no own swing/slide (refused below) rides its own per-shape slot with the
-            // parent's chained rigid delta instead of the identity — WorldCreationInstances.PackTransforms/EmitShape — so
+            // parent's chained rigid delta instead of the identity — WorldCreationInstances.PackTransforms, ShapeEmission.Emit — so
             // its fold plane travels with the parent. CreationStampEmitter's static stamp never reads Parent at
             // all: a static placement carries no dynamic-transform buffer for a delta to ride.
         }
@@ -1125,8 +1125,8 @@ public static partial class CreationCanonicalizer {
             } else if (referenceIndex >= hostIndex) {
                 errors.Add(item: new(Message: $"reference '{trim.Shape}' must be declared before the shape it trims.", Path: $"{trimPath}.shape"));
             } else {
-                // The reference is re-emitted from its OWN dynamic slot (WorldCreationInstances.EmitTrims) and its own authored
-                // pose (CreationStampEmitter.EmitTrim), without its fold or its group's chain: a domain-bearing shape's
+                // The reference is re-emitted under its own frame (IShapeEmissionFrame.PrefixOf, its own dynamic slot in the
+                // pool) at its own authored pose, without its fold or its group's chain: a domain-bearing shape's
                 // slot carries only its parent's delta frame (its geometry sits wherever the fold carries it), and a
                 // grouped member rides its group's instance — either would re-emit the reference at the wrong place.
                 var reference = shapes[referenceIndex];

@@ -379,6 +379,7 @@ public sealed class WorldSessionMirror : IClientSink {
     public void CopySnapshotTo(
         bool[] active,
         WorldEntityAddress[] addresses,
+        int[] poseEpochs,
         string?[] placementIds,
         Vector3[] previousPositions,
         Quaternion[] previousOrientations,
@@ -405,6 +406,7 @@ public sealed class WorldSessionMirror : IClientSink {
             for (var index = 0; (index < EntityCapacity); index++) {
                 active[index] = IsActive(index: index);
                 addresses[index] = Address(index: index);
+                poseEpochs[index] = PoseEpoch(index: index);
                 placementIds[index] = PlacementId(index: index);
                 previousPositions[index] = PreviousPosition(index: index);
                 previousOrientations[index] = PreviousOrientation(index: index);

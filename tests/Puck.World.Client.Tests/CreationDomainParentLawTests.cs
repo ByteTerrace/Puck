@@ -104,8 +104,7 @@ public sealed class CreationDomainParentLawTests {
                 creation: creation,
                 scale: scale
             )),
-            maxPlacementScale: scale,
-            probeWorstCase: false,
+
             slotBase: 0
         );
 
@@ -179,52 +178,39 @@ public sealed class CreationDomainParentLawTests {
         ) < Tolerance),
         userMessage: $"{what}: expected {expected}, read {actual}."
     );
-    // The fold shape's emitted chain: its own slot, the placement scale, the fold, then its rest translate/rotate —
+    // The fold shape's emitted chain: its own slot, the fold, then its rest translate/rotate, in the slot's units —
     // returned as the index of the TransformDynamic that opens it.
-    private static int AssertFoldChain(SdfInstruction[] program, float scale, Vector3 engineRestPosition) {
-        var transformIndex = (Array.FindIndex(array: program, match: instruction => (instruction.Op == SdfOp.SymmetryPlane)) - 2);
+    private static int AssertFoldChain(SdfInstruction[] program, Vector3 engineRestPosition) {
+        var transformIndex = (Array.FindIndex(array: program, match: instruction => (instruction.Op == SdfOp.SymmetryPlane)) - 1);
 
         Assert.True(
             condition: (transformIndex >= 0),
             userMessage: "the fold shape never rides its own dynamic-transform slot."
         );
         Assert.True(
-            condition: ((transformIndex + 4) < program.Length),
-            userMessage: "the fold shape's own slot is not followed by its scale, fold, and rest pose."
+            condition: ((transformIndex + 3) < program.Length),
+            userMessage: "the fold shape's own slot is not followed by its fold and rest pose."
         );
         Assert.Equal(
-            expected: SdfOp.Scale,
-            actual: program[(transformIndex + 1)].Op
-        );
-        AssertClose(
-            actual: new Vector3(
-                x: program[(transformIndex + 1)].Data0.X,
-                y: program[(transformIndex + 1)].Data0.Y,
-                z: program[(transformIndex + 1)].Data0.Z
-            ),
-            expected: new Vector3(value: scale),
-            what: "the Scale op after the fold's slot is not the placement scale"
-        );
-        Assert.Equal(
-            expected: SdfOp.SymmetryPlane,
-            actual: program[(transformIndex + 2)].Op
+            expected: SdfOp.TransformDynamic,
+            actual: program[transformIndex].Op
         );
         Assert.Equal(
             expected: SdfOp.Translate,
-            actual: program[(transformIndex + 3)].Op
+            actual: program[(transformIndex + 2)].Op
         );
         AssertClose(
             actual: new Vector3(
-                x: program[(transformIndex + 3)].Data0.X,
-                y: program[(transformIndex + 3)].Data0.Y,
-                z: program[(transformIndex + 3)].Data0.Z
+                x: program[(transformIndex + 2)].Data0.X,
+                y: program[(transformIndex + 2)].Data0.Y,
+                z: program[(transformIndex + 2)].Data0.Z
             ),
             expected: engineRestPosition,
-            what: "the Translate after the fold is not the shape's (unscaled — the Scale op carries the scale) engine-frame rest position"
+            what: "the Translate after the fold is not the shape's engine-frame rest position in creation units"
         );
         Assert.Equal(
             expected: SdfOp.Rotate,
-            actual: program[(transformIndex + 4)].Op
+            actual: program[(transformIndex + 3)].Op
         );
 
         return transformIndex;
@@ -375,8 +361,7 @@ public sealed class CreationDomainParentLawTests {
         Assert.Equal(expected: Scale, actual: fold.Scale);
         var transformIndex = AssertFoldChain(
             engineRestPosition: engine.Shapes![1].Position.Value,
-            program: program,
-            scale: 1f
+            program: program
         );
         // The primitive after the chain is at the shape's OWN scale: the Scale op immediately ahead of its unit
         // sphere carries the authored radius, not radius x 2.
@@ -398,8 +383,8 @@ public sealed class CreationDomainParentLawTests {
         );
 
         Assert.True(
-            condition: (primitiveScaleIndex > (transformIndex + 1)),
-            userMessage: "the fold's primitive carries no scale of its own after the chain's placement Scale op."
+            condition: (primitiveScaleIndex > transformIndex),
+            userMessage: "the fold's primitive carries no scale of its own."
         );
         Assert.True(
             condition: (MathF.Abs(x: (program[primitiveScaleIndex].Data0.X - engine.Shapes[1].Scale.X)) < Tolerance),
@@ -411,8 +396,8 @@ public sealed class CreationDomainParentLawTests {
     /// (delta-only) slot must share a position and differ in orientation by exactly the engine-frame rest rotation of
     /// an identity-authored shape. The same shape with NO parent stays exactly at the identity delta — the two ends of
     /// the contract, read off the SAME pack pass against an unparented control riding the identical domain op and
-    /// driver. The emitted program for the fold shape rides its own slot (TransformDynamic), scales, then applies
-    /// its domain op (SymmetryPlane) before its unscaled rest pose.</summary>
+    /// driver. The emitted program for the fold shape rides its own slot (TransformDynamic), then applies its domain
+    /// op (SymmetryPlane) before its rest pose.</summary>
     [Fact]
     public void DomainShapeParentedToASwingingShapeRidesExactlyTheParentDelta() {
         var creation = Prototype(document: FollowRig());
@@ -471,8 +456,7 @@ public sealed class CreationDomainParentLawTests {
 
         _ = AssertFoldChain(
             engineRestPosition: CreationFrame.ToEngine(document: creation.Document).Shapes![1].Position.Value,
-            program: EmitProgram(creation: creation).Instructions.ToArray(),
-            scale: 1f
+            program: EmitProgram(creation: creation).Instructions.ToArray()
         );
     }
     /// <summary>A domain-bearing shape refuses a named <c>frames</c> transform — its geometry never reads a

@@ -29,7 +29,7 @@ public sealed class WorldTextAuthoringLawTests {
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
 
-        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 1f,
+        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), 
             slotBase: 0, textCatalog: fonts);
         var program = builder.Build();
 
@@ -58,7 +58,7 @@ public sealed class WorldTextAuthoringLawTests {
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "Hello") });
         var builder = new SdfProgramBuilder();
 
-        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), probeWorstCase: false, maxPlacementScale: 2f,
+        pool.Emit(builder, WorldBakedColors.Of(definition: Fixtures.BuildDocument()), 
             slotBase: 0, textCatalog: fonts);
         var program = builder.Build();
 

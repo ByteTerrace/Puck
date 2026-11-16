@@ -137,236 +137,17 @@ public static partial class CreationStampEmitter {
                 y: MinimumTransformExtent
             )
         );
-    // The one place a shape's authored primitive facets (taper, profile, lift, rounding, chamfer, exponent, curve)
-    // reach SdfSolidGeometry: every emission of a shape's primitive, plate copy, trim host and trim reference goes
-    // through here, so no two emissions can disagree on a default. A trim's reference re-reads only the primitive
-    // geometry, never its sweep curve (ShapeTrimDocument), which `curve: false` leaves out.
-    private static SdfProgramBuilder AppendPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 scale, int material, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, bool detail = false, bool curve = true) =>
-        SdfSolidGeometry.AppendScaledPrimitive(
-            chain: chain,
-            type: shape.Type,
-            taper: (shape.Taper ?? 0.5f),
-            profile: shape.Profile,
-            lift: (shape.Lift ?? SdfLift.Extrude),
-            rounding: (shape.Rounding ?? 0f),
-            chamfer: (shape.Chamfer ?? 0f),
-            exponent: (shape.Exponent ?? SdfProgramBuilder.MinSuperellipsoidExponent),
-            curve: (curve
-            ? shape.Curve?.Parameters()
-            : null),
-            scale: scale,
-            material: material,
-            blend: blend,
-            smooth: smooth,
-            detail: detail
-        );
-    // The panel copy: the same primitive re-emitted from a fresh transform chain (its own ResetPoint/Translate/
-    // Rotate/Scale prefix, matching the plate's — chaining after the plate's shape would inherit whatever persistent
-    // Scale op its emission left), placed by ShapePanelDocument.Resolve and composed against the plate's own
-    // accumulator. Caller-owned scope: this must run inside the PushField/PopField pair the plate's emission opened.
-    // Inset/Depth are creation units, the same units the chain's shape-local ops read.
-    private static void EmitPanelCopy(SdfProgramBuilder baseChain, ShapeDocument shape, Vector3 scale, int material, ShapePanelDocument panel) {
-        var lift = (shape.Lift ?? SdfLift.Extrude);
-        var placement = ShapePanelDocument.Resolve(
-            depth: panel.Depth,
-            faceAxis: ((panel.Face is { } face)
-            ? face.Value
-            : ShapePanelDocument.DefaultFace),
-            inset: panel.Inset,
-            lift: lift,
-            scale: scale,
-            type: shape.Type
-        );
+    // A stamp's frame for ShapeEmission: every chain starts at the stamp's prefix, a relief samples the shape's stamped
+    // rigid frame in world units, and a panel's or trim's palette slot resolves through the caller's palette or delegate.
+    private readonly struct StampShapeFrame(StampFrame frame, Func<ShapeDocument, int>? materialFor, int[]? paletteIds) : IShapeEmissionFrame {
+        public float FacetScale => frame.FacetScale;
 
-        _ = AppendPrimitive(
-            chain: baseChain.Translate(offset: (placement.FaceAxis * placement.Offset)),
-            shape: shape,
-            scale: placement.ErodedScale,
-            material: material,
-            blend: placement.Blend
-        );
-    }
-    // panelMaterial is the panel copy's already-resolved program material id (null only when the shape has no panel;
-    // a panelled shape without one is a caller defect and throws). Render path only
-    // (contactMargin null): the deterministic fixed-point contact evaluator (EmitFixed/VisitFixedPrimitiveCopies)
-    // never calls this with a panelled shape's second material, so a solid placement's collider reads the plain
-    // plate regardless of Panel.
-    private static void EmitShapeChain(SdfProgramBuilder builder, ShapeDocument shape, in StampFrame frame, int material, float? contactMargin, bool inScope = false, int? panelMaterial = null) {
-        var shapeScale = shape.Scale;
-        var stampScale = frame.FacetScale;
-        var stampFrame = frame;
-
-        SdfProgramBuilder BuildTransformChain() {
-            var prefix = ShapeDomainOps.Apply(
-                chain: StampPrefix(
-                    builder: builder,
-                    frame: stampFrame
-                ),
-                domain: shape.Domain,
-                subject: shape.Position
-            )
-                .Translate(offset: shape.Position)
-                .Rotate(rotation: shape.Rotation);
-
-            // StampPrefix already converted the point to creation units. Both emitters share this
-            // ordering and unit conversion, including twist and bend before flare.
-            return ShapePointOps.Apply(chain: prefix, twist: (shape.Twist ?? 0f), bend: (shape.Bend ?? 0f),
-                flare: shape.Flare, shear: shape.Shear, bumps: shape.Bumps, warp: shape.Warp,
-                elongate: shape.Elongate);
-        }
-
-        var chain = BuildTransformChain();
-        // Per-shape lane-driven erosion (KEEP IN SYNC with WorldCreationInstances.EmitShape's mirrored prefix): the reach is
-        // this shape's own SdfSolidGeometry.Reach, converted to WORLD units for the field operation. Chained immediately before whichever AppendPrimitive call emits this shape's ShapeBlend —
-        // ordinary point ops (twist/bend/flare/shear/bumps, already applied above) land on the point as usual.
-        var erodeReach = ((shape.Erode is not null)
-            ? (SdfSolidGeometry.Reach(
-                lift: (shape.Lift ?? SdfLift.Extrude),
-                scale: shapeScale,
-                type: shape.Type
-            ) * stampScale)
-            : 0f
-        );
-
-        SdfProgramBuilder ApplyErode(SdfProgramBuilder target) =>
-            ((shape.Erode is { } erode)
-                ? target.LaneErode(
-                    from: erode.From,
-                    lane: erode.Lane,
-                    noiseScale: (erode.Noise ?? 1f),
-                    reach: erodeReach,
-                    to: erode.To
-                )
-                : target
-            );
-
-        var blend = (shape.Blend ?? SdfBlendOp.Union);
-        // The blend radius and the field ops below act on the running WORLD-space accumulator directly — never
-        // re-multiplied by the chain's own Scale(stamp scale) op the way a primitive's baked-local rounding/
-        // chamfer is (AppendPrimitive, above) — so they take the stamp scale explicitly here.
-        var smooth = ((shape.Smooth ?? 0f) * stampScale);
-        var dilate = ((shape.Dilate ?? 0f) * stampScale);
-        var onion = ((shape.Onion ?? 0f) * stampScale);
-        var wantsDilate = (dilate != 0f);
-        var wantsOnion = (onion != 0f);
-
-        if (
-            (contactMargin is not { } margin) ||
-            (margin == 0f)
-        ) {
-            var panel = shape.Panel;
-            // Dilate/Onion need their own scope — unscoped, a field op would inflate or hollow every shape emitted
-            // before it in the whole program, not just this one; inside a caller's shared scope the
-            // caller's pop already isolates it. KEEP IN SYNC with the static stamper's per-shape probe reservation
-            // (Client.WorldPlacementStamper.EmitProbe), which reserves the pair. A panel ALSO needs its own scope: its
-            // subtraction/union must bite only this shape's own candidate, never a sibling composed before it —
-            // validation refuses a panel wherever inScope would be true here (RequiresScope/Group), so this branch is
-            // unreachable for a panelled shape.
-            // A flare/shear/bump/erode/cells (each a warp, or a relief whose term folds the same way — see
-            // SdfProgram.Lipschitz.cs's LaneErode case) needs its own scope for a different reason: unscoped, its
-            // Lipschitz factor would fold into the whole program's step scale. A primitive never does — every one is
-            // 1-Lipschitz, a non-uniformly scaled sphere or ellipsoid included (the exact exponent-2 superellipsoid
-            // gauge), so no primitive opens a scope for its shape alone.
-            // A pop-only blend (morph, stairs) composes at a scope's pop alone, so its shape opens its own scope even
-            // inside the creation's.
-            var ownScope = (
-                (!inScope &&
-                (wantsDilate || wantsOnion || (panel is not null) || ShapePointOps.NeedsScope(shape: shape))) ||
-                ShapeScope.IsPopOnly(blend: blend)
-            );
-
-            if (ownScope) {
-                var scoped = AppendPrimitive(
-                    chain: ApplyErode(target: ShapeScope.Open(
-                        blend: blend,
-                        chain: chain,
-                        morph: shape.Morph,
-                        smooth: smooth,
-                        steps: shape.Steps
-                    )),
-                    shape: shape,
-                    scale: shapeScale,
-                    material: material,
-                    detail: (shape.Detail ?? false)
-                );
-
-                if (shape.Displace is not null) {
-                    EmitDisplace(builder: builder, frame: in frame, shape: shape, stampScale: stampScale);
-                }
-
-                if (wantsDilate) {
-                    scoped = scoped.Dilate(radius: dilate);
-                }
-
-                if (wantsOnion) {
-                    scoped = scoped.Onion(thickness: onion);
-                }
-
-                if (panel is not null) {
-                    // Never composed with this shape's own Dilate/Onion, which apply to the plate's own field only
-                    // (ShapePanelDocument) — the panel copy rides its own fresh chain rather than `scoped`.
-                    EmitPanelCopy(
-                        baseChain: BuildTransformChain(),
-                        material: (panelMaterial ?? throw new InvalidOperationException(message: "A panelled shape was emitted without its panel material resolved.")),
-                        panel: panel,
-                        scale: shapeScale,
-                        shape: shape
-                    );
-                }
-
-                if (shape.Cells is { } cells) {
-                    // Relief samples the shape's rigid frame, independently of the primitive's residual
-                    // scale or panel offset. Frequency and amplitude convert inversely, preserving its bound.
-                    _ = ReliefChain(builder: builder, frame: in frame, shape: shape)
-                        .CellDisplace(
-                        (cells.Frequency / stampScale),
-                        (cells.Amplitude * stampScale),
-                        cells.Seed,
-                        cells.Mode,
-                        cells.Randomness
-                    );
-                }
-                _ = chain.PopField();
-
-                return;
-            }
-
-            var afterShape = AppendPrimitive(
-                chain: ApplyErode(target: chain),
-                shape: shape,
-                scale: shapeScale,
-                material: material,
-                blend: blend,
-                smooth: smooth,
-                detail: (shape.Detail ?? false)
-            );
-
-            if (shape.Displace is not null) {
-                EmitDisplace(builder: builder, frame: in frame, shape: shape, stampScale: stampScale);
-            }
-
-            if (wantsDilate) {
-                afterShape = afterShape.Dilate(radius: dilate);
-            }
-
-            if (wantsOnion) {
-                _ = afterShape.Onion(thickness: onion);
-            }
-
-            return;
-        }
-
-        EmitMarginedPrimitive(
-            chain: ApplyErode(target: chain.PushField(
-                compose: blend,
-                smooth: smooth
-            )),
-            detail: (shape.Detail ?? false),
-            margin: margin,
-            material: material,
-            shape: shape,
-            shapeScale: shapeScale
-        );
+        public SdfProgramBuilder Prefix(SdfProgramBuilder builder) => StampPrefix(builder: builder, frame: frame);
+        public SdfProgramBuilder PrefixOf(SdfProgramBuilder builder, int shapeIndex) => StampPrefix(builder: builder, frame: frame);
+        public SdfProgramBuilder Relief(SdfProgramBuilder builder, ShapeDocument shape) => ReliefChain(builder: builder, frame: frame, shape: shape);
+        public int MaterialOf(ShapeDocument shape, int paletteSlot) => ((paletteIds is { } palette)
+            ? palette[Math.Clamp(value: paletteSlot, max: (palette.Length - 1), min: 0)]
+            : materialFor!(arg: (shape with { Material = paletteSlot })));
     }
     // A relief's own chain: the shape's rigid frame under the stamp, in world units, independently of the primitive's
     // residual scale or panel offset. A mirrored copy samples the relief through the stamp's reflection, like the shape
@@ -388,18 +169,10 @@ public static partial class CreationStampEmitter {
             ).Rotate(rotation: shape.Rotation)
             : origin.Rotate(rotation: (frame.Rotation * FixedQuaternion.FromQuaternion(value: shape.Rotation).Normalize()).Normalize()));
     }
-    // The sine relief on the shape's rigid frame (KEEP IN SYNC with WorldCreationInstances.EmitShape's relief): frequency and
-    // amplitude convert inversely with the stamp scale, like a cellular relief's.
-    private static void EmitDisplace(SdfProgramBuilder builder, in StampFrame frame, ShapeDocument shape, float stampScale) {
-        var displace = shape.Displace!;
-
-        _ = ReliefChain(builder: builder, frame: in frame, shape: shape)
-            .Displace(amplitude: (displace.Amplitude * stampScale), frequency: (displace.Frequency.Value / stampScale));
-    }
     // A primitive dilated by its contact margin inside the field scope the caller just opened, so the dilation applies
     // before the authored blend; pops that scope.
     private static void EmitMarginedPrimitive(SdfProgramBuilder chain, ShapeDocument shape, Vector3 shapeScale, int material, float margin, bool detail) =>
-        _ = AppendPrimitive(
+        _ = ShapeEmission.AppendPrimitive(
             chain: chain,
             shape: shape,
             scale: shapeScale,
@@ -408,101 +181,6 @@ public static partial class CreationStampEmitter {
         )
             .Dilate(radius: margin)
             .PopField();
-    // The trim's own scope pops via Union into the SAME accumulator the host's own (unmodified) real shape already
-    // folded into moments earlier in program order — so the scope's own candidate wins only where it undercuts that
-    // already-present value. A genuine erosion (Dilate at a negative radius) can never do that: max(a, b) >= a, so
-    // an eroded-then-intersected candidate is bounded below by "host eroded by Inset", which is STRICTLY WORSE
-    // (more positive) than the host's own unmodified distance by exactly Inset — an erosion is provably always
-    // beaten by the plain host and the trim would never render. A slight OUTWARD offset (Dilate at a POSITIVE
-    // radius, Inset's magnitude) instead makes the host copy narrowly closer than the plain host — losing to it
-    // everywhere by default (Inset is tiny, 0.003 by convention), but WINNING wherever the Intersection with the
-    // reference's own dilated copy does not additionally worsen it, i.e. near the reference. Inset therefore reads
-    // as "how far inside the reference's own influence the seam sits" rather than a literal inward erosion of the
-    // host's geometry, which stays imperceptibly proud (its whole purpose is avoiding a coincident-surface z-fight,
-    // not a visible step). Both copies ride a fresh ResetPoint/Translate/Rotate prefix rather than chaining off the
-    // host's own shape instruction, whose emission may leave a persistent Scale op behind.
-    private static void EmitTrim(SdfProgramBuilder builder, ShapeDocument shape, ShapeDocument reference, in StampFrame frame, ShapeTrimDocument trim, int material) {
-        var hostChain = StampPrefix(
-            builder: builder,
-            frame: frame
-        )
-            .Translate(offset: shape.Position)
-            .Rotate(rotation: shape.Rotation);
-
-        var eroded = AppendPrimitive(
-            chain: hostChain.PushField(compose: SdfBlendOp.Union),
-            shape: shape,
-            scale: shape.Scale,
-            material: material
-        ).Dilate(radius: (trim.Inset * frame.FacetScale));
-
-        var referenceChain = StampPrefix(
-            builder: eroded,
-            frame: frame
-        )
-            .Translate(offset: reference.Position)
-            .Rotate(rotation: reference.Rotation);
-
-        _ = AppendPrimitive(
-            chain: referenceChain,
-            shape: reference,
-            scale: ShapeTrimDocument.DilatedScale(
-                scale: reference.Scale,
-                width: trim.Width
-            ),
-            material: material,
-            blend: SdfBlendOp.Intersection,
-            curve: false
-        );
-
-        _ = builder.PopField();
-    }
-    // Render path only (mirrors EmitPanelCopy's own guard) — the deterministic fixed-point contact evaluator never
-    // reads Trims, so a solid placement's collider is unchanged by them. Runs after EmitShapeChain has fully closed
-    // the host's own emission (including any scope a panel/dilate/onion/warp opened), so each trim's own
-    // PushField/PopField pair is sequential with that scope, never nested inside it. inScope true means the CALLER
-    // already holds the whole-creation scope RequiresScope forces — ValidateTrims refuses Trims on that document, so
-    // this is a defensive no-op, never reached by a validated document.
-    private static void EmitTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, in StampFrame frame, Func<ShapeDocument, int> materialFor, float? contactMargin, bool inScope) {
-        if (
-            inScope ||
-            ((contactMargin is { } margin) && (margin != 0f)) ||
-            (shape.Trims is not { Count: > 0 } trims)
-        ) {
-            return;
-        }
-
-        var shapes = (document.Shapes ?? []);
-
-        foreach (var trim in trims) {
-            ShapeDocument? reference = null;
-
-            foreach (var candidate in shapes) {
-                if (string.Equals(
-                    a: candidate.Name?.Value,
-                    b: trim.Shape,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    reference = candidate;
-
-                    break;
-                }
-            }
-
-            if (reference is null) {
-                continue; // Validation refuses an undeclared reference before this ever runs.
-            }
-
-            EmitTrim(
-                builder: builder,
-                frame: frame,
-                material: materialFor(arg: shape with { Material = trim.Material }),
-                reference: reference,
-                shape: shape,
-                trim: trim
-            );
-        }
-    }
     // The point's mirror image across the plane through the origin with the given unit normal.
     private static FixedVector3 Reflect(FixedVector3 value, FixedVector3 unitNormal) {
         var projection = FixedVector3.Dot(
@@ -674,20 +352,19 @@ public static partial class CreationStampEmitter {
     /// <param name="builder">The target program builder.</param>
     /// <param name="document">The creation document.</param>
     /// <param name="transform">The stamp transform.</param>
-    /// <param name="materialFor">Resolves each shape's material id.</param>
-    /// <param name="contactMargin">An optional per-shape signed contact margin. Null emits the raw render stream;
-    /// a nonzero value scopes each primitive so dilation applies before its authored blend.</param>
+    /// <param name="materialFor">Resolves each shape's material id; a panel's or trim's palette slot resolves through it
+    /// as the shape carrying that slot.</param>
     /// <param name="inScope">Whether the caller already holds an open field scope around this emission (the
     /// whole-creation stamp of <see cref="RequiresScope"/>). The creation emitter shares this scope: a shape whose field
     /// op or warp would otherwise open its own scope then rides the caller's instead.</param>
     /// <param name="hidden">The shapes, by index, that emit nothing (a presentation's shape isolation), or
     /// <see langword="null"/> to emit every shape.</param>
-    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, float? contactMargin = null, bool inScope = false, IReadOnlyList<bool>? hidden = null) {
+    public static void Emit(SdfProgramBuilder builder, CreationDocument document, CreationStampTransform transform, Func<ShapeDocument, int> materialFor, bool inScope = false, IReadOnlyList<bool>? hidden = null) {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(materialFor);
 
-        var frame = StampFrame.Of(transform: transform);
+        var frame = new StampShapeFrame(frame: StampFrame.Of(transform: transform), materialFor: materialFor, paletteIds: null);
         var shapes = (document.Shapes ?? []);
 
         for (var index = 0; (index < shapes.Count); index++) {
@@ -697,26 +374,7 @@ public static partial class CreationStampEmitter {
                 continue;
             }
 
-            EmitShapeChain(
-                builder: builder,
-                contactMargin: contactMargin,
-                frame: frame,
-                inScope: inScope,
-                material: materialFor(arg: shape),
-                panelMaterial: ((shape.Panel is { } panel)
-                ? materialFor(arg: shape with { Material = panel.Material })
-                : (int?)null),
-                shape: shape
-            );
-            EmitTrims(
-                builder: builder,
-                contactMargin: contactMargin,
-                document: document,
-                frame: frame,
-                inScope: inScope,
-                materialFor: materialFor,
-                shape: shape
-            );
+            ShapeEmission.Emit(builder: builder, frame: in frame, inScope: inScope, material: materialFor(arg: shape), shape: shape, shapes: shapes);
         }
     }
     /// <summary>Returns whether a shape reaches contact geometry: neither a detail shape, which never reaches the contact
@@ -802,7 +460,7 @@ public static partial class CreationStampEmitter {
                     (contactMargin is not { } margin) ||
                     (margin == 0f)
                 ) {
-                    _ = AppendPrimitive(
+                    _ = ShapeEmission.AppendPrimitive(
                         chain: chain,
                         shape: shape,
                         scale: shapeScale,
@@ -891,50 +549,10 @@ public static partial class CreationStampEmitter {
             paramName: nameof(paletteIds)
         );
 
-        var shape = document.Shapes![shapeIndex];
-        var frame = StampFrame.Of(transform: transform);
+        var frame = new StampShapeFrame(frame: StampFrame.Of(transform: transform), materialFor: null, paletteIds: paletteIds);
 
-        EmitShapeChain(
-            builder: builder,
-            contactMargin: null,
-            frame: frame,
-            material: material,
-            panelMaterial: ((shape.Panel is { } panel)
-            ? paletteIds[Math.Clamp(
-                    value: panel.Material,
-                    max: (paletteIds.Length - 1),
-                    min: 0
-                )]
-            : (int?)null),
-            shape: shape
-        );
-        if (shape.Trims is { Count: > 0 }) {
-            EmitPaletteTrims(
-                builder: builder,
-                document: document,
-                frame: frame,
-                paletteIds: paletteIds,
-                shape: shape
-            );
-        }
+        ShapeEmission.Emit(builder: builder, frame: in frame, inScope: false, material: material, shape: document.Shapes![shapeIndex], shapes: document.Shapes);
     }
-
-    // A shape's trims against its creation's palette. The material delegate captures the palette, so it lives here, where
-    // only a shape that carries trims pays for it, rather than in EmitShapeStamp, whose every call would.
-    private static void EmitPaletteTrims(SdfProgramBuilder builder, CreationDocument document, ShapeDocument shape, in StampFrame frame, int[] paletteIds) =>
-        EmitTrims(
-            builder: builder,
-            contactMargin: null,
-            document: document,
-            frame: frame,
-            inScope: false,
-            materialFor: candidate => paletteIds[Math.Clamp(
-                value: (candidate.Material ?? 0),
-                max: (paletteIds.Length - 1),
-                min: 0
-            )],
-            shape: shape
-        );
 
     /// <summary>Emits every authored text run under the same stamp transform as <see cref="Emit"/>.</summary>
     /// <param name="builder">The target program builder.</param>

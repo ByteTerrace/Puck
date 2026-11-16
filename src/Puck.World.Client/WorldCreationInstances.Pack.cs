@@ -715,7 +715,7 @@ public sealed partial class WorldCreationInstances {
             var shape = shapes[shapeIndex];
 
             // A domain-bearing shape's own slot carries the rigid delta its parent chain imparts to creation space
-            // (identity when it has no parent) rather than a composed pose — EmitShape rides this slot for its
+            // (identity when it has no parent) rather than a composed pose — its emission (ShapeEmission.Emit) rides this slot for its
             // TransformDynamic, applies its domain ops against it, and bakes its own rest-pose local translate/rotate
             // afterward. The canonicalizer refuses an own swing/slide or a named frame pose on a domain-bearing shape,
             // so PartOwnRotation/Translation is always identity/zero here and PartDeltaRotation/Translation[shapeIndex]

@@ -39,8 +39,7 @@ public sealed class WorldCreationInstancesCompactionLawTests {
         pool.Emit(
             builder: builder,
             colors: WorldBakedColors.Of(definition: Fixtures.BuildGradientUpDocument(gradientUp: false)),
-            probeWorstCase: false,
-            maxPlacementScale: 1f,
+
             slotBase: SlotBase
         );
         return builder.Build();

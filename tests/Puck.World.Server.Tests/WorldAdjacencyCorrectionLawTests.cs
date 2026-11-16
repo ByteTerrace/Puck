@@ -326,6 +326,7 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
         public abstract int EntityCapacity { get; }
         public bool IsEntityActive(int index) => true;
         public abstract WorldEntityAddress EntityAddress(int index);
+        public int PoseEpoch(int index) => 0;
         public string? PlacementId(int index) => null;
         public Vector3 PreviousPosition(int index) => CurrentPosition(index) + Vector3.UnitX;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;
