@@ -2707,12 +2707,6 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
-- [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
-  beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
-  stack, but body predicates keep a separate dispatch over recency clocks,
-  counters, timers and held input. One home: operands and gate programs in
-  `Puck.State.Rules`, body facts served by the World host, moved with their
-  validation and checked through the authored body-action scenarios.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers

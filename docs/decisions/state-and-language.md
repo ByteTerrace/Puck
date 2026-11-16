@@ -121,6 +121,14 @@ Nothing in `src/Puck.World*` names a state type it did not name before except
 through the facets of D3. Topology never references generators: a Penrose
 patch takes its drawn start tile as a value.
 
+Body action and shaping gates also compile to `GateToken[]` and run through
+`RuleEvaluation.Decide`. `ActionGateOperand` reads the host's `IActionGateFacts` facet; the World
+resolves its body vocabulary and validates its scope in `BodyActionSpecFactory.CompileGate`
+and `WorldDefinitionValidator`. A scoped vocabulary can disable core predicate fallback,
+so only its registered leaves compile; Boolean structure and short-circuit lowering stay
+in `RuleCompiler`. The lane's recency slots are allocated before lowering, in authored order,
+and pure fact reads leave the same state whether evaluated eagerly or skipped.
+
 **D9 — The extension seam keeps its four families.** `OperandFamily`,
 `EffectFamily`, `KeyFamily`, and `PredicateFamily` keep their registration
 shape and JSON discriminators. A family's compiled fact declares the facet it

@@ -59,23 +59,6 @@ public sealed class WorldFactsCompilerAdversarialLawTests {
         expected: "at least one predicate"
     );
     [Fact]
-    public void EmptyBodyAnyPredicate_RefusesBeforeItCanUnderflowTheRuntimeStack() {
-        var gate = new List<CompiledPredicate>();
-
-        var error = Assert.Throws<InvalidOperationException>(testCode: () => BodyActionSpecFactory.FlattenPredicate(
-            predicate: new ActionPredicate.Any(Predicates: []),
-            gate: gate,
-            recencyFacts: [],
-            recencyWindows: []
-        ));
-
-        Assert.Contains(
-            expectedSubstring: "at least one predicate",
-            actualString: error.Message,
-            comparisonType: StringComparison.Ordinal
-        );
-    }
-    [Fact]
     public void NonUnitWorldImpulse_RefusesBecauseRuntimeDoesNotNormalizeIt() => Refuses(
         rule: Rule(effects: [new WorldEffect.PlanarImpulse(
                 Key: "0",

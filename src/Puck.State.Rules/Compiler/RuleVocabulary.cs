@@ -98,12 +98,17 @@ public sealed class RuleVocabulary {
     /// <summary>Gets the registered predicate arms.</summary>
     public IReadOnlyList<PredicateFamily> Predicates { get; }
 
+    /// <summary>Gets whether unregistered leaves may use the library's predicate meanings. A scoped host can
+    /// require every leaf to be registered while still sharing the compiler's Boolean structure.</summary>
+    public bool CorePredicates { get; }
+
     /// <summary>Initializes a vocabulary over the registered families.</summary>
     /// <param name="operands">The operand families, in the order they are consulted.</param>
     /// <param name="effects">The effect arms.</param>
     /// <param name="predicates">The predicate arms.</param>
     /// <param name="keys">The key families, in the order they are consulted.</param>
-    public RuleVocabulary(IReadOnlyList<OperandFamily> operands, IReadOnlyList<EffectFamily> effects, IReadOnlyList<PredicateFamily> predicates, IReadOnlyList<KeyFamily> keys) {
+    /// <param name="corePredicates">Whether unregistered leaves may use library predicates.</param>
+    public RuleVocabulary(IReadOnlyList<OperandFamily> operands, IReadOnlyList<EffectFamily> effects, IReadOnlyList<PredicateFamily> predicates, IReadOnlyList<KeyFamily> keys, bool corePredicates = true) {
         ArgumentNullException.ThrowIfNull(argument: effects);
         ArgumentNullException.ThrowIfNull(argument: keys);
         ArgumentNullException.ThrowIfNull(argument: operands);
@@ -113,6 +118,7 @@ public sealed class RuleVocabulary {
         Keys = keys;
         Operands = operands;
         Predicates = predicates;
+        CorePredicates = corePredicates;
     }
 
     /// <summary>Finds the effect family owning an authored effect's type.</summary>
