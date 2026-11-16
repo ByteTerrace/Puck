@@ -410,7 +410,7 @@ public static class QueuedHostContractProbe {
 
                 for (var step = 0; (step < WholeFrameSteps); step++) {
                     _ = host.Step(
-                        deltaTicks: (FixedTickConversion.TicksPerSecond / 30UL),
+                        deltaTicks: FixedTickConversion.PerRate(ratePerSecond: 30U),
                         inputs: MachinePads.One(input: in input)
                     );
                 }

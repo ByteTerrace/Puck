@@ -272,8 +272,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodePopulation(byte[] bytes, out string reason, out WorldPopulationCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodePopulation(byte[] bytes, out string reason, out WorldPopulationCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "population",
+        read: ReadPopulation,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldPopulationCheckpoint ReadPopulation(ref WireReader reader) {
         var simulatedCount = reader.ReadInt32();
         var revision = reader.ReadInt32();
         var seatKit = reader.ReadByte();
@@ -340,14 +346,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
             readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion()));
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"population section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldPopulationCheckpoint(
+        return new WorldPopulationCheckpoint(
             AttachedSolids: attached,
             Entries: entries,
             EventBodies: eventBodies,
@@ -358,9 +357,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             SimulatedCount: simulatedCount,
             SleepingGravity: gravity
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- grants section ----
 

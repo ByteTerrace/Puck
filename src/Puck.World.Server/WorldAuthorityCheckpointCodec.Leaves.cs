@@ -96,34 +96,33 @@ public static partial class WorldAuthorityCheckpointCodec {
     );
     // ---- shared leaf types ----
 
-    private static void WritePrincipal(WireWriter writer, Principal principal) {
-        if (!WorldWireCodec.TryWritePrincipal(
-            principal: principal,
-            writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(PrincipalKind)}.{principal.Kind} has no live wire value");
+    // A principal that may be the world's own program, which is authority-local and forbidden on the live wire: a
+    // flag, then the wire principal unless the flag names the program.
+    internal static void WriteProgramOrPrincipal(WireWriter writer, Principal actor) {
+        var program = (actor.Kind == PrincipalKind.World);
+
+        writer.WriteBoolean(value: program);
+        if (!program) {
+            WorldWireCodec.WritePrincipal(
+                principal: actor,
+                writer: writer
+            );
         }
     }
+    internal static Principal ReadProgramOrPrincipal(ref WireReader reader) => (reader.ReadBoolean()
+        ? Principal.World
+        : WorldWireCodec.ReadPrincipal(reader: ref reader)
+    );
     private static Grantee ReadCheckpointGrantee(ref WireReader reader) => (reader.ReadBoolean() ? Principal.World : WorldWireCodec.ReadGrantee(reader: ref reader));
     private static void WriteGrantee(WireWriter writer, Grantee grantee) {
         var program = ((grantee.Kind == GranteeKind.Principal) && (grantee.Principal == Principal.World));
 
         writer.WriteBoolean(value: program);
         if (program) { return; }
-        if (!WorldWireCodec.TryWriteGrantee(
+        WorldWireCodec.WriteGrantee(
             grantee: grantee,
             writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"{grantee.Describe()} has no live wire value");
-        }
-    }
-    internal static void WriteSubject(WireWriter writer, GrantSubject subject) {
-        if (!WorldWireCodec.TryWriteSubject(
-            subject: subject,
-            writer: writer
-        )) {
-            throw new InvalidOperationException(message: $"{nameof(GrantSubject)} {subject.Kind}:{subject.Value} has no wire value");
-        }
+        );
     }
     private static void WritePeerEventEntry(WireWriter writer, WorldPeerEventEntry peer) {
         if (!WorldWireLeaves.TryWritePeerEventEntry(
@@ -135,13 +134,13 @@ public static partial class WorldAuthorityCheckpointCodec {
     }
 
     internal static void WriteAdmissionGrant(WireWriter writer, WorldAdmissionGrant grant) {
-        WriteCapability(
+        WorldWireCodec.WriteCapability(
             capability: grant.Capability,
             writer: writer
         );
         writer.WriteOptional(
             value: grant.Subject,
-            writeValue: WriteSubject
+            writeValue: WorldWireCodec.WriteSubject
         );
         writer.WriteBoolean(value: grant.Exclusive);
         writer.WriteOptional(

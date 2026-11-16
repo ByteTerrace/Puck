@@ -137,7 +137,10 @@ public sealed class ParityBindingReference {
 
             if (
                 (rateHz <= 0) ||
-                ((FixedTickConversion.TicksPerSecond % ((ulong)rateHz)) != 0UL)
+                !FixedTickConversion.TryPerRate(
+                    period: out var stepTicks,
+                    ratePerSecond: ((uint)rateHz)
+                )
             ) {
                 throw new InvalidDataException(message: $"the world's simulation rate {rateHz} Hz does not step a whole number of engine ticks.");
             }
@@ -159,7 +162,7 @@ public sealed class ParityBindingReference {
                     keySelector: static pair => pair.Key
                 ),
                 seed: Default(field: "seed", graph: graph, pass: GrainPass).GetUInt32(),
-                stepTicks: (FixedTickConversion.TicksPerSecond / ((ulong)rateHz)),
+                stepTicks: stepTicks,
                 width: width
             );
 

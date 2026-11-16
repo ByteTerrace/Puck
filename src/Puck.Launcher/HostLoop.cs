@@ -95,7 +95,7 @@ public sealed class HostLoop(
                 } else if (tickLocked) {
                     steps = ((pump?.TryStep(intervalTicks: interval, stepTicks: stepTicks) == true) ? 1 : 0);
                 } else {
-                    steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: (FixedTickConversion.TicksPerSecond / 4UL), stepTicks: stepTicks) ?? 0);
+                    steps = (pump?.Advance(deltaTicks: interval, maxFrameTicks: FixedTickConversion.PerRate(ratePerSecond: 4U), stepTicks: stepTicks) ?? 0);
                 }
                 timeline.NoteSteps(steps: steps);
                 timeline.Mark(phase: HostFramePhase.Simulate);

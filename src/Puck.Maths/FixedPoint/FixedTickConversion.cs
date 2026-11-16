@@ -90,9 +90,7 @@ public static class FixedTickConversion {
     public static ulong PerRate(uint ratePerSecond) {
         ArgumentOutOfRangeException.ThrowIfZero(value: ratePerSecond);
 
-        var period = (TicksPerSecond / ratePerSecond);
-
-        if ((period * ratePerSecond) != TicksPerSecond) {
+        if (!TryPerRate(period: out var period, ratePerSecond: ratePerSecond)) {
             throw new ArgumentException(
                 message: $"The rate {ratePerSecond} Hz must divide {TicksPerSecond} engine ticks per second exactly; use a divisor of {TicksPerSecond}.",
                 paramName: nameof(ratePerSecond)
@@ -100,6 +98,66 @@ public static class FixedTickConversion {
         }
 
         return period;
+    }
+    /// <summary>Returns the rate, in hertz, of a step that is a whole number of engine ticks wide: the inverse of
+    /// <see cref="PerRate(uint)"/>.</summary>
+    /// <param name="stepTicks">A step width in engine ticks; it must divide <see cref="TicksPerSecond"/> exactly.</param>
+    /// <returns>The exact rate <c><see cref="TicksPerSecond"/> / <paramref name="stepTicks"/></c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
+    /// <exception cref="ArgumentException"><paramref name="stepTicks"/> does not divide <see cref="TicksPerSecond"/>
+    /// exactly, so the step has no whole rate.</exception>
+    public static ulong RateOfStep(ulong stepTicks) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+
+        var rate = (TicksPerSecond / stepTicks);
+
+        if ((rate * stepTicks) != TicksPerSecond) {
+            throw new ArgumentException(
+                message: $"The step of {stepTicks} engine ticks must divide {TicksPerSecond} engine ticks per second exactly.",
+                paramName: nameof(stepTicks)
+            );
+        }
+
+        return rate;
+    }
+    /// <summary>Returns the number of whole steps of <paramref name="stepTicks"/> engine ticks that cover
+    /// <paramref name="engineTicks"/>: the cross-rate bridge from an engine-tick span to a count of steps, rounded
+    /// up.</summary>
+    /// <param name="engineTicks">The span to cover, in engine ticks.</param>
+    /// <param name="stepTicks">The step width in engine ticks; must be positive.</param>
+    /// <returns><c>ceil(<paramref name="engineTicks"/> / <paramref name="stepTicks"/>)</c>; <c>0</c> for a zero
+    /// span.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
+    /// <exception cref="OverflowException">The sum <c><paramref name="engineTicks"/> + <paramref name="stepTicks"/> - 1</c>
+    /// overflows 128 bits.</exception>
+    public static UInt128 StepsCovering(UInt128 engineTicks, ulong stepTicks) {
+        ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
+
+        return (checked((engineTicks + stepTicks) - UInt128.One) / stepTicks);
+    }
+    /// <summary>Returns whether a rate in hertz divides <see cref="TicksPerSecond"/> exactly, so its period is a whole
+    /// number of engine ticks.</summary>
+    /// <param name="ratePerSecond">The rate in hertz.</param>
+    /// <returns><see langword="true"/> when <paramref name="ratePerSecond"/> is positive and a divisor of
+    /// <see cref="TicksPerSecond"/>.</returns>
+    public static bool IsRate(ulong ratePerSecond) =>
+        ((ratePerSecond != 0UL) && ((TicksPerSecond % ratePerSecond) == 0UL));
+    /// <summary>Returns the whole number of engine ticks in one period of the given rate, without throwing.</summary>
+    /// <param name="ratePerSecond">A rate in hertz.</param>
+    /// <param name="period">The exact period <c><see cref="TicksPerSecond"/> / <paramref name="ratePerSecond"/></c>
+    /// when this method returns <see langword="true"/>; <c>0</c> otherwise.</param>
+    /// <returns><see langword="true"/> when <paramref name="ratePerSecond"/> divides <see cref="TicksPerSecond"/>
+    /// exactly (see <see cref="IsRate(ulong)"/>); <see langword="false"/> for zero or a rate that does not.</returns>
+    public static bool TryPerRate(uint ratePerSecond, out ulong period) {
+        if (!IsRate(ratePerSecond: ratePerSecond)) {
+            period = 0UL;
+
+            return false;
+        }
+
+        period = (TicksPerSecond / ratePerSecond);
+
+        return true;
     }
     /// <summary>Converts a whole tick count at <paramref name="ratePerSecond"/> ticks per second to fixed-point seconds,
     /// rounded once to nearest with ties to even.</summary>

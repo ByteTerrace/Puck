@@ -9,7 +9,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     private static void WriteDurablePrincipal(WireWriter writer, Puck.Commands.Principal principal) {
         writer.WriteBoolean(value: (principal == Puck.Commands.Principal.World));
         if (principal != Puck.Commands.Principal.World) {
-            WritePrincipal(
+            WorldWireCodec.WritePrincipal(
                 principal: principal,
                 writer: writer
             );
@@ -322,8 +322,14 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         return writer.ToArray();
     }
-    private static bool TryDecodeEscrow(byte[] bytes, out string reason, out WorldTransferEscrowCheckpoint section) {
-        var reader = new WireReader(bytes: bytes);
+    private static bool TryDecodeEscrow(byte[] bytes, out string reason, out WorldTransferEscrowCheckpoint section) => TryDecodeSection(
+        bytes: bytes,
+        name: "escrow",
+        read: ReadEscrow,
+        reason: out reason,
+        section: out section
+    );
+    private static WorldTransferEscrowCheckpoint ReadEscrow(ref WireReader reader) {
         var leases = reader.ReadArray(
             field: "escrow leases",
             readItem: (ref WireReader r) => ReadLease(
@@ -428,14 +434,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
 
-        if (!reader.TryFinish(failure: out var failure)) {
-            section = null!;
-            reason = $"escrow section: {failure}";
-
-            return false;
-        }
-
-        section = new WorldTransferEscrowCheckpoint(
+        return new WorldTransferEscrowCheckpoint(
             BorderAdmissions: borderAdmissions,
             Committed: committed,
             CrossingSequence: crossingSequence,
@@ -447,9 +446,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             MobilityLeases: mobilityLeases,
             SpentKeys: spentKeys
         );
-        reason = string.Empty;
-
-        return true;
     }
     // ---- input hold section ----
 

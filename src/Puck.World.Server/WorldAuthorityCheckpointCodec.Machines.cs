@@ -40,8 +40,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         return writer.ToArray();
     }
-    private static bool TryDecodeMachines(byte[] bytes, out WorldMachineHostCheckpoint section, out string reason) {
-        var reader = new WireReader(bytes: bytes);
+    private static WorldMachineHostCheckpoint ReadMachines(ref WireReader reader) {
         var revision = reader.ReadUInt64();
         var next = reader.ReadUInt64();
         var pumped = reader.ReadBoolean();
@@ -92,28 +91,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
 
-        section = null!;
-        if (!reader.TryFinish(failure: out var failure)) { reason = $"machine section: {failure}"; return false; }
-        if (
-            (next == 0) ||
-            instances.Any(predicate: row => ((row.Generation == 0) || (row.Generation >= next) || !row.IsWellFormed)) ||
-            (instances.Select(selector: row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != instances.Length) ||
-            (instances.Select(selector: row => row.Generation).Distinct().Count() != instances.Length)
-        ) {
-            reason = "machine section has invalid inventory or generation bookkeeping";
-            return false;
-        }
-        if (
-            slots.Any(predicate: static row => ((row.Index < 0) || (row.SelectedEntry < 0))) ||
-            (slots.Select(selector: static row => row.Index).Distinct().Count() != slots.Length) ||
-            (links.Select(selector: static row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != links.Length) ||
-            links.Any(predicate: static row => ((row.Members.Count < 2) || row.Members.Any(predicate: static member => (member < 0)) || (row.Members.Distinct().Count() != row.Members.Count))) ||
-            slots.Any(predicate: row => ((row.LinkName is { } name) && !links.Any(predicate: link => (string.Equals(a: link.Name, b: name, comparisonType: StringComparison.Ordinal) && link.Members.Contains(value: row.Index)))))
-        ) {
-            reason = "machine section has invalid screen slots or links";
-            return false;
-        }
-        section = new(
+        return new(
             AnyEverPumped: pumped,
             Instances: instances,
             Links: links,
@@ -121,7 +99,45 @@ public static partial class WorldAuthorityCheckpointCodec {
             Revision: revision,
             Slots: slots
         );
-        reason = string.Empty;
+    }
+    private static bool TryDecodeMachines(byte[] bytes, out WorldMachineHostCheckpoint section, out string reason) {
+        if (!TryDecodeSection(
+            bytes: bytes,
+            name: "machine",
+            read: ReadMachines,
+            reason: out reason,
+            section: out section
+        )) {
+            return false;
+        }
+
+        var next = section.NextGeneration;
+        var instances = section.Instances;
+        var slots = section.Slots;
+        var links = section.Links;
+
+        if (
+            (next == 0) ||
+            instances.Any(predicate: row => ((row.Generation == 0) || (row.Generation >= next) || !row.IsWellFormed)) ||
+            (instances.Select(selector: row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != instances.Count) ||
+            (instances.Select(selector: row => row.Generation).Distinct().Count() != instances.Count)
+        ) {
+            section = null!;
+            reason = "machine section has invalid inventory or generation bookkeeping";
+            return false;
+        }
+        if (
+            slots.Any(predicate: static row => ((row.Index < 0) || (row.SelectedEntry < 0))) ||
+            (slots.Select(selector: static row => row.Index).Distinct().Count() != slots.Count) ||
+            (links.Select(selector: static row => row.Name).Distinct(comparer: StringComparer.Ordinal).Count() != links.Count) ||
+            links.Any(predicate: static row => ((row.Members.Count < 2) || row.Members.Any(predicate: static member => (member < 0)) || (row.Members.Distinct().Count() != row.Members.Count))) ||
+            slots.Any(predicate: row => ((row.LinkName is { } name) && !links.Any(predicate: link => (string.Equals(a: link.Name, b: name, comparisonType: StringComparison.Ordinal) && link.Members.Contains(value: row.Index)))))
+        ) {
+            section = null!;
+            reason = "machine section has invalid screen slots or links";
+            return false;
+        }
+
         return true;
     }
 }
