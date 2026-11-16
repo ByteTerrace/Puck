@@ -113,9 +113,13 @@ several:
 
 ## How the research was weighed
 
-Four reports fed this page: shipped MMO streaming, GPU virtual geometry and
-texturing with feedback, device budgets on the bar devices, and a reading of
-Puck's own residency and memory code. They disagreed in four places, and each
+Four reports fed this page, kept beside it with their cited sources:
+[shipped MMO streaming](streaming-and-memory/mmo-streaming.md),
+[GPU virtual geometry and texturing with feedback](streaming-and-memory/gpu-streaming.md),
+[device budgets on the bar devices](streaming-and-memory/device-budgets.md), and
+[a reading of Puck's own residency and memory code](streaming-and-memory/puck-today.md).
+Each is a snapshot of the round; where one disagrees with this page or the
+current source, this page and the source win. They disagreed in four places, and each
 is settled where it bears on a decision:
 
 - **How much of a budget to spend.** AMD advises 80% of total memory; Unreal's
