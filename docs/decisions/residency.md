@@ -239,6 +239,13 @@ test case for near-first ordering.
   is split into worlds, shards or authorities is not a seam; a transfer that
   shows only in logs or tooling is no leak ("Learning that their world is
   sharded by mining logs isn't a 'leak'").
+- Normal play conditions are a player's real setup: a fresh process on a bar
+  device, each backend the device ships, the prewarmed mesh store a player's
+  build ships, the first crossing after boot and the return. An empty store or
+  a lowered budget is reported beside the acceptance and never is it.
+- The cold-bake bar's minute covers what the boot's views demand; a tier a later
+  view asks for is a cache miss, derived and counted, and a tour's whole bake is
+  a trend beside the bar.
 
 The seam ruling is read by
 [the seam walk](../plans/streaming-and-memory.md#the-seam-walk): the debug

@@ -46,10 +46,9 @@ clocks. So:
   boot pose. Under demand tiers a tier exists because a view demands it, so
   what bakes in that interval is what the boot's views demand: each group at
   the tier a boot view resolves and, once step 5 lands, the floor of every
-  group in reach. That scope is derived from the bar's words and the
-  derived-product ruling (a tier a later view asks for is a cache miss,
-  derived and counted), not ruled by the owner in those terms; the owner may
-  widen it. The minute stays absolute.
+  group in reach. The owner confirmed this scope: the minute covers what the
+  boot's views demand, and a tier a later view asks for is a cache miss,
+  derived and counted. The minute stays absolute.
   Detail a later view owes is streaming cost, read by
   [the seam walk](#the-seam-walk), and the bake of every tier a tour demands is
   a trend beside the bar.
@@ -113,8 +112,9 @@ authored speed and is entered at each). A frameless threshold between worlds
 joins the walk when the standard package has its `threshold` template
 ([debug world content](open-items.md#debug-world-content)).
 
-**Normal play conditions**, as this page reads the ruling until the owner
-corrects it: a fresh process on a bar device, on each backend the device
+**Normal play conditions**, as the owner confirmed the reading
+([residency](../decisions/residency.md#the-owners-rulings-on-look-and-policy)):
+a fresh process on a bar device, on each backend the device
 ships, with the mesh store as a player's build ships it (prewarmed), taking
 the first crossing after boot and then the return. The window is display-paced
 with the ordinary lighting budget and temporal history: no `world.wait`, no
