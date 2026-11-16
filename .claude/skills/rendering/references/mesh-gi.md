@@ -587,6 +587,13 @@ done line; a nested residency's done line is insufficient.
   the three levels). `world.residency`'s `probe-cache-*` line reads it. A batch's
   depth/sky and light blocks stay alive while any kept probe names them, so
   bytes per kept probe can exceed their nominal payload.
+  The cache uses table-owned publication arenas, with no publication object per
+  key. Retired values clear when unheld, on retirement or the next write or
+  accounting visit after a held reader leaves; factory-created image buffers
+  retain their images. The cache byte reading includes current table/arena
+  machinery, every held retired value's blocks, and object/array headers. A
+  replaced table belongs only to readers already using it and stays valid
+  until those readers finish; it is outside the current cache-owned reading.
   The published table (`SdfWorldTables.PublishMeshIrradiance`) is copied on the
   device from the feedback table; no frame uploads it from the host. It fits
   the published volume exactly, is cleared before its first copies, retires
