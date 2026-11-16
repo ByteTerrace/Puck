@@ -2346,7 +2346,7 @@
                 },
                 "signal": {
                   "type": "string",
-                  "description": "One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a SignalStatePrefix state cell, or a SignalDriverPrefix earlier driver. The first three integrate: \u03C6 accumulates Cadence \u00D7 the signal\u0027s per-frame delta while w \u003E 0, and wraps modulo 2\u03C0 so a wheel spins forever without losing precision. The rest are instantaneous: \u03C6 is set to Cadence \u00D7 the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles."
+                  "description": "One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a state cell (state.\u003Crow\u003E[.\u003Ckey\u003E], whose numeric value at the frame\u0027s tick is the phase times the cadence), or a SignalDriverPrefix earlier driver. The first three integrate: \u03C6 accumulates Cadence \u00D7 the signal\u0027s per-frame delta while w \u003E 0, and wraps modulo 2\u03C0 so a wheel spins forever without losing precision. The rest are instantaneous: \u03C6 is set to Cadence \u00D7 the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles."
                 },
                 "cadence": {
                   "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",

@@ -284,7 +284,8 @@ public static class CliOptions {
     /// <param name="baseDirectory">The directory each entry resolves against; the working directory for a caller's
     /// own list.</param>
     /// <returns>The full path of every entry.</returns>
-    /// <exception cref="ArgumentException">An entry is null, rooted, or climbs out of
+    /// <exception cref="ArgumentException">An entry is not a string, or lacks the portable relative spelling
+    /// (<see cref="Puck.Confinement.PortablePath.IsRelative"/>): rooted, backslashed, or climbing out of
     /// <paramref name="baseDirectory"/> through <c>..</c>, <c>.</c>, or an empty segment.</exception>
     /// <exception cref="IOException">The manifest cannot be read.</exception>
     /// <exception cref="JsonException">The manifest is not a JSON array of strings.</exception>
@@ -302,14 +303,8 @@ public static class CliOptions {
                 ? entry.GetString()!
                 : throw new ArgumentException(message: $"A listed path must be a string, not {entry.ValueKind}."));
 
-            if (
-                Path.IsPathRooted(path: relative) ||
-                relative.Split(
-                '/',
-                '\\'
-            ).Any(predicate: static segment => (segment is ".." or "." or ""))
-            ) {
-                throw new ArgumentException(message: $"Expected a contained relative path: {relative}");
+            if (!Puck.Confinement.PortablePath.IsRelative(path: relative)) {
+                throw new ArgumentException(message: $"Expected a contained relative path, forward-slashed and portable: {relative}");
             }
 
             paths.Add(item: Path.GetFullPath(

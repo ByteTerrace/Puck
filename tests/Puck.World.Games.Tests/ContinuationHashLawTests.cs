@@ -9,7 +9,7 @@ namespace Puck.World.Games.Tests;
 
 /// <summary>
 /// The authoritative hash folds every body's simulation continuation from views of the live slots
-/// (<see cref="WorldPopulation.AppendContinuationHash"/>), and the views fold exactly the bytes the checkpoint's own
+/// (<see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash)"/>), and the views fold exactly the bytes the checkpoint's own
 /// entries encode, slot by slot and segment by segment (<see cref="WorldAuthorityCheckpointCodec.AppendPopulationEntries"/> over
 /// <see cref="WorldPopulation.Capture"/>): over a carried body sweeping against a wall behind a walking carrier, and
 /// over a rigid ball that comes to rest, tick by tick, and over a seat driven by an owned identity carrying facts and

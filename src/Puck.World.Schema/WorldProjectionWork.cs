@@ -21,6 +21,7 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     public const string SourceName = "world.projection";
 
     private static readonly AsyncLocal<WorldProjectionWork?> Attributed = new();
+    private static readonly WorkKindRegistry Registry = new();
 
     private readonly WorkCounterSet m_counts = new(
         kinds: Kinds,
@@ -35,33 +36,33 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
 
     /// <summary>Gets the kind counting whole projections delivered: a recipient's first, and every one a delta could not
     /// carry.</summary>
-    public static WorkKind Documents { get; } = new(name: "world.projection.documents", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Documents { get; } = Registry.Declare(name: "world.projection.documents", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting projections composed: every disclosure of the document to a presentation-tier
     /// reader, a recipient's delivery and a one-off read alike, whether or not it then owes anything. Fetch authorization
     /// also composes, so this count depends on the recipient cache retained across runs.</summary>
-    public static WorkKind Compositions { get; } = new(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind Compositions { get; } = Registry.Declare(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting member deltas delivered: the members of a recipient's projection that changed,
     /// and nothing else.</summary>
-    public static WorkKind Deltas { get; } = new(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Deltas { get; } = Registry.Declare(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the compact canonical bytes of every projection and delta delivered, as they
     /// travel.</summary>
-    public static WorkKind Bytes { get; } = new(name: "world.projection.bytes", unit: "bytes", workClass: WorkClass.Deterministic);
+    public static WorkKind Bytes { get; } = Registry.Declare(name: "world.projection.bytes", unit: "bytes", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting clock anchors sent: one per clock whose recipient's prediction differed from the
     /// authority's phase.</summary>
-    public static WorkKind Anchors { get; } = new(name: "world.projection.anchors", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind Anchors { get; } = Registry.Declare(name: "world.projection.anchors", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting anchor rows retained: one per recipient per clock it was first sent an anchor
     /// of.</summary>
-    public static WorkKind AnchorRowsRetained { get; } = new(name: "world.projection.anchor-rows.retained", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind AnchorRowsRetained { get; } = Registry.Declare(name: "world.projection.anchor-rows.retained", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting anchor rows released: every row a recipient held, when it leaves or loses
     /// disclosure.</summary>
-    public static WorkKind AnchorRowsReleased { get; } = new(name: "world.projection.anchor-rows.released", unit: "count", workClass: WorkClass.Deterministic);
+    public static WorkKind AnchorRowsReleased { get; } = Registry.Declare(name: "world.projection.anchor-rows.released", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the count of prototype objects fetched on recipient cache misses.</summary>
-    public static WorkKind PrototypeFetches { get; } = new(name: "world.projection.prototype-fetches", unit: "count", workClass: WorkClass.Pacing);
+    public static WorkKind PrototypeFetches { get; } = Registry.Declare(name: "world.projection.prototype-fetches", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the canonical prototype body bytes delivered by fetches.</summary>
-    public static WorkKind PrototypeBytes { get; } = new(name: "world.projection.prototype-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    public static WorkKind PrototypeBytes { get; } = Registry.Declare(name: "world.projection.prototype-bytes", unit: "bytes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
-    public static ReadOnlySpan<WorkKind> Kinds => Order.Kinds;
+    public static ReadOnlySpan<WorkKind> Kinds => Registry.Kinds;
 
     /// <inheritdoc/>
     ReadOnlySpan<WorkKind> IWorkCounterSource.WorkKinds => Kinds;
@@ -122,19 +123,5 @@ public sealed class WorldProjectionWork : IWorkCounterSource {
     // The process ledger sizes itself from Kinds, so it is built only once every kind exists.
     private static class Shared {
         internal static readonly WorldProjectionWork Ledger = new();
-    }
-    // A nested holder initializes after every kind above, whatever order the members are declared in.
-    private static class Order {
-        internal static readonly WorkKind[] Kinds = [
-            Compositions,
-            Documents,
-            Deltas,
-            Bytes,
-            PrototypeFetches,
-            PrototypeBytes,
-            Anchors,
-            AnchorRowsRetained,
-            AnchorRowsReleased,
-        ];
     }
 }

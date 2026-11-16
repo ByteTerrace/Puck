@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.DirectX;
 using Puck.DirectX.Apis;
@@ -190,7 +191,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
 
         // Two runs in turn over the one output ring, as a probe's run restarts when a socket's source is made again.
         for (var run = 0; (run < 2); run++) {
-            var readings = new ProbeReadingRing();
+            var readings = new PublishBuffer<ProbeReading>();
 
             trigger.Publish(
                 fenceValue: 0UL,
@@ -309,7 +310,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
             );
 
             using var host = new Win32RenderedProbeKernelHost(adapterLuid: adapterLuid);
-            var readings = new ProbeReadingRing();
+            var readings = new PublishBuffer<ProbeReading>();
             var request = new ProbeKernelRequest(
                 AccumulateBytecode: Bytecode(entry: "accumulate"),
                 AccumulateEntry: "accumulate",
@@ -360,7 +361,7 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
                         ),
                         userMessage: (run.Fault ?? "the kernel published no reading once the write finished")
                     );
-                    Assert.True(condition: readings.TryReadLatest(reading: out var reading));
+                    Assert.True(condition: readings.TrySnapshot(value: out var reading));
 
                     for (var channel = 0; (channel < 3); channel++) {
                         Assert.Equal(
@@ -380,18 +381,18 @@ public sealed unsafe class RenderedProbeKernelHostLawTests {
         }
     }
     // Polls until the ring holds a reading or the budget runs out.
-    private static bool Await(ProbeReadingRing readings, double seconds) {
+    private static bool Await(PublishBuffer<ProbeReading> readings, double seconds) {
         var started = Stopwatch.GetTimestamp();
 
         while (Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds < seconds) {
-            if (readings.TryReadLatest(reading: out _)) {
+            if (readings.TrySnapshot(value: out _)) {
                 return true;
             }
 
             Thread.Sleep(millisecondsTimeout: 5);
         }
 
-        return readings.TryReadLatest(reading: out _);
+        return readings.TrySnapshot(value: out _);
     }
     private static byte[] Bytecode(string entry) =>
         File.ReadAllBytes(path: RepositoryPaths.Resolve(relativePath: $"src/Puck.Shaders/Assets/Probes/average.{entry}.dxbc"));

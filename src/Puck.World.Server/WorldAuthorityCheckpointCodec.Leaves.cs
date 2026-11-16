@@ -42,10 +42,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         readItem: static (ref WireReader r) => r.ReadInt32(),
         maximum: MaxCollectionCount
     );
-    private static void WriteBoolArray(WireWriter writer, IReadOnlyList<bool> values) => writer.WriteArray(
-        items: values,
-        writeItem: static (w, v) => w.WriteBoolean(value: v)
-    );
+    private static void WriteBoolArray(WireWriter writer, IReadOnlyList<bool> values) {
+        if (values is bool[] array) {
+            writer.WriteArrayCount(count: array.Length);
+            writer.WriteBooleans(values: array);
+        } else {
+            writer.WriteArray(items: values, writeItem: static (w, v) => w.WriteBoolean(value: v));
+        }
+    }
     private static bool[] ReadBoolArray(ref WireReader reader, string field, int maximum = MaxCollectionCount) => reader.ReadArray(
         field: field,
         maximum: maximum,

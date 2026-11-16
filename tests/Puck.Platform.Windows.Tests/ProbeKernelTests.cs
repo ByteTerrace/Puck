@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Platform.Probes;
 using Xunit;
@@ -33,7 +34,7 @@ public sealed partial class ProbeKernelTests {
             inside: [255, 255, 255, 255],
             outside: [0, 0, 0, 255]
         ));
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -66,7 +67,7 @@ public sealed partial class ProbeKernelTests {
             expected: 1L,
             actual: kernel.Cycles
         );
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.Equal(
             expected: -1,
             actual: reading.OutputSlot
@@ -87,7 +88,7 @@ public sealed partial class ProbeKernelTests {
             inside: [255, 255, 255, 255],
             outside: [0, 0, 0, 255]
         ));
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -146,7 +147,7 @@ public sealed partial class ProbeKernelTests {
         );
         sharedRing.Slots.Publish(fenceValue: 0UL, slot: writeSlot);
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -191,7 +192,7 @@ public sealed partial class ProbeKernelTests {
             sharedRing.Slots.Release(slot: readSlot);
         }
 
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         AssertBlobCentroid(reading: reading);
     }
     [Fact]
@@ -202,7 +203,7 @@ public sealed partial class ProbeKernelTests {
             Assert.Skip(reason: "no DXGI hardware adapter is available on this machine.");
         }
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -231,7 +232,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 0u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.Equal(
             expected: 0.0,
             actual: ((double)reading[0])
@@ -262,7 +263,7 @@ public sealed partial class ProbeKernelTests {
 
         slots.Configure(targetCount: targets.Length);
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -299,7 +300,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 0b11u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.Equal(
             expected: 4,
             actual: reading.ChannelCount
@@ -381,7 +382,7 @@ public sealed partial class ProbeKernelTests {
 
         slots.Configure(targetCount: targets.Length);
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -418,7 +419,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 0b011u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.Equal(
             expected: FaerieChannelCount,
             actual: reading.ChannelCount
@@ -531,7 +532,7 @@ public sealed partial class ProbeKernelTests {
 
         slots.Configure(targetCount: targets.Length);
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         // The quad covers the wall's top-left region, x in [-0.9, -0.1] and y in [0.1, 0.9] in frame coordinates —
         // clear of the bright square at top-right (frame x in [0.5, 0.75], y in [0.75, 1]).
         var request = new ProbeKernelRequest(
@@ -601,7 +602,7 @@ public sealed partial class ProbeKernelTests {
             paintingRing.Slots.Release(slot: paintingReadSlot);
         }
 
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.InRange(
             actual: reading.OutputSlot,
             low: 0,
@@ -658,7 +659,7 @@ public sealed partial class ProbeKernelTests {
 
         slots.Configure(targetCount: targets.Length);
 
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -698,7 +699,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 0b011u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
         Assert.Equal(
             expected: expectedPortal,
             actual: ((double)reading[4])
@@ -733,7 +734,7 @@ public sealed partial class ProbeKernelTests {
             top: RectangleTop,
             width: RectangleWidth
         ));
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -762,7 +763,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 1u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
 
         var centreU = ((RectangleLeft + (RectangleWidth / 2.0)) / FrameWidth);
         var centreV = ((RectangleTop + (RectangleHeight / 2.0)) / FrameHeight);
@@ -821,7 +822,7 @@ public sealed partial class ProbeKernelTests {
             inside: [0, 0, 0, 255],
             outside: [0, 0, 0, 255]
         ));
-        var ring = new ProbeReadingRing();
+        var ring = new PublishBuffer<ProbeReading>();
         var request = new ProbeKernelRequest(
             AccumulateBytecode: Bytecode(
                 entry: "accumulate",
@@ -850,7 +851,7 @@ public sealed partial class ProbeKernelTests {
             boundMask: 1u,
             captureTimestamp: Stopwatch.GetTimestamp()
         ));
-        Assert.True(condition: ring.TryReadLatest(reading: out var reading));
+        Assert.True(condition: ring.TrySnapshot(value: out var reading));
 
         // The rectangle's own local axes are known by construction; feeding the major axis's uv-space direction
         // through the kernel's documented corner rule (non-negative u component) gives the expected corners

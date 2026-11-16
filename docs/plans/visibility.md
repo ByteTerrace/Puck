@@ -283,6 +283,10 @@ the raster decision's sentence on draw order change with V1.
    updates the table and its generation, and uploads are proportional to what
    changed. The packet's own `Dress` finding (index the frame's instances by
    slot once, redress only moved groups) is the first cut of this.
+   [Arrival work proportional to change](arrival-proportional.md) is this
+   step's design: the row table, its one write door, what makes it equal a
+   rebuild, and its steps R1a to R1c, which do not wait for V1a; its
+   decision 2 says what V1b's record split owes a hand-over.
 3. **Authored presentation motion compiled to the GPU.** A slot whose pose
    depends only on presentation time, state cells and constants (no effectors,
    contacts, IK or a rule reading it) is eligible. Its motion program (the

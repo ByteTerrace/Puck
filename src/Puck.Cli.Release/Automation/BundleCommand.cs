@@ -66,7 +66,12 @@ public static class BundleCommand {
         var paths = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         foreach (var file in release["files"]!.AsArray()) {
-            var relative = Puck.Abstractions.PuckPaths.Slashed(path: ((string)file!["path"]!));
+            var relative = ((string)file!["path"]!);
+
+            if (!Puck.Confinement.PortablePath.IsRelative(path: relative)) {
+                throw new InvalidDataException(message: $"Invalid or duplicate artifact path: {relative}");
+            }
+
             var path = Path.GetFullPath(path: Path.Combine(
                 path1: root,
                 path2: relative
@@ -75,8 +80,7 @@ public static class BundleCommand {
             if (
                 !Puck.Abstractions.PuckPaths.IsWithin(path: path, root: root) ||
                 !paths.Add(item: relative) ||
-                (relative == "release.json") ||
-                relative.Split('/').Any(predicate: segment => (segment is "." or ".." or ""))
+                (relative == "release.json")
             ) {
                 throw new InvalidDataException(message: $"Invalid or duplicate artifact path: {relative}");
             }

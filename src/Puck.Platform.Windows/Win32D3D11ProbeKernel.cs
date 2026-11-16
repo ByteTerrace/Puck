@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Abstractions;
 using Puck.Maths;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
@@ -49,7 +50,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     // readback that follows waits for the cycle on the CPU either way.
     private readonly Win32D3D11CompletionSignal m_completion;
     private readonly int m_registerCount;
-    private readonly ProbeReadingRing m_ring;
+    private readonly PublishBuffer<ProbeReading> m_ring;
     private readonly LatestSlotPublication? m_slots;
     private readonly long m_startTimestamp = Stopwatch.GetTimestamp();
 
@@ -60,7 +61,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     private byte[]? m_pendingConstants;
     private long m_sequence;
 
-    public Win32D3D11ProbeKernel(nint device, nint context, nint device1, in ProbeKernelRequest request, ProbeReadingRing ring, int triggerWidth, int triggerHeight)
+    public Win32D3D11ProbeKernel(nint device, nint context, nint device1, in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, int triggerWidth, int triggerHeight)
         : this(
         device: ((ID3D11Device*)device),
         context: ((ID3D11DeviceContext*)context),
@@ -72,7 +73,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
     ) {
     }
 
-    private Win32D3D11ProbeKernel(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Device1* device1, in ProbeKernelRequest request, ProbeReadingRing ring, int triggerWidth, int triggerHeight) {
+    private Win32D3D11ProbeKernel(ID3D11Device* device, ID3D11DeviceContext* context, ID3D11Device1* device1, in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, int triggerWidth, int triggerHeight) {
         ArgumentNullException.ThrowIfNull(ring);
 
         if (
@@ -433,7 +434,7 @@ public sealed unsafe class Win32D3D11ProbeKernel : IDisposable {
         }
 
         _ = Interlocked.Increment(location: ref m_cycles);
-        m_ring.Publish(reading: new ProbeReading(
+        m_ring.Publish(value: new ProbeReading(
             sequence: m_sequence++,
             captureTimestamp: captureTimestamp,
             completionTimestamp: Stopwatch.GetTimestamp(),

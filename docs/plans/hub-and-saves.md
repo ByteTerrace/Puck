@@ -367,7 +367,7 @@ with the default in the standard's cabinet module:
 `MachineCreationRequest.SavePath` (`MachineCreationRequest.cs:22-27`) becomes
 the battery image as bytes in, and the host reads the core's external RAM at
 capture. The cores' own file I/O (`HumbleGamingBrickCore.FlushSave` and
-`LoadBatterySave`, `HumbleGamingBrickCore.cs:234-315`, and whatever the
+`LoadBatterySave`, over `BatterySaveFile`, and whatever the
 other three engines that take `savePath` do with it) is deleted, and with it
 the wall-clock stamp `FlushSave` writes and the load already ignores. Operator
 verbs import and export a `.sav` for a real cartridge, unbindable.

@@ -332,10 +332,10 @@ public sealed partial class WorldTick {
             objB: template.Distribution
         )
         ) {
-            memo.Slots = WorldPlacementDeal.Offsets(
+            memo.Slots = WorldPlacementDeal.InstanceCount(
                 template: template,
                 worldSeed: worldSeed
-            ).Length;
+            );
             memo.Distribution = template.Distribution;
             memo.WorldSeed = worldSeed;
         }

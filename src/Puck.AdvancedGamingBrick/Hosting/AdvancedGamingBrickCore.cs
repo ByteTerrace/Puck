@@ -1,5 +1,3 @@
-using Puck.Confinement;
-
 namespace Puck.AdvancedGamingBrick;
 
 /// <summary>
@@ -16,10 +14,7 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     private readonly AdvancedGamingBrickMachine m_machine;
     private readonly AgbCartridge m_cartridge;
     private readonly StateWriter m_timeTravelWriter = new(capacity: 4096);
-    private readonly string? m_savePath;
-
-    // Host persistence state: the disk cannot rewind with an emulated snapshot's SaveDirty flag.
-    private bool m_saveNeedsFlush;
+    private readonly BatterySaveFile m_save;
 
     /// <summary>Builds a native machine with bundled Puck firmware, without a renderer or background worker.</summary>
     /// <param name="cartridgeRom">The native AGB cartridge image.</param>
@@ -55,7 +50,10 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
             configuration.Bios.Span,
             configuration.Rom
         );
-        m_savePath = savePath;
+        m_save = new BatterySaveFile(
+            path: savePath,
+            reportTag: "advanced-machine-host"
+        );
         m_instance = AgbMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
         m_cartridge = m_instance.GetRequiredService<AgbCartridge>();
@@ -116,7 +114,7 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
             length: length,
             start: 0
         ));
-        m_saveNeedsFlush = true;
+        m_save.MarkRewound();
     }
     /// <inheritdoc/>
     public ITimeTravelLookahead<MachinePads> CreateLookahead() =>
@@ -135,23 +133,16 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
     /// <inheritdoc/>
     public void FlushSave(bool force) {
         if (
-            (m_savePath is not { } savePath) ||
+            (m_save.Path is null) ||
             (m_cartridge is not { HasSave: true } cartridge) ||
-            (!cartridge.SaveDirty && !m_saveNeedsFlush && !force)
+            (!cartridge.SaveDirty && !m_save.IsStale && !force)
         ) {
             return;
         }
 
-        try {
-            WriteBatterySave(
-                path: savePath,
-                data: cartridge.SaveData
-            );
+        // Only a successful replacement clears the cartridge's dirty state.
+        if (m_save.TryWrite(data: cartridge.SaveData)) {
             cartridge.MarkSaveClean();
-            m_saveNeedsFlush = false;
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            m_saveNeedsFlush = true;
-            Console.Error.WriteLine(value: $"[advanced-machine-host] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
     /// <inheritdoc/>
@@ -160,27 +151,16 @@ public sealed partial class AdvancedGamingBrickCore : IQueuedMachineCore {
         m_instance.Dispose();
     }
 
-    // A failed write leaves the previous save intact. Only a successful replacement clears dirty state.
-    private static void WriteBatterySave(string path, ReadOnlySpan<byte> data) =>
-        AtomicFile.WriteAllBytes(
-            bytes: data,
-            path: path
-        );
     private void LoadBatterySave() {
         if (
-            (m_savePath is not { } savePath) ||
             !m_cartridge.HasSave ||
-            !File.Exists(path: savePath)
+            (m_save.Read() is not { } save)
         ) {
             return;
         }
 
-        try {
-            if (!m_cartridge.LoadSave(data: File.ReadAllBytes(path: savePath))) {
-                Console.Error.WriteLine(value: $"[advanced-machine-host] battery save '{savePath}' has an incompatible size; booting with fresh backup memory.");
-            }
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[advanced-machine-host] battery save '{savePath}' unreadable ({exception.Message}); booting with fresh backup memory.");
+        if (!m_cartridge.LoadSave(data: save)) {
+            m_save.Report(message: $"battery save '{m_save.Path}' has an incompatible size; booting with fresh backup memory.");
         }
     }
 }

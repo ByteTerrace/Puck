@@ -248,6 +248,25 @@ public static partial class WorldStateHashComposition {
 
         return digests;
     }
+    /// <summary>Folds one per-component read (<see cref="AuthoritativeComponents"/>) into the authoritative digest it
+    /// composes: the value <see cref="HashAuthoritative"/> returns for the state the read was taken at, so a caller
+    /// that keeps both folds the state once.</summary>
+    /// <param name="components">One digest per component of <see cref="Authoritative"/>, in its order.</param>
+    /// <returns>The digest.</returns>
+    /// <exception cref="ArgumentException">The read is not one digest per authoritative component.</exception>
+    public static ulong HashOf(ReadOnlySpan<ulong> components) {
+        if (components.Length != AuthoritativeOrder.Length) {
+            throw new ArgumentException(message: $"a per-component read holds {AuthoritativeOrder.Length} digests; got {components.Length}", paramName: nameof(components));
+        }
+
+        var hash = Fnv1aHash.Create();
+
+        foreach (var digest in components) {
+            hash.Add(value: digest);
+        }
+
+        return hash.Value;
+    }
     /// <summary>Names the components of <see cref="Authoritative"/> whose digests differ between two per-component
     /// reads (<see cref="AuthoritativeComponents"/>).</summary>
     /// <param name="left">One read.</param>
@@ -345,6 +364,10 @@ public static partial class WorldStateHashComposition {
     // of its own: a per-component read is exactly what the scope combines, and a component that folds in segments
     // (the arena by rows, the bodies by slots) does so behind its digest without moving any other.
     private static ulong ComponentDigest(WorldServer server, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
+        if ((component == WorldStateHashComponent.Declaration) && !recompute) {
+            return server.Persistence.DeclarationDigest();
+        }
+
         var hash = Fnv1aHash.Create();
 
         server.Persistence.AppendStateHashComponent(

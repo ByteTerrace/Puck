@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.Versioning;
 using Microsoft.Win32.SafeHandles;
+using Puck.Abstractions;
 using Puck.Platform.Probes;
 using Windows.Win32.Graphics.Direct3D11;
 
@@ -40,7 +42,35 @@ internal sealed unsafe class Win32ProbeKernelBench {
 
     private bool m_closed;
 
-    public IProbeKernelRun Attach(in ProbeKernelRequest request, ProbeReadingRing ring) {
+    /// <summary>Attaches a kernel its host has admitted, or refuses it with the host's reason: every host's
+    /// <see cref="IProbeKernelHost.TryAttachKernel"/> decides admission by its own graph's sockets, then attaches
+    /// through here.</summary>
+    /// <param name="request">The kernel request.</param>
+    /// <param name="ring">The ring the kernel publishes readings into.</param>
+    /// <param name="refusal">The host's reason to refuse the request, or <see langword="null"/> when it admits it.</param>
+    /// <param name="run">When this returns <see langword="true"/>, the attached run.</param>
+    /// <param name="fault">The refusal reason when this returns <see langword="false"/>; otherwise empty.</param>
+    /// <returns><see langword="true"/> if the kernel was attached.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="ring"/> is <see langword="null"/>.</exception>
+    public bool TryAttach(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, string? refusal, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
+        ArgumentNullException.ThrowIfNull(ring);
+
+        if (refusal is not null) {
+            run = null;
+            fault = refusal;
+
+            return false;
+        }
+
+        run = Attach(
+            request: in request,
+            ring: ring
+        );
+        fault = "";
+
+        return true;
+    }
+    private IProbeKernelRun Attach(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring) {
         var attachment = new Attachment(
             request: request,
             ring: ring
@@ -344,7 +374,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         }
     }
 
-    private sealed class Attachment(in ProbeKernelRequest request, ProbeReadingRing ring) : IProbeKernelRun {
+    private sealed class Attachment(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring) : IProbeKernelRun {
         private volatile bool m_detached;
         private volatile bool m_ended;
         private string? m_fault;
@@ -358,7 +388,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
         private Win32D3D11FenceWait?[] m_ringWaits = [];
 
         public readonly ProbeKernelRequest Request = request;
-        public readonly ProbeReadingRing Ring = ring;
+        public readonly PublishBuffer<ProbeReading> Ring = ring;
 
         public long Cycles => (Kernel?.Cycles ?? 0L);
         public bool Detached => m_detached;

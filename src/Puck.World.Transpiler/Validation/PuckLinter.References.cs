@@ -34,7 +34,6 @@ namespace Puck.World.Transpiler.Validation;
 // the SAME shapes array, a purely local scope no basis or importer could ever change, so it always runs and always
 // reports.
 public static partial class PuckLinter {
-    private const string BindingPrefix = "state.";
 
     // Read from RuleFacts' own constants, trimmed of their trailing ':'/'[' separator, so a channel added there is
     // known here without a second edit.
@@ -610,17 +609,14 @@ public static partial class PuckLinter {
     }
     // A `state.<row>[.<key>]` token; anything else a binding admits (a literal, a host channel) names no row.
     private static void CheckBinding(string token, Func<string> pointer, ReferenceCatalog catalog, SourceMap? sourceMap, DiagnosticBag diagnostics, bool resolveGlobalReferences) {
-        if (!token.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: BindingPrefix
-        )) {
+        if (!DocumentIdentifier.IsReference(value: token)) {
             return;
         }
 
         CheckRowName(
             catalog: catalog,
             diagnostics: diagnostics,
-            name: QualifiedName.Parse(text: token[BindingPrefix.Length..]).Head,
+            name: QualifiedName.Parse(text: token[DocumentIdentifier.ReferencePrefix.Length..]).Head,
             pointer: pointer,
             resolveGlobalReferences: resolveGlobalReferences,
             sourceMap: sourceMap

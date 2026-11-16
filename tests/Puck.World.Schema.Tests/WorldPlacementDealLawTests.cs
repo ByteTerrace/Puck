@@ -210,6 +210,29 @@ public sealed class WorldPlacementDealLawTests {
             actual: dealt
         );
     }
+    /// <summary>The count a deal reads is the length of the offsets it deals, for every region that deals a fixed count,
+    /// including a scatter whose grid is not a whole number of blocks and a lattice whose counts clamp up to one.</summary>
+    [Fact]
+    public void TheInstanceCountIsTheLengthOfTheOffsets() {
+        var step = new DocumentVector3(value: Vector3.UnitX);
+        WorldDistributionRegion[] regions = [
+            new WorldDistributionRegion.Lattice(StepA: step, CountA: 3, StepB: step, CountB: 4),
+            new WorldDistributionRegion.Lattice(StepA: step, CountA: 0, StepB: step, CountB: -2),
+            new WorldDistributionRegion.Scatter(CellSize: 1.6f, Depth: 10, Radius: 1, Seed: 3u, Spacing: 4, Width: 11),
+            new WorldDistributionRegion.Scatter(CellSize: 1.6f, Depth: 0, Radius: 1, Seed: 3u, Spacing: 1, Width: 5),
+            new WorldDistributionRegion.Noise(CellSize: 1f, Depth: 9, Frequency: 2, Octaves: 2, Seed: 5u, Threshold: 0.4f, Width: 7),
+            new WorldDistributionRegion.Disc(Radius: 2f),
+        ];
+
+        foreach (var region in regions) {
+            var template = Template(region: region);
+
+            Assert.Equal(
+                actual: WorldPlacementDeal.InstanceCount(template: template, worldSeed: 21UL),
+                expected: WorldPlacementDeal.Offsets(template: template, worldSeed: 21UL).Length
+            );
+        }
+    }
     [Fact]
     public void IsChildRequiresADealtParentAndTheParentsOwnChildShape() {
         var dealt = Template(region: new WorldDistributionRegion.Lattice(

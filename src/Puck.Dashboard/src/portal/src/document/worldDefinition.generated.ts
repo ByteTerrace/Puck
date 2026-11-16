@@ -2154,7 +2154,7 @@ export type CreationDocument = {
      */
     name: string;
     /**
-     * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a SignalStatePrefix state cell, or a SignalDriverPrefix earlier driver. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
+     * One of SignalPlanarTravel, SignalTravel, SignalTime, SignalSpeed, SignalVerticalSpeed, SignalTurnRate, SignalTravelDirection, SignalLateralAcceleration, SignalForwardAcceleration, a state cell (state.<row>[.<key>], whose numeric value at the frame's tick is the phase times the cadence), or a SignalDriverPrefix earlier driver. The first three integrate: φ accumulates Cadence × the signal's per-frame delta while w > 0, and wraps modulo 2π so a wheel spins forever without losing precision. The rest are instantaneous: φ is set to Cadence × the current value (through Dynamics when one is named), so a facet reading them tracks rather than cycles.
      */
     signal: string;
     /**

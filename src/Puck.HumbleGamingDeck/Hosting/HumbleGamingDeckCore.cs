@@ -1,4 +1,3 @@
-using Puck.Confinement;
 using System.Globalization;
 
 namespace Puck.HumbleGamingDeck;
@@ -16,7 +15,7 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     private readonly StateWriter m_writer = new(capacity: 4096);
     private readonly uint[] m_colours = new uint[(HgdPpu.Width * HgdPpu.Height)];
 
-    private readonly string? m_savePath;
+    private readonly BatterySaveFile m_save;
 
     private byte[] m_persistedSave = [];
     private long m_colouredFrame = -1;
@@ -24,13 +23,12 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     /// <summary>Initializes a new instance of the <see cref="HumbleGamingDeckCore"/> class from a cartridge image with the
     /// NTSC model and the default power-on profile.</summary>
     /// <param name="cartridgeImage">The iNES or NES 2.0 image.</param>
-    /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only.</param>
+    /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only. An
+    /// unreadable existing save is reported to stderr and the board starts from power-on RAM.</param>
     /// <exception cref="ArgumentNullException"><paramref name="cartridgeImage"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The image's header or payload is damaged or ambiguous.</exception>
     /// <exception cref="NotSupportedException">The image names an unimplemented mapper, submapper, console, timing
     /// family, or memory layout.</exception>
-    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
-    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public HumbleGamingDeckCore(byte[] cartridgeImage, string? savePath = null)
         : this(
         configuration: new HgdMachineConfiguration(cartridge: HgdCartridge.Load(image: (cartridgeImage ?? throw new ArgumentNullException(paramName: nameof(cartridgeImage))))),
@@ -40,8 +38,6 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     /// <param name="configuration">The cartridge, model, and power-on profile.</param>
     /// <param name="savePath">The battery-save path, or <see langword="null"/> to keep battery RAM in memory only.</param>
     /// <exception cref="ArgumentNullException"><paramref name="configuration"/> is <see langword="null"/>.</exception>
-    /// <exception cref="IOException">An existing battery save cannot be read.</exception>
-    /// <exception cref="UnauthorizedAccessException">Access to an existing battery save is denied.</exception>
     public HumbleGamingDeckCore(HgdMachineConfiguration configuration, string? savePath = null) {
         ArgumentNullException.ThrowIfNull(argument: configuration);
 
@@ -55,7 +51,10 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
             ),
             firmware: []
         );
-        m_savePath = savePath;
+        m_save = new BatterySaveFile(
+            path: savePath,
+            reportTag: "humble-gaming-deck"
+        );
         m_instance = HgdMachineFactory.Create(configuration: configuration);
         m_machine = m_instance.Machine;
         LoadBatterySave();
@@ -157,18 +156,13 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     public void FlushSave(bool force) {
         var battery = m_machine.Bus.Mapper.BatteryRam;
 
-        if ((m_savePath is not { } savePath) || battery.IsEmpty || (!force && battery.SequenceEqual(other: m_persistedSave))) {
+        // The mapper keeps no dirty flag; the bytes on disk are the reference, so a restore needs no rewound mark.
+        if ((m_save.Path is null) || battery.IsEmpty || (!force && battery.SequenceEqual(other: m_persistedSave))) {
             return;
         }
 
-        try {
-            AtomicFile.WriteAllBytes(
-                bytes: battery,
-                path: savePath
-            );
+        if (m_save.TryWrite(data: battery)) {
             m_persistedSave = battery.ToArray();
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[humble-gaming-deck] battery-save flush to '{savePath}' failed ({exception.Message}); retrying on the next flush.");
         }
     }
     /// <inheritdoc/>
@@ -180,14 +174,12 @@ public sealed class HumbleGamingDeckCore : IQueuedMachineCore {
     private void LoadBatterySave() {
         var battery = m_machine.Bus.Mapper.BatteryRam;
 
-        if ((m_savePath is not { } savePath) || battery.IsEmpty || !File.Exists(path: savePath)) {
+        if (battery.IsEmpty || (m_save.Read() is not { } saved)) {
             return;
         }
 
-        var saved = File.ReadAllBytes(path: savePath);
-
         if (saved.Length != battery.Length) {
-            Console.Error.WriteLine(value: $"[humble-gaming-deck] battery save '{savePath}' holds {saved.Length} bytes, the board keeps {battery.Length}; starting from power-on RAM.");
+            m_save.Report(message: $"battery save '{m_save.Path}' holds {saved.Length} bytes, the board keeps {battery.Length}; starting from power-on RAM.");
 
             return;
         }

@@ -29,6 +29,10 @@ namespace Puck.Machines;
 /// </para>
 /// </summary>
 public sealed class QueuedMachineWorker : IDisposable {
+    /// <summary>The finite number of exact tick and input segments a queued machine accepts before its producer
+    /// backpressures, unless a caller asks for another window. It bounds segments, not wall-clock time.</summary>
+    public const int DefaultMaximumPendingSteps = 8;
+
     // ~5 seconds at 59.73 fps between battery-save disk writes while dirty; counted in native frames, not work items.
     private const int SaveFlushIntervalFrames = 300;
 

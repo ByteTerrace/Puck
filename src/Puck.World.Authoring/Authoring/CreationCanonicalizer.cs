@@ -393,7 +393,7 @@ public static partial class CreationCanonicalizer {
             }
             if (!CreationDriverDocument.IsSignal(signal: driver.Signal)) {
                 errors.Add(item: new(
-                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', '{CreationDriverDocument.SignalTurnRate}', '{CreationDriverDocument.SignalTravelDirection}', '{CreationDriverDocument.SignalLateralAcceleration}', '{CreationDriverDocument.SignalForwardAcceleration}', '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]', and '{CreationDriverDocument.SignalDriverPrefix}<driver>'.",
+                    Message: $"signal '{driver.Signal}' is not recognized; the signals are '{CreationDriverDocument.SignalPlanarTravel}', '{CreationDriverDocument.SignalTravel}', '{CreationDriverDocument.SignalTime}', '{CreationDriverDocument.SignalSpeed}', '{CreationDriverDocument.SignalVerticalSpeed}', '{CreationDriverDocument.SignalTurnRate}', '{CreationDriverDocument.SignalTravelDirection}', '{CreationDriverDocument.SignalLateralAcceleration}', '{CreationDriverDocument.SignalForwardAcceleration}', '{DocumentIdentifier.ReferencePrefix}<row>[.<key>]', and '{CreationDriverDocument.SignalDriverPrefix}<driver>'.",
                     Path: $"drivers[{i}].signal"
                 ));
             } else if (CreationDriverDocument.TryDriverSignal(
@@ -776,7 +776,7 @@ public static partial class CreationCanonicalizer {
             default: {
                     if (!CreationDriverDocument.IsStateSignal(signal: target.Reference)) {
                         errors.Add(item: new(
-                            Message: $"reference '{target.Reference}' is not a '{CreationDriverDocument.SignalStatePrefix}<row>[.<key>]' state reference.",
+                            Message: $"reference '{target.Reference}' is not a '{DocumentIdentifier.ReferencePrefix}<row>[.<key>]' state reference.",
                             Path: $"{path}.reference"
                         ));
                     }
@@ -1496,7 +1496,7 @@ public static partial class CreationCanonicalizer {
                     rgb: out _,
                     value: entry.Color
                 ) &&
-                !ColorStateBinding.IsStateBinding(value: entry.Color)
+                !DocumentIdentifier.IsCellReference(value: entry.Color)
             ) {
                 errors.Add(item: new(
                     Message: "color must be #RRGGBB or a state.<row>[.<key>] binding.",
@@ -1541,7 +1541,7 @@ public static partial class CreationCanonicalizer {
                 if ((glass.Ior is { } ior) && (!float.IsFinite(f: ior) || (ior < SdfGlass.MinIor) || (ior > SdfGlass.MaxIor))) {
                     errors.Add(item: new(Message: $"glass ior must be finite and in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}].", Path: $"palette[{i}].glass.ior"));
                 }
-                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !ColorStateBinding.IsStateBinding(value: scatter)) {
+                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !DocumentIdentifier.IsCellReference(value: scatter)) {
                     errors.Add(item: new(Message: "glass scatter requires #RRGGBB or a state binding.", Path: $"palette[{i}].glass.scatter"));
                 }
                 if ((glass.Scattering is { } scattering) && (!float.IsFinite(f: scattering) || (scattering < 0f))) {

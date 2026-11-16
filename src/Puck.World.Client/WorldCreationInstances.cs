@@ -1089,46 +1089,34 @@ public sealed partial class WorldCreationInstances {
     }
 
     // Volumes follow the root or motion owner with the authored parent frame composed in. Overflow refuses by name.
-    private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, int shapeCount, bool[]? hidden) {
+    private void AppendVolumes(Registration live, CreationDocument document, float placementScale, int rootSlot, bool[]? hidden) {
         if (document.Volumes is not { Count: > 0 } volumes) {
             return;
         }
 
-        var shapes = (document.Shapes ?? []);
-
         // Indexed, since the list is an interface and a foreach over it boxes its enumerator every frame.
         for (var position = 0; (position < volumes.Count); position++) {
-            var volume = volumes[position];
-
-            if (!volume.Enabled) {
+            if (!WorldShapeIsolation.TryAdmitVolume(
+                creation: document,
+                emitted: m_volumes.Count,
+                hidden: hidden,
+                parentIndex: out var parentIndex,
+                position: position,
+                volume: out var volume
+            )) {
                 continue;
-            }
-            if (m_volumes.Count >= SdfProgramBuilder.MaxVolumes) {
-                throw new InvalidOperationException(message: $"Creation '{document.Name}' exceeds the {SdfProgramBuilder.MaxVolumes} bounded-volume frame capacity.");
             }
 
             var slot = rootSlot;
             var origin = Vector3.Zero;
             var rotation = Quaternion.Identity;
 
-            if (volume.Parent is { } parent) {
-                if (WorldShapeIsolation.IsHidden(hidden: hidden, name: parent, shapes: shapes)) {
-                    continue;
-                }
+            if (parentIndex >= 0) {
+                var shape = document.Shapes![parentIndex];
 
-                for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
-                    if (string.Equals(
-                        a: shapes[shapeIndex].Name?.Value,
-                        b: parent,
-                        comparisonType: StringComparison.Ordinal
-                    )) {
-                        slot = (rootSlot + live.Motion.ShapeSlots[shapeIndex]);
-                        origin = shapes[shapeIndex].Position.Value;
-                        rotation = shapes[shapeIndex].Rotation.Value;
-
-                        break;
-                    }
-                }
+                slot = (rootSlot + live.Motion.ShapeSlots[parentIndex]);
+                origin = shape.Position.Value;
+                rotation = shape.Rotation.Value;
             }
 
             m_volumes.Add(item: volume.ToVolume(

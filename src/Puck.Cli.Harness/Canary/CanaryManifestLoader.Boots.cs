@@ -132,13 +132,8 @@ public static partial class CanaryManifestLoader {
                 ? alterElement.GetString()
                 : null);
 
-            if (
-                string.IsNullOrWhiteSpace(value: alter) ||
-                (alter.IndexOf(value: '\\') >= 0) ||
-                Path.IsPathRooted(path: alter) ||
-                alter.Split('/').Any(predicate: static segment => (segment is "" or "." or ".."))
-            ) {
-                throw new CanaryManifestRefusal(message: $"{context} alter must be a logical path inside the package: relative, with forward slashes and no '.' or '..' segment.");
+            if (!Puck.Confinement.PortablePath.IsRelative(path: alter)) {
+                throw new CanaryManifestRefusal(message: $"{context} alter must be a logical path inside the package: relative, portable (forward slashes, no '.', '..' or empty segment, no reserved name or character).");
             }
         }
 

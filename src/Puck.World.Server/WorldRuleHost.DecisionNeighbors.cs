@@ -7,7 +7,10 @@ namespace Puck.World.Server;
 /// <summary>Observed work in the last ordinary rule pass; diagnostic counters do not affect simulation choices.</summary>
 public readonly record struct WorldDecisionWork(long Inspected, long Scored, long SightTests, long LimitedQueries, int ImagePoints = 0, int GridBuilds = 0);
 public sealed partial class WorldRuleHost {
-    private DecisionPerception? m_decisionPerception;
+    // The bodies as they stood before this tick's rule effects, or null until a decision reads neighbours. Derived
+    // scratch: reconciliation during an effect must not replace this image.
+    private WorldPerceptionImage? m_decisionPerception;
+    private FixedSpatialNeighbor[]? m_decisionScratch;
     private WorldDecisionWork m_decisionWork;
 
     /// <summary>Gets bounded-neighbor and score work from the last completed ordinary rule pass.</summary>
@@ -16,33 +19,12 @@ public sealed partial class WorldRuleHost {
     private readonly record struct DecisionChoice(int Option, int Candidate, int Generation, long Score) : IComparable<DecisionChoice> {
         public int CompareTo(DecisionChoice other) => Candidate.CompareTo(value: other.Candidate);
     }
-    // Derived scratch only. Rebuilt before rule effects; reconciliation during an effect must not replace this image.
-    private sealed class DecisionPerception(int capacity) {
-        public readonly FixedVector3[] Positions = new FixedVector3[capacity];
-        public readonly FixedQuaternion[] Orientations = new FixedQuaternion[capacity];
-        public readonly int[] Generations = new int[capacity];
-        public readonly bool[] Active = new bool[capacity];
-        public readonly FixedSpatialPoint[] Points = new FixedSpatialPoint[capacity];
-        public readonly FixedSpatialNeighbor[] Scratch = new FixedSpatialNeighbor[WorldBodiesLimits.CapacityCeiling];
-        public readonly Dictionary<long, Grid> Grids = [];
-
-        public int Count;
-
-        public sealed class Grid(int capacity, long width) {
-            public readonly FixedSpatialNeighborhood Neighborhood = new(
-                capacity: capacity,
-                cellWidth: FixedQ4816.FromRawBits(value: width)
-            );
-
-            public bool Built;
-        }
-    }
 
     private void FreezeDecisionPerception(CompiledRule[] rules) {
         if (!rules.Any(predicate: static rule => ((rule as CompiledWorldFactsRule)?.Decision?.Options.Any(predicate: static option => (option.Neighbors is not null)) == true))) { return; }
         if (
             (m_decisionPerception is null) ||
-            (m_decisionPerception.Active.Length != Host.Population.Capacity)
+            (m_decisionPerception.Capacity != Host.Population.Capacity)
         ) {
             m_decisionPerception = new(capacity: Host.Population.Capacity);
         }
@@ -51,37 +33,10 @@ public sealed partial class WorldRuleHost {
         foreach (var compiled in rules) {
             if ((compiled as CompiledWorldFactsRule)?.Decision is not { } policy) { continue; }
             foreach (var option in policy.Options) {
-                if (option.Neighbors is not { } neighbors) { continue; }
-                var width = neighbors.CellWidth.Value;
-
-                if (!image.Grids.ContainsKey(key: width)) {
-                    image.Grids.Add(
-                    key: width,
-                    value: new(
-                        capacity: Host.Population.Capacity,
-                        width: width
-                    )
-                );
-                }
+                if (option.Neighbors is { } neighbors) { image.Declare(cellWidthRaw: neighbors.CellWidth.Value); }
             }
         }
-        Array.Clear(array: image.Active);
-        image.Count = 0;
-        for (var index = 0; (index < image.Active.Length); index++) {
-            if (
-                !Host.Population.IsActive(index: index) ||
-                (Host.Population.EntryBody(index: index) is not { } body)
-            ) { continue; }
-            image.Active[index] = true;
-            image.Generations[index] = Host.Population.Generation(index: index);
-            image.Positions[index] = body.FixedPosition;
-            image.Orientations[index] = body.FixedOrientation;
-            image.Points[image.Count++] = new(
-                Index: index,
-                Position: body.FixedPosition
-            );
-        }
-        foreach (var grid in image.Grids.Values) { grid.Built = false; }
+        image.Freeze(population: Host.Population);
         m_decisionWork = m_decisionWork with { ImagePoints = image.Count };
     }
     private bool DecisionBodyLive(int index, int generation) => ((((uint)index) < ((uint)Host.Population.Capacity)) &&
@@ -121,40 +76,38 @@ public sealed partial class WorldRuleHost {
         Scored,
     }
 
-    private bool DecisionPerceptible(DecisionPerception image, CompiledWorldFactsDecisionNeighbors neighbors, int observer, int candidate) {
+    private bool DecisionPerceptible(WorldPerceptionImage image, CompiledWorldFactsDecisionNeighbors neighbors, int observer, int candidate) {
         if (
             (candidate == observer) ||
-            (((uint)candidate) >= ((uint)image.Active.Length)) ||
-            !image.Active[candidate] ||
+            !image.Present(index: candidate) ||
             !DecisionBodyLive(
             candidate,
-            image.Generations[candidate]
+            image.Generation(index: candidate)
         )
         ) { return false; }
-        var a = image.Positions[observer]; var b = image.Positions[candidate];
+        var a = image.Position(index: observer); var b = image.Position(index: candidate);
 
         // An offset the carrier cannot hold is farther than any range.
-        if (
-            !FixedVector3.TrySubtract(
+        if (!FixedVector3.TrySubtract(
             difference: out var offset,
             left: b,
             right: a
-        ) ||
-            !offset.IsWithin(radius: neighbors.Range)
-        ) { return false; }
-        var forward = image.Orientations[observer].Rotate(vector: -FixedVector3.UnitZ);
+        )) { return false; }
+        var forward = image.Orientation(index: observer).Rotate(vector: -FixedVector3.UnitZ);
 
-        if (!offset.IsWithinCone(
-            cosineHalfAngle: neighbors.MinimumDot,
-            forward: forward
+        if (!BodyTargetConeSense.ContainsOffset(
+            forward: in forward,
+            minimumDot: neighbors.MinimumDot,
+            offset: in offset,
+            range: neighbors.Range
         )) { return false; }
         if (!neighbors.Source.RequiresLineOfSight) { return true; }
         m_decisionWork = m_decisionWork with { SightTests = (m_decisionWork.SightTests + 1) };
         return Host.Population.HasLineOfSight(
             from: a,
-            fromOrientation: image.Orientations[observer],
+            fromOrientation: image.Orientation(index: observer),
             to: b,
-            toOrientation: image.Orientations[candidate]
+            toOrientation: image.Orientation(index: candidate)
         );
     }
     // The choices the options offer, in the runtime's buffer. A gate or score that faulted decides nothing, so the
@@ -191,11 +144,10 @@ public sealed partial class WorldRuleHost {
             var image = m_decisionPerception!;
 
             if (
-                (((uint)key) >= ((uint)image.Active.Length)) ||
-                !image.Active[key] ||
+                !image.Present(index: key) ||
                 !DecisionBodyLive(
                 key,
-                image.Generations[key]
+                image.Generation(index: key)
             )
             ) { continue; }
             var start = written;
@@ -256,16 +208,9 @@ public sealed partial class WorldRuleHost {
                 (budget > 0) &&
                 (retained < neighbors.Source.MaxCandidates)
             ) {
-                var grid = image.Grids[neighbors.CellWidth.Value];
-
-                if (!grid.Built) {
-                    grid.Neighborhood.Rebuild(points: image.Points.AsSpan(
-                        length: image.Count,
-                        start: 0
-                    )); grid.Built = true;
-                    m_decisionWork = m_decisionWork with { GridBuilds = (m_decisionWork.GridBuilds + 1) };
-                }
-                var width = ((ulong)image.Active.Length).NextPowerOfTwo();
+                var scratch = (m_decisionScratch ??= new FixedSpatialNeighbor[WorldBodiesLimits.CapacityCeiling]);
+                var builds = image.Builds;
+                var width = ((ulong)image.Capacity).NextPowerOfTwo();
                 var bits = BitOperations.Log2(value: width);
                 // Visit distant portions of each population-sized phase block first, not an almost identical
                 // sliding window. This permutes every phase in each block and consumes no choice RNG draws.
@@ -279,26 +224,28 @@ public sealed partial class WorldRuleHost {
                     key: ((uint)key),
                     ordinal: ordinal
                 );
-                var work = grid.Neighborhood.Query(
-                    image.Positions[key],
+                var work = image.Query(
+                    neighbors.CellWidth.Value,
+                    image.Position(index: key),
                     neighbors.Range,
                     key,
                     budget,
                     phase,
-                    image.Scratch.AsSpan(
+                    scratch.AsSpan(
                         length: budget,
                         start: 0
                     )
                 );
 
                 m_decisionWork = m_decisionWork with {
+                    GridBuilds = (m_decisionWork.GridBuilds + ((int)(image.Builds - builds))),
                     Inspected = (m_decisionWork.Inspected + work.CandidatesExamined),
                     LimitedQueries = (m_decisionWork.LimitedQueries + (work.BudgetLimited
                     ? 1
                     : 0)),
                 };
                 for (var n = 0; ((n < work.NeighborsWritten) && (retained < neighbors.Source.MaxCandidates)); n++) {
-                    var candidate = image.Scratch[n].Index;
+                    var candidate = scratch[n].Index;
 
                     if (
                         (candidate == incumbent) ||
@@ -324,7 +271,7 @@ public sealed partial class WorldRuleHost {
                         index,
                         key,
                         candidate,
-                        image.Generations[candidate],
+                        image.Generation(index: candidate),
                         ruleName,
                         state,
                         lostEligibility,

@@ -6,8 +6,7 @@ namespace Puck.Recording.Session;
 /// Strips temporal-delimiter OBUs (<c>OBU_TEMPORAL_DELIMITER</c>, type 2) from an AV1 temporal unit before it
 /// becomes a Matroska/WebM block. Each Matroska SimpleBlock already IS one temporal unit, so the in-band delimiter
 /// is redundant and the AV1-in-Matroska/WebM carriage mapping prefers it removed; some players reject or mis-seek a
-/// stream that keeps it. The walk mirrors <c>Av1Bitstream</c>'s OBU parser (header + optional extension byte +
-/// optional leb128 size); it copies every non-delimiter OBU verbatim and preserves order, and bails (returning
+/// stream that keeps it. The walk is <see cref="Av1Obu.TryRead"/>'s OBU framing; it copies every non-delimiter OBU verbatim and preserves order, and bails (returning
 /// <c>-1</c>, keep-original) on any byte it cannot parse so a non-AV1 or truncated payload is never corrupted.
 /// </summary>
 internal static class Av1TemporalDelimiterFilter {
@@ -28,53 +27,27 @@ internal static class Av1TemporalDelimiterFilter {
         var written = 0;
 
         while (index < temporalUnit.Length) {
-            var headerByte = temporalUnit[index];
+            var start = index;
 
-            // forbidden bit (bit 7) must be zero in a well-formed OBU header; a set bit means this is not an OBU run.
-            if ((headerByte & 0x80) != 0) {
-                return -1;
-            }
-
-            var obuType = (headerByte >> 3) & 0xF;
-            var extensionFlag = (headerByte >> 2) & 0x1;
-            var hasSizeField = (headerByte >> 1) & 0x1;
-            var cursor = ((index + 1) + extensionFlag);
-            int payloadLength;
-
-            if (hasSizeField == 1) {
-                if (!Av1Leb128.TryRead(
-                    data: temporalUnit,
-                    offset: ref cursor,
-                    value: out var size
-                )) {
-                    return -1;
-                }
-
-                payloadLength = ((int)size);
-            } else {
-                payloadLength = (temporalUnit.Length - cursor);
-            }
-
-            var obuEnd = (cursor + payloadLength);
-
-            if (
-                (payloadLength < 0) ||
-                (obuEnd > temporalUnit.Length)
-            ) {
+            if (!Av1Obu.TryRead(
+                index: ref index,
+                obuType: out var obuType,
+                payloadLength: out _,
+                payloadOffset: out _,
+                temporalUnit: temporalUnit
+            )) {
                 return -1;
             }
 
             if (obuType != ObuTemporalDelimiter) {
-                var obuLength = (obuEnd - index);
+                var obuLength = (index - start);
 
                 temporalUnit.Slice(
                     length: obuLength,
-                    start: index
+                    start: start
                 ).CopyTo(destination: destination.AsSpan(start: written));
                 written += obuLength;
             }
-
-            index = obuEnd;
         }
 
         return written;

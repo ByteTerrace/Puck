@@ -20,32 +20,18 @@ public sealed partial class WorldPopulation {
     /// that scratch has grown to the population's shape. Every slot folds into its segment of
     /// <see cref="HashSegmentSlots"/>, and the segments into the hash.</summary>
     /// <param name="hash">The hash to fold into.</param>
-    /// <param name="bodies">Selected slots, or null for every active slot.</param>
     /// <remarks>Every slot encodes afresh on every fold. A body's continuation spans dozens of fields and arrays its
     /// step, commands, contacts and tethers write directly, so no version covers it; a cached slot digest would need
     /// every one of those writes to pass one door that moves a version.</remarks>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
-    public void AppendContinuationHash(ref Fnv1aHash hash, IReadOnlySet<int>? bodies = null) {
+    public void AppendContinuationHash(ref Fnv1aHash hash) {
         RequireCapturePoint();
-
-        if (bodies is not null) {
-            var count = 0;
-
-            for (var index = 0; (index < Capacity); index++) {
-                if (bodies.Contains(item: index) && (m_entries[index] is { Active: true, Body: not null })) { count++; }
-            }
-            hash.Add(value: ((uint)count));
-            for (var index = 0; (index < Capacity); index++) {
-                if (bodies.Contains(item: index) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
-                    hash.Add(value: SlotDigest(body: body, entry: entry, index: index));
-                }
-            }
-            return;
-        }
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
 
         var digests = ((m_foldDigests.Length == Capacity) ? m_foldDigests : (m_foldDigests = new ulong[Capacity]));
         var present = ((m_foldPresent.Length == Capacity) ? m_foldPresent : (m_foldPresent = new bool[Capacity]));
 
+        WorldTickWork.Process.Add(amount: Capacity, kind: WorldTickWork.ContinuationSlots);
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
@@ -56,20 +42,50 @@ public sealed partial class WorldPopulation {
         }
         WorldAuthorityCheckpointCodec.FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
     }
+    /// <summary>Folds the simulation continuation of the named slots that hold an active body, as
+    /// <see cref="AppendContinuationHash(ref Fnv1aHash)"/> folds each slot's: their count, then each one's digest in
+    /// the order given. The fold visits the named slots alone, never the rest of the population.</summary>
+    /// <param name="hash">The hash to fold into.</param>
+    /// <param name="bodies">The slots to fold, ascending.</param>
+    /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
+    public void AppendContinuationHash(ref Fnv1aHash hash, ReadOnlySpan<int> bodies) {
+        RequireCapturePoint();
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
+        WorldTickWork.Process.Add(amount: bodies.Length, kind: WorldTickWork.ContinuationSlots);
+
+        var count = 0;
+
+        foreach (var index in bodies) {
+            if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: not null })) { count++; }
+        }
+        hash.Add(value: ((uint)count));
+        foreach (var index in bodies) {
+            if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
+                hash.Add(value: SlotDigest(body: body, entry: entry, index: index));
+            }
+        }
+    }
 
     // The fold's per-slot scratch, reused from one fold to the next.
     private ulong[] m_foldDigests = [];
     private bool[] m_foldPresent = [];
 
-    private ulong SlotDigest(int index, Entry entry, WorldBody body) => WorldAuthorityCheckpointCodec.ContinuationDigest(
-        entry: EntryCheckpoint(
-            alias: true,
-            body: body,
-            entry: entry,
-            index: index
-        ),
-        writer: (m_continuationWriter ??= new WireWriter())
-    );
+    private ulong SlotDigest(int index, Entry entry, WorldBody body) {
+        var writer = (m_continuationWriter ??= new WireWriter());
+        var digest = WorldAuthorityCheckpointCodec.ContinuationDigest(
+            entry: EntryCheckpoint(
+                alias: true,
+                body: body,
+                entry: entry,
+                index: index
+            ),
+            writer: writer
+        );
+
+        WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationEncodes);
+        WorldTickWork.Process.Add(amount: writer.WrittenSpan.Length, kind: WorldTickWork.ContinuationBytes);
+        return digest;
+    }
 
     /// <summary>Captures every active slot's simulation state. Asserts the per-tick pending-output lists are empty —
     /// guaranteed by <see cref="WorldServer.TryCaptureCheckpoint"/>'s capture point sitting between a completed
