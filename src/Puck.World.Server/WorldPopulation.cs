@@ -199,6 +199,7 @@ public sealed partial class WorldPopulation {
     private readonly CarryRelationship[] m_activeCarries;
 
     private int m_activeCarryCount;
+    private CarryNeighbourhood? m_carryNeighbourhood;
     private IWorldAdjacencySource? m_adjacencies;
     private WorldDefinition? m_adjacencyDefinition;
     // The world contact field derived from the definition's solid geometry and collision tuning. Built by

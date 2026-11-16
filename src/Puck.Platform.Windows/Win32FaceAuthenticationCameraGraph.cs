@@ -382,7 +382,7 @@ internal sealed class Win32FaceAuthenticationSharedGraph : Win32FaceAuthenticati
                 sensor: sensor
             );
         } finally {
-            Win32D3D11VideoDevice.ReleaseTexture(texture: texture);
+            Win32D3D11.Release(value: texture);
             _ = Marshal.ReleaseComObject(o: access);
         }
     }

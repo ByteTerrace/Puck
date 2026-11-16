@@ -124,7 +124,7 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
                                     matches = (((nint)output6->GetDesc1().Monitor.Value) == monitorHandle);
                                 } finally {
                                     if (!matches) {
-                                        _ = ((IUnknown*)output6)->Release();
+                                        Win32D3D11.Release(value: output6);
                                     }
                                 }
 
@@ -132,11 +132,11 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
                                     return new DxgiAdapterOutput(output: output6);
                                 }
                             } finally {
-                                _ = ((IUnknown*)output)->Release();
+                                Win32D3D11.Release(value: output);
                             }
                         }
                     } finally {
-                        _ = ((IUnknown*)adapter)->Release();
+                        Win32D3D11.Release(value: adapter);
                     }
                 }
             } catch (COMException) {
@@ -144,10 +144,8 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
             }
         }
         public void Dispose() {
-            if (m_factory is not null) {
-                _ = ((IUnknown*)m_factory)->Release();
-                m_factory = null;
-            }
+            Win32D3D11.Release(value: m_factory);
+            m_factory = null;
         }
     }
     [SupportedOSPlatform("windows10.0.10240")]
@@ -171,10 +169,8 @@ public sealed class Win32DisplayColorSpaceProbe : IDisposable {
             }
         }
         public void Dispose() {
-            if (m_output is not null) {
-                _ = ((IUnknown*)m_output)->Release();
-                m_output = null;
-            }
+            Win32D3D11.Release(value: m_output);
+            m_output = null;
         }
     }
 }

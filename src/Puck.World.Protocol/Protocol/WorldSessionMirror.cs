@@ -198,10 +198,6 @@ public sealed class WorldSessionMirror : IClientSink {
     private WorldEntityAddress? m_seededRouteEntity;
     private ulong m_seededRouteTick;
     private int m_snapshotRevision;
-    // Seqlock guarding a coherent copy of the complete delivered entity image. Odd means the socket/server delivery
-    // is writing; even means stable. Per-field publication remains for render reads that do not require a whole-tick
-    // record, while adjacency simulation uses CopySnapshotTo below.
-    private int m_snapshotSequence;
     // The destination's own step duration in seconds, derived from the latest snapshot's StepTicks — the
     // presentation clock WorldSessionSceneEmitter normalizes real elapsed time against (see its own remarks on why
     // it cannot read a host alpha/delta for a session view).
@@ -218,10 +214,10 @@ public sealed class WorldSessionMirror : IClientSink {
     private readonly byte[] m_catalogRig = new byte[EntityCapacity];
     private readonly byte[] m_kit = new byte[EntityCapacity];
     private readonly int[] m_generation = new int[EntityCapacity];
-    // Written only under m_snapshotWriteGate (DeliverSnapshot and SeedRoute).
-    // A route seed is written by the transfer/route thread while ordinary snapshots arrive on the observer task.
-    // Serialize those two writers: the seqlock below protects readers from a torn image, but by itself does not
-    // prevent two writers from interleaving their odd/even sequence increments and publishing a mixture.
+    // The one door to a coherent whole-image view: the entity arrays are written only under it (DeliverSnapshot and
+    // SeedRoute), and CopySnapshotTo copies under it, so a copy never sees a delivery half applied. A route seed is
+    // written by the transfer/route thread while ordinary snapshots arrive on the observer task, so the two writers
+    // serialize here too. Per-field render reads stay lock-free and need no whole-tick record.
     private readonly Lock m_snapshotWriteGate = new();
     private string m_authority = string.Empty;
     // A real (wall-clock) timestamp — Stopwatch.GetTimestamp() — captured the instant the CURRENT snapshot's poses
@@ -373,9 +369,10 @@ public sealed class WorldSessionMirror : IClientSink {
             : null
         );
     }
-    /// <summary>Copies one coherent delivered entity record for simulation pinning. If a socket delivery overlaps
-    /// the copy, the seqlock retries rather than exposing a mixture of two remote ticks. Placement identities are
-    /// copied with the poses, so a pinned renderer cannot read a newer body's authored policy.</summary>
+    /// <summary>Copies one coherent delivered entity record for simulation pinning. The copy holds the gate every delivery
+    /// holds, so a delivery that overlaps it completes first (the copy waits on the host's lock, never spins) rather than
+    /// exposing a mixture of two remote ticks. Placement identities are copied with the poses, so a pinned renderer cannot
+    /// read a newer body's authored policy.</summary>
     public void CopySnapshotTo(
         bool[] active,
         WorldEntityAddress[] addresses,
@@ -394,14 +391,7 @@ public sealed class WorldSessionMirror : IClientSink {
         out float stepSeconds,
         out long arrivalTimestamp
     ) {
-        for (; ; ) {
-            var sequence = Volatile.Read(location: ref m_snapshotSequence);
-
-            if ((sequence & 1) != 0) {
-                Thread.SpinWait(iterations: 1);
-                continue;
-            }
-
+        lock (m_snapshotWriteGate) {
             for (var index = 0; (index < EntityCapacity); index++) {
                 active[index] = IsActive(index: index);
                 addresses[index] = Address(index: index);
@@ -421,9 +411,6 @@ public sealed class WorldSessionMirror : IClientSink {
             revision = SnapshotRevision;
             stepSeconds = StepSeconds;
             arrivalTimestamp = SnapshotArrivalTimestamp;
-            if (sequence == Volatile.Read(location: ref m_snapshotSequence)) {
-                return;
-            }
         }
     }
     /// <summary>The entity's latest-tick render attitude (the other interpolation endpoint).</summary>
@@ -520,7 +507,6 @@ public sealed class WorldSessionMirror : IClientSink {
                 m_seededRouteEntity = null;
             }
 
-            _ = Interlocked.Increment(location: ref m_snapshotSequence);
             m_poses.Begin();
 
             foreach (ref readonly var entry in snapshot.Entries.Span) {
@@ -602,7 +588,6 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             m_arrivals[(m_arrivalCount % ArrivalHistory)] = arrival;
             m_arrivalCount++;
-            _ = Interlocked.Increment(location: ref m_snapshotSequence);
 
             lock (m_stampGate) {
                 m_stateTime = ArenaTime.At(engineTick: snapshot.EngineTick, tick: snapshot.Tick);
@@ -868,7 +853,6 @@ public sealed class WorldSessionMirror : IClientSink {
                 definition: route.Definition,
                 version: route.Version
             );
-            _ = Interlocked.Increment(location: ref m_snapshotSequence);
             var position = route.Position.ToVector3();
             var orientation = route.Orientation.ToQuaternion();
 
@@ -901,7 +885,6 @@ public sealed class WorldSessionMirror : IClientSink {
             );
             m_seededRouteEntity = route.Entity;
             m_seededRouteTick = route.Tick;
-            _ = Interlocked.Increment(location: ref m_snapshotSequence);
         }
     }
 }

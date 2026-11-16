@@ -64,7 +64,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
             );
             m_multithread = multithread;
         } finally {
-            _ = adapter->Release();
+            Win32D3D11.Release(value: adapter);
         }
     }
 
@@ -119,7 +119,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
         return (m_signal ?? throw new InvalidOperationException(message: "the camera video device's completion signal is not open")).Complete();
     }
     /// <summary>Opens a consumer-provisioned shared texture (an NT handle) on this device; the caller owns the returned
-    /// <c>ID3D11Texture2D*</c> and must release it via <see cref="ReleaseTexture"/>.</summary>
+    /// <c>ID3D11Texture2D*</c> and must release it via <see cref="Win32D3D11.Release(nint)"/>.</summary>
     /// <param name="sharedHandle">The shared NT handle of the texture to open.</param>
     /// <returns>The opened texture pointer.</returns>
     public nint OpenSharedTexture(nint sharedHandle) {
@@ -138,7 +138,7 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
         return ((nint)texture);
     }
     /// <summary>Creates a shader-resource view over an opened target so a hosted kernel can sample it; the caller
-    /// releases it via <see cref="ReleaseTexture"/>.</summary>
+    /// releases it via <see cref="Win32D3D11.Release(nint)"/>.</summary>
     /// <param name="texture">The <c>ID3D11Texture2D*</c> to view.</param>
     /// <returns>The <c>ID3D11ShaderResourceView*</c>.</returns>
     public nint CreateShaderResourceView(nint texture) {
@@ -152,13 +152,6 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
 
         return ((nint)view);
     }
-    /// <summary>Releases a COM pointer obtained from this device (an opened shared texture or a frame texture).</summary>
-    /// <param name="texture">The texture pointer; zero is ignored.</param>
-    public static void ReleaseTexture(nint texture) {
-        if (0 != texture) {
-            _ = ((IUnknown*)texture)->Release();
-        }
-    }
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
@@ -170,25 +163,14 @@ internal sealed unsafe class Win32D3D11VideoDevice : IDisposable, IProbeKernelDe
         m_signal?.Dispose();
         m_signal = null;
 
-        if (m_multithread is not null) {
-            _ = ((IUnknown*)m_multithread)->Release();
-            m_multithread = null;
-        }
-
-        if (m_device1 is not null) {
-            _ = ((IUnknown*)m_device1)->Release();
-            m_device1 = null;
-        }
-
-        if (m_context is not null) {
-            _ = ((IUnknown*)m_context)->Release();
-            m_context = null;
-        }
-
-        if (m_device is not null) {
-            _ = ((IUnknown*)m_device)->Release();
-            m_device = null;
-        }
+        Win32D3D11.Release(value: m_multithread);
+        m_multithread = null;
+        Win32D3D11.Release(value: m_device1);
+        m_device1 = null;
+        Win32D3D11.Release(value: m_context);
+        m_context = null;
+        Win32D3D11.Release(value: m_device);
+        m_device = null;
     }
 
 }

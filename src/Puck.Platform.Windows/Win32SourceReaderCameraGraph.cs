@@ -847,7 +847,7 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
                     sensor: CameraSensor.Color
                 );
             } finally {
-                Win32D3D11VideoDevice.ReleaseTexture(texture: frameTexture);
+                Win32D3D11.Release(value: frameTexture);
             }
         } finally {
             _ = Marshal.ReleaseComObject(o: buffer);
@@ -893,13 +893,13 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
         m_bench.Close();
 
         foreach (var view in m_targetViews) {
-            Win32D3D11VideoDevice.ReleaseTexture(texture: view);
+            Win32D3D11.Release(value: view);
         }
 
         m_targetViews = [];
 
         foreach (var target in m_targets) {
-            Win32D3D11VideoDevice.ReleaseTexture(texture: target);
+            Win32D3D11.Release(value: target);
         }
 
         m_targets = [];

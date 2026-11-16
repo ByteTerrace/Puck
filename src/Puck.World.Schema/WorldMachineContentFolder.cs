@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.Abstractions.Machines;
+using Puck.Confinement;
 
 namespace Puck.World;
 
@@ -159,7 +160,7 @@ public static class WorldMachineContentFolder {
         // A stem names a mountable file first, so a cartridge's source beside it does not make the stem ambiguous; a stem
         // only refused files answer still names them, to say why.
         var stems = entries.Where(predicate: candidate => string.Equals(
-            a: Stem(name: candidate.Name),
+            a: PortablePath.StemOf(name: candidate.Name),
             b: name,
             comparisonType: StringComparison.Ordinal
         )).ToArray();
@@ -451,13 +452,5 @@ public static class WorldMachineContentFolder {
             name = null;
             return "is not valid JSON";
         }
-    }
-    private static string Stem(string name) {
-        var dot = name.IndexOf(value: '.');
-
-        return ((dot < 0)
-            ? name
-            : name[..dot]
-        );
     }
 }
