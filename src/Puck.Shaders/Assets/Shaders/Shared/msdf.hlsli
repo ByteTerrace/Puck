@@ -12,7 +12,7 @@ float puckMedian(float3 s) {
     return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
 }
 // Per-channel bilinear blend of four texels at the fraction f inside their cell, then the median of the blend.
-float puckMsdfReconstruct(float3 s00, float3 s10, float3 s01, float3 s11, float2 f) {
+precise float puckMsdfReconstruct(float3 s00, float3 s10, float3 s01, float3 s11, float2 f) {
     return puckMedian(lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y));
 }
 // Coverage of an encoded distance's offset from the edge (the encoded value minus 0.5): half at the edge, one inside by
@@ -23,7 +23,7 @@ float puckMsdfCoverage(float screenPxRange, float edgeOffset) {
 }
 // The signed distance to a 2D box from q = abs(p) - halfSize: negative inside, the Euclidean distance to the nearest edge
 // or corner outside.
-float puckBoxDistance2(float2 q) {
+precise float puckBoxDistance2(float2 q) {
     return (length(max(q, 0.0)) + min(max(q.x, q.y), 0.0));
 }
 
