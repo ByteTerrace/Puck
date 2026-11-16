@@ -442,8 +442,8 @@ F. Depth of field (the owner's go-ahead): Puck has none. It comes after D,
 22. [Lighting and GI](#lighting-and-gi): light a cold area from the coarser
     levels or the sky term the moment a view arrives; the rest after the image
     meter.
-23. [Test runner and replay](#test-runner-and-replay): review
-    [the body's write door memo](body-state-door.md), then its step D1.
+23. [Test runner and replay](#test-runner-and-replay): step D1 of
+    [the body's write door memo](body-state-door.md).
 24. [Bake detail](#bake-detail): the flare's bound.
 25. [Residency and streaming](#residency-and-streaming): step 2 after the memo
     names GI's work units.
@@ -2617,10 +2617,13 @@ Code that grew a second implementation (AGENTS.md rule 7) or costs velocity:
   pass. A rest-epoch cache of the fold missed four writes to sleeping bodies
   and was deleted, so the door has to be one the compiler holds.
   [The design memo](body-state-door.md) holds the writer inventory, the door
-  (sections of value-type state behind a holder whose read side refuses writes
-  and whose write side moves a version), the digest cache and its recompute
-  check, what a tick changes in the debug world, and [the steps](body-state-door.md#steps),
-  D1 to D11. Next: a review of the memo by another family, then D1.
+  (sections of value-type state behind a holder whose read side refuses writes,
+  whose write side moves a version, and which compares a moved section's bytes
+  before it encodes), the digest cache and its recompute check, what a tick
+  changes in the debug world, its review's answers, and
+  [the steps](body-state-door.md#steps), D1 to D12. D6 changes the rigid
+  solver's interface in `Puck.Physics`, and D12 (the step writes on change) is
+  the physics lane's. Next: D1.
   One finding the door does not close: the checkpoint image of an all-default
   array or input image is written whole, and a sparse encoding would cut a
   slot's bytes about tenfold and shrink every checkpoint with it. It changes
@@ -2829,14 +2832,17 @@ Rendering duplicates the dup-render audit found (paths under `src/`):
   latest submission (`RetiredGraph.ArmAfterConsumers`, through
   `HoldUntilLatestSubmission`). The change first gives those two their own
   completion (the consumer node's lease already is one), then queues the rest.
-- [medium · unconfirmed] A submission its batch never queued reads complete:
-  `GpuSubmissionBatch.Split`'s failure path aliases every deferred fence to an
-  owner that `AbandonIfDeferred` retires, so both `IsSignaled` and `Wait`
-  report completion (`GpuBatchedSubmissionFence`). The node's `WaitSlot` then
-  proves a slot complete whose copies never ran, and a readback reads stale
-  bytes. Whether `Split` can fail without a device loss (which releases the
-  node without a proof) was not traced; if it can, the fence needs an
-  abandoned state that `Wait` reports.
+- [low · unconfirmed] A render node that survives an abandoned slot proves it on
+  the next wait. A batch hand-off can fail without a device loss (a refused
+  `vkQueueSubmit`, a refused `ID3D12CommandQueue::Wait` ahead of the execute),
+  and its fences now report `GpuSubmissionAbandonedException` from `IsSignaled`
+  and `Wait` (`GpuBatchedSubmissionFence`). The wait that reports it drains the
+  fence, so `ShaderPipelineRenderNode.WaitSlot` throws once and retires nothing;
+  if the node is kept and waits that slot again, the drained fence returns and
+  `CompletePackageReadbacks` retires readbacks whose copies never ran. Whether a
+  frame failure keeps the node was not traced; the fix is for `WaitSlot` to
+  catch the abandonment and abandon the slot's readbacks rather than complete
+  them (`GpuSurfaceUpload.Settle` is the pattern).
 
 An independent audit (Antigravity) confirmed the groups above as one mechanism
 implemented twice, and its blind scan found more, ranked by payoff (the lead
@@ -3244,9 +3250,8 @@ colliders report's only red findings left are the valley's relief
 ### Test runner and replay
 
 Owner: test runner and replay specialist · high to low ·
-Next: a review of [the body's write door memo](body-state-door.md), then its
-steps in order (the body's sections, then the rule latch, then the input
-owners).
+Next: the steps of [the body's write door memo](body-state-door.md) in order
+(the body's sections, then the rule latch, then the input owners).
 
 - [low · fix when touched] `Fixtures.FreshServer` (`tests/Shared/World/Fixtures.Server.cs:112`) deserializes without `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document with a seeded responsive placement can show the response's prototype while colliding as the authored one, which the real loader never does. Settle in the fixture as the loader does.
 - [high] The per-tick authority hash is most of what a recording adds to a

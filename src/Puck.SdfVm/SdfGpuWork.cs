@@ -466,7 +466,7 @@ public sealed class SdfGpuWork : IDisposable {
         if (m_submissionFailed) { m_device.TryWaitIdle(); }
         foreach (var slot in m_slots) {
             if (slot.Job is not { } job) { continue; }
-            if (!m_submissionFailed) { try { slot.Fence.Wait(); } catch (DeviceLostException) { } }
+            if (!m_submissionFailed) { try { slot.Fence.Wait(); } catch (Exception failure) when (failure is DeviceLostException or GpuSubmissionAbandonedException) { } }
             slot.Client!.Abandon(job: job);
             slot.Job = null;
             slot.Client = null;

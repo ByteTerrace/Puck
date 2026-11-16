@@ -36,6 +36,9 @@ public sealed unsafe class VulkanInstanceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceFeatures;
     /// <summary>The <c>vkGetPhysicalDeviceFeatures2</c> entry point; core in Vulkan 1.1; <see langword="null"/> on an older instance.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, void> GetPhysicalDeviceFeatures2;
+    /// <summary>The <c>vkGetPhysicalDeviceFormatProperties</c> entry point: a format's linear-tiling, optimal-tiling and
+    /// buffer features, three <c>VkFormatFeatureFlags</c> in that order.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, uint, nint, void> GetPhysicalDeviceFormatProperties;
     /// <summary>The <c>vkGetPhysicalDeviceMemoryProperties</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void> GetPhysicalDeviceMemoryProperties;
     /// <summary>The <c>vkGetPhysicalDeviceProperties</c> entry point.</summary>
@@ -120,6 +123,10 @@ public sealed unsafe class VulkanInstanceCommands {
         ));
         GetPhysicalDeviceFeatures2 = ((delegate* unmanaged[Cdecl]<nint, nint, void>)procedures.ResolveOptionalInstanceProc(
             functionName: "vkGetPhysicalDeviceFeatures2"u8,
+            instanceHandle: instanceHandle
+        ));
+        GetPhysicalDeviceFormatProperties = ((delegate* unmanaged[Cdecl]<nint, uint, nint, void>)procedures.ResolveInstanceProc(
+            functionName: "vkGetPhysicalDeviceFormatProperties"u8,
             instanceHandle: instanceHandle
         ));
         GetPhysicalDeviceMemoryProperties = ((delegate* unmanaged[Cdecl]<nint, out VkPhysicalDeviceMemoryProperties, void>)procedures.ResolveInstanceProc(

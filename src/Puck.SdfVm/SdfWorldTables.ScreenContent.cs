@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.SignedDistance;
 
@@ -75,12 +74,10 @@ public sealed partial class SdfWorldTables {
             );
         }
 
-        // The upload object owns the image + staging + the returned view. One instance held for the lifetime (a re-set
-        // re-uploads through it — Vulkan reuses the view, Direct3D 12 replaces it, so re-read the handle every time).
-        // Every view samples the one atlas, so a RE-upload (rewriting an image a view's submission in flight may still
-        // sample) first waits the device idle — a rare host event, typically once per residency.
-        m_deviceContext.TryWaitIdle();
-
+        // The upload owns the image, its staging and the returned view, held for the tables' lifetime. A re-set re-uploads
+        // through it: an unchanged extent keeps the view, and its copy is ordered after every earlier sampler on the queue
+        // by its own barrier; a changed extent replaces the image and retires the old one behind the copy into the new
+        // one (GpuSurfaceUpload). So no wait is needed here, and the handle is re-read every time.
         m_glyphAtlasUpload ??= m_gpu.SurfaceTransferFactory.CreateUpload();
         m_glyphAtlasView = m_glyphAtlasUpload.Upload(
             format: GlyphAtlasFormat,

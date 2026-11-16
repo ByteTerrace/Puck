@@ -28,6 +28,10 @@ public sealed class GpuCommandSlot(GpuObjectName name) : IDisposable {
 
         Wait();
 
+        // Created before anything is recorded, so a submit that follows a recording can fail only in the queue
+        // submitter, whose fence then tells whether the submission reached the queue.
+        m_fence ??= services.QueueSubmitter.CreateSubmissionFence();
+
         var commands = (m_commands ??= services.CommandPoolFactory.Create(name: in name));
         var commandBuffer = commands.CommandBufferHandle;
         var recorder = services.Recorder;
@@ -54,7 +58,7 @@ public sealed class GpuCommandSlot(GpuObjectName name) : IDisposable {
 
         services.QueueSubmitter.Submit(
             commandBufferHandles: [commands.CommandBufferHandle],
-            fence: (m_fence ??= services.QueueSubmitter.CreateSubmissionFence())
+            fence: m_fence!
         );
     }
 

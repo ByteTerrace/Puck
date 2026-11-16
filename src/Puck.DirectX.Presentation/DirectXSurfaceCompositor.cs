@@ -339,10 +339,10 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         if (surface.IsSameDeviceImage) {
             sourceView = surface.ImageViewHandle;
         } else if (surface.IsCpuPixels) {
+            // The upload's texture is shared by every ring slot, and an in-flight frame may still sample it: its copy is
+            // ordered after those frames on the queue by its own barrier, and a replaced texture retires behind the copy
+            // into its replacement (GpuSurfaceUpload), so no frame wait is needed here.
             m_cpuUpload ??= deviceContext.Services.SurfaceTransferFactory.CreateUpload();
-            // The upload texture is one resource shared by every ring slot: an in-flight frame may still be
-            // sampling it, so overwriting it must wait for every presented frame, not just this slot's.
-            WaitForAllFrames();
             sourceView = m_cpuUpload.Upload(
                 format: surface.Format,
                 height: surface.Height,
