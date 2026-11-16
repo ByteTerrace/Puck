@@ -1,0 +1,11 @@
+// Creation rig rows, a library.
+
+// One swing of a creation shape: the shape turns about `pivot` around `axis` by `amplitude` radians as the named
+// `driver` runs. `wave` and `phase` are written on the row when wanted, as `with { wave: "sine", phase: 3.1415927 }`; an
+// absent one keeps the model's default. Written in a shape's `swings` list.
+function swing(driver, axis, amplitude, pivot) = {
+  driver: driver
+  axis: axis
+  amplitude: amplitude
+  pivot: pivot
+}

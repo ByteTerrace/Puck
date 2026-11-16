@@ -17,6 +17,7 @@
 // the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
 // to. This file is a library: debug.puck and hall.puck expand its templates and lets.
 import "../standard/styles"
+import "../standard/rig"
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
@@ -1840,13 +1841,7 @@ template motionPrototypes() {
         position [0, 1.2, 0]
         scale [0.4, 0.15, 0.25]
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 1
-            pivot [0, 1.2, 0]
-            wave: "linear"
-          }
+          swing("clock", [0, 1, 0], 1, [0, 1.2, 0]) with { wave: "linear" }
         ]
       }
       exhibit(
@@ -1880,12 +1875,7 @@ template motionPrototypes() {
         position [0, 1.375, 0]
         scale [0.025, 0.225, 0.025]
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.6
-            pivot [0, 1.65, 0]
-          }
+          swing("clock", [0, 0, 1], 0.6, [0, 1.65, 0])
         ]
       }
       shape Sphere "bob" {
@@ -1923,12 +1913,7 @@ template motionPrototypes() {
         position [0, 1.45, 0]
         scale [0.05, 0.2, 0.05]
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.5
-            pivot [0, 1.65, 0]
-          }
+          swing("clock", [0, 0, 1], 0.5, [0, 1.65, 0])
         ]
       }
       shape Box "lower" {
@@ -1937,14 +1922,7 @@ template motionPrototypes() {
         position [0, 1.07, 0]
         scale [0.04, 0.18, 0.04]
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.8
-            phase: 1.2
-            pivot [0, 1.25, 0]
-            wave: "halfSine"
-          }
+          swing("clock", [0, 0, 1], 0.8, [0, 1.25, 0]) with { wave: "halfSine", phase: 1.2 }
         ]
       }
       shape Sphere "bob" {
@@ -2061,12 +2039,7 @@ template motionPrototypes() {
         scale [0.13, 0.13, 0.13]
         smooth: 0.08
         swings [
-          {
-            driver: "clock"
-            axis [1, 0, 0]
-            amplitude: 0.16
-            pivot [0, 1.3, 0]
-          }
+          swing("clock", [1, 0, 0], 0.16, [0, 1.3, 0])
         ]
       }
       exhibit(
@@ -2095,12 +2068,7 @@ template motionPrototypes() {
         scale [0.09, 0.09, 0.09]
         smooth: 0.1
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.06
-            pivot [0, 1.3, 0]
-          }
+          swing("clock", [0, 0, 1], 0.06, [0, 1.3, 0])
         ]
       }
       shape Sphere "right" {
@@ -2111,13 +2079,7 @@ template motionPrototypes() {
         scale [0.09, 0.09, 0.09]
         smooth: 0.1
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.06
-            phase: 3.14159
-            pivot [0, 1.3, 0]
-          }
+          swing("clock", [0, 0, 1], 0.06, [0, 1.3, 0]) with { phase: 3.14159 }
         ]
       }
       exhibit(
@@ -2136,12 +2098,7 @@ template motionPrototypes() {
         position [0, 1.2, 0]
         scale [0.06, 0.06, 0.06]
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 0.7
-            pivot [0, 1.2, 0]
-          }
+          swing("clock", [0, 1, 0], 0.7, [0, 1.2, 0])
         ]
       }
       shape Capsule "wing" {
@@ -2167,13 +2124,7 @@ template motionPrototypes() {
         rotation [0.707107, 0, 0, 0.707107]
         scale [0.08, 0.05, 0.08]
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 1
-            pivot [0, 1.2, 0]
-            wave: "linear"
-          }
+          swing("clock", [0, 0, 1], 1, [0, 1.2, 0]) with { wave: "linear" }
         ]
       }
       shape Box "blade" {
@@ -2201,12 +2152,7 @@ template motionPrototypesB() {
         position [0, 1.2, 0]
         scale [0.35, 0.3, 0.1]
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 0.6
-            pivot [0, 1.2, 0]
-          }
+          swing("clock", [0, 1, 0], 0.6, [0, 1.2, 0])
         ]
       }
       exhibit(
@@ -2305,19 +2251,8 @@ template motionPrototypesB() {
         position [0, 1.25, 0]
         scale [0.25, 0.25, 0.25]
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 0.5
-            pivot [0, 1.25, 0]
-          }
-          {
-            driver: "clock"
-            axis [1, 0, 0]
-            amplitude: 0.2
-            phase: 1.5708
-            pivot [0, 1.25, 0]
-          }
+          swing("clock", [0, 1, 0], 0.5, [0, 1.25, 0])
+          swing("clock", [1, 0, 0], 0.2, [0, 1.25, 0]) with { phase: 1.5708 }
         ]
       }
       exhibit(
@@ -2345,8 +2280,24 @@ template motionPrototypesB() {
                 modulationFrequency: 40
               }
             }
-            shade: inset([0,0,-0.25], [0,1,0,0], 0.05, 1.336, 0.15, 0.04, 40, 3.82113123,
-              "#0B0B0B", "#3A7BD5", "#1A2A40", "#F5F3EE", 0.03, 0.075, 0.085, 0.095)
+            shade: inset(
+              [0, 0, -0.25],
+              [0, 1, 0, 0],
+              0.05,
+              1.336,
+              0.15,
+              0.04,
+              40,
+              3.82113123,
+              "#0B0B0B",
+              "#3A7BD5",
+              "#1A2A40",
+              "#F5F3EE",
+              0.03,
+              0.075,
+              0.085,
+              0.095
+            )
           }
         ]
       )
@@ -2363,19 +2314,8 @@ template motionPrototypesB() {
         scale [0.15, 0.4, 0.15]
         twist: 1.5
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 0.5
-            pivot [0, 1.2, 0]
-          }
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.25
-            pivot [0, 0.8, 0]
-            wave: "constant"
-          }
+          swing("clock", [0, 1, 0], 0.5, [0, 1.2, 0])
+          swing("clock", [0, 0, 1], 0.25, [0, 0.8, 0]) with { wave: "constant" }
         ]
       }
       exhibit(label: "TWIST", extra: [accent])
@@ -2390,12 +2330,7 @@ template motionPrototypesB() {
         position [0, 1.2, 0]
         scale [0.08, 0.4, 0.08]
         swings [
-          {
-            driver: "clock"
-            axis [0, 1, 0]
-            amplitude: 0.5
-            pivot [0, 1.2, 0]
-          }
+          swing("clock", [0, 1, 0], 0.5, [0, 1.2, 0])
         ]
       }
       exhibit(label: "BEND", extra: [accent])
@@ -2446,12 +2381,7 @@ template motionPrototypesB() {
         position [0, 1.2, 0]
         scale [0.35, 0.35, 0.35]
         swings [
-          {
-            driver: "clock"
-            axis [1, 0, 0]
-            amplitude: 0.5
-            pivot [0, 1.2, 0]
-          }
+          swing("clock", [1, 0, 0], 0.5, [0, 1.2, 0])
         ]
       }
       exhibit(label: "MOVING CELLS", extra: [accent])
@@ -2466,12 +2396,7 @@ template motionPrototypesB() {
         position [0, 0.8, 0]
         scale [0.07, 0.15, 0.07]
         swings [
-          {
-            driver: "clock"
-            axis [0, 0, 1]
-            amplitude: 0.4
-            pivot [0, 0.65, 0]
-          }
+          swing("clock", [0, 0, 1], 0.4, [0, 0.65, 0])
         ]
       }
       volumes [

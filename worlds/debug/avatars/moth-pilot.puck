@@ -12,6 +12,7 @@
 // seats the handheld (75 x 133 x 27.5 mm) in her hands.
 
 import "moth-head"
+import "../../standard/rig"
 
 // What an importer binds: the creation its look wears, and the cell its look's hold pose reads, which the importer's
 // rules write.
@@ -128,53 +129,17 @@ template pilotArm(name, side, baseId, handGroup) {
       bulge: 0.005
     }
     swings [
-      {
-        driver: "run"
-        axis [0, 0, 1]
-        amplitude: -0.06 * side
-        pivot [side * 0.172, 1.355, -0.015]
-        wave: "constant"
-      }
-      {
-        driver: "gait"
-        axis [0.990, side * 0.138, 0]
-        amplitude: 0.5
-        pivot [side * 0.172, 1.355, -0.015]
+      swing("run", [0, 0, 1], -0.06 * side, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
+      swing("gait", [0.990, side * 0.138, 0], 0.5, [side * 0.172, 1.355, -0.015]) with {
         wave: "sine"
         phase: 3.1415927 * (1 + side) / 2
       }
       // The arms open 0.45 rad from the sides at the jump's peak, 0.6 on the way up and 0.3 coming down.
-      {
-        driver: "air"
-        axis [0, 0, 1]
-        amplitude: 0.03 * side
-        pivot [side * 0.172, 1.355, -0.015]
-        wave: "linear"
-        phase: 15
-      }
-      {
-        driver: "air"
-        axis [0.990, side * 0.138, 0]
-        amplitude: -0.015
-        pivot [side * 0.172, 1.355, -0.015]
-        wave: "linear"
-        phase: 8
-      }
+      swing("air", [0, 0, 1], 0.03 * side, [side * 0.172, 1.355, -0.015]) with { wave: "linear", phase: 15 }
+      swing("air", [0.990, side * 0.138, 0], -0.015, [side * 0.172, 1.355, -0.015]) with { wave: "linear", phase: 8 }
       // Holding the handheld: the upper arm forward a little and turned in, so the bent forearm points to her middle.
-      {
-        driver: "hold"
-        axis [1, 0, 0]
-        amplitude: -0.25
-        pivot [side * 0.172, 1.355, -0.015]
-        wave: "constant"
-      }
-      {
-        driver: "hold"
-        axis [0, 1, 0]
-        amplitude: -0.5 * side
-        pivot [side * 0.172, 1.355, -0.015]
-        wave: "constant"
-      }
+      swing("hold", [1, 0, 0], -0.25, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
+      swing("hold", [0, 1, 0], -0.5 * side, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
     ]
   }
 
@@ -202,54 +167,19 @@ template pilotArm(name, side, baseId, handGroup) {
       bulge: 0.005
     }
     swings [
-      {
-        driver: "run"
-        axis [1, 0, 0]
-        amplitude: -1.1
-        pivot [side * 0.212, 1.068, -0.032]
-        wave: "constant"
-      }
-      {
-        driver: "gait"
-        axis [1, 0, 0]
-        amplitude: 0.18
-        pivot [side * 0.212, 1.068, -0.032]
+      swing("run", [1, 0, 0], -1.1, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
+      swing("gait", [1, 0, 0], 0.18, [side * 0.212, 1.068, -0.032]) with {
         wave: "sine"
         phase: 0.5 + 3.1415927 * (1 + side) / 2
       }
       // The elbows bend 0.36 rad at the jump's peak, 0.51 rising and 0.21 falling, and a little further on landing.
-      {
-        driver: "air"
-        axis [1, 0, 0]
-        amplitude: -0.03
-        pivot [side * 0.212, 1.068, -0.032]
-        wave: "linear"
-        phase: 12
-      }
-      {
-        driver: "land"
-        axis [1, 0, 0]
-        amplitude: 0.05
-        pivot [side * 0.212, 1.068, -0.032]
-        wave: "linear"
-      }
+      swing("air", [1, 0, 0], -0.03, [side * 0.212, 1.068, -0.032]) with { wave: "linear", phase: 12 }
+      swing("land", [1, 0, 0], 0.05, [side * 0.212, 1.068, -0.032]) with { wave: "linear" }
       // Holding: the forearm turns a little palm-up, then the elbow bends, so the palms face each other in front of
       // her chest with the thumbs up, 11 cm apart round the handheld's 75 mm. Swings compose in list order, then the
       // parent's delta.
-      {
-        driver: "hold"
-        axis [0, 1, 0]
-        amplitude: 0.15 * side
-        pivot [side * 0.212, 1.068, -0.032]
-        wave: "constant"
-      }
-      {
-        driver: "hold"
-        axis [1, 0, 0]
-        amplitude: -1.5
-        pivot [side * 0.212, 1.068, -0.032]
-        wave: "constant"
-      }
+      swing("hold", [0, 1, 0], 0.15 * side, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
+      swing("hold", [1, 0, 0], -1.5, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
     ]
   }
 
@@ -391,59 +321,15 @@ template pilotLeg(name, side, baseId) {
       bulge: 0.004
     }
     swings [
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: 0.7
-        pivot [side * 0.09, 0.86, 0]
-        wave: "sine"
-      }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: -0.5
-        pivot [side * 0.09, 0.86, 0]
-        wave: "linear"
-      }
-      {
-        driver: "gait"
-        axis [1, 0, 0]
-        amplitude: 0.7
-        pivot [side * 0.09, 0.86, 0]
-        wave: "sine"
-        phase: 3.1415927 * (1 - side) / 2
-      }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: 0.5
-        pivot [side * 0.09, 0.86, 0]
-        wave: "linear"
-      }
-      {
-        driver: "heading"
-        axis [0, 1, 0]
-        amplitude: -0.7
-        pivot [side * 0.09, 0.86, 0]
-        wave: "sine"
-      }
+      swing("heading", [0, 1, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
+      swing("heading", [0, 1, 0], -0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
+      swing("gait", [1, 0, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine", phase: 3.1415927 * (1 - side) / 2 }
+      swing("heading", [0, 1, 0], 0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
+      swing("heading", [0, 1, 0], -0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
       // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
-      {
-        driver: "air"
-        axis [1, 0, 0]
-        amplitude: -0.06
-        pivot [side * 0.09, 0.86, 0]
-        wave: "linear"
-        phase: 13.3
-      }
+      swing("air", [1, 0, 0], -0.06, [side * 0.09, 0.86, 0]) with { wave: "linear", phase: 13.3 }
       // Touching down at about 4 m/s the hip folds 0.4 rad into the crouch, and springs back as the give settles.
-      {
-        driver: "land"
-        axis [1, 0, 0]
-        amplitude: 0.1
-        pivot [side * 0.09, 0.86, 0]
-        wave: "linear"
-      }
+      swing("land", [1, 0, 0], 0.1, [side * 0.09, 0.86, 0]) with { wave: "linear" }
     ]
   }
 
@@ -460,30 +346,13 @@ template pilotLeg(name, side, baseId) {
       radiusEnd: 0.063
     }
     swings [
-      {
-        driver: "gait"
-        axis [1, 0, 0]
-        amplitude: 1.25
-        pivot [side * 0.1, 0.475, 0.012]
+      swing("gait", [1, 0, 0], 1.25, [side * 0.1, 0.475, 0.012]) with {
         wave: "halfSine"
         phase: 2.0424 + 3.1415927 * (1 + side) / 2
       }
       // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, and takes twice the hip's fold on landing.
-      {
-        driver: "air"
-        axis [1, 0, 0]
-        amplitude: 0.05
-        pivot [side * 0.1, 0.475, 0.012]
-        wave: "linear"
-        phase: 24
-      }
-      {
-        driver: "land"
-        axis [1, 0, 0]
-        amplitude: -0.2
-        pivot [side * 0.1, 0.475, 0.012]
-        wave: "linear"
-      }
+      swing("air", [1, 0, 0], 0.05, [side * 0.1, 0.475, 0.012]) with { wave: "linear", phase: 24 }
+      swing("land", [1, 0, 0], -0.2, [side * 0.1, 0.475, 0.012]) with { wave: "linear" }
     ]
   }
 
@@ -513,37 +382,16 @@ template pilotLeg(name, side, baseId) {
       vertices [[-1, 0], [-1, 0.62], [-0.4, 0.78], [0.35, 0.55], [0.78, 0.41], [1, 0.24], [1, 0]]
     }
     swings [
-      {
-        driver: "gait"
-        pivot [side * 0.105, 0.085, -0.005]
-        axis [1, 0, 0]
-        amplitude: 0.2
-        phase: 3.1415927 * (1 - side) / 2
+      swing("gait", [1, 0, 0], 0.2, [side * 0.105, 0.085, -0.005]) with {
         wave: "sine"
+        phase: 3.1415927 * (1 - side) / 2
       }
-      {
-        driver: "gait"
-        pivot [side * 0.105, 0.085, -0.005]
-        axis [1, 0, 0]
-        amplitude: -0.25
-        phase: 2.0424 + 3.1415927 * (1 + side) / 2
+      swing("gait", [1, 0, 0], -0.25, [side * 0.105, 0.085, -0.005]) with {
         wave: "halfSine"
+        phase: 2.0424 + 3.1415927 * (1 + side) / 2
       }
-      {
-        driver: "air"
-        pivot [side * 0.105, 0.085, -0.005]
-        axis [1, 0, 0]
-        amplitude: 0.02
-        phase: 12.5
-        wave: "linear"
-      }
-      {
-        driver: "land"
-        pivot [side * 0.105, 0.085, -0.005]
-        axis [1, 0, 0]
-        amplitude: 0.1
-        wave: "linear"
-      }
+      swing("air", [1, 0, 0], 0.02, [side * 0.105, 0.085, -0.005]) with { wave: "linear", phase: 12.5 }
+      swing("land", [1, 0, 0], 0.1, [side * 0.105, 0.085, -0.005]) with { wave: "linear" }
     ]
   }
 
@@ -875,14 +723,14 @@ prototypes {
         group: 43
         exponent: 2.4
         swings [
-          { driver: "gait", axis [0, 1, 0], amplitude: 0.08, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
-          { driver: "run", axis [1, 0, 0], amplitude: 0.1, pivot [0, 0, 0], wave: "constant", phase: 0 }
-          { driver: "gait", axis [0, 0, 1], amplitude: 0.05, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
-          { driver: "heading", axis [0, 1, 0], amplitude: 0.7, pivot [0, 0.96, 0], wave: "sine" }
-          { driver: "trail", axis [0, 1, 0], amplitude: -0.12, pivot [0, 0.96, 0], wave: "linear" }
-          { driver: "lean", axis [0, 0, 1], amplitude: -0.016, pivot [0, 0, 0], wave: "linear" }
-          { driver: "surge", axis [1, 0, 0], amplitude: 0.006, pivot [0, 0, 0], wave: "linear" }
-          { driver: "land", axis [1, 0, 0], amplitude: -0.02, pivot [0, 0, 0], wave: "linear" }
+          swing("gait", [0, 1, 0], 0.08, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
+          swing("run", [1, 0, 0], 0.1, [0, 0, 0]) with { wave: "constant", phase: 0 }
+          swing("gait", [0, 0, 1], 0.05, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
+          swing("heading", [0, 1, 0], 0.7, [0, 0.96, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], -0.12, [0, 0.96, 0]) with { wave: "linear" }
+          swing("lean", [0, 0, 1], -0.016, [0, 0, 0]) with { wave: "linear" }
+          swing("surge", [1, 0, 0], 0.006, [0, 0, 0]) with { wave: "linear" }
+          swing("land", [1, 0, 0], -0.02, [0, 0, 0]) with { wave: "linear" }
         ]
         slides [
           { driver: "bob", axis [0, 1, 0], amplitude: 0.018, phase: -1.5708, wave: "sine" }
@@ -962,10 +810,10 @@ prototypes {
         parent: "pelvis"
         exponent: 2.3
         swings [
-          { driver: "gait", axis [0, 1, 0], amplitude: -0.16, pivot [0, 0.96, 0], wave: "sine", phase: 0 }
-          { driver: "bob", axis [1, 0, 0], amplitude: -0.025, pivot [0, 0.96, 0], wave: "sine", phase: -1.0708 }
-          { driver: "heading", axis [0, 1, 0], amplitude: -0.4, pivot [0, 0.96, 0], wave: "sine" }
-          { driver: "trail", axis [0, 1, 0], amplitude: 0.08, pivot [0, 0.96, 0], wave: "linear" }
+          swing("gait", [0, 1, 0], -0.16, [0, 0.96, 0]) with { wave: "sine", phase: 0 }
+          swing("bob", [1, 0, 0], -0.025, [0, 0.96, 0]) with { wave: "sine", phase: -1.0708 }
+          swing("heading", [0, 1, 0], -0.4, [0, 0.96, 0]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.08, [0, 0.96, 0]) with { wave: "linear" }
         ]
         slides [
           { driver: "breath", axis [0, 1, 0], amplitude: 0.003, phase: 0, wave: "sine" }
@@ -1064,11 +912,11 @@ prototypes {
         parent: "torso"
         exponent: 2.6
         swings [
-          { driver: "gait", axis [0, 1, 0], amplitude: 0.08, pivot [0, 1.36, -0.005], wave: "sine", phase: 0.3 }
-          { driver: "heading", axis [0, 1, 0], amplitude: -0.3, pivot [0, 1.36, -0.005], wave: "sine" }
-          { driver: "trail", axis [0, 1, 0], amplitude: 0.07, pivot [0, 1.36, -0.005], wave: "linear" }
+          swing("gait", [0, 1, 0], 0.08, [0, 1.36, -0.005]) with { wave: "sine", phase: 0.3 }
+          swing("heading", [0, 1, 0], -0.3, [0, 1.36, -0.005]) with { wave: "sine" }
+          swing("trail", [0, 1, 0], 0.07, [0, 1.36, -0.005]) with { wave: "linear" }
           // Holding the handheld, she looks down at it.
-          { driver: "hold", axis [1, 0, 0], amplitude: 0.3, pivot [0, 1.36, -0.005], wave: "constant" }
+          swing("hold", [1, 0, 0], 0.3, [0, 1.36, -0.005]) with { wave: "constant" }
         ]
       }
 

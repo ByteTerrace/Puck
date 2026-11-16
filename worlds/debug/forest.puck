@@ -136,32 +136,6 @@ spawnPoints [
 
 // Repeatable composition views, alongside the player's ordinary chase camera.
 cameras [
-  {
-    name: "forest-overview"
-    renderWidth: 1280
-    renderHeight: 900
-    rig {
-      name: "forest-overview"
-      version: "puck.camera.program.v1"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0, 135, -30]))
-        lookAt(focusDistance: 185, opcode: "lookAt", subject: worldPoint(point: [0, 0, -155]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
-      ]
-    }
-  }
-  {
-    name: "forest-clearing"
-    renderWidth: 1280
-    renderHeight: 900
-    rig {
-      name: "forest-clearing"
-      version: "puck.camera.program.v1"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [60, 2.2, -165]))
-        lookAt(focusDistance: 12, opcode: "lookAt", subject: worldPoint(point: [66, 0.8, -175]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 1.05, opcode: "fov")
-      ]
-    }
-  }
+  lookCamera("forest-overview", [0, 135, -30], [0, 0, -155], 1.05, 185, 1280, 900)
+  lookCamera("forest-clearing", [60, 2.2, -165], [66, 0.8, -175], 1.05, 12, 1280, 900)
 ]
