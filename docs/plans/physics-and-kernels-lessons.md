@@ -55,7 +55,7 @@ from a float engine and what Puck's integers make better.
   (`WorldPopulation.ParkRigidIslands`, `WorldPopulation.Sleep.cs`). The island
   graph is the bodies' persistent contacts: an occupied rigid contact joins two
   islands and a contact with a kit body is a wake dependency, so nothing is
-  rebuilt per tick. Parked bodies keep a retained index (`SleepingIndex`) that
+  rebuilt per tick. Parked bodies keep a retained index (a `FixedSweepGrid`) that
   both the pair sweep and a bounded contact-field change query, and they observe
   the field through the population's own observation.
 
@@ -327,7 +327,7 @@ per body." Jolt documents the same per-island rest rule.
 
 **What Puck does.** Landed (brief B): the island graph is the bodies'
 persistent contact manifolds, with no per-tick rebuild or allocation, and a
-bounded field change takes its candidates from `SleepingIndex` over the change
+bounded field change takes its candidates from the sleeping index over the change
 box; the parked bodies observe the field through the population's
 `m_sleepFieldVersion`, so a change that reaches no sleeper visits none (the
 debug world's `physics.bodies.field-observed` fell from 61 a tick to 0).
@@ -386,7 +386,7 @@ credits AVX2 runtime dispatch with about 15 % of its speed-up, and Box3D's
 SIMD edge tests run 2.2 to 2.4× faster than scalar, with the data in
 "structure of arrays format".
 
-**What Puck does.** `SleepingIndex` already packs parked bounds so that "no
+**What Puck does.** The sleeping index (a `FixedSweepGrid`) already packs parked bounds so that "no
 sleeping body's object is read on an idle tick". The pair sweep, the wake test
 and the static bounds pass read positions and radii through `WorldBody` and
 `FixedStaticCollider` objects.

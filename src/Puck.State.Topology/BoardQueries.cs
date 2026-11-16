@@ -1,11 +1,10 @@
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 
 namespace Puck.State;
 
 /// <summary>Deterministic discrete queries over immutable topology and caller-owned value spans.</summary>
 public static class BoardQueries {
-    private static bool Before(long distanceA, int cellA, long distanceB, int cellB) =>
-        ((distanceA < distanceB) || ((distanceA == distanceB) && (cellA < cellB)));
     // The least fingerprint of the board's values over every element: the same number for every board in one symmetry
     // orbit, so a ring of fingerprints answers repetition up to symmetry. Element 0 is the identity, so this is never
     // more than the board's own fingerprint.
@@ -140,8 +139,8 @@ public static class BoardQueries {
         var topology = query.Topology;
         var count = topology.CellCount;
         var capacity = (count * (topology.DirectionCount + 1));
-        var distancePool = System.Buffers.ArrayPool<long>.Shared.Rent(minimumLength: (count + capacity));
-        var cellPool = System.Buffers.ArrayPool<int>.Shared.Rent(minimumLength: capacity);
+        var distancePool = System.Buffers.ArrayPool<long>.Shared.Rent(minimumLength: count);
+        var heapPool = System.Buffers.ArrayPool<PathEntry>.Shared.Rent(minimumLength: capacity);
         var settledPool = System.Buffers.ArrayPool<byte>.Shared.Rent(minimumLength: count);
 
         try {
@@ -149,11 +148,7 @@ public static class BoardQueries {
                 length: count,
                 start: 0
             );
-            var heapDistance = distancePool.AsSpan(
-                length: capacity,
-                start: count
-            );
-            var heapCell = cellPool.AsSpan(
+            var heap = heapPool.AsSpan(
                 length: capacity,
                 start: 0
             );
@@ -161,39 +156,38 @@ public static class BoardQueries {
                 length: count,
                 start: 0
             );
+            var order = default(PathEntryOrder);
 
             distances.Fill(value: long.MaxValue);
             settled.Clear();
             distances[source] = 0;
             var size = 0;
 
-            Push(
-                cell: heapCell,
-                distance: heapDistance,
-                ordinal: source,
-                size: ref size,
-                value: 0
+            BinaryHeap.Push(
+                count: ref size,
+                heap: heap,
+                item: new PathEntry(Cell: source, Distance: 0),
+                order: order
             );
             for (var visited = 0; (visited <= query.MaxVisits); visited++) {
                 var best = -1;
                 var distance = long.MaxValue;
 
                 while (size > 0) {
-                    Pop(
-                        cell: heapCell,
-                        distance: heapDistance,
-                        ordinal: out var candidate,
-                        size: ref size,
-                        value: out var candidateDistance
+                    var candidate = BinaryHeap.Pop(
+                        count: ref size,
+                        heap: heap,
+                        order: order
                     );
+
                     if (
-                        (settled[candidate] != 0) ||
-                        (candidateDistance != distances[candidate])
+                        (settled[candidate.Cell] != 0) ||
+                        (candidate.Distance != distances[candidate.Cell])
                     ) {
                         continue;
                     }
-                    best = candidate;
-                    distance = candidateDistance;
+                    best = candidate.Cell;
+                    distance = candidate.Distance;
                     break;
                 }
                 if (
@@ -227,12 +221,11 @@ public static class BoardQueries {
 
                     if (relaxed < distances[neighbour]) {
                         distances[neighbour] = relaxed;
-                        Push(
-                            cell: heapCell,
-                            distance: heapDistance,
-                            ordinal: neighbour,
-                            size: ref size,
-                            value: relaxed
+                        BinaryHeap.Push(
+                            count: ref size,
+                            heap: heap,
+                            item: new PathEntry(Cell: neighbour, Distance: relaxed),
+                            order: order
                         );
                     }
                 }
@@ -240,7 +233,7 @@ public static class BoardQueries {
             return -2;
         } finally {
             System.Buffers.ArrayPool<long>.Shared.Return(distancePool);
-            System.Buffers.ArrayPool<int>.Shared.Return(cellPool);
+            System.Buffers.ArrayPool<PathEntry>.Shared.Return(heapPool);
             System.Buffers.ArrayPool<byte>.Shared.Return(settledPool);
         }
     }
@@ -388,69 +381,16 @@ public static class BoardQueries {
             System.Buffers.ArrayPool<int>.Shared.Return(stackPool);
         }
     }
-    private static void Pop(Span<long> distance, Span<int> cell, ref int size, out long value, out int ordinal) {
-        value = distance[0];
-        ordinal = cell[0];
-        size--;
-        if (size == 0) {
-            return;
-        }
-        var lastDistance = distance[size];
-        var lastCell = cell[size];
-        var index = 0;
-
-        while (true) {
-            var left = ((2 * index) + 1);
-
-            if (left >= size) {
-                break;
-            }
-            var right = (left + 1);
-            var child = (((right < size) && Before(
-                distance[right],
-                cell[right],
-                distance[left],
-                cell[left]
-            ))
-                ? right
-                : left
-            );
-
-            if (!Before(
-                distance[child],
-                cell[child],
-                lastDistance,
-                lastCell
-            )) {
-                break;
-            }
-            distance[index] = distance[child];
-            cell[index] = cell[child];
-            index = child;
-        }
-        distance[index] = lastDistance;
-        cell[index] = lastCell;
-    }
-    private static void Push(Span<long> distance, Span<int> cell, ref int size, long value, int ordinal) {
-        var index = size++;
-
-        while (index > 0) {
-            var parent = ((index - 1) / 2);
-
-            if (!Before(
-                value,
-                ordinal,
-                distance[parent],
-                cell[parent]
-            )) {
-                break;
-            }
-            distance[index] = distance[parent];
-            cell[index] = cell[parent];
-            index = parent;
-        }
-        distance[index] = value;
-        cell[index] = ordinal;
+    // One path-cost frontier entry: a cell reached at a distance, possibly stale once a cheaper entry for it exists.
+    private readonly record struct PathEntry(long Distance, int Cell);
+    // Least distance first, lowest cell ordinal on ties: a total order, so the settle order is the linear scan's.
+    private readonly struct PathEntryOrder : IComparer<PathEntry> {
+        public int Compare(PathEntry x, PathEntry y) => LexicographicOrder.Compare(
+            leftPrimary: x.Distance,
+            leftSecondary: x.Cell,
+            rightPrimary: y.Distance,
+            rightSecondary: y.Cell
+        );
     }
 
     /// <summary>Clears every group whose values lie in <paramref name="lower"/>..<paramref name="upper"/> beside

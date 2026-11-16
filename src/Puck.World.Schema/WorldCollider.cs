@@ -101,8 +101,9 @@ public sealed record WorldCollision(IReadOnlyList<WorldContactRequirement> Requi
 /// most <see cref="BeginBudget"/> relationships per tick, and admits at most <see cref="MaxPairsPerBody"/>
 /// simultaneous pairs incident to any body. All choices are deterministic; a
 /// saturated crowd therefore degrades by omitting lower-priority new pairs rather than by missing its frame budget.</summary>
-/// <param name="CandidateBudget">The most sweep-and-prune candidates inspected for one body while discovering new
-/// overlaps. Must be at least <paramref name="MaxPairsPerBody"/>.</param>
+/// <param name="CandidateBudget">The most box-overlapping sweep candidates inspected for one body while discovering new
+/// overlaps; a body whose bounding box misses the searching body's is never charged. Must be at least
+/// <paramref name="MaxPairsPerBody"/>.</param>
 /// <param name="MaxPairsPerBody">The maximum retained overlap-event degree of one body; zero disables collision
 /// begin/end sensing.</param>
 /// <param name="BeginBudget">The maximum collision-begin relationships admitted in one authority tick. Existing

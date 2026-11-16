@@ -1194,11 +1194,18 @@ world contact. Saturation deliberately omits lower-priority new event pairs.
 `solid` kits. Its per-body box-overlapping candidate budget (default 32, maximum 256) and
 resolved-pair degree (default 8, maximum 16) bound a fully coincident crowd;
 stable population order decides which later pairs are omitted.
-The X sweep also queries a fixed-point YZ grid, rebuilt each tick.
-Cells span the largest body diameter, so only the same or adjacent cells can
-overlap. Their lists merge in X/index order, preserving deterministic pair
-priority without scanning an entire X-aligned, Y/Z-disjoint column. Reused
-population-sized storage keeps the broadphase allocation-free after load.
+
+Body contacts, collision-event discovery and the retained index of sleeping
+bodies are one broadphase, `Puck.Physics.FixedSweepGrid`: an X sweep over
+bounding spheres sorted by least X then population index, crossed with a
+fixed-point Y/Z grid whose cells span the largest sphere's diameter, so only
+the same or adjacent cells can overlap. A pair search merges the nine
+neighbouring cells' lists in sweep order and culls on all three axes before it
+charges a candidate, so an X-aligned crowd spread along Y or Z spends no budget
+on bodies it cannot touch, and events and contacts see the same candidates. A
+box query (a sleeper near an awake body, or near a contact-field change) visits
+only the cells its box covers. Reused population-sized storage keeps the
+broadphase allocation-free after load.
 The counters `DynamicContactPairVisits` (before Y/Z rejection or candidate limits),
 `DynamicContactCandidates`, `DynamicContactNarrowPairs`,
 `DynamicContactResolvedPairs`, and `DynamicContactLimitedBodies` expose the
@@ -1307,7 +1314,7 @@ active rigid body rests uncarried, vacuously 1 for a world authoring none. The
 scoped expression `physics(quiescent, roster)` checks only the count-1
 inhabitants named by a keyed row's authored keys
 (`WorldPopulation.RigidPlacementsQuiescent`). Sleeping bodies retain a spatial
-index of frozen bounds (`SleepingIndex`): only an awake body's nearby sleepers
+index of frozen bounds (a `FixedSweepGrid`): only an awake body's nearby sleepers
 enter the broadphase, and a bounded contact-field change takes its candidates
 from the same index over the change box, so a change that reaches no sleeper
 visits none; the parked bodies observe the field together through the
