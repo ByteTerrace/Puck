@@ -18,7 +18,11 @@ public sealed partial class ConfinedDirectory {
 
         private const uint ModeMask = 0xF000, ModeDirectory = 0x4000, ModeRegular = 0x8000, ModeLink = 0xA000;
 
-        // Linux x86-64 struct stat. Other architectures fail closed before reaching this ABI.
+        // Linux x86-64 struct stat, 144 bytes: st_dev, st_ino and st_nlink are 8 bytes each, st_mode, st_uid, st_gid and
+        // a pad are 4, then st_rdev, st_size (48), st_blksize and st_blocks are 8, and st_atim, st_mtim (88) and st_ctim
+        // are 16-byte timespecs, then three reserved longs. The kernel's arch/x86/include/uapi/asm/stat.h, glibc's
+        // sysdeps/unix/sysv/linux/x86/bits/struct_stat.h (its __x86_64__ arms) and musl's arch/x86_64/bits/stat.h agree.
+        // Other architectures fail closed before reaching this ABI.
         [StructLayout(LayoutKind.Explicit, Size = 144)]
         public struct Stat {
             [FieldOffset(0)] public ulong Device;

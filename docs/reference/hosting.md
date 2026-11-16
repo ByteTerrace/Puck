@@ -607,8 +607,11 @@ the screens standing in the boot world, so the walk continues from a pane throug
 a screen into its source, or into the view the screen films; any other instance
 reports none, so a ray cast into it ends on its world.
 
-`PublishBuffer<T>` (in `Puck.Abstractions`, below every host) is the smaller handoff for latest-state values. Writers
-publish under one lock into a seqlock-guarded slot, and readers snapshot the newest value without a lock and never see a torn copy.
+`PublishBuffer<T>` (in `Puck.Abstractions`, below every host) is the one
+handoff for latest-state values, copied by assignment or, for an image too
+large to copy, filled and read in place. Writers serialize on one lock and fill
+a slot no reader holds; a reader enters the published slot with one atomic add,
+so it never sees a torn value, never waits on a writer and never spins.
 It is not a FIFO and retains no history, so use it only when skipping obsolete
 intermediate publications is correct.
 
