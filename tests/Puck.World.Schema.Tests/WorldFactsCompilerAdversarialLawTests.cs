@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
-using Puck.Physics.Motion;
 using Xunit;
 
 namespace Puck.World.Schema.Tests;

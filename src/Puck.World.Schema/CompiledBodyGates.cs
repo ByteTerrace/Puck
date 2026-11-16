@@ -17,7 +17,6 @@ public readonly record struct CompiledFactTrigger(ActionFact Fact, GateToken[] G
 /// <summary>A lane binding compiled once before simulation: both trigger channels plus the recency-clock table (one
 /// slot per authored <c>recently</c> instance across both gates — the per-tick clock updater walks it).</summary>
 public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigger? OnRelease, CompiledFactTrigger[] OnFact, ActionFact[] RecencyFacts, ulong[] RecencyWindows);
-
 /// <summary>One compiled row of a kit's <c>shaping</c> table — the unified velocity-shaping law
 /// <see cref="BodyMotionOp.ShapeVelocity"/> reads. The first row whose <see cref="When"/> gate opens governs the
 /// whole tick; a row carries exactly one of <see cref="Along"/> (used alone for the whole-vector response law, or
@@ -38,7 +37,6 @@ public readonly record struct FixedBodyShaping(
     FixedMotionDynamics? Dynamics,
     FixedQ4816 TurnScale
 );
-
 /// <summary>The one-time fixed-point compilation of an authored grounded motion row. Runtime simulation reads only
 /// this form.</summary>
 /// <remarks><see cref="Shaping"/> is simulation-affecting: it selects the slice of the tuning the velocity-shaping

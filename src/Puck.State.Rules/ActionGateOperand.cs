@@ -16,41 +16,36 @@ public interface IActionGateFacts : IFacet {
     /// <summary>Reads whether input meets its channel's authored threshold.</summary>
     bool Held(int channel);
 }
-
 /// <summary>A resolved action fact, read through the same operand protocol as every rule gate.</summary>
-public abstract class ActionGateOperand : OperandFact<IActionGateFacts>, IRuleOperand {
+public abstract class ActionGateOperand : FacetRuleOperand<IActionGateFacts> {
     private ActionGateOperand(CellKind kind) : base(valueKind: kind) { }
 
     /// <inheritdoc/>
-    public ReadOnlySpan<OperandAddress> Addresses => [];
-    /// <inheritdoc/>
     public override RuleWork Cost(IRuleCostContext context) => 1;
-
-    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) => Read(reader, (IActionGateFacts)reader);
 
     /// <summary>A current action fact.</summary>
     public sealed class Current(int fact) : ActionGateOperand(CellKind.Bool) {
         /// <inheritdoc/>
-        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: facet.Now(fact) ? 1 : 0);
+        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: (facet.Now(fact: fact) ? 1 : 0));
     }
     /// <summary>A lane's recency clock.</summary>
     public sealed class Recent(int slot) : ActionGateOperand(CellKind.Bool) {
         /// <inheritdoc/>
-        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: facet.Recently(slot) ? 1 : 0);
+        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: (facet.Recently(slot: slot) ? 1 : 0));
     }
     /// <summary>A named action counter.</summary>
     public sealed class Counter(int slot) : ActionGateOperand(CellKind.Fixed) {
         /// <inheritdoc/>
-        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(facet.Counter(slot));
+        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(value: facet.Counter(slot: slot));
     }
     /// <summary>A named action timer's zero test.</summary>
     public sealed class Elapsed(int slot) : ActionGateOperand(CellKind.Bool) {
         /// <inheritdoc/>
-        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: facet.TimerElapsed(slot) ? 1 : 0);
+        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: (facet.TimerElapsed(slot: slot) ? 1 : 0));
     }
     /// <summary>A composition channel's held test.</summary>
     public sealed class Held(int channel) : ActionGateOperand(CellKind.Bool) {
         /// <inheritdoc/>
-        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: facet.Held(channel) ? 1 : 0);
+        public override Fact Read(IStateReader reader, IActionGateFacts facet) => Fact.Finite(kind: CellKind.Bool, value: (facet.Held(channel: channel) ? 1 : 0));
     }
 }

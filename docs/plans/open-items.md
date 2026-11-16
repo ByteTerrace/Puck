@@ -2699,6 +2699,13 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
+  which can re-resolve unrelated transitive packages after a project-reference change.
+  The verb's promise to keep every other pinned version needs an enforcing mechanism:
+  an rf2 reference experiment rewrote 52 lock files and advanced System.IO.Hashing
+  and FSharp.Core without `--update`. The experiment was backed up and reverted;
+  rf2's final project graph needs no lock changes. Fix the non-update path in
+  `src/Puck.Cli.Gate/Locks/LockFiles.cs`, or correct its advertised contract.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers

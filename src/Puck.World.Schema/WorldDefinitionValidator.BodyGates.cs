@@ -3,11 +3,11 @@ using Puck.Physics.Motion;
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
-    // A shaping-row gate: the body-fact predicate vocabulary, plus 'held' (a shaping row's own channel test).
-    // Now/Recently/All/Any/Not/Held are accepted; the lane-scoped CompareState/TimerElapsed are rejected by name
-    // ("action-state predicates apply only to action triggers"); an unknown kind is loud. Mirrors ValidatePredicate's
-    // structure but narrows the admissible set.
-    private static void ValidateMotionGate(ActionPredicate? predicate, ISet<string> channelNames, string path, List<string> errors) {
+    // The scopes share structural validation; only shaping gates receive a channel table, and only
+    // action triggers receive action-state slots.
+    private static void ValidateMotionGate(ActionPredicate? predicate, ISet<string> channelNames, string path, List<string> errors) =>
+        ValidatePredicate(channelNames: channelNames, errors: errors, path: path, predicate: predicate, stateSlots: null);
+    private static void ValidatePredicate(ActionPredicate? predicate, IReadOnlyDictionary<string, ActionStateSlot>? stateSlots, string path, List<string> errors, ISet<string>? channelNames = null) {
         switch (predicate) {
             case null:
                 break;
@@ -28,95 +28,12 @@ public static partial class WorldDefinitionValidator {
                 );
 
                 break;
-            case WorldPredicate.Held held:
-                if (
-                    string.IsNullOrWhiteSpace(value: held.Channel) ||
-                    !channelNames.Contains(item: held.Channel)
-                ) {
-                    errors.Add(item: $"{path}.channel '{held.Channel}' names no declared composition channel.");
-                }
-
-                break;
-            case ActionPredicate.All all:
-                if (all.Predicates is not { Count: > 0 } inner) {
-                    errors.Add(item: $"{path}.all must contain at least one predicate.");
-
-                    break;
-                }
-
-                for (var index = 0; (index < inner.Count); index++) {
-                    ValidateMotionGate(
-                        predicate: inner[index],
-                        channelNames: channelNames,
-                        path: $"{path}.all[{index}]",
-                        errors: errors
-                    );
-                }
-
-                break;
-            case ActionPredicate.Any any:
-                if (any.Predicates is not { Count: > 0 } alternatives) {
-                    errors.Add(item: $"{path}.any must contain at least one predicate.");
-
-                    break;
-                }
-
-                for (var index = 0; (index < alternatives.Count); index++) {
-                    ValidateMotionGate(
-                        predicate: alternatives[index],
-                        channelNames: channelNames,
-                        path: $"{path}.any[{index}]",
-                        errors: errors
-                    );
-                }
-
-                break;
-            case ActionPredicate.Not not:
-                if (not.Predicate is null) {
-                    errors.Add(item: $"{path}.not must contain one predicate.");
-                } else {
-                    ValidateMotionGate(
-                        predicate: not.Predicate,
-                        channelNames: channelNames,
-                        path: $"{path}.not",
-                        errors: errors
-                    );
-                }
-
-                break;
-            case ActionPredicate.CompareState:
-            case WorldPredicate.TimerElapsed:
+            case ActionPredicate.CompareState or WorldPredicate.TimerElapsed when (stateSlots is null):
                 errors.Add(item: $"{path} is an action-state predicate ('{PredicateKind(predicate: predicate)}') — action-state predicates apply only to action triggers, not a shaping-row gate.");
-                break;
-            default:
-                errors.Add(item: $"{path} is an unknown predicate kind.");
-                break;
-        }
-    }
-    private static void ValidatePredicate(ActionPredicate? predicate, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, string path, List<string> errors) {
-        switch (predicate) {
-            case null:
-                break;
-            case WorldPredicate.Now now when !Enum.IsDefined(value: now.Fact):
-                errors.Add(item: $"{path}.fact '{now.Fact}' is not a defined ActionFact.");
-                break;
-            case WorldPredicate.Now:
-                break;
-            case WorldPredicate.Recently recently:
-                if (!Enum.IsDefined(value: recently.Fact)) {
-                    errors.Add(item: $"{path}.fact '{recently.Fact}' is not a defined ActionFact.");
-                }
-
-                RequirePositive(
-                    value: recently.WindowSeconds,
-                    name: $"{path}.windowSeconds",
-                    errors: errors
-                );
-
                 break;
             case ActionPredicate.CompareState compare:
                 if (compare.Text is not null) {
-                    errors.Add($"{path}.text is refused at body scope — action-state slots are numeric; text comparisons belong to world rules.");
+                    errors.Add(item: $"{path}.text is refused at body scope — action-state slots are numeric; text comparisons belong to world rules.");
                 }
                 // A per-body action-state slot is not keyed; `key` addresses a WORLD state row's cell and is
                 // legitimate only in a world rule. Refused rather than parsed and discarded.
@@ -131,7 +48,7 @@ public static partial class WorldDefinitionValidator {
                 ) {
                     errors.Add(item: $"{path}.comparandState/comparandKey is refused at body scope — a comparand row reference addresses a world state row or a reserved channel, legitimate only in a world rule.");
                 }
-                if (!stateSlots.TryGetValue(
+                if (!stateSlots!.TryGetValue(
                     key: compare.State.Spelling,
                     value: out var compareSlot
                 )) {
@@ -154,7 +71,7 @@ public static partial class WorldDefinitionValidator {
                 }
                 break;
             case WorldPredicate.TimerElapsed elapsed:
-                if (!stateSlots.TryGetValue(
+                if (!stateSlots!.TryGetValue(
                     key: elapsed.State,
                     value: out var timerSlot
                 )) {
@@ -174,6 +91,7 @@ public static partial class WorldDefinitionValidator {
                     ValidatePredicate(
                         predicate: inner[index],
                         stateSlots: stateSlots,
+                        channelNames: channelNames,
                         path: $"{path}.all[{index}]",
                         errors: errors
                     );
@@ -190,6 +108,7 @@ public static partial class WorldDefinitionValidator {
                     ValidatePredicate(
                         predicate: alternatives[index],
                         stateSlots: stateSlots,
+                        channelNames: channelNames,
                         path: $"{path}.any[{index}]",
                         errors: errors
                     );
@@ -205,12 +124,17 @@ public static partial class WorldDefinitionValidator {
                 ValidatePredicate(
                     predicate: not.Predicate,
                     stateSlots: stateSlots,
+                    channelNames: channelNames,
                     path: $"{path}.not",
                     errors: errors
                 );
                 break;
-            case WorldPredicate.Held:
-                errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
+            case WorldPredicate.Held held:
+                if (channelNames is null) {
+                    errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
+                } else if (string.IsNullOrWhiteSpace(value: held.Channel) || !channelNames.Contains(item: held.Channel)) {
+                    errors.Add(item: $"{path}.channel '{held.Channel}' names no declared composition channel.");
+                }
                 break;
             default:
                 errors.Add(item: $"{path} is an unknown predicate kind.");

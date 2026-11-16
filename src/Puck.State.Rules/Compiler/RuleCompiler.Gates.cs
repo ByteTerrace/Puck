@@ -601,12 +601,12 @@ public static partial class RuleCompiler {
 
         // A host vocabulary owns its leaf meanings, including a core spelling used in another scope.
         // Boolean structure always belongs to this compiler.
-        if (predicate is not null and not (ActionPredicate.All or ActionPredicate.Any or ActionPredicate.Not) &&
-            context.Vocabulary.PredicateOf(predicate: predicate) is { } family) {
-            gate.Add(item: family.Compile(predicate: predicate, ruleName: ruleName, context: context));
+        if ((predicate is not null and not (ActionPredicate.All or ActionPredicate.Any or ActionPredicate.Not)) &&
+            (context.Vocabulary.PredicateOf(predicate: predicate) is { } family)) {
+            gate.Add(item: family.Compile(context: context, predicate: predicate, ruleName: ruleName));
             return;
         }
-        if (predicate is not null and not (ActionPredicate.All or ActionPredicate.Any or ActionPredicate.Not) &&
+        if ((predicate is not null and not (ActionPredicate.All or ActionPredicate.Any or ActionPredicate.Not)) &&
             !context.Vocabulary.CorePredicates) {
             throw new RuleException(RuleRefusal.PredicateKindInadmissible, ruleName,
                 $"'{predicate.GetType().Name}' has no meaning in this gate's vocabulary");
