@@ -696,7 +696,7 @@ public sealed partial class WorldBody {
     /// REFERENCE changes is woken: its rest latch was derived against the old static world,
     /// and a live solid edit that moved or removed the floor
     /// beneath it must let it fall rather than leave it frozen in the air — a checkpoint restore hands the field to a
-    /// fresh body BEFORE <see cref="ApplyIntegrationResidue"/> re-applies the captured latch, so a restore is never
+    /// fresh body BEFORE <see cref="RestoreSections"/> re-applies the captured latch, so a restore is never
     /// perturbed by this wake.</summary>
     /// <param name="field">The world contact field.</param>
     public void SetContactField(IContactField? field) => AdoptContactField(field: field, wake: true);
