@@ -203,7 +203,7 @@ One door publishes
 uploads, the root is written last, and an abandoned upload frees only its
 prefix.
 
-[The graphics plan](graphics-architecture.md#probe-lighting) sized the top
+The graphics research round sized the top
 level as "hundreds of draws, trivial". The scene's static draws at the meadow
 are not counted in any reading this memo has **[unconfirmed]**; the allocation
 trace named the scene's constructor and the export as the two largest
@@ -720,7 +720,7 @@ the wait before probes can trace the new scene.
 | 3b. Refit the top level | NVIDIA: "BLAS updates are a good choice after limited deformations"; for the top level, "perform only rebuilds" ([sources](#sources)) | Medium | A tier swap changes a geometry's braid set, which is an insert and a delete, not a moved bound; quality decays | None alone |
 | 3c. Mutate one hierarchy in place (insert, remove, rotate) | Proportional | Large | F11: CPU readers hold claims across threads, and an abandoned upload must leave the published root intact | F11 only with copy-on-write, which is 3d |
 | 3d. Spatial cells, each cell's hierarchy identified by its entry list and reused when the list is equal, under a small top over the cells | Puck-native: each geometry's hierarchy is already identified by its buffers and kept across scenes, on the CPU and in the GPU arena | Medium | Entries straddling cells loosen cell bounds | F11, F12 |
-| 3e. Build the top level on the GPU each change | H-PLOC builds a hierarchy over a million instances in milliseconds ([the graphics plan](graphics-architecture.md#probe-lighting-research) opened it) | Large: a build kernel family on both backends | The CPU still traverses the scene for placement and diagnostics, so it would be a second builder | The upload |
+| 3e. Build the top level on the GPU each change | H-PLOC builds a hierarchy over a million instances in milliseconds (Benthin et al., H-PLOC, opened by the graphics research round) | Large: a build kernel family on both backends | The CPU still traverses the scene for placement and diagnostics, so it would be a second builder | The upload |
 
 **Favoured: 3a now, 3d if R0's rule sends it.** 3a removes what reaches
 the frame thread. 3d makes the rest proportional without changing a kernel
@@ -1193,4 +1193,4 @@ One line per finding of the review, with where the design answers it.
 
 ---
 
-[Plans](README.md) · [Visibility](visibility.md) · [Graphics architecture](graphics-architecture.md) · [Open items](open-items.md#residency-and-streaming) · [Frame rendering](../rendering/sdf/handbook/frame-rendering.md)
+[Plans](README.md) · [Visibility](visibility.md) · [Illumination](illumination.md) · [Open items](open-items.md#residency-and-streaming) · [Frame rendering](../rendering/sdf/handbook/frame-rendering.md)

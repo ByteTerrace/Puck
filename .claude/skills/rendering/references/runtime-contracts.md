@@ -119,7 +119,7 @@ schedule did not name. `render.record.packages-microseconds` times the
 preparation apart from the jobs. The jobs still run serially on the frame
 thread: the pipeline cache and the counting recorder share host state across
 nodes, so recording on workers needs those made safe first
-([lessons plan](../../../../docs/plans/frame-source-lessons.md#1-complete-a2s-accounting-and-give-j6-immutable-recording-jobs)).
+([the job system's R1](../../../../docs/plans/engine-job-system.md#6-build-order)).
 
 ## 2. Nothing resolves silently to nothing
 

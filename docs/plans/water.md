@@ -191,7 +191,7 @@ the code or capture shows, and the lane that closes it.
 | G2 | The lake is a film in the air | `lakeSurface` is a cylinder 0.24 m thick (`scale [radius, 0.12, radius]`) at y 324.5 over a bowl the valley cuts to y 319 (`valleyBasins[lake-basin]`: radii 17 at y 336), and its slide lifts it 4 m per unit of `lakeLevel` over 0.4, so during the melt it floats up to 3.6 m higher with air beneath. The art's panel 2 has clear stones at the near bank, turquoise middle depth and teal deep water. | A2 |
 | G3 | The falls stand 8 m off the wall | `fallsRibbon` places fourteen flat 8 m sheets at `standoff: 8` in front of the face profile, so the ribbon hangs in the air before the rock; the art has one sheet hugging and interrupted by rock, and a residual dark wet streak when dry. | A3 |
 | G4 | The pool and plunge floors are flat boxes | `waterBasin` is a flat bed with square walls and up to four steps; the art's panel 4 wants shallow stones at the margin, a dark deep end, submerged stones under caustic light and the drain throat at the bank (the pool's west opening at (−66, −1.3, −6) leads nowhere); panel 3 wants a dark rounded plunge pocket. | A4 |
-| G5 | The reservoir is invisible and has no inlet | The pavilion's observation window (`glass { depth: 8, ior: 1.5 }`) lies over the reservoir's glass field surface, and the glass pass shades the nearest layer alone, so the pane reads as tint with no water line, float or medium (W1's capture). The art's panel 5 has a descending inlet, air over the water, and the float on the surface beside pale ticks; the chamber has no inlet geometry and the gauge's post tops out at y −0.1 under the window. | A5, after the two-glass-layers lane |
+| G5 | The reservoir is invisible and has no inlet | The pavilion's observation window (`glass { depth: 8, ior: 1.5 }`) lies over the reservoir's glass field surface, and the glass pass now shades two interfaces a pixel, so the pane can show the water line. The art's panel 5 has a descending inlet, air over the water, and the float on the surface beside pale ticks; the chamber has no inlet geometry and the gauge's post tops out at y −0.1 under the window. | A5 |
 
 #### Look, light and motion
 
@@ -220,9 +220,11 @@ counter or a state reading named here, never by watching the arc in real time.
 
 ### The arc's proof is a scenario
 
-The simulation half of done is `puck test worlds/debug/water-arc-tests.puck`
-and `water-chain-tests.puck` green, with `--reproduce` showing the run replays
-bit for bit, on the merged head. The claims, each read from a probe at a
+The simulation half of done is the claims below, read by running
+`puck test worlds/debug/water-arc-tests.puck` and `water-chain-tests.puck`,
+with `--reproduce` showing two runs agree. The scenarios are the instrument
+that reads the claims, not a gate: a deliberate correction to the chain
+re-records what it changes. The claims, each read from a probe at a
 simulated milestone (`worlds/debug/water-arc.puck` holds the probes):
 
 | Milestone (simulated) | Claim | Probe |
@@ -307,7 +309,7 @@ falls and the lake views with bakes settled, and compared before and after:
 | Glass raster texels | ≤ 2 × the image (one layer of overdraw) | 1 346 168 |
 | Glass-shade texels | the image (once per pixel, by construction) | 1 152 000 |
 | Mesh-pass vertices from water groups | ≤ 150 000 across the pool, the river channel, the basins and the lake | 92 736 (glass vertices) |
-| Cloud volume steps × footprint at the falls | ≤ the composite's share today; a particle pool replaces, never adds | the audit's reading |
+| Spray at the falls: the cloud volume's steps × footprint, plus the particle pool's step and its shaded sprite texels once W3 exists | Together ≤ the cloud volume's share before the pool. `impactSpray` stays a cloud volume and `impactSplash` is the pool's, so the pool's work is taken from the cloud's steps, never added on top | the audit's reading |
 | Mesh region bytes owed to water prototypes | ≤ today's, read from `world.residency` after a cold bake | the audit's reading |
 | Lattice work | one `hydro` lattice step per tick (`physics` counters), the water views stepping every 8 ticks | as authored |
 
@@ -319,10 +321,11 @@ ruling asks for or reduces it.
 The full-arc capture series (five stages × the seven views on Direct3D 12,
 stages 1 and 5 on Vulkan) run from one script on the merged head, reviewed
 view by view against the art pack's panels and the table above, with the
-arc scenario green and reproduced, the counts within budget and the lead's
-`host.frames` reading at the bar. The series' script and its contact sheet
-are committed with the plan's closing change, under `worlds/debug/sweep.json`
-as a tour so `puck sweep --tour` repeats it.
+arc's claims read from its scenario, the counts within budget and the frame
+bar read by [the one recipe](streaming-and-memory.md#how-the-bars-are-read).
+The series is a tour in `worlds/debug/sweep.json`, so `puck sweep --tour`
+repeats it; its captures and contact sheet are evidence in the closing change's
+commit, never committed files.
 
 ## The lanes
 
@@ -373,7 +376,7 @@ is the third.
 
 ### A5. The reservoir, readable
 
-**Outcome.** The reservoir visible through the pavilion's pane once the two-glass-layers lane lands: air over the water line, the float on the surface beside its ticks, readable from the terrace; a descending inlet from the pool's drain into the chamber (authored geometry carrying the passage's water view); the passage lit. A5's geometry lands first and its pane acceptance waits on that lane.
+**Outcome.** The reservoir visible through the pavilion's pane, which shades two glass interfaces a pixel ([option 3 as built](#option-3-as-built)): air over the water line, the float on the surface beside its ticks, readable from the terrace; a descending inlet from the pool's drain into the chamber (authored geometry carrying the passage's water view); the passage lit.
 
 **Invariant.** The chamber's water line and the float read one gauge (`aquiferFill`) through one height scale.
 
@@ -428,9 +431,9 @@ template parameter.
 **Invariant and its door.** A glass pixel reads the lit image once
 (`sdfGlassLitAt`, or the frost's disc); the medium, the contact and the
 revealed surface are functions of the thickness, `opaque - t` and the arriving
-light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: glass
-behind glass reads the opaque image behind the nearer pane, which the two-glass-layers
-lane is lifting.
+light alone. `sdf-glass.comp.hlsl` is the one read site. Where it stops: a
+pixel shades two interfaces ([option 3 as built](#option-3-as-built)), and what
+lies beyond the second is the opaque image.
 
 **Owed.** `world.gpu-timing` for the glass passes against the build before
 W1, in a quiet window, and the glass kernel's registers beside the views
@@ -625,6 +628,31 @@ the volumes' per-frame table packing (`PackVolumes`); `sdfSampledRegion` for
 the brick's read; `GpuRegion` for the pool's buffers; the residency's byte
 budget for capacity.
 
+**Constraints from the open renderers read for it** (Wicked's emitted
+particles, Godot's particle storage and collision), which the lane keeps:
+
+- *One simulation, work per view.* The pool steps once; visibility, billboard
+  basis, depth keys and transparent drawing belong to each demanding view, so
+  sorting once in the root camera's order is wrong through a portal. Additive
+  sprites need no depth order and conventional alpha does, so the material's
+  needed ordering is measured before a sorter is chosen, and Puck's selection
+  and scan machinery is reused where it applies.
+- *Collision is not camera depth.* Colliding against the previous frame's
+  depth is cheap and camera-dependent: turning a camera away from a collider
+  must not change the shared trajectory. The brick is the collider, and a
+  sampled brick is an approximation: swept travel and thin surfaces are checked
+  for tunnelling, since a voxel-sized endpoint step alone certifies nothing.
+- *A sprite crossing the glass's front face* is classified per fragment, never
+  by its emitter's centre: particles behind the glass are in the glass's input
+  and those in front compose after it.
+- *Overload is authored and observable.* A fixed-step catch-up is bounded by
+  the presented tick and the settled-capture contract, never by a wall-time
+  clamp.
+- *Cost is counted before it is timed:* pool bytes per capacity slot, stepped
+  particles times catch-up steps times collider taps, sort and compaction
+  scratch per simultaneous view, and covered sprite pixels times overdraw, each
+  its own counter. Capacity alone bounds no fill rate.
+
 **Order.** (1) The pool, the table, the step with gravity and age, the quad
 draw after `views`, no collision; the splash. (2) The brick derivation and the
 collision response. (3) The glass-target split. (4) The W2 field row as a
@@ -718,4 +746,4 @@ carries no verdict alone.
 
 ---
 
-[Plans](README.md) · [Graphics architecture](graphics-architecture.md) · [The debug world as one valley](debug-world-composition.md) · [Open items](open-items.md#water) · [Decisions](../decisions/rendering.md)
+[Plans](README.md) · [Illumination](illumination.md) · [The debug world as one valley](debug-world-composition.md) · [Open items](open-items.md#water) · [Decisions](../decisions/rendering.md)

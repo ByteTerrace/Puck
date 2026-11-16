@@ -196,6 +196,24 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
   the measured budget calls for it.
 - A package pass takes its extent from its first image port. Resolve the
   output-extent contract for a pass whose only image is a fixed-size atlas.
+- Account a graph's storage by lifetime before reusing any of it. The plan
+  forbids unrelated storage aliasing today, and no allocator proves a handoff.
+  First, from the plan's first and last uses and the actual dimensions and
+  formats, compute the unaliased bytes and a conservative estimate of what
+  compatible, non-overlapping transients could share, by lifetime class
+  (external, published, history or retained, frame-slot, transient, retired,
+  background), with flight-slot multiplicity and graph-replacement overlap
+  counted and no reference summed twice
+  ([how memory is read](streaming-and-memory.md#what-adds-and-what-only-names)).
+  Only if that estimate is large: assign physical allocations to eligible
+  transient chains in the compiler's immutable plan, within one node and queue
+  first. The invariant is that reuse is legal only after every GPU access to
+  the old allocation and every external lease has ended, which the compiler
+  can prove locally and the allocator's retirement door must enforce; history,
+  held portal images, capture inputs, standing pass contents and background
+  bindings are never eligible. Check: planned against actual peak allocation
+  across resize, graph replacement, held views, capture and background work on
+  both backends, kept only for a measured byte dividend.
 
 The back of a portal's glass still needs a presentation choice: no image,
 fallback colour or a front-image mirror. The

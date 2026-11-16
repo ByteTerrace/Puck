@@ -1383,7 +1383,7 @@ not every possible authored geometry. A settled capture remains waiting while
 its prepared lighting or exposure is pending; background work continues to
 completion before that frame can certify a still. Throughput and the one-frame
 lockstep target remain measurement obligations in the
-[graphics plan](../plans/graphics-architecture.md#g1-the-gpu-probe-trace-and-relight).
+[illumination plan](../plans/illumination.md#after-the-gpu-trace).
 
 **Visibility is measured as local first-hit surfaces.** Each probe holds a
 12×12 octahedral surface map. One bounded closest-hit ray per texel stores an
@@ -1426,8 +1426,8 @@ tall. Levels are a table per tier with a spacing per axis: the middle level's
 4 m × 2 m × 4 m cells put a probe plane in every storey 2.4 m or taller,
 which no isotropic coarse level does (an 8 m level had one in every other
 4.5 m storey, and its single corner across a slab lit a whole storey). The
-[far-field memo](../plans/far-field-irradiance.md) holds the measurement and
-the research behind this rule.
+[illumination plan](../plans/illumination.md#after-the-gpu-trace) holds the
+options this rule left open.
 
 **A coarse tap on a sheet closes; a coarse tap on a solid's near side does
 not.** One visibility rule holds at every level: the taps that block a receiver

@@ -769,6 +769,13 @@ What a bake rebakes is the [Bake proportional to change](open-items.md#bake-prop
 packet's: per-group content keys, the narrowed closure, one store for both
 backends; the scheduler runs whatever that packet leaves to bake.
 
+The background GPU service (`SdfGpuWork`) records and submits on the frame
+thread, so a job completes between frames but the next is submitted only at
+the next pump. Moving the pump to a waiter on the slots' fences needs a
+thread-safe submitter over the caller-stated layouts the Direct3D 12 recorder
+now takes. It pays only once the CPU half no longer bounds the bake and a pump
+gap is observed in the job's timestamps; until then it is not built.
+
 ### GI as jobs, and only the probes whose light can change
 
 GI is already proportional to change: a probe is a hit buffer traced once per

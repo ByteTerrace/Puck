@@ -155,6 +155,13 @@ V-step would otherwise assume:
 - **A draw-count variance.** The meadow's validation reads once differed by an
   order of magnitude between Vulkan and Direct3D 12 at the highest quality and
   native scale; a later leg did not reproduce it and its cause is unconfirmed.
+- **What changes thousands of draw records in a still frame.** About 2,600
+  records were re-staged a frame at the spawn with nothing moving, cause
+  unattributed. Read `world.counters` and a frame-thread trace there with the
+  sun held before V2b claims its saving.
+- **Buried draws.** Whether the bake's distance bounds (`TryDistanceBounds`)
+  find draws wholly inside other solids, worth culling at load, is one
+  load-time count on the debug world; it stays a count until it finds some.
 
 ## GPU selection is the foundation
 

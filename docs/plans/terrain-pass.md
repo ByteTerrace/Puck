@@ -139,7 +139,7 @@ alone, a measurement request.
   changes, so ridges shadow the walls behind them. Holding it between changes
   keeps the authored shadow precision; the cascade's snap is never coarsened.
   This step is the one home of the terrain cascade, and the
-  [illumination plan](illumination.md#step-1-status) waits on it.
+  [illumination plan](illumination.md#the-build-order) waits on it.
 
 ### What the bake needs
 
