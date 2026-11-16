@@ -317,6 +317,19 @@ and then its step C0.1, then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
+- [high] The rated screens' phase spread does not happen on a variable-rate
+  display: on the RTX 4070 at `debug.go desktop` (`world.rates`: `display=60hz
+  grid=none`), all eight 15 Hz screen sources render on one frame (`burst:
+  views=0 screens=8`), where the spread should hold about half. The schedule
+  laws prove only the fixed 60 Hz grid with a 30 Hz tick; `PresentationPhases`
+  and `PresentationRate.Holds` need a rule for a display with no grid.
+- [high] Gen-1 collections dominate the slow frames: at `debug.go desktop` on
+  Direct3D 12, 600 iterations held 64 over 16.7 ms, the worst carrying 20 to
+  28 ms pauses (47 collections pausing 674 ms), one iteration allocating
+  68763816 bytes. The machine was loaded, so the times are indicative; the
+  pauses and allocation are not load-bound. Attribute the allocation with
+  `dotnet-trace --profile gc-verbose` and cut it at its sources (the churn
+  item below names the probe cache and the dressed frame copies).
 - [high] Concurrency is hand-rolled across the engine (`lock`, `Task.Run`,
   `new Thread`, `ThreadPool`, `Parallel.For`), densest in the bake and
   irradiance code; the memo's C0 and J1 move it. Beside them: make thread
