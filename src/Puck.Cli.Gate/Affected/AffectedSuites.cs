@@ -10,7 +10,7 @@ namespace Puck.Cli.Affected;
 /// <summary>One chosen suite as <c>puck affected --run</c> schedules it.</summary>
 /// <param name="Name">The suite's project name, which is also its directory under <c>tests/</c>.</param>
 /// <param name="Heavy">Whether its full run is heavy (<see cref="HostProcesses.IsHeavyTestAssembly"/>), so it starts
-/// first and is admitted machine-wide before it runs (<see cref="AffectedCommand.AdmitHeavySuite"/>).</param>
+/// first and is admitted machine-wide before it runs (<see cref="HeavyLease"/>).</param>
 public sealed record AffectedSuite(string Name, bool Heavy);
 /// <summary>One suite's outcome.</summary>
 /// <param name="ExitCode">The test host's exit code, or <see cref="CliExit.Refused"/> when admission refused it.</param>
@@ -21,7 +21,7 @@ public sealed record AffectedSuiteResult(int ExitCode, IReadOnlyList<string> Rep
 /// of exactly those projects, then runs their test hosts side by side, at most <c>--suite-jobs</c> at once, each on the
 /// build that invocation left (<c>dotnet test --project &lt;suite&gt; --no-build</c>, CPU tests only). Heavy suites start
 /// first, and each holds the shared heavy lease through admission and execution
-/// (<see cref="AffectedCommand.AdmitHeavySuite"/>, <see cref="HostAdmission"/>): no other heavy run on the machine, and
+/// (<see cref="HeavyLease"/>, <see cref="HostAdmission"/>): no other heavy run on the machine, and
 /// memory and disk headroom.
 /// </summary>
 public static class AffectedSuites {
@@ -192,14 +192,7 @@ public static class AffectedSuites {
     // what CI's does, so an explicit tier such as Maths' Deep and Exhaustive stays out, and the Gpu trait keeps device
     // laws out (CliTestRun.CpuSelection). The platform prints each failure with its message and stack.
     private static AffectedSuiteResult RunSuite(string repositoryRoot, AffectedSuite suite) {
-        using var lease = (suite.Heavy ? HeavyLease.Acquire(repositoryRoot: repositoryRoot, holder: suite.Name, clock: TimeProvider.System) : null);
-
-        if (suite.Heavy && !AffectedCommand.AdmitHeavySuite(repositoryRoot: repositoryRoot, suite: suite.Name)) {
-            return new AffectedSuiteResult(
-                ExitCode: CliExit.Refused,
-                Report: [$"REFUSED — host admission did not return within {CliLease.DefaultWait.TotalHours.ToString(format: "0", provider: CultureInfo.InvariantCulture)} hours"]
-            );
-        }
+        using var lease = (suite.Heavy ? HeavyLease.Acquire(repositoryRoot: repositoryRoot, holder: suite.Name, clock: TimeProvider.System, admit: HostAdmission.For(TimeProvider.System)) : null);
 
         var run = CliProcess.RunCaptured(
             arguments: [.. AffectedCommand.TestArguments(suite: suite.Name), .. CliTestRun.CpuSelection],

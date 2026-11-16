@@ -237,6 +237,7 @@ public sealed class HostAdmissionLawTests {
     // passes first refuses the start by exception.
     [Fact]
     public void AVerbsWorldStartWaitsAtNinetyPercentCommitAndRunsAtSixtyThroughTheInstalledAdmission() {
+        using var checkout = new GitScratchCheckout();
         var clock = new GateClock();
         var readings = 0;
         var asked = new List<(string Step, bool Device, bool Heavy, HostStartKind Kind)>();
@@ -249,11 +250,11 @@ public sealed class HostAdmissionLawTests {
 
         WorldAdmission.Install(admit: admit);
         try {
-            var worker = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "test worker") { Arguments = ["--test-batch", "batch.json"], HeavySuite = true, Shape = WorldShape.TestBatch };
+            var worker = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "test worker") { Arguments = ["--test-batch", "batch.json"], Checkout = checkout.Root, HeavySuite = true, Shape = WorldShape.TestBatch };
 
             // The first replica waits two samples at 90% and starts on the third.
             WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
-            Assert.Equal(expected: 3, actual: readings);
+            Assert.Equal(expected: 4, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%); commit headroom 6.4GB (admission needs at least 9.0GB");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
@@ -261,9 +262,9 @@ public sealed class HostAdmissionLawTests {
             // The next replica is admitted on its own reading: 60% starts at once, as does a World booted in process.
             WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
             WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "bench");
-            Assert.Equal(expected: 5, actual: readings);
+            Assert.Equal(expected: 7, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("bench", false, false, HostStartKind.HeadlessWorld)], actual: asked);
+            Assert.Equal(expected: [("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("test worker", false, true, HostStartKind.ReproduceReplica), ("bench", false, false, HostStartKind.HeadlessWorld)], actual: asked);
 
             // A machine that never recovers refuses the start at the admission's bound, and the verb's start never happens.
             readings = int.MinValue;
@@ -275,6 +276,47 @@ public sealed class HostAdmissionLawTests {
         // Without an installed admission a start is admitted at once.
         WorldAdmission.WaitInProcess(cancellationToken: TestContext.Current.CancellationToken, step: "canary");
     }
+    [Theory]
+    [InlineData(WorldShape.TestBatch, "heavy")]
+    [InlineData(WorldShape.Windowed, "gpu")]
+    public async Task WorldLaunchWaitsWithoutAnExclusiveHoldAndSharedStartsCannotWaitUnderLiveWork(WorldShape shape, string resource) {
+        using var checkout = new GitScratchCheckout();
+        var token = TestContext.Current.CancellationToken;
+        var root = await CliLease.RootAsync(checkout.Root, token);
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var headroom = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var refuseShared = false;
+        HostAdmit admit = async (place, _, _, _, _, bound, reserve, _, _, cancel) => {
+            Assert.Equal(checkout.Root, place);
+            if (reserve) {
+                Assert.Equal(TimeSpan.Zero, bound);
+                Assert.True(CliLease.HoldsExecution(root));
+                return !refuseShared;
+            }
+            Assert.False(CliLease.HoldsExecution(root));
+            waiting.SetResult();
+            return await headroom.Task.WaitAsync(cancel);
+        };
+        WorldAdmission.Install(admit);
+        try {
+            var request = new WorldLaunchRequest("launch law", "Puck.World.dll") { Checkout = checkout.Root, HeavySuite = shape == WorldShape.TestBatch, Shape = shape };
+            var pending = WorldLaunch.AdmitAsync(request, token);
+            await waiting.Task.WaitAsync(token);
+            using (await CliLease.AcquireAsync(root, resource, "other lane", TimeSpan.Zero, TimeProvider.System, checkout.Root, token)) {
+                Assert.Equal("other lane", CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holder);
+            }
+            headroom.SetResult(true);
+            using var launch = await pending;
+            refuseShared = true;
+            await Assert.ThrowsAsync<HostAdmissionRefusedException>(() => WorldLaunch.AdmitAsync(request, token));
+            Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
+        } finally {
+            headroom.TrySetResult(false);
+            WorldAdmission.Install(null);
+        }
+        Assert.False(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
+    }
+
     // The launch's own view of a World (whether it opens a device, so takes the GPU lease) and the host's reading of the
     // command line it builds agree for every shape, so a running World is classified as the launch admitted it.
     [InlineData(WorldShape.Headless)]

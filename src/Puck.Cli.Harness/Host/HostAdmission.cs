@@ -165,8 +165,10 @@ public static class HostAdmission {
     /// <param name="reserve">Whether an admitted start reserves its expected peak.</param>
     /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed
     /// first.</returns>
-    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, bool reserve = true) =>
-        Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session, reserve);
+    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, bool reserve = true) {
+        if (probe.LeaseRoot is { } root && CliLease.HoldsExecution(root)) { bound = TimeSpan.Zero; }
+        return Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session, reserve);
+    }
     /// <summary>Gets the admission the root hands to the verbs that cannot reference this assembly: each call samples with a
     /// <see cref="HostProbe"/> over the caller's checkout and waits on a thread-pool thread.</summary>
     /// <param name="clock">The clock the bound and the sleeps are measured on.</param>
