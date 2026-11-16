@@ -342,10 +342,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
             // own frame, its center is that offset turned back by the slot's orientation in this frame.
             // An explicitly slot-local bound already lies in that frame, whatever pose the owner starts in.
-            var orientation = ((instance.IsDynamic && (instance.Slot < transforms.Count)) ? transforms[instance.Slot].Orientation : default);
+            var orientation = ((instance.IsDynamic && (instance.Slot < transforms.Count)) ? SdfMeshGeometryBuilder.PoseOf(transform: transforms[instance.Slot]).Orientation : Quaternion.Identity);
             // Rounded as the geometry rounds a pose, so one geometry bakes over one box whatever frame turned it back.
             var center = ((instance.IsDynamic && !instance.BoundInSlotFrame)
-                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: ((orientation == default) ? Quaternion.Identity : orientation))))
+                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: orientation)))
                 : instance.Center);
             var glass = program.IsGlassRange(end: instance.End, first: instance.First);
             T group;
@@ -457,12 +457,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         foreach (var part in instance.Parts) {
             if (!poses.TryGetValue(key: part.Slot, value: out var pose)) { continue; }
 
-            var box = SdfMeshBox.Turned(
-                center: (0.5f * (part.Low + part.High)),
-                half: (0.5f * (part.High - part.Low)),
-                offset: pose.Position,
-                turn: ((pose.Orientation == default) ? Quaternion.Identity : pose.Orientation)
-            );
+            var box = SdfMeshBox.OfPart(part: part, pose: pose);
             var reach = box.AxisHalf;
 
             group.Members.Add(item: (box.Center, reach.Length(), part.Detail, (box.Center - reach), (box.Center + reach)));

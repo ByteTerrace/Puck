@@ -455,8 +455,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         );
     }
 
-    // A transform's position and orientation, an unset orientation read as the identity, as the bake reads it.
-    internal static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
+    /// <summary>Returns a transform's position and orientation, an unset orientation read as the identity: the one reading of
+    /// a slot's pose the bake, its audit and the demand carry share.</summary>
+    /// <param name="transform">The slot's transform.</param>
+    /// <returns>The position, and the orientation with <see langword="default"/> read as <see cref="Quaternion.Identity"/>.</returns>
+    public static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
         (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
 
     /// <summary>Returns the world units one unit of a slot's own geometry spans (<see cref="DynamicTransform.Scale"/>),

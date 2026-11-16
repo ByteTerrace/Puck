@@ -24,14 +24,12 @@ public sealed class GpuRegionCopyPass {
     /// <summary>Initializes a new instance of the <see cref="GpuRegionCopyPass"/> class over its backend's deployed
     /// kernel, which it reads here.</summary>
     /// <param name="pipelines">The composition's pass pipelines, which the copy pipeline is an entry of.</param>
-    /// <param name="bytecodeExtension">The backend's compiled-kernel extension (<c>".spv"</c> for Vulkan,
-    /// <c>".dxil"</c> for Direct3D 12).</param>
+    /// <param name="target">The backend's shader target.</param>
     /// <exception cref="ArgumentNullException"><paramref name="pipelines"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> is empty.</exception>
     /// <exception cref="IOException">The deployed kernel is missing or cannot be read.</exception>
-    public GpuRegionCopyPass(GpuPassPipelineCache pipelines, string bytecodeExtension) : this(
+    public GpuRegionCopyPass(GpuPassPipelineCache pipelines, ShaderTarget target) : this(
         kernel: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: DefaultDirectory
         ),
         pipelines: pipelines
@@ -73,20 +71,17 @@ public sealed class GpuRegionCopyPass {
             description: GpuRegion.CopyPipeline
         );
     /// <summary>Reads a backend's compiled kernel from a directory.</summary>
-    /// <param name="bytecodeExtension">The compiled-kernel extension (<c>".spv"</c> for Vulkan, <c>".dxil"</c> for
-    /// Direct3D 12).</param>
+    /// <param name="target">The backend's shader target.</param>
     /// <param name="directory">The directory holding <c>region-copy.comp</c> compiled for that backend.</param>
     /// <returns>The kernel's bytecode.</returns>
-    /// <exception cref="ArgumentException"><paramref name="bytecodeExtension"/> or <paramref name="directory"/> is
-    /// empty.</exception>
+    /// <exception cref="ArgumentException"><paramref name="directory"/> is empty.</exception>
     /// <exception cref="IOException">The kernel file is missing or cannot be read.</exception>
-    public static ReadOnlyMemory<byte> Load(string bytecodeExtension, string directory) {
-        ArgumentException.ThrowIfNullOrEmpty(argument: bytecodeExtension);
+    public static ReadOnlyMemory<byte> Load(ShaderTarget target, string directory) {
         ArgumentException.ThrowIfNullOrEmpty(argument: directory);
 
         return File.ReadAllBytes(path: Path.Combine(
             path1: directory,
-            path2: $"{KernelStem}.comp{bytecodeExtension}"
+            path2: $"{KernelStem}.comp{target.FileExtension()}"
         ));
     }
     /// <summary>Takes a lease on <paramref name="device"/>'s copy pipeline, joining the entry another owner already

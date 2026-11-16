@@ -42,42 +42,42 @@ public sealed class SdfMeshRasterPass {
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshRasterPass"/> class from the deployed stages.</summary>
     /// <param name="pipelines">The composition's pass pipelines.</param>
-    /// <param name="bytecodeExtension">The backend's compiled-shader extension (<c>".spv"</c> or <c>".dxil"</c>).</param>
-    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, string bytecodeExtension) : this(
+    /// <param name="target">The backend's shader target.</param>
+    public SdfMeshRasterPass(GpuPassPipelineCache pipelines, ShaderTarget target) : this(
         fragment: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "frag"
         ),
         glassFragment: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "frag",
             stem: GlassShaderStem
         ),
         occlusion: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "comp",
             stem: OcclusionShaderStem
         ),
         pipelines: pipelines,
-        shadowGlassVertex: Load(bytecodeExtension: bytecodeExtension, directory: SdfKernelSet.DefaultDirectory, stage: "vert", stem: ShadowGlassShaderStem),
-        shadowGlassFragment: Load(bytecodeExtension: bytecodeExtension, directory: SdfKernelSet.DefaultDirectory, stage: "frag", stem: ShadowGlassShaderStem),
+        shadowGlassVertex: Load(target: target, directory: SdfKernelSet.DefaultDirectory, stage: "vert", stem: ShadowGlassShaderStem),
+        shadowGlassFragment: Load(target: target, directory: SdfKernelSet.DefaultDirectory, stage: "frag", stem: ShadowGlassShaderStem),
         shadowFragment: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "frag",
             stem: ShadowShaderStem
         ),
         shadowVertex: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "vert",
             stem: ShadowShaderStem
         ),
         vertex: Load(
-            bytecodeExtension: bytecodeExtension,
+            target: target,
             directory: SdfKernelSet.DefaultDirectory,
             stage: "vert"
         )
@@ -255,19 +255,18 @@ public sealed class SdfMeshRasterPass {
         );
     }
     /// <summary>Reads one deployed stage.</summary>
-    /// <param name="bytecodeExtension">The backend's compiled-shader extension.</param>
+    /// <param name="target">The backend's shader target.</param>
     /// <param name="directory">The directory the stages are deployed in.</param>
     /// <param name="stage">The stage's file suffix, <c>vert</c> or <c>frag</c>.</param>
     /// <param name="stem">The stage's file stem; the mesh pass's by default.</param>
     /// <returns>The stage's bytecode.</returns>
-    public static ReadOnlyMemory<byte> Load(string bytecodeExtension, string directory, string stage, string stem = ShaderStem) {
-        ArgumentException.ThrowIfNullOrEmpty(argument: bytecodeExtension);
+    public static ReadOnlyMemory<byte> Load(ShaderTarget target, string directory, string stage, string stem = ShaderStem) {
         ArgumentException.ThrowIfNullOrEmpty(argument: directory);
         ArgumentException.ThrowIfNullOrEmpty(argument: stage);
 
         return File.ReadAllBytes(path: Path.Combine(
             path1: directory,
-            path2: $"{stem}.{stage}{bytecodeExtension}"
+            path2: $"{stem}.{stage}{target.FileExtension()}"
         ));
     }
     /// <summary>Takes a lease on the pipeline for a device, joining its build or starting it on the thread pool.</summary>

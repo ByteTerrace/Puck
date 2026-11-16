@@ -144,11 +144,9 @@ public sealed class SdfMeshDemand {
         if (!group.Dynamic || (group.Slot >= transforms.Count)) { return PixelAt(center: center, half: half); }
 
         var transform = transforms[group.Slot];
-        var units = SdfMeshGeometryBuilder.UnitsOf(transform: transform);
-        var (position, orientation) = SdfMeshGeometryBuilder.PoseOf(transform: transform);
-        var box = SdfMeshBox.Turned(center: (center * units), half: (half * units), offset: position, turn: orientation);
+        var box = SdfMeshBox.Carried(center: center, half: half, transform: transform);
 
-        return (PixelAt(center: box.Center, half: box.AxisHalf) / units);
+        return (PixelAt(center: box.Center, half: box.AxisHalf) / SdfMeshGeometryBuilder.UnitsOf(transform: transform));
     }
     /// <summary>Returns a box's priority at the demand point that ranks it highest. A box whose diagonal projects past a
     /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a
