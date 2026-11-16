@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Cameras;
@@ -199,10 +200,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind CameraTraces = Registry.Declare(name: "sdf.mesh-gi.camera-traces", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Counts relights of a cached camera sample's hits under a changed lighting.</summary>
     public static readonly WorkKind CameraRelights = Registry.Declare(name: "sdf.mesh-gi.camera-relights", unit: "samples", workClass: WorkClass.Pacing);
-
     /// <summary>Counts each camera sample asked of the volume (<see cref="TrySampleCamera"/>).</summary>
     public static readonly WorkKind CameraSamples = Registry.Declare(name: "sdf.mesh-gi.camera-samples", unit: "samples", workClass: WorkClass.Pacing);
-
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
     public static readonly WorkKind GpuMeterNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Counts the static draws scene builds took into their trace scenes.</summary>
@@ -262,8 +261,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // its own and the memory bandwidth it packs and uploads with.
     private static readonly int DrainWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount - 2));
     private static readonly int BackgroundWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
-
-
     // The least wall time between two scene builds while the bake still lands opaque static meshes, so the trace
     // measures what has landed without restarting on every arrival. Presentation only: the scene a frame lights by is
     // never simulation state.
@@ -377,7 +374,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // next build's snapshot is written into, both rented. Builds run one at a time and swap the two as one installs, so
     // the spare is read by nobody: the build that read it as its previous draws finished before the next one starts.
     private SdfMeshDraw[] m_diagnosticDraws = [];
+
     private int m_diagnosticCount;
+
     private SdfMeshDraw[] m_snapshotDraws = [];
     // The meshes the latest snapshot names, claimed from the frame thread as the snapshot is taken and held until the
     // next snapshot moves them, so a build reads only claimed meshes; a snapshot naming the meshes the last one named
@@ -1034,12 +1033,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         lock (m_gate) {
             if (GpuTrace is { } gpu) {
-                if (TryGpuCameraSample(position, fresh, light, out skyVisibility, out source)) { return true; }
+                if (TryGpuCameraSample(fresh: fresh, light: light, position: position, skyVisibility: out skyVisibility, source: out source)) { return true; }
                 // The device meters only once it holds the volume's scene, which it uploads after the scene is built and
                 // beside the residency's mesh landing, seconds into a boot. Until its first answer the camera traces its
                 // own hits on the built scene, so a view's open sky and surroundings are known from the build on; after
                 // it, a view holds its last sample for the frames a meter takes.
-                if ((m_gpuMeter is { } answered) && ReferenceEquals(answered.Client, gpu)) { return false; }
+                if ((m_gpuMeter is { } answered) && ReferenceEquals(objA: answered.Client, objB: gpu)) { return false; }
                 if ((m_lighting is not { } early) || !m_windowValid) { return false; }
                 return TryTraceCamera(fresh: fresh, light: light, lighting: early, position: position, skyVisibility: out skyVisibility, source: out source);
             }
@@ -1096,6 +1095,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             return true;
         }
     }
+
     // Samples the camera by its own hits on the volume's scene (CameraRadiance), as one probe at the camera, which needs no
     // lattice probe and no device; under the gate. False before the scene is built or inside opaque geometry.
     private bool TryTraceCamera(Vector3 position, Lighting lighting, bool fresh, Span<Vector3> light, out float skyVisibility, out SdfCameraSampleSource source) {
@@ -1374,11 +1374,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         snapshot.AsSpan(start: count).Clear();
         m_snapshotDraws = snapshot;
 
-        var input = new ArraySegment<SdfMeshDraw>(array: snapshot, offset: 0, count: count);
+        var input = new ArraySegment<SdfMeshDraw>(array: snapshot, count: count, offset: 0);
 
         m_snapshotClaims.Update(draws: input);
 
         var previous = m_scene?.Acquire();
+
         var (previousDraws, previousCount) = (m_diagnosticDraws, m_diagnosticCount);
         var hadScene = (m_scene is not null);
 
@@ -1388,7 +1389,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             using var previousBorrow = previous;
             var clock = Stopwatch.StartNew();
             var scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous, counters: Counters);
-            var changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(start: 0, length: count), before: previousDraws.AsSpan(start: 0, length: previousCount)) : null);
+            var changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(length: count, start: 0), before: previousDraws.AsSpan(length: previousCount, start: 0)) : null);
 
             Counters.Count(kind: Scenes);
             Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
@@ -2843,11 +2844,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
         public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (((index * FloatsPerProbe) + 36) + SdfMeshIrradianceProbe.LightWords)));
     }
-    // The probes by cell: an open-addressed table of entries, so a probe the worker lands costs no allocation and the walk
-    // into an untraced area promotes no small objects. The worker writes it under the volume's gate, one writer at a time;
-    // the frame, the refill and the worker's threads read it without the gate, each entry under a sequence lock (its
-    // version is odd while a write is in progress), and a grown table is published whole, so a reader holding the old one
-    // reads a consistent, slightly earlier cache.
+    // The probes by cell. Each occupied entry owns a PublishBuffer: its one publication door keeps ProbeData whole,
+    // and readers never wait for the writer. The volume's gate serializes writes and table replacement. Grow and Retain
+    // copy buffer references, not their slots, so steady updates allocate nothing and table replacement carries fewer
+    // bytes. A reader holding a retired table can still read its entries; eviction never mutates that table's keys.
     private sealed class ProbeCache {
         private const int InitialCapacity = (1 << 16);
 
@@ -2857,20 +2857,24 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The probes cached.
         public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
 
-        // The bytes the cache holds: its table's arrays and every block an entry names, each block once. Read without
-        // the gate, so a batch landing meanwhile can leave it a block off.
+        // Logical table/slot payload bytes and the blocks latest entries name, each block once. Older publications can
+        // still retain blocks through their reusable slots or readers. Object headers and buffer machinery are excluded.
+        // Read without the gate, so a batch landing meanwhile can leave this a block off.
         public (long Table, long Blocks, int Capacity) Bytes() {
             if (Volatile.Read(location: ref m_table) is not { } table) { return (0, 0, 0); }
 
             var capacity = table.Keys.Length;
-            var tableBytes = (((long)capacity) * ((((3 * sizeof(int)) + sizeof(int)) + sizeof(int)) + System.Runtime.CompilerServices.Unsafe.SizeOf<ProbeData>()));
+            var tableBytes = (((long)capacity) * (((3 * sizeof(int)) + sizeof(int)) + IntPtr.Size));
             var blocks = new HashSet<object>(comparer: ReferenceEqualityComparer.Instance);
             var blockBytes = 0L;
 
             for (var slot = 0; (slot < capacity); slot++) {
                 if (Volatile.Read(location: ref table.Used[slot]) == 0) { continue; }
 
-                var entry = table.Entries[slot];
+                var publication = table.Entries[slot]!;
+                // Slot payloads, including retired values still held by readers.
+                tableBytes += publication.StorageBytes;
+                if (!publication.TrySnapshot(value: out var entry)) { continue; }
 
                 if ((entry.Hits is { } hits) && blocks.Add(item: hits)) { blockBytes += hits.Bytes; }
                 if ((entry.Shading is { } shading) && blocks.Add(item: shading)) { blockBytes += shading.Bytes; }
@@ -2885,8 +2889,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         // Forgets the probes outside a box of cells, from low inclusive to high exclusive, once the cache holds more probes
         // than the box has cells; the volume's gate is held. The kept probes are published as a new table, as Grow publishes
-        // one, so a reader holding the old table reads a consistent, slightly earlier cache, and a batch block no kept
-        // probe names is released with the forgotten entries.
+        // one. An old table keeps its earlier key membership; retained keys share their publication with the new table.
+        // A batch block no kept probe names is released with the forgotten entries once old readers finish.
         public void Retain((int X, int Y, int Z) low, (int X, int Y, int Z) high) {
             if (m_table is not { } table) { return; }
 
@@ -2935,20 +2939,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 return false;
             }
 
-            ref var version = ref table.Versions[slot];
-
-            while (true) {
-                var before = Volatile.Read(location: ref version);
-
-                if ((before & 1) != 0) {
-                    Thread.SpinWait(iterations: 1);
-                    continue;
-                }
-
-                value = table.Entries[slot];
-                Interlocked.MemoryBarrier();
-                if (Volatile.Read(location: ref version) == before) { return true; }
-            }
+            return table.Entries[slot]!.TrySnapshot(value: out value);
         }
 
         // Writes a cell's entry; the volume's gate is held.
@@ -2964,11 +2955,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var slot = Find(key: key, table: table);
 
                 if (slot >= 0) {
-                    ref var version = ref table.Versions[slot];
-
-                    _ = Interlocked.Increment(location: ref version);
-                    table.Entries[slot] = value;
-                    Volatile.Write(location: ref version, value: (version + 1));
+                    table.Entries[slot]!.Publish(value: value);
 
                     return;
                 }
@@ -2978,7 +2965,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 }
 
                 slot = ~slot;
-                table.Entries[slot] = value;
+                var entry = new PublishBuffer<ProbeData>();
+
+                entry.Publish(value: value);
+                table.Entries[slot] = entry;
                 table.Keys[slot] = key;
                 Volatile.Write(location: ref table.Used[slot], value: 1);
                 table.Count++;
@@ -3019,15 +3009,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         private sealed class Table(int capacity) {
             public readonly (int X, int Y, int Z)[] Keys = new (int X, int Y, int Z)[capacity];
             public readonly int[] Used = new int[capacity];
-            public readonly int[] Versions = new int[capacity];
-            public readonly ProbeData[] Entries = new ProbeData[capacity];
+            public readonly PublishBuffer<ProbeData>?[] Entries = new PublishBuffer<ProbeData>?[capacity];
 
             public int Count;
         }
     }
     // One level of the volume: its probes by cell, its window's first cell, the slots of its window still lacking a
     // measurement of their own cell, the slots composed since its last publication, and the window views read. Its
-    // state is the volume's gate's, except the cache, which readers take under its own sequence locks.
+    // state is the volume's gate's, except the cache, which readers take through its published entries.
     private sealed class Level(int index) {
         public int Index { get; } = index;
         public ProbeCache Cache { get; } = new();

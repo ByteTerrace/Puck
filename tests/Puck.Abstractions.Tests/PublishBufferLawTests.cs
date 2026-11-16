@@ -48,7 +48,7 @@ public sealed class PublishBufferLawTests {
     [Fact]
     public async Task ReadersRacingTwoWritersNeverSeeAFrameHalfWritten() {
         const long Publishes = 200_000;
-        const int Readers = 2;
+        const int Readers = 8;
 
         var buffer = new PublishBuffer<Wide>();
         var torn = 0L;
@@ -108,6 +108,13 @@ public sealed class PublishBufferLawTests {
             actual: torn,
             expected: 0L
         );
+        // Retire the final publication too: every balanced read must leave every retired slot reusable.
+        buffer.Publish(value: default);
+        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
+
+        foreach (var slot in slots) {
+            Assert.Equal(expected: 0L, actual: ((long)slot!.GetType().GetField(name: "Pending")!.GetValue(obj: slot)!));
+        }
     }
     [Fact]
     public async Task AReaderNeverWaitsOnAWriterStalledMidPublish() {
@@ -251,5 +258,81 @@ public sealed class PublishBufferLawTests {
             actual: (GC.GetAllocatedBytesForCurrentThread() - before),
             expected: 0L
         );
+    }
+    [Fact]
+    public void DisposingALeaseTwiceCannotReleaseAnotherReaderIncludingThroughAnAlias() {
+        var buffer = new PublishBuffer<Wide>();
+
+        buffer.Publish(value: Of(value: 1));
+        var first = buffer.Read();
+        var alias = first;
+        using var other = buffer.Read();
+
+        first.Dispose();
+        alias.Dispose();
+        first.Dispose();
+        Assert.False(condition: first.HasValue);
+        for (var value = 2L; (value < 32L); value++) { buffer.Publish(value: Of(value: value)); }
+        Assert.Equal(expected: Of(value: 1), actual: other.Value);
+        other.Dispose();
+        // A spurious leave would keep one retired slot at -1 after the real reader left.
+        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
+
+        foreach (var slot in slots) {
+            Assert.Equal(expected: 0L, actual: ((long)slot!.GetType().GetField(name: "Pending")!.GetValue(obj: slot)!));
+        }
+    }
+    [Fact]
+    public void BothPublicationOverloadsRefuseInsideAFill() {
+        var buffer = new PublishBuffer<Wide>();
+
+        buffer.Publish(value: Of(value: 1));
+        buffer.Publish(state: buffer, fill: static (ref Wide value, PublishBuffer<Wide> owner) => {
+            Assert.Throws<InvalidOperationException>(testCode: () => owner.Publish(value: Of(value: 99)));
+            Assert.Throws<InvalidOperationException>(testCode: () => owner.Publish(state: 99L, fill: static (ref Wide nested, long number) => nested = Of(value: number)));
+            value = Of(value: 2);
+        });
+        Assert.Equal(expected: 2L, actual: buffer.Version);
+        Assert.True(condition: buffer.TrySnapshot(value: out var value));
+        Assert.Equal(expected: Of(value: 2), actual: value);
+    }
+    [Fact]
+    public void ReaderAdmissionRefusesBeforeTheCounterCanCarryIntoTheSlotIndex() {
+        var buffer = new PublishBuffer<Wide>();
+
+        buffer.Publish(value: Of(value: 1));
+        const long Mask = ((1L << 48) - 1);
+        const long Limit = (Mask - (1L << 32));
+        var state = typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_state")!;
+        var slots = ((Array)typeof(PublishBuffer<Wide>).GetField(bindingAttr: System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, name: "m_slots")!.GetValue(obj: buffer)!);
+        // Seed balanced earlier reads of this publication, including their already completed leaves.
+        slots.GetValue(index: 0)!.GetType().GetField(name: "Pending")!.SetValue(obj: slots.GetValue(index: 0), value: -(Limit - 1));
+        state.SetValue(obj: buffer, value: (1L << 48) | (Limit - 1));
+        Assert.True(condition: buffer.TrySnapshot(value: out var value));
+        Assert.Equal(expected: Of(value: 1), actual: value);
+        Assert.Throws<InvalidOperationException>(testCode: () => buffer.TrySnapshot(value: out _));
+        Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read());
+        Assert.Equal(expected: (1L << 48) | Limit, actual: ((long)state.GetValue(obj: buffer)!));
+        buffer.Publish(value: Of(value: 2));
+        Assert.True(condition: buffer.TrySnapshot(value: out value));
+        Assert.Equal(expected: Of(value: 2), actual: value);
+        Assert.Equal(expected: 0L, actual: ((long)slots.GetValue(index: 0)!.GetType().GetField(name: "Pending")!.GetValue(obj: slots.GetValue(index: 0))!));
+    }
+    [Fact]
+    public void AScopedReadReleasesOnThrowAndAllocatesNothingInSteadyUse() {
+        var buffer = new PublishBuffer<Wide>();
+
+        buffer.Publish(value: Of(value: 1));
+        Assert.Throws<InvalidOperationException>(testCode: () => buffer.Read<int, int>(state: 0, read: static (in Wide value, long version, int state) => throw new InvalidOperationException()));
+        PublishBuffer<Wide>.ReadValue<int, long> read = static (in Wide value, long version, int state) => value.A;
+
+        _ = buffer.Read(read: read, state: 0);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+
+        for (var index = 0; (index < 64); index++) {
+            _ = buffer.Read(read: read, state: 0);
+            buffer.Publish(value: Of(value: index));
+        }
+        Assert.Equal(expected: 0L, actual: (GC.GetAllocatedBytesForCurrentThread() - before));
     }
 }
