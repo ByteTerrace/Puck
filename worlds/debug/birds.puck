@@ -1,3 +1,5 @@
+import "../standard/camera"
+
 // The valley's birds: a swallow perched on a post a few metres from spawn. It is drawn in the selected direction's
 // palette (worlds/debug/debug.md, the visual bar): a deep teal back and crown, a cream belly, a chestnut throat and
 // forehead, long pointed wings folded over a forked tail. `view.override camera look 3.3 1.22 3.62 3 1.15 4 30` frames
@@ -199,32 +201,6 @@ placements {
 }
 
 cameras [
-  {
-    name: "swallow-portrait"
-    renderWidth: 1280
-    renderHeight: 900
-    rig {
-      name: "swallow-portrait"
-      version: "puck.camera.program.v1"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [3.22, 1.24, 3.66]))
-        lookAt(focusDistance: 0.4, opcode: "lookAt", subject: worldPoint(point: [3, 1.16, 4]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
-      ]
-    }
-  }
-  {
-    name: "swallow-side"
-    renderWidth: 1280
-    renderHeight: 900
-    rig {
-      name: "swallow-side"
-      version: "puck.camera.program.v1"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [3.42, 1.17, 4]))
-        lookAt(focusDistance: 0.42, opcode: "lookAt", subject: worldPoint(point: [3, 1.15, 4]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
-      ]
-    }
-  }
+  lookCamera("swallow-portrait", [3.22, 1.24, 3.66], [3, 1.16, 4], 0.6, 0.4, 1280, 900)
+  lookCamera("swallow-side", [3.42, 1.17, 4], [3, 1.15, 4], 0.6, 0.42, 1280, 900)
 ]

@@ -24,6 +24,23 @@
 // The interactive boom's zoom: the nearest and farthest requested distance and the distance one input unit moves.
 let cameraBoom = { minimum: 1.5, maximum: 12, step: 0.6 }
 
+// A fixed camera row for a `cameras` section: `eye` looking at `target`, `fov` radians wide, focused `focusDistance`
+// metres out and rendered `width` by `height` pixels.
+function lookCamera(name, eye, target, fov, focusDistance = 6, width = 1280, height = 900) = {
+  name: name
+  renderHeight: height
+  renderWidth: width
+  rig {
+    name: name
+    operations [
+      anchor(opcode: "anchor", subject: worldPoint(point: eye))
+      lookAt(focusDistance: focusDistance, opcode: "lookAt", subject: worldPoint(point: target), worldAxes: false)
+      fieldOfView(fieldOfViewRadians: fov, opcode: "fov")
+    ]
+    version: "puck.camera.program.v1"
+  }
+}
+
 // The shared look feel and the `camera-boom` response a chase rig eases on.
 template cameraResponse() {
   exports {

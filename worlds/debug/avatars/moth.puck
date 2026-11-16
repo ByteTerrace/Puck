@@ -4,6 +4,7 @@ import "../../standard/quality"
 import "../../standard/motion"
 import "../../standard/styles"
 import "../../standard/kits"
+import "../../standard/camera"
 import "moth-head"
 import "moth-dash"
 import "moth-camera"
@@ -201,547 +202,59 @@ bodies {
   sleepAfterSeconds: 0s
 }
 
-cameras [
+// A 320 by 450 tile of a layout, 0.62 radians wide.
+function tileCamera(name, eye, target) = lookCamera(name, eye, target, 0.62, 6, 320, 450)
+
+// Eight tile cameras at 45-degree steps round `centre` ([x, z]) at height `y`, `radius` out and looking at `target`,
+// from the front (-Z) turning toward -X; eyes are rounded to 0.1 mm.
+let tileRingSides = ["front", "front-left", "left", "back-left", "back", "back-right", "right", "front-right"]
+function tileRing(prefix, centre, y, radius, target) = map(range(0, 8), i => tileCamera(
+  $"{prefix}-{tileRingSides[i]}",
+  [
+    round((centre[0] - radius * sine(i * 0.7853981633974483)) * 10000) / 10000,
+    y,
+    round((centre[1] - radius * cosine(i * 0.7853981633974483)) * 10000) / 10000
+  ],
+  target
+))
+
+cameras: concat(
   // Eight cameras round the jetpack alone, framed on her hovering 2 m above the hero spawn (body.pose 48 2 -48 0 0 0 in
   // flight mode, then view.isolate moth pod* nozzle*), tiled by the pods-hero layout: rear, rear-low, top, below, both
   // sides, the body-facing front and a rear three-quarter.
-  {
-    name: "pods-rear"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-rear"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -45.4]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-rear-low"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-rear-low"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.4229, -46.1029]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-top"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-top"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 5.4025, -47.0584]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-below"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-below"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 0.8375, -47.0584]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-side-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-side-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 3.12, -47.8]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-side-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-side-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 3.12, -47.8]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-front"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-front"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 3.12, -50.2]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "pods-rear-three-quarter"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "pods-rear-three-quarter"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [49.4901, 2.4988, -46.0241]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 3.12, -47.8]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
+  [
+    tileCamera("pods-rear", [48, 3.12, -45.4], [48, 3.12, -47.8])
+    tileCamera("pods-rear-low", [48, 1.4229, -46.1029], [48, 3.12, -47.8])
+    tileCamera("pods-top", [48, 5.4025, -47.0584], [48, 3.12, -47.8])
+    tileCamera("pods-below", [48, 0.8375, -47.0584], [48, 3.12, -47.8])
+    tileCamera("pods-side-left", [45.6, 3.12, -47.8], [48, 3.12, -47.8])
+    tileCamera("pods-side-right", [50.4, 3.12, -47.8], [48, 3.12, -47.8])
+    tileCamera("pods-front", [48, 3.12, -50.2], [48, 3.12, -47.8])
+    tileCamera("pods-rear-three-quarter", [49.4901, 2.4988, -46.0241], [48, 3.12, -47.8])
+  ],
   // Eight hero cameras round the shoulders at the hero spawn, at 45-degree steps from the front, tiled by the
   // shoulders-hero layout; each looks down 24 degrees so its frame shows only plain ground behind her.
-  {
-    name: "shoulders-front"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-front"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -50.4]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-front-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-front-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -49.6971]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [45.6, 2.4885, -48]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-back-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-back-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [46.3029, 2.4885, -46.3029]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-back"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-back"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 2.4885, -45.6]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-back-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-back-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -46.3029]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [50.4, 2.4885, -48]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulders-front-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "shoulders-front-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [49.6971, 2.4885, -49.6971]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 1.42, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
+  tileRing("shoulders", [48, -48], 2.4885, 2.4, [48, 1.42, -48]),
   // Eight hero cameras round the lower legs at the hero spawn, at 45-degree steps from the front, tiled by the legs-hero
   // layout. Each looks down about 20 degrees, so its frame tops out just under the horizon and shows only plain ground.
-  {
-    name: "legs-front"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-front"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -50]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-front-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-front-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -49.4142]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [46, 1.05, -48]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-back-left"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-back-left"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [46.5858, 1.05, -46.5858]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-back"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-back"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [48, 1.05, -46]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-back-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-back-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -46.5858]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [50, 1.05, -48]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "legs-front-right"
-    renderHeight: 450
-    renderWidth: 320
-    rig {
-      name: "legs-front-right"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [49.4142, 1.05, -49.4142]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [48, 0.36, -48]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.62, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "front"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "front"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0, 1.5, -5.3]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.13, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "three-quarter"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "three-quarter"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [2.9, 2, -4.8]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.13, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "rear"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "rear"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [-2.7, 2, 4.6]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.15, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "flight-stage"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "flight-stage"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [4, 4.3, -6.5]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 2.8, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.65, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "head"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "head"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0.9, 2, -2.05]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.84, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.54, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "face"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "face"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0, 1.9, -1.7]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.86, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.5, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "face-side"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "face-side"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [1.5, 1.9, -0.9]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.86, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.5, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulder"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "shoulder"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [1.4, 1.75, -1.5]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.35, 1.4, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "back-close"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "back-close"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [-0.8, 1.9, 2.2]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 1.2, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.75, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "shoulder-top"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "shoulder-top"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0.42, 2.9, -0.35]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.42, 1.42, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "boots"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "boots"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0.9, 0.55, -1.7]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.35, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "knee"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "knee"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0.75, 0.95, -0.95]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.05, 0.7, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.42, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "boots-side"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "boots-side"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [1.9, 0.45, -0.4]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0.2, 0.35, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.55, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-  {
-    name: "boots-rear"
-    renderHeight: 900
-    renderWidth: 1280
-    rig {
-      name: "boots-rear"
-      operations [
-        anchor(opcode: "anchor", subject: worldPoint(point: [0.7, 0.6, 1.8]))
-        lookAt(focusDistance: 6, opcode: "lookAt", subject: worldPoint(point: [0, 0.35, 0]), worldAxes: false)
-        fieldOfView(fieldOfViewRadians: 0.6, opcode: "fov")
-      ]
-      version: "puck.camera.program.v1"
-    }
-  }
-]
+  tileRing("legs", [48, -48], 1.05, 2, [48, 0.36, -48]),
+  [
+    lookCamera("front", [0, 1.5, -5.3], [0, 1.13, 0], 0.65)
+    lookCamera("three-quarter", [2.9, 2, -4.8], [0, 1.13, 0], 0.65)
+    lookCamera("rear", [-2.7, 2, 4.6], [0, 1.15, 0], 0.65)
+    lookCamera("flight-stage", [4, 4.3, -6.5], [0, 2.8, 0], 0.65)
+    lookCamera("head", [0.9, 2, -2.05], [0, 1.84, 0], 0.54)
+    lookCamera("face", [0, 1.9, -1.7], [0, 1.86, 0], 0.5)
+    lookCamera("face-side", [1.5, 1.9, -0.9], [0, 1.86, 0], 0.5)
+    lookCamera("shoulder", [1.4, 1.75, -1.5], [0.35, 1.4, 0], 0.55)
+    lookCamera("back-close", [-0.8, 1.9, 2.2], [0, 1.2, 0], 0.75)
+    lookCamera("shoulder-top", [0.42, 2.9, -0.35], [0.42, 1.42, 0], 0.55)
+    lookCamera("boots", [0.9, 0.55, -1.7], [0, 0.35, 0], 0.6)
+    lookCamera("knee", [0.75, 0.95, -0.95], [0.05, 0.7, 0], 0.42)
+    lookCamera("boots-side", [1.9, 0.45, -0.4], [0.2, 0.35, 0], 0.55)
+    lookCamera("boots-rear", [0.7, 0.6, 1.8], [0, 0.35, 0], 0.6)
+  ]
+)
 
 
 
