@@ -94,9 +94,9 @@ public static partial class CanaryCommand {
             }
         }
 
-        CopyDirectory(
-            source: root,
-            target: federatedDirectory
+        CliFiles.CopyDirectory(
+            destination: federatedDirectory,
+            source: root
         );
 
         var staged = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -176,31 +176,6 @@ public static partial class CanaryCommand {
                 contents: world.ToJsonString(options: new System.Text.Json.JsonSerializerOptions { NewLine = "\n", WriteIndented = true }),
                 encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 path: staged
-            );
-        }
-    }
-
-    private static void CopyDirectory(string source, string target) {
-        Directory.CreateDirectory(path: target);
-
-        foreach (var file in Directory.GetFiles(path: source)) {
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: target,
-                    path2: Path.GetFileName(path: file)
-                ),
-                overwrite: true,
-                sourceFileName: file
-            );
-        }
-
-        foreach (var directory in Directory.GetDirectories(path: source)) {
-            CopyDirectory(
-                source: directory,
-                target: Path.Combine(
-                    path1: target,
-                    path2: Path.GetFileName(path: directory)
-                )
             );
         }
     }

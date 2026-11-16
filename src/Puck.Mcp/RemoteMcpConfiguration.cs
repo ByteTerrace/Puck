@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Puck.Confinement;
 
 namespace Puck.Mcp;
 
@@ -21,14 +22,9 @@ public static partial class RemoteMcpServer {
             share: FileShare.ReadWrite | FileShare.Delete
         );
 
-        if (file.Length is <= 0 or > 65536) { throw new InvalidDataException(message: "Remote MCP configuration must be 1..65536 bytes."); }
-        var data = new byte[((int)file.Length)];
+        var data = await FileContent.ReadAtMostAsync(cancellationToken: cancellationToken, maximumBytes: 65536, stream: file).ConfigureAwait(continueOnCapturedContext: false);
 
-        await file.ReadExactlyAsync(
-            buffer: data,
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        if (file.ReadByte() != -1) { throw new InvalidDataException(message: "Remote MCP configuration changed while being read."); }
+        if (data is not { Length: > 0 }) { throw new InvalidDataException(message: "Remote MCP configuration must be 1..65536 bytes."); }
         var options = (JsonSerializer.Deserialize(
             data,
             OperatorMcpJson.Default.RemoteMcpOptions

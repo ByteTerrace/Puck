@@ -95,7 +95,7 @@ public sealed class WorldArtifactStore(string root) {
     // The key a store directory belongs to: its name up to the first dot. Keys hold no dot, so this names the key of a
     // build directory, and of any other directory a store run once left.
     internal static string KeyOf(string name) =>
-        name.Split(count: 2, separator: '.')[0];
+        PortablePath.StemOf(name: name);
     private string Sibling(string key, string suffix) =>
         Path.Combine(
             path1: Root,

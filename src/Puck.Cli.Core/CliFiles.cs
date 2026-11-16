@@ -8,8 +8,18 @@ namespace Puck.Cli;
 public static class CliFiles {
     private static readonly JsonSerializerOptions Indented = new() { NewLine = "\n", WriteIndented = true };
 
-    public static void CopyDirectory(string source, string destination, IEnumerable<string>? files = null) {
+    // Copies the files beneath source to the same relative paths beneath destination and returns how many it copied.
+    // Without a selection it copies the whole tree, empty directories included; a selection (any files beneath source)
+    // copies only those files and the directories that hold them.
+    public static int CopyDirectory(string source, string destination, IEnumerable<string>? files = null) {
+        var copied = 0;
+
         Directory.CreateDirectory(path: destination);
+        if (files is null) {
+            foreach (var directory in Directory.EnumerateDirectories(path: source, searchOption: SearchOption.AllDirectories, searchPattern: "*")) {
+                Directory.CreateDirectory(path: Path.Combine(path1: destination, path2: Path.GetRelativePath(path: directory, relativeTo: source)));
+            }
+        }
         foreach (var file in files ?? Directory.EnumerateFiles(
             path: source,
             searchOption: SearchOption.AllDirectories,
@@ -32,7 +42,9 @@ public static class CliFiles {
                 overwrite: false,
                 sourceFileName: file
             );
+            copied++;
         }
+        return copied;
     }
     public static JsonNode ReadJson(string path) =>
         (JsonNode.Parse(json: File.ReadAllText(path: path)) ?? throw new InvalidDataException(message: $"Empty JSON: {path}"));

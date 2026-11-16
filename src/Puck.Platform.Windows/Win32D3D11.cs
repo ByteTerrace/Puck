@@ -42,10 +42,10 @@ internal static unsafe class Win32D3D11 {
                 operation: "QueryInterface(ID3D10Multithread)"
             );
             _ = multithread->SetMultithreadProtected(bMTProtect: true);
-            _ = ((IUnknown*)multithread)->Release();
+            Release(value: multithread);
         } catch {
-            _ = ((IUnknown*)createdContext)->Release();
-            _ = ((IUnknown*)createdDevice)->Release();
+            Release(value: createdContext);
+            Release(value: createdDevice);
             throw;
         }
 
@@ -78,6 +78,8 @@ internal static unsafe class Win32D3D11 {
             _ = ((IUnknown*)value)->Release();
         }
     }
+    // The same release for a COM pointer held as an integer (an opened texture or view); zero is ignored.
+    public static void Release(nint value) => Release(value: ((IUnknown*)value));
     public static void Release<T>(T*[] values) where T : unmanaged {
         foreach (var value in values) {
             Release(value: value);
@@ -124,10 +126,10 @@ internal static unsafe class Win32D3D11 {
                     return adapter;
                 }
 
-                _ = adapter->Release();
+                Release(value: adapter);
             }
         } finally {
-            _ = factory->Release();
+            Release(value: factory);
         }
     }
 }

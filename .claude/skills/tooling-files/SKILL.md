@@ -18,6 +18,9 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Remove an owned directory tree without following descendant links | `ConfinedDirectory.RemoveTree` in `src/Puck.Confinement/ConfinedDirectory.cs` |
 | Stage, flush, publish or discard complete replacement files | `AtomicFile`, including `PendingWrite`, in `src/Puck.Confinement/AtomicFile.cs` |
 | Compare files or a file and bytes with bounded memory | `FileContent` in `src/Puck.Confinement/FileContent.cs` |
+| Read an opened file or stream to its end under a byte ceiling, never trusting its length | `FileContent.ReadAtMost` / `ReadAtMostAsync` in `src/Puck.Confinement/FileContent.cs` |
+| Copy a directory tree, or selected files beneath it, without writing through an existing hard link | `CliFiles.CopyDirectory` in `src/Puck.Cli.Core/CliFiles.cs` |
+| Start a redirected companion process and end its output reads after it exits | `ChildProcess.StartRedirected`, `OpenOutputReader` and `DrainAfterExitAsync` in `src/Puck.Abstractions/ChildProcess.cs` |
 | Read source lines or nonempty process-output lines | `CliText` in `src/Puck.Cli.Core/CliText.cs` |
 | Query Git, resolve common directories or commits, list unignored files | `CliGit` in `src/Puck.Cli.Core/CliGit.cs`; local reports use `ReadOnlyAsync` |
 | Parse NUL-delimited worktree records | `CliWorktree.Parse` in `src/Puck.Cli.Core/CliWorktree.cs` |

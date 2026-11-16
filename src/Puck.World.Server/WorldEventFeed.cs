@@ -56,10 +56,10 @@ public readonly record struct WorldEventEdge(WorldEventFamily Family, GrantSubje
 /// <para><b>Collision pairs are a proximity test, not the physical contact resolver.</b>
 /// <see cref="IContactField"/> resolves a body against static solid scene rows, screens, and creation placements, while
 /// <see cref="WorldBodyContactMode.Solid"/> separately opts a kit into bounded dynamic-body depenetration. This feed
-/// does not reuse either solver's admitted pair set: it runs an honest overlap test over selected pairs of the bodies'
-/// collider volumes in full 3D — a capsule/sphere pair by 3D segment-to-segment distance against the summed radii, a
-/// box-involving pair by an oriented per-axis extent test on X, Y, and Z. A kit with no collider has no event volume
-/// and therefore emits no collision pair. Discovery uses the broadphase body contacts use (<see cref="FixedSweepGrid"/>,
+/// does not reuse either solver's admitted pair set: it asks <see cref="FixedDynamicBodyContacts.Overlaps"/>, the
+/// contact narrowphase's own answer at zero margin, about selected pairs of the bodies' collider volumes in full 3D, so
+/// an event never reports a pair the dynamic-body solver would not depenetrate nor misses one it would. A kit with no
+/// collider has no event volume and therefore emits no collision pair. Discovery uses the broadphase body contacts use (<see cref="FixedSweepGrid"/>,
 /// so both see the same candidates) under the authored <see cref="WorldCollisionEvents"/> limits; established pairs are
 /// retained first. A saturated crowd therefore has
 /// bounded work and memory and may omit lower-priority new proximity pairs. It is deliberately not a claim about

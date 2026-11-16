@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Confinement;
 using Puck.Maths;
 
 namespace Puck.Shaders;
@@ -165,12 +166,7 @@ public static class ShaderFrameInterface {
     public static string NameOf(string sourcePath) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: sourcePath);
 
-        var fileName = Path.GetFileName(path: sourcePath);
-        var dot = fileName.IndexOf(value: '.');
-
-        return ((dot < 0)
-            ? fileName
-            : fileName[..dot]);
+        return PortablePath.StemOf(name: Path.GetFileName(path: sourcePath));
     }
 
     private static ShaderInterfaceMember Value(string name, ShaderValueType type) =>

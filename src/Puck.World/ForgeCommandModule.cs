@@ -65,8 +65,9 @@ internal sealed class ForgeCommandModule(WorldServer server, IServerLink link, I
                 ));
                 using var stream = File.OpenRead(path: path);
 
-                if (stream.Length > CartridgeDocuments.MaximumSourceBytes) { throw new ArgumentException(message: "Cartridge source exceeds the source size limit."); }
-                var bytes = new byte[checked((int)stream.Length)]; stream.ReadExactly(buffer: bytes);
+                var bytes = (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: CartridgeDocuments.MaximumSourceBytes, stream: stream)
+                    ?? throw new ArgumentException(message: "Cartridge source exceeds the source size limit."));
+
                 m_drafts[key: principal] = new CartridgeDraft(document: CartridgeDocuments.Parse(utf8: bytes));
                 return new CommandResult(Output: $"[forge.open: {path}]");
             }

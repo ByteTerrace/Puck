@@ -298,7 +298,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             }
         } catch {
             for (var i = 0; (i < opened); i++) {
-                Win32GraphicsCaptureDevice.ReleaseTexture(texture: slotTextures[i]);
+                Win32D3D11.Release(value: slotTextures[i]);
             }
 
             throw;
@@ -310,7 +310,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
             signal = device.OpenSignal(sharedFenceHandle: targets.SharedFenceHandle);
         } catch {
             foreach (var texture in slotTextures) {
-                Win32GraphicsCaptureDevice.ReleaseTexture(texture: texture);
+                Win32D3D11.Release(value: texture);
             }
 
             throw;
@@ -848,7 +848,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         }
 
         foreach (var texture in targets.SlotTextures) {
-            Win32GraphicsCaptureDevice.ReleaseTexture(texture: texture);
+            Win32D3D11.Release(value: texture);
         }
 
         targets.Signal.Dispose();
@@ -1115,20 +1115,18 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
                     _ = Marshal.Release(pUnk: inspectableDevice);
                 }
             } finally {
-                _ = ((IUnknown*)dxgiDevice)->Release();
+                Win32D3D11.Release(value: dxgiDevice);
             }
         } catch {
             Dispose();
             throw;
         } finally {
-            if (adapter is not null) {
-                _ = ((IUnknown*)adapter)->Release();
-            }
+            Win32D3D11.Release(value: adapter);
         }
     }
 
     // Opens a consumer-provisioned shared texture (a D3D12 CreateSharedHandle NT handle) on this device; the caller owns
-    // the returned ID3D11Texture2D* and releases it via ReleaseTexture. Device-level and safe off the callback gate
+    // the returned ID3D11Texture2D* and releases it via Win32D3D11.Release. Device-level and safe off the callback gate
     // (the device is multithread-protected). Rejects a target whose format or extent CopyResource would silently drop:
     // the capture pool is in the capture's format, B8G8R8A8_UNORM or R16G16B16A16_FLOAT, and a cross-format/extent
     // CopyResource is a release-build no-op, not an error.
@@ -1154,7 +1152,7 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
             (description.Width != ((uint)expectedWidth)) ||
             (description.Height != ((uint)expectedHeight))
         ) {
-            ReleaseTexture(texture: ((nint)texture));
+            Win32D3D11.Release(value: ((nint)texture));
             throw new ArgumentException(
                 message: $"The shared target must be a {expectedWidth}x{expectedHeight} {expectedFormat} texture; got {description.Width}x{description.Height} {description.Format}.",
                 paramName: nameof(sharedHandle)
@@ -1178,12 +1176,6 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         );
 
         return signal.Complete();
-    }
-    // Releases a COM pointer obtained from this device (an opened shared target); zero is ignored.
-    public static void ReleaseTexture(nint texture) {
-        if (0 != texture) {
-            _ = ((IUnknown*)texture)->Release();
-        }
     }
     public void RecreateReadbacks(int width, int height) {
         ReleaseReadbacks();
@@ -1535,28 +1527,18 @@ internal sealed unsafe class Win32GraphicsCaptureDevice : IDisposable {
         }
 
 
-        if (m_device1 is not null) {
-            _ = ((IUnknown*)m_device1)->Release();
-            m_device1 = null;
-        }
-
-        if (m_context is not null) {
-            _ = ((IUnknown*)m_context)->Release();
-            m_context = null;
-        }
-
-        if (m_device is not null) {
-            _ = ((IUnknown*)m_device)->Release();
-            m_device = null;
-        }
+        Win32D3D11.Release(value: m_device1);
+        m_device1 = null;
+        Win32D3D11.Release(value: m_context);
+        m_context = null;
+        Win32D3D11.Release(value: m_device);
+        m_device = null;
     }
 
     private void ReleaseReadbacks() {
         foreach (var readback in m_readbacks) {
-            if (readback.Texture is not null) {
-                _ = ((IUnknown*)readback.Texture)->Release();
-                readback.Texture = null;
-            }
+            Win32D3D11.Release(value: readback.Texture);
+            readback.Texture = null;
 
             readback.Pending = false;
             readback.Sequence = 0;

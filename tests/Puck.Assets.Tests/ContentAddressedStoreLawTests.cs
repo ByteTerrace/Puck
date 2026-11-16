@@ -3,9 +3,9 @@ using Xunit;
 
 namespace Puck.Assets.Tests;
 
-// A promotion out of tmp/ either lands the object or ref, or leaves tmp/ exactly as it found it: a failed
-// File.Move never orphans the temp file it was about to promote. A store opened with a retention bound is a cache that
-// keeps the objects most recently used; one opened without keeps everything.
+// A write either lands the object or ref, or leaves the store exactly as it found it: a failed publication never
+// orphans the staged temporary beside its destination. A store opened with a retention bound is a cache that keeps the
+// objects most recently used; one opened without keeps everything.
 public sealed class ContentAddressedStoreLawTests : IDisposable {
     private readonly TemporaryDirectory m_root = new(prefix: "puck-content-store-");
 
@@ -13,7 +13,7 @@ public sealed class ContentAddressedStoreLawTests : IDisposable {
         m_root.Dispose();
 
     private string[] TmpEntries() =>
-        [.. Directory.EnumerateFileSystemEntries(path: Path.Combine(path1: m_root.RootPath, path2: "tmp"))];
+        [.. Directory.EnumerateFileSystemEntries(path: m_root.RootPath, searchOption: SearchOption.AllDirectories, searchPattern: $"*{Puck.Confinement.AtomicFile.TemporarySuffix}")];
 
     [Fact]
     public void AStoreWithRetentionKeepsTheObjectsMostRecentlyUsed() {
@@ -82,5 +82,16 @@ public sealed class ContentAddressedStoreLawTests : IDisposable {
 
         Assert.True(condition: Directory.Exists(path: refPath));
         Assert.Empty(collection: TmpEntries());
+    }
+    [Fact]
+    public void ListRefsSkipsAWriteInProgressAndARefNameNeverEndsInTheTemporarySuffix() {
+        var store = new ContentAddressedStore(root: m_root.RootPath);
+        var hash = ContentPin.Compute(content: "hello"u8.ToArray());
+
+        store.SetRef(category: "worlds", hash: hash, name: "demo");
+        File.WriteAllText(contents: "partial", path: Path.Combine(path1: m_root.RootPath, path2: "refs", path3: "worlds", path4: $"demo.0123{Puck.Confinement.AtomicFile.TemporarySuffix}"));
+
+        Assert.Equal(expected: ["demo"], actual: store.ListRefs(category: "worlds"));
+        _ = Assert.Throws<ArgumentException>(testCode: () => store.SetRef(category: "worlds", hash: hash, name: $"other{Puck.Confinement.AtomicFile.TemporarySuffix}"));
     }
 }

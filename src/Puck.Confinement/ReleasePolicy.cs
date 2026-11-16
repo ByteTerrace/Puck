@@ -110,11 +110,8 @@ public sealed record ReleasePolicy(
         using var stream = state?.OpenFile(name: InstallLayout.ReleasePolicyFileName);
 
         if (stream is null) { return Absent(root: root); }
-        if (stream.Length > MaximumBytes) { throw new InvalidDataException(message: $"'{InstallLayout.ReleasePolicyFileName}' exceeds {MaximumBytes} bytes."); }
-        var bytes = new byte[stream.Length];
-
-        stream.ReadExactly(buffer: bytes);
-        return Parse(bytes: bytes);
+        return Parse(bytes: (FileContent.ReadAtMost(maximumBytes: MaximumBytes, stream: stream)
+            ?? throw new InvalidDataException(message: $"'{InstallLayout.ReleasePolicyFileName}' exceeds {MaximumBytes} bytes.")));
     }
     // The record is absent only before the first commit, and before it the one install record that can exist is the first
     // apply's own, uncommitted, with sequence 1. A valid install record with a later sequence proves a record was
@@ -216,9 +213,10 @@ public sealed record InstallRecord(long Sequence, string Rid, int StateGeneratio
         using var stream = version.OpenFile(name: FileName);
 
         if (stream is null) { return null; }
-        if (stream.Length > MaximumBytes) { throw new IOException(message: $"'{FileName}' exceeds {MaximumBytes} bytes."); }
+        var bytes = (FileContent.ReadAtMost(maximumBytes: MaximumBytes, stream: stream) ?? throw new IOException(message: $"'{FileName}' exceeds {MaximumBytes} bytes."));
+
         try {
-            return ((JsonSerializer.Deserialize(utf8Json: stream, jsonTypeInfo: InstallJsonContext.Default.InstallRecord) is { } record) && record.IsValid) ? record : null;
+            return ((JsonSerializer.Deserialize(utf8Json: bytes, jsonTypeInfo: InstallJsonContext.Default.InstallRecord) is { } record) && record.IsValid) ? record : null;
         } catch (JsonException) {
             return null;
         }

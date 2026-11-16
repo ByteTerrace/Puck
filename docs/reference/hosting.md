@@ -642,8 +642,12 @@ read, consumes a snapshot of the bytes still buffered in the pipe, and presents 
 to the text decoder. This preserves output even when a reader has not been scheduled
 before the grace expires, including a final line without a newline.
 `OpenOutputReader` and `DrainAfterExitAsync` apply the same bound to a caller that
-pumps its own streams. Caller cancellation ends the grace early and still joins
-the pumps before disposing their streams.
+pumps its own streams, whether its pumps return text or nothing (a log copy, a
+forwarder, a readiness observer). Every driven companion ends its reads through
+them: the operator adapter's started Worlds and its worker's error forwarder,
+the harness's `WorldProcess` and the canary's authority companion. Caller
+cancellation ends the grace early and still joins the pumps before disposing
+their streams.
 The run is bounded by an optional timeout on a caller-supplied `TimeProvider` and
 by cancellation. Either bound kills the whole process tree and drains both
 streams. A timeout is reported as `TimedOut` in the result, while cancellation

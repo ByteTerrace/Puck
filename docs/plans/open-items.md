@@ -3725,10 +3725,6 @@ failing case is argued from source, not run):
   set (`inUse: path`, `:251-256`). Two 4 GiB sets against the 8 GiB cap can
   evict a peer's live set, which then rebakes. Correct the documentation, or
   give a recently stamped set a grace window.
-- [low] A full disk leaves temporary files behind: `ContentAddressedStore`
-  writes the temporary copy outside its `try` (`src/Puck.Assets/ContentAddressedStore.cs:161-170`)
-  and nothing sweeps `tmp/` when the store opens (`:54-65`). Write inside the
-  `try` and sweep `tmp/` on open.
 - [low · plausible] A cache set directory that vanishes mid-listing resets the
   retention tally to an undercount: `CacheRetention.EnforceSetsCore`
   (`src/Puck.Abstractions/CacheRetention.cs:285-313`) catches the whole walk's
@@ -5218,13 +5214,9 @@ Launch and process lifecycles:
   start ticks), and evict the oldest start.
 - [low] `WorldProcess` has no state between running and drained
   (`src/Puck.Cli.Harness/WorldProcess.cs`): `WaitFor` treats exit as drained
-  after one rescan (`:114-148`), so a final line that arrives milliseconds later
-  reads as no answer. `Dispose` kills the tree and joins the pumps for at most
-  five seconds before it disposes the logs (`:174-187`, `:211-215`), so a descendant holding
-  the pipes can write after the dispose and the pump thread's
-  `ObjectDisposedException` ends the CLI (argued; no known World descendant
-  outlives the World). Count pump end-of-stream per stream
-  (`Running | Exited | Drained`) and set a disposed flag under the gate.
+  after one rescan, so a final line that arrives milliseconds later
+  reads as no answer. Count pump end-of-stream per stream
+  (`Running | Exited | Drained`) and let `WaitFor` end on drained, not on exit.
 - [low] A joiner of a faulted GPU hold gets an instant `TimeoutException`:
   `WorldGpuHold.AcquireAsync` (`src/Puck.Cli.Harness/WorldGpuHold.cs:45-63`)
   shares one entry per (root, holder, lane) and nothing replaces an entry whose

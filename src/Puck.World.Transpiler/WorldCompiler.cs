@@ -1,4 +1,5 @@
 using Puck.Assets;
+using Puck.Confinement;
 using System.Text.Json.Nodes;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Modules;
@@ -484,13 +485,7 @@ public static class WorldCompiler {
             return "world";
         }
 
-        var stem = Path.GetFileName(path: sourcePath);
-        var dot = stem.IndexOf(value: '.');
-
-        return ((dot > 0)
-            ? stem[..dot]
-            : stem
-        );
+        return PortablePath.StemOf(name: Path.GetFileName(path: sourcePath));
     }
 
     private static readonly IReadOnlyDictionary<string, HashSet<string>> EmptyEmbeddings =

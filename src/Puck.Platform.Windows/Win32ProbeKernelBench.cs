@@ -338,7 +338,7 @@ internal sealed unsafe class Win32ProbeKernelBench {
     }
 
     private static void ReleaseRingResources(nint[]?[] textures, nint[]?[] views) => ReleaseRingResources(
-        release: static resource => Win32D3D11VideoDevice.ReleaseTexture(texture: resource),
+        release: static resource => Win32D3D11.Release(value: resource),
         textures: textures,
         views: views
     );

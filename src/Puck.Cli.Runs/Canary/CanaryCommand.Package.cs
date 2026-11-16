@@ -59,9 +59,9 @@ public static partial class CanaryCommand {
             path2: package.OutputName
         );
 
-        CopyDirectory(
-            source: built.Directory,
-            target: output
+        CliFiles.CopyDirectory(
+            destination: output,
+            source: built.Directory
         );
 
         if (package.Alter is { } alter) {
@@ -91,16 +91,9 @@ public static partial class CanaryCommand {
             path2: "package-build"
         );
 
-        Directory.CreateDirectory(path: copy);
-        foreach (var file in Directory.GetFiles(path: Path.GetDirectoryName(path: sourcePath)!)) {
-            File.Copy(
-                destFileName: Path.Combine(
-                    path1: copy,
-                    path2: Path.GetFileName(path: file)
-                ),
-                sourceFileName: file
-            );
-        }
+        var sourceDirectory = Path.GetDirectoryName(path: sourcePath)!;
+
+        CliFiles.CopyDirectory(destination: copy, files: Directory.EnumerateFiles(path: sourceDirectory), source: sourceDirectory);
 
         CliProcessResult process;
 

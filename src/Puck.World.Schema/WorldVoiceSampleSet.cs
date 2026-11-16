@@ -32,9 +32,14 @@ public static class WorldVoiceSampleLoader {
             for (var index = 0; (index < sources.Length); index++) {
                 var asset = WorldDocumentPaths.Resolve(documentDirectory: directory, path: sources[index]);
 
-                if (new FileInfo(fileName: asset).Length > 1_048_576) { throw new InvalidDataException(message: $"Syllable '{sources[index]}' exceeds the 1 MiB asset limit."); }
+                byte[] bytes;
+
+                using (var stream = File.OpenRead(path: asset)) {
+                    bytes = (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: 1_048_576, stream: stream)
+                        ?? throw new InvalidDataException(message: $"Syllable '{sources[index]}' exceeds the 1 MiB asset limit."));
+                }
                 try {
-                    loaded[index] = PcmWave.ReadMono(bytes: File.ReadAllBytes(path: asset));
+                    loaded[index] = PcmWave.ReadMono(bytes: bytes);
                 } catch (InvalidDataException exception) {
                     throw new InvalidDataException($"Syllable '{sources[index]}': {exception.Message}", exception);
                 }

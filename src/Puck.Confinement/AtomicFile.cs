@@ -28,6 +28,17 @@ public static class AtomicFile {
     /// <summary>The suffix every temporary file a write stages ends in, and the one a write killed mid-way leaves behind.</summary>
     public const string TemporarySuffix = ".tmp";
 
+    /// <summary>Determines whether a file name or path names a temporary this class stages: a write in progress, or
+    /// one a killed writer left. A listing of the files beside a destination skips these names.</summary>
+    /// <param name="path">The file name, or a path whose last component is the file name.</param>
+    /// <returns>Whether the name ends in <see cref="TemporarySuffix"/>, compared without regard to case.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    public static bool IsTemporary(string path) {
+        ArgumentNullException.ThrowIfNull(argument: path);
+
+        return Path.GetFileName(path: path.AsSpan()).EndsWith(value: TemporarySuffix, comparisonType: StringComparison.OrdinalIgnoreCase);
+    }
+
     private delegate void Fill<TState>(FileStream stream, TState state) where TState : allows ref struct;
 
     [UnsupportedOSPlatform(platformName: "windows")]
