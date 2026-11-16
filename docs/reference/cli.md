@@ -3329,6 +3329,39 @@ sample; they never become zero. Additional timestamp waits extend the frame
 window. Filing a request uses the same option grammar and stop/pass selection
 as execution, so unsupported metric names are refused with available pointers.
 
+`--window` (with `--plan`) reads each selected stop's own timeline as a player
+takes it, the seam walk's instrument
+([streaming and memory](../plans/streaming-and-memory.md#step-0-the-walks-instrument)):
+the stop's lines pose the body while authority is held, then the stop's timeline
+(a route stop's test program) is armed and the World runs display-paced with
+lockstep off. Nothing waits on bakes, residency or capture convergence before or
+inside it. The window opens at the stop's `opens` tick (default its start) and
+closes at its end; every reading is a console line pinned to one of those two
+ticks, so each is taken in the drain of its own tick and a change is the
+difference of the two answers. It reads `host.frames` (the window's slowest frames
+split into phases, in `<stop>/frames.txt`, and the `steps.shed` change), the
+`world.residency` blocks of every residency by their names (`owed`,
+`owed-frames`, `tiers-owed`, `owed-error`, `refusals`, `relocations`,
+`late-stagings`, the gpu-work `unbound` and the landing times), the
+`render.record`, `gpu.queue` and `sdf` counters, `host.memory`, `audio.state` and the
+body's pose at both ends, and `--gpu-pass` timing at the close. A stop's presented
+`captures` become bursts of the frames the display showed (`world.screenshot …
+presented`), written beside the report with their per-frame lines on the World's
+`stderr.log`. A reading no console line answers is printed `absent` with the step
+of the build order that supplies it; a read the World refused is `unmeasured`
+with its answer, never zero. A route stop whose arrival box the body misses fails
+the sample as off course. `<stop>.window.frames.{avg,p50,p99,max,over}` and
+`<stop>.window.steps.shed` are the metrics, and `<stop>/window.txt` holds the
+whole report. `--headless` boots without a renderer, so every reading that needs
+one reads absent or unmeasured; it proves the timeline and the arrival. Each stop
+of each sample is a fresh process, so a window reads the first crossing after
+boot:
+
+```sh
+puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop seam-valley-walking --window --backend directx
+puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop seam-valley-walking --window --headless
+```
+
 `--backend`, `--width` and `--height` select the renderer and window (1280×720
 by default); `--cache-dir` forwards the World cache root. `--timeout-seconds`
 bounds each process and its calls (default 600, 1..7200); `--output` selects a

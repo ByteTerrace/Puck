@@ -25,6 +25,9 @@ spawnPoints [
   { id: "desktop", position [12.4, 0.05, 23.7], yawDegrees: 90 }
   // Outside the gallery hall's entrance (hall.puck), facing in; the map board stands in the lobby ahead and left.
   { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
+  // On the valley floor in line with the hall's entrance, 36 m south of it, facing it: the seam walk's first crossing
+  // (walkthrough-tests.puck) starts here and walks into the lobby.
+  { id: "seam-valley", position [16, 0.05, -24], yawDegrees: 180 }
 ]
 
 commands [

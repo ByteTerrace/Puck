@@ -579,4 +579,6 @@ spawnPoints [
   { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
   { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }
+  // Eleven metres south of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).
+  { id: "seam-painting", position [57, wingFloor, 28], yawDegrees: 180 }
 ]
