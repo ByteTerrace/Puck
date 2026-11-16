@@ -1,7 +1,6 @@
 using System.CommandLine;
 using Puck.Cli.Architecture;
 using Puck.Cli.Canary;
-using Puck.Cli.Host;
 
 namespace Puck.Cli.Affected;
 
@@ -270,12 +269,6 @@ public static class AffectedCommand {
     /// every option it does not own to the test application, which refuses MSBuild switches, so the run builds nothing
     /// and takes none.</summary>
     public static string[] TestArguments(string suite) => ["test", "--project", $"tests/{suite}/{suite}.csproj", "-c", "Release", "--no-build"];
-
-    // The caller holds CliLease for the heavy suite throughout this admission and execution. Sampling also
-    // accounts for unleased heavy processes and memory/disk headroom; it is not mutual exclusion itself.
-    internal static bool AdmitHeavySuite(string repositoryRoot, string suite) {
-        return HostAdmission.Wait(cancellationToken: CancellationToken.None, clock: TimeProvider.System, device: false, error: Console.Error, heavySuite: true, probe: new HostProbe(checkoutRoot: repositoryRoot), step: suite);
-    }
 
     // Every other verb a run takes runs through the root that invoked this one.
     private static int ExecuteAtRoot(string repositoryRoot, AffectedPlan plan, bool gpu, int gpuJobs, int suiteJobs, RootCommand root) {

@@ -21,11 +21,12 @@ public sealed class HeavyLeaseTests {
         metadata[2] = parent.Id.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
         metadata[3] = parent.StartTime.ToUniversalTime().Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture);
         File.WriteAllLines(contents: metadata, path: metadataPath);
-        using var first = HeavyLease.Acquire(repositoryRoot: root, holder: "doctrine-first", clock: TimeProvider.System, cancellationToken: cancellation.Token);
+        HostAdmit admit = (_, _, _, _, _, _, _, _, _, _) => Task.FromResult(true);
+        using var first = HeavyLease.Acquire(repositoryRoot: root, holder: "doctrine-first", clock: TimeProvider.System, admit: admit, cancellationToken: cancellation.Token);
         var entered = new TaskCompletionSource(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
         var waiting = Task.Run(function: () => {
             entered.SetResult();
-            return HeavyLease.Acquire(repositoryRoot: root, holder: "doctrine-second", clock: TimeProvider.System, cancellationToken: cancellation.Token);
+            return HeavyLease.Acquire(repositoryRoot: root, holder: "doctrine-second", clock: TimeProvider.System, admit: admit, cancellationToken: cancellation.Token);
         }, cancellationToken: cancellation.Token);
 
         await entered.Task.WaitAsync(cancellationToken: cancellation.Token);

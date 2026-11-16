@@ -996,9 +996,9 @@ ran under; the gate never waits or refuses for CPU alone. A step that opens a
 device (the canaries, parity, each device suite, counters and citations, the steps that run only with `--gpu`) also waits for an idle GPU; the
 build, affected run and baseline checks run no `Gpu`-trait test and never wait
 on a GPU holder. A heavy suite (an assembly in `HostProcesses.HeavyTestAssemblies`, whatever its filter) also
-holds the same `heavy` lease as `puck lease heavy` through admission and execution.
-It samples capacity only after acquiring that lease, so two sampled-idle runs
-cannot overlap. A validated ancestor lease admits one child lease at a time;
+waits for admission before taking the same `heavy` lease as `puck lease heavy`
+for execution. It reserves on a fresh, nonwaiting reading under that lease;
+lost headroom parks the same ticket without serving the lane. A validated ancestor lease admits one child lease at a time;
 nested runs do not wait on their parent and siblings remain exclusive. Unleased
 heavy processes still hold capacity back. A step with what it needs admits immediately. Otherwise the
 gate reports waiting on stderr, naming the holder again when it changes, samples
@@ -1092,8 +1092,9 @@ six logical processors therefore has capacity with CPU below 50% and more than
 defaults, and `puck gate` and `puck affected` admit their heavy steps, `puck lease heavy`
 and `puck lease gpu` their commands, and the MCP server's `puck_world_start` its World
 (a windowed World as a device step, a headless one as an ordinary step) by the
-same machine thresholds, through one admission (`HostAdmission`), waiting after the
-lease is held. A machine that cannot report its installed memory is
+same machine thresholds, through one admission (`HostAdmission`). A start waits
+without an exclusive resource hold; leased starts retain their ticket while waiting,
+then reserve on a fresh, nonwaiting reading under the lease. A machine that cannot report its installed memory is
 judged as a 16GB one. The [orchestration skill](../../.claude/skills/orchestration/SKILL.md)
 documents what an agent does on each line. `reuseNodes` counts MSBuild nodes a build or restore left running because
 it ran without `-nodeReuse:false`.
@@ -1715,11 +1716,11 @@ development machine; use `--jobs 1` alongside other heavy work.
 
 A run of more than one world (a directory, or a source with several `test`
 blocks) takes the machine's `heavy` lease, the one `puck lease heavy`, `puck gate`
-and `puck affected` use, once the worlds are collected and the World is built
-and before the first boot. It holds it until the last leg ends, as the lane named
-by the checkout's directory (`puck test <file>` is the holder). A wait prints the
-lease's own `lease: … waiting for heavy lease held by …` line, and holding prints
-`test: holding the heavy lease as lane <lane> for <n> worlds (waited <s> s)`. A
+and `puck affected` use. `WorldLaunch` admits before acquiring it for a worker;
+parallel workers of the run share the execution hold, which ends with the last
+live worker. Between worker-count legs, the next start waits for admission without
+retaining the previous hold. The lane is the checkout's directory and the holder
+is `test worker`. A lease wait prints `lease: … waiting for heavy lease held by …`. A
 run under `puck lease heavy` nests as that holder's child lease rather than
 waiting on it. A single world stays unleased, so a quick check never queues.
 `--workers` re-runs the same worlds one worker count after another, never beside
@@ -4806,21 +4807,23 @@ windowed World the MCP server starts all pass the ancestor recognizer
 (`ProcessInspection.IsAncestor`), so a command run under `puck lease <name>`
 that takes the same lease waits on a sibling, never on itself.
 
-`puck lease heavy` and `puck lease gpu` also pass the host admission once they hold their lease
+`puck lease heavy` and `puck lease gpu` also pass the host admission before they hold their lease
 and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
 over the capacity threshold, a commit charge under its share of the commit limit, commit headroom that covers the start's expected peak
 (the machine's observed peak for that kind, plus what admitted starts still running have left to grow), free disk
 over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
 heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
-(exit 2, lease released) when the machine has no headroom; wait lines go to standard error
+(exit 2, ticket withdrawn) when the machine has no headroom; wait lines go to standard error
 (`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
 headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s))).`) and a heartbeat repeats them
 while it lasts. The final refusal names the last blocker even before a heartbeat
 is due; growth shortfalls also name the live starts by kind and PID. `lease build` and `lease quiet` take no admission of their own: a World build
 holds its own limits, and a quiet window settles on the same readings.
 
-Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process (so each replica of `--reproduce` and each `--workers` leg is admitted on its own reading, with the heavy-suite wait when it holds the heavy lease), `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease and passes the host admission installed by default in the harness. A World that opens a device (windowed, or offscreen through its document) first waits for that admission's headroom without reserving it, then takes the `gpu` lease (nested under an ancestor that holds it and shared by the process's other device Worlds of the same holder and lane, so two GPU verbs queue on the lease instead of polling for an idle GPU), then is judged and reserved again with the lease held, since the lease is what keeps two device starts from reading the same headroom; a leased judgement that does not pass within `LeasedAdmission.LeasedAdmissionBound` gives the lease back and waits for headroom again, so the GPU never idles under a lease waiting for memory. A device World's admission also waits for an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
+Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process, `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease; heavy workers take `heavy`, and device Worlds take `gpu`, through `LeasedAdmission` and `CliLease`'s single grant door. A ticket waiting for headroom is marked under its queue's `.blocked` sibling directory and skipped by grants. It retains its sequence and its lane's service history. After an unreserved preflight, the grant door takes the resource guard and reserves on a fresh reading with a zero wait. If headroom changed, it releases the guard and parks the same ticket again; only a successful reservation serves the lane. Among eligible tickets, the oldest ticket of the least recently served lane wins. Both the resource guard and `admission.guard` are free during the capacity wait.
+
+`WorldWorkHold` shares an execution hold among live Worlds of the same resource, holder and lane, including parallel test workers. Each joining start gets its own fresh, nonwaiting reservation; it cannot release a live sibling's hold to wait. More generally, a start beneath an already executing lease (in this process or an ancestor, including an outer `puck lease`) samples once and refuses if capacity is unavailable, so an inherited hold never hosts a capacity wait. Run the World verb directly when it needs to queue for headroom. Device admission also needs an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
 the unused reserve over one minute without a material allocation (64 MB),
 releasing it entirely at the plateau and restoring it if growth resumes. A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
@@ -4841,7 +4844,7 @@ Run `puck lease list` to inspect the shared lease directory. It prunes unlocked
 holder metadata for every resource under that resource's exclusive guard; a live
 guard is never removed, and the persistent guard file stays in place. The OS
 releases a dead process's lock, so the next waiter acquires it without waiting
-for metadata cleanup or a stale-age threshold. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>`, followed by the queued count. If cleanup is refused or a holder releases during inspection, it can still label leftover metadata `stale: no process holds its lock`; that metadata cannot block acquisition. Under it, one line per live waiter in admission order, the order the lease will be granted in: its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a child of it (`<name>.child`) is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
+for metadata cleanup or a stale-age threshold. For each of `build`, `gpu` and `heavy` it prints one line, `idle` or `held by <holder> (lane <lane>) for <time> from <checkout>`, followed by the queued count. If cleanup is refused or a holder releases during inspection, it can still label leftover metadata `stale: no process holds its lock`; that metadata cannot block acquisition. Under it, one line per live waiter in rotation order (parked tickets retain that position but grants skip them until headroom returns): its holder, lane, checkout, how long it has waited, its lane's turn among the queued lanes, and how many admissions come before it. The verb takes no ticket, deletes no dead ticket, and writes no rotation serial, so it can run at any time beside any lease (it reads through `CliLease.Inspect`, the reader `puck lanes` uses). A lease a holder's descendants hold as a child of it (`<name>.child`) is not shown. The lead reads it for lease pressure ([orchestration](../../.claude/skills/orchestration/SKILL.md#schedule-machines)).
 
 ```text
 build: idle
@@ -4854,7 +4857,7 @@ heavy: idle
 `puck lease list --json` writes one JSON object per lease instead: `lease`,
 `holder`, `lane`, `checkout`, `since`, `alive`, its `queue` in admission order
 (each waiter's `holder`, `lane`, `checkout`, `since`, `ahead`, `position` and
-`lanes`), and the `recordedProtocol` and `protocol`.
+`lanes`, plus `admissionBlocked` for a parked ticket), and the `recordedProtocol` and `protocol`.
 
 ### `puck lease quiet`—a settle window
 
