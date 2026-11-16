@@ -314,7 +314,7 @@ public static class CacheRetention {
             foreach (var file in new DirectoryInfo(path: directory).EnumerateFiles(searchOption: search, searchPattern: "*")) {
                 if (isEntry(arg: file)) {
                     entries.Add(item: new CacheEntry(Bytes: file.Length, LastUsedUtc: file.LastWriteTimeUtc, Path: file.FullName));
-                } else if (file.Name.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: AtomicFile.TemporarySuffix) && (file.LastWriteTimeUtc < abandonedBefore)) {
+                } else if (AtomicFile.IsTemporary(path: file.Name) && (file.LastWriteTimeUtc < abandonedBefore)) {
                     _ = TryDelete(path: file.FullName);
                 }
             }

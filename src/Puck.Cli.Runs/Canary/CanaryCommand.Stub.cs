@@ -61,13 +61,13 @@ public static partial class CanaryCommand {
         var payload = Path.Combine(path1: run, path2: "payload");
 
         MaterializeStubInstall(installDirectory: install, stubArtifact: stubArtifact);
-        CopyDirectoryFiles(payload, Path.GetDirectoryName(path: worldArtifact)!, true);
+        CliFiles.CopyDirectory(destination: payload, source: Path.GetDirectoryName(path: worldArtifact)!);
         var prepared = Path.Combine(path1: payload, path2: "worlds", path3: "debug");
         var authored = (Directory.Exists(path: leg.WorldPath) ? leg.WorldPath : Path.GetDirectoryName(path: leg.WorldPath)!);
 
         // The world's package directory is copied with its siblings, the packages a relative import such as
         // ../standard reaches, so the installed world resolves every import and asset it names.
-        CopyDirectoryFiles(destination: Path.GetDirectoryName(path: prepared)!, recursive: true, source: Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: authored))!);
+        CliFiles.CopyDirectory(destination: Path.GetDirectoryName(path: prepared)!, source: Path.GetDirectoryName(path: Path.TrimEndingDirectorySeparator(path: authored))!);
         if (Puck.Cli.Automation.WorldPrepareCommand.Create().Parse([leg.WorldPath, "--output", prepared]).Invoke() != 0) {
             throw new IOException(message: "world prepare failed for the stub release payload");
         }
@@ -208,12 +208,9 @@ public static partial class CanaryCommand {
     // (AppContext.BaseDirectory) — the stub build output is copied here so nothing this leg does can touch the
     // artifact the other legs in this run share. The build log sits outside that output directory.
     private static void MaterializeStubInstall(string installDirectory, string stubArtifact) {
-        Directory.CreateDirectory(path: installDirectory);
-        CopyDirectoryFiles(
-            destination: installDirectory,
-            recursive: false,
-            source: Path.GetDirectoryName(path: stubArtifact)!
-        );
+        var stubOutput = Path.GetDirectoryName(path: stubArtifact)!;
+
+        CliFiles.CopyDirectory(destination: installDirectory, files: Directory.EnumerateFiles(path: stubOutput), source: stubOutput);
         File.WriteAllText(
             contents: JsonSerializer.Serialize(value: new StubConfigurationFile(
                 AppExecutableFileName: "Puck.World.exe",
@@ -224,31 +221,6 @@ public static partial class CanaryCommand {
                 path2: "stub.json"
             )
         );
-    }
-    private static void CopyDirectoryFiles(string destination, string source, bool recursive) {
-        foreach (var file in Directory.EnumerateFiles(
-            path: source,
-            searchOption: (recursive
-            ? SearchOption.AllDirectories
-            : SearchOption.TopDirectoryOnly),
-            searchPattern: "*"
-        )) {
-            var relative = Path.GetRelativePath(
-                path: file,
-                relativeTo: source
-            );
-            var target = Path.Combine(
-                path1: destination,
-                path2: relative
-            );
-
-            Directory.CreateDirectory(path: Path.GetDirectoryName(path: target)!);
-            File.Copy(
-                destFileName: target,
-                overwrite: true,
-                sourceFileName: file
-            );
-        }
     }
     // Publish the entire prepared application. The ordinary stager alone creates versions/<version>.
     private static ReleaseTrustAnchor PublishRelease(string releaseDirectory, string payloadDirectory, string version, ECDsa key, ulong sequence) {

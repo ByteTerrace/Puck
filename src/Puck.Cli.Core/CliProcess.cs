@@ -127,34 +127,14 @@ public static class CliProcess {
         clock ??= TimeProvider.System;
         cancellationToken.ThrowIfCancellationRequested();
 
-        var utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-        var startInfo = new ProcessStartInfo {
-            CreateNoWindow = true,
-            FileName = fileName,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            StandardErrorEncoding = utf8NoBom,
-            StandardInputEncoding = utf8NoBom,
-            StandardOutputEncoding = utf8NoBom,
-            UseShellExecute = false,
-            WorkingDirectory = (workingDirectory ?? string.Empty),
-        };
-
-        foreach (var argument in arguments) {
-            startInfo.ArgumentList.Add(item: argument);
-        }
-        foreach (var (name, value) in (environment ?? new Dictionary<string, string?>())) {
-            if (value is null) {
-                _ = startInfo.Environment.Remove(key: name);
-            } else {
-                startInfo.Environment[name] = value;
-            }
-        }
-
         var startedAt = Stopwatch.GetTimestamp();
-        using var process = (Process.Start(startInfo: startInfo)
-            ?? throw new InvalidOperationException(message: $"Failed to start {fileName}."));
+        using var process = ChildProcess.StartRedirected(
+            arguments: arguments,
+            encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            environment: environment,
+            fileName: fileName,
+            workingDirectory: workingDirectory
+        );
 
         try {
             started?.Invoke(obj: process);

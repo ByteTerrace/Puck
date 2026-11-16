@@ -5,6 +5,7 @@ using ModelContextProtocol;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Puck.Abstractions;
 
 namespace Puck.Mcp;
 
@@ -26,18 +27,10 @@ public static class OperatorMcpFront {
     public static Task RunAsync(Stream input, Stream output, string stub, string[] arguments,
         Func<CancellationToken, Task<string>> activate, CancellationToken cancellationToken) =>
         RunAsync(input, output, activate, async token => {
-            var info = new ProcessStartInfo(fileName: stub) {
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                UseShellExecute = false,
-            };
-
-            foreach (var argument in arguments) { info.ArgumentList.Add(item: argument); }
-            var process = (Process.Start(startInfo: info) ?? throw new IOException(message: "The application stub did not start."));
+            var process = ChildProcess.StartRedirected(arguments: arguments, fileName: stub);
             var recent = new Queue<string>();
-            var errors = ForwardErrors(process: process, recent: recent);
+            var release = new CancellationTokenSource();
+            var errors = ForwardErrors(reader: ChildProcess.OpenOutputReader(reader: process.StandardError, release: release.Token), recent: recent);
             McpClient client;
 
             try {
@@ -52,7 +45,7 @@ public static class OperatorMcpFront {
                 _ = await Task.WhenAny(process.WaitForExitAsync(cancellationToken: CancellationToken.None), Task.Delay(delay: ExitGrace, cancellationToken: CancellationToken.None)).ConfigureAwait(continueOnCapturedContext: false);
                 int? exitCode = (process.HasExited ? process.ExitCode : null);
 
-                await StopWorker(client: null, errors: errors, process: process).ConfigureAwait(continueOnCapturedContext: false);
+                await StopWorker(client: null, errors: errors, process: process, release: release).ConfigureAwait(continueOnCapturedContext: false);
                 if ((error is OperationCanceledException) && token.IsCancellationRequested) { throw; }
                 // The transport only knows the stream ended or the handshake timed out; the stub and the worker say why on
                 // standard error (a launch refusal, a registration refusal, a crash), which the client never sees otherwise.
@@ -62,7 +55,7 @@ public static class OperatorMcpFront {
                 throw new IOException(message: $"{error.Message.TrimEnd('.')}. The worker {((exitCode is { } code) ? $"exited with code {code}" : "did not answer and was stopped")}; " +
                     ((said.Length == 0) ? "it wrote nothing to standard error." : $"its last standard error: {said}"), innerException: error);
             }
-            return (client, () => StopWorker(client: client, errors: errors, process: process), process.WaitForExitAsync());
+            return (client, () => StopWorker(client: client, errors: errors, process: process, release: release), process.WaitForExitAsync());
         }, cancellationToken);
     /// <summary>Serves a stable endpoint over owned SDK worker connections. The factory supplies the connection, a
     /// shutdown operation that drains and disposes it, including its transport, and a task that completes when the
@@ -344,9 +337,12 @@ public static class OperatorMcpFront {
         if (bounded.Failure is { } failure) { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(source: failure).Throw(); }
     }
 
-    // Forwards a worker's standard error to the session's, keeping the last few lines for a failure to name.
-    private static async Task ForwardErrors(Process process, Queue<string> recent) {
-        while (await process.StandardError.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
+    // Forwards a worker's standard error to the session's, keeping the last few lines for a failure to name. It owns the
+    // reader, which ChildProcess.OpenOutputReader opened, and disposes it once the read ends.
+    private static async Task ForwardErrors(StreamReader reader, Queue<string> recent) {
+        using var errors = reader;
+
+        while (await errors.ReadLineAsync().ConfigureAwait(continueOnCapturedContext: false) is { } line) {
             Console.Error.WriteLine(value: line);
             if (line.Length == 0) { continue; }
             lock (recent) {
@@ -355,16 +351,21 @@ public static class OperatorMcpFront {
             }
         }
     }
-    private static async Task StopWorker(McpClient? client, Process process, Task errors) {
+    // Closes the worker's input, kills its tree after the grace, then ends the error forwarder through the shared post-exit
+    // drain, so a process that inherited the pipe cannot hold shutdown open, and only then disposes the process.
+    private static async Task StopWorker(McpClient? client, Process process, Task errors, CancellationTokenSource release) {
         try {
-            try { process.StandardInput.Close(); } catch (IOException) { }
+            ChildProcess.CloseInput(input: process.StandardInput);
             try { await process.WaitForExitAsync().WaitAsync(timeout: TimeSpan.FromSeconds(seconds: 30)).ConfigureAwait(continueOnCapturedContext: false); } catch (TimeoutException) {
                 if (!process.HasExited) { process.Kill(entireProcessTree: true); }
                 await process.WaitForExitAsync().ConfigureAwait(continueOnCapturedContext: false);
             }
-            await errors.ConfigureAwait(continueOnCapturedContext: false);
+            await ChildProcess.DrainAfterExitAsync(clock: TimeProvider.System, pumps: [errors], release: release).ConfigureAwait(continueOnCapturedContext: false);
         } finally {
-            try { if (client is not null) { await client.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); } } finally { process.Dispose(); }
+            try { if (client is not null) { await client.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); } } finally {
+                process.Dispose();
+                release.Dispose();
+            }
         }
     }
 }

@@ -234,12 +234,11 @@ threads must synchronize access.
 
 ## Persisting objects and refs
 
-A `ContentAddressedStore` creates three directories beneath its root:
+A `ContentAddressedStore` creates two directories beneath its root:
 
 ```text
 objects/sha256/ab/ab…   immutable object bytes, fanned out by the first two hex digits
 refs/<category>/<name>  a one-line sha256/<hex> pointer
-tmp/                    write staging before an object or ref is promoted
 ```
 
 `ContentAddressedStore.ObjectPath(root, pin)` and
@@ -247,10 +246,12 @@ tmp/                    write staging before an object or ref is promoted
 reader that shares the tree without opening a store, such as a launcher release
 source or an HTTP mirror of the tree, addresses objects through them.
 
-Object writes are staged in `tmp/` and moved into place. If another writer has
-already stored the same object, the duplicate temporary file is discarded.
-Objects are never overwritten because their address is derived from their
-bytes.
+Every object and ref write is a complete-file replacement through `AtomicFile`:
+the bytes are staged in a flushed temporary beside the destination and renamed
+over it, and a write that fails at any step deletes its temporary. If another
+writer has already stored the same object, the duplicate temporary is
+discarded. An object already present is kept when it hashes to its address and
+replaced from the supplied bytes when it does not.
 
 Refs provide mutable names over those immutable objects. `SetRef` replaces a
 ref atomically, `TryResolveRef` reads it, and `ListRefs` returns the names in a
@@ -274,8 +275,9 @@ release store must.
 
 `AtomicFile` lives in the BCL-only `Puck.Confinement` leaf, so every layer reaches it; see
 [Writing and locking files](abstractions.md#writing-and-locking-files). The
-store does not use it for its own writes. It stages in `tmp/` so that
-`ListRefs` never sees a temporary file beside a ref.
+store writes through it. A temporary's name ends in `AtomicFile.TemporarySuffix`,
+which `SetRef` refuses as a ref name, so `ListRefs` and the store's retention
+skip a write in progress, and retention removes one a killed writer abandoned.
 
 ## Naming content for people
 

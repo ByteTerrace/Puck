@@ -265,10 +265,7 @@ public sealed class LocalEndpointCapability {
                 }
             }
         }
-        if (file.Length is <= 0 or > 4096) { throw new InvalidDataException(message: "Invalid attachment file size."); }
-        var data = new byte[((int)file.Length)];
-
-        file.ReadExactly(buffer: data);
+        if (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: 4096, stream: file) is not { Length: > 0 } data) { throw new InvalidDataException(message: "Invalid attachment file size."); }
         var descriptor = (JsonSerializer.Deserialize(
             data,
             LocalEndpointJson.Default.LocalEndpointDescriptor

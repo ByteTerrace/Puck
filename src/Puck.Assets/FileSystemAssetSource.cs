@@ -29,21 +29,8 @@ public sealed class FileSystemAssetSource : IAssetSource {
         }
 
         using var stream = File.OpenRead(path: path);
-        var length = stream.Length;
 
-        if (length > maximumBytes) {
-            throw new InvalidDataException(message: $"The asset '{path}' exceeds the {maximumBytes}-byte source limit.");
-        }
-
-        var bytes = new byte[(int)length];
-
-        stream.ReadExactly(buffer: bytes);
-        // The open handle, not a prior FileInfo lookup, supplies the length. Still detect a source that grows
-        // after that observation instead of returning a valid prefix of different content.
-        if (stream.ReadByte() != -1) {
-            throw new InvalidDataException(message: $"The asset '{path}' grew while it was being read.");
-        }
-
-        return bytes;
+        return (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: maximumBytes, stream: stream)
+            ?? throw new InvalidDataException(message: $"The asset '{path}' exceeds the {maximumBytes}-byte source limit."));
     }
 }
