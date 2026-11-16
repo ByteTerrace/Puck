@@ -4,6 +4,8 @@ Brief: `s1-research-mmo`. Research lane (Codex) on `lead/authoring`.
 
 Scope: research only. No source edits, commits, builds, Worlds, leases or hardware measurements. This report is being written as sources are opened; conclusions below distinguish evidence, inference and proposed work.
 
+Step numbers in this report are the campaign outline's as it stood when the round ran: 2 one byte authority, 3 attribution, 4 duplicate-copy removal, 5 priority eviction, 6 mapped portal demand, 7 shared lighting demand, 8 areas, terrain and moons, 9 managed churn. [The plan](../streaming-and-memory.md#the-build-order) builds the same work as its steps 1 and 3, 2, 6, 5, 4, 9, 10 and 11, in that order.
+
 ## Puck baseline read before research
 
 Read `AGENTS.md`, the `delegate` and `puck-world` skills, `docs/decisions/residency.md`, `docs/architecture/worlds.md` (including “The idea in plain terms”), `docs/plans/streaming-and-memory.md`, and the opening of the MMO foundations synthesis for its decision-record format.
