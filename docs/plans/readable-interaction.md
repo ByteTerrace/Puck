@@ -24,9 +24,20 @@ thrown object, meeting a creature's pounce).
 **The future is readable.** A motion program is a pure function of time and
 state, so the engine can compute the volume a moving part will sweep over the
 next ticks. That volume is the truth the telegraph shows, not an animator's
-approximation. The same computation is the visibility plan's V2 (swept bounds
-for authored motion, [visibility](visibility.md)); one mechanism serves culling
-and play.
+approximation.
+
+**Two computations, one derivation.** The visibility plan also derives a bound
+from a motion program ([V2](visibility.md#v2-instance-updates-proportional-to-change-and-authored-motion-on-the-gpu)),
+and the two must not be built as one mechanism. A predicted sweep here feeds
+contact and grading, so it is simulation: fixed-point, computed on the CPU
+inside the tick, replayed and hashed with everything else (rule 4). V2's path
+is presentation-only: it admits only a slot no effector, contact, IK or rule
+reads, runs in a GPU kernel in float, and nothing in simulation reads its
+poses. What they share is the derivation, a swept bound read from a motion
+program's amplitudes and pivots, and that has one home: the simulation-side
+derivation is written first, in fixed point, and V2's culling bound is the same
+derivation's conservative box, which presentation may read. A presentation
+bound never feeds a contact or a grade.
 
 **The commitment frontier.** A program may branch on input until a tick after
 which its motion is committed. What lies past the frontier is certain; what
@@ -63,8 +74,10 @@ sword):
 - the sub-tick time of a press within its command snapshot;
 - a material input that renders a predicted volume or a frontier, for authors
   who want an overt indicator;
-- prediction and rollback for remote sessions (a dependency; Puck has no
-  rollback plan yet, and this plan asks for one).
+- prediction and rollback for remote sessions, a dependency with no design
+  yet. Step 0's round covers it, and the design it produces is owned by the
+  [transfers and server packet](open-items.md#transfers-federation-and-server),
+  since it changes what a client simulates ahead of its authority.
 
 Authored, in the standard package and in worlds: weapons, swings, feints and
 their frontiers, how answers are graded, window sizes, riposte branches, how
@@ -84,8 +97,8 @@ press to screen and, once it exists, rollback. It is lane C12 of the
 | Step | Lands | Check on `worlds/debug` |
 |---|---|---|
 | 0. Research round | The round across the families: readable combat and telegraphs in shipped games (Sekiro's deflect, Zelda's flurry rush, For Honor's guard, fighting-game frame data), prediction and rollback netcode (GGPO and successors), sub-tick input, and what Puck's determinism and fields make possible that others cannot | A consensus and this plan revised from it |
-| 1. Predicted sweep and frontier | The motion program's swept volume over a horizon and its frontier, shared with the visibility plan's V2 bounds | A swing's predicted volume contains every pose the swing reaches, across a run with feints |
+| 1. Predicted sweep and frontier | The motion program's swept volume over a horizon and its frontier, in fixed point on the tick; the one derivation of a bound from a motion program, whose conservative box the visibility plan's V2 reads | A swing's predicted volume contains every pose the swing reaches, across a run with feints, and two runs reproduce it |
 | 2. First contact | The field-against-field first-contact query with time, angle and velocity, on the certified contact solver | Two blades meeting at known times and angles report them exactly, reproducibly |
 | 3. Sub-tick presses | Press timing inside the command snapshot, replayed exactly | A recorded duel replays with identical grades |
 | 4. The salle and the duel kit | C12: the place, and the standard's duel kit with diegetic telegraphs | Two local seats duel; parry, evade and feint read from the blades alone |
-| 5. Remote | Prediction and rollback, from its own plan | A remote duel feels as fair as a local one at an authored latency |
+| 5. Remote | Prediction and rollback, from the design step 0 produces | A remote duel feels as fair as a local one at an authored latency |

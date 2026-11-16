@@ -771,58 +771,38 @@ backends; the scheduler runs whatever that packet leaves to bake.
 
 ### GI as jobs, and only the probes whose light can change
 
-Illumination step 2 has since made a probe a hit buffer traced once per
-geometry and relit under the frame's budget
-([step 2's status](illumination.md#step-2-status)), so the analysis below and
-its line citations describe the trace before it; re-read the worker
-(`SdfMeshIrradiance.Process`, `Relight`) before building this section's step.
-
-The trace re-measures every probe after every scene rebuild: a probe's cached
-sweeps count only while `cached.Current.Generation == generation`
-(`SdfMeshIrradiance.cs:979`), and the generation moves with the scene, so each
-landed set is measured whole. That confirms the packet's suspicion. What a
-probe's measurement depends on is wider than the geometry built for a rebuild:
-the scene reuses a geometry by mesh key across instances
-(`SdfMeshIrradianceScene.cs:85-96`), so a removed or moved instance builds no
-geometry yet changes occlusion; radiance rays reach `lighting.Reach`, which is
-the frame's far distance (`SdfMeshIrradiance.cs:1214`, `:1890`); light rays go to
-each light; hit shading traces shadows from the hit; and later sweeps read
-neighbouring cached probes (`:1287-1303`), so a change propagates through bounce
-feedback.
-
-Illumination step 2 split each probe into a hit buffer and a relight
-([illumination](illumination.md#step-2-status)), which settles most of this.
-A light change invalidates no hits: it advances the lighting version and the
-probes are relit from their cached hits under the frame's budget. A scene
-rebuild computes a **change set**, the world boxes of the static draws it added
-or removed (a moved draw is both), and retraces only the probes whose
-placement region one overlaps or whose rays meet one before the hit they
-recorded (`SdfMeshIrradiance.Affected`); the rest keep their hits, which a
-trace would reproduce, and are relit, so bounce and shadow rays through the
-change are recomputed without a closure over them. A layout or reach change
-still retraces the window. The CPU law
-`ALockstepFrameRendersTheWindowTracedToTheEnd` checks a removal's probe table
-against a fresh volume's word for word. What remains for B1 is the jobs: the
-trace and relight batches under `Lighting`, and the windowed check against a
-full retrace after a `world.reload` that removes a wall and one that moves a
-draw. Fewer probes traced is the cost reading, never the correctness reading.
-
-The trace's unit is one probe; its comparer is the existing `(sweeps, level,
-distance)` key; its class is `Lighting`, under the frame and the bake. The scene
-build and `Refill` are `Lighting` jobs; `Publish` drains the volume's channel at
-its own point. A lockstep frame's wait becomes a `Frame` fork (section 1).
+GI is already proportional to change: a probe is a hit buffer traced once per
+geometry and relit under the frame's budget, a light change invalidates no
+hits, and a scene rebuild retraces only the probes its change set reaches
+(`SdfMeshIrradiance.Affected`;
+[the mesh-GI reference](../../.claude/skills/rendering/references/mesh-gi.md)
+owns the contract). The trace and relight run on the GPU through the
+background GPU service. What this memo owns is execution: the CPU work that
+remains (the scene build, placement, the selection's host half) becomes
+`Lighting` jobs under the frame and the bake, `Publish` drains the volume's
+channel at its own point, and a lockstep frame's wait becomes a `Frame` fork
+(section 1). Which mesh tier the lighting traces, and what it keeps resident,
+is the streaming plan's
+([decision 9](streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand));
+what the light computes is the [illumination plan](illumination.md)'s. Fewer
+probes traced is a cost reading, never a correctness reading.
 
 ## 6. Build order
 
 Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
-to fail when the step's main risk is real. Built so far: the scheduling stage
-(S1) but for the rated views' and screens' phase spread, the memory account
-(M1), native movers 1 and 2 (M2a), the worker-count harness (T0,
-`--workers` and `puck test --workers`), snapshot partitions (T1) and GPU
-culling in the indirect path (R2). Their measurements are in their commits; the
-packet holds what they left open.
+to fail when the step's main risk is real. Built: the scheduling stage (S1) but
+for the rated views' and screens' phase spread, the memory account, native
+movers 1 and 2, the worker-count harness (`--workers` and
+`puck test --workers`), snapshot partitions and GPU culling in the indirect
+path.
+
+This table is the one statement of the job system's order; the
+[packet](open-items.md#engine-job-system) and the shared queue point at "the
+memo's next step" and restate none of it. The rows are in order. The
+[garbage-collection cuts](open-items.md#engine-job-system) on today's runtime
+run beside S1's remainder as ordinary work, since they need no pool.
 
 **How a step's image is checked.** No step requires byte-identical stills,
 for three reasons:
@@ -843,22 +823,18 @@ as `puck mesh audit` for bake defects.
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
 | **S1's remainder** | The rated views' and screens' phase spread. | `host.frames` standing at `debug.go desktop` and `debug.go overlook`: no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **J1 The pool and the channels** | `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
+| **C0 The control plane's phase, and bounded waits** | The host loop gives the control plane (console, MCP, input) a guaranteed phase of every iteration, held iterations included; every cross-subsystem wait carries a deadline and a named reason, so a presentation wait on lighting convergence cannot starve the console. Headless; no new thread. It is first because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | A lockstep walkthrough tour stop that converges lighting: a console verb issued during the drain answers within one iteration, and a wait that exceeds its deadline reports its named reason in `world.wait`'s answer instead of holding. |
+| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
-| **R1 Parallel recording in waves** | Waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission; the pose pack fork. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
-| **B1 GI proportional to change** | The change-set closure; GI jobs under `Lighting`. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's; `[sdf.mesh-gi]` probes traced against the whole window; the cold bake's GI seconds. |
-| **M2b Probe block ownership** | Blocks owned by the cache with live-slice counts, native. | A walk into an untraced area for 60 s with `host.memory collect` every 10 s: managed heap flat, native blocks freed as sweeps converge (block count printed by `[sdf.mesh-gi]`); stills before and after compared as above. |
+| **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission, the pose pack fork; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |
+| **B1 GI's CPU work as jobs** | The change-set closure is built; what lands is the scene build, placement and selection as `Lighting` jobs under J1's pool. | After a `world.reload` that removes a wall and one that moves a draw: the probe tables and a still compared with a full retrace's (the windowed check the closure still owes); `[sdf.mesh-gi]` probes traced against the whole window; no `Parallel.For` left in the irradiance code. |
+| **M2b Probe block ownership** (recheck before scheduling) | Written when the CPU held every probe's hit blocks. The trace and relight now run on the GPU and the full CPU hit blocks are released, so the step's first act is a reading: a walk into an untraced area for 60 s with `host.memory collect` every 10 s. | Taken only if the managed heap still grows with probe blocks on that walk; then blocks owned by the cache with live-slice counts, native, freed as sweeps converge. Otherwise the row is deleted. |
 | **M3 Native movers 4 and 5** | Unmanaged scratch leases, the split journal, numeric columns; the tick's deliveries. | T0 at every count; `puck bench world` unchanged; a scratch world whose rules overwrite text cells and rewind (`world.undo`) reads the restored text. |
 
-R2 left two readings unexplained, to be read on a machine with no other load
-before anything is attributed to R2 or to that load (the
-[packet](open-items.md#other-frame-time-findings) holds them): a Direct3D 12
-lobby produce well above its CPU-selection controls, and a stripe difference on
-the lobby's static striped monitor face beyond the pinned noise. The meadow's
-blade draws share a few hundred geometries; grouping them needs ordered
-compaction and (geometry, level) instance buckets with every draw-identity
-consumer moved and depth ties preserved, which is
+The meadow's blade draws share a few hundred geometries; grouping them needs
+ordered compaction and (geometry, level) instance buckets with every
+draw-identity consumer moved and depth ties preserved, which is
 [visibility V1](visibility.md#the-build-order).
 
 ### What the job system leaves to ordinary work
@@ -913,8 +889,8 @@ step that meets it.
 4. Which queued bake actions exceed the unit bound; J1 measures each kind.
 5. Which of the standard's test worlds have a kit producer targeting a rigid
    body, and so move hash under T2; the step re-records them.
-6. How wide B1's closure must be for the probe tables to match a full retrace;
-   B1 widens it until they do.
+6. Whether the built change-set closure matches a full retrace on a windowed
+   World after a wall is removed and after a draw moves; B1's check reads it.
 
 ---
 
