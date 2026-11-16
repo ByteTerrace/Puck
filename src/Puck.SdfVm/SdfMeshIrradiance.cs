@@ -1011,8 +1011,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// of their six axes, as last relit, the light the surfaces about it reflect and emit under every traced light and the
     /// sky through the openings it sees, blended by the camera's place among the visible probes. When no visible lattice
     /// probe answers, reads a camera sample's hits, traced once per cell and geometry and relit when the lighting changes.
-    /// Reuse within a cell requires visibility from the sample's origin. An anchored light and the screens are no part of
-    /// the sample. The views read it for a surface no probe answers and for the sky the air about the camera sees; the
+    /// Reuse within a cell requires visibility from the sample's origin. On a device the sample is its meter's latest
+    /// answer, and until the device first answers, the camera's own trace on the built scene. An anchored light and the
+    /// screens are no part of the sample. The views read it for a surface no probe answers and for the sky the air about the camera sees; the
     /// exposure meters the view's image, never this sample.</summary>
     /// <param name="position">The camera's position, in world units.</param>
     /// <param name="skyVisibility">The share of the sky the probes about the camera see open, alike in every direction,
@@ -1032,7 +1033,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         Counters.Count(kind: CameraSamples);
 
         lock (m_gate) {
-            if (GpuTrace is not null) { return TryGpuCameraSample(position, fresh, light, out skyVisibility, out source); }
+            if (GpuTrace is { } gpu) {
+                if (TryGpuCameraSample(position, fresh, light, out skyVisibility, out source)) { return true; }
+                // The device meters only once it holds the volume's scene, which it uploads after the scene is built and
+                // beside the residency's mesh landing, seconds into a boot. Until its first answer the camera traces its
+                // own hits on the built scene, so a view's open sky and surroundings are known from the build on; after
+                // it, a view holds its last sample for the frames a meter takes.
+                if ((m_gpuMeter is { } answered) && ReferenceEquals(answered.Client, gpu)) { return false; }
+                if ((m_lighting is not { } early) || !m_windowValid) { return false; }
+                return TryTraceCamera(fresh: fresh, light: light, lighting: early, position: position, skyVisibility: out skyVisibility, source: out source);
+            }
             if ((m_lighting is not { } lighting) || !m_windowValid) {
                 return false;
             }
@@ -1077,27 +1087,36 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 total += weight;
             }
 
-            if (total <= 0f) {
-                if (m_scene is not { } scene) { return false; }
-
-                var sampleAtCamera = CameraRadiance(fresh: fresh, lighting: lighting, position: position, scene: scene);
-
-                if (sampleAtCamera.Invalid) { return false; }
-                for (var axis = 0; (axis < 6); axis++) {
-                    axes[axis] = (sampleAtCamera.Radiance[axis] + sampleAtCamera.SkyLight[axis]);
-                    open += (sampleAtCamera.Sky[axis] / 6f);
-                }
-                total = 1f;
-                source = SdfCameraSampleSource.CameraTrace;
-            } else {
-                source = SdfCameraSampleSource.Probes;
-            }
+            if (total <= 0f) { return TryTraceCamera(fresh: fresh, light: light, lighting: lighting, position: position, skyVisibility: out skyVisibility, source: out source); }
             for (var axis = 0; (axis < 6); axis++) { axes[axis] /= total; }
             skyVisibility = Math.Clamp(max: 1f, min: 0f, value: ((SdfMeshIrradianceProbe.OpenGroundShare * open) / total));
             if (!light.IsEmpty) { axes.CopyTo(destination: light); }
+            source = SdfCameraSampleSource.Probes;
 
             return true;
         }
+    }
+    // Samples the camera by its own hits on the volume's scene (CameraRadiance), as one probe at the camera, which needs no
+    // lattice probe and no device; under the gate. False before the scene is built or inside opaque geometry.
+    private bool TryTraceCamera(Vector3 position, Lighting lighting, bool fresh, Span<Vector3> light, out float skyVisibility, out SdfCameraSampleSource source) {
+        skyVisibility = 1f;
+        source = SdfCameraSampleSource.None;
+        if (m_scene is not { } scene) { return false; }
+
+        var sample = CameraRadiance(fresh: fresh, lighting: lighting, position: position, scene: scene);
+
+        if (sample.Invalid) { return false; }
+
+        var open = 0f;
+
+        for (var axis = 0; (axis < 6); axis++) {
+            if (!light.IsEmpty) { light[axis] = (sample.Radiance[axis] + sample.SkyLight[axis]); }
+            open += (sample.Sky[axis] / 6f);
+        }
+        skyVisibility = Math.Clamp(max: 1f, min: 0f, value: (SdfMeshIrradianceProbe.OpenGroundShare * open));
+        source = SdfCameraSampleSource.CameraTrace;
+
+        return true;
     }
     // A camera sample's hits are traced once per cell and geometry, at the camera's own position; its cubes are relit
     // from them when the lighting changes or the volume settles, whose bounce they read. A cell can straddle a partition:

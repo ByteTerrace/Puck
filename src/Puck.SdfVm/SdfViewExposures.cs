@@ -347,8 +347,10 @@ public sealed class SdfViewExposures {
         for (var index = 0; (index < m_count); index++) {
             var metered = float.IsFinite(f: m_heldEv[index]);
             var reading = (metered ? $"{m_metered[index]:0.###} nits target={exposure.Target(luminance: m_metered[index]):0.00} band={(m_adapting[index] ? "following" : "holding")}" : "none");
+            // A view without a fresh camera sample names what the sample waits for now.
+            var wait = (((m_sampleSources[index] is "none" or "held") && (m_irradiance is { } irradiance)) ? $" wait={irradiance.CameraSampleWait()}" : string.Empty);
 
-            lines.Add(item: $"view {index}: ev100={m_ev100[index]:0.00} multiplier={m_multipliers[index]:G4} meter={reading} source={m_meterSources[index]} camera={m_sampleSources[index]} air={m_airLight[index]:0.###}");
+            lines.Add(item: $"view {index}: ev100={m_ev100[index]:0.00} multiplier={m_multipliers[index]:G4} meter={reading} source={m_meterSources[index]} camera={m_sampleSources[index]}{wait} air={m_airLight[index]:0.###}");
         }
 
         return lines;

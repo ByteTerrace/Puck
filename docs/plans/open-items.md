@@ -3034,12 +3034,13 @@ the fixed poses and the approaches already rejected.
   relight alone, but the relight reads a lane-driven emissive as zero
   (`SdfMeshIrradiance.Shade`: a static draw has no frame slot); read the lane's
   value in the relight, then author the switch as a lane.
-- [medium] A camera sample is relit on the frame thread, under the volume's
-  gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
-  from `TrySampleCamera`), outside the relight budget: the debug world's forty-odd
-  screen-camera views read camera samples, so each lighting capture relights
-  them on the frame thread (`camera-relights` counts them). Move them into the
-  worker's batches.
+- [medium] A camera sample is traced and relit on the frame thread, under the
+  volume's gate, whenever the lighting version advances (`SdfMeshIrradiance.CameraRadiance`
+  from `TrySampleCamera`, through `TryTraceCamera`), outside the relight budget:
+  with no device trace always, and on a device until its first meter answers
+  (seconds into a boot, while the scene uploads). Every staged view reads a camera
+  sample, so each lighting capture in that span relights them on the frame thread
+  (`camera-relights` counts them). Move them into the worker's batches.
 - [medium · duplicate] Each lighting capture renders a 64×64 sky map on the
   frame thread with `SdfSkyEnvironment.Render`, the CPU reference of a GPU
   kernel, about nine times a second while the sky moves. Read the GPU kernel's

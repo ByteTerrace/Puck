@@ -214,6 +214,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_sceneAdoptions++;
     }
     private long m_sceneAdoptions;
+    // What every query waits on before it can run, for the camera sample's read-back (SdfMeshIrradiance.CameraSampleWait):
+    // "scene-upload" while a scene uploads, "scene" before the first stands, or null once one does.
+    internal string? SceneWait {
+        get { lock (m_gate) { return (m_sceneUpload is not null) ? "scene-upload" : (m_scene is null) ? "scene" : null; } }
+    }
 
     // A scene chunk is cut at SdfGpuWork.UploadChunkBytes before any take, the least any allowance is.
     public bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
