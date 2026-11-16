@@ -135,7 +135,11 @@ let seamRecenter = [
   step("player.signal gamepad.buttonNorth release", 0)
   step("player.signal gamepad.leftTrigger 0", 2)
 ]
-let seamTurn = [step(stickRest, 2), step("player.signal gamepad.rightStick 1 0", 27), step("player.signal gamepad.rightStick 0 0", 3)]
+let seamTurn = [
+  step(stickRest, 2)
+  step("player.signal gamepad.rightStick 1 0", 27)
+  step("player.signal gamepad.rightStick 0 0", 3)
+]
 
 // Metres walked at a speed: a dash beat (the stick, the dash and its cooldown, 25 ticks) for each whole `beat` metres
 // of a speed that dashes, then the rest in chunks of `chunk` ticks of the stick (a schedule holds at most 256 rows).
@@ -163,26 +167,49 @@ function seamWaits(program) = map(program, s => s.wait)
 // z 12). From 36 m before the door to 14 m inside it and back, then in again with the stick pulled back at the threshold.
 function seamValley(speed) = concat(
   seamStart(speed, "seam-valley"),
-  seamForward(speed, 50), seamTurn, seamForward(speed, 50), seamTurn,
-  seamForward(speed, 34.5), [step(stickBack, 15)], seamForward(speed, 17), seamEnd(speed)
+  seamForward(speed, 50),
+  seamTurn,
+  seamForward(speed, 50),
+  seamTurn,
+  seamForward(speed, 34.5),
+  [step(stickBack, 15)],
+  seamForward(speed, 17),
+  seamEnd(speed)
 )
 
 // Crossing 2: the garden painting (paintings.puck: the glass is at z 39.2). Eleven metres to it with a pull back at its
 // face, through it and eight metres into the garden, then back through the garden's arrival frame into the wing.
 function seamPainting(speed) = concat(
   seamStart(speed, "seam-painting"),
-  seamForward(speed, 9.7), [step(stickBack, 12)], seamForward(speed, 11), [step(stickRest, 2)], seamTurn,
-  seamForward(speed, 14), seamEnd(speed)
+  seamForward(speed, 9.7),
+  [step(stickBack, 12)],
+  seamForward(speed, 11),
+  [step(stickRest, 2)],
+  seamTurn,
+  seamForward(speed, 14),
+  seamEnd(speed)
 )
 // Crossing 3: the lift (hall.puck: the car's door faces south onto the level 0 landing at z 36, the cab z 36 .. 40).
 // Into the car, up to level 3 and out onto its landing, back into the car and down.
 function seamLift(speed) = concat(
   seamStart(speed, "gallery-level-0"),
-  [step("world.state.cell.set liftCall $value 0", 20)], seamForward(speed, 4.9), [step(stickRest, 2), step("world.state.cell.set liftCall $value 3", 150)],
-  seamTurn, [step(stickRest, 150)],
-  seamForward(speed, 3), [step(stickBack, 10)], seamForward(speed, 2.5), [step(stickRest, 2)], seamTurn,
-  [step("world.state.cell.set liftCall $value 3", 20)], seamForward(speed, 5.5), [step(stickRest, 2), step("world.state.cell.set liftCall $value 0", 150)],
-  seamTurn, [step(stickRest, 150)], seamForward(speed, 5.5), seamEnd(speed)
+  [step("world.state.cell.set liftCall $value 0", 20)],
+  seamForward(speed, 4.9),
+  [step(stickRest, 2), step("world.state.cell.set liftCall $value 3", 150)],
+  seamTurn,
+  [step(stickRest, 150)],
+  seamForward(speed, 3),
+  [step(stickBack, 10)],
+  seamForward(speed, 2.5),
+  [step(stickRest, 2)],
+  seamTurn,
+  [step("world.state.cell.set liftCall $value 3", 20)],
+  seamForward(speed, 5.5),
+  [step(stickRest, 2), step("world.state.cell.set liftCall $value 0", 150)],
+  seamTurn,
+  [step(stickRest, 150)],
+  seamForward(speed, 5.5),
+  seamEnd(speed)
 )
 
 let seamValleyWalking = seamValley(seamWalking)

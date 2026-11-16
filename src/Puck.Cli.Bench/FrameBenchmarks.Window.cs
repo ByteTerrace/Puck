@@ -19,7 +19,10 @@ public static partial class FrameBenchmarks {
     // One reading taken at both ends of the window.
     private sealed record WindowRead(string Name, string Open, string Close, WindowParse Parse);
 
-    private enum WindowParse { Pairs, Residency, Counters, Text }
+    // How an answer's key-value pairs are named: bare (Pairs); under the residency each report block names (Residency);
+    // under the words that lead each ` | `-separated part of a host.memory answer (Memory); from a counters JSON answer
+    // (Counters); or not read as pairs at all (Text).
+    private enum WindowParse { Pairs, Residency, Memory, Counters, Text }
 
     // A reading the plan names that exists today, looked for by key in the answers. The key is a suffix, so a residency's
     // block prefix and a counter's source prefix both match.
@@ -34,7 +37,7 @@ public static partial class FrameBenchmarks {
         new("render.record", "world.counters render.record --json", "world.counters render.record --json", WindowParse.Counters),
         new("gpu.queue", "world.counters gpu.queue --json", "world.counters gpu.queue --json", WindowParse.Counters),
         new("sdf", "world.counters sdf --json", "world.counters sdf --json", WindowParse.Counters),
-        new("memory", "host.memory", "host.memory", WindowParse.Pairs),
+        new("memory", "host.memory", "host.memory", WindowParse.Memory),
         new("audio", "audio.state", "audio.state", WindowParse.Pairs),
         new("body", "body.where 0", "body.where 0", WindowParse.Text),
     ];
@@ -58,6 +61,14 @@ public static partial class FrameBenchmarks {
         new("gpu.queue", "gpu.queue.executes", "queue executes"),
         new("memory", "ws", "the process's working set, MiB"),
         new("memory", "private", "the process's private bytes, MiB"),
+        new("memory", "budget", "each pool's and segment's budget"),
+        new("memory", "spend-limit", "each pool's and segment's spend limit"),
+        new("memory", "usage", "each segment's usage as the API reports it"),
+        new("memory", "reservation", "each segment's current reservation"),
+        new("memory", "ledger-held", "the bytes the backend's ledger placed in each segment"),
+        new("memory", "usage-beyond-ledger", "usage past the ledger's held bytes: driver, swapchain and uncounted memory"),
+        new("memory", "peak", "each ledger row's peak"),
+        new("memory", "released", "each ledger row's released bytes"),
     ];
 
     // The residency's own landing times from the bake's start (a time not reached reads pending), which are the only
@@ -71,8 +82,7 @@ public static partial class FrameBenchmarks {
         new("lighting owed in frames a view shows", "step 9"),
         new("evictions and re-requests", "steps 5 and 8"),
         new("the latency of each stage from demand to first drawn (read, decode, bake, upload) with its tail", "step 10; the landing times above stand in until then"),
-        new("host.memory per pool and per segment: budget, usage, the ledger's held, peak and retired, reserved", "steps 1 and 2"),
-        new("each physical row's residual", "step 2"),
+        new("each physical row's owners and residual (host.memory prints pools, segments and ledger rows, not the rows' owners)", "step 2"),
         new("the transfer's reserve and commit ticks", "the transfers packet (open-items: Transfers, federation and server)"),
         new("the seat's commands per tick across the crossing", "the transfers packet (open-items: Transfers, federation and server)"),
         new("the voices the mixer started and released", "the transfers packet (audio.state reads only the live voice count)"),
@@ -329,6 +339,15 @@ public static partial class FrameBenchmarks {
                 }
                 break;
             }
+            case WindowParse.Memory:
+                foreach (var part in answer.Split(['|', '\n'])) {
+                    // The words before a part's first pair name it: `pool device`, `segment local`, `ledger vulkan.local`.
+                    var first = WindowPairPattern().Match(part);
+                    var head = (first.Success ? part[..first.Index] : part).Trim().TrimStart('[').Replace(": ", ".").Replace(' ', '.').Trim('.');
+                    var prefix = ((head.Length == 0) ? string.Empty : (head + "."));
+                    foreach (Match pair in WindowPairPattern().Matches(part)) { _ = values.TryAdd(prefix + pair.Groups["key"].Value, pair.Groups["value"].Value); }
+                }
+                break;
             case WindowParse.Pairs:
                 foreach (Match pair in WindowPairPattern().Matches(answer)) { _ = values.TryAdd(pair.Groups["key"].Value, pair.Groups["value"].Value); }
                 break;

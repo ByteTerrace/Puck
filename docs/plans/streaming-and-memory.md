@@ -1253,8 +1253,7 @@ one that does not exist yet as absent, never as nothing. Today's absences and
 the step that supplies each: floor shown, pending and failed (5); a fallback
 shown (3 and 5); reach drawn in (10); lighting owed (9); evictions and
 re-requests (5 and 8); the latency of each stage from demand to first drawn (10);
-`host.memory` per pool and segment, and each row's residual (1 and 2); and the
-transfer's reserve and commit ticks, the seat's commands per tick and the voices
+each physical row's owners and residual (2); and the transfer's reserve and commit ticks, the seat's commands per tick and the voices
 the mixer started and released, which wait on the
 [transfers packet](open-items.md#transfers-federation-and-server). The window
 carries the body's pose and `audio.state`'s device counts for the cross-world
