@@ -42,7 +42,7 @@ plus the pieces that need no OS-specific code at all.
 - **Probes contracts** (`Puck.Platform.Probes`)—`ProbeReading`, the
   neutral fixed-point currency between an probe and every binding that
   consumes it, published through the shared `PublishBuffer<ProbeReading>`
-  latest-value seqlock; `IProbeKernelHost`/`IProbeKernelRun`, the seam a kernel-class
+  latest-value handoff; `IProbeKernelHost`/`IProbeKernelRun`, the seam a kernel-class
   probe attaches to its host through: a camera graph, or the render adapter's
   own host (`IRenderedProbeKernelHost`, opened by `IProbeKernelHostService`)
   for a kernel whose trigger reads a rendered source. `ProbeKernelRequest.Inputs`

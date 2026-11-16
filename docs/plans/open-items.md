@@ -760,15 +760,14 @@ landed geometry).
   delivery (`WorldSessionMirror.cs:533-594`) can compose a frame from two ticks;
   the fix is the coherent-copy path the adjacency pin already uses
   (`CopySnapshotTo`). Owner: the federation lane.
-- `WorldSessionMirror.TryInput`, which the client's seat bindings call
-  (`WorldClient`, `WorldSeatBindings`), and `SnapshotArrivalIntervals` still
-  take the snapshot write gate, so a client read waits on a remote delivery's
-  whole critical section, where the pin's copy reads the published image
-  (`TripleBuffer`) and never waits. The inputs belong in that image.
-  `PublishBuffer<T>`'s reader retries through a `SpinWait` while a write is in
-  progress; a reader that keeps the last complete value instead (as
-  `TripleBuffer` does for one reader) removes the spin. Owner: the federation
-  lane.
+- `LatestSlotPublication.TryAcquireLatest` (the shared GPU texture ring a
+  camera or probe kernel publishes into) retries in a loop: it increments the
+  slot it read, re-reads the latest slot and backs out when a publication moved
+  it. `PublishBuffer<T>` enters a slot with one atomic add on a word that holds
+  both the published slot and its reader count, so it has nothing to retry; the
+  ring's acquire should use that index mechanism, with its fixed slot count kept
+  (a full ring drops the frame rather than grow). It is a GPU-lifetime change
+  that needs a camera or probe-kernel run to verify. Owner: the platform lane.
 
 #### Memory ownership
 

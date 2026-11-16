@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Server;
@@ -6,9 +7,10 @@ using Xunit;
 
 namespace Puck.World.Protocol.Tests;
 
-/// <summary>THE LAW: a whole-image copy of a session mirror (<see cref="WorldSessionMirror.CopySnapshotTo"/>) never sees
-/// a torn image and never waits on a writer. A delivery or route seed stalled inside its own critical section leaves the
-/// copy free to take the last complete image, and a copy racing both writers always reads one image a writer
+/// <summary>THE LAW: a whole-image read of a session mirror (<see cref="WorldSessionMirror.CopySnapshotTo"/>,
+/// <see cref="WorldSessionMirror.TryInput"/>, <see cref="WorldSessionMirror.SnapshotArrivalIntervals"/>) never sees a
+/// torn image and never waits on a writer. A delivery or route seed stalled inside its own critical section leaves the
+/// read free to take the last complete image, and a copy racing both writers always reads one image a writer
 /// finished.</summary>
 public sealed class SessionMirrorImageLawTests {
     private const int Bodies = 8;
@@ -132,6 +134,14 @@ public sealed class SessionMirrorImageLawTests {
             Assert.True(condition: stalled.Wait(cancellationToken: token, timeout: TimeSpan.FromSeconds(seconds: 30)));
             await CopyWithin(copy: copy, mirror: mirror, token: token);
             Assert.Equal(expected: 2, actual: copy.CommonValue());
+            // The inputs and the arrival history come from the same image, so they never wait on the stalled tail either.
+            var (input, intervals) = await Task.Run(function: () => (
+                mirror.TryInput(owner: Principal.Seat(slot: 0), publication: out _),
+                mirror.SnapshotArrivalIntervals(milliseconds: new double[4])
+            ), cancellationToken: token).WaitAsync(cancellationToken: token, timeout: TimeSpan.FromSeconds(seconds: 30));
+
+            Assert.False(condition: input);
+            Assert.Equal(expected: 1, actual: intervals);
             release.Set();
             await delivery;
 
