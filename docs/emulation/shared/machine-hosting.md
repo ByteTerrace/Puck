@@ -258,7 +258,9 @@ part of authoritative history and must execute exactly once, in order.
 ## State serialization and divergence
 
 `StateWriter` and `StateReader` encode scalar widths little-endian and copy
-`WriteBlock<T>` spans verbatim; bulk values retain their in-memory layout.
+`WriteRaw<T>` spans verbatim; bulk values retain their in-memory layout.
+`StateWriter` is a `Puck.Assets.LittleEndianWriter`, the one growable
+little-endian buffer `Puck.Networking.WireWriter` is also built on.
 `Reset` reuses the writer’s backing buffer once its
 capacity is sufficient. A component whose save and load mirror each other
 lists its fields once, in a method generic over `IStateTransfer`, and runs
@@ -267,7 +269,11 @@ so the two directions cannot disagree about order or width. Each transfer
 member names the width it moves, so retyping a field fails to compile instead
 of silently changing the layout. `SnapshotSection` names each captured byte range;
 `SnapshotDivergence` compares two `SnapshotImage` values and reports the first
-differing section and byte offset.
+differing section and byte offset. Every core builds its image through
+`SnapshotCapture`, which writes the header and each component in order and records
+the section table, and restores through `MachineSnapshot.RestoreInto`, which checks
+the identity and that the restore consumed exactly the image; a core supplies only
+its clock header, its component order and its identity.
 
 A complete core snapshot includes registers, pipeline and scheduler state, bus
 latches, timers, memory, and peripherals; the exact sections belong to each core.
@@ -379,7 +385,7 @@ this project reaches beyond the process.
 
 | Area | Types | Purpose |
 |---|---|---|
-| Serialization | `StateWriter`, `StateReader`, `IStateTransfer`, `StateSaveTransfer`, `StateLoadTransfer`, `SnapshotSection`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
+| Serialization | `StateWriter`, `StateReader`, `IStateTransfer`, `StateSaveTransfer`, `StateLoadTransfer`, `SnapshotSection`, `SnapshotCapture`, `ISnapshotable`, `SnapshotImage` | Little-endian whole-state capture/restore |
 | Divergence | `SnapshotDivergence` | Section-localized first-difference report |
 | Fork lifecycle | `ISnapshotableMachine`, `MachineInstance<TMachine, TConfiguration>`, `MachineFork<TMachine, TConfiguration>`, `MachineInstancePool<TMachine, TConfiguration>` | Pooled, ABA-safe forked-instance rentals |
 | Queued machines | `QueuedMachineHost`, `QueuedMachineWorker`, `IQueuedMachineCore`, `QueuedWorkerLifecycle<TWorkItem>`, `IQueuedWorkItem<TSelf>` | Ordered off-thread emulation and complete-frame publication |

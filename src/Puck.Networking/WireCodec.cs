@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Unicode;
+using Puck.Assets;
 using Puck.Maths;
 
 namespace Puck.Networking;
@@ -212,7 +213,7 @@ public ref struct WireReader {
 
         return (value == 1);
     }
-    /// <summary>Reads one GUID from its 16 little-endian bytes, the mirror of <see cref="WireWriter.WriteGuid"/>.</summary>
+    /// <summary>Reads one GUID from its 16 little-endian bytes, the mirror of <see cref="LittleEndianWriter.WriteGuid"/>.</summary>
     /// <returns>The GUID, or <see cref="Guid.Empty"/> once a refusal has latched.</returns>
     public Guid ReadGuid() {
         var slice = Take(count: 16);
@@ -563,69 +564,21 @@ public static class WireLimits {
     public const int MaxStringBytes = (16 * 1024);
 }
 /// <summary>A growable little-endian writer producing one canonical leaf. It is the exact mirror of
-/// <see cref="WireReader"/>; an encoder and its decoder are read side by side. The written bytes are reachable two
-/// ways: <see cref="ToArray"/> copies them out for anything stored or queued, and <see cref="WrittenMemory"/> /
-/// <see cref="WrittenSpan"/> alias the writer's own buffer for immediate consumption.</summary>
-public sealed class WireWriter {
-    private byte[] m_buffer;
-    private int m_length;
-
+/// <see cref="WireReader"/>; an encoder and its decoder are read side by side. The buffer and the scalar encodings
+/// are <see cref="LittleEndianWriter"/>'s; this adds the wire's framed forms (counted arrays, length-prefixed blocks
+/// and strings, presence-bit optionals, fixed-point and presentation values). The written bytes are reachable two
+/// ways: <see cref="LittleEndianWriter.ToArray"/> copies them out for anything stored or queued, and
+/// <see cref="LittleEndianWriter.WrittenMemory"/> / <see cref="LittleEndianWriter.WrittenSpan"/> alias the writer's own
+/// buffer for immediate consumption, such as handing to <see cref="WireFrame.WriteAsync"/>.</summary>
+public sealed class WireWriter : LittleEndianWriter {
     /// <summary>Initializes a writer.</summary>
     /// <param name="capacity">The initial buffer size. The default holds a typical signed peer message without a
     /// resize.</param>
-    public WireWriter(int capacity = 512) {
-        m_buffer = new byte[Math.Max(
-            val1: capacity,
-            val2: 16
-        )];
-        m_length = 0;
-    }
+    public WireWriter(int capacity = 512) : base(capacity: Math.Max(
+        val1: capacity,
+        val2: 16
+    )) { }
 
-    /// <summary>Gets the bytes written so far.</summary>
-    public int Length => m_length;
-    /// <summary>Gets the written bytes as memory aliasing the writer's own buffer — no copy. The memory is
-    /// invalidated by the next write (a resize moves the buffer), so it is for immediate consumption, such as
-    /// handing to <see cref="WireFrame.WriteAsync"/>; anything stored or queued takes <see cref="ToArray"/>.</summary>
-    public ReadOnlyMemory<byte> WrittenMemory => m_buffer.AsMemory(
-        length: m_length,
-        start: 0
-    );
-    /// <summary>Gets the written bytes as a span aliasing the writer's own buffer — no copy. The span is invalidated
-    /// by the next write (a resize moves the buffer), so it is for immediate consumption; anything stored or queued
-    /// takes <see cref="ToArray"/>.</summary>
-    public ReadOnlySpan<byte> WrittenSpan => m_buffer.AsSpan(
-        length: m_length,
-        start: 0
-    );
-
-    private Span<byte> Reserve(int count) {
-        if (checked((m_length + count)) > m_buffer.Length) {
-            Array.Resize(
-                array: ref m_buffer,
-                newSize: Math.Max(
-                    val1: (m_buffer.Length * 2),
-                    val2: (m_length + count)
-                )
-            );
-        }
-
-        var span = m_buffer.AsSpan(
-            length: count,
-            start: m_length
-        );
-
-        m_length += count;
-
-        return span;
-    }
-
-    /// <summary>Discards the written bytes and keeps the buffer, so a writer its owner reuses encodes again without
-    /// growing a fresh one.</summary>
-    public void Reset() => m_length = 0;
-    /// <summary>Copies the written bytes into a new array — the form to keep when the leaf is stored or queued
-    /// beyond the writer's next write; <see cref="WrittenMemory"/> serves an immediate consumer without the copy.</summary>
-    /// <returns>The canonical leaf.</returns>
-    public byte[] ToArray() => WrittenSpan.ToArray();
     /// <summary>Writes a declared-count array: the 32-bit count, then each item through
     /// <paramref name="writeItem"/>.</summary>
     /// <typeparam name="T">The element type.</typeparam>
@@ -677,7 +630,7 @@ public sealed class WireWriter {
             );
         }
     }
-    /// <summary>Writes contiguous booleans in wire order, each as the single 0/1 byte <see cref="WriteBoolean"/>
+    /// <summary>Writes contiguous booleans in wire order, each as the single 0/1 byte <see cref="LittleEndianWriter.WriteBoolean"/>
     /// writes, without a count prefix.</summary>
     /// <param name="values">The values.</param>
     public void WriteBooleans(ReadOnlySpan<bool> values) {
@@ -697,30 +650,6 @@ public sealed class WireWriter {
         WriteInt32(value: value.Length);
         WriteBytes(value: value);
     }
-    /// <summary>Writes one boolean as a single 0/1 byte.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteBoolean(bool value) => WriteByte(value: ((byte)(value
-        ? 1
-        : 0)));
-    /// <summary>Writes one byte.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteByte(byte value) => Reserve(count: sizeof(byte))[0] = value;
-    /// <summary>Writes raw bytes with no prefix.</summary>
-    /// <param name="value">The bytes.</param>
-    public void WriteBytes(ReadOnlySpan<byte> value) => value.CopyTo(destination: Reserve(count: value.Length));
-    /// <summary>Writes one GUID as its 16 little-endian bytes, the mirror of <see cref="WireReader.ReadGuid"/>.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteGuid(Guid value) => _ = value.TryWriteBytes(
-        bigEndian: false,
-        bytesWritten: out _,
-        destination: Reserve(count: 16)
-    );
-    /// <summary>Writes one little-endian double-precision float.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteDouble(double value) => BinaryPrimitives.WriteDoubleLittleEndian(
-        destination: Reserve(count: sizeof(double)),
-        value: value
-    );
     /// <summary>Writes one fixed-point scalar.</summary>
     /// <param name="value">The value.</param>
     public void WriteFixed(FixedQ4816 value) => WriteInt64(value: value.Value);
@@ -739,18 +668,6 @@ public sealed class WireWriter {
         WriteFixed(value: value.Y);
         WriteFixed(value: value.Z);
     }
-    /// <summary>Writes one little-endian signed 32-bit integer.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteInt32(int value) => BinaryPrimitives.WriteInt32LittleEndian(
-        destination: Reserve(count: sizeof(int)),
-        value: value
-    );
-    /// <summary>Writes one little-endian signed 64-bit integer.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteInt64(long value) => BinaryPrimitives.WriteInt64LittleEndian(
-        destination: Reserve(count: sizeof(long)),
-        value: value
-    );
     /// <summary>Writes contiguous signed 64-bit lanes in wire order, without a count prefix.</summary>
     /// <param name="values">The lanes.</param>
     public void WriteInt64s(ReadOnlySpan<long> values) {
@@ -826,12 +743,6 @@ public sealed class WireWriter {
         WriteSingle(value: value.Z);
         WriteSingle(value: value.W);
     }
-    /// <summary>Writes one little-endian single-precision float.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteSingle(float value) => BinaryPrimitives.WriteSingleLittleEndian(
-        destination: Reserve(count: sizeof(float)),
-        value: value
-    );
     /// <summary>Writes one UTF-8 string behind a 16-bit byte-length prefix, encoding straight into the buffer with
     /// no temporary array. The cap is a caller bug, not a peer refusal — every wire string in this repository is a
     /// name, an authority spelling, or a refusal sentence — so it throws rather than latching.</summary>
@@ -859,12 +770,6 @@ public sealed class WireWriter {
             chars: text
         );
     }
-    /// <summary>Writes one little-endian unsigned 16-bit integer.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteUInt16(ushort value) => BinaryPrimitives.WriteUInt16LittleEndian(
-        destination: Reserve(count: sizeof(ushort)),
-        value: value
-    );
     /// <summary>Writes one unsigned 128-bit integer as two little-endian 64-bit halves, low half first. Both halves
     /// are written explicitly: a single 64-bit lane would drop every bit above 63.</summary>
     /// <param name="value">The value.</param>
@@ -872,18 +777,6 @@ public sealed class WireWriter {
         WriteUInt64(value: ((ulong)value));
         WriteUInt64(value: ((ulong)(value >> 64)));
     }
-    /// <summary>Writes one little-endian unsigned 32-bit integer.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteUInt32(uint value) => BinaryPrimitives.WriteUInt32LittleEndian(
-        destination: Reserve(count: sizeof(uint)),
-        value: value
-    );
-    /// <summary>Writes one little-endian unsigned 64-bit integer.</summary>
-    /// <param name="value">The value.</param>
-    public void WriteUInt64(ulong value) => BinaryPrimitives.WriteUInt64LittleEndian(
-        destination: Reserve(count: sizeof(ulong)),
-        value: value
-    );
     /// <summary>Writes one presentation vector.</summary>
     /// <param name="value">The value.</param>
     public void WriteVector(Vector3 value) {
@@ -1061,7 +954,7 @@ public static class WireFrame {
         );
     }
     /// <summary>Writes one framed kind/body pair and flushes it: one joined buffer (<see cref="FrameCodec.Join"/>),
-    /// one write, one flush. The body is consumed before this returns, so a <see cref="WireWriter.WrittenMemory"/>
+    /// one write, one flush. The body is consumed before this returns, so a <see cref="LittleEndianWriter.WrittenMemory"/>
     /// may be passed directly without copying it out first.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="kind">The frame kind.</param>

@@ -15,7 +15,7 @@ public readonly struct StateSaveTransfer : IStateTransfer {
     }
 
     /// <inheritdoc/>
-    public void Block<T>(Span<T> values) where T : unmanaged => m_writer.WriteBlock<T>(values: values);
+    public void Block<T>(Span<T> values) where T : unmanaged => m_writer.WriteRaw<T>(values: values);
     /// <inheritdoc/>
     public void Boolean(ref bool value) => m_writer.WriteBoolean(value: value);
     /// <inheritdoc/>
