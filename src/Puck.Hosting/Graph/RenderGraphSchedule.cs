@@ -44,6 +44,9 @@ public enum RenderGraphInstanceStatus : byte {
 /// when it has never rendered.</param>
 /// <param name="Held">Whether its own refresh was due but the roots and footprints demanding it held its latest render
 /// through this frame, so its consumers show that render again by design.</param>
+/// <param name="Led">Whether it renders this frame only by a lead: the floors of the roots and footprints demanding it
+/// would have held its latest render but for the time they count ahead (<see cref="RenderGraphRefresh.LeadSeconds"/>).
+/// The host that gave the lead ends it on this render, which has placed the instance within its floor's period.</param>
 public readonly record struct RenderGraphInstanceSchedule(
     string Instance,
     RenderGraphInstanceStatus Status,
@@ -54,7 +57,8 @@ public readonly record struct RenderGraphInstanceSchedule(
     int Passes,
     long PassPixels,
     long LatestFrame,
-    bool Held = false
+    bool Held = false,
+    bool Led = false
 );
 /// <summary>Which frame of a producer's output one consumer reads this frame.</summary>
 /// <param name="Consumer">The instance reading.</param>

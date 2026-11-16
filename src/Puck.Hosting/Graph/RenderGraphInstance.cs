@@ -13,6 +13,10 @@ namespace Puck.Hosting;
 public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Floor = 0) {
     /// <summary>Gets the refresh that renders on every frame something visible reads the instance.</summary>
     public static RenderGraphRefresh EveryFrame => Every(divisor: 1);
+    /// <summary>Gets the presentation time a floor's hold counts ahead of the time since the instance's latest render, in
+    /// seconds (<see cref="PresentationRate.Holds"/>'s lead), which renders it that much early once and so places it
+    /// within the floor's period (<see cref="PresentationPhases"/>); zero for none. Only a floor reads it.</summary>
+    public double LeadSeconds { get; init; }
     /// <summary>Gets whether exactly one of <see cref="Divisor"/>, <see cref="Hertz"/> and <see cref="Floor"/> is positive
     /// and the others are zero.</summary>
     public bool IsValid => (
@@ -38,12 +42,15 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Flo
     /// <summary>Creates a refresh that renders at least <paramref name="hertz"/> times a second of presentation time and
     /// holds its latest render between.</summary>
     /// <param name="hertz">The floor, at least one.</param>
+    /// <param name="leadSeconds">The floor's <see cref="LeadSeconds"/>.</param>
     /// <returns>The refresh.</returns>
-    public static RenderGraphRefresh AtLeast(int hertz) => new(
+    public static RenderGraphRefresh AtLeast(int hertz, double leadSeconds = 0d) => new(
         Divisor: 0,
         Floor: hertz,
         Hertz: 0
-    );
+    ) {
+        LeadSeconds = leadSeconds,
+    };
     /// <summary>Resolves a divisor or a cap to a frame divisor against the display's refresh rate
     /// (<see cref="PresentationRate.FramesAtMost"/>); a floor, which presentation time paces rather than frames, resolves
     /// to one.</summary>
@@ -64,7 +71,8 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Flo
     }
     /// <summary>Returns whether the refresh holds an instance's latest render through this frame: a divisor or a cap while
     /// fewer presented frames than its divisor have passed since that render, a floor while
-    /// <see cref="PresentationRate.Holds"/> does. An instance that has never rendered is never held.</summary>
+    /// <see cref="PresentationRate.Holds"/> does over that time and its <see cref="LeadSeconds"/>. An instance that has
+    /// never rendered is never held.</summary>
     /// <param name="rate">The frame's presentation rate.</param>
     /// <param name="frames">The presented frames since the instance last rendered, or a negative number when it never
     /// has.</param>
@@ -80,7 +88,7 @@ public readonly record struct RenderGraphRefresh(int Divisor, int Hertz, int Flo
         }
 
         return ((Floor > 0)
-            ? rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: Floor)
+            ? rate.Holds(elapsedSeconds: elapsedSeconds, frameSeconds: frameSeconds, hertz: Floor, leadSeconds: LeadSeconds)
             : (frames < divisor));
     }
 }

@@ -17,7 +17,7 @@ world.debug-view rates       # tint each rated item by its tier (F8 toggles it)
 world.debug-view rate-flash  # tint each one only on the frames it updates
 world.debug-view off         # the final image again
 world.rates toggle           # every lever off, then on again (F7)
-world.rates                  # each lever's longest interval, and each rated item's size and tier
+world.rates                  # each lever's longest interval and largest burst, and each rated item's size and tier
 ```
 
 | Key | Does |
