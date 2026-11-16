@@ -2793,7 +2793,7 @@ marching the program; 0 bakes no grid. Meaningful only when a requirement
 selects field contact.
 
 `collision.events` bounds overlap-event sensing without changing physical world
-contact. `candidateBudget` limits inspected broadphase candidates per body,
+contact. `candidateBudget` limits inspected box-overlapping broadphase candidates per body,
 `maxPairsPerBody` limits retained degree, and `beginBudget` limits new pairs per
 tick. Established relationships are considered first. Setting
 `maxPairsPerBody` to zero disables body-pair begin/end events.

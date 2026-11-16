@@ -187,19 +187,13 @@ public sealed partial class WorldPopulation {
     // rebuild site.
     private int[] m_placementOrdinalToBody = [];
 
-    // Reused broadphase scratch. This used to be four population-sized stackallocs while the table ceiling was
-    // 128; the few-thousand-body representation makes that a stack-overflow hazard. Keeping it population-local
-    // preserves allocation-free ticks and sizes the storage to the authored census rather than the global ceiling.
-    private readonly WorldSweepBody[] m_dynamicContactBodies;
+    // Reused broadphase scratch, sized to the authored census so a tick allocates nothing. The contact sweep's
+    // travel is indexed by population slot: the grid's spheres carry only slot, centre and radius.
+    private readonly FixedSweepSphere[] m_dynamicContactSpheres;
+    private readonly FixedQ4816[] m_dynamicContactTravel;
     private readonly bool[] m_dynamicContactIncluded;
-    private readonly Dictionary<(long Y, long Z), int> m_awakeContactGrid;
-    private readonly int[] m_awakeContactNext;
-    private readonly bool[] m_contactIndexedAwake;
     private readonly byte[] m_dynamicContactDegrees;
-    // Y/Z cell heads and links in X-sweep order. Only lookups enumerate cells, never dictionary iteration.
-    private readonly Dictionary<(long Y, long Z), int> m_dynamicContactGrid;
-    private readonly (long Y, long Z)[] m_dynamicContactCells;
-    private readonly int[] m_dynamicContactNext;
+    private readonly FixedSweepGrid m_dynamicContactGrid;
     // Active carry relationships, sorted by carrier index. The backing store is population-sized and reused so the
     // per-tick attachment pass visits only actual relationships and allocates nothing; it never scans Capacity.
     private readonly CarryRelationship[] m_activeCarries;
@@ -365,18 +359,16 @@ public sealed partial class WorldPopulation {
         m_awakeBodies = new BodyWorkSet(capacity: m_entries.Length);
         m_sleepingBodies = new BodyWorkSet(capacity: m_entries.Length);
         m_eventBodies = new BodyWorkSet(capacity: m_entries.Length);
-        m_dynamicContactBodies = new WorldSweepBody[m_entries.Length];
+        m_dynamicContactSpheres = new FixedSweepSphere[m_entries.Length];
+        m_dynamicContactTravel = new FixedQ4816[m_entries.Length];
         m_dynamicContactIncluded = new bool[m_entries.Length];
-        m_awakeContactGrid = new Dictionary<(long Y, long Z), int>(capacity: m_entries.Length);
-        m_awakeContactNext = new int[m_entries.Length];
-        m_contactIndexedAwake = new bool[m_entries.Length];
         m_stepBodies = new int[m_entries.Length];
         m_sleepQueries = new int[m_entries.Length];
+        m_sleepSpheres = new FixedSweepSphere[m_entries.Length];
+        m_sleepIndex = new FixedSweepGrid(capacity: m_entries.Length);
         m_eventBodyImage = new int[m_entries.Length];
         m_dynamicContactDegrees = new byte[m_entries.Length];
-        m_dynamicContactGrid = new Dictionary<(long Y, long Z), int>(capacity: m_entries.Length);
-        m_dynamicContactCells = new (long Y, long Z)[m_entries.Length];
-        m_dynamicContactNext = new int[m_entries.Length];
+        m_dynamicContactGrid = new FixedSweepGrid(capacity: m_entries.Length);
         m_activeCarries = new CarryRelationship[m_entries.Length];
 
         m_seatSpawns = CompileSeatSpawns(

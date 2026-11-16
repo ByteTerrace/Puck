@@ -165,6 +165,14 @@ the deepest pair correction without knowing body identity or mutating state.
 Its `Overlaps` is the event feed's overlap sense: a pair overlaps exactly when
 the correction's narrowphase reports a positive push at zero margin, so a
 collision event and a contact never disagree and a touching pair is neither.
+`FixedSweepGrid` is the one broadphase over those radii: an X sweep over
+bounding spheres sorted by least X then slot, crossed with a Y/Z grid whose
+cells span the largest diameter. A pair search returns, in sweep order, the
+later spheres whose bounds meet on all three axes, and charges its candidate
+budget only after that cull; an active-only search skips pairs of two inactive
+spheres. A box query returns every sphere whose bounds meet a box. Body
+contacts, collision-event discovery and the sleeping index all use it, so they
+see the same candidates.
 Sphere and capsule pairs, dynamic or against a static sphere, answer through
 one round-core rule (`TryRoundPush`): the segment witness, the full-width
 distance against the summed radii, and an explicit tie axis when the cores
@@ -707,7 +715,7 @@ thread-safe**.
   `FastMonopoleOptions`, `AdaptiveFmmOptions`.
 - **Contact geometry**—`FixedBodyColliderVolume`, `FixedOrientedBox`,
   `FixedColliderBounds`, `FixedDynamicBodyContacts`, `FixedStaticCollider`,
-  `FixedContactPush`.
+  `FixedContactPush`, `FixedSweepGrid`, `FixedSweepSphere`.
 - **The contact seam**—`IContactField`, `ContactResolution`,
   `FixedStaticContactSolver`, `FixedFieldContactSolver`, `FixedStepUp`,
   `IFixedContactStep`, `FixedStepUpResult`.

@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 
 namespace Puck.World.Server;
 
@@ -26,7 +27,10 @@ public sealed partial class WorldPopulation {
     private readonly int[] m_eventBodyImage;
     private readonly int[] m_sleepQueries;
 
-    private readonly SleepingIndex m_sleepIndex = new();
+    // A retained broadphase over frozen bounds, rebuilt only when island membership changes, so no sleeping body's
+    // object is read on an idle tick.
+    private readonly FixedSweepGrid m_sleepIndex;
+    private readonly FixedSweepSphere[] m_sleepSpheres;
     private bool m_sleepIndexDirty = true;
 
     private bool m_wakingIsland;
@@ -227,11 +231,7 @@ public sealed partial class WorldPopulation {
     // come from the retained sleeping index over the grown box, so a change that reaches nobody visits no sleeper; the
     // rest observe the change through the population's own observation (m_sleepFieldVersion), never a per-sleeper write.
     private void WakeSleepersNear(in WorldColliderBox box, FixedQ4816 margin) {
-        if (m_sleepIndexDirty) {
-            m_sleepIndex.Rebuild(population: this, sleeping: m_sleepingBodies);
-            m_sleepIndexDirty = false;
-        }
-        var found = m_sleepIndex.QueryBox(box: in box, destination: m_sleepQueries, margin: margin);
+        var found = (box.Any ? SleepIndex().Query(box: box.Box.Grow(margin: margin), destination: m_sleepQueries) : 0);
 
         m_fieldWakes.Clear();
         for (var ordinal = 0; (ordinal < found); ordinal++) {
@@ -370,143 +370,29 @@ public sealed partial class WorldPopulation {
             if (!m_awakeBodies.Contains(item: index)) { m_eventBodies.Remove(item: index); }
         }
     }
-    /// <summary>Lists the sleepers whose broadphase bounds may meet a sphere about a body: every one whose centre lies
-    /// within <paramref name="reach"/> plus its own broadphase radius on each axis, and perhaps a few more.</summary>
+    /// <summary>Lists the sleepers whose broadphase bounds meet a sphere's about a body: every one whose centre lies
+    /// within <paramref name="reach"/> plus its own broadphase radius on each axis.</summary>
     /// <param name="body">The body whose position centres the query.</param>
     /// <param name="reach">The query radius, in metres: the body's broadphase radius, or the radius it sweeps this
     /// step, grown by whatever its pair test adds to the sleeper's own radius.</param>
     /// <param name="destination">The array the sleepers' population indices are written to.</param>
     /// <returns>The number of indices written.</returns>
-    internal int NearbySleepingBodies(WorldBody body, FixedQ4816 reach, int[] destination) {
+    internal int NearbySleepingBodies(WorldBody body, FixedQ4816 reach, int[] destination) =>
+        SleepIndex().Query(box: FixedAabb.Around(center: body.FixedPosition, radius: reach), destination: destination);
+    // The sleeping index, rebuilt from the sleepers' bounds when island membership has changed since it was last read.
+    private FixedSweepGrid SleepIndex() {
         if (m_sleepIndexDirty) {
-            m_sleepIndex.Rebuild(population: this, sleeping: m_sleepingBodies);
+            var count = 0;
+
+            foreach (var index in m_sleepingBodies) {
+                var body = m_entries[index].Body!;
+
+                m_sleepSpheres[count++] = new FixedSweepSphere(Index: index, Center: body.FixedPosition, Radius: body.BroadphaseRadius);
+            }
+            m_sleepIndex.Rebuild(spheres: m_sleepSpheres.AsSpan(start: 0, length: count));
             m_sleepIndexDirty = false;
         }
-        return m_sleepIndex.Query(position: body.FixedPosition, radius: reach, destination: destination);
-    }
-
-    // A retained broadphase over frozen bounds. Only island membership changes rebuild it. Queries visit cached
-    // bounds in neighbouring Y/Z cells, using binary X ranges; no sleeping body's object is read on an idle tick.
-    private sealed class SleepingIndex {
-        private readonly Dictionary<(long Y, long Z), List<(WorldSweepBody Bounds, FixedVector3 Position)>> m_cells = [];
-
-        private long m_width = 2;
-        private long m_maximumRadius;
-
-        internal void Rebuild(WorldPopulation population, BodyWorkSet sleeping) {
-            m_cells.Clear();
-            m_maximumRadius = 0;
-            foreach (var index in sleeping) { m_maximumRadius = Math.Max(val1: m_maximumRadius, val2: population.m_entries[index].Body!.BroadphaseRadius.Value); }
-            m_width = Math.Max(val1: 2, val2: m_maximumRadius.AddSaturating(right: m_maximumRadius));
-            foreach (var index in sleeping) {
-                var body = population.m_entries[index].Body!;
-                var position = body.FixedPosition;
-                var radius = body.BroadphaseRadius;
-                var key = (position.Y.Value.FloorDivide(divisor: m_width), position.Z.Value.FloorDivide(divisor: m_width));
-
-                if (!m_cells.TryGetValue(key: key, value: out var cell)) { m_cells[key] = cell = []; }
-                cell.Add(item: (new WorldSweepBody(Index: index, MinimumX: (position.X - radius), MaximumX: (position.X + radius), Radius: radius), position));
-            }
-            foreach (var cell in m_cells.Values) { cell.Sort(comparison: static (a, b) => a.Bounds.CompareTo(other: b.Bounds)); }
-        }
-        // The sleepers whose bounds, grown by the margin, may meet the box: every one that does, and perhaps a few that do
-        // not, which the caller's exact test rejects. Cells are visited in key order and lists by X, so the candidates
-        // are not in slot order.
-        internal int QueryBox(in WorldColliderBox box, FixedQ4816 margin, int[] destination) {
-            if (m_cells.Count == 0) { return 0; }
-            var count = 0;
-
-            if (box.Unbounded) {
-                foreach (var pair in m_cells) {
-                    foreach (var candidate in pair.Value) { destination[count++] = candidate.Bounds.Index; }
-                }
-                return count;
-            }
-            var grown = box.Box.Grow(margin: FixedQ4816.FromRawBits(value: margin.Value.AddSaturating(right: m_maximumRadius)));
-            var firstY = grown.Minimum.Y.Value.FloorDivide(divisor: m_width);
-            var lastY = grown.Maximum.Y.Value.FloorDivide(divisor: m_width);
-            var firstZ = grown.Minimum.Z.Value.FloorDivide(divisor: m_width);
-            var lastZ = grown.Maximum.Z.Value.FloorDivide(divisor: m_width);
-            var minimum = grown.Minimum.X.Value;
-            var maximum = grown.Maximum.X.Value;
-            var range = (((((Int128)lastY) - firstY) + 1) * ((((Int128)lastZ) - firstZ) + 1));
-
-            if (range > m_cells.Count) {
-                foreach (var pair in m_cells) {
-                    if ((pair.Key.Y >= firstY) && (pair.Key.Y <= lastY) && (pair.Key.Z >= firstZ) && (pair.Key.Z <= lastZ)) { Visit(cell: pair.Value); }
-                }
-            } else {
-                for (var y = firstY; (y <= lastY); y++) {
-                    for (var z = firstZ; (z <= lastZ); z++) {
-                        if (m_cells.TryGetValue(key: (y, z), value: out var cell)) { Visit(cell: cell); }
-                    }
-                }
-            }
-            return count;
-
-            void Visit(List<(WorldSweepBody Bounds, FixedVector3 Position)> cell) {
-                var low = 0;
-                var high = cell.Count;
-                // A list is sorted by its bounds' least X; one whose least X lies past the box's grown reach misses it.
-                var lowest = minimum.SubtractSaturating(right: m_width);
-
-                while (low < high) {
-                    var middle = (low + ((high - low) / 2));
-
-                    if (cell[middle].Bounds.MinimumX.Value < lowest) { low = (middle + 1); } else { high = middle; }
-                }
-                for (var ordinal = low; ((ordinal < cell.Count) && (cell[ordinal].Bounds.MinimumX.Value <= maximum)); ordinal++) {
-                    if (cell[ordinal].Bounds.MaximumX.Value >= minimum) { destination[count++] = cell[ordinal].Bounds.Index; }
-                }
-            }
-        }
-        internal int Query(FixedVector3 position, FixedQ4816 radius, int[] destination) {
-            if (m_cells.Count == 0) { return 0; }
-            var reach = radius.Value.AddSaturating(right: m_maximumRadius);
-            var firstY = position.Y.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
-            var lastY = position.Y.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
-            var firstZ = position.Z.Value.SubtractSaturating(right: reach).FloorDivide(divisor: m_width);
-            var lastZ = position.Z.Value.AddSaturating(right: reach).FloorDivide(divisor: m_width);
-            var minimum = (position.X.Value.SubtractSaturating(right: radius.Value).SubtractSaturating(right: m_width));
-            var maximum = position.X.Value.AddSaturating(right: radius.Value);
-            var count = 0;
-            // A large live body must not enumerate an unbounded empty lattice. The occupied-cell fallback has
-            // the same exact candidates and subsequent slot/X sorting removes dictionary enumeration order.
-            var range = (((((Int128)lastY) - firstY) + 1) * ((((Int128)lastZ) - firstZ) + 1));
-
-            if (range > m_cells.Count) {
-                foreach (var pair in m_cells) {
-                    if ((pair.Key.Y >= firstY) && (pair.Key.Y <= lastY) && (pair.Key.Z >= firstZ) && (pair.Key.Z <= lastZ)) { Visit(cell: pair.Value); }
-                }
-            } else {
-                for (var y = firstY; (y <= lastY); y++) {
-                    for (var z = firstZ; (z <= lastZ); z++) {
-                        if (m_cells.TryGetValue(key: (y, z), value: out var cell)) { Visit(cell: cell); }
-                    }
-                }
-            }
-            return count;
-
-            void Visit(List<(WorldSweepBody Bounds, FixedVector3 Position)> cell) {
-                var low = 0;
-                var high = cell.Count;
-
-                while (low < high) {
-                    var middle = (low + ((high - low) / 2));
-
-                    if (cell[middle].Bounds.MinimumX.Value < minimum) { low = (middle + 1); } else { high = middle; }
-                }
-                for (var ordinal = low; ((ordinal < cell.Count) && (cell[ordinal].Bounds.MinimumX.Value <= maximum)); ordinal++) {
-                    var candidate = cell[ordinal];
-                    var sum = (radius + candidate.Bounds.Radius);
-
-                    if ((candidate.Bounds.MaximumX.Value >= position.X.Value.SubtractSaturating(right: radius.Value)) &&
-                        (FixedQ4816.Abs(value: (candidate.Position.Y - position.Y)) <= sum) && (FixedQ4816.Abs(value: (candidate.Position.Z - position.Z)) <= sum)) {
-                        destination[count++] = candidate.Bounds.Index;
-                    }
-                }
-            }
-        }
+        return m_sleepIndex;
     }
     // Membership mutates only on admission, wake and sleep. Pay for ordered insertion there, rather than a tree
     // enumerator's traversal stack on every tick. Iteration borrows the array; callers that can wake bodies copy it.

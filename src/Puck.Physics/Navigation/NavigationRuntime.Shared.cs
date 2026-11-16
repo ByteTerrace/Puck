@@ -607,13 +607,13 @@ public sealed partial class NavigationRuntime {
 
             // Reverse Dijkstra from the goal: cost, then the lower index — a total order, so the heap never breaks
             // a tie itself.
-            private readonly struct CostOrder(int[] cost) : INodeOrder {
-                public int Compare(int left, int right) {
-                    var byCost = cost[left].CompareTo(value: cost[right]);
+            private readonly struct CostOrder(int[] cost) : IComparer<int> {
+                public int Compare(int x, int y) {
+                    var byCost = cost[x].CompareTo(value: cost[y]);
 
                     return ((byCost != 0)
                         ? byCost
-                        : left.CompareTo(value: right)
+                        : x.CompareTo(value: y)
                     );
                 }
             }

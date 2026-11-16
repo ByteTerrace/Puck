@@ -799,9 +799,8 @@ public sealed partial class WorldPopulation {
     /// (WorldPopulation.Rigid.cs). The complete resting islands then park.
     /// </summary>
     public void ResolveDynamicContacts() {
-        var contacts = m_dynamicContactBodies;
+        var contacts = m_dynamicContactSpheres;
         var count = 0;
-        var maximumRadius = FixedQ4816.Zero;
         var included = m_dynamicContactIncluded;
 
         Array.Clear(array: included);
@@ -818,216 +817,126 @@ public sealed partial class WorldPopulation {
             // A body reaches as far as it can move this step, plus half the rest band a pair keeps its contact within,
             // so a rigid pair is found before it overlaps.
             var travel = body.ContactTravel(stepTicks: m_rigidTickStepTicks);
-            var radius = ((body.BroadphaseRadius + travel) + RigidRestOffset);
 
-            maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
-
-            contacts[count++] = new WorldSweepBody(
+            m_dynamicContactTravel[index] = travel;
+            contacts[count++] = new FixedSweepSphere(
                 Index: index,
-                MinimumX: (body.FixedPosition.X - radius),
-                MaximumX: (body.FixedPosition.X + radius),
-                Radius: radius,
-                Travel: travel
+                Center: body.FixedPosition,
+                Radius: ((body.BroadphaseRadius + travel) + RigidRestOffset),
+                Active: !body.PopulationSleeping
             );
             included[index] = true;
         }
 
-        DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
         DynamicContactCandidates = 0;
-        DynamicContactPairVisits = 0;
         DynamicContactLimitedBodies = 0;
         DynamicContactNarrowPairs = 0;
         DynamicContactResolvedPairs = 0;
         m_rigidPairHits.Clear();
 
-        // A pair's summed radii never exceed this cell width, so intersecting Y/Z intervals have centres in the
-        // same or adjacent cells. Keep raw units for exact floor division (including negative coordinates).
-        var cellWidth = Math.Max(val1: 2L, val2: maximumRadius.Value.AddSaturating(right: maximumRadius.Value));
+        // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep, found with the
+        // awake body's travel-grown sweep radius plus the rest offset a sleeper's sweep radius adds to its own: exactly
+        // the bound the pair test below applies, so no pair it would form is missed.
+        for (var ordinal = 0; (ordinal < count); ordinal++) {
+            var body = m_entries[contacts[ordinal].Index].Body!;
 
-        // The one broadphase-plus-narrowphase sweep over the work set, extended by the sleepers near it.
-        {
-            // Frozen bodies retain their spatial index. Only bodies near an awake contact enter this sweep, found with
-            // the awake body's travel-grown sweep radius plus the rest offset a sleeper's sweep radius adds to its own:
-            // exactly the bound the pair test below applies, so no pair it would form is missed.
-            for (var ordinal = 0; (ordinal < count); ordinal++) {
-                var body = m_entries[contacts[ordinal].Index].Body!;
+            if (body.PopulationSleeping) { continue; }
+            var nearby = NearbySleepingBodies(body: body, destination: m_sleepQueries, reach: (contacts[ordinal].Radius + RigidRestOffset));
 
-                if (body.PopulationSleeping) { continue; }
-                var nearby = NearbySleepingBodies(body: body, destination: m_sleepQueries, reach: (contacts[ordinal].Radius + RigidRestOffset));
+            for (var neighbour = 0; (neighbour < nearby); neighbour++) {
+                var index = m_sleepQueries[neighbour];
 
-                for (var neighbour = 0; (neighbour < nearby); neighbour++) {
-                    var index = m_sleepQueries[neighbour];
+                if (included[index] || (BodyContact(index: index) != WorldBodyContactMode.Solid)) { continue; }
+                var sleeper = m_entries[index].Body!;
 
-                    if (included[index] || (BodyContact(index: index) != WorldBodyContactMode.Solid)) { continue; }
-                    var sleeper = m_entries[index].Body!;
-                    var radius = (sleeper.BroadphaseRadius + RigidRestOffset);
-
-                    included[index] = true;
-                    maximumRadius = FixedQ4816.Max(x: maximumRadius, y: radius);
-                    contacts[count++] = new WorldSweepBody(Index: index, MinimumX: (sleeper.FixedPosition.X - radius),
-                        MaximumX: (sleeper.FixedPosition.X + radius), Radius: radius);
-                }
+                included[index] = true;
+                m_dynamicContactTravel[index] = FixedQ4816.Zero;
+                contacts[count++] = new FixedSweepSphere(
+                    Index: index,
+                    Center: sleeper.FixedPosition,
+                    Radius: (sleeper.BroadphaseRadius + RigidRestOffset),
+                    Active: !sleeper.PopulationSleeping
+                );
             }
-            cellWidth = Math.Max(val1: 2L, val2: maximumRadius.Value.AddSaturating(right: maximumRadius.Value));
-
-            // Refreshed from each body's current position (radius is collider-derived and does not change mid-tick).
-            for (var refreshOrdinal = 0; (refreshOrdinal < count); refreshOrdinal++) {
-                var refreshedRadius = contacts[refreshOrdinal].Radius;
-                var refreshedX = m_entries[contacts[refreshOrdinal].Index].Body!.FixedPosition.X;
-
-                contacts[refreshOrdinal] = (contacts[refreshOrdinal] with {
-                    MinimumX = (refreshedX - refreshedRadius),
-                    MaximumX = (refreshedX + refreshedRadius),
-                });
-            }
-
-            // Introspective sort keeps a badly reshuffled few-thousand-body frame O(n log n), while the body index
-            // is a complete tie-breaker that makes its result deterministic.
-            Array.Sort(
-                array: contacts,
-                index: 0,
-                length: count
-            );
-            Array.Clear(array: m_dynamicContactDegrees);
-
-            // Prepend in reverse sweep order: each cell is a sorted linked list, without per-cell allocations.
-            // A left body's nine neighbouring lists are merged lazily, preserving the original X/index pair order
-            // and stopping immediately at the candidate/degree budget even when every body occupies one cell.
-            m_dynamicContactGrid.Clear();
-            m_awakeContactGrid.Clear();
-            for (var ordinal = (count - 1); (ordinal >= 0); ordinal--) {
-                var position = m_entries[contacts[ordinal].Index].Body!.FixedPosition;
-                var cell = (position.Y.Value.FloorDivide(divisor: cellWidth), position.Z.Value.FloorDivide(divisor: cellWidth));
-
-                m_dynamicContactCells[ordinal] = cell;
-                m_dynamicContactNext[ordinal] = (m_dynamicContactGrid.TryGetValue(key: cell, value: out var head) ? head : -1);
-                m_dynamicContactGrid[cell] = ordinal;
-                m_contactIndexedAwake[ordinal] = !m_entries[contacts[ordinal].Index].Body!.PopulationSleeping;
-                if (m_contactIndexedAwake[ordinal]) {
-                    m_awakeContactNext[ordinal] = (m_awakeContactGrid.TryGetValue(key: cell, value: out var awakeHead) ? awakeHead : -1);
-                    m_awakeContactGrid[cell] = ordinal;
-                }
-            }
-            Span<int> neighbours = stackalloc int[9];
-
-            for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
-                var leftContact = contacts[leftOrdinal];
-                var leftIndex = leftContact.Index;
-                var left = m_entries[leftIndex].Body!;
-                var cell = m_dynamicContactCells[leftOrdinal];
-
-                // Remove every left body, even one already at its degree limit. Queries then see only later
-                // bodies, without repeatedly walking past earlier bodies in a crowded cell.
-                m_dynamicContactGrid[cell] = m_dynamicContactNext[leftOrdinal];
-                if (m_contactIndexedAwake[leftOrdinal]) { m_awakeContactGrid[cell] = m_awakeContactNext[leftOrdinal]; }
-                // A frozen left body queries only awake right bodies. Never enumerate frozen/frozen pairs or
-                // charge them against a contact budget before reaching a genuinely changing interaction.
-                var grid = (left.PopulationSleeping ? m_awakeContactGrid : m_dynamicContactGrid);
-                var next = (left.PopulationSleeping ? m_awakeContactNext : m_dynamicContactNext);
-
-                if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                    continue;
-                }
-
-                var inspected = 0;
-                var neighbourCount = 0;
-
-                for (var y = -1; (y <= 1); y++) {
-                    for (var z = -1; (z <= 1); z++) {
-                        neighbours[neighbourCount++] = (grid.TryGetValue(
-                            key: ((cell.Y + y), (cell.Z + z)), value: out var head
-                        ) ? head : -1);
-                    }
-                }
-                while (true) {
-                    var rightOrdinal = count;
-                    var nearestCell = -1;
-
-                    for (var neighbour = 0; (neighbour < neighbours.Length); neighbour++) {
-                        if ((neighbours[neighbour] >= 0) && (neighbours[neighbour] < rightOrdinal)) {
-                            rightOrdinal = neighbours[neighbour];
-                            nearestCell = neighbour;
-                        }
-                    }
-                    if ((nearestCell < 0) || (contacts[rightOrdinal].MinimumX > leftContact.MaximumX)) {
-                        break;
-                    }
-                    neighbours[nearestCell] = next[rightOrdinal];
-                    DynamicContactPairVisits++;
-                    var rightContact = contacts[rightOrdinal];
-                    var rightIndex = rightContact.Index;
-                    var right = m_entries[rightIndex].Body!;
-                    var radius = (leftContact.Radius + rightContact.Radius);
-                    var delta = (left.FixedPosition - right.FixedPosition);
-
-                    if (
-                        (FixedQ4816.Abs(value: delta.Y) > radius) ||
-                        (FixedQ4816.Abs(value: delta.Z) > radius)
-                    ) {
-                        continue;
-                    }
-                    if (inspected >= m_bodyContactPolicy.CandidateBudget) {
-                        DynamicContactLimitedBodies++;
-                        break;
-                    }
-                    inspected++;
-                    DynamicContactCandidates++;
-
-                    if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                        continue;
-                    }
-                    DynamicContactNarrowPairs++;
-
-                    var pairIsRigid = (left.IsRigid || right.IsRigid);
-                    // A rigid pair is solved speculatively: within what both can travel this step plus the rest band,
-                    // its contact exists before it overlaps. Two kit bodies resolve by position, overlap only.
-                    var margin = (pairIsRigid ? ((leftContact.Travel + rightContact.Travel) + RigidRestBand) : FixedQ4816.Zero);
-
-                    if (FixedDynamicBodyContacts.TryCorrection(
-                        leftPosition: left.FixedPosition,
-                        leftOrientation: left.FixedOrientation,
-                        leftVolumes: left.ScaledColliderVolumes(),
-                        rightPosition: right.FixedPosition,
-                        rightOrientation: right.FixedOrientation,
-                        rightVolumes: right.ScaledColliderVolumes(),
-                        tieBreaker: leftIndex ^ rightIndex,
-                        correction: out var correction,
-                        margin: margin
-                    )) {
-                        var depth = (correction.Length - margin);
-
-                        if (pairIsRigid && (left.PopulationSleeping || right.PopulationSleeping) &&
-                            RestingContactHolds(depth: depth, left: leftIndex, right: rightIndex)) {
-                            // The sleeper rests in this very contact, and a contact no deeper than its rest wakes nothing.
-                            continue;
-                        }
-                        if (pairIsRigid) {
-                            // The pair is a body contact of this tick's rigid step; its sleepers join the step.
-                            if (left.PopulationSleeping) { WakeBodyIsland(index: leftIndex); }
-                            if (right.PopulationSleeping) { WakeBodyIsland(index: rightIndex); }
-                            m_rigidPairHits.Add(item: new RigidPairHit(Correction: correction, Depth: depth, Left: leftIndex, Right: rightIndex));
-                        } else {
-                            var (leftShare, rightShare) = SplitPairCorrection(
-                                correction: correction,
-                                left: left,
-                                right: right
-                            );
-
-                            left.ApplyDynamicContact(correction: leftShare);
-                            right.ApplyDynamicContact(correction: rightShare);
-                        }
-                        m_dynamicContactDegrees[leftIndex]++;
-                        m_dynamicContactDegrees[rightIndex]++;
-                        DynamicContactResolvedPairs++;
-                        if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
-                            break;
-                        }
-                    }
-                }
-            }
-
         }
 
+        // The one broadphase-plus-narrowphase sweep over the work set. A frozen left body's candidates are awake bodies
+        // only, so frozen/frozen pairs are never visited or charged against a contact budget.
+        var grid = m_dynamicContactGrid;
+
+        grid.Rebuild(spheres: contacts.AsSpan(start: 0, length: count));
+        Array.Clear(array: m_dynamicContactDegrees);
+        for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
+            var leftIndex = grid.Sphere(ordinal: leftOrdinal).Index;
+            var left = m_entries[leftIndex].Body!;
+
+            if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                continue;
+            }
+            // Read live: a body an earlier pair woke searches the whole image.
+            grid.BeginPairs(activeOnly: left.PopulationSleeping, candidateBudget: m_bodyContactPolicy.CandidateBudget, leftOrdinal: leftOrdinal);
+            while (grid.NextPair(rightOrdinal: out var rightOrdinal)) {
+                DynamicContactCandidates++;
+                var rightIndex = grid.Sphere(ordinal: rightOrdinal).Index;
+                var right = m_entries[rightIndex].Body!;
+
+                if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                    continue;
+                }
+                DynamicContactNarrowPairs++;
+
+                var pairIsRigid = (left.IsRigid || right.IsRigid);
+                // A rigid pair is solved speculatively: within what both can travel this step plus the rest band,
+                // its contact exists before it overlaps. Two kit bodies resolve by position, overlap only.
+                var margin = (pairIsRigid ? ((m_dynamicContactTravel[leftIndex] + m_dynamicContactTravel[rightIndex]) + RigidRestBand) : FixedQ4816.Zero);
+
+                if (FixedDynamicBodyContacts.TryCorrection(
+                    leftPosition: left.FixedPosition,
+                    leftOrientation: left.FixedOrientation,
+                    leftVolumes: left.ScaledColliderVolumes(),
+                    rightPosition: right.FixedPosition,
+                    rightOrientation: right.FixedOrientation,
+                    rightVolumes: right.ScaledColliderVolumes(),
+                    tieBreaker: leftIndex ^ rightIndex,
+                    correction: out var correction,
+                    margin: margin
+                )) {
+                    var depth = (correction.Length - margin);
+
+                    if (pairIsRigid && (left.PopulationSleeping || right.PopulationSleeping) &&
+                        RestingContactHolds(depth: depth, left: leftIndex, right: rightIndex)) {
+                        // The sleeper rests in this very contact, and a contact no deeper than its rest wakes nothing.
+                        continue;
+                    }
+                    if (pairIsRigid) {
+                        // The pair is a body contact of this tick's rigid step; its sleepers join the step.
+                        if (left.PopulationSleeping) { WakeBodyIsland(index: leftIndex); }
+                        if (right.PopulationSleeping) { WakeBodyIsland(index: rightIndex); }
+                        m_rigidPairHits.Add(item: new RigidPairHit(Correction: correction, Depth: depth, Left: leftIndex, Right: rightIndex));
+                    } else {
+                        var (leftShare, rightShare) = SplitPairCorrection(
+                            correction: correction,
+                            left: left,
+                            right: right
+                        );
+
+                        left.ApplyDynamicContact(correction: leftShare);
+                        right.ApplyDynamicContact(correction: rightShare);
+                    }
+                    m_dynamicContactDegrees[leftIndex]++;
+                    m_dynamicContactDegrees[rightIndex]++;
+                    DynamicContactResolvedPairs++;
+                    if (m_dynamicContactDegrees[leftIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
+                        break;
+                    }
+                }
+            }
+            if (grid.PairsLimited) {
+                DynamicContactLimitedBodies++;
+            }
+        }
+
+        DynamicContactPairVisits = grid.PairVisits;
         DynamicContactPotentialPairs = ((count * (count - 1)) / 2);
         SolveRigidContacts();
         ParkRigidIslands();
