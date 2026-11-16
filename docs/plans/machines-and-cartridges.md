@@ -348,7 +348,7 @@ dotnet run --project src/Puck.HumbleGamingBrick.Post -c Release -- --artifacts a
 ```
 
 ```bash
-dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release -- --bios <GBA_bios.rom>
+dotnet run --project src/Puck.AdvancedGamingBrick.Post -c Release
 ```
 
 ```bash

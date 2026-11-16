@@ -488,6 +488,14 @@ the console and in the file. Both are already decisions 3 and 4.
 
 ## 5. Implementation slices
 
+**The Moth and the swallow are held (the owner's ruling).** Their remaining
+modeling waits for a pair session with the owner, and no lane models either
+until then. The slices below use them only as sources to rewrite without
+changing what they compile to: where a construct's output differs from the
+hand-written row (a mirrored wing that is not the left's mirror, for example),
+the slice reports the row with its preview sheets as an item for the pair
+session and leaves the creation's look as it is.
+
 Each slice is dispatchable on its own, headless, with a finish line a verb
 decides. The order follows the defects: mirroring and orientation first, since
 they recur in every creation; relative placement next, since it depends on the
