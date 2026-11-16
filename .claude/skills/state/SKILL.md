@@ -210,7 +210,7 @@ and the source-read timing choice; these are not guarantees the current implemen
   a rule gate could read).
   The remaining lowering work is in the [refactoring packet](../../../docs/plans/open-items.md#refactoring-campaign).
 - Rule-fault follow-ups are in [the rule-faults plan](../../../docs/plans/rule-faults.md),
-  evaluation cost in [the rule-evaluation-cost plan](../../../docs/plans/rule-evaluation-cost.md).
+  evaluation cost in [the job-system memo](../../../docs/plans/engine-job-system.md#rule-evaluation-stays-serial).
 
 ## Verify
 

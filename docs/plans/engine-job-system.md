@@ -531,12 +531,35 @@ body continuations far ahead of the rule latch, input and body action state
 ### Rule evaluation stays serial
 
 Rule evaluation is document-order sequential, and this memo changes nothing
-about it. Its cost is the [rule-evaluation memo](rule-evaluation-cost.md)'s:
-the schedule names host facts beside rows, a push-based due list visits only
-the rules something they read moved for, and a speculated gate phase on the
-pool is that memo's open decision, taken only when its measurement shows a due
-list worth a fork. Any speculation reuses `RuleSchedule` and its one version
-door (`RuleEvaluator.VersionsMatch`), never a second dependency map.
+about it. Its cost is proportional to change
+([the decision](../decisions/state-and-language.md#rule-evaluation-is-proportional-to-change)):
+the schedule names host facts beside rows, and a push-based due list visits
+only the rules something they read moved for. A speculated gate phase on the
+pool is set aside there until a sheet shows a due list worth a fork; any
+speculation reuses `RuleSchedule` and its one version door
+(`RuleEvaluator.VersionsMatch`), never a second dependency map.
+
+What rule evaluation still leaves open, each taken as
+`world.budget.rules --spent` names it:
+
+- The volatile rest: the chess sweeps read `physics(quiescent, ...)`, a
+  binding-free world fact whose value the host could version by comparison at
+  each refresh, as it does a body's pose.
+- A placement-pose move marks its readers in full: `go-read-stones` is visited
+  every tick because some placement inhabitant moves every tick. Reporting the
+  moved placement ordinal, and marking a row sweep's binding for that key,
+  would leave it unvisited.
+- Per-cell (per-binding) due sets for sweeps over rows: a moved row re-judges
+  every binding of a sweep that reads it. The journal already knows the written
+  cells, so this refines the same mechanism.
+- Facet versions for host facts that are not per-body storage (engagement, the
+  input channels' epoch, placement responses), each a host door of its own.
+- The parallel commit of independent rules, behind the kit-transaction
+  redesign.
+- The latch's two dictionaries per binding
+  ([open items](open-items.md#refactoring-campaign)).
+- The machine worker wait under `WorldMachineHost.Advance` and the instance
+  host's share of the tick, which no rule mechanism reaches.
 
 ### The fork and join
 

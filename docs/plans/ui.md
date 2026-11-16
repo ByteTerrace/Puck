@@ -16,27 +16,12 @@ Step 1 is its remaining author leaks, tracked in the
 [standard-authoring packet](open-items.md#author-leaks-to-the-standard). Step 2's
 renderer replacement follows a GPU-cost measurement of the existing element
 walk. Steps 3 to 6 wait behind the frame-time, bake, build, and duplication
-fundamentals. The debug world proves each step at highest quality: 60 FPS on
-the RTX 2060 and RTX 4070, and 45 FPS (every frame under 22.2 ms) on Steam Deck.
+fundamentals. The debug world proves each step at
+[the frame bar](../decisions/rendering.md#the-pipeline-foundation).
 
 Text shaping, bidirectional text, font fallback, input composition and
 localization are a named step after 4. Fonts and specific values are the
 owner's look calls.
-
-## Open items
-
-Step 1 retains the CRT inset and overlay text advance. Step 2 waits for the
-element-walk GPU measurement; steps 3 to 6 follow the fundamentals. A world
-with no `theme` draws the engine's neutral one (`WorldThemeSection.Default`), so
-its console, toasts, bar, wheel and cursor stay usable, and the debug world and
-the garden draw their on-screen controls through the authored standard
-(`worlds/standard/skin.puck` and `worlds/standard/controls.puck`), with debug-only
-pages in `worlds/debug/controls.puck`. The standard also authors the shared
-input vocabulary, the sky and quality presets, the chase-camera template and the
-editor's build page, bar and feel (`inputs`, `skies`, `quality`, `camera` and
-`editor` beside them). The
-[open items](open-items.md#author-leaks-to-the-standard) hold the packet that
-finishes it. A line is deleted when its step lands, never ticked.
 
 ---
 
