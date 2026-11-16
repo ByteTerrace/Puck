@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
 using Puck.Abstractions.Memory;
+using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
@@ -110,18 +111,19 @@ public sealed class SdfMeshStore {
     /// <param name="materials">The stored canonical ids by material place; the library maps them into the taking group's palette.</param>
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
-    public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) {
+    public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) =>
+        TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: new SdfMeshManagedStorage(), taking: null);
+    // Reads a geometry's entry into a storage as TryRead does: the entry is stamped when it is sound, and deleted when its
+    // bytes are refused. `taking` is the taking group's ids, which the decode writes the triangle materials in when the mesh
+    // can be renumbered back by place (SdfMeshStoreCodec.TryDecode); `declined` is set for a sound entry the storage did not take.
+    internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined) {
         var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity));
+        var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking);
 
-        if (!TryReadEntry(damaged: out var damaged, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal)) {
-            if (damaged) { Delete(path: path); }
+        if (!read && damaged) { Delete(path: path); }
+        if (read || declined) { Puck.Abstractions.CacheRetention.Stamp(path: path); }
 
-            return false;
-        }
-
-        Puck.Abstractions.CacheRetention.Stamp(path: path);
-
-        return true;
+        return read;
     }
     /// <summary>Reads a geometry's mesh under a bake's identity as <see cref="TryRead"/> does, leaving the store as it
     /// is: an entry it refuses stays, and a read stamps nothing, so a tool may read a store a running World owns.</summary>
@@ -132,7 +134,7 @@ public sealed class SdfMeshStore {
     /// <param name="refusal">Why a held entry was refused, or <see langword="null"/> when there was none to read.</param>
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     public bool TryPeek(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) =>
-        TryReadEntry(damaged: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal);
+        TryReadEntry(damaged: out _, declined: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: new SdfMeshManagedStorage(), taking: null);
     /// <summary>Returns the files of the entries the store holds, whatever bake identity wrote them, in ordinal order of
     /// their paths.</summary>
     /// <returns>The entries' paths; none when the directory does not exist.</returns>
@@ -176,15 +178,37 @@ public sealed class SdfMeshStore {
         mesh = null;
         materials = [];
 
-        byte[] bytes;
+        using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-entry");
+        using var entry = new OwnedBuffer<byte>(allocator: null, observer: owner);
 
         try {
-            bytes = File.ReadAllBytes(path: path);
+            ReadEntryBytes(entry: entry, path: path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return false;
         }
 
-        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes.AsSpan(start: 8)), materials: out materials, mesh: out mesh, refusal: out _));
+        var bytes = entry.GetSpan();
+
+        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null));
+    }
+    // Reads a file's bytes into a buffer sized to it.
+    private static void ReadEntryBytes(OwnedBuffer<byte> entry, string path) {
+        using var handle = File.OpenHandle(path: path, mode: FileMode.Open, access: FileAccess.Read, share: FileShare.Read, options: FileOptions.SequentialScan);
+        var length = RandomAccess.GetLength(handle: handle);
+
+        if (length > int.MaxValue) { throw new IOException(message: "The entry is larger than an array."); }
+        entry.Resize(length: ((int)length), clear: false, preserve: false);
+
+        var bytes = entry.GetSpan();
+        var read = 0;
+
+        while (read < bytes.Length) {
+            var count = RandomAccess.Read(handle: handle, buffer: bytes[read..], fileOffset: read);
+
+            if (count == 0) { break; }
+            read += count;
+        }
+        entry.Resize(length: read, clear: false, preserve: true);
     }
 
     // The entries this store read, their file bytes, and the time its readers spent reading and decoding them, summed over
@@ -202,20 +226,25 @@ public sealed class SdfMeshStore {
         handler: $"store-reads={Interlocked.Read(location: ref m_reads)} store-read-bytes={Interlocked.Read(location: ref m_readBytes)}B store-read-thread-seconds={(((double)Interlocked.Read(location: ref m_readTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s store-decode-thread-seconds={(((double)Interlocked.Read(location: ref m_decodeTicks)) / System.Diagnostics.Stopwatch.Frequency):0.000}s"
     );
 
-    // Reads an entry, answering whether a held entry's bytes were refused (damaged) rather than unreadable.
-    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged) {
+    // Reads an entry into a storage, answering whether a held entry's bytes were refused (damaged) rather than unreadable
+    // or sound but not taken by the storage (declined). The entry's bytes are read into owned scratch, as its inflated planes
+    // are, and nothing of them outlives the decode.
+    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged, out bool declined) {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key);
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        byte[] bytes;
 
         mesh = null;
         materials = [];
         refusal = null;
         damaged = false;
+        declined = false;
+
+        using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-entry");
+        using var entry = new OwnedBuffer<byte>(allocator: m_allocator, observer: owner);
 
         try {
-            bytes = File.ReadAllBytes(path: path);
+            ReadEntryBytes(entry: entry, path: path);
         } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
             return false;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -225,15 +254,15 @@ public sealed class SdfMeshStore {
         }
 
         var read = System.Diagnostics.Stopwatch.GetTimestamp();
-        var decoded = TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out var why, allocator: m_allocator);
+        var decoded = TryDecode(bytes: entry.GetSpan(), allocator: m_allocator, declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking);
 
         _ = Interlocked.Increment(location: ref m_reads);
-        _ = Interlocked.Add(location1: ref m_readBytes, value: bytes.Length);
+        _ = Interlocked.Add(location1: ref m_readBytes, value: entry.Length);
         _ = Interlocked.Add(location1: ref m_readTicks, value: (read - started));
         _ = Interlocked.Add(location1: ref m_decodeTicks, value: (System.Diagnostics.Stopwatch.GetTimestamp() - read));
         if (!decoded) {
             refusal = $"{Path.GetFileName(path: path)} {why}";
-            damaged = true;
+            damaged = !declined;
 
             return false;
         }
@@ -431,7 +460,7 @@ public sealed class SdfMeshStore {
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
-    private static bool TryDecode(byte[] bytes, UInt128 key, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, materials: out materials, mesh: out mesh, refusal: out refusal, allocator: allocator);
+    private static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, storage: storage, taking: taking, mesh: out mesh, materials: out materials, refusal: out refusal, declined: out declined, allocator: allocator);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.
