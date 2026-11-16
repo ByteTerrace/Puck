@@ -389,7 +389,11 @@ laws exercise that boundary.
   smallest half extent, since a lattice sized by its length or its copies'
   span steps clean over the sheet. A shell declares a quarter of its
   thickness, a warped shape a thirty-second of its smallest half extent and
-  cellular relief a thirty-second of its wavelength. A blend's seam is a
+  cellular relief a thirty-second of its wavelength. A sine relief or a warp
+  also declares its crest's bend (`ShapeWarpDocument.ReliefRadius`, one over
+  amplitude times the largest frequency squared) at `RoundCell`, since a
+  lattice sized by a large shape's extent facets a relief only a few of its
+  cells long. A blend's seam is a
   feature neither shape's bound measures, so a shape with a `smooth` blend
   declares it: a smooth, pipe or groove seam turns at `smooth` (`RoundCell`),
   a chamfer's bevel is a face `smooth` wide (half of it), stairs are `steps`
