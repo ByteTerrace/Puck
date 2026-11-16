@@ -654,8 +654,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         ));
     }
     /// <summary>Stages the frame: prepares it (<see cref="Prepare"/>), then submits its upload and pumps the tables'
-    /// background GPU work against it (<see cref="PumpGpuWork"/>), or drives it while the frame is held for its lighting
-    /// (<see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
+    /// background GPU work against it (<see cref="PumpGpuWork"/>), or drives it while the graph withholds the frame
+    /// (<see cref="FrameWithheld"/>, <see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
     /// preparation asks for every scheduled render that reads the residency, before the frame's batch opens and before any
     /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
     /// This is the one place the frame's upload is submitted.</summary>
@@ -671,8 +671,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_submitted = true;
             tables.HoldsFrame = HoldsFrame;
             tables.SubmitUpload();
-            // A frame held for its lighting presents nothing, so the work it waits on runs at the GPU's pace.
-            if (LightingPending) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
+            // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
+            if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
         }
 
         return true;
@@ -836,6 +836,15 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets whether this prepared frame still awaits its requested lighting and exposure convergence.
     /// Background GPU work continues while the graph marks this frame's image as waiting.</summary>
     public bool LightingPending { get; private set; }
+    /// <summary>Gets whether the prepared frame is a locked tick that waits for its meshes: its bake still owes a mesh, or
+    /// a draw waits for one to land. The graph withholds the frame's image until they arrive
+    /// (<see cref="SdfWorldPasses.WaitingOf"/>), as it does for <see cref="LightingPending"/>.</summary>
+    public bool MeshesPending => ((m_frame is { TickLocked: true }) && (MeshPathBake.Pending || DrawsAwaitMeshes));
+    /// <summary>Gets whether the graph withholds the prepared frame's image (<see cref="MeshesPending"/> or
+    /// <see cref="LightingPending"/>). Such a frame presents nothing for background work to delay, so its staging drives
+    /// that work at the GPU's pace (<see cref="SdfGpuWork.Drive"/>) instead of pumping it under the budgets that protect a
+    /// presented frame.</summary>
+    public bool FrameWithheld => (MeshesPending || LightingPending);
 
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.

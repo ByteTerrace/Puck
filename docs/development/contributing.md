@@ -991,8 +991,14 @@ unverified when no device run exists.
   runs to about 100 ms, or whose `produce` sits in
   `SdfWorldTables.SubmitUpload`'s fence wait, with the GPU idle. The Windows
   window's `PowerRequestDisplayRequired` request keeps composition running for
-  a World's life; a host or tool without one (another engine's window, an
-  older build) needs the display woken first, and
+  a World's life, but a display that is already off has been seen to stay off
+  under it, with `nvidia-smi --query-gpu=display_active,pstate,clocks.gr
+  --format=csv` reading `Disabled` and P8. Check that before any timing: a cold
+  bake (`puck bench startup --bake`) and its probe lighting read slow there too,
+  since the background GPU work completes at the compositor's pace and the idle
+  clocks; compare builds only when both ran in the same display state. A host
+  or tool without the request (another engine's window, an older build) needs
+  the display woken first, and
   `GUID_CONSOLE_DISPLAY_STATE` notifications kept reading "off" there while
   frames ran at 60 FPS, so they are no test of it.
 - Under a Remote Desktop session an NVIDIA GPU can hold its idle clocks (P8 or P5,
