@@ -117,7 +117,7 @@ public sealed partial class ShaderPipelineRenderNode {
         pipelines: m_pipelines
     )).IsReady;
     // Reads a completed same-device image back as RGBA8: a surface format through the node's readback, which sizes its
-    // staging buffer to the image, any other through the display encode's SDR. The memory is valid until the next read.
+    // staging buffer to the image, any other through the display encode's SDR.
     private ReadOnlyMemory<byte> ReadPixels(in Surface image, GpuImageLayout layout) {
         if (
             image.IsEmpty ||
@@ -141,18 +141,18 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         m_readback ??= m_gpu.SurfaceTransferFactory.CreateReadback();
-        m_readbackBytes = ReadbackBytes(
+        m_readbackBytes = GpuPixelFormats.ImageByteLength(
+            format: image.Format,
             height: image.Height,
             width: image.Width
         );
 
         return m_readback.Read(
-            image.ImageHandle,
-            image.Format,
-            image.Width,
-            image.Height,
-            4,
-            layout
+            format: image.Format,
+            height: image.Height,
+            sourceImageHandle: image.ImageHandle,
+            sourceLayout: layout,
+            width: image.Width
         );
     }
 }

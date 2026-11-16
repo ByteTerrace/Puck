@@ -11,7 +11,7 @@ using Xunit;
 namespace Puck.DirectX.Tests;
 
 /// <summary>The Direct3D 12 peer of the Vulkan device-ownership laws: a surface upload, readback or shared-surface
-/// import (<see cref="DirectXDeviceOwnership"/>) stays on the device it first created its objects on. A device context
+/// import (<see cref="GpuDeviceOwnership"/>) stays on the device it first created its objects on. A device context
 /// replaces its device in place on a loss (<see cref="DirectXDeviceContext.Recreate"/>), so a transfer object its owner
 /// did not release across the loss is handed the replacement through the same context: it refuses that device, and its
 /// release after the device it holds was released, by name. Each law runs on a software (WARP) device and skips when the
@@ -23,10 +23,10 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
     [Fact]
     public void AnUploadOutlivingARecreateRefusesTheReplacementAndItsLateRelease() {
         using var context = DirectXTestDevices.Warp();
-        var upload = new DirectXSurfaceUpload(deviceContext: context);
+        var upload = context.Services.SurfaceTransferFactory.CreateUpload();
         var pixels = new byte[((Extent * Extent) * 4U)];
 
-        upload.Upload(
+        _ = upload.Upload(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: Extent,
             pixels: pixels,
@@ -44,11 +44,11 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
 
         Assert.StartsWith(
             actualString: other.Message,
-            expectedStartString: $"A {nameof(DirectXSurfaceUpload)} was handed a device other"
+            expectedStartString: $"A {nameof(GpuSurfaceUpload)} was handed a device other"
         );
         Assert.StartsWith(
             actualString: late.Message,
-            expectedStartString: $"A {nameof(DirectXSurfaceUpload)} was released after its device was destroyed"
+            expectedStartString: $"A {nameof(GpuSurfaceUpload)} was released after its device was destroyed"
         );
     }
     [Fact]
@@ -56,8 +56,8 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
         using var context = DirectXTestDevices.Warp();
         var pixels = new byte[((Extent * Extent) * 4U)];
 
-        using (var upload = new DirectXSurfaceUpload(deviceContext: context)) {
-            upload.Upload(
+        using (var upload = context.Services.SurfaceTransferFactory.CreateUpload()) {
+            _ = upload.Upload(
                 format: GpuPixelFormat.R8G8B8A8Unorm,
                 height: Extent,
                 pixels: pixels,
@@ -67,9 +67,9 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
 
         context.Recreate();
 
-        using var replacement = new DirectXSurfaceUpload(deviceContext: context);
+        using var replacement = context.Services.SurfaceTransferFactory.CreateUpload();
 
-        replacement.Upload(
+        _ = replacement.Upload(
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: Extent,
             pixels: pixels,
@@ -106,7 +106,7 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
 
             Assert.StartsWith(
                 actualString: other.Message,
-                expectedStartString: "A DirectXGpuSurfaceReadback was handed a device other"
+                expectedStartString: $"A {nameof(GpuSurfaceReadback)} was handed a device other"
             );
         } finally {
             _ = ((IUnknown*)replacementSource)->Release();
@@ -116,13 +116,12 @@ public sealed unsafe class DirectXDeviceOwnershipLawTests {
 
         Assert.StartsWith(
             actualString: late.Message,
-            expectedStartString: "A DirectXGpuSurfaceReadback was released after its device was destroyed"
+            expectedStartString: $"A {nameof(GpuSurfaceReadback)} was released after its device was destroyed"
         );
     }
 
     private static int Read(IGpuSurfaceReadback readback, ID3D12Resource* source) =>
         readback.Read(
-            bytesPerPixel: 4U,
             format: GpuPixelFormat.R8G8B8A8Unorm,
             height: Extent,
             sourceImageHandle: ((nint)source),

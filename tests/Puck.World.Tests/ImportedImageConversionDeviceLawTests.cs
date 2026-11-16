@@ -242,7 +242,6 @@ public sealed class ImportedImageConversionDeviceLawTests {
         }
 
         var stored = MemoryMarshal.Cast<byte, Half>(span: readback.Read(
-            bytesPerPixel: 8U,
             format: GpuPixelFormat.R16G16B16A16Float,
             height: Extent,
             sourceImageHandle: filled.ImageHandle,
@@ -357,7 +356,6 @@ public sealed class ImportedImageConversionDeviceLawTests {
                 )
             );
             converted = MemoryMarshal.Cast<byte, Half>(span: readback.Read(
-                bytesPerPixel: 8U,
                 format: GpuPixelFormat.R16G16B16A16Float,
                 height: Extent,
                 sourceImageHandle: converter.Output.ImageHandle,

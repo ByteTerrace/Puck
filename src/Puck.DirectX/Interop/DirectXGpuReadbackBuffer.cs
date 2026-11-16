@@ -46,18 +46,22 @@ public sealed unsafe class DirectXGpuReadbackBuffer : IGpuReadbackBuffer {
     public ulong SizeBytes { get; }
 
     /// <inheritdoc/>
-    public void Read(Span<byte> destination) {
+    public void Read(Span<byte> destination, ulong sourceOffsetBytes = 0UL) {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
         );
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
             other: SizeBytes,
+            value: sourceOffsetBytes
+        );
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(
+            other: (SizeBytes - sourceOffsetBytes),
             value: ((ulong)destination.Length)
         );
         new ReadOnlySpan<byte>(
             length: destination.Length,
-            pointer: m_mapped
+            pointer: (((byte*)m_mapped) + sourceOffsetBytes)
         ).CopyTo(destination: destination);
     }
     /// <inheritdoc/>

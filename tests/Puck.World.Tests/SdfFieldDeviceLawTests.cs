@@ -345,7 +345,6 @@ public sealed partial class SdfFieldDeviceLawTests {
             recorder.EndCommandBuffer(commandBufferHandle: command);
             services.QueueSubmitter.SubmitAndWait(commandBufferHandles: [command]);
             values = readback.Read(
-                bytesPerPixel: 16U,
                 format: GpuPixelFormat.R32G32B32A32Float,
                 height: height,
                 sourceImageHandle: output.ImageHandle,

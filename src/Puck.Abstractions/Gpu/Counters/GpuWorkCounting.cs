@@ -349,6 +349,26 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
         );
         Tally(column: GpuWork.CopiesColumn);
     }
+    public uint CopyRowAlignment =>
+        inner.CopyRowAlignment;
+    public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) {
+        inner.CopyBufferToImage(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            footprint: in footprint,
+            imageHandle: imageHandle
+        );
+        Tally(column: GpuWork.CopiesColumn);
+    }
+    public void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) {
+        inner.CopyImageToBuffer(
+            bufferHandle: bufferHandle,
+            commandBufferHandle: commandBufferHandle,
+            footprint: in footprint,
+            imageHandle: imageHandle
+        );
+        Tally(column: GpuWork.CopiesColumn);
+    }
     public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         inner.CopyBuffer(
             commandBufferHandle: commandBufferHandle,

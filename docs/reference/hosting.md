@@ -433,7 +433,7 @@ command allocator, list and committed-resource creates included, answers
 through `DirectXCommandCalls`, so a removed device surfaces as the neutral
 device loss rather than a `COMException` the policy never sees. A surface
 upload, readback or import stays on the device it first created its objects on
-(`DirectXDeviceOwnership`, the peer of `VulkanDeviceOwnership`): its owner
+(`GpuDeviceOwnership`, the one rule both backends' holders use): its owner
 releases it before the device goes, and a holder that outlives a loss refuses
 the replacement device and its own late release by name.
 
