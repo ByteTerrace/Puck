@@ -77,7 +77,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     };
     // The world.rates echo: each lever, what each counted so far, then the presentation rate the levers hold by, each
     // tier's longest allowed interval, and each lever's longest achieved interval at each tier over the recent window, in
-    // milliseconds ('-' where nothing was rated at that tier).
+    // milliseconds ('-' where nothing was rated at that tier), then the most rated views, and screens, one frame updated
+    // together over that window, and each lever's rated items.
     private static string RatesEcho(WorldRenderSettings settings) {
         static string On(SdfUpdateRates rates, SdfUpdateRates lever) => (((rates & lever) != 0) ? "on" : "off");
 
@@ -110,6 +111,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                 _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {LeverName(lever: lever)}.{tier}hz={((longest is { } seconds) ? (seconds * 1000d).ToString(format: "0.0", provider: CultureInfo.InvariantCulture) : "-")}");
             }
         }
+
+        _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" burst: views={intervals.LargestBurst(lever: SdfUpdateRates.Views)} screens={intervals.LargestBurst(lever: SdfUpdateRates.Screens)}");
 
         foreach (var lever in ((ReadOnlySpan<SdfUpdateRates>)[SdfUpdateRates.Bodies, SdfUpdateRates.Views, SdfUpdateRates.Screens])) {
             _ = echo.Append(provider: CultureInfo.InvariantCulture, handler: $" {LeverName(lever: lever)}:");

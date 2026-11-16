@@ -128,4 +128,44 @@ public sealed class PresentationRateLawTests {
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new PresentationRate(DisplayHertz: 60, GridHertz: 0d).FramesAtMost(hertz: 0));
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => new PresentationRate(DisplayHertz: 60, GridHertz: 0d).PeriodSeconds(hertz: 0));
     }
+    // The items that take a tier take no lead and half its period alternately, each tier on its own, and none on a host
+    // not paced to a display.
+    [Fact]
+    public void ItemsThatTakeATierTakeNoLeadAndHalfItsPeriodAlternately() {
+        var phases = new PresentationPhases();
+        var rate = new PresentationRate(DisplayHertz: 60, GridHertz: 60d);
+
+        Assert.Equal(expected: 0d, actual: phases.Take(hertz: 15, rate: rate));
+        Assert.Equal(expected: 0d, actual: phases.Take(hertz: 30, rate: rate));
+        Assert.Equal(expected: (2d / 60d), actual: phases.Take(hertz: 15, rate: rate), tolerance: 1e-12);
+        Assert.Equal(expected: (1d / 60d), actual: phases.Take(hertz: 30, rate: rate), tolerance: 1e-12);
+        Assert.Equal(expected: 0d, actual: phases.Take(hertz: 15, rate: rate));
+        Assert.Equal(expected: 0d, actual: phases.Take(hertz: 15, rate: new PresentationRate(DisplayHertz: 0, GridHertz: 0d)));
+        Assert.Equal(expected: 0d, actual: phases.Take(hertz: 0, rate: rate));
+    }
+    // With a 30 Hz step on every even frame of a 60 Hz display, an item with half a period's lead updates once on the
+    // other step-free frame of a 15 Hz period and keeps the period from there; at 30 Hz, whose period holds one
+    // step-free frame, the lead moves nothing. Neither updates on a frame that runs a step, on a fixed grid and off one.
+    [InlineData(60d)]
+    [InlineData(0d)]
+    [Theory]
+    public void ALeadMovesAnUpdateToAnotherFrameThatRunsNoStep(double grid) {
+        foreach (var (hertz, expected) in new[] { (15, new[] { 3, 7, 11, 15 }), (30, new[] { 3, 5, 7, 9 }) }) {
+            var updates = new List<int>();
+            var last = 1;
+            var lead = (new PresentationRate(DisplayHertz: 60, GridHertz: grid).PeriodSeconds(hertz: hertz) * 0.5d);
+
+            for (var frame = 2; (updates.Count < expected.Length); frame++) {
+                var rate = new PresentationRate(DisplayHertz: 60, GridHertz: grid, Steps: ((frame % 2) == 0), StepsNext: (((frame + 1) % 2) == 0));
+
+                if (!rate.Holds(elapsedSeconds: ((frame - last) / 60d), frameSeconds: (1d / 60d), hertz: hertz, leadSeconds: lead)) {
+                    updates.Add(item: frame);
+                    last = frame;
+                    lead = 0d;
+                }
+            }
+
+            Assert.Equal(expected: expected, actual: updates);
+        }
+    }
 }

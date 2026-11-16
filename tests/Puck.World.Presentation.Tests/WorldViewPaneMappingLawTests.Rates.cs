@@ -126,6 +126,69 @@ public sealed partial class WorldViewPaneMappingLawTests {
             Assert.Equal(expected: ((byte)SdfUpdateRateCode.None), actual: codes[0]);
         }
     }
+    // THE LAW: two sessions that take the 15 Hz tier on one frame render on alternate halves of its period, never both
+    // on one frame and neither on a frame that runs a step, and world.rates' burst reads one view a frame. Both glasses
+    // span a third of a 64-pixel view on a 60 Hz display whose even frames run a 30 Hz step.
+    [Fact]
+    public void SessionsThatTakeATierTogetherRenderOnAlternateHalvesOfItsPeriod() {
+        _ = ShowTwoWorlds();
+        m_host.ViewScenes = new EveryGlassScenes(Glass: FacingScreen(index: 0, source: new WorldScreenSource.Session(Destination: "beyond")));
+
+        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults()) { UpdateRates = SdfUpdateRates.Views };
+
+        m_host.RenderSettings = settings;
+        m_rate = Paced60;
+        m_stepsOnEvenFrames = true;
+
+        var (boot, routed) = (new List<long>(), new List<long>());
+
+        for (var frame = 0L; (frame < 160L); frame++) {
+            Frame(pane: null);
+            settings.RateIntervals.Advance(frameSeconds: (1d / 60d), rate: m_rate);
+            if (RendersOf(instance: BootSession) != 0) {
+                boot.Add(item: frame);
+            }
+            if (RendersOf(instance: RoutedSession) != 0) {
+                routed.Add(item: frame);
+            }
+        }
+
+        TestContext.Current.TestOutputHelper?.WriteLine(message: $"{BootSession}: [{string.Join(separator: ' ', values: boot)}] {RoutedSession}: [{string.Join(separator: ' ', values: routed)}] burst {settings.RateIntervals.LargestBurst(lever: SdfUpdateRates.Views)}");
+
+        var (steadyBoot, steadyRouted) = (boot.Where(predicate: static frame => (frame > 8L)).ToArray(), routed.Where(predicate: static frame => (frame > 8L)).ToArray());
+
+        Assert.NotEmpty(collection: steadyBoot);
+        Assert.NotEmpty(collection: steadyRouted);
+        Assert.Empty(collection: steadyBoot.Intersect(second: steadyRouted));
+        Assert.All(collection: steadyBoot.Concat(second: steadyRouted), action: static frame => Assert.Equal(expected: 1L, actual: (frame % 2L)));
+        Assert.All(collection: steadyBoot.Zip(second: steadyBoot.Skip(count: 1)), action: static step => Assert.Equal(expected: 4L, actual: (step.Second - step.First)));
+        Assert.All(collection: steadyRouted.Zip(second: steadyRouted.Skip(count: 1)), action: static step => Assert.Equal(expected: 4L, actual: (step.Second - step.First)));
+        Assert.Equal(expected: 1, actual: settings.RateIntervals.LargestBurst(lever: SdfUpdateRates.Views));
+    }
+    // A scene whose every session's glass every consumer sees.
+    private sealed record EveryGlassScenes(WorldScreen Glass) : IWorldViewScenes {
+        public object? ArrivingWorld(string view, string consumer) => null;
+        public bool TryCamera(string view, out CameraSnapshot camera) {
+            camera = default;
+
+            return false;
+        }
+        public bool TrySurface(string view, SourceRay ray, out FixedVector3 point) {
+            point = default;
+
+            return false;
+        }
+        public bool TryPlacements(string view, out IReadOnlyList<SourceMapping> placements) {
+            placements = [];
+
+            return false;
+        }
+        public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+            glass = Glass;
+
+            return WorldPortalGlass.Found;
+        }
+    }
     // THE LAW: a session whose glass its consumer sees at no more than SdfUpdateRateTiers.ViewHeldPixels renders once,
     // then holds that image until it grows, while the views lever is on; a settled capture renders it every frame it is
     // pending. The glass stands 200 m beyond the camera, half a pixel of the 64-pixel view: its first frame, before the
