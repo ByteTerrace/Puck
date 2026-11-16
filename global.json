@@ -1,4 +1,7 @@
 {
+    "msbuild-sdks": {
+        "Azure.Functions.Sdk": "1.0.1"
+    },
     "sdk": {
         "rollForward": "disable",
         "version": "11.0.100-rc.3.26522.148"

@@ -1595,14 +1595,6 @@ retirement.
     <repo>:<commit>`) and treat only a not-found answer as "not published".
     Do not grant the catalog role.
 
-- [medium] A solution build intermittently fails in `Puck.Azure.Functions`:
-  the Functions worker's generated `obj/azure_functions/azure_functions.g.csproj`
-  cannot resolve Azure.Functions.Sdk ("no version specified in the project or
-  global.json"), and an identical retry builds clean. It appears when several
-  restores run at once; find whether it is a restore race on the generated
-  project, pin the SDK where it resolves, and name the hazard in contributing's
-  toolchain hazards.
-
 - [medium] Cold debug-world silo activation still spends most of its time before
   checkpoint decode, in storage and definition admission (per-step timers at
   `src/Puck.World.Silo/WorldSiloHost.cs:1202`; the phase includes root-qualified
