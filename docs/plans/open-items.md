@@ -39,8 +39,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 
 1. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
-   agreed with the owner: step 0 (a crossing read as a player takes it),
-   steps 1 and 2 beside each other, and step 7's prototype with a GPU grant.
+   agreed with the owner: step 0's baseline legs on both backends in a quiet
+   window, step 2, and step 7's prototype with a GPU grant; then step 3.
 2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -328,7 +328,12 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   not reached. In measured order:
   - Steady frame: `ProbeCache.Retain` replaces the probe cache's table whole
     and `Grow` again as probes land (what the cache keeps is the streaming
-    plan's lighting step's). Then the dressed `SdfFrame` copies.
+    plan's lighting step's). Publication now uses table-owned dense arenas:
+    inserts within capacity allocate no per-key objects, and idle retired
+    values release their blocks on retirement or the next write/accounting
+    visit after their readers leave. Table replacement still allocates arrays;
+    its byte report includes arena machinery, held retired values and block
+    headers. Then the dressed `SdfFrame` copies.
     On the bake writer thread `CacheRetention.EnforceSetsCore` enumerates the
     store on every write. Small: `BindingBarSeatComposer.PlacedSlots`
     enumerating `CompiledBindingBarLayout.Banks.Values` once a slot,
@@ -389,7 +394,7 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   pin already uses (`CopySnapshotTo`). Owner: federation.
 - `LatestSlotPublication.TryAcquireLatest` (the shared GPU texture ring a
   camera or probe kernel publishes into) retries in a loop, where
-  `PublishBuffer<T>` enters a slot with one atomic add and has nothing to
+  `PublishBuffer<T>` enters a slot with one atomic increment and has nothing to
   retry. Move the ring's acquire onto that index mechanism, keeping its fixed
   slot count; a GPU-lifetime change that needs a camera or probe-kernel run.
   Owner: platform.
@@ -853,12 +858,20 @@ the tour's remaining reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 0, the seam walk as a run, with steps 1 and 2 beside each other and step
-7's prototype under a GPU grant. The plan owns the decisions, the build order
+step 0's baseline legs (`puck bench frames --window` over
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), step 2
+and step 7's prototype under a GPU grant, then step 3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [medium] The seam walk's window counts its opening tick and each burst's
+  tick from the route program's first line (`opens` and `captures[].at` in
+  `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
+  window off course or moves its burst, and nothing ties the two. The burst
+  ticks are estimates to correct after the first windowed reading. Free
+  flight is not walked yet (the fastest leg is run plus dash), and the window
+  does not drive the mixed-sound recording `capture.start` offers.
 - `world.instance.stop` on a routed world leaves that world's per-view
   residencies (`session$N$2`) in `world.residency`, and at the meadow stop the
   garden painting's windows stay scheduled as `waiting` for hundreds of ticks.
@@ -1883,6 +1896,8 @@ and 6; then the researcher brief's priorities
   and counts a failure (`ReadFlockAffinity`), and a binding whose local is
   absent is dropped at its sweep's end, re-arming an Edge rule
   (`RuleEvaluator`'s `HoldOnFault`). Decide what each absence means.
+- [low] A routed `body.where` appends ` anchor=body:N` to a refusal as well as
+  to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
   rows if the grant vocabulary allows.
@@ -2550,6 +2565,12 @@ that stops compiling.
     the printer), `ShippedSourceLintLawTests`
     (`worlds/standard/hydrology.puck` trips PUCK_LINT_003), the
     `SweepEvidenceLawTests` index.
+  - Unconfirmed whether they predate the change that found them:
+    `MeshCommandTests` (`AnOfflineBakeAuditsAGroupWithNoDeviceAndNoStore`,
+    `TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers`,
+    `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`) and
+    `VulkanDeviceChainCleanupLawTests` (two cases failing at log index 1 with
+    `unexpected native call` during instance creation).
 - The keep-list the owner approves: exact results and determinism
   (`Puck.Maths.Tests`' laws; World.Server `MusicReplayReDerivabilityLawTests`,
   `CrossingReplayLawTests`, `ReplayForkLawTests`,

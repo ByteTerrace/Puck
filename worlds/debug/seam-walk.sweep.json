@@ -1,0 +1,106 @@
+{
+  "note": "The seam walk's stops (docs/plans/streaming-and-memory.md#the-seam-walk): each of the debug world's three crossings walked at three speeds by the controller programs in walkthrough-tests.puck, for puck bench frames --window (a window over the stop's own timeline: display-paced, nothing settled first). A stop's `opens` is the tick after the program's start at which its walk begins, and each burst's tick is chosen to span the first crossing at its speed; both count from the program's first line and are caught, not enforced: a retimed program turns the window's arrival `off course`.",
+  "tour": {
+    "note": "Each stop poses the body from its program's first line and plays the program; the window reads it as the player takes it.",
+    "prelude": ["world.lockstep on", "world.row.set hud.defaults enabled false", "world.binding-bar off 1", "world.inspect off", "console off 1", "view.annotate off", "world.state.cell.set chessDemo enabled 0", "world.wait 300"],
+    "reset": ["body.stop 0", "world.debug-view off", "view.override camera auto", "view.override layout play"],
+    "frame": ["view.recenter 1", "view.reseed 0"],
+    "settle": 45,
+    "levelTolerance": 16,
+    "amberFraction": 0.02,
+    "columns": 4,
+    "cellWidth": 480,
+    "stops": [
+      {
+        "name": "seam-valley-walking",
+        "group": "seam-walk",
+        "note": "The valley floor into the gallery's entrance and lobby and back, walking (5 m/s).",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, walking",
+        "opens": 74,
+        "captures": [{ "at": 260, "name": "door", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-valley-running",
+        "group": "seam-walk",
+        "note": "The valley floor into the gallery's entrance and lobby and back, running (10 m/s).",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, running",
+        "opens": 74,
+        "captures": [{ "at": 155, "name": "door", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-valley-fastest",
+        "group": "seam-walk",
+        "note": "The valley floor into the gallery's entrance and lobby and back, running with the dash on each cooldown (0.48 m a tick).",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, fastest",
+        "opens": 74,
+        "captures": [{ "at": 120, "name": "door", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-painting-walking",
+        "group": "seam-walk",
+        "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, walking.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, walking",
+        "opens": 74,
+        "captures": [{ "at": 135, "name": "glass", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-painting-running",
+        "group": "seam-walk",
+        "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, running.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, running",
+        "opens": 74,
+        "captures": [{ "at": 100, "name": "glass", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-painting-fastest",
+        "group": "seam-walk",
+        "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, running with the dash.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, fastest",
+        "opens": 74,
+        "captures": [{ "at": 90, "name": "glass", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-lift-walking",
+        "group": "seam-walk",
+        "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, walking.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, walking",
+        "opens": 74,
+        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-lift-running",
+        "group": "seam-walk",
+        "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, running.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, running",
+        "opens": 74,
+        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      },
+      {
+        "name": "seam-lift-fastest",
+        "group": "seam-walk",
+        "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, running with the dash.",
+        "lines": [],
+        "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, fastest",
+        "opens": 74,
+        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "after": ["player.camera.view auto"]
+      }
+    ]
+  }
+}
