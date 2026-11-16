@@ -171,8 +171,7 @@ public sealed class WorldScreenCarryLawTests {
         pool.Emit(
             builder: builder,
             colors: new WorldBakedColors(mirror: client.StateMirror),
-            maxPlacementScale: 1f,
-            probeWorstCase: false,
+
             screens: heldWorld.Screens,
             slotBase: 0
         );

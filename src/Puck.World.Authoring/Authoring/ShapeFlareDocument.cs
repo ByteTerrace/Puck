@@ -44,13 +44,4 @@ public sealed record ShapeFlareDocument(float Amount, float Bulge, float Span, f
                 ).MaxS
             )
         );
-
-    /// <summary>The worst-case <see cref="ReachFactor"/> a probe reserves: the factor at <see cref="MaxAmount"/> and
-    /// <see cref="MaxBulge"/>, the flare every stamp-pool probe emits.</summary>
-    public static float ProbeReachFactor { get; } = ReachFactor(flare: new ShapeFlareDocument(
-        Amount: MaxAmount,
-        Bulge: MaxBulge,
-        Span: 1f,
-        StartScale: MaxStartScale
-    ));
 }

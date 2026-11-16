@@ -323,6 +323,9 @@ It offers:
   ([decision 4](#4-the-physical-layout-follows-the-hidden-policy)); at
   `Presentation`, the hydrated projection and nothing more; at `Frames`, or
   while the recipient's Observe grant is revoked, `WorldProjection.Undisclosed`.
+  That is what a delivery stream holds; a session's read door refuses before it
+  mints a view whenever its query door would (`WorldServer.ReadView`), so a read
+  never answers a session the query door refuses.
   The ceiling is the view's; no member takes a tier, so a caller can lower
   nothing and raise nothing.
 - `ReadsWhole(row)` and `Discloses(row, key)`: the policy questions.

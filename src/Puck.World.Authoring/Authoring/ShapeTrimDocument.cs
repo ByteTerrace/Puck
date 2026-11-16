@@ -47,10 +47,6 @@ public sealed record ShapeTrimDocument(string Shape, float Width, int Material, 
     public const float MaxInset = 0.05f;
     /// <summary>The most entries <see cref="ShapeDocument.Trims"/> carries.</summary>
     public const int MaxTrims = 4;
-    /// <summary>A representative <see cref="Width"/> a capacity probe reserves <see cref="MaxTrims"/> worst-case
-    /// forms with — the probe never renders, and every trim costs the same instruction words regardless of
-    /// magnitude, so any finite positive value reserves correctly.</summary>
-    public const float ProbeWidth = 0.1f;
 
     /// <summary>Grows a scale per axis by <paramref name="width"/> — the sharp-cornered dilation <see cref="Width"/>
     /// bakes into the reference copy's own primitive, the mirror image of the erosion

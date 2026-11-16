@@ -47,6 +47,20 @@ public sealed partial class SessionObservationLawTests {
             Assert.Throws<InvalidOperationException>(testCode: () => WorldStateReadView.Of(reader: session, server: fixture.Server));
         } else {
             Assert.NotNull(@object: WorldStateReadView.Of(reader: session, server: fixture.Server));
+            // A live session without observe all reads nothing either, and reads again once the grant returns.
+            var observe = Assert.Single(
+                collection: fixture.Server.GrantRows(principal: session),
+                predicate: static row => ((row.Capability == WorldCapability.Observe) && (row.Subject == GrantSubject.All))
+            );
+
+            fixture.Server.Revoke(actor: Principal.Console, grant: observe);
+            fixture.Step();
+            Assert.True(condition: fixture.Server.AnswerSubmittedQuery(principal: session, query: query).Refused);
+            Assert.Throws<InvalidOperationException>(testCode: () => WorldStateReadView.Of(reader: session, server: fixture.Server));
+            fixture.Server.Grant(actor: Principal.Console, grant: observe);
+            fixture.Step();
+            Assert.False(condition: fixture.Server.AnswerSubmittedQuery(principal: session, query: query).Refused);
+            Assert.NotNull(@object: WorldStateReadView.Of(reader: session, server: fixture.Server));
         }
         observation.Dispose();
         var (replacement, _, _) = Observe(fixture: fixture);

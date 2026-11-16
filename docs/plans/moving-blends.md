@@ -298,7 +298,7 @@ composed motions over the seam box's corners, and each swing's reach grows by th
 displacement counted before it, so the bound holds for swings about different pivots.
 
 The rest-identity premise was checked, and holds: `WorldCreationInstances.PackRegistration`
-publishes each owner's pose after removing its authored shape pose; `EmitShape` reapplies
+publishes each owner's pose after removing its authored shape pose; `ShapeEmission.Emit` reapplies
 the authored pose after the dynamic transform. One memo premise needed correction:
 `WorldGaitDrivers` clamps `weightBy` to [0,1] before the motion reads it, so those weights
 are already bounded. Curve waveforms still require a world-curve bound and crease here.

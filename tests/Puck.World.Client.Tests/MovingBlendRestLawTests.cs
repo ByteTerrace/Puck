@@ -34,7 +34,7 @@ public sealed class MovingBlendRestLawTests {
         pool.Reconcile(WorldPlacementFrameCompilation.Compile(placements: [], worldSeed: 0), [], [creation], [], [new(0, creation, 1f, WorldLook.Implicit)]);
         var builder = new SdfProgramBuilder();
 
-        pool.Emit(builder, WorldBakedColors.Of(definition: definition), false, 1f, slotBase: 0);
+        pool.Emit(builder, WorldBakedColors.Of(definition: definition), slotBase: 0);
         var program = builder.Build();
         var transforms = new DynamicTransform[pool.DynamicSlotCount];
         var moved = new SdfMovedTransforms();

@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Assets.Documents;
 using Puck.World.Authoring;
 using Puck.Maths;
 using Puck.SdfVm;
@@ -72,15 +71,6 @@ public sealed partial class WorldCreationInstances {
     // Latched by Tick, consumed once by the next PackTransforms — the frame delta the pool's root/part followers
     // step by (accumulates across a Tick called more than once before a pack, mirroring the replay clock above).
     private float m_pendingDeltaSeconds;
-
-    // The placeholder document an unused/probe slot registers its constant-shape palette against.
-    private static readonly CreationDocument EmptyDocument = new(
-        Schema: CreationDocument.CurrentSchema,
-        Name: "empty",
-        Palette: null,
-        Shapes: null,
-        Frames: null
-    );
 
     /// <summary>One body-rooted creation stamp the frame source requests: a population body index and the creation whose
     /// geometry rides that body's live pose (an inhabited placement's creature, or a crowd body wearing a creation
@@ -354,286 +344,18 @@ public sealed partial class WorldCreationInstances {
 
         return layouts;
     }
-    // One shape's emission: ResetPoint + TransformDynamic + [domain ops + static local pose, OR the per-shape slot's
-    // own pre-composed pose] + [twist/bend point ops] + the scaled primitive + [dilate/onion field ops, scoped
-    // outside a group; a warp or cells relief takes the same scope for its Lipschitz factor] — the fixed op sequence over the canonical CreationGeometry dimensions. probeWorstCase emits
-    // EVERY op unconditionally (the probe binding rule).
-    //
-    // A domain-bearing shape rides its OWN per-shape slot, like any other shape — but PackTransforms packs that slot
-    // with the RIGID DELTA the shape's parent chain imparts to creation space (identity when the shape has no
-    // parent), never a composed root*shape pose: there is no seam to insert a domain op between "the composed pose"
-    // and "this shape's own translate/rotate". So its chain mirrors CreationStampEmitter.EmitShapeChain's static
-    // chain exactly, with the carried frame standing in for the placement frame: TransformDynamic(slot) ->
-    // Scale(placementScale) -> the domain ops -> the shape's own (STATIC, rest-pose) Translate/Rotate -> the
-    // primitive at the shape's OWN scale (the caller passes `scale` unbaked for this branch — the Scale op carries
-    // the placement scale for the fold's offsets, spacings, and cells as well as the rest offset, which a baked
-    // primitive scale could not). A domain-bearing shape therefore never carries its own swing/slide or a
-    // frame-timeline pose (refused at validation) — only a parent's motion reaches it, and only through
-    // PackTransforms's parent-delta chain (WorldCreationInstances.ChainPartDeltas).
-    //
-    // A panel's copy is emitted from a SECOND chain (its own ResetPoint + TransformDynamic + the same twist/bend
-    // prefix) rather than after the plate's shape instruction, whose emission may leave a persistent Scale op on the
-    // chain. placementScale converts the panel's creation-unit Inset/Depth into the world units `scale` is already
-    // in, and is the Scale op a domain-bearing shape's chain carries (above).
-    private static void EmitShape(SdfProgramBuilder builder, int slot, int rootSlot, SdfSolidPrimitive type, int material, Vector3 scale, bool probeWorstCase, IReadOnlyList<ShapeDomainOp>? domain = null, Vector3 shapePosition = default, Quaternion shapeRotation = default, SdfBlendOp blend = SdfBlendOp.Union, float smooth = 0f, float twist = 0f, float bend = 0f, float dilate = 0f, float onion = 0f, bool inGroupScope = false, float taper = 0.5f, SdfPrismProfile? profile = null, SdfLift lift = SdfLift.Extrude, float rounding = 0f, float chamfer = 0f, ShapePanelDocument? panel = null, int panelMaterial = 0, float placementScale = 1f, IReadOnlyList<ShapeTrimDocument>? trims = null, IReadOnlyList<ShapeDocument>? allShapes = null, int[]? paletteIds = null, CreationMotionPlan? motion = null, bool detail = false, ShapeFlareDocument? flare = null, float exponent = SdfProgramBuilder.MinSuperellipsoidExponent, ShapeShearDocument? shear = null, IReadOnlyList<ShapeBumpDocument>? bumps = null, SdfSweepParameters? curve = null, ShapeErodeDocument? erode = null, ShapeCellsDocument? cells = null, ShapeWarpDocument? warp = null, ShapeDisplaceDocument? displace = null, DocumentVector3? elongate = null, int? steps = null, ShapeMorphDocument? morph = null) {
-        if (probeWorstCase) { builder.ReservePathTables(shapeCount: 1); }
-        // The worst-case reservation for a Sweep's fixed 3-uvec4 curve table entry — any admitted curve costs the
-        // SAME table words (unlike ConvexPolygon's variable vertex count), so one representative curve inside the
-        // admitted envelope (SdfProgramBuilder.MaxSweepBulgeRatio et al.) reserves it.
-        var effectiveCurve = (probeWorstCase
-            ? new SdfSweepParameters(A: Vector3.Zero, B: Vector3.UnitY, Bulge: 0.1f, C: (2f * Vector3.UnitY), RadiusEnd: 0.1f, RadiusStart: 0.1f, Strands: SdfProgramBuilder.MinSweepStrands, StrandOffset: 0f, Twist: 0f)
-            : curve);
+    // A pooled shape's frame for ShapeEmission. Every slot holds the rigid delta its motion imparts to creation space
+    // (PackTransforms), and the bake reads it at identity, so a chain starts under the slot that moves the shape (a
+    // trim's reference under its own) and then takes the shape's rest pose, in creation units; the slot's pose carries
+    // the registration's scale. A relief samples the shape's rigid frame the same way.
+    private readonly struct PoolShapeFrame(int slot, int rootSlot, CreationMotionPlan motion, int[] paletteIds) : IShapeEmissionFrame {
+        public float FacetScale => 1f;
 
-        SdfProgramBuilder BuildChain(bool withDomain) {
-            var chain = builder.ResetPoint();
-            var chainCarriesScale = (withDomain && (domain is { Count: > 0 }));
-
-            if (chainCarriesScale) {
-                chain = ShapeDomainOps.Apply(
-                    chain: chain
-                        .TransformDynamic(slot: slot)
-                        .Scale(scale: new Vector3(value: placementScale)),
-                    domain: domain,
-                    subject: shapePosition
-                )
-                    .Translate(offset: shapePosition)
-                    .Rotate(rotation: ((shapeRotation == default)
-                    ? Quaternion.Identity
-                    : Quaternion.Normalize(value: shapeRotation)));
-            } else {
-                chain = chain.TransformDynamic(slot: slot).Translate(offset: (shapePosition * placementScale)).Rotate(rotation: ((shapeRotation == default) ? Quaternion.Identity : shapeRotation));
-            }
-
-            chain = ShapePointOps.Apply(bend: bend,
-                bumps: bumps, chain: chain, elongate: elongate,
-                flare: flare, lengthScale: (chainCarriesScale ? 1f : placementScale), probeWorstCase: probeWorstCase, shear: shear, twist: twist,
-                warp: warp);
-
-            if (probeWorstCase || (erode is not null)) {
-                // KEEP IN SYNC with CreationStampEmitter.EmitShapeChain's mirrored erode prefix. reach is this
-                // shape's own SdfSolidGeometry.Reach in WORLD units — a domain-bearing chain carries the placement
-                // scale as its own Scale op (chainCarriesScale), so reach takes it by hand there exactly as Flare's
-                // Top/Span do; every other chain's `scale` parameter is already world-scaled.
-                var reachScale = (chainCarriesScale ? placementScale : 1f);
-                var erodeReach = (SdfSolidGeometry.Reach(
-                    lift: lift,
-                    scale: scale,
-                    type: type
-                ) * reachScale);
-
-                chain = chain.LaneErode(
-                    from: (probeWorstCase ? 0f : erode!.From),
-                    lane: (probeWorstCase ? 0 : erode!.Lane),
-                    noiseScale: (probeWorstCase ? 1f : (erode!.Noise ?? 1f)),
-                    reach: erodeReach,
-                    to: (probeWorstCase ? 1f : erode!.To)
-                );
-            }
-
-            return chain;
-        }
-
-        // A relief's own chain: the shape's rigid frame under its slot, in world units (KEEP IN SYNC with
-        // CreationStampEmitter.ReliefChain).
-        SdfProgramBuilder ReliefChain() {
-            var reliefChain = builder.ResetPoint().TransformDynamic(slot: slot);
-
-            return ((domain is { Count: > 0 })
-                ? reliefChain.Translate(offset: (shapePosition * placementScale))
-                    .Rotate(rotation: ((shapeRotation == default) ? Quaternion.Identity : shapeRotation))
-                : reliefChain);
-        }
-        // The sine relief on the shape's rigid frame (KEEP IN SYNC with CreationStampEmitter.EmitDisplace): frequency and
-        // amplitude convert inversely with the placement scale, like a cellular relief's.
-        void EmitDisplace() {
-            var reliefScale = (probeWorstCase ? 1f : placementScale);
-
-            _ = ReliefChain().Displace(
-                amplitude: (probeWorstCase ? ShapeDisplaceDocument.MaxAmplitude : (displace!.Amplitude * reliefScale)),
-                frequency: (probeWorstCase ? new Vector3(value: ShapeDisplaceDocument.MaxFrequency) : (displace!.Frequency.Value / reliefScale))
-            );
-        }
-
-        var chain = BuildChain(withDomain: true);
-        var wantsDilate = (probeWorstCase || (dilate != 0f));
-        var wantsOnion = (probeWorstCase || (onion != 0f));
-        // A panel takes the per-shape scope the field ops do — its subtraction/union must bite only this shape's own
-        // candidate — and, like Group, is refused at validation whenever inGroupScope would apply here. A primitive
-        // alone never needs one: every primitive is 1-Lipschitz, a non-uniformly scaled sphere or ellipsoid included
-        // (the exact exponent-2 superellipsoid gauge).
-        var wantsPanel = (probeWorstCase || (panel is not null));
-        // A flare/shear/bump/erode is a warp (or, for erode, a noise-perturbed candidate whose Lipschitz factor
-        // folds the same way — SdfProgram.Lipschitz.cs's LaneErode case), so its factor
-        // (SdfProgram.FlareOperatorNorm/ShearOperatorNorm/GaussianPushLipschitz/NoiseDisplaceStepFactor) would
-        // otherwise fold into the WHOLE program's step scale; its own scope clamps it onto this candidate at the pop
-        // instead. Inside a group the group's scope already covers it (GroupNeedsScope). (The probe already emits the scope
-        // unconditionally, so the envelope is unchanged.)
-        var wantsWarpScope = ShapePointOps.NeedsScope(bend: bend, bumps: bumps, cells: cells, displace: displace, erode: erode, flare: flare, shear: shear, twist: twist, warp: warp);
-        var wantsDisplace = (displace is not null);
-
-        // A pop-only blend (morph, stairs) composes at a scope's pop alone, so its shape opens its own scope even
-        // inside its group's.
-        if (
-            ((wantsDilate || wantsOnion || wantsPanel || wantsWarpScope) &&
-            !inGroupScope) ||
-            ShapeScope.IsPopOnly(blend: blend)
-        ) {
-            var scoped = SdfSolidGeometry.AppendScaledPrimitive(
-                blend: SdfBlendOp.Union,
-                chain: ShapeScope.Open(
-                    blend: blend,
-                    chain: chain,
-                    morph: morph,
-                    smooth: smooth,
-                    steps: steps
-                ),
-                detail: detail,
-                material: material,
-                scale: scale,
-                smooth: 0f,
-                type: type,
-                taper: taper, profile: profile,
-                lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
-                curve: effectiveCurve
-            );
-
-            if (wantsDilate) {
-                scoped = scoped.Dilate(radius: (probeWorstCase
-                    ? ShapeDocument.MaxDilate
-                    : dilate));
-            }
-
-            if (wantsOnion) {
-                scoped = scoped.Onion(thickness: (probeWorstCase
-                    ? ShapeDocument.MaxOnion
-                    : onion));
-            }
-
-            if (wantsPanel) {
-                // probeWorstCase reserves the recess form unconditionally at the shape's own maximum inset and a
-                // full-extent depth — the instruction-word cost is the same either way; the bound a raised panel
-                // needs is the caller's (the per-shape reach EmitOne packs this instance against). A panel is refused
-                // with a domain, so the copy's chain never carries one; the probe's plate chain does, and dominates.
-                var faceAxis = (probeWorstCase
-                    ? ShapePanelDocument.DefaultFace
-                    : ((panel!.Face is { } face)
-                        ? face.Value
-                        : ShapePanelDocument.DefaultFace));
-                var placement = ShapePanelDocument.Resolve(
-                    depth: (probeWorstCase
-                    ? (2f * SdfSolidGeometry.HalfExtent(axis: faceAxis, lift: lift, scale: scale, type: type))
-                    : (panel!.Depth * placementScale)),
-                    faceAxis: faceAxis,
-                    inset: (probeWorstCase
-                    ? MinHalfExtent(lift: lift, scale: scale, type: type)
-                    : (panel!.Inset * placementScale)),
-                    lift: lift,
-                    scale: scale,
-                    type: type
-                );
-
-                _ = SdfSolidGeometry.AppendScaledPrimitive(
-                    chain: BuildChain(withDomain: false).Translate(offset: (placement.FaceAxis * placement.Offset)),
-                    type: type, taper: taper, profile: profile,
-                    lift: lift, rounding: rounding, chamfer: chamfer, exponent: exponent,
-                    scale: placement.ErodedScale,
-                    material: (probeWorstCase ? material : panelMaterial),
-                    blend: placement.Blend,
-                    smooth: 0f
-                );
-            }
-
-            if (probeWorstCase || (cells is not null)) {
-                var relief = (cells ?? new ShapeCellsDocument(Amplitude: 0.1f, Frequency: 1f, Mode: SdfCellMode.F1, Randomness: 0.2f, Seed: 0u));
-                // A capacity probe may have no live placement scale. It reserves instructions,
-                // so its representative relief keeps unit coordinates instead of dividing by zero.
-                var cellScale = (probeWorstCase ? 1f : placementScale);
-
-                _ = ReliefChain().CellDisplace((relief.Frequency / cellScale),
-                    (relief.Amplitude * cellScale), relief.Seed, relief.Mode, relief.Randomness);
-            }
-            if (probeWorstCase || wantsDisplace) {
-                EmitDisplace();
-            }
-            _ = builder.PopField();
-            EmitTrims(
-                allShapes: allShapes,
-            builder: builder,
-            chamfer: chamfer,
-            exponent: exponent, lift: lift, material: material, motion: motion, paletteIds: paletteIds, placementScale: placementScale,
-                probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot, rounding: rounding, scale: scale,
-                shapePosition: shapePosition, shapeRotation: shapeRotation,
-                slot: slot, taper: taper, trims: trims, type: type
-            );
-
-            return;
-        }
-
-        var afterShape = SdfSolidGeometry.AppendScaledPrimitive(
-            blend: blend,
-            chain: chain,
-            chamfer: chamfer,
-            curve: effectiveCurve,
-            detail: detail,
-            exponent: exponent,
-            lift: lift,
-            material: material, profile: profile,
-            rounding: rounding, scale: scale, smooth: smooth, taper: taper,
-            type: type
-        );
-
-        if (wantsDilate) {
-            afterShape = afterShape.Dilate(radius: (probeWorstCase
-                ? ShapeDocument.MaxDilate
-                : dilate));
-        }
-
-        if (wantsOnion) {
-            _ = afterShape.Onion(thickness: (probeWorstCase
-                ? ShapeDocument.MaxOnion
-                : onion));
-        }
-
-        if (wantsDisplace) {
-            EmitDisplace();
-        }
-
-        if (!inGroupScope) {
-            EmitTrims(
-                allShapes: allShapes,
-            builder: builder,
-            chamfer: chamfer,
-            exponent: exponent, lift: lift, material: material, motion: motion, paletteIds: paletteIds, placementScale: placementScale,
-                probeWorstCase: probeWorstCase, profile: profile, rootSlot: rootSlot, rounding: rounding, scale: scale,
-                shapePosition: shapePosition, shapeRotation: shapeRotation,
-                slot: slot, taper: taper, trims: trims, type: type
-            );
-        }
+        public SdfProgramBuilder Prefix(SdfProgramBuilder builder) => builder.ResetPoint().TransformDynamic(slot: slot);
+        public SdfProgramBuilder PrefixOf(SdfProgramBuilder builder, int shapeIndex) => builder.ResetPoint().TransformDynamic(slot: (rootSlot + motion.ShapeSlots[shapeIndex]));
+        public SdfProgramBuilder Relief(SdfProgramBuilder builder, ShapeDocument shape) => Prefix(builder: builder).Translate(offset: shape.Position).Rotate(rotation: shape.Rotation);
+        public int MaterialOf(ShapeDocument shape, int paletteSlot) => paletteIds[(paletteSlot % paletteIds.Length)];
     }
-    // The panel probe's worst-case inset: the shape's smallest local half-extent, past which an eroded copy is
-    // empty everywhere.
-    private static float MinHalfExtent(SdfSolidPrimitive type, Vector3 scale, SdfLift lift) => MathF.Min(
-        x: SdfSolidGeometry.HalfExtent(
-            type: type,
-            scale: scale,
-            lift: lift,
-            axis: Vector3.UnitX
-        ),
-        y: MathF.Min(
-            x: SdfSolidGeometry.HalfExtent(
-                type: type,
-                scale: scale,
-                lift: lift,
-                axis: Vector3.UnitY
-            ),
-            y: SdfSolidGeometry.HalfExtent(
-                type: type,
-                scale: scale,
-                lift: lift,
-                axis: Vector3.UnitZ
-            )
-        )
-    );
     private Registration? FindBody(int bodyIndex) {
         if (!m_bodySlotsStale) {
             return (((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0))
@@ -737,15 +459,6 @@ public sealed partial class WorldCreationInstances {
     // non-inhabited row — an inhabited row roots through the body-stamp census instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
         ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
-    private static int[] ProbePalette(SdfProgramBuilder builder) {
-        var ids = new int[CreationDocument.PaletteSize];
-
-        for (var index = 0; (index < ids.Length); index++) {
-            ids[index] = builder.AddMaterial(material: new SdfMaterial(Albedo: new Vector3(value: 0.5f)));
-        }
-
-        return ids;
-    }
     private static Registration RegisterBody(BodyStamp stamp) {
         var registration = new Registration(document: stamp.Creation.EngineDocument) {
             BodyIndex = stamp.BodyIndex,
@@ -1028,14 +741,10 @@ public sealed partial class WorldCreationInstances {
     /// <summary>Emits registered geometry: each live palette, ungrouped shapes as per-slot dynamic instances, and
     /// blend groups as bounded scoped instances. Rigid groups use a traveling member bound; other groups retain
     /// the creation-root envelope. Unused registrations and shape slots emit no instances;
-    /// dynamic-transform addresses remain fixed. The probe path still takes the largest legal form.</summary>
+    /// dynamic-transform addresses remain fixed.</summary>
     /// <param name="builder">The program builder.</param>
     /// <param name="colors">The colors the build bakes, which a registration's state-bound palette color resolves
     /// through.</param>
-    /// <param name="probeWorstCase">Emit the worst-case form for capacity measurement (never rendered).</param>
-    /// <param name="maxPlacementScale">Live-consumed: the placement scale envelope's ceiling
-    /// (<see cref="WorldPlacementPolicyDefaults.MaxPlacementScale"/>), read fresh at every call — it only feeds spatial-cull
-    /// bound radii here, never a word-capacity term, so re-reading it live cannot desync the frozen probe.</param>
     /// <param name="slotBase">The pool's first dynamic-transform slot — the same value the matching
     /// <see cref="PackTransforms"/> call packs against. Supplied by the owning emitter (which derives it from its own
     /// <see cref="Puck.SdfVm.SdfEmitContext.SlotBase"/>) rather than latched here, so the pool carries no assumption
@@ -1046,7 +755,7 @@ public sealed partial class WorldCreationInstances {
     /// <param name="picks">The presentation identity table populated alongside live emission, or null.</param>
     /// <param name="screens">The world's screen rows, whose carried screens a body's look shows on its box
     /// (<see cref="TryCarriedScreen"/>), or <see langword="null"/> for none.</param>
-    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, bool probeWorstCase, float maxPlacementScale, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
+    public void Emit(SdfProgramBuilder builder, WorldBakedColors colors, int slotBase, PackedFontAtlasCatalog? textCatalog = null, WorldPickMapBuilder? picks = null, IReadOnlyList<WorldScreen>? screens = null) {
         ArgumentNullException.ThrowIfNull(argument: colors);
 
         for (var index = 0; (index < m_pool.Length); index++) {
@@ -1061,9 +770,7 @@ public sealed partial class WorldCreationInstances {
                 builder: builder,
                 colors: colors,
                 live: live,
-                maxPlacementScale: maxPlacementScale,
                 picks: picks,
-                probeWorstCase: false,
                 rootSlot: (slotBase + RootSlotOffset(index: index)),
                 screenMaterials: CarriedScreenMaterials(live: live, screens: screens),
                 textCatalog: textCatalog

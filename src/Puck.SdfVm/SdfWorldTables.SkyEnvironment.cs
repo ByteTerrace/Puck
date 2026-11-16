@@ -110,15 +110,13 @@ public sealed partial class SdfWorldTables {
         private readonly SdfWorldTables m_tables;
 
         private readonly SdfSkyEnvironmentRefresh m_refresh = new();
-        private readonly GpuImagePublication[] m_sources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly GpuImagePublication[] m_renderedSources = new GpuImagePublication[MaxScreenSurfaces];
-        private readonly byte[] m_renderedMappings = new byte[(MaxScreenSurfaces * ScreenMappingStride)];
+        private readonly ScreenSourceWatch m_watch;
 
         private bool m_physical;
-        private bool m_tainted;
 
         public SkyEnvironmentPass(SdfWorldTables tables, GpuDeviceServices gpu, GpuCreationScope scope) {
             m_tables = tables;
+            m_watch = new ScreenSourceWatch(tables: tables);
             Publication = new EnvironmentPublication(owner: tables);
             Map = scope.Own(created: gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "sky-environment", detail: "map"),
                 sizeBytes: SdfSkyEnvironment.MapBytes, usage: GpuBufferUsage.Storage));
@@ -129,7 +127,8 @@ public sealed partial class SdfWorldTables {
         public IGpuBuffer Coefficients { get; }
         public IGpuBuffer Map { get; }
 
-        public bool[] Screens { get; } = new bool[MaxScreenSurfaces];
+        // The screens a lit panorama layer reads.
+        public bool[] Screens => m_watch.Screens;
 
         public EnvironmentPublication Publication { get; }
         public bool Demand { get; private set; }
@@ -152,12 +151,9 @@ public sealed partial class SdfWorldTables {
             if (m_refresh.Projected) { Projected = true; Skipped = m_refresh.Skipped; }
         }
         public bool ObserveSources(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads) {
-            Array.Clear(array: Screens);
-            Array.Clear(array: m_sources);
-            m_tainted = false;
+            m_watch.Clear();
             CanRecord = true;
             var known = true;
-            var changed = false;
             var layers = m_tables.m_skyLayerRecords;
             var count = Math.Min(val1: ((int)m_tables.m_skyRecord[0].LayerCount), val2: layers.Length);
 
@@ -167,7 +163,7 @@ public sealed partial class SdfWorldTables {
                 if ((layer.Kind != SdfSkyLayerKind.Panorama) || (layer.Opacity <= 0f) || !SdfSkyEnvironment.IsLit(layer: layer)) { continue; }
                 var screen = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen;
 
-                if (((uint)screen) < MaxScreenSurfaces) { Screens[screen] = true; }
+                if (((uint)screen) < MaxScreenSurfaces) { m_watch.Read(screen: screen); }
             }
             for (var screen = 0; (screen < Screens.Length); screen++) {
                 if (!Screens[screen]) { continue; }
@@ -177,28 +173,20 @@ public sealed partial class SdfWorldTables {
                     (reads.IndexOf(producer: producer) is var read and >= 0)) {
                     var input = reads[read];
 
-                    m_tainted |= input.Tainted;
-                    m_sources[screen] = input.Publication;
+                    m_watch.Observe(publication: input.Publication, screen: screen, tainted: input.Tainted);
                     if ((input.Lease.ImageViewHandle != 0) && !input.Publication.IsKnown) { known = false; }
                 }
-                var offset = (screen * ScreenMappingStride);
-                var different = ((m_sources[screen] != m_renderedSources[screen]) ||
-                    !m_tables.m_screenMappingRegion.Contents.Slice(length: ScreenMappingByteLength, start: offset)
-                        .SequenceEqual(other: m_renderedMappings.AsSpan(length: ScreenMappingByteLength, start: offset)));
-
-                changed |= different;
             }
             CanRecord &= (known || Forced);
-            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: (changed || !known || Forced));
+            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: (m_watch.Changed() || !known || Forced));
             return known;
         }
         public long Publish() {
             m_refresh.Rendered();
-            m_sources.CopyTo(array: m_renderedSources, index: 0);
-            m_tables.m_screenMappingRegion.Contents[..m_renderedMappings.Length].CopyTo(destination: m_renderedMappings);
+            m_watch.Commit();
             Owes = false;
             Forced = false;
-            return Publication.Publish(tainted: m_tainted);
+            return Publication.Publish(tainted: m_watch.Tainted);
         }
         // An unproven submission must be projected again by the next recorder.
         public void Withdraw(long sequence) {

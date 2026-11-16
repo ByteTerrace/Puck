@@ -15,6 +15,7 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     internal ArenaTime Time => time();
     internal bool Unrestricted => recipient?.IsAuthority == true;
     internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted, m_recipientName ??= recipient?.Describe());
+    private static readonly WorldWithheldRow WithheldWhole = new(0, HiddenCells.Omit, WholeRow: true);
     // The recipient's canonical token, formatted once for every policy check this view makes.
     private string? m_recipientName;
     // The last audience key Images composed for this view, reused while the policies it reads answer the same.
@@ -39,8 +40,10 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     public bool ReadsWhole(int row) => Includes(row) && Observer.ReadsWhole(row);
     /// <summary>Whether a named row is carried whole at this ceiling.</summary>
     public bool ReadsWhole(string row) => Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) && ReadsWhole(handle.Ordinal);
-    /// <summary>The policy's withheld metadata, never an undisclosed member count.</summary>
+    /// <summary>The policy's withheld metadata, never an undisclosed member count. A view that does not observe
+    /// withholds every name whole, declared or not, so its answer never tells which rows exist.</summary>
     public WorldWithheldRow? Withheld(string row) {
+        if (!Observes) { return WithheldWhole; }
         if (!Arena.Catalog.TryResolve(StateLane.Document, row, out var handle) || ReadsWhole(handle.Ordinal)) { return null; }
         var observation = Image(handle.Ordinal).Observation;
         return new WorldWithheldRow(observation?.HiddenCount ?? 0,

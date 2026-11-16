@@ -58,6 +58,7 @@ public sealed class WorldEditorFrameLawTests {
 
         public bool IsEntityActive(int index) => (index == 0);
         public WorldEntityAddress EntityAddress(int index) => new(Authority: North, Generation: 1, Index: index);
+        public int PoseEpoch(int index) => 0;
         public string? PlacementId(int index) => null;
         public Vector3 PreviousPosition(int index) => Slab;
         public Quaternion PreviousOrientation(int index) => Quaternion.Identity;

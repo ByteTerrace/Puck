@@ -68,11 +68,8 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
     // Per rendered band/entity presentation state. The durable address guards slot reuse and band reordering; gait
     // advances from the neighbour's interpolated pose, exactly like the boot/session avatar paths, rather than being
     // frozen merely because authority moved across a seam.
-    private readonly float[] m_gaitPhases;
-    private readonly WorldEntityAddress[] m_motionAddresses;
-    private readonly bool[] m_motionSeeded;
+    private readonly WorldAvatarGait[] m_gaits;
     private readonly WorldTransformOwners m_motionOwners;
-    private readonly Vector3[] m_previousRenderPositions;
     private readonly IWorldAdjacencySource m_source;
     private readonly Func<WorldEntityAddress, bool>? m_suppressEntity;
 
@@ -128,15 +125,12 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
         m_source = source;
         m_suppressEntity = suppressEntity;
         m_bandCount = WorldAdjacencyBands.ProjectionCapacity(definition: client.Definition);
-        m_gaitPhases = new float[(m_bandCount * WorldBodiesLimits.CapacityCeiling)];
-        m_previousRenderPositions = new Vector3[m_gaitPhases.Length];
-        m_motionAddresses = new WorldEntityAddress[m_gaitPhases.Length];
-        m_motionSeeded = new bool[m_gaitPhases.Length];
-        m_motionOwners = new WorldTransformOwners(capacity: m_gaitPhases.Length);
-        m_emittedRigs = new int[m_gaitPhases.Length];
-        m_emittedScales = new float[m_gaitPhases.Length];
-        m_emittedGaitAmplitudes = new float[m_gaitPhases.Length];
-        m_emittedEntities = new bool[m_gaitPhases.Length];
+        m_gaits = new WorldAvatarGait[(m_bandCount * WorldBodiesLimits.CapacityCeiling)];
+        m_motionOwners = new WorldTransformOwners(capacity: m_gaits.Length);
+        m_emittedRigs = new int[m_gaits.Length];
+        m_emittedScales = new float[m_gaits.Length];
+        m_emittedGaitAmplitudes = new float[m_gaits.Length];
+        m_emittedEntities = new bool[m_gaits.Length];
     }
 
     /// <inheritdoc/>
@@ -311,7 +305,6 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
             isActive: index => m_emittedEntities[(appearanceBase + index)],
             bodyMaterials: bodyMaterials,
             accentMaterials: accentMaterials,
-            probeWorstCase: false,
             slotBase: slotBase,
             rigFor: index => m_emittedRigs[(appearanceBase + index)],
             slotFor: index => m_liveSlots[(appearanceBase + index)]
@@ -579,7 +572,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                 // The emitted latch, not a fresh liveness read: the program's geometry was compiled for exactly this
                 // set, and re-deriving the set here would pack a body whose leaves this program never emitted.
                 if (!m_emittedEntities[motionIndex]) {
-                    m_motionSeeded[motionIndex] = false;
+                    m_gaits[motionIndex].Seeded = false;
                     continue;
                 }
 
@@ -593,30 +586,18 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     current: neighbour.CurrentOrientation(index: entity),
                     alpha: alpha
                 );
-                var address = neighbour.EntityAddress(index: entity);
-
-                if (!m_motionOwners.Wake(
-                    deltaSeconds: 1f,
-                    discontinuity: (
-                    !m_motionSeeded[motionIndex] ||
-                    (m_motionAddresses[motionIndex] != address)
-                ),
+                if (!WorldMirroredAvatarBand.Wake(
+                    address: neighbour.EntityAddress(index: entity),
+                    epoch: neighbour.PoseEpoch(index: entity),
+                    gait: ref m_gaits[motionIndex],
                     moved: moved,
                     orientation: orientation,
                     owner: motionIndex,
+                    owners: m_motionOwners,
                     position: position
                 )) {
                     continue;
                 }
-
-                WorldMirroredAvatarBand.AdvanceGait(
-                    address: address,
-                    gaitPhase: ref m_gaitPhases[motionIndex],
-                    lastAddress: ref m_motionAddresses[motionIndex],
-                    lastPosition: ref m_previousRenderPositions[motionIndex],
-                    position: position,
-                    seeded: ref m_motionSeeded[motionIndex]
-                );
 
                 var mapped = MapPoseIntoSource(
                     position: position,
@@ -624,22 +605,20 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter {
                     path: projection.Path
                 );
 
-                m_motionOwners.Settle(
-                    deltaSeconds: 1f,
-                    moved: WorldTransformOwners.PackBody(
-                    firstSlot: m_liveSlots[motionIndex],
+                WorldMirroredAvatarBand.Pack(
                     avatar: entity,
                     catalogBase: bandBase,
-                    gaitPhase: (m_gaitPhases[motionIndex] * m_emittedGaitAmplitudes[motionIndex]),
+                    firstSlot: m_liveSlots[motionIndex],
+                    gait: in m_gaits[motionIndex],
+                    gaitAmplitude: m_emittedGaitAmplitudes[motionIndex],
                     moved: moved,
+                    owner: motionIndex,
+                    owners: m_motionOwners,
                     rig: m_emittedRigs[motionIndex],
                     rootOrientation: mapped.Orientation,
                     rootPosition: mapped.Position,
-                    reseat: m_motionOwners.Reseats(owner: motionIndex),
                     scale: m_emittedScales[motionIndex],
                     table: slots
-                ),
-                    owner: motionIndex
                 );
             }
             bandIndex++;

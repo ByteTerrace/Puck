@@ -168,7 +168,7 @@ public sealed class ShapeRenderOpFacetsLawTests {
         Assert.Equal(expected: ShapeDomainOp.LogSphere.MinShellRatio, actual: Assert.IsType<ShapeDomainOp.LogSphere>(@object: canonical.Domain[1]).ShellRatio);
     }
     [Fact]
-    public void ThePointReachCountsBumpsWarpAndElongationAndTheProbeCoversThem() {
+    public void ThePointReachCountsBumpsWarpAndElongation() {
         var shape = Shape() with {
             Bumps = [new ShapeBumpDocument(Center: new DocumentVector3(x: 0f, y: 0f, z: 0f), Radii: new DocumentVector3(x: 0.2f, y: 0.2f, z: 0.2f), Push: new DocumentVector3(x: 0.3f, y: 0f, z: 0f))],
             Warp = new ShapeWarpDocument(Amplitude: 0.1f, Frequency: Vector3.One),
@@ -176,6 +176,5 @@ public sealed class ShapeRenderOpFacetsLawTests {
         };
 
         Assert.Equal(expected: ((0.3f + (0.1f * MathF.Sqrt(x: 3f))) + 0.5f), actual: ShapeWarpReach.PointReach(shape: shape), tolerance: 1e-6f);
-        Assert.True(condition: (ShapeWarpReach.ProbePointReach >= ShapeWarpReach.PointReach(shape: shape)));
     }
 }

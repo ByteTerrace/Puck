@@ -20,7 +20,6 @@ public static class WorldRigCatalog {
     public const int RigCount = WorldLookSource.Catalog.RigCount;
 
     private static readonly ulong[] IdentityHashes;
-    private static readonly int LargestRig;
     private static readonly AvatarLeaf[] Leaves;
     // The procedural humanoid's authored content. These identifiers are not an engine vocabulary: another look
     // publishes any part ids its own geometry needs against its own transform slots.
@@ -97,7 +96,6 @@ public static class WorldRigCatalog {
                 Count: count,
                 First: first
             );
-            if (count > Ranges[LargestRig].Count) { LargestRig = avatar; }
             var identity = IdentityHashFor(
                 avatar: avatar,
                 leafCount: count
@@ -336,18 +334,15 @@ public static class WorldRigCatalog {
     /// own size in its slot's units; a look's uniform render scale rides the slot (<see cref="PackTransforms"/>), so a
     /// body drawn at another size keeps its meshes. A detailed body's complete pinned rig is written into its maximum-sized
     /// transform range; no leaf is duplicated or truncated to fit another appearance. A coarse body uses its one
-    /// stable root slot. The material spans determine the body count. Probes reserve the largest rig throughout the
-    /// detailed band and one capsule for each remaining body.</remarks>
+    /// stable root slot. The material spans determine the body count.</remarks>
     /// <param name="builder">The program builder.</param>
     /// <param name="isActive">Whether the avatar at an index is active.</param>
     /// <param name="bodyMaterials">Each avatar's body material id.</param>
     /// <param name="accentMaterials">Each avatar's accent material id.</param>
-    /// <param name="probeWorstCase">Emit the largest rig in every reserved body range at unit scale.</param>
     /// <param name="slotBase">The owning emitter's first dynamic-transform slot
     /// (<see cref="Puck.SdfVm.SdfEmitContext.SlotBase"/>) — the catalog's own ranges start at 0 and are shifted by this
     /// when the absolute slot lane is baked into an instruction.</param>
     /// <param name="rigFor">The catalog rig each body sources its leaves from, or null for the default catalog pick.</param>
-    /// <param name="probeAvatarLimit">Bounds a worst-case probe to that many bodies. Null reserves every material-span entry.</param>
     /// <param name="picks">The optional presentation identity table populated for emitted bodies.</param>
     /// <param name="slotFor">The active scene's packed slot offset for each body, or null for catalog-local slots.</param>
     public static void Emit(
@@ -355,10 +350,8 @@ public static class WorldRigCatalog {
         Func<int, bool> isActive,
         ReadOnlySpan<int> bodyMaterials,
         ReadOnlySpan<int> accentMaterials,
-        bool probeWorstCase,
         int slotBase,
         Func<int, int>? rigFor = null,
-        int? probeAvatarLimit = null,
         WorldPickMapBuilder? picks = null,
         Func<int, int>? slotFor = null
     ) {
@@ -366,36 +359,18 @@ public static class WorldRigCatalog {
         ArgumentNullException.ThrowIfNull(isActive);
         if (bodyMaterials.Length != accentMaterials.Length) { throw new ArgumentException(message: "Body and accent material spans must have equal lengths."); }
 
-        var bounded = (probeWorstCase && (probeAvatarLimit is not null));
-        var count = (bounded
-            ? Math.Clamp(
-                max: bodyMaterials.Length,
-                min: 0,
-                value: probeAvatarLimit!.Value
-            )
-            : bodyMaterials.Length
-        );
-
-        for (var position = 0; (position < count); position++) {
-            var avatar = position;
-
-            if (
-                !probeWorstCase &&
-                !isActive(arg: avatar)
-            ) {
+        for (var avatar = 0; (avatar < bodyMaterials.Length); avatar++) {
+            if (!isActive(arg: avatar)) {
                 continue;
             }
 
             var firstInstance = builder.InstanceCount;
             var firstSlot = (slotFor?.Invoke(avatar) ?? BodySlotBase(avatar: avatar));
 
-            var rigRange = (probeWorstCase
-                ? Ranges[LargestRig]
-                : Ranges[RigIndex(
-                    avatar: avatar,
-                    rigFor: rigFor
-                )]
-            );
+            var rigRange = Ranges[RigIndex(
+                avatar: avatar,
+                rigFor: rigFor
+            )];
 
             for (var offset = 0; (offset < rigRange.Count); offset++) {
                 var leaf = Leaves[(rigRange.First + offset)];
