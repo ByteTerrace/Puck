@@ -12,7 +12,7 @@ import "valley-form"
 // run down the face from the lake's outlet at the crest to the floor, where the stream begins. The north-west sector's
 // own face gives the heights: `sectorFace` is how far out the face stands at a height.
 let wallSector = filter(valleySectors, s => s.name == "north-west")[0]
-let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 34, depth: 6.5 }
+let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 39, depth: 6.5 }
 // The lake's bowl, an ellipsoid (centre height and half-extents) that `valleyBasins` cuts and the lake's water fills.
 let lakeBowl = { y: 336, radii [46, 17, 46] }
 // The height of the bowl's floor at `r` metres from its centre.
@@ -44,43 +44,45 @@ let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 // A golden-ratio fraction of k, in [0, 1): a scatter that places the stones without a seed.
 function siteScatter(k, ratio) = shadeFrac(k * ratio)
 
-// The stones the wall's rock carries in the lake's bowl, in its palette after the rock: sandy cobbles on the shallows and warm
-// boulders on the bank.
-let valleyStonePalette = [
-  { color: "#BFA882", roughness: 0.92, specular: 0.02 }
-  { color: "#A8704F", roughness: 0.9, specular: 0.03 }
+// The stones in the lake's bowl and on its bank, in the lake's own frame (its placement turns by the wall's yaw, so +z is out
+// from the ring's centre, toward the glacier's trough, and -z toward the outlet): sandy cobbles scattered over the bowl's floor
+// and warm boulders at the waterline, each half sunk where the bowl's rock stands. Neither lies on the trough side or the
+// outlet's, which the glacier's ramp and the sill own. A stone is { position, radii, yaw (degrees), material }.
+let lakeStonePalette = [
+  { color: "#C2AC86", roughness: 0.92, specular: 0.02 }
+  { color: "#8E7861", roughness: 0.9, specular: 0.03 }
 ]
-// Cobbles on the bowl's floor between `lakeSite`'s centre and its shore, and boulders on the bank at the water's edge,
-// each half sunk where the bowl's rock stands (the wall's relief moves stone and rock together). A stone is
-// { sector, label, lateral, y, radial, radii, yaw (degrees), material }, its centre on the bowl's surface.
-let lakeStones = concat(
-  map(range(0, 90), k => {
-    sector: "north-west"
-    label: $"lake-cobble-{k}"
-    lateral: lakeSite.lateral + (8 + 25 * siteScatter(k, 0.754878)) * sine(6.283185307179586 * siteScatter(k, 0.618034))
-    radial: lakeSite.radial + (8 + 25 * siteScatter(k, 0.754878)) * cosine(6.283185307179586 * siteScatter(k, 0.618034))
-    y: lakeBowlFloor(8 + 25 * siteScatter(k, 0.754878)) + 0.12
+// A point at `r` metres from the lake's centre and `deg` degrees from +z toward +x, on the bowl's floor `lift` over it,
+// relative to the lake's surface.
+function lakeBedPoint(r, deg, lift) = [
+  r * sine(deg * 0.017453292519943295),
+  lakeBowlFloor(r) - lakeSite.surface + lift,
+  r * cosine(deg * 0.017453292519943295)
+]
+let lakeBedStones = concat(
+  map(range(0, 44), k => {
+    position: lakeBedPoint(5 + 25 * siteScatter(k, 0.754878), 70 + 220 * siteScatter(k, 0.618034), 0.15)
     radii [
-      0.55 + 0.8 * siteScatter(k, 0.569840)
-      0.3 + 0.25 * siteScatter(k, 0.381966)
-      0.55 + 0.7 * siteScatter(k, 0.896491)
+      1.1 + 1.3 * siteScatter(k, 0.569840)
+      0.7 + 0.5 * siteScatter(k, 0.381966)
+      1.1 + 1.2 * siteScatter(k, 0.896491)
+    ]
+    yaw: 360 * siteScatter(k, 0.430159)
+    material: 0
+  }),
+  map(range(0, 16), k => {
+    position: lakeBedPoint(
+      32.2 + 1.6 * siteScatter(k, 0.754878),
+      (k % 2 == 0 ? 62 + 95 * siteScatter(k, 0.618034) : 205 + 95 * siteScatter(k, 0.618034)),
+      0.3
+    )
+    radii [
+      1.7 + 1.4 * siteScatter(k, 0.569840)
+      1.3 + 0.8 * siteScatter(k, 0.381966)
+      1.5 + 1.2 * siteScatter(k, 0.896491)
     ]
     yaw: 360 * siteScatter(k, 0.430159)
     material: 1
-  }),
-  map(range(0, 22), k => {
-    sector: "north-west"
-    label: $"lake-boulder-{k}"
-    lateral: lakeSite.lateral + (31 + 5 * siteScatter(k, 0.754878)) * sine(6.283185307179586 * siteScatter(k, 0.618034))
-    radial: lakeSite.radial + (31 + 5 * siteScatter(k, 0.754878)) * cosine(6.283185307179586 * siteScatter(k, 0.618034))
-    y: lakeBowlFloor(31 + 5 * siteScatter(k, 0.754878)) + 0.3
-    radii [
-      1.3 + 1.5 * siteScatter(k, 0.569840)
-      0.9 + 0.8 * siteScatter(k, 0.381966)
-      1.2 + 1.3 * siteScatter(k, 0.896491)
-    ]
-    yaw: 360 * siteScatter(k, 0.430159)
-    material: 2
   })
 )
 
