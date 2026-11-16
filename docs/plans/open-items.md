@@ -38,8 +38,7 @@ the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
 1. [high, before any push to `main`] [Security review](#security-review):
-   the session read doors' remaining leaks, and with them the publication
-   buffer's two misuse cases ([engine job system](#engine-job-system)).
+   the session read doors' remaining leaks.
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0 (a crossing read as a player takes it),
@@ -59,9 +58,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    proof, built by [Water](#water)'s lanes A2 to A5.
 8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-9. [high] [Lighting and GI](#lighting-and-gi): the probe cache reader's spin
-   now, then what the GPU trace still owes under a moving sun, then a cold
-   area lit the moment a view arrives.
+9. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
+   under a moving sun, then a cold area lit the moment a view arrives.
 10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
     one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
     V1a, with `lane/g5` landed beside them.
@@ -318,13 +316,6 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   type, prefer publish-once handoff to shared state under locks, and research
   a systematic schedule explorer for .NET (Microsoft Coyote) beside the
   `--workers` harness, since these defects rarely show in one run.
-- [high] `PublishBuffer<T>` admits two misuses its stress harness reproduced
-  (every balanced race passed): a `Lease` disposed twice decrements its slot's
-  reader count twice, which corrupts another reader's count and strands the
-  slot, and `Publish(in T)` called from inside a fill is unguarded, where the
-  fill overload refuses. The 48-bit reader count can also roll over in
-  principle. Make a double dispose and a reentrant publish refuse by
-  construction.
 - [medium · unconfirmed] `WorldDocument.AttachSink` delivers an attach primer
   that reaches `WorldDisclosureImages.Current` without taking
   `WorldServer.AuthorityGate`, while in-tick delivery and ordered-domain
@@ -402,6 +393,15 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   retry. Move the ring's acquire onto that index mechanism, keeping its fixed
   slot count; a GPU-lifetime change that needs a camera or probe-kernel run.
   Owner: platform.
+- [medium] The publication-reader audit also found compare/exchange retry
+  loops in `SingleSlotPublication.TryAcquireLatest` and `Release`
+  (`src/Puck.Platform/SingleSlotPublication.cs`), and the scene-claim reader
+  `SdfMeshIrradianceScene.Acquire` (`src/Puck.SdfVm/SdfMeshIrradianceScene.cs`).
+  Make acquisition bounded without waiting on another participant; keep GPU
+  lifetime checks with the single-slot change. `CodeDerivedTable.CurrentGeneration`
+  (`src/Puck.Abstractions/CodeDerivedTable.cs`) also retries while installing a
+  changed code generation; its steady read returns directly. Owner: job system
+  with platform and rendering.
 
 #### Memory ownership
 
@@ -890,7 +890,6 @@ in [sweep](#sweep-and-visual-checks).
 ### Lighting and GI
 
 Owner: next lighting batch (rendering, principal-grade review) · high · Next:
-the probe cache reader's spin, dispatched now; then
 [what the GPU trace still owes](illumination.md#after-the-gpu-trace), the
 plan's step 3: the moving-sun lockstep drain and the outdoor difference from
 the CPU reference; then a cold area lit from the coarser levels or the sky
@@ -901,11 +900,6 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
-- [high, dispatch now] The probe cache's reader retries with
-  `Thread.SpinWait` while an entry is published, which breaks the host rule
-  (AGENTS.md: no spinning in place of a wait). Replace it with stable
-  publication or a host wait; it does not wait for the streaming plan's
-  lighting step.
 - [high] A view-driven retier relights the whole window: a landed retier is a
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its

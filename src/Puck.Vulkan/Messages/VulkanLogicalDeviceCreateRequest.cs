@@ -14,6 +14,9 @@ namespace Puck.Vulkan.Messages;
 /// <param name="EnabledFeatureStructureTypes">The <c>VkStructureType</c> values of the chained feature structures to enable.</param>
 /// <param name="AddressBindings">The instance's address record, which a device created with
 /// <see cref="VulkanDeviceAddressBindings.ExtensionName"/> reports its bindings to, or <see langword="null"/>.</param>
+/// <param name="MemorySegments">The physical device's memory segments, one per heap, which the device registers with its
+/// memory counts before its first counted allocation, or <see langword="null"/> for a device whose allocations are not
+/// counted.</param>
 public readonly record struct VulkanLogicalDeviceCreateRequest(
     VulkanInstanceCommands Instance,
     VkPhysicalDevice PhysicalDevice,
@@ -21,5 +24,6 @@ public readonly record struct VulkanLogicalDeviceCreateRequest(
     IReadOnlyList<string> ExtensionNames,
     IReadOnlyList<uint> EnabledFeatureIndices,
     IReadOnlyList<uint> EnabledFeatureStructureTypes,
-    VulkanDeviceAddressBindings? AddressBindings = null
+    VulkanDeviceAddressBindings? AddressBindings = null,
+    GpuMemorySegments? MemorySegments = null
 );

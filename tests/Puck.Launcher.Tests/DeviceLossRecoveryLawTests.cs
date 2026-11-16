@@ -449,6 +449,8 @@ public sealed class DeviceLossRecoveryLawTests {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public GpuDeviceServices Services => throw new NotSupportedException();
 
         // A removed device's drain throws, which the policy tolerates.
@@ -464,6 +466,8 @@ public sealed class DeviceLossRecoveryLawTests {
         public GpuDeviceCapabilities? Capabilities => null;
         public GpuDeviceIdentity? Identity => null;
         public GpuMemoryProfile MemoryProfile => default;
+        public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+        public void RefreshMemoryReading() { }
         public GpuDeviceServices Services => throw new NotSupportedException();
 
         public bool RemoveDevice() {

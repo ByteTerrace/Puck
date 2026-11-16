@@ -244,6 +244,8 @@ public sealed class VulkanBufferLawTests {
         public VulkanInstance Instance => throw new NotSupportedException();
         public VulkanLogicalDevice LogicalDevice => throw new NotSupportedException();
         public GpuMemoryProfile MemoryProfile => throw new NotSupportedException();
+        public GpuMemoryReading MemoryReading => throw new NotSupportedException();
+        public void RefreshMemoryReading() => throw new NotSupportedException();
         public VkPhysicalDevice PhysicalDevice => throw new NotSupportedException();
         public GpuDeviceServices Services => throw new NotSupportedException();
         public VulkanSurface Surface => throw new NotSupportedException();

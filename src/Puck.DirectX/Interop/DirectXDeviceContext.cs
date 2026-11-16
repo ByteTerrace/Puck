@@ -48,6 +48,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private ulong m_idleFenceValue;
     private GpuMemoryProfile m_memoryProfile;
     private GpuDeviceCapabilities? m_capabilities;
+    // The current device's budget reading, created with it; the serial its predecessor reached, so a recreated device's
+    // serial moves on; and whether a device was ever brought up, which tells a lost reading from an absent one.
+    private DirectXVideoMemory? m_videoMemory;
+    private ulong m_readingSerial;
+    private bool m_broughtUp;
 
     /// <summary>Initializes a new instance that creates its device on the first hardware adapter at feature level
     /// 11.0.</summary>
@@ -163,6 +168,17 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <remarks>Read from the device and its adapter when the device is created; the default profile before, and
     /// reading it never creates the device.</remarks>
     public GpuMemoryProfile MemoryProfile => m_memoryProfile;
+    /// <inheritdoc />
+    /// <remarks>Read from the adapter the device was created on (<see cref="DirectXVideoMemory"/>); absent before the
+    /// device is brought up and after disposal, lost while a removed device is being recreated.</remarks>
+    public GpuMemoryReading MemoryReading => (Volatile.Read(location: ref m_videoMemory)?.Reading ?? ((m_broughtUp && !m_disposed)
+        ? GpuMemoryReading.Lost(serial: m_readingSerial)
+        : GpuMemoryReading.Absent));
+
+    /// <inheritdoc />
+    /// <remarks>Tests the budget-change event without waiting and queries the adapter only when it is set; a device not
+    /// brought up is not brought up by it.</remarks>
+    public void RefreshMemoryReading() => _ = m_videoMemory?.Refresh();
     /// <inheritdoc />
     /// <remarks>Reading it first hands the open batch's deferred submissions to the queue
     /// (<see cref="DirectXGpuQueueSubmitter.Split"/>), so an execute, signal or drain a caller puts on the returned queue
@@ -287,6 +303,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         // created, so the next use starts it again rather than finding a device with no queue.
         try {
             BringUp();
+            m_broughtUp = true;
         } catch (Exception exception) {
             ReleaseDeviceObjects();
             m_capabilities = null;
@@ -313,6 +330,16 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         );
         m_identity = m_deviceApi.GetDeviceIdentity(deviceHandle: m_device.Handle);
         m_memoryProfile = m_deviceApi.GetMemoryProfile(deviceHandle: m_device.Handle);
+
+        // The device's segments are registered before its first counted allocation (the descriptor heaps below).
+        var segments = GpuMemorySegments.FromDirectX(profile: m_memoryProfile);
+
+        Memory?.BeginDevice(device: m_device.Handle, segments: segments);
+        Volatile.Write(location: ref m_videoMemory, value: new DirectXVideoMemory(
+            adapter: m_deviceApi.OpenAdapter(deviceHandle: m_device.Handle),
+            segments: segments,
+            serial: m_readingSerial
+        ));
         m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
         var barriers = default(D3D12_FEATURE_DATA_D3D12_OPTIONS12);
@@ -466,8 +493,10 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         return true;
     }
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
-    // descriptor heaps and the device, without a GPU drain, leaving the context with no device.
+    // descriptor heaps, the budget reading and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
+        ReleaseVideoMemory();
+
         if (0 != m_idleFence) {
             _ = ((IUnknown*)m_idleFence)->Release();
             m_idleFence = 0;
@@ -495,6 +524,17 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_bindings.ReleaseDeviceHeaps();
         m_idleFenceValue = 1;
         ReleaseDevice();
+    }
+    // Unregisters the budget reading's event and releases its adapter, keeping the serial it reached.
+    private void ReleaseVideoMemory() {
+        var videoMemory = Interlocked.Exchange(location1: ref m_videoMemory, value: null);
+
+        if (videoMemory is null) {
+            return;
+        }
+
+        m_readingSerial = Math.Max(val1: m_readingSerial, val2: videoMemory.Reading.Serial);
+        videoMemory.Dispose();
     }
     // Ends the device's memory entries, then releases the device even when an entry was still held, so a leak refuses
     // the teardown by name without keeping the device alive.
@@ -769,6 +809,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         }
 
         ReleaseDispatchSignature();
+        ReleaseVideoMemory();
         PipelineLibrary?.Dispose();
         PipelineLibrary = null;
         m_bindings.ReleaseDeviceHeaps();

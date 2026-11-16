@@ -140,7 +140,7 @@ public sealed unsafe class VulkanMemoryArena {
             0,
             out var memory
         ).ThrowIfFailed(device: m_device, operation: "vkAllocateMemory");
-        m_device.CountAllocated(allocationSize: bytes, memoryHandle: memory, role: role);
+        m_device.CountAllocated(allocationSize: bytes, memoryHandle: memory, memoryTypeIndex: key.Type, role: role);
 
         var mapped = ((nint)0);
 
