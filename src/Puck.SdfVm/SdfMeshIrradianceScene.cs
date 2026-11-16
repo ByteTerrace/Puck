@@ -770,7 +770,10 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private readonly int m_capacity;
         private readonly int m_leaf;
         private readonly int m_braid;
-        private readonly List<int> m_braids = [];
+        // Each braid's node and the first leaf position it holds: the position orders the braids, since a parallel build
+        // numbers its nodes in whatever order its tasks reach them, and the top level that indexes the braids is built
+        // over them in this order.
+        private readonly List<(int First, int Node)> m_braids = [];
 
         private int m_nodeCount = 1;
         private int m_medianSplits;
@@ -801,8 +804,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             try {
                 var depth = hierarchy.BuildNode(count: count, first: 0, node: 0, wide: true, depth: 0);
+                var braids = new int[hierarchy.m_braids.Count];
+
                 hierarchy.m_braids.Sort();
-                return (hierarchy.CopyNodes(), hierarchy.m_order, [.. hierarchy.m_braids], depth, hierarchy.m_medianSplits);
+                for (var index = 0; (index < braids.Length); index++) { braids[index] = hierarchy.m_braids[index].Node; }
+                return (hierarchy.CopyNodes(), hierarchy.m_order, braids, depth, hierarchy.m_medianSplits);
             } finally {
                 hierarchy.ReturnWorkspace();
             }
@@ -852,7 +858,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 throw new InvalidOperationException($"{m_name}: {count} primitives cannot fit within the mesh GI hierarchy depth bound {StackDepth - 2}.");
             }
             if (wide && (count <= m_braid)) {
-                lock (m_braids) { m_braids.Add(item: node); }
+                lock (m_braids) { m_braids.Add(item: (first, node)); }
             }
 
             var low = new Vector3(value: float.PositiveInfinity);

@@ -25,6 +25,10 @@ public sealed partial class SdfMeshIrradianceScene {
         }
         return true;
     }
+    /// <summary>Gets the words a GPU export's prefix holds (the top level's nodes, its entries and one record per draw):
+    /// what each scene change uploads whatever geometry it shares with the scene before it.</summary>
+    public int PrefixWords => checked(m_nodes.Length * SdfMeshProbeTrace.NodeWords + m_entries.Length * SdfMeshProbeTrace.EntryWords + m_instances.Length * SdfMeshProbeTrace.InstanceWords);
+
     /// <summary>Exports the existing hierarchy in traversal order, referencing triangles in an already placed mesh
     /// region. Word zero is the top root's address, or zero for an empty scene. No triangles or hierarchy are rebuilt.
     /// The caller retains this scene and the region's placements until the GPU submission completes.</summary>
@@ -43,7 +47,7 @@ public sealed partial class SdfMeshIrradianceScene {
         ArgumentNullException.ThrowIfNull(placements);
         arena ??= new GpuArena();
         var geometries = new Dictionary<Geometry, (int Nodes, int Triangles)>();
-        var prefixWords = checked(m_nodes.Length * SdfMeshProbeTrace.NodeWords + m_entries.Length * SdfMeshProbeTrace.EntryWords + m_instances.Length * SdfMeshProbeTrace.InstanceWords);
+        var prefixWords = PrefixWords;
         var prefix = arena.Allocate(Math.Max(1, prefixWords));
         var entries = checked(prefix + m_nodes.Length * SdfMeshProbeTrace.NodeWords);
         var instances = checked(entries + m_entries.Length * SdfMeshProbeTrace.EntryWords);
