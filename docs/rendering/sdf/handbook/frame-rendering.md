@@ -1042,8 +1042,9 @@ still samples a lower bound of its distance.
 
 Static shapes also declare feature spacing through `SdfInstanceRange.Detail`:
 an eighth of the smaller sweep radius, a quarter of shell thickness or rounded
-profile radius, a thirty-second of the smallest half-extent for a warped shape, or a thirty-second of
-the wavelength for cellular relief. `WorldPlacementStamper` takes the tightest
+profile radius, a thirty-second of the smallest half-extent for a warped shape, a thirty-second of
+the wavelength for cellular relief, or the crest's bend of a sine relief or warp
+(`ShapeWarpDocument.ReliefRadius`) at `SdfSampledLattice.RoundCell`. `WorldPlacementStamper` takes the tightest
 of these at placement scale; a scoped creation takes its tightest shape's
 spacing. These regions refine surface cells even when their corner signs need
 no topological repair, up to eight subdivisions per coarse axis. This gives thin

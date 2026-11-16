@@ -21,8 +21,6 @@ public sealed record ShapeWarpDocument(DocumentVector3 Frequency, float Amplitud
 
     /// <summary>The farthest the warp carries any point: the amplitude on every axis at once.</summary>
     public float Reach => (MathF.Abs(x: Amplitude) * MathF.Sqrt(x: 3f));
-    /// <summary>Gets the tightest radius, in creation units, the warp bends a flat surface to (<see cref="ReliefRadius"/>).</summary>
-    public float CurvatureRadius => ReliefRadius(amplitude: Amplitude, frequency: Frequency.Value);
 
     /// <summary>Returns the tightest radius of curvature a sine of <paramref name="amplitude"/> at
     /// <paramref name="frequency"/> bends a flat surface to: one over amplitude times the largest frequency squared, the
@@ -56,7 +54,4 @@ public sealed record ShapeDisplaceDocument(DocumentVector3 Frequency, float Ampl
 
     /// <summary>The farthest the relief carries the surface outward.</summary>
     public float Reach => MathF.Abs(x: Amplitude);
-    /// <summary>Gets the tightest radius, in creation units, the relief bends a flat face to
-    /// (<see cref="ShapeWarpDocument.ReliefRadius"/>).</summary>
-    public float CurvatureRadius => ShapeWarpDocument.ReliefRadius(amplitude: Amplitude, frequency: Frequency.Value);
 }

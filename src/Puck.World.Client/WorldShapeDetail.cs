@@ -81,8 +81,8 @@ internal static class WorldShapeDetail {
         }
         if (shape.Onion is > 0f) { Take(spacing: (shape.Onion.Value / 4f)); }
         if (shape.Cells is { } cells) { Take(spacing: (1f / (32f * cells.Frequency))); }
-        if (shape.Displace is { } displace) { Take(spacing: RoundCell(radius: displace.CurvatureRadius, scale: scale)); }
-        if (shape.Warp is { } warp) { Take(spacing: RoundCell(radius: warp.CurvatureRadius, scale: scale)); }
+        if (shape.Displace is { } displace) { Take(spacing: RoundCell(radius: ShapeWarpDocument.ReliefRadius(amplitude: displace.Amplitude, frequency: displace.Frequency.Value), scale: scale)); }
+        if (shape.Warp is { } warp) { Take(spacing: RoundCell(radius: ShapeWarpDocument.ReliefRadius(amplitude: warp.Amplitude, frequency: warp.Frequency.Value), scale: scale)); }
         // A zero twist or bend is none: the canonicalizer writes an absent one as zero, so a live edit's document reads it
         // as authored.
         if (ShapePointOps.NeedsScope(shape)) {
