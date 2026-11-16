@@ -268,7 +268,7 @@ public sealed class CacheRetentionLawTests {
         var live = Assert.Single(collection: Directory.GetFiles(path: cache.RootPath));
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: live);
-        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => true);
+        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => false);
         Assert.True(condition: File.Exists(path: live));
 
         var fields = Path.GetFileName(path: live)["entry.bin.".Length..^".tmp".Length].Split(separator: '_');
@@ -286,7 +286,7 @@ public sealed class CacheRetentionLawTests {
         var unclaimed = cache.WriteText(name: "other.bin.0123456789abcdef.tmp", text: "x");
 
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: hourAgo, path: unclaimed);
-        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => true);
+        _ = CacheRetention.Enforce(bound: CacheBound.Entries(maxEntries: 1), directory: cache.RootPath, isEntry: static _ => false);
 
         Assert.True(condition: File.Exists(path: live));
         Assert.True(condition: File.Exists(path: foreign));
