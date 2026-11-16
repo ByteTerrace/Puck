@@ -10,7 +10,10 @@ namespace Puck.World.Client;
 // renders the view or uploads the source at least 30 or 15 times a second of presentation time
 // (RenderGraphRefresh.AtLeast on RenderGraphFootprint.Refresh). The pixels are the footprint's share of its consumer
 // times the consumer's share of the display, measured before this frame prunes small glass. Each rated producer's
-// achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders).
+// achieved intervals are read back from the schedule its footprints were scheduled in (MeasureRatedRenders), which is
+// also where a producer that takes a reduced tier chooses its phase within the tier's period (PresentationPhases, one
+// per lever), so the views, and the screens, that take a tier together render on alternate halves of it; its
+// footprints carry the lead (RenderGraphRefresh.LeadSeconds) until the render it asks for.
 public sealed partial class WorldViewGraphHost {
     private readonly Dictionary<(string Consumer, string Producer), (PortalSight Sight, double Width, double Height, int Glass)> m_portalCoverage = [];
 
@@ -49,6 +52,9 @@ public sealed partial class WorldViewGraphHost {
     // Each producer a rated footprint showed: what its footprints asked this frame and its interval since it last
     // rendered.
     private readonly Dictionary<string, RatedProducer> m_ratedProducers = new(comparer: StringComparer.Ordinal);
+    // The phases the views, and the screens, that take a reduced tier choose within its period.
+    private readonly PresentationPhases m_viewPhases = new();
+    private readonly PresentationPhases m_screenPhases = new();
     // The readings PublishRateReadings gathers a lever's into.
     private readonly SdfUpdateRateReadings.Buffer m_rateReadings = new();
     // The frame of the latest schedule the rated producers were measured against, so a frame the runtime did not
@@ -93,6 +99,10 @@ public sealed partial class WorldViewGraphHost {
         public ulong Rendered;
         // Whether every frame since its latest render rendered it or held it by its rated demand.
         public bool Chained;
+        // The reduced tier its phase was chosen at (every frame while unchosen), and the seconds its footprints' floors
+        // count ahead of the time since its latest render until a render they alone ask for.
+        public int PhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
+        public double Lead;
     }
 
     /// <summary>Gets or sets the live render settings whose <c>world.rates</c> levers rate the nested views and screens
@@ -215,12 +225,15 @@ public sealed partial class WorldViewGraphHost {
 
         counts.Count(kind: kind);
 
-        return RenderGraphRefresh.AtLeast(hertz: hertz);
+        return RenderGraphRefresh.AtLeast(hertz: hertz, leadSeconds: rated.Lead);
     }
     // Reads the latest schedule, the one this host's previous footprints were scheduled in, into each rated producer's
     // interval: a render closes the interval since the one before (recorded under the slowest tier asked over it when
     // every frame between rendered or held it by its rated demand) and opens the next; a frame that neither rendered nor
-    // held it, or did not ask for it through a rated footprint, breaks the interval. Then clears what was asked.
+    // held it, or did not ask for it through a rated footprint, breaks the interval. A render its lead alone asked for
+    // (RenderGraphInstanceSchedule.Led) ends the producer's lead, so a lead a render could not follow (a tick source
+    // with no new tick to show) stands until one does, and a producer whose most frequent ask became another reduced tier chooses its phase in that tier (ChoosePhase).
+    // Each lever's rated producers the schedule rendered together are recorded as its burst. Then clears what was asked.
     private void MeasureRatedRenders() {
         if (
             (m_runtime is { Latest: { } latest } runtime) &&
@@ -229,6 +242,7 @@ public sealed partial class WorldViewGraphHost {
             m_ratedMeasured = latest.Frame;
 
             var intervals = RenderSettings?.RateIntervals;
+            var (views, screens) = (0, 0);
 
             foreach (var portal in m_portals) {
                 var rendered = runtime.Instances.IndexOf(name: portal);
@@ -255,17 +269,40 @@ public sealed partial class WorldViewGraphHost {
                     rated.Chained = true;
                     rated.Rendered = latest.PresentedTicks;
                     rated.Slowest = SdfUpdateRateTiers.EveryFrameHertz;
+                    if (row.Led) {
+                        rated.Lead = 0d;
+                    }
+                    if (rated.Asked < SdfUpdateRateTiers.EveryFrameHertz) {
+                        _ = ((rated.Lever == SdfUpdateRates.Views) ? views++ : screens++);
+                    }
                 } else if (row.Held) {
                     rated.Slowest = Math.Min(val1: rated.Slowest, val2: rated.Asked);
                 } else {
                     rated.Chained = false;
                 }
+
+                ChoosePhase(rated: rated);
             }
+
+            intervals?.RecordBurst(count: views, lever: SdfUpdateRates.Views);
+            intervals?.RecordBurst(count: screens, lever: SdfUpdateRates.Screens);
         }
 
         foreach (var rated in m_ratedProducers.Values) {
             rated.Asked = 0;
             rated.Glass = -1;
+        }
+    }
+    // Chooses a rated producer's phase within the period of the reduced tier its footprints most frequently asked for,
+    // when that tier is not the one its phase was chosen at; a producer asked for every frame, or not at all, forgets
+    // its phase and chooses again when it next takes a tier.
+    private void ChoosePhase(RatedProducer rated) {
+        if ((rated.Asked <= 0) || (rated.Asked >= SdfUpdateRateTiers.EveryFrameHertz)) {
+            rated.PhaseHertz = SdfUpdateRateTiers.EveryFrameHertz;
+            rated.Lead = 0d;
+        } else if (rated.PhaseHertz != rated.Asked) {
+            rated.PhaseHertz = rated.Asked;
+            rated.Lead = ((rated.Lever == SdfUpdateRates.Views) ? m_viewPhases : m_screenPhases).Take(hertz: rated.Asked, rate: m_presentationRate);
         }
     }
     // The refresh a footprint showing a source on the boot world's screens asks for: every frame unless the screens lever

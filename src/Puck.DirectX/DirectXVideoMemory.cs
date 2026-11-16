@@ -11,11 +11,12 @@ namespace Puck.DirectX;
 /// One Direct3D 12 device's memory budget reading (<see cref="GpuMemoryReading"/>), read from the adapter the device was
 /// created on, held as <c>IDXGIAdapter3</c> for the device's life. Each segment group its <see cref="GpuMemorySegments"/>
 /// names is read with <c>IDXGIAdapter3::QueryVideoMemoryInfo</c>, every field kept: the local group always, the
-/// non-local group only on a discrete adapter, since a unified adapter's system pool and local group are one memory. An
-/// auto-reset event registered with <c>RegisterVideoMemoryBudgetChangeNotificationEvent</c> marks the reading stale;
-/// <see cref="Refresh"/> tests it without waiting and reads only when it is set. The OS sets the event at registration,
-/// which gives the first reading. <see cref="Dispose"/> unregisters the event before the device goes; a recreated device
-/// gets a new instance. Not thread-safe: <see cref="Refresh"/> runs on the frame thread, and <see cref="Reading"/> is
+/// non-local group only on a discrete adapter, since a unified adapter's system pool and local group are one memory.
+/// <see cref="Refresh"/> follows the backends' one refresh rule (<see cref="GpuMemoryReadingRefresh"/>): it reads when an
+/// auto-reset event registered with <c>RegisterVideoMemoryBudgetChangeNotificationEvent</c> is set, tested without
+/// waiting, since that event signals budget changes, and otherwise once a second, since usage moves with every allocation
+/// and no event signals it. The serial moves only when a budget changes. <see cref="Dispose"/> unregisters the event
+/// before the device goes; a recreated device gets a new instance. Not thread-safe: <see cref="Refresh"/> runs on the frame thread, and <see cref="Reading"/> is
 /// safe to read from any thread.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
@@ -25,8 +26,8 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
     private nint m_adapter;
     private uint m_cookie;
     private HANDLE m_event;
+    private readonly GpuMemoryReadingRefresh m_refresh;
     private GpuMemoryReading m_reading = GpuMemoryReading.Absent;
-    private ulong m_serial;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXVideoMemory"/> class, taking ownership of an
     /// adapter reference, and registers its budget-change event. A registration the adapter refuses leaves the reading
@@ -47,7 +48,7 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
 
         m_adapter = adapter;
         m_segments = segments;
-        m_serial = serial;
+        m_refresh = new GpuMemoryReadingRefresh(serial: serial);
         m_event = PInvoke.CreateEvent(
             bInitialState: true,
             bManualReset: false,
@@ -75,11 +76,19 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
     /// reading once a query fails or the instance is disposed.</summary>
     public GpuMemoryReading Reading => Volatile.Read(location: ref m_reading);
 
-    /// <summary>Reads every segment group again when the budget-change event is set, tested without waiting; otherwise
-    /// makes no driver call.</summary>
+    /// <summary>Reads every segment group again when the budget-change event is set, tested without waiting, or a second
+    /// has passed since the last read (<see cref="GpuMemoryReadingRefresh"/>); otherwise makes no driver call.</summary>
     /// <returns>Whether a new reading was published.</returns>
     public bool Refresh() {
-        if (m_event.IsNull || (PInvoke.WaitForSingleObject(hHandle: m_event, dwMilliseconds: 0U) != WAIT_EVENT.WAIT_OBJECT_0)) {
+        if (0 == m_adapter) {
+            return false;
+        }
+
+        // The wait resets the auto-reset event, so it is tested whether or not the interval has passed.
+        var signalled = (!m_event.IsNull && (PInvoke.WaitForSingleObject(hHandle: m_event, dwMilliseconds: 0U) == WAIT_EVENT.WAIT_OBJECT_0));
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        if (!m_refresh.Due(signalled: signalled, timestamp: now)) {
             return false;
         }
 
@@ -93,7 +102,7 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
             try {
                 ((IDXGIAdapter3*)m_adapter)->QueryVideoMemoryInfo(NodeIndex: 0U, MemorySegmentGroup: ((DXGI_MEMORY_SEGMENT_GROUP)segment.Index), pVideoMemoryInfo: &info);
             } catch (COMException) {
-                Volatile.Write(location: ref m_reading, value: GpuMemoryReading.Lost(serial: m_serial));
+                Volatile.Write(location: ref m_reading, value: GpuMemoryReading.Lost(serial: m_refresh.Serial));
 
                 return true;
             }
@@ -107,7 +116,7 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
             );
         }
 
-        Volatile.Write(location: ref m_reading, value: GpuMemoryReading.Read(estimated: false, readings: readings, segments: m_segments, serial: ++m_serial));
+        Volatile.Write(location: ref m_reading, value: m_refresh.Publish(estimated: false, last: m_reading, readings: readings, segments: m_segments, timestamp: now));
 
         return true;
     }
@@ -127,6 +136,6 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
         }
 
         DirectXConstants.Release(pointer: ref m_adapter);
-        Volatile.Write(location: ref m_reading, value: GpuMemoryReading.Lost(serial: m_serial));
+        Volatile.Write(location: ref m_reading, value: GpuMemoryReading.Lost(serial: m_refresh.Serial));
     }
 }

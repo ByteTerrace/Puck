@@ -167,6 +167,7 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
             allocation: heap,
             bytes: checked((long)bytes),
             device: m_device,
+            family: GpuDeviceMemoryWork.DescriptorHeapFamily,
             role: GpuMemoryRole.DeviceLocal,
             segment: GpuMemorySegments.DirectXLocal
         );

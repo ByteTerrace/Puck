@@ -195,8 +195,10 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   vertices in a row of notches. The cell that hands it over keeps its vertex on
   its crossings' side of the crease (`BesideCrease`), or the quads it shares
   with the crease vertex fold. A feature takes its crossings' normals, each quad
-  splits along the diagonal that turns least from its non-crease corners'
-  normals, chosen again after the final field correction moves vertices, and
+  splits along the diagonal that faces out as its lattice edge says (next
+  bullet) and, where both do, the one that turns least from its non-crease
+  corners' normals, chosen again after the final field correction moves
+  vertices, and
   `SdfContour.SplitAtCreases` splits it per side at 25 degrees. Incident faces
   identify shading creases independently of the placement's feature flag:
   correcting a vertex must not erase its sharp edge. A lifted chamfer's corner
@@ -215,6 +217,60 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   (`ContourProjection.Outward`): inside a layer thinner than a cell the
   gradient points at the seam the layer shares with its neighbour, and the move
   lifted the vertex onto that seam.
+- **A contour holds the facing its lattice gave it.** A dual contour's
+  connectivity is the lattice's signs alone: one quad per sign-changing lattice
+  edge, joining the four cells around it, and that edge runs from inside the
+  solid to outside. Its direction is each quad's facing with no estimate in it
+  (`SdfContour.QuadAxes`), and `SdfContourFacing` is the one place a triangle is
+  judged against it: a triangle faces out when its area normal has a positive
+  component along its quad's edge, and one lying within fifteen degrees of
+  edge-on to that edge (a quad squashed into a face that passes through the
+  edge) is judged by its corners' patches, the sum of each cell patch's own
+  sign-changing edge directions (`SdfContour.Patches`,
+  `SdfContourFacing.Patch`). Vertex normals and a triangle's own earlier facing
+  are estimates a misplaced vertex has already turned, so no stage orients by
+  them first. Four things hold a contour to it:
+  - *Placement keeps a vertex in the region its quads allow*
+    (`SdfDualContouring.Within`). The four cells around an edge lie in the four
+    quadrants about its line, and a quad faces out while each vertex keeps to
+    its own quadrant, so an edge bounds its cells' vertices only along the two
+    axes it does not run along. A vertex may therefore reach a feature past its
+    cell (`FeatureReach`) only through a face its patch does not cross; past a
+    crossed face it lies among the cells its own quads join it to and turns
+    them over, so it clamps instead. A vertex no feature pins also keeps
+    `CrossedClear` of a cell clear of the faces its patch crosses (`Clear`): on
+    such a face the quad it shares with the cell across it has no width, and
+    which way its triangles turn is rounding.
+  - *The settle* (`SdfDualContouring.Settle`, after the hand-off and the merge)
+    finds every quad neither of whose splits faces out and returns the vertex
+    whose return fixes it, or all of them, to its crossings' mean, which lies in
+    its own cell. A merged piece's vertex stands for several cells and has no
+    region of its own, so the settle is all that holds a transition fan.
+  - *The split* (`SdfSampledLattice.SelectDiagonals`) takes the diagonal whose
+    triangles face out where only one's do, before any normal is read. Two
+    quads that hold one pair of vertices as opposite corners (a merged vertex
+    stands for several cells) would both split along that pair, an edge four
+    triangles hold; the later quad takes its other diagonal.
+  - *The field check's moves* (`ContourProjection.Move`) are clipped before a
+    triangle that faces out stops doing so, beside the clip against its
+    original facing.
+  To measure a change here, count a contour's quads with no split that faces
+  out (`SdfContourFacing.Splits`) after the settle, where a contour without
+  merged pieces has none, and again after the field check. What this does not
+  hold: a triangle can face out by every lattice fact and still be turned past
+  a right angle from the field's gradient. The audit's remaining flips are of
+  that kind: a sliver between two rows of vertices a few hundredths of a cell
+  apart along a crease, a web across a junction of two creases, a vertex its
+  planes put off the surface where the field check refuses to move it, and a
+  face narrower than a cell between two creases (the Moth's shin blades). They
+  are [open](../../../../docs/plans/open-items.md#bake-detail).
+- **A crossing's gradient within a tap of a crease is a blend of the faces
+  meeting there**, and its tangent plane is neither face's. A lattice plane that
+  falls within a few tenths of a millimetre of a flat face (the narrowed box
+  puts one there) reads such planes at every crossing along the rims on that
+  face, and the cell's least-squares point is drawn to the face it shares with
+  its neighbour. Read `puck mesh audit --cpu`'s clusters by where the lattice
+  planes fall before blaming the shape.
 - **The bake's field is no true distance.** Scopes, flares and non-uniform
   scales read well under the distance (a fifth of it on the Moth's shins). A
   value becomes a distance only over the gradient's magnitude (the bake kernel

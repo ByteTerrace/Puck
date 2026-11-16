@@ -68,13 +68,15 @@ public sealed class VulkanBuffer : IGpuStorageBuffer, IGpuReadbackBuffer {
     /// <param name="usage">A bitmask of <see cref="VulkanBufferUsageFlags"/>.</param>
     /// <param name="memory">The memory the buffer is allocated from.</param>
     /// <param name="sizeBytes">The size, in bytes, of the buffer.</param>
+    /// <param name="family">The family the buffer's memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>).</param>
     /// <returns>A new, owning <see cref="VulkanBuffer"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="bufferApi"/> is <see langword="null"/>.</exception>
-    public static VulkanBuffer Create(IVulkanBufferApi bufferApi, IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes) {
+    public static VulkanBuffer Create(IVulkanBufferApi bufferApi, IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes, string family) {
         ArgumentNullException.ThrowIfNull(argument: bufferApi);
 
         var handles = bufferApi.Create(
             device: device,
+            family: family,
             memory: memory,
             sizeBytes: sizeBytes,
             usage: usage

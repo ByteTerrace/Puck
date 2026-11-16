@@ -151,6 +151,7 @@ public sealed class VulkanBufferLawTests {
         var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
             device: new UntouchableDeviceContext(),
+            family: GpuObjectName.UnnamedFamily,
             memory: VulkanBufferMemory.HostCoherent,
             sizeBytes: 16,
             usage: VulkanBufferUsageFlags.Storage
@@ -179,6 +180,7 @@ public sealed class VulkanBufferLawTests {
         using var buffer = VulkanBuffer.Create(
             bufferApi: bufferApi,
             device: new UntouchableDeviceContext(),
+            family: GpuObjectName.UnnamedFamily,
             memory: VulkanBufferMemory.DeviceLocal,
             sizeBytes: 16,
             usage: VulkanBufferUsageFlags.Storage
@@ -203,7 +205,7 @@ public sealed class VulkanBufferLawTests {
         public List<(uint Usage, VulkanBufferMemory Memory, ulong SizeBytes)> Created { get; } = [];
         public List<IVulkanDeviceContext> Devices { get; } = [];
 
-        public VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes) {
+        public VulkanBufferHandles Create(IVulkanDeviceContext device, uint usage, VulkanBufferMemory memory, ulong sizeBytes, string family) {
             Calls.Add(item: "create");
             Created.Add(item: (usage, memory, sizeBytes));
             Devices.Add(item: device);

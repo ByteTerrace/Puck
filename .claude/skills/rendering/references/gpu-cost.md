@@ -16,10 +16,19 @@ disjoint backend rows: device-local bytes (aperture storage is already inside th
 and host-visible bytes (upload, staging and readback heaps). `host.memory owners 0`
 appends both; neither includes driver internals or swapchain images. Device-local
 plus host-visible is what the backend's counted allocations hold, and on the Deck's
-unified memory both come out of the same physical pool. Account,
-allocator, managed-heap, resource and process readings overlap; their sum is not a
-physical total. Read full GPU node counters when ownership matters: summary
-submission counters omit the node's owned-byte gauge.
+unified memory both come out of the same physical pool. Those readings overlap
+the account's; what adds is `host.memory`'s physical rows per pool (device
+blocks, native allocator, native direct, managed, runtime and driver), each with
+the part its owners name and its residual. Device memory is named by owner
+family (`GpuObjectName.MemoryFamily`: the creator's owner without its `$`
+instance, then the part), counted at placement by the ledger
+(`GpuDeviceMemoryWork.CountPlaced`, or `CountAllocated` for a dedicated
+allocation), so `host.memory`'s `family` lines name who holds a segment and who
+churns it (allocated against released), and a segment's `residual` is the room
+inside shared blocks. A creating member's `GpuObjectName` is therefore what its
+memory is attributed to: a default name lands in the `unnamed` family. Read full
+GPU node counters when per-node ownership matters: summary submission counters
+omit the node's owned-byte gauge.
 
 Keep driver residency/budget observations separate from resource allocations.
 [DXGI reports process usage and an OS budget](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info),
@@ -433,8 +442,12 @@ large blocks.
   placement's tiers are sized for its measured part speed
   (`WorldCreationInstances.MeasurePartSpeed`, one `SdfUpdateRateTiers.BodyHertz`
   for bodies and placements), so slow wind reduces nearer than a body would.
+  The items that take a tier together spread over its period: every other
+  body, view and screen takes half the period as a lead (`PresentationPhases`),
+  and `world.rates`' `burst` reads the most rated views and screens one frame
+  updated.
   New rated work decides through the same floor rather than a schedule of its
-  own, reads the frame's flags before it runs (the stamp pool takes them in
+  own, takes its phase from a `PresentationPhases` of its own, reads the frame's flags before it runs (the stamp pool takes them in
   `PresentAt`), and a new reader of a body's parts goes through the pool's part
   accessors, which record it (`NotePoseRead`).
 
@@ -509,8 +522,8 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   front-to-back order and no depth prepass ([rendering plan](../../../../docs/plans/rendering.md#gpu-submission-and-routed-worlds)).
 - **Growing the program region waits for the device to go idle**
   ([hot reload](../../../../docs/plans/open-items.md#edit-to-running-hot-reload-and-boot)).
-- **Tick-bound views record on tick frames,** beside the tick itself; rated
-  views and screens still share one phase ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
+- **Tick-bound views record on tick frames,** beside the tick itself
+  ([simulation tick](../../../../docs/plans/open-items.md#engine-job-system)).
 - **The sky reduction's bank conflict,** **the views filter tile's 2-way
   conflict** and **the bake's `SdfBakeTaps`,**
   indexed by the `[loop]` counter, the shape the local-array rule forbids: the

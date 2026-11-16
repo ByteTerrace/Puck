@@ -498,7 +498,10 @@ machine runs at its own rate, so game timing, audio and replay hashes do not
 move. The levers extend the per-pass cadence and the render graph's refresh
 (`RenderGraphRefresh.AtLeast`), never a second scheduler; `world.rates`
 switches each for comparison and prints each lever's longest interval between
-updates at each tier against the tier's period. Measured on the debug world
+updates at each tier against the tier's period. Rated items spread over a
+tier's period by a lead on the same floor (`PresentationPhases`), which only
+moves one update earlier and never onto a step's frame, so the spread costs no
+rate and needs no clock of its own. Measured on the debug world
 ([P20-3](../plans/rendering.md#p20--visibility-areas-and-residency)).
 
 ## A diagnostic view never covers its evidence

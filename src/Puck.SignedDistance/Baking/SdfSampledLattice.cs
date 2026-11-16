@@ -10,8 +10,8 @@ namespace Puck.SignedDistance.Baking;
 /// quad per sign-changing lattice edge, wound counter-clockwise seen from outside, with the material the field reported at
 /// the edge's outside end, whose nearest shape is the one the edge crosses. A quad whose last two vertices are one vertex
 /// is a triangle; any other splits into two triangles along its first diagonal, its first vertex to its third: the
-/// diagonal whose triangles face out where only one does, else the one whose triangles turn least from the normals of
-/// their corners that lie on no crease.</summary>
+/// diagonal whose triangles face out along the quad's lattice edge (<see cref="QuadAxes"/>) where only one's do, else
+/// the one whose triangles turn least from the normals of their corners that lie on no crease.</summary>
 /// <param name="Positions">Three floats per vertex.</param>
 /// <param name="Normals">Three floats per vertex: the unit outward normal.</param>
 /// <param name="Quads">Four vertex indices per quad.</param>
@@ -37,6 +37,14 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// quads as that face. Empty when the contour records none. A vertex <see cref="SplitAtCreases"/> appends records
     /// none.</summary>
     public bool[] Beside { get; init; } = [];
+    /// <summary>Gets, per quad, the lattice edge the quad crosses as a signed axis (<see cref="SdfContourFacing.Axis"/>):
+    /// the direction its triangles face out along. Empty for a contour that records none, whose quads are then judged by
+    /// their vertices' normals.</summary>
+    public sbyte[] QuadAxes { get; init; } = [];
+    /// <summary>Gets, per vertex, three components: the way the lattice says the vertex's surface patch faces
+    /// (<see cref="SdfContourFacing.Patch"/>), which judges a triangle lying edge-on to its quad's lattice edge. Empty for
+    /// a contour that records none. A vertex <see cref="SplitAtCreases"/> appends records none.</summary>
+    public float[] Patches { get; init; } = [];
 
     // A lifted chamfer's corner meets its neighboring bevel at 31.4 degrees, although the bevel meets the main face at
     // 45. Leave room below that smaller turn for sampled triangle normals; using 32 blended the corner across its rim.
@@ -67,6 +75,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         // takes one side's normal at every corner, and its other triangle shades as a spike of that side on this one.
         var quadList = new List<int>(capacity: Quads.Length);
         var materialList = new List<int>(capacity: QuadMaterials.Length);
+        var axisList = new List<sbyte>(capacity: QuadAxes.Length);
 
         for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
             var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
@@ -79,11 +88,16 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     quadList.AddRange(collection: [ia, ib, ic, ic, ia, ic, id, id]);
                     materialList.Add(item: QuadMaterials[quad]);
                     materialList.Add(item: QuadMaterials[quad]);
+                    if (quad < QuadAxes.Length) {
+                        axisList.Add(item: QuadAxes[quad]);
+                        axisList.Add(item: QuadAxes[quad]);
+                    }
                     continue;
                 }
             }
             quadList.AddRange(collection: [ia, ib, ic, id]);
             materialList.Add(item: QuadMaterials[quad]);
+            if (quad < QuadAxes.Length) { axisList.Add(item: QuadAxes[quad]); }
         }
 
         int[] quads = [.. quadList];
@@ -223,7 +237,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         return (((addedPositions.Count == 0) && !folded)
             ? this
-            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], QuadMaterials = [.. materialList], Quads = quads }));
+            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], QuadAxes = [.. axisList], QuadMaterials = [.. materialList], Quads = quads }));
 
         bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
     }
@@ -2196,8 +2210,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         float[] normals = [.. surface.Normals.Select(selector: static value => ((float)value))];
         float[] positions = [.. surface.Positions.Select(selector: static value => ((float)value))];
         var quads = surface.Quads;
+        var axes = surface.QuadAxes;
 
-        (quads, materials) = WithoutSpecks(materials: materials, positions: positions, quads: quads);
+        (quads, materials, axes) = WithoutSpecks(axes: axes, materials: materials, positions: positions, quads: quads);
 
         var contour = new SdfContour(
             Normals: normals,
@@ -2207,6 +2222,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         ) {
             Beside = surface.Beside,
             Features = surface.Features,
+            Patches = [.. surface.Patches.Select(selector: static value => ((float)value))],
+            QuadAxes = axes,
             Solved = surface.Solved,
         };
 
@@ -2221,21 +2238,51 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         for (var quad = 0; (quad < contour.QuadCount); quad++) {
             var at = (4 * quad);
 
-            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(features: contour.Features, normals: contour.Normals, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
+            if ((quads[(at + 2)] != quads[(at + 3)]) && !SplitsAlongFirstDiagonal(axis: ((quad < contour.QuadAxes.Length) ? contour.QuadAxes[quad] : ((sbyte)0)), features: contour.Features, normals: contour.Normals, patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at))) {
                 (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (quads[(at + 1)], quads[(at + 2)], quads[(at + 3)], quads[at]);
+            }
+        }
+
+        // A merged vertex stands for several cells, so two quads can hold one pair of vertices as opposite corners; split
+        // along that pair both, they make an edge four triangles hold. The later quad takes its other diagonal where that
+        // split faces out too. Only a vertex no crossing pins (SdfContour.Solved, which every merged vertex is) can be
+        // such a corner.
+        var solved = contour.Solved;
+        HashSet<long>? taken = null;
+
+        for (var quad = 0; (quad < contour.QuadCount); quad++) {
+            var at = (4 * quad);
+            var (a, b, c, d) = (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]);
+
+            if ((c == d) || !(((a < solved.Length) && solved[a]) || ((c < solved.Length) && solved[c]))) { continue; }
+            taken ??= new HashSet<long>(comparer: PackedIntPairComparer.Instance);
+            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: c), low: Math.Max(val1: a, val2: c)))) { continue; }
+            if ((quad < contour.QuadAxes.Length) && !SdfContourFacing.Splits(axis: contour.QuadAxes[quad], patches: contour.Patches, positions: contour.Positions, quad: quads.AsSpan(length: 4, start: at)).Second) { continue; }
+            if (taken.Add(item: PackedIntPair.Pack(high: Math.Min(val1: b, val2: d), low: Math.Max(val1: b, val2: d)))) {
+                (quads[at], quads[(at + 1)], quads[(at + 2)], quads[(at + 3)]) = (b, c, d, a);
             }
         }
     }
 
     // Whether a quad of four vertex indices splits along its first diagonal, its first corner to its third, rather than
-    // its second: the diagonal whose two triangles both face the way the corner normals point, where only one's do; else
+    // its second: the diagonal whose two triangles both face out as the lattice fixed the quad's facing (`axis`, zero
+    // for a contour that records none; SdfContourFacing.Splits), where only one's do, since a corner normal is an
+    // estimate; else the diagonal whose two triangles both face the
+    // way the corner normals point, where only one's do; else
     // the one whose triangles turn least from the normals of their corners that lie on no crease (Turn); else the
     // shorter. A quad around an edge beside a crease that steps across the lattice holds a crease vertex, a vertex of
     // each face and a fourth: split one way, a triangle joins the two faces' vertices across the crease and cuts its
     // corner; split the other, the crease vertex is a corner of both triangles and each lies on one face. Every quad of a
     // contour splits by this one rule.
-    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, bool[] features, ReadOnlySpan<int> quad) {
+    private static bool SplitsAlongFirstDiagonal(float[] positions, float[] normals, float[] patches, bool[] features, ReadOnlySpan<int> quad, sbyte axis) {
         var (v0, v1, v2, v3) = (Vertex(values: positions, vertex: quad[0]), Vertex(values: positions, vertex: quad[1]), Vertex(values: positions, vertex: quad[2]), Vertex(values: positions, vertex: quad[3]));
+
+        if (axis != 0) {
+            var (first, second) = SdfContourFacing.Splits(axis: axis, patches: patches, positions: positions, quad: quad);
+
+            if (first != second) { return first; }
+        }
+
         var (n0, n1, n2, n3) = (Vertex(values: normals, vertex: quad[0]), Vertex(values: normals, vertex: quad[1]), Vertex(values: normals, vertex: quad[2]), Vertex(values: normals, vertex: quad[3]));
         var outward = (
             X: (((((double)n0.X) + n1.X) + n2.X) + n3.X),
@@ -2323,7 +2370,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Drops the specks a sheet thinner than the finest cell leaves where it thins to a knife edge (the top of a shell cut
     // where its inside meets its outside): pieces of the surface apart from the rest, each smaller than two lattice cells
     // across and holding under a hundredth of the largest piece's quads. A whole surface that small, a part's own, stays.
-    private (int[] Quads, int[] Materials) WithoutSpecks(int[] quads, int[] materials, float[] positions) {
+    private (int[] Quads, int[] Materials, sbyte[] Axes) WithoutSpecks(int[] quads, int[] materials, sbyte[] axes, float[] positions) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
         var pieceSets = new SdfDisjointSet(count: vertexCount);
@@ -2352,7 +2399,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             pieces[root] = ((piece.Quads + 1), piece.Low, piece.High);
         }
         if (pieces.Count < 2) {
-            return (quads, materials);
+            return (quads, materials, axes);
         }
 
         var largest = pieces.Values.Max(selector: static piece => piece.Quads);
@@ -2363,11 +2410,12 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             if (((100 * piece.Quads) < largest) && ((piece.High - piece.Low).Length() < reach)) { _ = specks.Add(item: root); }
         }
         if (specks.Count == 0) {
-            return (quads, materials);
+            return (quads, materials, axes);
         }
 
         var keptQuads = new List<int>(capacity: quads.Length);
         var keptMaterials = new List<int>(capacity: quadCount);
+        var keptAxes = new List<sbyte>(capacity: quadCount);
 
         for (var quad = 0; (quad < quadCount); quad++) {
             if (specks.Contains(item: Root(vertex: quads[(4 * quad)]))) { continue; }
@@ -2375,9 +2423,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 keptQuads.Add(item: quads[((4 * quad) + corner)]);
             }
             keptMaterials.Add(item: materials[quad]);
+            keptAxes.Add(item: axes[quad]);
         }
 
-        return ([.. keptQuads], [.. keptMaterials]);
+        return ([.. keptQuads], [.. keptMaterials], [.. keptAxes]);
     }
     private int Index(int x, int y, int z) => (x + (m_samplesX * (y + (m_samplesY * z))));
     private (int X, int Y, int Z) FineCoordinates(int key) {

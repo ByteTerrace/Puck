@@ -183,7 +183,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
     /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), the store's reads,
-    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the background GPU work's buffers
+    /// the mesh region's landing (<see cref="SdfWorldTables.DescribeLanding"/>), the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
     /// (<see cref="SdfGpuWork.DescribeBytes"/>), the frame's sampled table (<see cref="SdfWorldTables.DescribeFrameSampled"/>),
     /// the latest program's emission, build and size, and the irradiance
     /// volume's probe cache.</summary>
@@ -199,6 +199,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             MeshPathBake.DescribeResidency(radius: radius),
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
+            (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
             $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.MeshDrawChanges?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
