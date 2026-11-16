@@ -613,6 +613,17 @@ budget and `CodeDerivedTable`'s generations (F17) run now as ordinary work
 tick-to-produce memo's phase 2 is dropped, and its phase 3 merges into the
 presentation view's last cut ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
 
+- [medium · unconfirmed · with the guaranteed phase and cross-subsystem waits]
+  `WorldDocument.AttachSink` delivers an attach primer that reaches
+  `WorldDisclosureImages.Current` without taking `WorldServer.AuthorityGate`,
+  while in-tick delivery and ordered-domain writes run under it; a frame-thread
+  attach (loopback transport, a session screen) could read the arena while a
+  federation or socket thread writes it, and the arena is not thread-safe.
+  Route the attach through the authority operation as a peer's attach does,
+  with the lock-order audit of its callers. The arena's move order now heals a
+  reader that overlaps one move (`ArenaRowVersions`), so the log is not the
+  exposure; the unguarded read is.
+
 The owner's direction: performance with quality means removing a cost at its
 cause, never trading latency or lighting quality for frame time. The engine
 runs its heavy work serially on one or two threads while most cores idle, and the bake and the irradiance preview compete with each

@@ -51,7 +51,11 @@ public sealed class WorldDisclosureImages {
     public static WorkKind RowVisits { get; } = new(name: "world.disclosure.row-visits", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the interned images a pass tested for reclamation.</summary>
     public static WorkKind ContentVisits { get; } = new(name: "world.disclosure.content-visits", unit: "count", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits];
+    /// <summary>Gets the kind counting the passes that checked every row of an audience's definition because the arena
+    /// could not name the rows that moved since the audience was last brought current: every version was reset at
+    /// once, or the definition was held against another arena.</summary>
+    public static WorkKind FullScans { get; } = new(name: "world.disclosure.full-scans", unit: "count", workClass: WorkClass.Pacing);
+    private static readonly WorkKind[] WorkKindOrder = [RowCompositions, RowBytes, RowSkips, IndexRebuilds, DefinitionCompositions, DefinitionBytes, RowVisits, ContentVisits, FullScans];
 
     private sealed record Entry(ulong Version, ulong Dependencies, WorldRecipientImage Image, int[] Keys);
     // One audience's disclosed definition. Between whole compositions it changes only row by row: a keyed write changes
@@ -72,8 +76,8 @@ public sealed class WorldDisclosureImages {
         public ulong[] Versions { get; } = versions;
         public ulong[] Dependencies { get; } = dependencies;
         public long Revision { get; set; } = revision;
-        // The arena whose rows Versions and Dependencies describe, and the place in its move log they are current to:
-        // a row the log has not named since then, and that depends on none it named, stands as recorded.
+        // The arena whose rows Versions and Dependencies describe, and the place in its version moves they are current
+        // to: a row that has not moved since then, and that depends on none that has, stands as recorded.
         public StateArena? Arena { get; set; }
         public long MovesRead { get; set; } = -1L;
         public byte[] Digests { get; } = digests;
@@ -101,6 +105,7 @@ public sealed class WorldDisclosureImages {
     private Utf8JsonWriter? m_imageWriter;
     private readonly List<StateCell> m_cellScratch = [];
     private readonly List<int> m_movedScratch = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_affectedScratch = new();
     private StateArena? m_exportArena;
     private StateRow?[] m_exports = [];
     /// <summary>Gets the table's monotonic work totals, an operator measurement like <see cref="Describe"/>.</summary>
@@ -238,10 +243,14 @@ public sealed class WorldDisclosureImages {
     // affected, unordered.
     internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, Puck.Abstractions.Collections.MarkedIndexSet affected) {
         Prepare(view);
-        var authored = view.Source.AuthoredState.Count;
+        AddAffected(rows, view.Source.AuthoredState.Count, affected);
+    }
+    // Each changed row that is authored, and every authored row whose policies read a changed row (authored or not),
+    // each once: the set's marks are what keep a row many changes name from being visited once per change.
+    private void AddAffected(ReadOnlySpan<int> rows, int authored, Puck.Abstractions.Collections.MarkedIndexSet affected) {
         foreach (var row in rows) {
-            if ((uint)row >= (uint)authored) { continue; }
-            affected.Add(row);
+            if ((uint)row < (uint)authored) { affected.Add(row); }
+            if ((uint)row >= (uint)m_dependents.Length) { continue; }
             foreach (var dependent in m_dependents[row]) {
                 if (dependent < authored) { affected.Add(dependent); }
             }
@@ -386,28 +395,34 @@ public sealed class WorldDisclosureImages {
         var skeletons = (entry.Revision != arena.DisclosureRevision);
         var moved = m_movedScratch;
         moved.Clear();
-        // A row's version and its dependencies' versions move only through the arena's move log, so the rows it names
-        // since this entry was last brought current, and the rows whose policies read them, are the only ones that
-        // can differ from the record. An entry the log cannot serve (another arena, or too far behind) checks every row.
-        if (ReferenceEquals(entry.Arena, arena) && arena.TryReadMoves(entry.MovesRead, moved)) {
-            foreach (var row in moved) {
+        // A row's version and its dependencies' versions move only through the arena's version moves, so the rows it
+        // names since this entry was last brought current, and the rows whose policies read them, are the only ones
+        // that can differ from the record. Each is visited once, so a pass costs the distinct rows that changed and
+        // their readers, never the number of writes. An entry the arena cannot serve (another arena, or a wholesale
+        // reset since) checks every row.
+        var place = entry.MovesRead;
+        // Another arena's place means nothing here: the scan below reads every row, from the place read before it.
+        var named = ReferenceEquals(entry.Arena, arena) ? arena.TryReadMoves(ref place, moved) : NoPlace(arena, out place);
+        if (named) {
+            var affected = m_affectedScratch;
+            affected.Clear();
+            AddAffected(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(moved), entry.Images.Length, affected);
+            foreach (var row in affected.Members) {
                 if (!Refresh(view, entry, audience, row, skeletons)) { return Compose(view, audience); }
-                if ((uint)row >= (uint)m_dependents.Length) { continue; }
-                foreach (var dependent in m_dependents[row]) {
-                    if (!Refresh(view, entry, audience, dependent, skeletons)) { return Compose(view, audience); }
-                }
             }
         } else {
+            m_work.Count(FullScans);
             for (var row = 0; row < entry.Images.Length; row++) {
                 if (!Refresh(view, entry, audience, row, skeletons)) { return Compose(view, audience); }
             }
         }
         entry.Arena = arena;
-        entry.MovesRead = arena.MoveSequence;
+        entry.MovesRead = place;
         entry.Revision = arena.DisclosureRevision;
         entry.Settle();
         return entry;
     }
+    private static bool NoPlace(StateArena arena, out long place) { place = arena.MoveSequence; return false; }
     // Brings one row of an audience's definition current, reporting false when the frame moved with it and the whole
     // definition must be composed again. A row beyond the authored rows, or one whose version and dependency versions
     // stand as recorded, is left as it is.
