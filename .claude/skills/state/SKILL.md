@@ -34,6 +34,7 @@ corrected in the same change.
 | Bounded sets of typed instances, claims, generations, pair pools | `StatePool` and the arena's pool storage (`StateArena.Pools.cs`) | [records and pools](../../../docs/reference/state/records-and-pools.md) |
 | Store, read and write cells; nest savepoints; take a change back | `StateArena` with `ArenaJournal`: `StateArena.Commit`, `StateArena.Rewind` | [arena](../../../docs/reference/state/arena.md#journal-scopes) |
 | Prove a row unchanged, or invalidate a cache derived from it | `StateArena.RowVersion` (content) versus `RowGeneration` (any mutation) | [row versions](../../../docs/reference/state/arena.md#row-versions-and-generations) |
+| State kept outside the arena behind a write door: a version that moves on write, a digest cached by version and content, the slots that were written | `Versioned<T>`, `VersionedArray<T>`, `VersionedRecord<T>` (a section implements `IVersionedSection`); `SlotBinding` and `SlotNotes`, whose publish is the one writer of the shared `IndexVersions`; `Derived<TResult>` for an answer computed from holders | [the body state door](../../../docs/plans/body-state-door.md#d2-as-landed) |
 | Hash the state; compose the world's hash | `StateArena.ComputeHash` (row digests cached by version; `RecomputeHash`, `CheckDigests`), composed by `WorldStateHashComposition` | [state hashing](../../../docs/reference/state/arena.md#state-hashing) |
 | Save, restore, relayout; replay one scope while the world runs | arena export/import and snapshots (`ArenaSnapshot.cs`, `ArenaScopeSnapshot.cs`); `WorldScopedReplayRuntime` | [checkpoints](../../../docs/reference/state/arena.md#checkpoints), [scoped replay](../puck-world/references/replay.md#scoped-live-replays) |
 | Boards: grids, hexes, graphs, tilings, rays, masks, cell sets | `CompiledTopology`, `BoardQueries`, `BoardMask` | [topologies](../../../docs/reference/state/topologies.md) |
@@ -185,6 +186,7 @@ and the source-read timing choice; these are not guarantees the current implemen
 | Contract | Enforced by |
 |---|---|
 | A fault is never dropped; an operand never resolves its own address | `OutcomeAnalyzer` (`OUTCOME001`–`OUTCOME004`), build errors |
+| A holder's state is written only through its write side | the compiler, which will not write through the read side's readonly reference, and `DoorAnalyzer` (`DOOR001`, `DOOR002`, `DOOR003`, `DOOR005`), build errors, for a mutating call on a copy, a reinterpreting cast, a mutable field in a record section and a kept write reference |
 | A firing's writes land together or not at all | the scope `RuleEvaluator.FireProposal`/`FireEffects` open and `RuleEvaluator.Commit` closes |
 | Side state rewinds with the arena | `IJournalParticipant`, recorded through `ArenaJournal.RecordParticipant`, which throws with no scope open |
 | Latch lifecycle writes stay outside firings | `RuleLatch` writers take the journal and refuse inside a scope |

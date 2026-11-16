@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
+using static Puck.Analyzers.NamedTypes;
 
 namespace Puck.Analyzers;
 
@@ -137,35 +138,6 @@ public sealed class OutcomeAnalyzer : DiagnosticAnalyzer {
         });
     }
 
-    private static bool Is(ITypeSymbol? type, string @namespace, string name) {
-        if (type is null) {
-            return false;
-        }
-
-        var definition = type.OriginalDefinition;
-
-        return (
-            (definition.Name == name) &&
-            (definition.ContainingType is null) &&
-            (definition.ContainingNamespace?.ToDisplayString() == @namespace)
-        );
-    }
-    private static bool Implements(ITypeSymbol? type, string @namespace, string name) {
-        if (type is null) {
-            return false;
-        }
-        if (Is(type: type, @namespace: @namespace, name: name)) {
-            return true;
-        }
-
-        foreach (var contract in type.AllInterfaces) {
-            if (Is(type: contract, @namespace: @namespace, name: name)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
     private static string? OutcomeDisplay(ITypeSymbol? type) {
         foreach (var (@namespace, name, display) in OutcomeTypes) {
             if (Is(type: type, @namespace: @namespace, name: name)) {

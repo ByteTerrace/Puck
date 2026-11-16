@@ -169,7 +169,7 @@ public sealed partial class StateArena {
         m_reindexStamp = new long[layout.RowCount];
         m_rowChangeStamp = new long[layout.RowCount];
         m_rowGenerations = new ulong[layout.RowCount];
-        m_rowVersions = new ArenaRowVersions(rowCount: layout.RowCount);
+        m_rowVersions = new IndexVersions(count: layout.RowCount);
         m_deliveryRows = new bool[layout.RowCount];
         m_rows = NormalizeRows(
             bytes: out m_declarationVisibilityBytes,
@@ -233,7 +233,7 @@ public sealed partial class StateArena {
             // the first time.
             Array.Clear(array: m_rowChangeStamp);
             Array.Clear(array: m_rowGenerations);
-            m_rowVersions.ResetAll(rowCount: m_rowVersions.Count, version: 0UL);
+            m_rowVersions.ResetAll(count: m_rowVersions.Count, version: 0UL);
         }
     }
 
