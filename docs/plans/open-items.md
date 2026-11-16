@@ -37,58 +37,63 @@ built on the engine's systems stresses them, and what it surfaces is fixed at
 the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high] [Residency and streaming](#residency-and-streaming): the
+1. [high, before any push to `main`] [Security review](#security-review):
+   the write door still tells a withheld row from an absent one at fields
+   and paths a per-field enumeration missed (an adversarial review of the
+   read-door fix found five high leaks); the structural write door
+   ([the disclosure plan](disclosure.md)) is in design.
+2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
    window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
    grant; then step 3.
-2. [high] [Bake detail](#bake-detail): the contour's triangles that face out
+3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-3. [high] [Engine job system](#engine-job-system): the memo's next step:
+4. [high] [Engine job system](#engine-job-system): the memo's next step:
    the scheduling stage's windowed reading, another family's review of the
    control plane's phase and bounded waits and its first step, then the
    pool's design.
-4. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
+5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
-5. [high] [Refactoring campaign](#refactoring-campaign): the duplication
+6. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-6. [high] [The visual bar](#the-visual-bar): the caldera water as its first
+7. [high] [The visual bar](#the-visual-bar): the caldera water as its first
    proof, built by [Water](#water)'s lanes A2 to A5.
-7. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
+8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-8. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
+9. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
    under a moving sun, then a cold area lit the moment a view arrives.
-9. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
    one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
    V1a, with `lane/g5` landed beside them.
-10. [high] [Transmission](transmission.md): its implementation lanes in order;
+11. [high] [Transmission](transmission.md): its implementation lanes in order;
     the defects it closes are in [Lighting and GI](#lighting-and-gi).
-11. [high] [Bake proportional to change](#bake-proportional-to-change): one
+12. [high] [Bake proportional to change](#bake-proportional-to-change): one
     store for both backends, then the collapse's acceptance search.
-12. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
+13. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
     and 6, with step 0's fuzzer and step 0b's principals.
-13. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
+14. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-14. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
+15. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
     release's three causes and the production deploy, which a push to `main`
     needs.
-15. [high] [Transfers, federation and server](#transfers-federation-and-server):
+16. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
-16. [high] [Test runner and replay](#test-runner-and-replay): the body's write
+17. [high] [Test runner and replay](#test-runner-and-replay): the body's write
     door from step D5.
-17. [medium] [Certified field contact](#certified-field-contact): box and
+18. [medium] [Certified field contact](#certified-field-contact): box and
     ellipsoid bodies, then clearance close to a slope.
-18. [medium] [Language and authoring](#language-and-authoring) and
+19. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the spelling pairs, the overlay text advance.
-19. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
+20. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
-20. Then, by ordinary priority:
+21. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
@@ -1875,6 +1880,20 @@ and 6; then the researcher brief's priorities
   learns that a withheld declaration sits in a write's footprint (never its
   name). [The disclosure plan's open items](disclosure.md#open-items) hold the
   two candidates.
+- [high, before any push to `main`] The write door's footprint is
+  enumerated per field, and an Antigravity adversarial review of the read-door
+  fix found five high and three medium leaks it missed: state-row references
+  in mutation and placement values outside `CollectReferencedRows`; transform
+  indirections (`$cell:`, `$zone:`, `$expr:`, `[key]`) with
+  `WorldRecipientView.AdmitsTransform` admitting when it cannot resolve the
+  rows; `AdmitsDeclaration` skipping knowledge, witness and per-cell readers;
+  `Admits`' reverse footprint skipping dependents other than keyed rows; an
+  empty `ExpectedStateRows` passing `AdmitsDefinition` while the fingerprint
+  hashes state-dependent placements and fields; console write verbs reading
+  the read view first; `WorldDocument.IsStateCommand` reading the unfiltered
+  definition; `world.parked` and `world.hud.template`. The design for one
+  derived write footprint, with granted row declaration and an operator grant,
+  is in [the disclosure plan](disclosure.md); the build follows its review.
 - [high] Hidden state is distinguishable from absent state at doors the
   door-by-door fixes did not reach. [The disclosure plan](disclosure.md#the-build-order)
   is the structural fix and owns the queue: steps 5 and 6, step 0's fuzzer,
@@ -2400,6 +2419,13 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
+- [high] `puck test` takes the heavy lease and then waits up to 120 minutes for
+  host capacity while holding it ("gate: waiting for host capacity before test
+  worker"), so every other lane's heavy run queues behind a run that is itself
+  waiting: a lead `puck test` held the heavy lease 18 minutes behind a
+  windowed World's admission while a lane's scenario run waited 8 minutes for
+  it. Admit before acquiring an exclusive lease, or release the lease while
+  waiting on admission and requeue at the same ticket.
 - [medium] `puck integrate`: the lead's integration steps as one verb under
   one report: the build, each generator's `--check`, `puck docs links`, a
   headless boot of the debug world, windowed Direct3D 12 and Vulkan boots, and
@@ -2787,6 +2813,14 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [medium] `host.memory heap` (`ManagedHeapWalk`) brings
+  `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
+  players run, for one diagnostic verb. Read the runtime's heap-dump events
+  in process without the package (an `EventListener` on the runtime provider
+  with the GC heap-dump keyword is the lead to check, unverified), or move
+  the walk to a `puck` verb attached over the diagnostics port, and drop the
+  reference. The verb also blocks the World for the walk (671 to 926 ms on a
+  headless debug world), since commands have no asynchronous form.
 - [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
   beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
   stack, but body predicates keep a separate dispatch over recency clocks,
