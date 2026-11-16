@@ -73,16 +73,18 @@ citations are leads: recheck the symbol before building from one.
 entry as a view (`WorldPopulation.EntryCheckpoint`, which calls
 `WorldBody.CaptureSections`), digests each section through its own static
 encoder (`WorldAuthorityCheckpointCodec.SectionDigest`) and folds the digests
-([D1 as landed](#d1-as-landed)). Its own remark states the problem
-**[opened]** (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs:25`):
+([D1 as landed](#d1-as-landed)). Its own remark states the problem, for
+every section not yet behind a holder ([D3 as landed](#d3-as-landed))
+**[opened]** (`src/Puck.World.Server/WorldPopulation.Checkpoint.cs:28`):
 
 ```csharp
-    /// <remarks>Every section of every active slot encodes afresh on every fold: a body's state is written directly
-    /// by its step, commands, contacts and tethers, so nothing yet says a section is unchanged.</remarks>
+    /// holder hands out, which is cached while the section is unchanged. Every other section of every active slot
+    /// encodes afresh on every fold: its state is still written directly by the step, commands, contacts and tethers,
+    /// so nothing says it is unchanged.</remarks>
 ```
 
 The view hands out the body's live arrays **[opened]**
-(`src/Puck.World.Server/WorldBody.Sections.cs:191`):
+(`src/Puck.World.Server/WorldBody.Sections.cs:221`):
 
 ```csharp
     // A table as a section holds it: the live array for a view, a copy for a capture.
@@ -219,7 +221,7 @@ The Action writes, as an example of the shape
 
 ```csharp
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            m_previousChannelBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
+            ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
         }
 ```
 
@@ -755,7 +757,7 @@ section it can. Bytes are the measured ranges'; the Pose and Motion split is
 | Input images | The submitted, held, producer and transfer-held images and their flags, the crossing's held image, the source, the mapping and epoch | 1,340 | 0 | Yes |
 | Input read-backs | The engaged image and the read-held, read-composed and read-scalar images | 1,070 | 11 | Yes |
 | Action | The per-channel timers, values, bits and pending presses; each lane's latch, held facts and recency | 4,160 | 2 | Yes |
-| Bookkeeping | Register dirty flags and operands, durable input, script actors (array holders) | 204 and the bookkeeping beside the registers | 0 | No |
+| Bookkeeping | Register dirty flags and operands (an array holder); durable input and script actors (record holders over immutable tables, because their rows hold a writer id and a principal) | 204 and the bookkeeping beside the registers | 0 | No |
 | Tape and program | The scripted tape, a pending continuum, the motion program's name | About 10 | 0 | No |
 | Contacts | The owned contact records, behind the array holder | 630 on average | 0 while parked | No |
 | Admission (entry) | Generation, flags, kit index and selections, placement, mobility, park, spawn, travel turn, identity; the grant templates and revoked keys as immutable sorted arrays; the designations in an array holder | 96 | 0 | No |
@@ -1035,7 +1037,7 @@ over ticks 300 to 600 of the headless debug world with a recording armed.
 |---|---|---|---|---|
 | D1. Sections as images (landed; [what it fixed](#d1-as-landed)) | Medium | The section types as capture images built from the body's and the entry's fields (`WorldBody.CaptureSections`, `WorldPopulation.EntryCheckpoint`); a static encoder and reader per section (`IContinuationSection<TSelf>`); the checkpoint entry as its sections and a tail (`WorldPopulationEntryCheckpoint`, `WorldPopulationEntryTail`), walked in one stated order; the slot digest as a fold of section digests; the observation and the profile folded beside the segments, the profile by content; the registers out of the whole-population fold; the medium flags and the affecting subject captured and restored (`WorldBody.RestoreSections`); the per-section counters; the codec coverage law | None yet: every section encodes fresh | Ran: `puck test --reproduce --jobs 1` on the go, chess-scope, garden, snapshot-partitions and rule-faults W10/W11 tests; the go tests recorded (`--record`) and compared file by file with a recording of the step before: the delivered snapshots, the crossings and every exported value match, and the authoritative hash differs, as it must; the counters read 590 slots and 5,177,680 bytes a tick; `ContinuationHashLawTests` (a captured population's fold equals the live fold, a profiled seat's included, and an identity's rate edit with no body write moves it); `ContinuationSectionLawTests` (every field of every section reaches its digest and reads back); `WorldMediumLawTests` (a body asleep in a medium restores reading `inmedium`). Not run as specified: the walkthrough scenario for `identity.motion`, because that verb writes the identity inline and tapes nothing, so a replay cannot re-apply it; the law above stands in for the fold's half of it |
 | D2. The door types (landed; [what it fixed](#d2-as-landed)) | Small | The section, table and record holders (`Versioned<T>`, `VersionedArray<T>`, `VersionedRecord<T>`) with the content check and the checked read; the slot binding, the notes and their publish (`SlotBinding`, `SlotNotes`); `IndexVersions` as a shared type with the arena on it; the derived view (`Derived<TResult>`); DOOR001, DOOR002, DOOR003 and DOOR005 (`DoorAnalyzer`); a law that compiles both spikes' statements against the holders' own sources and asserts each diagnostic | The holders, used by nothing in the body yet | `DoorAnalyzerTests` (each refused shape names its compiler error or its rule, each shape the write side admits reports nothing); `VersionedHolderLawTests` (a holder written back to the same value hands out its cached digest and counts one filtered compare; a checked read names a stale digest; notes written across partitions publish every slot once, in partition order; a derived answer recomputes exactly when a holder moved); the state laws; `puck test --reproduce` on the rule-faults and snapshot-partitions tests with the rule counters unchanged; the go tests under `--compare` against D1's recording |
-| D3. The Action section | Medium | The per-channel arrays and the lane runtime as inline arrays in a holder; the bookkeeping arrays in array holders | The Action and Bookkeeping holders | Hashes equal D1's (`puck test --compare` against D1's `--record`); the Action ranges' 2,454,400 bytes fall to about 9,000 and the script actors' 120,360 to zero; about 100 filtered compares of Action a tick (the standing bodies); zero stale digests on every replayed tick; unchanged encodes at a body's first move only |
+| D3. The Action section (landed; [what it fixed](#d3-as-landed)) | Medium | The per-channel arrays and the lane runtime as inline arrays in a holder; the bookkeeping arrays in array holders | The Action and Bookkeeping holders | Hashes equal D1's (`puck test --compare` against D1's `--record`); the Action ranges' 2,454,400 bytes fall to about 9,000 and the script actors' 120,360 to zero; about 100 filtered compares of Action a tick (the standing bodies); zero stale digests on every replayed tick; unchanged encodes at a body's first move only |
 | D4. The Input sections | Medium | The intent images and flags, in two sections | The two Input holders | The same; the input ranges' 1,421,900 bytes fall to about 12,000; the walkthrough routes reproduce |
 | D5. Pose, Motion, Clocks, Tape and the configuration | Large | The remaining body fields; the facts as a static function behind a derived view, with the walkable threshold and hold table in the configuration holder; the checkpoint restore and the step snapshot as section copies with the four fixups; the crossing's image as a projection; the residue pair deleted | Their holders | The same; these ranges' 416,540 bytes fall to about 19,000; the walkthrough routes reproduce; a refused sweep still restores (the sweep refusal laws); a law that capture, a contact-field rebuild and a second capture give one digest; the hall tests reproduce |
 | D6. Contacts | Medium | In `Puck.Physics`: the slot state struct, `FixedRigidWorld.Step` over spans, association over a span, the manifold and slot-table objects gone. In the server: contact records in the body's array holder, `WorldRigidContact` and the slot image gone, the step's association list and scratch | The Contacts holder | The same; the physics laws for the rigid solver; a law that after a rigid step every associated contact's stored state equals its solved scratch, and that every body whose stored contacts changed was noted; the contact-store counter split by whether the owner stepped; chess and go reproduce with parked islands waking and parking |
@@ -1160,6 +1162,79 @@ fields, inline-array and span elements) starts at a readonly reference and is
 a holder's read side or passes through a section. DOOR005 is a `ref` local, a
 `ref` assignment or a `Span<T>` local initialised from a holder's write side
 or from a member that returns a writable reference or span to a section.
+
+### D3 as landed
+
+Five sections of a body are behind holders, and nothing else stores their
+state:
+
+| Section | Holder | Why that holder |
+|---|---|---|
+| Action | `Versioned<BodyActionSection>` | Fixed size: seven per-channel inline arrays (`PerChannel<T>`) |
+| LaneRecency | `VersionedArray<ulong>` | One flat table, laid out by the lanes' bindings (`WorldBody.LayoutLaneRecency`) |
+| RegisterWrites | `VersionedArray<WorldRegisterWriteImage>` | One row per register of the kit's register file |
+| DurableInput | `VersionedRecord<BodyDurableInputSection>` | A row names its writer, a string, so the table is an immutable array that a write replaces |
+| ScriptActors | `VersionedRecord<BodyScriptActorsSection>` | A principal holds a string; two immutable tables |
+
+[The section table](#decision-2-one-version-or-many-and-what-a-moved-version-costs)
+had array holders for all of Bookkeeping. The two with a reference in a row
+are record holders instead, which is the form DOOR003 admits for them; their
+writes are rare (a staged profile delivery, a scripted press), so replacing a
+table costs nothing a tick.
+
+- **A fold reads the held digests.** `WorldBody.HeldDigests` asks each holder
+  for its digest and answers which sections it holds; the slot digest
+  (`WorldAuthorityCheckpointCodec.ContinuationSlotDigest`) folds those in the
+  sections' places and never reads the entry's value for them. The fold's
+  view of a body (`WorldBody.CaptureSections` with `held`) leaves the Action
+  section and the two tables out, so an unchanged one is neither captured nor
+  encoded.
+- **The recompute reads no cache.** `WorldPopulation.AppendContinuationHash`
+  with `recompute` captures and encodes every section; the replay check
+  (`WorldStateHashComposition.DescribeStaleDigest`) compares the two on every
+  replayed tick and, when they differ, takes the incremental hash once more
+  under `SlotNotes.Checked` and reports the slot and section the holders name.
+- **A table section has one encoder.** `IContinuationTableSection<TSelf, TElement>`
+  writes the section from a span of its elements; the section's own `Write`
+  calls it, and a table holder digests through it
+  (`ContinuationTableCodec<TSection, TElement>`).
+- **One binding for a body.** The five holders share one `SlotBinding`, bound
+  to the population's `SlotNotes` in `WorldBody.BindPopulation`; the fold
+  publishes the notes. Nothing reads them until D7.
+- **Bookkeeping writers compare; the step does not.** A clear, a restore or an
+  install that changes nothing writes nothing. The step's Action writes stay
+  unconditional until D12, and the holder's content compare absorbs them:
+  they are the filtered compares below.
+- **A lane's clocks number its binding's recency facts at all times.** Before,
+  each lane owned an array that an arrival reset dropped and an installed
+  mapping left missing for a lane no channel carried into; a lane with a
+  recency fact then read through a null array on its next step. The reset
+  zeroes the clocks and an install lays them out for the new bindings, moving
+  a kept channel's clocks with it.
+
+Counts a tick, the debug world over ticks 300 to 600 with a recording armed
+(four folds a tick):
+
+| Count (`world.tick.`) | D2 | D3 |
+|---|---|---|
+| `continuation-bytes` | 5,177,680 | 2,529,891 |
+| `section-bytes.action` | 2,378,880 | 9,233 |
+| `section-encodes.action` | 590 | 2.29 |
+| `section-filtered-compares.action` | none | 83.21 |
+| `section-compared-bytes.action` | none | 344,736 |
+| `section-unchanged-encodes.action` | none | 0 |
+| `section-bytes.script-actors` | 113,280 | 0 |
+| `section-bytes.durable-input` | 107,362 | 0 |
+| `section-bytes.register-writes` | 55,140 | 0 |
+| `section-bytes.lane-recency` | 2,360 | 0 |
+| encodes of each of those four | 590 | 0 |
+
+The four bookkeeping sections count no compare either: nothing wrote them in
+the window, so each read is answered by the version alone. Action is written
+for about 85.5 bodies a tick (83.21 filtered and 2.29 encoded), where the row
+expected about 100: `physics.bodies.advances` reads 84.5 over the same window,
+so the writers are the bodies whose step ran **[inference]**.
+
 No step is a stopgap for a later one. D1's static encoders are what makes the
 coverage half of the invariant true before any field moves, and every later
 step only changes where a section's value is stored. D12 is the one step the
