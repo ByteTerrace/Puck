@@ -218,3 +218,10 @@ test case for step 2.
   opening time authored there, once the scheduler and areas have landed.
 - The resident-byte target is set on the RTX 4070; the Steam Deck is a second
   qualification on the same budget mechanism.
+- A seam is whatever breaks immersion for the player in normal play conditions.
+  A crossing between worlds is seamless when nothing a player sees, hears or
+  feels in the controls gives it away: no hitch, pause, correction, camera
+  jump, dropped input, audio cut, lighting snap or late surface. That the world
+  is split into worlds, shards or authorities is not a seam; a transfer that
+  shows only in logs or tooling is no leak ("Learning that their world is
+  sharded by mining logs isn't a 'leak'").
