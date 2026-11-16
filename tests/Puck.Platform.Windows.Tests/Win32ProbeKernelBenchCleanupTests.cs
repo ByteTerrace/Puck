@@ -152,9 +152,16 @@ public sealed class Win32ProbeKernelBenchCleanupTests {
             bindingAttr: BindingFlags.Public | BindingFlags.Instance,
             name: "OpenSharedTexture"
         )!;
-        var releaseTexture = VideoDeviceType.GetMethod(
+        // The one COM release every opened texture and view goes through (the non-generic nint overload).
+        var releaseTexture = Platform.GetType(
+            name: "Puck.Platform.Windows.Win32D3D11",
+            throwOnError: true
+        )!.GetMethod(
+            binder: null,
             bindingAttr: BindingFlags.Public | BindingFlags.Static,
-            name: "ReleaseTexture"
+            modifiers: null,
+            name: "Release",
+            types: [typeof(nint)]
         )!;
 
         try {
