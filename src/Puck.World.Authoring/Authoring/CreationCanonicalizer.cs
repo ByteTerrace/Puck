@@ -15,7 +15,6 @@ namespace Puck.World.Authoring;
 public static partial class CreationCanonicalizer {
     // The default extrude half-depth a text run relies on when it declares none, and the floors every run clamps to —
     // a zero-depth glyph slab has no relief (it would be coplanar with the surface), so the depth is floored positive.
-    private const float DefaultTextDepth = 0.02f;
     private const float MinTextDepth = 0.001f;
     private const float MinTextEmHeight = 0.01f;
 
@@ -220,7 +219,7 @@ public static partial class CreationCanonicalizer {
                     ? TextRunDocument.AlignRight
                     : null)),
                 Depth = MathF.Max(
-                x: (run.Depth ?? DefaultTextDepth),
+                x: run.Relief,
                 y: MinTextDepth
             ),
                 EmHeight = MathF.Max(

@@ -56,6 +56,10 @@ public readonly record struct SdfInstanceRange(
     /// steps over a surface made of features thinner than that spacing, such as a line of glyphs' strokes. The
     /// builder declares it for an instance of text alone (<see cref="SdfProgramBuilder.Text"/>).</summary>
     public bool Fitted { get; init; }
+    /// <summary>Gets a static instance's glyphs (<see cref="SdfProgramBuilder.Text"/>): the box their cells span and the
+    /// spacing their strokes ask, which the mesh bake refines inside that box alone, whatever the rest of the instance
+    /// declares (<see cref="Detail"/>). <see langword="null"/> for an instance with no glyph, or a dynamic one.</summary>
+    public SdfGlyphSpan? Glyphs { get; init; }
     /// <summary>Gets the shapes a dynamic instance holds, each the box it occupies in its own slot's frame and the detail it
     /// declares (<see cref="SdfInstancePart"/>): the members its group's union lattice refines one by one, as a static union
     /// refines each instance's box. Empty where the instance's bound alone describes it.</summary>

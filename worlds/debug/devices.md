@@ -83,12 +83,12 @@ glass draw of the shell's own mesh.
 
 The stands' names are embossed text runs at a 40 mm em and a 2 mm relief. An
 embossed run bakes as a group of its own, refined toward its declared detail
-(the thinner of its relief and a tenth of its em, about a stroke's width) but no
-finer than an eighth of a 15 mm cell along the run, 1.875 mm; a stroke must span
-two of those cells to survive every placement, so lettering much under a 40 mm
-em loses strokes (an 18 mm "I" dropped out of the deck's name). The devices
-carry no wordmarks for that reason: lettering a few millimetres high is below
-what the bake keeps.
+(the thinner of its relief and half its stroke, about a twentieth of its em) on
+a lattice spaced to reach it, so each stroke spans two cells. The bake's finest
+cell is a millimetre (`SdfMeshTier.BaseCell`), so a stroke under 2 mm, lettering
+under about a 20 mm em, can lose strokes at any distance. The devices carry no
+wordmarks for that reason: lettering a few millimetres high is below what the
+bake keeps.
 
 A `roms/` folder is spelled `../../roms/<device>` beside this file, so it
 resolves when the world boots from its package in the checkout

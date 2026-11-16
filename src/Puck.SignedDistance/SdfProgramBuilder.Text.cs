@@ -146,6 +146,20 @@ public sealed partial class SdfProgramBuilder {
         return correction;
     }
 
+    /// <summary>A regular weight's stroke, in ems: the width <see cref="GlyphDetail"/> takes a run's letters' strokes to
+    /// be.</summary>
+    public const float GlyphStrokeEms = 0.1f;
+
+    /// <summary>Returns the spacing a run's glyphs ask of the mesh bake, by the rule for any thin feature, its half
+    /// thickness: the lesser of half the slab each glyph extrudes and half its stroke (<see cref="GlyphStrokeEms"/>). A
+    /// stroke two cells wide keeps a sample inside it wherever the lattice falls; one about a cell wide loses
+    /// letters.</summary>
+    /// <param name="worldEmHeight">The world height of one em.</param>
+    /// <param name="extrudeHalfDepth">The half depth each glyph extrudes along its plane's normal.</param>
+    /// <returns>The spacing, in world units.</returns>
+    public static float GlyphDetail(float worldEmHeight, float extrudeHalfDepth) =>
+        MathF.Min(x: MathF.Abs(x: extrudeHalfDepth), y: ((0.5f * GlyphStrokeEms) * worldEmHeight));
+
     /// <summary>Lays <paramref name="text"/> out against <paramref name="atlas"/> and emits one <see cref="Glyph"/> cell
     /// per drawn character, positioned on the plane spanned by <paramref name="right"/>/<paramref name="up"/> at
     /// <paramref name="origin"/> (the first line's baseline pen). Each glyph is a self-contained
@@ -304,10 +318,11 @@ public sealed partial class SdfProgramBuilder {
         if ((m_openInstanceFirst >= 0) && (spanLow.X <= spanHigh.X)) {
             var frame = (dynamicSlot ?? -1);
             var emitted = (m_instructions.Count - firstInstruction);
+            var detail = GlyphDetail(worldEmHeight: worldEmHeight, extrudeHalfDepth: extrudeHalfDepth);
 
             m_openInstanceGlyphs = ((m_openInstanceGlyphs is { } glyphs)
-                ? (Vector3.Min(value1: glyphs.Low, value2: spanLow), Vector3.Max(value1: glyphs.High, value2: spanHigh), ((glyphs.Slot == frame) ? frame : GlyphFramesMixed), (glyphs.Instructions + emitted))
-                : (spanLow, spanHigh, frame, emitted));
+                ? (Vector3.Min(value1: glyphs.Low, value2: spanLow), Vector3.Max(value1: glyphs.High, value2: spanHigh), ((glyphs.Slot == frame) ? frame : GlyphFramesMixed), (glyphs.Instructions + emitted), MathF.Min(x: glyphs.Detail, y: detail))
+                : (spanLow, spanHigh, frame, emitted, detail));
         }
 
         return this;

@@ -2103,6 +2103,8 @@ public static partial class WorldModelShape {
                 M("tracking", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.TextRunDocument), "Tracking", Read | Write, static value => ((global::Puck.World.Authoring.TextRunDocument)value).Tracking),
                 M("lineSpacing", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.TextRunDocument), "LineSpacing", Read | Write, static value => ((global::Puck.World.Authoring.TextRunDocument)value).LineSpacing),
                 M("shapeId", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.TextRunDocument), "ShapeId", Read | Write, static value => ((global::Puck.World.Authoring.TextRunDocument)value).ShapeId),
+                M("relief", typeof(global::System.Single), typeof(global::Puck.World.Authoring.TextRunDocument), "Relief", None),
+                M("engraves", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.TextRunDocument), "Engraves", None),
                 M("glyphCount", typeof(global::System.Int32), typeof(global::Puck.World.Authoring.TextRunDocument), "GlyphCount", None),
             ],
             []),

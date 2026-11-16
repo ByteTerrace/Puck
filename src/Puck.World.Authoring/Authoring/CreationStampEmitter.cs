@@ -337,11 +337,7 @@ public static partial class CreationStampEmitter {
         }
 
         foreach (var run in (document.TextRuns ?? [])) {
-            if (string.Equals(
-                a: run.Mode,
-                b: TextRunDocument.ModeEngrave,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (run.Engraves) {
                 return true;
             }
         }
@@ -618,14 +614,8 @@ public static partial class CreationStampEmitter {
                 up: frame.Rotation.Rotate(vector: localUp).ToVector3(),
                 worldEmHeight: (run.EmHeight * transform.Scale),
                 material: materialFor(arg: run),
-                blend: (string.Equals(
-                    a: run.Mode,
-                    b: TextRunDocument.ModeEngrave,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ? SdfBlendOp.Subtraction
-                : SdfBlendOp.Union),
-                extrudeHalfDepth: ((run.Depth ?? 0.02f) * transform.Scale),
+                blend: (run.Engraves ? SdfBlendOp.Subtraction : SdfBlendOp.Union),
+                extrudeHalfDepth: (run.Relief * transform.Scale),
                 layout: RunLayoutOptions(
                     run: run,
                     scale: transform.Scale
@@ -681,14 +671,8 @@ public static partial class CreationStampEmitter {
                 ),
                 worldEmHeight: (run.EmHeight * scale),
                 material: materialFor(arg: run),
-                blend: (string.Equals(
-                    a: run.Mode,
-                    b: TextRunDocument.ModeEngrave,
-                    comparisonType: StringComparison.Ordinal
-                )
-                ? SdfBlendOp.Subtraction
-                : SdfBlendOp.Union),
-                extrudeHalfDepth: ((run.Depth ?? 0.02f) * scale),
+                blend: (run.Engraves ? SdfBlendOp.Subtraction : SdfBlendOp.Union),
+                extrudeHalfDepth: (run.Relief * scale),
                 layout: RunLayoutOptions(
                     run: run,
                     scale: scale
@@ -962,7 +946,7 @@ public static partial class CreationStampEmitter {
             )
         );
         var worldPerTexel = (emHeight / atlas.Size);
-        var depth = (MathF.Abs(x: (run.Depth ?? 0.02f)) * scale);
+        var depth = (MathF.Abs(x: run.Relief) * scale);
         var runReach = 0f;
 
         foreach (var placement in layout.Placements) {
@@ -1013,11 +997,7 @@ public static partial class CreationStampEmitter {
         var runs = (document.TextRuns ?? []);
 
         for (var index = 0; (index < runs.Count); index++) {
-            if (string.Equals(
-                a: runs[index].Mode,
-                b: TextRunDocument.ModeEngrave,
-                comparisonType: StringComparison.Ordinal
-            )) {
+            if (runs[index].Engraves) {
                 return true;
             }
         }

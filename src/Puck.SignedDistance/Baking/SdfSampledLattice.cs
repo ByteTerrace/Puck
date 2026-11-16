@@ -235,7 +235,11 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 /// <param name="Factor">The fine cells along each axis of a coarse cell the box asks for, at least two; zero asks for the
 /// refinement's own factor. A region asking for fewer than the refinement takes the fewest the refinement's own factor
 /// divides into by a power of two that still reach it (<see cref="SdfSampledLattice.Refine"/>).</param>
-public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High, int Factor = 0);
+/// <param name="Bound">Whether the box's field is only a lower bound on the distance away from its surface, as a glyph's is
+/// past half its atlas's distance range (a constant band, then its cell's box): samples that hold such a field flat say
+/// nothing of a feature between them, so every cell the surface can enter refines at the box's factor, not only the
+/// cells whose samples show the surface turning.</param>
+public readonly record struct SdfLatticeRegion(Vector3 Low, Vector3 High, int Factor = 0, bool Bound = false);
 /// <summary>
 /// A field sampled on a lattice whose spacing may differ per axis, as a GPU bake reads it back: each sample's value and
 /// the material the field reported there, then the gradients the contour reads. <see cref="Contour"/> extracts its
@@ -448,7 +452,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// surface patch, and
     /// every cell the surface can enter (a corner within half the cell's diagonal of it) that overlaps one of
     /// <paramref name="regions"/> and whose samples show the surface turning (a plane's field is affine and contours
-    /// exactly), split no finer than its turn needs to contour smooth (<see cref="RoundCell"/>) or its regions ask.
+    /// exactly), split no finer than its turn needs to contour smooth (<see cref="RoundCell"/>) or its regions ask; in a
+    /// region whose field is a bound (<see cref="SdfLatticeRegion.Bound"/>), every such cell, split as the region asks.
     /// <para>The essential cells split <paramref name="factor"/> times; a region cell splits the fewest times
     /// <paramref name="factor"/> divides into by a power of two that reach what it needs, so each split divides the
     /// finest. A cell of a coarser split measures the fine samples on its stride's grid and interpolates the rest inside
@@ -672,8 +677,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                             }
                             if (nearest > reach) { continue; }
 
-                            // A cell whose surface the samples already hold flat refines nothing: its contour is exact.
-                            var need = Math.Min(val1: asked, val2: CurvedSplit(x: x, y: y, z: z));
+                            // A cell whose surface the samples already hold flat refines nothing: its contour is exact. A
+                            // bound's flat samples prove no such thing (SdfLatticeRegion.Bound).
+                            var need = (region.Bound ? asked : Math.Min(val1: asked, val2: CurvedSplit(x: x, y: y, z: z)));
 
                             if (need < 2) { continue; }
 

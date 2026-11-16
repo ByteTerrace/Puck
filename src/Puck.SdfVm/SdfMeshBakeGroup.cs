@@ -66,6 +66,10 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     public Vector3 DetailLow { get; private set; }
     /// <summary>Gets the high corner of the box the group's detailed instances' bounds cover, in the group's frame.</summary>
     public Vector3 DetailHigh { get; private set; }
+    /// <summary>Gets the group's static instances' glyphs joined (<see cref="SdfInstanceRange.Glyphs"/>), in the group's
+    /// frame: the box whose field is a bound its lattice refines cell by cell, at their detail; <see langword="null"/>
+    /// for none.</summary>
+    public SdfGlyphSpan? Glyphs { get; private set; }
 
     /// <summary>Gets the geometry the group bakes while its instances are appended: a world group's names its segments'
     /// materials as they are, an instance group's by their place in <see cref="MaterialOrder"/>.</summary>
@@ -274,6 +278,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         replanned.Detail = group.Detail;
         replanned.DetailLow = group.DetailLow;
         replanned.DetailHigh = group.DetailHigh;
+        replanned.Glyphs = group.Glyphs;
         replanned.Members.AddRange(collection: group.Members);
 
         foreach (var index in group.m_instances) {
@@ -394,6 +399,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     high = Vector3.Max(value1: low, value2: Vector3.Min(value1: high, value2: box.High));
                 }
                 group.Members.Add(item: (instance.Center, radius, instance.Detail, low, high));
+                if (instance.Glyphs is { } glyphs) { group.Glyphs = ((group.Glyphs is { } held) ? held.Join(other: glyphs) : glyphs); }
             }
             if (instance.Detail > 0f) {
                 var low = (center - new Vector3(value: radius));
@@ -531,6 +537,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         foreach (var (_, _, detail, _, _) in Members) {
             if (detail > 0f) { finest = MathF.Min(x: finest, y: detail); }
         }
+        if (Glyphs is { Detail: > 0f } glyphs) { finest = MathF.Min(x: finest, y: glyphs.Detail); }
 
         var extent = (High - Low);
 

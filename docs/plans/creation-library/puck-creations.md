@@ -57,7 +57,7 @@ Six findings matter most to a library:
 ### The document
 
 The creation is its own document type, embedded in a world **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:546-547`):
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:555-556`):
 
 ```csharp
 /// The <c>puck.creation.v1</c> document — an authored scene as data, the everything-as-data payoff for authoring: a
@@ -69,7 +69,7 @@ cameras, a behaviour manifest, text runs, parts, a noise facet, drivers,
 effectors, volumes and `SizeBy` **[opened]**
 (`src/Puck.World.Authoring/Authoring/CreationDocument.cs:587-608`). The palette
 has 32 slots **[opened]**
-(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:618-620`):
+(`src/Puck.World.Authoring/Authoring/CreationDocument.cs:627-629`):
 
 ```csharp
     /// <summary>The material palette's slot count — <see cref="ShapeDocument.Material"/>/<see cref="TextRunDocument.Material"/>

@@ -403,8 +403,9 @@ laws exercise that boundary.
   part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
   declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
   its noise relief's (`CreationNoiseDocument.DetailSpacing`) where that is
-  finer; text declares `WorldPlacementStamper.TextDetail`. Refinement stops at
-  eight cells a coarse axis, and a scoped creation's coarse lattice spans its
+  finer; text declares half a stroke (`SdfProgramBuilder.GlyphDetail`). Refinement stops at
+  eight cells a coarse axis (a fitted text group's lattice is spaced to reach
+  its detail instead, below), and a scoped creation's coarse lattice spans its
   bound sphere about the creation's origin, so a terrain sector centred on its
   ring's centre bakes at 2.8 m, not its declared 1.56 m
   (`docs/plans/valley-and-moons.md`). A declaration bounds refinement; the bake
@@ -508,8 +509,22 @@ laws exercise that boundary.
   box cut the first words off the gallery plaques' notes. An emitter that
   knows its surface's box exactly declares it the same way; a box with a
   margin about the surface is not fitted. A stroke about one fine cell wide
-  still tears: the refinement stops at `MaxDetailRefinement` cells of the
-  final lattice's cell, which the box's longest axis sets.
+  tears or bridges to its neighbour, so a run asks half its stroke
+  (`SdfProgramBuilder.GlyphDetail`, which `WorldPlacementStamper.TextDetail`
+  declares), and a fitted group whose length-spaced lattice cannot reach that
+  detail within `MaxDetailRefinement` cells takes a lattice that many details
+  apart (`SdfMeshPathBake.OwnFinal`, budgeted as a union's by
+  `BudgetedLattice`). The tier floors the detail, so a view that resolves no
+  stroke pays for none: at the debug world's boot views every plaque bakes at
+  tier 3 to 6, and its cold bake matches a build that asked a whole stroke. A
+  glyph's field is its atlas distance only within half the atlas's distance
+  range of an edge and a bound past it (a constant band, then its cell's box),
+  so a static instance's glyphs (`SdfInstanceRange.Glyphs`, joined into
+  `SdfMeshBakeGroup.Glyphs`) are a region of their own, at their own detail, in
+  which every cell the surface can enter refines (`SdfLatticeRegion.Bound`): a
+  cell whose samples sat on that band read flat and skipped the refinement,
+  losing an i's dot or a full stop between them. Lettering engraved into a
+  scoped creation refines only that box, never the creation's whole surface.
 - **The coarse narrowing keeps the rows a thin plate lies between.** The
   narrowing (`SdfMeshPathBake.Refine`) keeps a sample within half the lattice's
   finest spacing of the surface, beside a sign change, or in a pair of rows a

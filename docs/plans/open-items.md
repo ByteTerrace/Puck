@@ -40,6 +40,29 @@ world is the proving ground, so every plan's checks run on it, and what the
 experimental worlds have that it lacks is ported into it
 ([port](#port-the-experimental-worlds-missing-features)).
 
+**First, before any push to `main`: the session read doors' remaining
+leaks** [high, from an adversarial review of the read-door fix by Codex Sol;
+findings argued from source; the commit that filed them carries the
+review's summary]:
+
+- Write admission for a session that cannot observe still answers through a
+  refusal that names or reveals withheld rows
+  (`WorldDocument.StateTransformAdmission`), and a Frames session holding
+  Edit grants is still blocked from writing, against the read-door fix's own
+  claim. One write door that neither reveals a withheld row's existence nor
+  depends on observing.
+- `body.where` (`PlayerCommandModule.Movement`) answers through authority
+  queries stamped as the console instead of the session's read door.
+- `world.peers` (`WorldNetworkCommandModule`) exposes live population
+  membership without a recipient read view [medium].
+
+And from the review of the one latest-value publication (`PublishBuffer`): its
+stress harness passed every balanced race (eight readers, two writers), and it
+reproduced only misuse: a lease disposed twice corrupts another reader's
+count and strands a slot, a reentrant `Publish` is unguarded, and the 48-bit
+reader count can roll over in principle. Make a double dispose and a
+reentrant publish refuse by construction.
+
 **Wave 2, after the lead's session restart, in this order (agreed with the
 owner):** read-only and headless work runs beside the GPU-bound lanes, and no
 more than one lane besides the lead's batched window holds the GPU at once.
@@ -3440,23 +3463,13 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
   edge only when its midpoint differs from both ends; the lists still need a
   bound the account enforces, and a cut that exceeds it should fail its group
   by name (`SdfMeshBakeReport.Failed`) instead of the process.
-- [medium] Glyphs have no CPU reference and drop fine strokes.
-  `SdfFieldEvaluator` has no interpreter for the `Glyph` shape, so
-  `puck mesh audit --cpu` refuses a plaque ("cannot interpret instruction 3's
-  shape Glyph") and no audit covers text. The gallery plaques' note lines
-  keep every word now that text bakes over its glyphs' box
-  (`SdfInstanceRange.Fitted`), and still lose thin strokes at their baked
-  cell (the UNION plaque's note reads "min of the two fie ds" from a metre
-  away). The arithmetic: a note line 0.03 m tall and 4 mm deep declares
-  `WorldPlacementStamper.TextDetail`, the lesser of its depth and a tenth of
-  its em, 3 mm, which is about a whole stroke where `WorldShapeDetail`
-  declares half a shape's thickness; a 1.2 m line's final lattice has an
-  18.75 mm cell, and the refinement stops at
-  `SdfMeshPathBake.MaxDetailRefinement` cells of it, 2.3 mm, so a 2.4 mm
-  stroke gets one cell. Declare half the stroke, and let a fitted line's
-  refinement follow its declared detail instead of its longest axis (a
-  line's lattice is long and thin, so the cap costs it most). Add the
-  interpreter, then audit a plaque.
+- [medium] Glyphs have no CPU reference. `SdfFieldEvaluator` has no
+  interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
+  `puck mesh preview` bake a plaque's text group empty ("baked no surface, or
+  the field evaluator refuses it") and no audit covers text; a plaque's
+  strokes are judged only from a windowed World's captures. Add the
+  interpreter (the atlas's alpha band, bilinear, and the cell quad past it, as
+  `sdfGlyph` reads them), then audit a plaque.
 - [medium] A rim thinner than a group's final cell is lost: `range-window`'s
   2 cm rim does not bake at its 26.2 mm final cell. The same question as the
   crease merge below: a declared feature narrower than the cell must refine or
