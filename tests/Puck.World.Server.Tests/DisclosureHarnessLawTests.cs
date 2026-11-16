@@ -20,15 +20,15 @@ public sealed class DisclosureHarnessLawTests {
 
     private static WorldAdmissionEntry Observer(string domain, WorldDisclosureTier tier) => new(Disclosure: tier, Domain: domain, Mode: WorldAdmissionTrustMode.FederatedAuthority,
         Grants: [new WorldAdmissionGrant(Budget: 64, Capability: WorldCapability.Observe, Subject: GrantSubject.All)]);
-    private static WorldDefinition Document(long pub, long secret, bool hand = true) => Fixtures.BuildDocument() with {
+    private static WorldDefinition Document(long pub, long secret, bool hand = true, bool restricted = true) => Fixtures.BuildDocument() with {
         Admission = [Observer(domain: "replica", tier: WorldDisclosureTier.Replica), Observer(domain: "presentation", tier: WorldDisclosureTier.Presentation)],
         StateRaw = new WorldStateSection(World: (hand ? [new WorldStateRow(
             Name: CellName.Parse(candidate: "hand"), Kind: CellKind.Int,
-            Visibility: new StateVisibility(Hidden: HiddenCells.Omit),
+            Visibility: (restricted ? new StateVisibility(Hidden: HiddenCells.Omit) : null),
             Cells: [
                 new StateCell(Key: CellName.Parse(candidate: "pub"), Value: CellValue.Int(value: pub)),
                 new StateCell(Key: CellName.Parse(candidate: "secret"), Value: CellValue.Int(value: secret),
-                    Visibility: new StateVisibility(Readers: ["seat1"])),
+                    Visibility: (restricted ? new StateVisibility(Readers: ["seat1"]) : null)),
             ])] : [])),
     };
     private static WorldDisclosureTranscript Transcript(WorldFixture fixture) => new(clock: () => fixture.Server.CompletedTick);
@@ -135,23 +135,35 @@ public sealed class DisclosureHarnessLawTests {
         Assert.Equal(expected: 25UL, actual: leak.Tick);
         Assert.Contains(expectedSubstring: "tick 25 against 26", actualString: leak.Where, comparisonType: StringComparison.Ordinal);
     }
+    // Seat 2 removes a cell nothing holds from 'hand', and its edit echo is the transcript.
+    private static WorldDisclosureTranscript EchoedRemoval(bool hand, bool restricted) {
+        using var fixture = Fixtures.FreshServer(definition: Document(hand: hand, pub: 3, restricted: restricted, secret: 7));
+        var seat = Principal.Seat(slot: 1);
+        var transcript = Transcript(fixture: fixture);
+
+        fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 16, Capability: WorldCapability.Mutate, Exclusive: false,
+            Grantee: seat, KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State), Subject: GrantSubject.Section(section: WorldSection.State)));
+        using (WorldDisclosureEchoTap.Attach(observed: new Dictionary<Principal, string> { [seat] = "seat2" }, server: fixture.Server, transcript: transcript)) {
+            fixture.Step();
+            fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(Key: "ghost", Principal: seat, Row: "hand"));
+            fixture.Step();
+        }
+        return transcript;
+    }
+    // The write door answers a row withheld from the writer exactly as a row no world declares: the same echo, at the
+    // same tick, with the same refusal text.
+    [Fact]
+    public void AWriteIntoAWithheldRowIsEchoedAsAWriteIntoAnAbsentOne() {
+        var (withheld, absent) = (EchoedRemoval(hand: true, restricted: true), EchoedRemoval(hand: false, restricted: true));
+
+        Assert.Empty(collection: WorldDisclosureComparison.Compare(left: withheld, right: absent));
+        Assert.Contains(absent.Events, entry => (entry.Door == "echo") &&
+            WorldDisclosureComparison.Render(entry: entry).Contains(value: "'hand' is not disclosed to seat2", comparisonType: StringComparison.Ordinal));
+    }
     [Fact]
     public void TwoWorldsThatDifferOnlyInTheTextOfAnEchoedRefusalAreToldApart() {
-        static WorldDisclosureTranscript Refused(bool hand) {
-            using var fixture = Fixtures.FreshServer(definition: Document(hand: hand, pub: 3, secret: 7));
-            var seat = Principal.Seat(slot: 1);
-            var transcript = Transcript(fixture: fixture);
-
-            fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 16, Capability: WorldCapability.Mutate, Exclusive: false,
-                Grantee: seat, KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State), Subject: GrantSubject.Section(section: WorldSection.State)));
-            using (WorldDisclosureEchoTap.Attach(observed: new Dictionary<Principal, string> { [seat] = "seat2" }, server: fixture.Server, transcript: transcript)) {
-                fixture.Step();
-                fixture.Server.EnqueueMutation(mutation: new WorldMutation.RemoveStateCell(Key: "ghost", Principal: seat, Row: "hand"));
-                fixture.Step();
-            }
-            return transcript;
-        }
-        var (left, right) = (Refused(hand: true), Refused(hand: false));
+        // A public row's missing key and an absent row are both refused, in different words.
+        var (left, right) = (EchoedRemoval(hand: true, restricted: false), EchoedRemoval(hand: false, restricted: false));
         var leak = Assert.Single(collection: WorldDisclosureComparison.Compare(left: left, right: right));
 
         Assert.Equal(expected: "seat2", actual: leak.Principal);

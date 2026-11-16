@@ -15,7 +15,7 @@ public sealed partial class WorldDocument {
                 WorldRecipientMutations.PlaceholderRefusal(placeholder));
             return false;
         }
-        var view = Host.RecipientView(mutation.Principal);
+        var view = Host.WriteView(mutation.Principal);
         if (!view.Admits(mutation, out var withheld)) {
             m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;
             var refusedSection = WorldMutationKindCatalog.SectionOf(mutation: mutation);

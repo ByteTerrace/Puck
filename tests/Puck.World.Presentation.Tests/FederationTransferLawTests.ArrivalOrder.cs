@@ -75,7 +75,7 @@ public sealed partial class FederationTransferLawTests {
         Assert.True(condition: fixture.Server.ReserveTransfer(request: request).Accepted);
         var completed = false;
 
-        transport.Query(query: new WorldQuery.PlayerWhere(Index: 0), completion: answer => {
+        transport.Query(query: new WorldQuery.PlayerWhere(Index: 0), principal: Principal.Console, completion: answer => {
             completed = true;
             Assert.Equal(WorldTransferStatus.Missing, fixture.Server.CommitTransfer(sourceAuthority: request.SourceAuthority, transferId: request.TransferId,
                 members: [Turned(travelTurn: FixedQ4816.One), Turned(travelTurn: FixedQ4816.One), Turned(travelTurn: FixedQ4816.One)], reason: out _));

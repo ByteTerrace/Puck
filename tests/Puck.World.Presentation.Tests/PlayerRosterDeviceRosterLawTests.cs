@@ -303,7 +303,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         Assert.Null(@object: roster.DeviceSlot(device: camera2));
         Assert.Contains(
             expectedSubstring: "p2 empty",
-            actualString: roster.Describe()
+            actualString: roster.Describe(caller: Principal.Console)
         );
     }
     [Theory]
@@ -531,7 +531,7 @@ public sealed class PlayerRosterDeviceRosterLawTests {
         Assert.Null(@object: roster.DeviceSlot(device: camera2));
         Assert.Contains(
             expectedSubstring: "p2 empty",
-            actualString: roster.Describe()
+            actualString: roster.Describe(caller: Principal.Console)
         );
         Assert.Contains(
             expectedSubstring: "passive camera is refused because it cannot create a player",

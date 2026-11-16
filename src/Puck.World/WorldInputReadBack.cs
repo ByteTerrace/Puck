@@ -8,8 +8,8 @@ namespace Puck.World;
 /// the authority's <see cref="WorldCapability.Observe"/> check over that body, so a verb open to every caller shows
 /// only the input its caller may see, and a refusal reads back as a refusal.</summary>
 internal static class WorldInputReadBack {
-    /// <summary>Submits a query through a link as <paramref name="caller"/> when the link attributes queries, else
-    /// through the link's own door (a federated door stamps the traveler's principal itself).</summary>
+    /// <summary>Submits a query through a link as <paramref name="caller"/> (a federated door answers the traveler
+    /// whose credential it rides instead).</summary>
     /// <param name="link">The submission door of the authority that answers.</param>
     /// <param name="caller">The acting principal whose Observe grant is checked.</param>
     /// <param name="query">The read-back query.</param>
@@ -17,19 +17,11 @@ internal static class WorldInputReadBack {
     internal static QueryAnswer Ask(IServerLink link, Principal caller, WorldQuery query) {
         var answer = new QueryAnswer(Text: "[query unanswered]", Refused: true);
 
-        if (link is IPrincipalServerLink principals) {
-            principals.Query(
-                completion: result => answer = result,
-                principal: caller,
-                query: query
-            );
-        } else {
-            link.Query(
-                completion: result => answer = result,
-                query: query
-            );
-        }
-
+        link.Query(
+            completion: result => answer = result,
+            principal: caller,
+            query: query
+        );
         return answer;
     }
     /// <summary>Asks the authority a seat is routed to about the body it holds there: the boot world's link for a
