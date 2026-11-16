@@ -651,6 +651,12 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_diagnosticPick?.Completed(slot: slot);
         m_occlusion?.Completed(slot: slot);
     }
+    public void Abandoned(int slot) {
+        m_shade.Abandoned(slot: slot);
+        m_pick?.Abandoned(slot: slot);
+        m_diagnosticPick?.Abandoned(slot: slot);
+        m_occlusion?.Abandoned(slot: slot);
+    }
 
     private int OutputIndexOf(string member) {
         for (var index = 0; (index < m_outputs.Length); index++) {

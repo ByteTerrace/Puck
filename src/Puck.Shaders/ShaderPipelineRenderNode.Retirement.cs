@@ -44,7 +44,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 (m_firstSubmission is { } first)
             ) {
                 try {
-                    if (first.IsSignaled) {
+                    // An abandoned first submission is settled by Signaled, which clears the watch it was.
+                    if (Signaled(fence: first) && ReferenceEquals(objA: m_firstSubmission, objB: first)) {
                         NoteWaited(fence: first);
                     }
                 } catch (DeviceLostException) {
@@ -336,7 +337,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         // Read before anything is moved, so a device loss reported here leaves the replaced objects whole.
-        var inFlight = (m_lastSubmissionFence is { IsSignaled: false });
+        var inFlight = LatestSubmissionRunning;
 
         Hold(
             imageHandle: m_lastSurface.ImageHandle,
@@ -441,7 +442,7 @@ public sealed partial class ShaderPipelineRenderNode {
         for (var index = (m_retired.Count - 1); (index >= 0); index--) {
             var retired = m_retired[index];
 
-            if (retired.ReadersCompleted || (retired.Fence is { IsSignaled: true })) {
+            if (retired.ReadersCompleted || ((retired.Fence is { } fence) && Signaled(fence: fence))) {
                 retired.Dispose(node: this, completed: true);
                 m_retired.RemoveAt(index: index);
             }

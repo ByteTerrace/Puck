@@ -103,6 +103,7 @@ internal sealed class SdfGlassRecorder : IRenderGraphPackageRecorder, IRenderGra
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
     public void Submitted(int slot) => m_shade.Submitted(slot: slot);
     public void Completed(int slot) => m_shade.Completed(slot: slot);
+    public void Abandoned(int slot) => m_shade.Abandoned(slot: slot);
 
     // Writes, once per slot and tables, each port at the member its version reads or writes it through, and the tables'
     // dummy at the reactivity of a view that resolves nothing over time. A slot's ports stay the same storages for the

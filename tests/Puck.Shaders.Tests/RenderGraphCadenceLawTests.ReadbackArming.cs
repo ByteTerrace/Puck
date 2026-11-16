@@ -34,6 +34,36 @@ public sealed partial class RenderGraphCadenceLawTests {
         Assert.Equal([$"completed {next}", $"record {next}", $"submitted {next}"], factory.Events);
     }
 
+    // A submission whose batch never reached the queue proves nothing: its readback pass hears the slot abandoned, never
+    // completed, before the slot records again, and the node's other slots are settled first.
+    [Fact]
+    public void AnAbandonedSlotsReadbackIsDroppedNeverCompleted() {
+        var gpu = new FakePipelineGpu { Recording = true };
+        var factory = new ArmingFactory();
+        var packages = new RenderGraphPackageRecorders();
+
+        foreach (var package in new[] { Writer, Shade, Composite }) { packages.Register(factory: factory, package: package); }
+        using var node = new ShaderPipelineRenderNode(name: "readback-abandoned", deviceContext: gpu, pipelines: new GpuPassPipelineCache(),
+            hostsOnDirectX: false, width: 32, height: 32, packages: packages);
+
+        node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog()).Compile(definition: Graph()).Pipeline,
+            shaders: new Dictionary<string, CompiledShader>()));
+        node.ProduceUntilInstalled();
+        factory.Events.Clear();
+        gpu.AbandonNextSubmission = true;
+        _ = node.ProduceFrame(context: default);
+
+        var abandoned = factory.Events.Single(static entry => entry.StartsWith("submitted ", StringComparison.Ordinal))["submitted ".Length..];
+
+        factory.Events.Clear();
+        for (var frame = 0; (frame < 3); frame++) { _ = node.ProduceFrame(context: default); }
+
+        var aboutAbandoned = factory.Events.Where(entry => entry.EndsWith($" {abandoned}", StringComparison.Ordinal)).ToArray();
+
+        Assert.Equal($"abandoned {abandoned}", aboutAbandoned[0]);
+        Assert.DoesNotContain($"completed {abandoned}", aboutAbandoned.TakeWhile(static entry => !entry.StartsWith("record ", StringComparison.Ordinal)));
+    }
+
     private sealed class ArmingFactory : IRenderGraphPackageFactory {
         public readonly List<string> Events = [];
         public bool Skip;
@@ -59,6 +89,7 @@ public sealed partial class RenderGraphCadenceLawTests {
             public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
             public void Submitted(int slot) => owner.Events.Add(item: $"submitted {slot}");
             public void Completed(int slot) => owner.Events.Add(item: $"completed {slot}");
+            public void Abandoned(int slot) => owner.Events.Add(item: $"abandoned {slot}");
         }
     }
 }

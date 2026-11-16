@@ -200,7 +200,7 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     private void PollTimings() {
         foreach (var slot in m_timingSlots) {
-            if ((slot.Fence is { } fence) && !fence.IsSignaled) { continue; }
+            if ((slot.Fence is { } fence) && !Signaled(fence: fence)) { continue; }
             if (!TimingActive) { slot.Dispose(); continue; }
             if (slot.Fence is null) { continue; }
             slot.Fence = null;

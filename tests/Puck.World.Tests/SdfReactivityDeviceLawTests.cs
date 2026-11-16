@@ -162,6 +162,7 @@ public sealed class SdfReactivityDeviceLawTests {
             m_owner.Latest = m_copies[slot];
         }
         public void Completed(int slot) => (m_inner as IRenderGraphPackageReadback)?.Completed(slot: slot);
+        public void Abandoned(int slot) => (m_inner as IRenderGraphPackageReadback)?.Abandoned(slot: slot);
         public void Dispose() {
             m_inner.Dispose();
             foreach (var copy in m_copies) { copy.Dispose(); }

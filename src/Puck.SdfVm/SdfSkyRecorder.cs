@@ -124,6 +124,7 @@ internal sealed class SdfSkyRecorder : IRenderGraphPackageRecorder, IRenderGraph
     public bool TryReadback(int slot, int index, out RenderGraphBufferReadback readback) { readback = default; return false; }
     public void Submitted(int slot) => m_meterCopies?.Submitted(slot: slot);
     public void Completed(int slot) => m_meterCopies?.Completed(slot: slot);
+    public void Abandoned(int slot) => m_meterCopies?.Abandoned(slot: slot);
     private static void ReadMeter(MeterSlot slot) {
         Span<uint> words = stackalloc uint[SdfExposure.MeterWords];
 

@@ -90,6 +90,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_retired[slot].Clear();
         m_sightCopies.Completed(slot: slot);
     }
+    // The slot's previous submission never reached the queue: its sight copy is dropped unread, and the buffers a
+    // recording into the slot replaced stay held for the slot's next completion, since nothing proved the queue passed
+    // the submissions that may read them.
+    internal void Abandoned(int slot) => m_sightCopies.Abandoned(slot: slot);
     private void ReadSight(SightSlot slot) {
         Span<byte> bytes = stackalloc byte[(int)CountsBytes];
 

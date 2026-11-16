@@ -95,6 +95,7 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         m_publications.Submitted(slot: slot);
     }
     public void Completed(int slot) => m_publications.Completed(slot: slot);
+    public void Abandoned(int slot) => m_publications.Abandoned(slot: slot);
     public void Dispose() {
         if (m_submission != 0) {
             if (Screens) { m_built.Tables.WithdrawScreenEmission(sequence: m_submission); } else { m_built.Tables.WithdrawSkyEnvironment(sequence: m_submission); }
