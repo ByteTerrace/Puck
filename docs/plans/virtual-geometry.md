@@ -959,10 +959,11 @@ Demand tiers change what "the debug world's meshes" can mean, because a tier
 exists only when a view demands it and D7 sets no finest cell for a
 mirror-close view. The bar has one definition, in
 [how the bars are read](streaming-and-memory.md#how-the-bars-are-read): the
-minute is absolute and times the boot's demanded set, a scope derived from the
-bar's words that the owner may widen. A finer tier a later view asks for is a
-cache miss, read as streaming cost; nothing on this page defines the bar a
-second time.
+minute is absolute and times the boot's demanded set, the scope the owner
+confirmed
+([the ruling](../decisions/residency.md#the-owners-rulings-on-look-and-policy)).
+A finer tier a later view asks for is a cache miss, read as streaming cost;
+nothing on this page defines the bar a second time.
 
 ## Found while reading
 
@@ -1006,8 +1007,6 @@ whichever lane next touches its file:
 - G5's counted query latency exceeding a floor tier's period on the bar
   devices reopens the floor tier's choice (a higher floor, or a host-side
   test of the reach box against a reduced pyramid).
-- The owner widening the cold-bake bar's scope past the boot's demanded set
-  changes what the arrival contract must fit.
 
 ## Sources
 
