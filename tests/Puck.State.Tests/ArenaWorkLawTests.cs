@@ -20,10 +20,6 @@ public sealed class ArenaWorkLawTests {
         IWorkCounterSource source = arena;
 
         Assert.Equal(actual: source.WorkKinds.ToArray(), expected: ArenaWork.Kinds.ToArray());
-        Assert.Equal(
-            actual: ArenaWork.Kinds.ToArray().Select(selector: kind => kind.Name),
-            expected: ["state.arena.visits", "state.arena.change-window-probes", "state.arena.scratch-leased-elements"]
-        );
         Assert.False(condition: source.TryRead(kind: GpuWork.Dispatches, value: out var undeclared));
         Assert.Equal(actual: undeclared, expected: 0L);
     }

@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
+using static Puck.Analyzers.NamedTypes;
 
 namespace Puck.Analyzers;
 
@@ -127,19 +128,6 @@ public sealed class DoorAnalyzer : DiagnosticAnalyzer {
         });
     }
 
-    private static bool Is(ITypeSymbol? type, string @namespace, string name) {
-        if (type is null) {
-            return false;
-        }
-
-        var definition = type.OriginalDefinition;
-
-        return (
-            (definition.Name == name) &&
-            (definition.ContainingType is null) &&
-            (definition.ContainingNamespace?.ToDisplayString() == @namespace)
-        );
-    }
     private static bool IsHolder(ITypeSymbol? type) {
         for (var current = type; (current is not null); current = current.BaseType) {
             if (Is(type: current, @namespace: StateNamespace, name: "VersionedHolder")) {
@@ -149,19 +137,8 @@ public sealed class DoorAnalyzer : DiagnosticAnalyzer {
 
         return false;
     }
-    private static bool IsSection(ITypeSymbol? type) {
-        if (type is null) {
-            return false;
-        }
-
-        foreach (var contract in type.AllInterfaces) {
-            if (Is(type: contract, @namespace: StateNamespace, name: "IVersionedSection")) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private static bool IsSection(ITypeSymbol? type) =>
+        Implements(type: type, @namespace: StateNamespace, name: "IVersionedSection");
     private static bool IsSpan(ITypeSymbol? type, bool writable) =>
         Is(type: type, @namespace: "System", name: (writable ? "Span" : "ReadOnlySpan"));
     private static bool DeclaresSection(INamespaceSymbol @namespace) {
