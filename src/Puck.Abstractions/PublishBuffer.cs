@@ -1,8 +1,9 @@
 namespace Puck.Abstractions;
 
 /// <summary>
-/// The one latest-value handoff between threads: writers publish a value, readers snapshot the newest one, and
-/// nothing is queued or retained, so a reader skips every publication it was too slow to see. The slot is a seqlock:
+/// The latest-value handoff between threads for a value copied by assignment: writers publish a value, readers
+/// snapshot the newest one, and nothing is queued or retained, so a reader skips every publication it was too slow to
+/// see. An image filled in place, which one reader takes, goes through <see cref="TripleBuffer{T}"/>. The slot is a seqlock:
 /// a sequence counter that is zero before the first publish, odd while a write is in progress and even once a value is
 /// published. A reader copies the value and keeps the copy only when the counter was even and unchanged across the
 /// copy, so it never observes a torn value (a copy whose words come from two publications), and it retries otherwise.

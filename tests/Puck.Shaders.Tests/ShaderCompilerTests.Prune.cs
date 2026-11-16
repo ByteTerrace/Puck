@@ -86,9 +86,10 @@ public sealed partial class ShaderCompilerTests {
 
         var result = ShaderCompiler.Prune(cacheDirectory: cache, cutoffUtc: DateTime.UtcNow.AddMinutes(value: -1));
 
-        // The unused stage's two entries, all four duration records (a hit reads none) and the abandoned staging file go;
-        // the used stage's two entries stay, each the 64-byte key and digest header and the fake compiler's four bytes.
-        Assert.Equal(expected: 7, actual: result.Removed);
+        // The unused stage's two entries and all four duration records (a hit reads none) go; the used stage's two entries
+        // stay, each the 64-byte key and digest header and the fake compiler's four bytes. The staging file no writer claims
+        // goes too, uncounted: a temporary is never an entry.
+        Assert.Equal(expected: 6, actual: result.Removed);
         Assert.Equal(expected: 2, actual: result.Kept);
         Assert.Equal(expected: (2 * (64 + 4)), actual: result.KeptBytes);
         Assert.Equal(expected: 2, actual: Entries(directory: cache).Length);

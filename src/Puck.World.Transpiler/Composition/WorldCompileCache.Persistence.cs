@@ -57,7 +57,7 @@ public sealed partial class WorldCompileCache {
                 bound: new Puck.Abstractions.CacheBound(MaxBytes: MaxPersistedBytes, MaxEntries: MaxPersistedEntries),
                 directory: Path.GetDirectoryName(path: path)!,
                 inUse: path,
-                isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: EntryExtension)
+                isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: EntryExtension)
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             // A refused write only costs a future derivation.

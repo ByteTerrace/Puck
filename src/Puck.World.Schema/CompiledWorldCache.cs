@@ -335,7 +335,7 @@ public sealed class CompiledWorldRequest {
                     bound: CompiledWorldCache.Retention,
                     directory: m_cache.Directory,
                     inUse: cached,
-                    isEntry: static file => file.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: CompiledWorld.Extension)
+                    isEntry: static name => name.EndsWith(comparisonType: StringComparison.Ordinal, value: CompiledWorld.Extension)
                 );
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
                 writeFailure = exception.Message.ReplaceLineEndings(replacementText: " ");

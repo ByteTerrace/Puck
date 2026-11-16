@@ -241,29 +241,117 @@ public sealed partial class ConfinedDirectory : IDisposable {
     /// none exists.</returns>
     /// <exception cref="IOException">An entry cannot be inspected.</exception>
     public string? FindLink() {
+        foreach (var item in Walk()) {
+            if (item.Entry.Kind == ConfinedEntryKind.Link) { return item.Path; }
+        }
+        return null;
+    }
+    /// <summary>Lists every entry below this directory, depth first, each directory before what it holds. Every
+    /// directory is opened relative to its parent's handle; a link is listed as itself and never descended, so the walk
+    /// never leaves this directory however the tree's entries are replaced meanwhile.</summary>
+    /// <returns>The entries, lazily; disposing the enumeration closes every directory it holds open. A directory
+    /// removed during the walk is listed but not descended.</returns>
+    /// <exception cref="IOException">A directory cannot be listed, or became a link between its listing and its
+    /// open.</exception>
+    public IEnumerable<ConfinedTreeEntry> Walk() {
         // Depth first without recursion: one open directory per level, and no stack, whatever the tree's depth.
-        var levels = new Stack<(ConfinedDirectory? Directory, string Path, Queue<ConfinedEntry> Remaining)>();
+        var levels = new Stack<(ConfinedDirectory Directory, bool Owned, string Path, Queue<ConfinedEntry> Remaining)>();
 
-        levels.Push(item: (null, "", new Queue<ConfinedEntry>(collection: Entries())));
+        levels.Push(item: (this, false, "", new Queue<ConfinedEntry>(collection: Entries())));
         try {
             while (levels.TryPeek(result: out var level)) {
                 if (!level.Remaining.TryDequeue(result: out var entry)) {
-                    level.Directory?.Dispose();
+                    if (level.Owned) { level.Directory.Dispose(); }
                     _ = levels.Pop();
                     continue;
                 }
                 var path = ((level.Path.Length == 0) ? entry.Name : $"{level.Path}/{entry.Name}");
 
-                if (entry.Kind == ConfinedEntryKind.Link) { return path; }
-                if ((entry.Kind == ConfinedEntryKind.Directory) && ((level.Directory ?? this).Child(name: entry.Name) is { } child)) {
-                    levels.Push(item: (child, path, new Queue<ConfinedEntry>()));
-                    foreach (var grandchild in child.Entries()) { levels.Peek().Remaining.Enqueue(item: grandchild); }
+                yield return new ConfinedTreeEntry(Directory: level.Directory, Entry: entry, Path: path);
+                if ((entry.Kind == ConfinedEntryKind.Directory) && (level.Directory.Child(name: entry.Name) is { } child)) {
+                    try {
+                        levels.Push(item: (child, true, path, new Queue<ConfinedEntry>(collection: child.Entries())));
+                    } catch { child.Dispose(); throw; }
                 }
             }
-            return null;
         } finally {
-            foreach (var level in levels) { level.Directory?.Dispose(); }
+            foreach (var level in levels) {
+                if (level.Owned) { level.Directory.Dispose(); }
+            }
         }
+    }
+    /// <summary>Opens a directory below this one by a relative path, one component at a time relative to each parent's
+    /// handle, refusing a link anywhere on the way; holds only the result.</summary>
+    /// <param name="relativePath">The path below this directory, its components separated by <c>/</c> or the
+    /// platform's separator; never rooted, and no component is <c>.</c> or <c>..</c>.</param>
+    /// <param name="create">Whether missing components are created.</param>
+    /// <returns>The held directory, or <see langword="null"/> when a component is missing and <paramref name="create"/>
+    /// is <see langword="false"/>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="relativePath"/> is empty, rooted or holds a component that is
+    /// not a single entry name.</exception>
+    /// <exception cref="IOException">A component is a link or not a directory, or cannot be opened.</exception>
+    public ConfinedDirectory? Descend(string relativePath, bool create) {
+        var segments = SplitRelative(relativePath: relativePath);
+        ConfinedDirectory? current = null;
+
+        try {
+            foreach (var segment in segments) {
+                var next = (current ?? this).Child(create: create, name: segment);
+
+                current?.Dispose();
+                current = next;
+                if (current is null) { return null; }
+            }
+            return current;
+        } catch { current?.Dispose(); throw; }
+    }
+    /// <summary>Opens a regular file relative to this directory for reading, without following a link. Unlike
+    /// <see cref="OpenFile"/> it admits a hard-linked file, since a read cannot change the bytes another name
+    /// shares.</summary>
+    /// <param name="name">The file's name: one component, never a path.</param>
+    /// <returns>The read-only stream, which owns the handle and shares reading, or <see langword="null"/> when the file
+    /// is missing.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is not a single component.</exception>
+    /// <exception cref="IOException">The entry is a link or not a regular file, or cannot be opened.</exception>
+    public FileStream? OpenRead(string name) {
+        RequireName(name: name);
+        var handle = (OperatingSystem.IsWindows()
+            ? Windows.Open(access: Windows.GenericRead, busyIsNull: false, create: false, directory: false, hardLinked: true, name: name, newFile: false,
+                parent: Handle, share: Windows.ShareRead)
+            : Linux.Open(create: false, directory: false, hardLinked: true, name: name, newFile: false, parent: Handle, write: false));
+
+        return ((handle is null) ? null : new FileStream(access: FileAccess.Read, handle: handle));
+    }
+    /// <summary>Removes a file below this directory through its own handle: every directory on the way is opened
+    /// relative to its parent's handle, and neither they nor the file are followed when a link. Only this name goes, so a
+    /// hard link's other names keep their bytes.</summary>
+    /// <param name="relativePath">The file's path below this directory (<see cref="Descend"/>'s form), or its name.</param>
+    /// <returns><see langword="true"/> when a file was removed; <see langword="false"/> when none existed.</returns>
+    /// <exception cref="ArgumentException"><paramref name="relativePath"/> is empty, rooted or holds a component that is
+    /// not a single entry name.</exception>
+    /// <exception cref="IOException">The entry or a directory on the way is a link, the entry is a directory or is held
+    /// by another process, or it cannot be removed; it is left in place.</exception>
+    public bool DeleteFile(string relativePath) {
+        var segments = SplitRelative(relativePath: relativePath);
+        var name = segments[^1];
+
+        if (segments.Length > 1) {
+            using var parent = Descend(create: false, relativePath: string.Join(separator: '/', value: segments[..^1]));
+
+            return ((parent is not null) && parent.DeleteFile(relativePath: name));
+        }
+        if (OpenForRemoval(existed: out var existed, name: name, parent: Handle) is { } directory) {
+            directory.Dispose();
+            throw new IOException(message: $"'{name}' is a directory; a file removal left it in place.");
+        }
+        return existed;
+    }
+    /// <summary>Gets or sets this directory's Unix permission bits, through its handle.</summary>
+    /// <exception cref="IOException">The mode cannot be read or changed.</exception>
+    [System.Runtime.Versioning.UnsupportedOSPlatform(platformName: "windows")]
+    public UnixFileMode UnixMode {
+        get => File.GetUnixFileMode(fileHandle: Handle);
+        set => File.SetUnixFileMode(fileHandle: Handle, mode: value);
     }
     /// <summary>Atomically and durably replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both
     /// directly in this directory: when it returns, a power loss leaves the replacement; when it throws the replaced file
@@ -492,6 +580,19 @@ public sealed partial class ConfinedDirectory : IDisposable {
         if ((name is "." or "..") || (name.IndexOfAny(anyOf: ['/', '\\', '\0']) >= 0) || (OperatingSystem.IsWindows() && name.Contains(value: ':'))) {
             throw new ArgumentException(message: $"'{name}' is not a single directory entry name.", paramName: nameof(name));
         }
+    }
+    private static string[] SplitRelative(string relativePath) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: relativePath);
+        if (System.IO.Path.IsPathRooted(path: relativePath)) {
+            throw new ArgumentException(message: $"'{relativePath}' is rooted; a confined path is relative to its directory.", paramName: nameof(relativePath));
+        }
+        var segments = relativePath.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: ['/', System.IO.Path.DirectorySeparatorChar]);
+
+        if (segments.Length == 0) {
+            throw new ArgumentException(message: $"'{relativePath}' names no entry.", paramName: nameof(relativePath));
+        }
+        foreach (var segment in segments) { RequireName(name: segment); }
+        return segments;
     }
     private static IReadOnlyList<ConfinedEntry> EntriesOf(SafeFileHandle directory) => (OperatingSystem.IsWindows()
         ? Windows.Entries(handle: directory)
