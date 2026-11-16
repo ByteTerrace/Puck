@@ -1,4 +1,3 @@
-using System.Numerics;
 
 namespace Puck.World.Authoring;
 
@@ -27,7 +26,4 @@ public static class ShapeWarpReach {
 
         return ((ShapeBumpDocument.ReachExtra(bumps: shape.Bumps) + (shape.Warp?.Reach ?? 0f)) + (shape.Elongate?.Value.Length() ?? 0f));
     }
-    /// <summary>The worst-case <see cref="PointReach"/> a probe reserves: every bump at its largest push, the warp at
-    /// its largest amplitude and the elongation at its largest half-extent on every axis.</summary>
-    public static float ProbePointReach { get; } = (((ShapeBumpDocument.MaxBumps * ShapeBumpDocument.MaxPushMagnitude) + (ShapeWarpDocument.MaxAmplitude * MathF.Sqrt(x: 3f))) + new Vector3(value: ShapeDocument.MaxElongate).Length());
 }

@@ -264,7 +264,7 @@ public sealed partial class WorldCreationInstances {
                         separateBake: true, boundInSlotFrame: true,
                         slot: slot,
                         boundOffset: ((placed.Domain is { Count: > 0 }) ? Vector3.Zero : placed.Position.Value),
-                        boundRadius: ShapeBoundRadius(shape: placed),
+                        boundRadius: ShapeBoundRadius(document: document, index: index),
                         detail: WorldShapeDetail.Of(scale: 1f, shape: placed)
                     );
                 }
@@ -361,39 +361,19 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // An ungrouped pooled shape's instance bound, in creation units: an influence sphere by contract, read per tile cone
-    // by the cull and per sample by the interpreter's influence skip, so it covers the primitive's true reach
-    // (SdfSolidGeometry.Reach, the measure the static stamper's ShapeStampBound takes) through its warps, its outward
-    // field ops and relief, and a trim's growth; the packer adds the smooth halo. A domain-bearing shape's slot carries
-    // its parent's delta frame, not its own pose, so its sphere centres on the slot and adds the rest offset and the
-    // folds' displacement (RenderReach's charge). A Sweep's control points carry its dimensions, and it admits no panel.
-    private static float ShapeBoundRadius(ShapeDocument shape) {
-        Vector3 scale = shape.Scale;
-        var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
-            ? ((shape.Curve?.Reach() ?? 0f) * scale.X)
-            : SdfSolidGeometry.Reach(
-            type: shape.Type,
-            scale: scale,
-            lift: (shape.Lift ?? SdfLift.Extrude),
-            panelRaise: ((shape.Panel is { Depth: < 0f } raisedPanel)
-            ? -raisedPanel.Depth
-            : 0f)
-        ));
-        var warpedReach = ShapeWarpReach.Expand(
-            (primitiveReach + (shape.Cells?.PrimitiveReachPadding(shape.Scale, shape.Flare) ?? 0f)),
-            shape.Flare,
-            shape.Shear,
-            ShapeWarpReach.PointReach(shape: shape));
-        var dilate = (shape.Dilate ?? 0f);
-        // A sine relief carries the surface outward by its amplitude, as a dilation does.
-        var onion = ((shape.Onion ?? 0f) + (shape.Displace?.Reach ?? 0f));
-        // A trim's scope grows the host's copy outward by at most its inset before it can win against the plain shape.
+    // by the cull and per sample by the interpreter's influence skip, so it covers the shape's reach and a trim's growth
+    // (at most its inset before it can win against the plain shape); the packer adds the smooth halo. It is the static
+    // stamper's per-shape bound about the shape's origin, except that a domain-bearing shape's slot carries its parent's
+    // delta frame, not its own pose, so its sphere centres on the slot and takes the creation-origin reach.
+    private static float ShapeBoundRadius(CreationDocument document, int index) {
+        var shape = document.Shapes![index];
         var trimMargin = ((shape.Trims is { Count: > 0 })
             ? ShapeTrimDocument.MaxInset
             : 0f);
 
-        return (((shape.Domain is { Count: > 0 } domain)
-            ? ((((shape.Position.Value.Length() + ShapeDomainOps.Reach(domain: domain)) + warpedReach) + dilate) + onion)
-            : ((warpedReach + dilate) + onion)
+        return (((shape.Domain is { Count: > 0 })
+            ? CreationStampEmitter.ShapeReach(shape: shape)
+            : CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1f, null)).Radius
         ) + trimMargin);
     }
 }

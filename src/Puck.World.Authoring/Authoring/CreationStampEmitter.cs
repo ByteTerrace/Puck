@@ -712,15 +712,29 @@ public static partial class CreationStampEmitter {
         );
     }
     /// <summary>Measures one shape's worst-case reach from the creation's origin, in creation units: its position,
-    /// its primitive's reach grown by its cells padding, warps (flare, shear, bumps), domain fold, dilation and
-    /// onion. The one per-shape reach every creation bound is built from (<see cref="RenderReach"/>,
-    /// <see cref="CreationGeometry.Reach"/>); a Sweep carries no <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3, SdfLift)"/>
-    /// unit-scale law (its own control points already carry creation-unit dimensions — see
-    /// <see cref="SdfSolidPrimitive.Sweep"/>'s remarks), so its own uniform scale bakes on directly.</summary>
+    /// its domain fold's displacement and its <see cref="WarpedPrimitiveReach"/>, grown by its dilation, onion and sine
+    /// relief. The one per-shape reach every creation bound is built from (<see cref="RenderReach"/>,
+    /// <see cref="CreationGeometry.Reach"/>, a pooled domain-bearing shape's instance bound).</summary>
     /// <param name="shape">The authored shape.</param>
     /// <returns>The reach in creation units.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
     public static float ShapeReach(ShapeDocument shape) {
+        ArgumentNullException.ThrowIfNull(shape);
+
+        // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged beside the
+        // shape's own position; Dilate/Onion and a sine relief move the outer surface outward by their own value.
+        return (((((shape.Position.Length() + WarpedPrimitiveReach(shape: shape)) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) + (shape.Displace?.Reach ?? 0f));
+    }
+    /// <summary>Measures how far one shape's primitive reaches from the shape's own origin, in creation units: its
+    /// primitive's reach with a raised panel's rise (<see cref="ShapePanelDocument.Depth"/> negative) and its cells
+    /// padding, carried through its warps (flare, shear, bumps, warp, elongation). A Sweep carries no
+    /// <see cref="SdfSolidGeometry.Reach(SdfSolidPrimitive, Vector3, SdfLift, float)"/> unit-scale law (its own control
+    /// points already carry creation-unit dimensions — see <see cref="SdfSolidPrimitive.Sweep"/>'s remarks), so its own
+    /// uniform scale bakes on directly; a panel is refused on it.</summary>
+    /// <param name="shape">The authored shape.</param>
+    /// <returns>The reach in creation units.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> is <see langword="null"/>.</exception>
+    public static float WarpedPrimitiveReach(ShapeDocument shape) {
         ArgumentNullException.ThrowIfNull(shape);
 
         var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
@@ -728,10 +742,15 @@ public static partial class CreationStampEmitter {
             : SdfSolidGeometry.Reach(
                 type: shape.Type,
                 scale: shape.Scale,
-                lift: (shape.Lift ?? SdfLift.Extrude)
+                lift: (shape.Lift ?? SdfLift.Extrude),
+                panelRaise: ((shape.Panel is { Depth: < 0f } panel)
+                ? -panel.Depth
+                : 0f)
             )
         );
-        var warpedReach = ShapeWarpReach.Expand(
+
+        // Inverse warp bounds compose in reverse point-evaluation order (bumps, shear, profile).
+        return ShapeWarpReach.Expand(
             (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
                 shape.Scale,
                 shape.Flare
@@ -740,10 +759,6 @@ public static partial class CreationStampEmitter {
             shape.Shear,
             ShapeWarpReach.PointReach(shape: shape)
         );
-
-        // A domain fold carries the shape across its lattice, so the fold's displacement bound is charged beside the
-        // shape's own position; Dilate/Onion move the outer surface outward by their own value.
-        return ((((shape.Position.Length() + warpedReach) + ShapeDomainOps.Reach(domain: shape.Domain)) + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f));
     }
     /// <summary>Lays out every one of a creation's authored text runs once, in document order — the same input
     /// <see cref="RenderReach"/> and <see cref="EmitText"/>/<see cref="EmitTextDynamic"/> each independently derive
@@ -1013,9 +1028,10 @@ public static partial class CreationStampEmitter {
     /// position and its primitive reach — the tight per-shape sibling of <see cref="RenderReach"/>. Only sound for a
     /// DOMAIN-FREE shape (a fold's copies leave any shape-local sphere); callers keep domain-bearing shapes on the
     /// whole-creation bound. A raised panel (<see cref="ShapePanelDocument.Depth"/> negative) widens the bound by
-    /// <c>|Depth|</c>; a recess needs no widening (subtraction only removes). <see cref="ShapeDocument.Dilate"/> and
-    /// <see cref="ShapeDocument.Onion"/> move the outer surface outward by their own creation-unit value, scaled the
-    /// same way; the smooth-blend halo is the packer's own concern (<see cref="RequiresScope"/>).</summary>
+    /// <c>|Depth|</c>; a recess needs no widening (subtraction only removes). <see cref="ShapeDocument.Dilate"/>,
+    /// <see cref="ShapeDocument.Onion"/> and a sine relief (<see cref="ShapeDocument.Displace"/>) move the outer
+    /// surface outward by their own creation-unit value, scaled the same way; the smooth-blend halo is the packer's own
+    /// concern (<see cref="RequiresScope"/>).</summary>
     /// <param name="document">The creation document.</param>
     /// <param name="shapeIndex">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
     /// <param name="transform">The stamp transform.</param>
@@ -1025,32 +1041,8 @@ public static partial class CreationStampEmitter {
 
         var shape = document.Shapes![shapeIndex];
         var frame = StampFrame.Of(transform: transform);
-        var panelRaise = ((shape.Panel is { Depth: < 0f } panel)
-            ? -panel.Depth
-            : 0f
-        );
-
-        // Inverse warp bounds compose in reverse point-evaluation order (bumps, shear, profile) — the position term is untouched since every warp
-        // applies after the shape's own translate. A Sweep carries no SdfSolidGeometry.Reach unit-scale law (see
-        // RenderReach's identical Sweep branch); a panel is refused on it, so panelRaise never applies.
-        var primitiveReach = ((shape.Type == SdfSolidPrimitive.Sweep)
-            ? ((shape.Curve?.Reach() ?? 0f) * shape.Scale.X)
-            : SdfSolidGeometry.Reach(
-                type: shape.Type,
-                scale: shape.Scale,
-                lift: (shape.Lift ?? SdfLift.Extrude),
-                panelRaise: panelRaise
-            )
-        );
-        var warpedReach = ShapeWarpReach.Expand(
-            (primitiveReach + (shape.Cells?.PrimitiveReachPadding(
-                shape.Scale,
-                shape.Flare
-            ) ?? 0f)),
-            shape.Flare,
-            shape.Shear,
-            ShapeWarpReach.PointReach(shape: shape)
-        );
+        // The position term is untouched by the warps, which all apply after the shape's own translate.
+        var warpedReach = WarpedPrimitiveReach(shape: shape);
 
         return (
             StampedPosition(
@@ -1060,7 +1052,7 @@ public static partial class CreationStampEmitter {
                     shape: shape
                 )
             ).ToVector3(),
-            (((warpedReach + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) * transform.Scale)
+            ((((warpedReach + (shape.Dilate ?? 0f)) + (shape.Onion ?? 0f)) + (shape.Displace?.Reach ?? 0f)) * transform.Scale)
         );
     }
     /// <summary>Measures one shape's world-axis box under the stamp transform: its primitive's local box
