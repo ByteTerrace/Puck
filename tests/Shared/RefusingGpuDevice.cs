@@ -87,7 +87,9 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reach(member: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reach(member: "IGpuRecorder.ClearStorageBuffer");
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => throw Reach(member: "IGpuRecorder.CopyImage");
+
     uint IGpuRecorder.CopyRowAlignment => throw Reach(member: "IGpuRecorder.CopyRowAlignment");
+
     void IGpuRecorder.CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) => throw Reach(member: "IGpuRecorder.CopyBufferToImage");
     void IGpuRecorder.CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) => throw Reach(member: "IGpuRecorder.CopyImageToBuffer");
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) => throw Reach(member: "IGpuRecorder.CopyBuffer");
@@ -98,6 +100,7 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.TransitionBuffer(nint commandBufferHandle, nint bufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => throw Reach(member: "IGpuRecorder.TransitionBuffer");
 
     // A revision read reaches no device: a holder reads it to decide whether a refused build is due again.
+    ulong IGpuBindings.MaxConstantBufferBytes => throw Reach(member: "IGpuBindings.MaxConstantBufferBytes");
     long IGpuBindings.HeapReleaseRevision => 0L;
 
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => throw Reach(member: "IGpuBindings.AllocateSet");

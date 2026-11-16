@@ -101,6 +101,7 @@ public sealed partial class WorldFlagCommandModule(IServerLink link, WorldClient
         var pose = "[world.flag: no pose answer]";
 
         link.Query(
+            principal: principal,
             query: new WorldQuery.PlayerWhere(Index: slot),
             completion: answer => pose = answer.Text
         );

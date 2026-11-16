@@ -175,7 +175,7 @@ public sealed class InstrumentClockSourceLawTests {
             fixture.Step();
         }
 
-        return fixture.Server.Answer(query: new WorldQuery.MusicState(Index: 1)).Text;
+        return fixture.Server.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.MusicState(Index: 1)).Text;
     }
 
     [Fact]

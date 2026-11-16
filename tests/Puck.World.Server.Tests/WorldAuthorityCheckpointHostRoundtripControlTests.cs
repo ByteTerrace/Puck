@@ -151,8 +151,8 @@ public sealed class WorldAuthorityCheckpointHostRoundtripControlTests : IDisposa
 
         var restoredHonest = Restore(checkpoint: checkpoint);
         var restoredCorrupted = Restore(checkpoint: corrupted);
-        var honestText = restoredHonest.Answer(query: new WorldQuery.Rules()).Text;
-        var corruptedText = restoredCorrupted.Answer(query: new WorldQuery.Rules()).Text;
+        var honestText = restoredHonest.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.Rules()).Text;
+        var corruptedText = restoredCorrupted.AnswerSubmittedQuery(principal: Principal.Console, query: new WorldQuery.Rules()).Text;
 
         Assert.Contains(
             actualString: honestText,

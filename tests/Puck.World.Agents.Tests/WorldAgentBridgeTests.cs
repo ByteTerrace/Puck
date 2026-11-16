@@ -819,7 +819,7 @@ public sealed class WorldAgentBridgeTests {
         Assert.Null(@object: link.LastPayload);
     }
 
-    private sealed class RecordingLink : IPrincipalServerLink {
+    private sealed class RecordingLink : IServerLink {
         public bool CompleteQueries { get; init; } = true;
         public long CorrelationId { get; init; } = 1;
         public WorldSubmissionPayload? LastPayload { get; private set; }
@@ -828,11 +828,6 @@ public sealed class WorldAgentBridgeTests {
         public Principal LastQueryPrincipal { get; private set; }
         public List<Principal> QueryPrincipals { get; } = [];
 
-        public void Query(WorldQuery query, Action<QueryAnswer> completion) => Query(
-            completion: completion,
-            principal: Principal.Console,
-            query: query
-        );
         public void Query(WorldQuery query, Principal principal, Action<QueryAnswer> completion) {
             LastQuery = query;
             LastQueryPrincipal = principal;

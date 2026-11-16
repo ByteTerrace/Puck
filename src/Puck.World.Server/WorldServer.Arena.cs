@@ -79,7 +79,7 @@ public sealed partial class WorldServer {
         if (!m_arena.Catalog.TryGetDescriptor(descriptor: out var descriptor, handle: row) || (descriptor.Lane != StateLane.Document)) {
             return WorldCellWriteVerdict.StaleAddress;
         }
-        if (!RecipientView(principal).Admits(descriptor.Name)) { return WorldCellWriteVerdict.NotDisclosed; }
+        if (!WriteView(principal).Admits(descriptor.Name)) { return WorldCellWriteVerdict.NotDisclosed; }
         var subject = GrantSubject.State(name: descriptor.Name);
 
         if (!m_grants.Allows(capability: WorldCapability.Edit, principal: principal, subject: subject).IsAllowed) {

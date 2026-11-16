@@ -14,14 +14,13 @@ public enum WorldDynamicResolutionSignal {
     /// <summary>The present timing, where the GPU's frame time is unavailable: each new present's interval against the
     /// display period.</summary>
     Present,
-    /// <summary>The counted march steps against the step budget, where neither timing is available.</summary>
-    Steps,
+    /// <summary>No timing or display period is available: the grid holds.</summary>
+    Unavailable,
     /// <summary>A pinned grid (<c>world.render-scale pin &lt;scale&gt;</c>), which no load moves.</summary>
     Pin,
 }
 /// <summary>The load the dynamic-resolution controller reads each frame, from the world's views: the GPU's time for their
-/// renders timed since the last reading, the presenter's latest confirmed present, the counted march steps of their
-/// renders completed since the last reading, and the march steps an output pixel is budgeted. Each reading names the
+/// renders timed since the last reading and the presenter's latest confirmed present. Each reading names the
 /// grid its renders recorded their passes at. A host reports what it can read and nothing else.</summary>
 public interface IWorldFrameLoadSource {
     /// <summary>Asks for the views' GPU frame time to be measured, or stops asking: timestamps cost a pool and a readback
@@ -41,15 +40,7 @@ public interface IWorldFrameLoadSource {
 
     /// <summary>Gets the latest confirmed present, or <see cref="PresentTimingSample.Unavailable"/>.</summary>
     PresentTimingSample LastPresentTiming { get; }
-    /// <summary>Gets the march steps a frame is budgeted per output pixel where present timing is unavailable, or zero for
-    /// none.</summary>
-    double MarchStepBudgetPerPixel { get; }
 
-    /// <summary>Reads the counted march steps of the views' renders completed since the previous reading: each view's
-    /// newest completed render not read before, summed over the views.</summary>
-    /// <param name="reading">The reading, which is not fresh when no view completed a render since the previous one.</param>
-    /// <returns><see langword="true"/> when a view's completed render was counted.</returns>
-    bool TryReadMarchSteps(out WorldFrameLoadReading reading);
     /// <summary>Reads and clears every view's renders completed since the previous read, summarized over all of them
     /// (<see cref="ShaderPipelineCompletions.Then"/>): every render, not only each view's newest, so the summary names a
     /// grid only when every one of them recorded it.</summary>
@@ -67,10 +58,8 @@ public interface IWorldFrameLoadSource {
 /// Where the display rate is known, the signal is the GPU's own frame time, the views' newly timed renders' pass time
 /// against the display period; a present-paced display reads every kept present as exactly its period, so only the
 /// GPU's time can show the headroom to raise the grid again. Where the device does not time the views, it is the
-/// present timing, a new present's interval against the display period. Where neither is available, it is the counted
-/// march steps: the views' newly completed renders' steps against the step budget, the load source's steps per output
-/// pixel (<see cref="StepBudgetPerPixel"/> in a World) times the output's pixels, and without a budget the step path
-/// holds the ceiling. A pin grid overrides all three.
+/// present timing, a new present's interval against the display period. Where neither timing or no display period
+/// is available, the grid holds its last scale (the ceiling on first use). A pin overrides the load.
 /// </para>
 /// <para>
 /// The views render the grid quantized (<see cref="GridOf"/>), so a sample is taken only at the grid the views are
@@ -91,11 +80,6 @@ public sealed class WorldDynamicResolution {
     public const double MaximumFall = (1d / 16d);
     /// <summary>The largest share of the grid one sample raises it by.</summary>
     public const double MaximumRise = (1d / 32d);
-    /// <summary>The march steps a frame is budgeted per output pixel where neither timing is available: the world
-    /// node's counted march steps over every pass, 552,762, for one frame of the floor counters workload at 1920 by 1080
-    /// on the floor device (an RTX 2060), over that frame's pixels. Its Vulkan and DirectX counts differed by one step,
-    /// so one budget serves both backends.</summary>
-    public const double StepBudgetPerPixel = (552_762d / (1920d * 1080d));
 
     private double m_completedGrid;
     private uint m_lastPresentCount;
@@ -115,8 +99,6 @@ public sealed class WorldDynamicResolution {
     public double OverGrid => m_overGrid;
     /// <summary>Gets what moved the grid on the latest <see cref="Advance"/>.</summary>
     public WorldDynamicResolutionSignal Signal { get; private set; }
-    /// <summary>Gets the march-step budget the latest <see cref="Advance"/> held the frame to, or zero for none.</summary>
-    public double StepBudget { get; private set; }
 
     /// <summary>Returns the grid the views render a scale at: the scale quantized as the render graph quantizes an
     /// extent (<see cref="RenderGraphExtent.Quantize(double)"/>), no larger than the quantized ceiling.</summary>
@@ -132,7 +114,7 @@ public sealed class WorldDynamicResolution {
     /// the grid's area, by at most <see cref="MaximumFall"/> or <see cref="MaximumRise"/> of itself, clamped between the
     /// floor and the ceiling. A sample of no load at all raises it by the most.</summary>
     /// <param name="scale">The grid the sample was taken at.</param>
-    /// <param name="load">The sample: a present interval or a frame's march steps.</param>
+    /// <param name="load">The sample: GPU frame time or a present interval.</param>
     /// <param name="budget">What the sample is held to, in the load's unit.</param>
     /// <param name="floor">The lowest grid.</param>
     /// <param name="ceiling">The highest grid.</param>
@@ -164,22 +146,19 @@ public sealed class WorldDynamicResolution {
         m_completedGrid = 0d;
         Grid = 0d;
         Signal = WorldDynamicResolutionSignal.Off;
-        StepBudget = 0d;
     }
     /// <summary>Chooses this frame's render grid.</summary>
     /// <param name="load">The frame's load, or <see langword="null"/> for none, which holds the grid.</param>
     /// <param name="displayHertz">The display's presented frames a second, or zero when unknown.</param>
     /// <param name="ceiling">The render-scale ceiling, in (0, 1]: the grid never exceeds it.</param>
     /// <param name="floor">The lowest grid the load may move to; the ceiling when it is higher.</param>
-    /// <param name="outputPixels">The output's pixels, which scale the step budget.</param>
     /// <param name="pin">A pin grid in (0, 1], which the load does not move, or zero for none.</param>
     /// <returns>The scale, in (0, <paramref name="ceiling"/>], which the views render at its grid
     /// (<see cref="GridOf"/>).</returns>
-    public float Advance(IWorldFrameLoadSource? load, int displayHertz, float ceiling, float floor, long outputPixels, float pin) {
+    public float Advance(IWorldFrameLoadSource? load, int displayHertz, float ceiling, float floor, float pin) {
         if (pin > 0f) {
             m_wasPinned = true;
             Signal = WorldDynamicResolutionSignal.Pin;
-            StepBudget = 0d;
             m_overGrid = 0d;
             m_presentGrid = 0d;
 
@@ -195,21 +174,17 @@ public sealed class WorldDynamicResolution {
 
         if ((displayHertz > 0) && (load is not null) && load.TryReadGpuFrame(reading: out var frame)) {
             Signal = WorldDynamicResolutionSignal.Gpu;
-            StepBudget = 0d;
             m_presentGrid = 0d;
             scale = Take(budget: (1d / displayHertz), ceiling: ceiling, floor: floor, reading: frame, scale: scale);
         } else if (present.IsAvailable && (displayHertz > 0)) {
             Signal = WorldDynamicResolutionSignal.Present;
-            StepBudget = 0d;
             scale = AdvancePresent(ceiling: ceiling, displayHertz: displayHertz, floor: floor, load: load, present: present, scale: scale);
         } else {
-            Signal = WorldDynamicResolutionSignal.Steps;
-            StepBudget = ((load?.MarchStepBudgetPerPixel ?? 0d) * outputPixels);
+            Signal = WorldDynamicResolutionSignal.Unavailable;
             m_presentGrid = 0d;
-            scale = AdvanceSteps(budget: StepBudget, ceiling: ceiling, floor: floor, load: load, scale: scale);
         }
 
-        // Releasing a pin keeps the view's policy history. Even a fallback with no budget may not jump from the
+        // Releasing a pin keeps the view's policy history. A resumed timing sample may not jump from the
         // pinned grid to its ceiling in that first automatic step.
         if (released) {
             scale = Math.Clamp(scale,
@@ -255,17 +230,6 @@ public sealed class WorldDynamicResolution {
         return (sampled
             ? Take(budget: (1d / displayHertz), ceiling: ceiling, floor: floor, reading: new WorldFrameLoadReading(Grid: current, Load: interval, Renders: 1), scale: scale)
             : scale);
-    }
-    // The views' newly completed renders' counted steps against the budget; no budget holds the ceiling.
-    private float AdvanceSteps(IWorldFrameLoadSource? load, double budget, float ceiling, float floor, float scale) {
-        if (budget <= 0d) {
-            return ceiling;
-        }
-        if ((load is null) || !load.TryReadMarchSteps(reading: out var steps)) {
-            return scale;
-        }
-
-        return Take(budget: budget, ceiling: ceiling, floor: floor, reading: steps, scale: scale);
     }
     // One sample. Only a fresh reading at the grid the views render now is one; an over-budget sample marks its grid,
     // and a rise onto the marked grid stops at the current grid unless the sample, scaled by the grids' area ratio,

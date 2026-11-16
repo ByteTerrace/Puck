@@ -1,5 +1,3 @@
-using Puck.Abstractions.Counting;
-using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
 using Puck.Shaders;
@@ -10,9 +8,8 @@ namespace Puck.World;
 /// <summary>The load the dynamic-resolution controller reads in a presentation with a render graph: one view's
 /// (<paramref name="view"/>, the world's own by default) GPU frame time, from the pass timestamps <see cref="WorldGpuTiming"/> records while
 /// the controller asks; the presenter's present timing, when the host's presenter reports it (a windowed World's
-/// swapchain; an offscreen World presents nothing, so it reports none); the counted march steps of the views' completed
-/// submissions; and their budget per output pixel (<see cref="WorldDynamicResolution.StepBudgetPerPixel"/>). A timed or counted reading sums the view's newest submissions not read before, through a
-/// <see cref="WorldFrameLoadAggregate"/> per signal, and names the grid each submission's node recorded it at
+/// swapchain; an offscreen World presents nothing, so it reports none). A timed reading sums the view's newest submissions
+/// not read before, through a <see cref="WorldFrameLoadAggregate"/>, and names the grid each submission's node recorded it at
 /// (<see cref="ShaderPipelineRenderNode.TryGetRenderGrid"/>). Reading allocates nothing.</summary>
 /// <param name="presentTiming">Resolves the presenter's present timing, on the first read, or <see langword="null"/> for a
 /// host whose presenter reports none.</param>
@@ -20,10 +17,7 @@ namespace Puck.World;
 /// <param name="probe">The render probe, whose root runtime holds the views' work.</param>
 /// <param name="view">The view whose fresh submissions this source reads.</param>
 internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> presentTiming, WorldGpuTiming timing, WorldRenderProbe probe, string view = WorldViewGraphs.WorldInstance) : IWorldFrameLoadSource {
-    private static readonly int MarchStepsColumn = ColumnOf(kind: GpuWork.MarchSteps);
     private readonly WorldFrameLoadAggregate m_gpu = new();
-    private readonly GpuWorkSample m_sample = new();
-    private readonly WorldFrameLoadAggregate m_steps = new();
 
     private IPresentTimingFeedback? m_presentTiming;
     private bool m_resolved;
@@ -48,8 +42,6 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
             return (m_presentTiming?.LastPresentTiming ?? PresentTimingSample.Unavailable);
         }
     }
-    /// <inheritdoc/>
-    public double MarchStepBudgetPerPixel => WorldDynamicResolution.StepBudgetPerPixel;
 
     /// <inheritdoc/>
     public void RequireGpuTiming(bool required) => timing.Require(required: required);
@@ -117,46 +109,6 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         return timed;
     }
     /// <inheritdoc/>
-    /// <remarks>A completed submission whose grid its node does not record, one that rendered no passes or is no longer
-    /// recorded, adds nothing.</remarks>
-    public bool TryReadMarchSteps(out WorldFrameLoadReading reading) {
-        reading = default;
-
-        if (probe.Root?.Runtime is not { } runtime) {
-            return false;
-        }
-
-        FindViews(runtime: runtime);
-        m_steps.Begin();
-        var counted = false;
-
-        for (var view = 0; (view < m_nodes.Length); view++) {
-            if ((m_nodes[view] is not { } node) || !node.TryReadCompleted(sample: m_sample)) {
-                continue;
-            }
-
-            counted = true;
-
-            if (!node.TryGetRenderGrid(grid: out var grid, submission: m_sample.Submission)) {
-                continue;
-            }
-
-            var steps = 0L;
-
-            for (var pass = 0; (pass < m_sample.PassCount); pass++) {
-                if (m_sample.TryGetPassCount(column: MarchStepsColumn, pass: pass, value: out var count)) {
-                    steps += count;
-                }
-            }
-
-            m_steps.Add(grid: grid, load: steps, render: m_sample.Submission, view: view);
-        }
-
-        reading = m_steps.End();
-
-        return counted;
-    }
-    /// <inheritdoc/>
     /// <remarks>The views that left the graph since the previous read hand their completed renders over through the
     /// runtime (<see cref="RenderGraphRuntime.TakeRetiredCompletions"/>), so a removed view's render still counts.</remarks>
     public ShaderPipelineCompletions TakeCompletions() {
@@ -204,7 +156,6 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         m_set = set;
         m_nodes = nodes;
         m_gpu.Reset(survivors: survivors);
-        m_steps.Reset(survivors: survivors);
 
         if (m_accounting) {
             m_accountedViews = viewCount;
@@ -226,16 +177,5 @@ internal sealed class WorldFrameLoadSource(Func<IPresentTimingFeedback?> present
         }
 
         return true;
-    }
-    private static int ColumnOf(WorkKind kind) {
-        var kinds = GpuWork.SubmissionKinds;
-
-        for (var column = 0; (column < kinds.Length); column++) {
-            if (ReferenceEquals(objA: kinds[column], objB: kind)) {
-                return column;
-            }
-        }
-
-        throw new InvalidOperationException(message: $"'{kind.Name}' is no submission kind.");
     }
 }

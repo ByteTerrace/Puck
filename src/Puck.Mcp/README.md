@@ -317,8 +317,9 @@ no `algorithm` and no `publicKey`. The silo requires explicit `Replica`
 disclosure for its text surface: these commands can read the full authored state. This reuses
 the existing disclosure contract; peers cannot hold `Observe/all`.
 
-The remote command surface is `world.wait`, `world.peers`, `world.admission`,
-`world.links`, `world.state`, `world.state.cell.set` and `world.state.cell.remove`.
+The remote command surface is `world.wait`, `world.admission`,
+`world.links`, `world.state`, `world.state.cell.set`, `world.state.cell.remove` and
+`world.state.similar`.
 A live command guard refuses other verbs, including newly registered local admin
 commands. Every accepted command retains its generation-bound Peer principal.
 State writes additionally require the ordinary `Mutate/section:state` grant with

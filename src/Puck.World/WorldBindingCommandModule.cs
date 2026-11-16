@@ -70,11 +70,6 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
     private const string BindingsForm = "[seat]";
     private const string ValueTokenPrefix = "value:";
 
-    // A server read-back rendered with its verdict: a refusal (a missing/inactive subject) fails, so it reaches
-    // wire.errors rather than scrolling past as data.
-    private static CommandResult Answered(in QueryAnswer answer) => new(Output: answer.Text) {
-        IsError = answer.Refused,
-    };
     private CommandResult BindHandler(CommandContext context, WireArgs args) {
         if (
             (args.Count != 3) &&
@@ -575,20 +570,6 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: prefix
         );
-    // Submits a query and renders its answer — the completion fires INLINE over loopback, so the result is settled
-    // before this call returns.
-    private CommandResult QueryResult(WorldQuery query) {
-        var result = default(CommandResult);
-
-        m_link.Query(
-            query: query,
-            completion: answer => {
-                result = Answered(answer: in answer);
-            }
-        );
-
-        return result;
-    }
     // Re-derives the profile-bindings input layer for every ACTIVE seat whose selected identity is <paramref name="profileId"/>,
     // so a durable bindings edit (identity.bindings.save) recomposes and hot-reloads the couch's mappings at once —
     // the seat handles are the same shared WorldIdentity the edit above mutated in place, so the new section reads

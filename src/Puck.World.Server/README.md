@@ -1759,7 +1759,7 @@ which authenticates the resulting `WorldRemoteAuthority` purely over
 a signed claim over the challenge—never a shared secret)—the interactive
 attestation identity door above is server-side only today; no production
 client crosses it.
-`Puck.World.Console`'s `WorldNetworkCommandModule`'s `world.peers` echoes the
+`Puck.World.Console`'s `WorldNetworkCommandModule`'s `world.peers`, an operator verb, echoes the
 connection table this class owns—each connection's verified admission
 identity (domain/subject)—plus an `arrivals:` group naming every body
 admitted by transfer and the authority its verdict was decided against;

@@ -20,6 +20,14 @@ namespace Puck.DirectX.Tests;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXGroupedBindingLawTests {
     [Fact]
+    public void AnOversizedConstantBufferViewIsRefusedBeforeReachingTheDevice() {
+        var bindings = new DirectXGpuBindings(deviceContext: null!);
+
+        Assert.Equal(expected: 65536UL, actual: bindings.MaxConstantBufferBytes);
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => bindings.WriteConstantBuffer(
+            arrayElement: 0, binding: 0, bufferHandle: 0, bufferSize: 65792UL, descriptorSetHandle: 0));
+    }
+    [Fact]
     public void A_groups_set_takes_its_constant_buffer_image_and_sampler_and_binds_only_at_its_own_group() {
         using var context = DirectXTestDevices.Warp();
         var services = context.Services;
