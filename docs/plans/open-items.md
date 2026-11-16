@@ -4164,6 +4164,15 @@ Next: reproduce the companion overlaps, then one paired windowed tour when no
 lane holds the GPU, compared stop by stop, with `--attach` on one World for
 both runs.
 
+- [medium] `puck measure` cannot time `bench world` across builds whose
+  in-process types differ: the bench loads the frozen build's `Puck.World`
+  assemblies under the requesting checkout's CLI, so a before build older than
+  a counter source the CLI registers fails to load (`Could not load type
+  'Puck.World.Server.WorldTickWork'`, measure request w2-perf-tick-idle-tick,
+  withdrawn). Run each side's bench from that side's own frozen CLI, as `bench
+  startup` and `bench frames` already do through a World process, so a timing
+  pair never mixes builds in one process. No recorded-tick bench row exists
+  either; the tick and body-door work is shown by counts until one does.
 - [medium] A windowed sweep's convergence is unproven under load. A frame held
   for its lighting is withheld, not recorded again, and its staging drives the
   background GPU work (`SdfWorldPasses.WithheldOf`, `SdfGpuWork.Drive`), and
