@@ -32,7 +32,6 @@ public sealed class SurfaceCompositor : IDisposable {
     private readonly nint[] m_descriptorSets = new nint[DescriptorSetRingSize];
     private readonly IVulkanExternalMemoryApi m_externalMemoryApi;
     private readonly IVulkanFramebufferSetApi m_framebufferSetApi;
-    private readonly IVulkanOffscreenImageApi m_offscreenImageApi;
     private readonly double m_paperWhiteNits;
     private readonly GpuPassPipelineCache m_pipelines;
     private readonly VulkanQueueSubmitter m_queueSubmitter;
@@ -51,7 +50,7 @@ public sealed class SurfaceCompositor : IDisposable {
     private bool m_initialized;
     private nint m_lastWrittenImageView;
     private VulkanLogicalDevice? m_resourceDevice;
-    private VulkanSurfaceUpload? m_rootUpload;
+    private IGpuSurfaceUpload? m_rootUpload;
     private nint m_sampler;
     private VulkanSurfaceImport? m_sharedImport;
 
@@ -63,7 +62,6 @@ public sealed class SurfaceCompositor : IDisposable {
     /// <param name="bufferApi">The native buffer API.</param>
     /// <param name="descriptorApi">The native descriptor API.</param>
     /// <param name="externalMemoryApi">The native external-memory API a shared surface is imported through.</param>
-    /// <param name="offscreenImageApi">The native image API a CPU surface is uploaded through.</param>
     /// <param name="framebufferSetApi">The native framebuffer and image-view API.</param>
     /// <param name="commandResourcesFactory">The command resources factory.</param>
     /// <param name="commandBufferRecordingApi">The native command-buffer recording API.</param>
@@ -76,7 +74,6 @@ public sealed class SurfaceCompositor : IDisposable {
         IVulkanBufferApi bufferApi,
         IVulkanDescriptorApi descriptorApi,
         IVulkanExternalMemoryApi externalMemoryApi,
-        IVulkanOffscreenImageApi offscreenImageApi,
         IVulkanFramebufferSetApi framebufferSetApi,
         IVulkanCommandResourcesFactory commandResourcesFactory,
         IVulkanCommandBufferRecordingApi commandBufferRecordingApi,
@@ -88,7 +85,6 @@ public sealed class SurfaceCompositor : IDisposable {
         ArgumentNullException.ThrowIfNull(descriptorApi);
         ArgumentNullException.ThrowIfNull(externalMemoryApi);
         ArgumentNullException.ThrowIfNull(framebufferSetApi);
-        ArgumentNullException.ThrowIfNull(offscreenImageApi);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(presentationOptions);
         ArgumentNullException.ThrowIfNull(queueSubmitter);
@@ -100,7 +96,6 @@ public sealed class SurfaceCompositor : IDisposable {
         m_descriptorAllocator = new VulkanDescriptorAllocator(descriptorApi: descriptorApi);
         m_externalMemoryApi = externalMemoryApi;
         m_framebufferSetApi = framebufferSetApi;
-        m_offscreenImageApi = offscreenImageApi;
         m_paperWhiteNits = presentationOptions.PaperWhiteNits;
         m_pipelines = pipelines;
         m_queueSubmitter = queueSubmitter;
@@ -324,15 +319,7 @@ public sealed class SurfaceCompositor : IDisposable {
                 width: surface.Width
             );
         } else if (surface.IsCpuPixels) {
-            m_rootUpload ??= new VulkanSurfaceUpload(
-                bufferApi: m_bufferApi,
-                commandBufferRecordingApi: m_commandBufferRecordingApi,
-                commandResourcesFactory: m_commandResourcesFactory,
-                deviceContext: m_renderer,
-                framebufferSetApi: m_framebufferSetApi,
-                offscreenImageApi: m_offscreenImageApi,
-                queueSubmitter: m_queueSubmitter
-            );
+            m_rootUpload ??= m_renderer.Services.SurfaceTransferFactory.CreateUpload();
             imageViewHandle = m_rootUpload.Upload(
                 format: surface.Format,
                 height: surface.Height,

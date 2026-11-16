@@ -45,7 +45,7 @@ internal sealed class RuleDueList {
     private readonly List<int> m_liveNow = [];
 
     private StateArena? m_arena;
-    // The list's place in the arena's move log: every row that moved before it has been pushed onto the list.
+    // The list's place in the arena's version moves: every row that moved before it has been pushed onto the list.
     private long m_movesRead = -1L;
     private long m_latchEpoch = -1L;
 
@@ -246,11 +246,9 @@ internal sealed class RuleDueList {
         }
 
         m_rows.Clear();
-        if (!arena.TryReadMoves(into: m_rows, since: m_movesRead)) {
-            m_movesRead = arena.MoveSequence;
+        if (!arena.TryReadMoves(into: m_rows, place: ref m_movesRead)) {
             MarkAll();
         } else {
-            m_movesRead = arena.MoveSequence;
             foreach (var row in m_rows) {
                 if (m_rowReaders.TryGetValue(key: row, value: out var readers)) {
                     foreach (var reader in readers) {

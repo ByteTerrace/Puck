@@ -291,6 +291,14 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuRecorder.ClearStorageBuffer");
     }
     void IGpuRecorder.CopyImage(nint commandBufferHandle, nint sourceImageHandle, nint destinationImageHandle, uint width, uint height) => Hit(key: "IGpuRecorder.CopyImage");
+    uint IGpuRecorder.CopyRowAlignment {
+        get {
+            Hit(key: "IGpuRecorder.CopyRowAlignment");
+            return 1U;
+        }
+    }
+    void IGpuRecorder.CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) => Hit(key: "IGpuRecorder.CopyBufferToImage");
+    void IGpuRecorder.CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) => Hit(key: "IGpuRecorder.CopyImageToBuffer");
     void IGpuRecorder.CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes, ulong destinationOffsetBytes) {
         OnBufferCopy?.Invoke(arg1: sourceOffsetBytes, arg2: sizeBytes);
         BufferCopies?.Add(item: (sourceBufferHandle, destinationBufferHandle, sizeBytes, sourceOffsetBytes, destinationOffsetBytes));
@@ -836,7 +844,7 @@ internal sealed class FakeGpuDevice :
         public void Dispose() => creation?.Release();
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write");
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => gpu.Hit(key: "IGpuStorageBuffer.Write(offset)");
-        public void Read(Span<byte> destination) {
+        public void Read(Span<byte> destination, ulong sourceOffsetBytes = 0UL) {
             gpu.OnReadback?.Invoke(obj: destination.Length);
             gpu.Hit(key: "IGpuReadbackBuffer.Read");
             destination.Clear();
@@ -854,8 +862,8 @@ internal sealed class FakeGpuDevice :
         private byte[] m_pixels = [];
 
         public void Dispose() { }
-        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
-            var length = checked((int)((width * height) * bytesPerPixel));
+        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout) {
+            var length = checked((int)GpuPixelFormats.ImageByteLength(format: format, height: height, width: width));
 
             if (m_pixels.Length != length) {
                 m_pixels = new byte[length];

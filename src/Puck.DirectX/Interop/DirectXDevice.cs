@@ -8,7 +8,7 @@ namespace Puck.DirectX.Interop;
 /// exactly once on disposal.
 /// </summary>
 [SupportedOSPlatform("windows8.1")]
-public sealed unsafe class DirectXDevice : IDisposable {
+public sealed unsafe class DirectXDevice : IGpuHeldDevice, IDisposable {
     private nint m_deviceHandle;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXDevice"/> class taking ownership of a device.</summary>

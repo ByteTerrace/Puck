@@ -408,6 +408,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         NoteUse(commandBuffer: commandBufferHandle, handle: destinationImageHandle, use: "copy to");
         CopiedImages.Add(item: (sourceImageHandle, destinationImageHandle));
     }
+    public uint CopyRowAlignment => 1U;
+    public void CopyBufferToImage(nint commandBufferHandle, nint bufferHandle, nint imageHandle, in GpuCopyFootprint footprint) =>
+        NoteUse(commandBuffer: commandBufferHandle, handle: imageHandle, use: "copy to");
+    public void CopyImageToBuffer(nint commandBufferHandle, nint imageHandle, nint bufferHandle, in GpuCopyFootprint footprint) =>
+        NoteUse(commandBuffer: commandBufferHandle, handle: imageHandle, use: "copy from");
     public void CopyBuffer(nint commandBufferHandle, nint sourceBufferHandle, nint destinationBufferHandle, ulong sizeBytes, ulong sourceOffsetBytes = 0, ulong destinationOffsetBytes = 0) {
         if (Recording) {
             Record(text: $"copy buffer {sourceBufferHandle} to {destinationBufferHandle}");
@@ -830,7 +835,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
         public void Dispose() => created.Dispose();
         public void Write<T>(ReadOnlySpan<T> data) where T : unmanaged => throw new NotSupportedException();
-        public void Read(Span<byte> destination) => destination.Clear();
+        public void Read(Span<byte> destination, ulong sourceOffsetBytes = 0UL) => destination.Clear();
         public void Write<T>(ReadOnlySpan<T> data, ulong destinationOffsetBytes) where T : unmanaged => throw new NotSupportedException();
     }
     // A host-visible buffer: the bytes a host write puts in it, which a law reads back as the GPU would.
@@ -906,8 +911,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
             : 0UL);
 
         public void Dispose() => m_staging?.Dispose();
-        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, uint bytesPerPixel, GpuImageLayout sourceLayout) {
-            var bytes = ((((ulong)width) * height) * bytesPerPixel);
+        public ReadOnlyMemory<byte> Read(nint sourceImageHandle, GpuPixelFormat format, uint width, uint height, GpuImageLayout sourceLayout) {
+            var bytes = GpuPixelFormats.ImageByteLength(format: format, height: height, width: width);
 
             if (gpu.LoseNextReadback) {
                 gpu.LoseNextReadback = false;

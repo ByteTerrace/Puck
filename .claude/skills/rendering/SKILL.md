@@ -804,7 +804,9 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`SdfMeshBakeIdentity`), so their closure holds only what the bake reads:
   their own interface (`isa/sdf-mesh-bake.interface.hlsli`: a pass block of
   `SdfWorldPackage.BakeValues` alone, stamped with the field's fingerprint), the
-  field interpreter and the field's generated vocabulary (`isa/sdf-isa.hlsli`).
+  field interpreter (with the 2D box distance and glyph decode it shares with the
+  overlays, `Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli`) and the field's
+  generated vocabulary (`isa/sdf-isa.hlsli`).
   A light, exposure, view, pass-block value, pass resource or World table goes
   in `isa/sdf-render.hlsli`, the world interface or after
   `SdfWorldPackage.FieldTables`, and leaves the bake's bytecode byte for byte as

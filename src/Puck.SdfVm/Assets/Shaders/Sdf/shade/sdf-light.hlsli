@@ -272,12 +272,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
     return false;
 }
 // What `light` adds at `surface`:
-// - a directional its wrapped Lambert term and its own GGX lobe under its shadow visibility: its cascades', or in a view
-//   with no cascade a shadowing directional's (its Shadows flag) share of the probes about the surface that see it
-//   (sdfMeshLightVisibility), so a view without cascades never lights every face turned toward the sun;
-// - a point or spot its wrapped Lambert term and its own GGX lobe under the windowed inverse square and the spot's cone
-//   (sdfPointReach), ambient occlusion and, for a static light the irradiance volume traced (its Shadows flag,
-//   SdfLight.IsTraced), the share of the probes about the surface that see it (sdfMeshLightVisibility);
+// - a directional or a point or spot light its wrapped Lambert term and its own GGX lobe, scaled by its reach (one for a
+//   directional; the windowed inverse square and the spot's cone for a point, sdfPointReach) and its visibility
+//   (sdfLightInputs);
 // - a rim its view-dependent silhouette brighten;
 // - an occluder a Gaussian dimming of reflected light, facing the surface;
 // - a screen its glow toward what sits in front of its face: a Lambertian face of luminance L and area A casts
@@ -285,10 +282,15 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // A specular lobe's scale is the light's illuminance, pi times its weight, since sdfMaterialSpecular answers the BRDF
 // times the cosine. A wrap of 0 reduces each wrapped term to max(n.l, 0).
 // The one evaluation of a light's direction, reach, probe share and visibility, which the default response and an
-// authored light phase's stamp both read. `visibility` is the share of the light the default response lets through:
-// the cascade slot's (the probes' where no cascade measured it) for a directional, the probes' share for a traced point
-// light, and one for every other kind. The authored stamp requests every term; ordinary shading requests only the
-// terms its light kind uses, preserving the no-program path's work.
+// authored light phase's stamp both read. `visibility` is the share of a directional or point light that reaches the
+// surface. Where the view draws cascades, a directional's is its stable slot's measured shadow, which resolves every
+// scale (sdfLightVisibility; ambient occlusion for a directional no slot renders). Otherwise nothing measures the
+// light's shadow at the surface: a light the irradiance volume traced (its Shadows flag, SdfLight.IsTraced; the probes
+// record every shadowing directional too) takes the share of the probes about the surface that see it
+// (sdfMeshLightVisibility), which resolves only the probes' spacing, times the surface's ambient occlusion, which stands
+// in for the contact-scale shadowing nothing measured; an untraced one takes the ambient occlusion alone. One for every
+// other kind. The authored stamp requests every term; ordinary shading requests only the terms its light kind uses,
+// preserving the no-program path's work.
 struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; };
 SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored) {
     SdfLightInputs inputs;
@@ -304,16 +306,15 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         inputs.direction = delta * rsqrt(max(distanceSquared, 1.0e-8));
         if (light.kind == SdfLightScreen) inputs.reach = saturate(dot(light.facing, -inputs.direction)) / (distanceSquared + light.weight);
     }
-    if (surface.probed && light.record.Shadows != 0u && light.index >= 0 &&
-        (authored || (light.kind == SDF_LIGHT_DIRECTIONAL && !surface.cascaded) ||
-         (light.kind == SDF_LIGHT_POINT && light.weight * inputs.reach > 0.0))) {
+    bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
+    bool probeVisibility = (light.kind == SDF_LIGHT_POINT) || (light.kind == SDF_LIGHT_DIRECTIONAL && !surface.cascaded);
+    if (traced && (authored || (probeVisibility && light.weight * inputs.reach > 0.0))) {
         inputs.probeShare = sdfMeshLightVisibility(surface.probes, (uint)light.index);
     }
-    if (light.kind == SDF_LIGHT_DIRECTIONAL) {
-        inputs.visibility = !surface.cascaded && surface.probed && light.record.Shadows != 0u && light.index >= 0
-            ? inputs.probeShare : sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion, surface.shadowMeasured);
-    } else if (light.kind == SDF_LIGHT_POINT) {
-        inputs.visibility = inputs.probeShare;
+    if (probeVisibility) {
+        inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
+    } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
+        inputs.visibility = sdfLightVisibility(light.index, surface.shadowVisibility, surface.ambientOcclusion, surface.shadowMeasured);
     }
     return inputs;
 }
@@ -327,29 +328,19 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
 
     float3 normal = surface.normal;
 
-    if (light.kind == SDF_LIGHT_DIRECTIONAL) {
-        float lambert = sdfWrapDiffuse(dot(normal, light.position), surface.material.wrap);
-        float occlusion = inputs.visibility;
+    if ((light.kind == SDF_LIGHT_DIRECTIONAL) || (light.kind == SDF_LIGHT_POINT)) {
+        float radiance = (light.weight * inputs.reach);
+        float visibility = inputs.visibility;
 
-        if (sdfToonEnabled(surface.toon)) {
-            response.diffuse = light.color * light.weight * sdfToonBand(surface.toon, lambert, occlusion);
-            response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, light.position, light.weight, occlusion);
-        } else {
-            response.diffuse = (light.color * ((light.weight * lambert) * occlusion));
-            response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, light.position, ((SDF_PI * light.weight) * occlusion)));
-        }
-    } else if (light.kind == SDF_LIGHT_POINT) {
-        float3 pointDirection = inputs.direction;
-        float reach = (light.weight * inputs.reach) * inputs.visibility;
-        if (reach > 0.0) {
-            float pointLambert = sdfWrapDiffuse(dot(normal, pointDirection), surface.material.wrap);
+        if ((radiance * visibility) > 0.0) {
+            float lambert = sdfWrapDiffuse(dot(normal, inputs.direction), surface.material.wrap);
 
             if (sdfToonEnabled(surface.toon)) {
-                response.diffuse = light.color * reach * sdfToonBand(surface.toon, pointLambert, surface.ambientOcclusion);
-                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, pointDirection, reach, surface.ambientOcclusion);
+                response.diffuse = light.color * radiance * sdfToonBand(surface.toon, lambert, visibility);
+                response.specular = light.color * sdfToonSpecular(surface.toon, surface.material, normal, -surface.rayDirection, inputs.direction, radiance, visibility);
             } else {
-                response.diffuse = (light.color * ((reach * pointLambert) * surface.ambientOcclusion));
-                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, pointDirection, ((SDF_PI * reach) * surface.ambientOcclusion)));
+                response.diffuse = (light.color * ((radiance * lambert) * visibility));
+                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
             }
         }
     } else if (light.kind == SDF_LIGHT_RIM) {

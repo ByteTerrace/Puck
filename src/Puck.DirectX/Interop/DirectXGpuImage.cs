@@ -1,5 +1,8 @@
 using System.Runtime.Versioning;
+using Puck.DirectX.Apis;
+using Windows.Win32;
 using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.Graphics.Dxgi.Common;
 using Windows.Win32.System.Com;
 
 namespace Puck.DirectX.Interop;
@@ -36,6 +39,26 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             usage: usage,
             width: width
         );
+        RequireWithinTextureLimit(
+            dimension: width,
+            name: nameof(width)
+        );
+        RequireWithinTextureLimit(
+            dimension: height,
+            name: nameof(height)
+        );
+
+        var device = ((ID3D12Device*)deviceContext.Device.Handle);
+        var (resourceFormat, viewFormat) = DirectXTextures.FormatsOf(format: dxgiFormat, usage: usage);
+
+        // A shader samples the view's format: a sampled depth image's typeless resource is read as R32_FLOAT.
+        if ((usage & GpuImageUsage.Sampled) != 0) {
+            RequireSampled(
+                device: device,
+                dxgiFormat: viewFormat,
+                format: format
+            );
+        }
 
         Format = format;
         Height = height;
@@ -47,12 +70,11 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
             format: dxgiFormat,
             usage: usage
         );
-        var (resourceFormat, viewFormat) = DirectXTextures.FormatsOf(format: dxgiFormat, usage: usage);
 
         m_resource = ((nint)DirectXTextures.Create(
             arena: (deviceContext as DirectXDeviceContext)?.HeapArena,
             clearValue: clearValue,
-            device: ((ID3D12Device*)deviceContext.Device.Handle),
+            device: device,
             flags: flags,
             format: resourceFormat,
             height: height,
@@ -80,6 +102,39 @@ public sealed unsafe class DirectXGpuImage : IGpuImage {
     /// <inheritdoc/>
     public uint Width { get; }
 
+    // Refuses a width or height beyond the largest two-dimensional texture Direct3D 12 admits. The device accepts a larger
+    // texture's creation and refuses only the recording that copies into it, so the limit is checked first.
+    private static void RequireWithinTextureLimit(uint dimension, string name) {
+        const uint Limit = PInvoke.D3D12_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+
+        if (dimension > Limit) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: dimension,
+                message: $"The {name} is {dimension} texels; Direct3D 12 limits a two-dimensional texture to {Limit} texels per side.",
+                paramName: name
+            );
+        }
+    }
+    // Refuses a format the device cannot sample from a two-dimensional texture, naming the format and what the device
+    // reports for it.
+    private static void RequireSampled(ID3D12Device* device, GpuPixelFormat format, DXGI_FORMAT dxgiFormat) {
+        const D3D12_FORMAT_SUPPORT1 Required = D3D12_FORMAT_SUPPORT1.D3D12_FORMAT_SUPPORT1_TEXTURE2D | D3D12_FORMAT_SUPPORT1.D3D12_FORMAT_SUPPORT1_SHADER_SAMPLE;
+
+        var support = new D3D12_FEATURE_DATA_FORMAT_SUPPORT {
+            Format = dxgiFormat,
+        };
+
+        if (
+            !DirectXFeatureReads.TryCheck(
+                data: ref support,
+                feature: D3D12_FEATURE.D3D12_FEATURE_FORMAT_SUPPORT,
+                support: new DirectXDeviceFeatureSupport(device: device)
+            ) ||
+            ((support.Support1 & Required) != Required)
+        ) {
+            throw new NotSupportedException(message: $"The Direct3D 12 device cannot sample {format} textures: it reports {support.Support1} for {dxgiFormat}.");
+        }
+    }
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) {
