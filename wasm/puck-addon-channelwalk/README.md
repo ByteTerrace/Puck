@@ -19,7 +19,7 @@ world records a pin for generated repository bytes.
 
 These fixtures still link Rust's standard library. They compile and load in
 `Puck.Scripting`, but their tables and segment state are outside the current
-World checkpoint contract. The [refactoring packet](../../docs/plans/open-items.md#refactoring-campaign)
+World checkpoint contract. The [addons packet](../../docs/plans/open-items.md#addons)
 owns generic checkpoint support and capability-boundary scenarios in the debug
 world. The default guest is a freestanding worked example that mounts there.
 
