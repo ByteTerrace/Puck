@@ -2862,15 +2862,20 @@ confirmed the AV1 item in the code; the rest are unconfirmed):
     (`:122`) and `engineBoot.ts` (`:83`) under
     `Puck.Dashboard/src/portal/src/native/` (S).
 
-The `.puck` sources (about 48,000 lines outside the cartridges) still
+The `.puck` sources (about 44,000 lines outside the cartridges) still
 under-use the language where the shared libraries (`worlds/standard/bounds.puck`,
-`kits.puck`) and generated tables have not reached:
+`kits.puck`, `mirror.puck`, `rig.puck`) and generated tables have not reached.
+The Moth's two sides (`mothLimbs`), the court figures' halves and layers
+(`courtLayers`), the swing rows (`swing`) and the camera rows (`lookCamera`) are
+written once; the rest of the list is still open:
 
-- `worlds/debug/avatars/moth.puck` (about 7,300 lines): about 500 left/right
-  names mirrored by hand, about 4,000 decimal literals, about 200 raw
-  quaternions, swing blocks repeating one pivot. Generate both sides from one
-  definition.
-- `worlds/standard/cards.puck` (about 4,400 lines): rank glyphs traced as 314
+- `worlds/debug/avatars/moth.puck` (about 4,500 lines): about 4,000 decimal
+  literals and about 200 raw quaternions; the pod's band groups (a band, its
+  clip, cut, top and bottom, four times a side) are pasted, and a uniform row
+  table like the court figures' would write the Box, Prism and Cylinder rows
+  (blocked on a template leaving a member out, G13 in
+  [state and language](state-and-language.md)).
+- `worlds/standard/cards.puck` (about 2,000 lines): rank glyphs traced as 314
   polyline points and about 220 raw quaternions; the engine already draws text
   (`shape-text-engrave`, `shape-text-ride`). The card faces change look, so the
   owner reviews them.
