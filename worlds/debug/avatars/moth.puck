@@ -218,8 +218,21 @@ template mothLimbs(side, isRight) {
       radiusEnd: 0.08
     }
     swings [
-      { driver: "swim", axis [1, 0, 0], amplitude: 0.55, pivot: mirrorX(isRight, [0.295, 1.4515, 0]), wave: "sine", phase: bySide(isRight, 0, 3.14159265358979) }
-      { driver: "swim", axis [0, 0, 1], amplitude: flip(isRight, -0.85), pivot: mirrorX(isRight, [0.295, 1.4515, 0]), wave: "constant" }
+      {
+        driver: "swim"
+        axis [1, 0, 0]
+        amplitude: 0.55
+        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+        wave: "sine"
+        phase: bySide(isRight, 0, 3.14159265358979)
+      }
+      {
+        driver: "swim"
+        axis [0, 0, 1]
+        amplitude: flip(isRight, -0.85)
+        pivot: mirrorX(isRight, [0.295, 1.4515, 0])
+        wave: "constant"
+      }
       {
         driver: "run"
         axis [0, 0, 1]
@@ -692,7 +705,14 @@ template mothLimbs(side, isRight) {
       startScale: 1
     }
     swings [
-      { driver: "swim", axis [1, 0, 0], amplitude: 0.45, pivot: mirrorX(isRight, [0.19, 0.7465, 0]), wave: "sine", phase: bySide(isRight, 0, 3.14159265358979) }
+      {
+        driver: "swim"
+        axis [1, 0, 0]
+        amplitude: 0.45
+        pivot: mirrorX(isRight, [0.19, 0.7465, 0])
+        wave: "sine"
+        phase: bySide(isRight, 0, 3.14159265358979)
+      }
       {
         driver: "gait"
         axis [1, 0, 0]
@@ -2434,7 +2454,13 @@ kits [
     // falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
     // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller.
     motion: walkerMotion with {
-      holds [swimHold(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5), groundFlightHold, groundHold, flightHold, fallHold]
+      holds [
+        swimHold(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5)
+        groundFlightHold
+        groundHold
+        flightHold
+        fallHold
+      ]
       speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
