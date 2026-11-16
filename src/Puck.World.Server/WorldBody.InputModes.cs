@@ -8,19 +8,15 @@ public sealed partial class WorldBody {
     internal void ResetArrivalInput() {
         ClearTransientInput();
         ClearTape();
-        Array.Clear(array: m_laneTimers);
-        Array.Clear(array: m_channelTimerValues);
-        Array.Clear(array: m_pendingDefaultChannelPress);
-        Array.Clear(array: m_pendingDefaultChannelValue);
-        Array.Clear(array: m_previousChannelBit);
-        Array.Clear(array: m_laneActions);
+        ActionEdit = default;
+        Array.Clear(array: m_laneRecency);
         m_channelReadHeld = default;
         m_channelReadComposed = default;
         m_channelReadScalar = default;
         m_engagedIntent = default;
     }
 
-    private readonly LaneActionRuntime[] m_inputActionScratch = new LaneActionRuntime[ActionLaneCount];
+    private readonly ulong[]?[] m_inputRecencyScratch = new ulong[]?[ActionLaneCount];
 
     /// <summary>The input tuple currently installed on this body's folded intent.</summary>
     public ushort InputMappingId { get; private set; }
@@ -35,9 +31,14 @@ public sealed partial class WorldBody {
         Span<bool> previousBits = stackalloc bool[ActionLaneCount];
         Span<bool> continuing = stackalloc bool[ActionLaneCount];
 
+        // The whole section is rebuilt for the new mapping and written through the door once: a channel that keeps
+        // its logical identity carries its timer, bit, latch and fact memory to its new ordinal, every other ordinal
+        // starts clean, and no pending tap survives the barrier.
+        var action = default(BodyActionSection);
+
         timers.Clear(); timerValues.Clear(); previousBits.Clear();
         continuing.Clear();
-        Array.Clear(array: m_inputActionScratch);
+        Array.Clear(array: m_inputRecencyScratch);
         Array.Clear(array: m_inputScriptActorScratch);
         foreach (var logical in next.Live) {
             var destination = next.Address(logicalId: logical);
@@ -51,19 +52,20 @@ public sealed partial class WorldBody {
             }
             if (released) { continue; }
             continuing[destination] = true;
-            timers[destination] = m_laneTimers[source];
-            timerValues[destination] = m_channelTimerValues[source];
+            timers[destination] = Action.TimerTicks[source];
+            timerValues[destination] = Action.TimerValues[source];
             m_inputScriptActorScratch[destination] = m_scriptActors[source];
-            previousBits[destination] = (m_previousChannelBit[source] || (accepted[destination] != FixedQ4816.Zero));
-            m_inputActionScratch[destination] = m_laneActions[source];
+            previousBits[destination] = (Action.PreviousBit[source] || (accepted[destination] != FixedQ4816.Zero));
+            action.LaneLatch[destination] = Action.LaneLatch[source];
+            action.LaneFactHeld[destination] = Action.LaneFactHeld[source];
+            m_inputRecencyScratch[destination] = m_laneRecency[source];
         }
-        timers.CopyTo(destination: m_laneTimers);
-        timerValues.CopyTo(destination: m_channelTimerValues);
+        timers.CopyTo(destination: action.TimerTicks);
+        timerValues.CopyTo(destination: action.TimerValues);
         m_inputScriptActorScratch.CopyTo(array: m_scriptActors, index: 0);
-        previousBits.CopyTo(destination: m_previousChannelBit);
-        m_inputActionScratch.CopyTo(array: m_laneActions, index: 0);
-        Array.Clear(array: m_pendingDefaultChannelPress);
-        Array.Clear(array: m_pendingDefaultChannelValue);
+        previousBits.CopyTo(destination: action.PreviousBit);
+        ActionEdit = action;
+        m_inputRecencyScratch.CopyTo(array: m_laneRecency, index: 0);
         var submitted = default(PlayerIntent);
         var held = default(PlayerIntent);
 

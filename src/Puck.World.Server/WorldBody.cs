@@ -245,11 +245,13 @@ public sealed partial class WorldBody {
     // grows the ring by doubling (never dropping) when the live count would exceed capacity, so steady-state enqueue+drain
     // allocates nothing. m_tapeHead is the front index, m_tapeCount the live length; the tail wraps at m_tape.Length.
     private TapeSegment[] m_tape = new TapeSegment[InitialTapeCapacity];
-    private readonly bool[] m_pendingDefaultChannelPress = new bool[ActionLaneCount];
-    private readonly FixedQ4816[] m_pendingDefaultChannelValue = new FixedQ4816[ActionLaneCount];
-    private readonly bool[] m_previousChannelBit = new bool[ActionLaneCount];
-    private readonly ulong[] m_laneTimers = new ulong[ActionLaneCount];
-    private readonly FixedQ4816[] m_channelTimerValues = new FixedQ4816[ActionLaneCount];
+    // The action track's per-channel state and the lanes' latches, behind their write door: Action reads, ActionEdit
+    // moves the section's version and notes the body's slot, and nothing else reaches the section. A write-side
+    // reference is used within one statement or handed to one call (DOOR005).
+    private readonly Versioned<BodyActionSection> m_action = new(binding: new SlotBinding());
+
+    private ref readonly BodyActionSection Action => ref m_action.Read;
+    private ref BodyActionSection ActionEdit => ref m_action.Write;
     // Whether the last contact solve found support. Only a body with a collider runs one, so this is false for a
     // colliderless body at every write: construction, teleport (ResetVertical) and kit recompile each take CanBeGrounded.
     private bool m_grounded;
@@ -273,11 +275,11 @@ public sealed partial class WorldBody {
     private FixedQ4816 ObstructionLatchIdleThreshold => m_tuning.Obstruction.IdleThreshold;
     private ulong ObstructionLatchGraceTicks => m_tuning.Obstruction.GraceTicks;
 
-    // The per-channel action runtime: the compiled binding (null = unbound), its press latch, and one recency clock per
-    // Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
+    // The per-channel action runtime: the compiled binding (null = unbound), its press latch and fact-edge memory (in
+    // the Action section), and one recency clock per Recently-predicate instance. Named counters and timers live in the kit-wide action-state register file below.
     // A role ordinal never has a binding, so it is naturally inert here.
     private readonly CompiledActionSpec?[] m_laneBindings = new CompiledActionSpec?[ActionLaneCount];
-    private readonly LaneActionRuntime[] m_laneActions = new LaneActionRuntime[ActionLaneCount];
+    private readonly ulong[]?[] m_laneRecency = new ulong[]?[ActionLaneCount];
     private CompiledActionStateSlot[] m_actionStateDefinitions = [];
 
     // Named counters and timers are stored in the arena's slot lanes, addressed by this body's own entity index —
@@ -384,7 +386,7 @@ public sealed partial class WorldBody {
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
             if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
-                m_laneActions[lane].Recency = new ulong[binding.RecencyFacts.Length];
+                m_laneRecency[lane] = new ulong[binding.RecencyFacts.Length];
             }
         }
 

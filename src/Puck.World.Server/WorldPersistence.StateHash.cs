@@ -53,7 +53,8 @@ public sealed partial class WorldPersistence {
     // scope folds and in what order; each arm here folds one of them through its own owner, and a component with no
     // arm throws rather than folding nothing. Recompute folds the arena's rows afresh instead of from their
     // version-keyed digests, and the declaration afresh instead of from the digest its definition names
-    // (DeclarationDigest); every other arm folds whole either way.
+    // (DeclarationDigest), and the bodies' sections afresh instead of from the digests their holders cache; every
+    // other arm folds whole either way.
     internal void AppendStateHashComponent(ref Fnv1aHash hash, WorldStateHashComponent component, ulong seed, ulong tick, bool recompute) {
         switch (component) {
             case WorldStateHashComponent.Input:
@@ -97,7 +98,7 @@ public sealed partial class WorldPersistence {
 
                 break;
             case WorldStateHashComponent.BodyContinuation:
-                Host.Population.AppendContinuationHash(hash: ref hash);
+                Host.Population.AppendContinuationHash(hash: ref hash, recompute: recompute);
                 Host.Population.AppendSleepStateHash(hash: ref hash);
                 Host.Events.AppendDiscoveryHash(hash: ref hash);
 

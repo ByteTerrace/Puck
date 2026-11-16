@@ -344,8 +344,8 @@ public sealed partial class WorldBody {
 
         // A press is input: the body's program must run to read it, so a sleeping body wakes.
         WakeIfResting();
-        m_pendingDefaultChannelPress[ordinal] = true;
-        m_pendingDefaultChannelValue[ordinal] = value;
+        ActionEdit.PendingPress[ordinal] = true;
+        ActionEdit.PendingValue[ordinal] = value;
         m_pendingScriptActors[ordinal] = actor;
     }
     /// <summary>Presses a channel for a timed auto-release — the scripted/wire path (<c>body.press</c>), reaching
@@ -590,11 +590,12 @@ public sealed partial class WorldBody {
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            m_laneActions[lane] = default;
-
-            if (m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding) {
-                m_laneActions[lane].Recency = new ulong[binding.RecencyFacts.Length];
-            }
+            ActionEdit.LaneLatch[lane] = 0UL;
+            ActionEdit.LaneFactHeld[lane] = 0UL;
+            m_laneRecency[lane] = ((m_laneBindings[lane] is { RecencyFacts.Length: > 0 } binding)
+                ? new ulong[binding.RecencyFacts.Length]
+                : null
+            );
         }
 
         // The response recency clocks are bound to the OLD table shape (a new table may have a different Recently count),
@@ -841,19 +842,19 @@ public sealed partial class WorldBody {
         var clearedTimedPresses = 0;
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            if (m_laneTimers[ordinal] > 0) {
+            if (Action.TimerTicks[ordinal] > 0) {
                 clearedTimedPresses++;
-                m_laneTimers[ordinal] = 0;
-                m_channelTimerValues[ordinal] = default;
+                ActionEdit.TimerTicks[ordinal] = 0;
+                ActionEdit.TimerValues[ordinal] = default;
             }
 
             // A body.press with no holdSeconds hasn't materialized into a lane timer yet (MaterializeDefaultLanePresses
             // only runs at the next Advance) — panic-verb totality means this pending tap is cleared too, and counted
             // the same as an already-materialized one.
-            if (m_pendingDefaultChannelPress[ordinal]) {
+            if (Action.PendingPress[ordinal]) {
                 clearedTimedPresses++;
-                m_pendingDefaultChannelPress[ordinal] = false;
-                m_pendingDefaultChannelValue[ordinal] = default;
+                ActionEdit.PendingPress[ordinal] = false;
+                ActionEdit.PendingValue[ordinal] = default;
             }
         }
 
@@ -914,10 +915,10 @@ public sealed partial class WorldBody {
                 return true;
             }
 
-            for (var ordinal = 0; (ordinal < m_pendingDefaultChannelPress.Length); ordinal++) {
+            for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
                 if (
-                    m_pendingDefaultChannelPress[ordinal] ||
-                    (m_laneTimers[ordinal] > 0UL)
+                    Action.PendingPress[ordinal] ||
+                    (Action.TimerTicks[ordinal] > 0UL)
                 ) {
                     return true;
                 }

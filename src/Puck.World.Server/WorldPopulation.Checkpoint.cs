@@ -22,13 +22,18 @@ public sealed partial class WorldPopulation {
     /// values are the arena's, whose own component folds them. The fold writes into scratch the population reuses,
     /// so it allocates nothing once that scratch has grown to the population's shape.</summary>
     /// <param name="hash">The hash to fold into.</param>
-    /// <remarks>Every section of every active slot encodes afresh on every fold: a body's state is written directly
-    /// by its step, commands, contacts and tethers, so nothing yet says a section is unchanged.</remarks>
+    /// <param name="recompute">Whether to encode every section afresh and read no holder's cached digest: the fold a
+    /// cached one is checked against.</param>
+    /// <remarks>A section a body keeps behind a holder (<see cref="WorldBody.HeldDigests"/>) folds by the digest its
+    /// holder hands out, which is cached while the section is unchanged. Every other section of every active slot
+    /// encodes afresh on every fold: its state is still written directly by the step, commands, contacts and tethers,
+    /// so nothing says it is unchanged.</remarks>
     /// <exception cref="InvalidOperationException">A pending-output list is non-empty.</exception>
     [System.Runtime.CompilerServices.SkipLocalsInit]
-    public void AppendContinuationHash(ref Fnv1aHash hash) {
+    public void AppendContinuationHash(ref Fnv1aHash hash, bool recompute = false) {
         RequireCapturePoint();
         WorldTickWork.Process.Add(amount: 1L, kind: WorldTickWork.ContinuationFolds);
+        _ = m_slotNotes.Publish();
 
         var digests = ((m_foldDigests.Length == Capacity) ? m_foldDigests : (m_foldDigests = new ulong[Capacity]));
         var present = ((m_foldPresent.Length == Capacity) ? m_foldPresent : (m_foldPresent = new bool[Capacity]));
@@ -43,8 +48,10 @@ public sealed partial class WorldPopulation {
             present[index] = (entry is { Active: true, Body: not null });
             digests[index] = 0UL;
             if (entry is { Active: true, Body: { } body }) {
-                EntryCheckpoint(alias: true, body: body, entry: entry, image: out var image, index: index);
-                digests[index] = WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, work: work, writer: writer);
+                var held = (recompute ? 0U : body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer));
+
+                EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
+                digests[index] = WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer);
                 beside.Add(entry: in image, work: work, writer: writer);
                 work.Slots++;
             }
@@ -55,7 +62,7 @@ public sealed partial class WorldPopulation {
     }
     /// <summary>Folds the simulation continuation of the named slots that hold an active body: their count, then, in
     /// the order given, each one's slot digest (the fold of its sections' digests, as
-    /// <see cref="AppendContinuationHash(ref Fnv1aHash)"/> takes it) and the digest of its tail, encoded afresh. A
+    /// <see cref="AppendContinuationHash(ref Fnv1aHash, bool)"/> takes it) and the digest of its tail, encoded afresh. A
     /// scope compares one body's whole image and not the arena or the population, so its fold reads the register
     /// values, the profile and the body's own contact-field observation with the body. The fold visits the named
     /// slots alone, never the rest of the population.</summary>
@@ -78,14 +85,23 @@ public sealed partial class WorldPopulation {
         hash.Add(value: ((uint)count));
         foreach (var index in bodies) {
             if ((((uint)index) < ((uint)Capacity)) && (m_entries[index] is { Active: true, Body: { } body } entry)) {
-                EntryCheckpoint(alias: true, body: body, entry: entry, image: out var image, index: index);
-                hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, work: work, writer: writer));
+                var held = body.HeldDigests(digests: work.HeldDigests, work: work.Held, writer: writer);
+
+                EntryCheckpoint(alias: true, body: body, entry: entry, held: (held != 0U), image: out var image, index: index);
+                hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationSlotDigest(entry: ref image, held: held, heldDigests: work.HeldDigests, work: work, writer: writer));
                 hash.Add(value: WorldAuthorityCheckpointCodec.ContinuationTailDigest(tail: in image.Tail, work: work, writer: writer));
                 work.Slots++;
             }
         }
         work.Publish();
     }
+
+    // Which slots were written since the last fold: every body's holders note through a binding to these. The fold
+    // publishes them; nothing follows the versions yet.
+    private readonly SlotNotes m_slotNotes;
+
+    /// <summary>Gets the notes the bodies' state holders note their writes in.</summary>
+    internal SlotNotes SlotNotes => m_slotNotes;
 
     // The fold's per-slot scratch and its work counts, reused from one fold to the next.
     private ulong[] m_foldDigests = [];
@@ -119,7 +135,7 @@ public sealed partial class WorldPopulation {
             var entry = m_entries[index];
 
             if (entry is { Active: true, Body: { } body }) {
-                EntryCheckpoint(alias: false, body: body, entry: entry, image: out var image, index: index);
+                EntryCheckpoint(alias: false, body: body, entry: entry, held: false, image: out var image, index: index);
                 entries.Add(item: image);
             }
         }
@@ -137,9 +153,9 @@ public sealed partial class WorldPopulation {
         }
     }
     // The one statement of what a slot's checkpoint entry holds: the body's sections, the entry's sections and the
-    // tail. A capture copies every table; a view aliases the slot's live tables and assembles the rest into scratch
+    // tail. A fold's view may leave out the sections the body's holders digest (held). A capture copies every table; a view aliases the slot's live tables and assembles the rest into scratch
     // the body and the population reuse, valid until the next view.
-    private void EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias, out WorldPopulationEntryCheckpoint image) {
+    private void EntryCheckpoint(int index, Entry entry, WorldBody body, bool alias, bool held, out WorldPopulationEntryCheckpoint image) {
         List<(WorldCapability, GrantSubject)> revokedKeys;
 
         if (alias) {
@@ -158,7 +174,7 @@ public sealed partial class WorldPopulation {
         });
 
         image.Index = index;
-        body.CaptureSections(alias: alias, registers: out var registers, sections: out image.Body);
+        body.CaptureSections(alias: alias, held: held, registers: out var registers, sections: out image.Body);
         image.Admission = new(
             AdmissionTrust: entry.AdmissionTrust,
             Generation: entry.Generation,

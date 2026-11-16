@@ -33,16 +33,14 @@ public sealed partial class WorldBody {
             hash.Add(value: ((byte)definition.Lifetime));
         }
 
-        hash.Add(value: ((uint)m_laneActions.Length));
+        hash.Add(value: ((uint)ActionLaneCount));
 
-        for (var lane = 0; (lane < m_laneActions.Length); lane++) {
-            ref var runtime = ref m_laneActions[lane];
+        for (var lane = 0; (lane < ActionLaneCount); lane++) {
+            hash.Add(value: Action.LaneLatch[lane]);
+            hash.Add(value: Action.LaneFactHeld[lane]);
+            hash.Add(value: ((uint)(m_laneRecency[lane]?.Length ?? 0)));
 
-            hash.Add(value: runtime.Latch);
-            hash.Add(value: runtime.FactHeld);
-            hash.Add(value: ((uint)(runtime.Recency?.Length ?? 0)));
-
-            if (runtime.Recency is { } recency) {
+            if (m_laneRecency[lane] is { } recency) {
                 for (var index = 0; (index < recency.Length); index++) {
                     hash.Add(value: recency[index]);
                 }
@@ -640,17 +638,17 @@ public sealed partial class WorldBody {
     // one merge rule for both press paths, never two that can quietly drift apart.
     private void MaterializeDefaultLanePresses(ulong stepTicks) {
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            if (!m_pendingDefaultChannelPress[ordinal]) {
+            if (!Action.PendingPress[ordinal]) {
                 continue;
             }
 
             MergeLaneTimer(
                 actor: m_pendingScriptActors[ordinal],
                 ordinal: ordinal,
-                value: m_pendingDefaultChannelValue[ordinal],
+                value: Action.PendingValue[ordinal],
                 holdTicks: stepTicks
             );
-            m_pendingDefaultChannelPress[ordinal] = false;
+            ActionEdit.PendingPress[ordinal] = false;
         }
     }
     // Merges (ordinal, value, holdTicks) into the lane-timer slot: a same-value re-press only extends an in-flight
@@ -659,16 +657,16 @@ public sealed partial class WorldBody {
     // whatever ticks remained. Shared by PressChannel's timed overload and MaterializeDefaultLanePresses so the
     // wire-timed and host-step-tap press paths can never drift onto two different merge rules.
     private void MergeLaneTimer(int ordinal, FixedQ4816 value, ulong holdTicks, Puck.Commands.Principal actor) {
-        var isSameValueRepress = ((m_laneTimers[ordinal] > 0) && (m_channelTimerValues[ordinal] == value) && (m_scriptActors[ordinal] == actor));
+        var isSameValueRepress = ((Action.TimerTicks[ordinal] > 0) && (Action.TimerValues[ordinal] == value) && (m_scriptActors[ordinal] == actor));
 
         if (isSameValueRepress) {
-            m_laneTimers[ordinal] = Math.Max(
-                val1: m_laneTimers[ordinal],
+            ActionEdit.TimerTicks[ordinal] = Math.Max(
+                val1: Action.TimerTicks[ordinal],
                 val2: holdTicks
             );
         } else {
-            m_channelTimerValues[ordinal] = value;
-            m_laneTimers[ordinal] = holdTicks;
+            ActionEdit.TimerValues[ordinal] = value;
+            ActionEdit.TimerTicks[ordinal] = holdTicks;
             m_scriptActors[ordinal] = actor;
         }
     }
@@ -707,29 +705,29 @@ public sealed partial class WorldBody {
                 continue;
             }
 
-            ref var state = ref m_laneActions[ordinal];
+            var recency = m_laneRecency[ordinal];
             var logicalChannel = (((m_stateLane?.Input is { } inputRuntime) && m_channels.IsDeclared(ordinal: ordinal) &&
                 inputRuntime.Catalog.TryGetLogicalId(m_channels.Name(ordinal: ordinal)!, out var channel)) ? channel : -1);
             var bit = (scratch.Intent[ordinal] >= m_channelThresholds[ordinal]);
-            var pressed = (bit && !m_previousChannelBit[ordinal]);
-            var released = (!bit && m_previousChannelBit[ordinal]);
+            var pressed = (bit && !Action.PreviousBit[ordinal]);
+            var released = (!bit && Action.PreviousBit[ordinal]);
 
             for (var slot = 0; (slot < binding.RecencyFacts.Length); slot++) {
-                state.Recency![slot] = (FactHolds(fact: binding.RecencyFacts[slot])
+                recency![slot] = (FactHolds(fact: binding.RecencyFacts[slot])
                     ? binding.RecencyWindows[slot]
                     : SubtractSaturating(
-                        value: state.Recency[slot],
+                        value: recency[slot],
                         amount: scratch.StepTicks
                     )
                 );
             }
 
             if (binding.OnPress is { } press) {
-                state.Latch = (pressed
+                ActionEdit.LaneLatch[ordinal] = (pressed
                     ? press.LatchTicks
                     : SubtractSaturating(
                         amount: scratch.StepTicks,
-                        value: state.Latch
+                        value: Action.LaneLatch[ordinal]
                     )
                 );
 
@@ -738,11 +736,11 @@ public sealed partial class WorldBody {
                 // open its gate was. The press is pending when its latch is still running OR when this very tick is
                 // its edge; consuming it still clears the latch.
                 if (
-                    (pressed || (state.Latch > 0)) &&
+                    (pressed || (Action.LaneLatch[ordinal] > 0)) &&
                     GateOpen(
                     gate: press.Gate,
                     intent: in scratch.Intent,
-                    recency: state.Recency
+                    recency: recency
                 )
                 ) {
                     if (ApplyEffects(
@@ -751,7 +749,7 @@ public sealed partial class WorldBody {
                         logicalChannel: logicalChannel
                     )) {
                         if (InputEpoch != inputEpoch) { return; }
-                        state.Latch = 0;
+                        ActionEdit.LaneLatch[ordinal] = 0;
                     }
                 }
             }
@@ -762,7 +760,7 @@ public sealed partial class WorldBody {
                 GateOpen(
                 gate: release.Gate,
                 intent: in scratch.Intent,
-                recency: state.Recency
+                recency: recency
             )
             ) {
                 ApplyEffects(
@@ -778,13 +776,13 @@ public sealed partial class WorldBody {
                 var holds = (FactHolds(fact: trigger.Fact) && GateOpen(
                     gate: trigger.Gate,
                     intent: in scratch.Intent,
-                    recency: state.Recency
+                    recency: recency
                 ));
-                var wasHeld = ((state.FactHeld & (1UL << rule)) != 0UL);
+                var wasHeld = ((Action.LaneFactHeld[ordinal] & (1UL << rule)) != 0UL);
 
-                state.FactHeld = (holds
-                    ? state.FactHeld | (1UL << rule)
-                    : state.FactHeld & ~(1UL << rule)
+                ActionEdit.LaneFactHeld[ordinal] = (holds
+                    ? Action.LaneFactHeld[ordinal] | (1UL << rule)
+                    : Action.LaneFactHeld[ordinal] & ~(1UL << rule)
                 );
 
                 // ONE edge vocabulary, the same ActionTriggerMode a world rule reads: EDGE fires on the crossing
@@ -839,14 +837,5 @@ public sealed partial class WorldBody {
         value = StateCounter(slot: slot);
         timerTicks = StateTimer(slot: slot);
         return true;
-    }
-
-    private struct LaneActionRuntime {
-        public ulong Latch;
-        // One bit per OnFact trigger of this lane's binding, recording whether its condition (fact AND gate) held on
-        // the previous evaluation — the edge latch. A lane's OnFact list is bounded by the same authored-effects
-        // budget everything else here is; a 64-bit word is the same shape every other mask in this engine uses.
-        public ulong FactHeld;
-        public ulong[]? Recency;
     }
 }

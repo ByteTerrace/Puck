@@ -1,4 +1,6 @@
+using System.Runtime.CompilerServices;
 using Puck.Maths;
+using Puck.Networking;
 using Puck.Physics;
 using Puck.World.Protocol;
 
@@ -13,8 +15,6 @@ public sealed partial class WorldBody {
     private static readonly long[] NoRelativeRemainders = new long[ChannelLimits.MaxAxes];
 
     // Scratch a view assembles into, reused from one view to the next and shared with no capture.
-    private ulong[]? m_viewLaneLatch;
-    private ulong[]? m_viewLaneFactHeld;
     private ulong[]? m_viewLaneRecency;
     private long[]? m_viewRegisters;
     private WorldTapeSegmentImage[]? m_viewTape;
@@ -30,8 +30,10 @@ public sealed partial class WorldBody {
     /// <param name="sections">The sections.</param>
     /// <param name="registers">The body's register file as the arena's slot lanes hold it, one raw value per slot of
     /// the kit's compiled definitions: state the arena owns, read beside the sections for an entry's tail.</param>
+    /// <param name="held">Whether to leave out the sections a holder digests (<see cref="HeldDigests"/>): a fold's
+    /// view, which reads those digests from the holders and never the sections.</param>
     [System.Runtime.CompilerServices.SkipLocalsInit]
-    internal void CaptureSections(bool alias, out WorldBodySections sections, out ReadOnlyMemory<long> registers) {
+    internal void CaptureSections(bool alias, out WorldBodySections sections, out ReadOnlyMemory<long> registers, bool held = false) {
         sections.Pose = new(
             Orientation: m_orientation,
             Position: m_position,
@@ -120,35 +122,28 @@ public sealed partial class WorldBody {
             RelativeRemainders: ((m_relativeRemainders.Length == 0) ? NoRelativeRemainders : Table(alias: alias, live: m_relativeRemainders))
         );
 
-        var laneLatch = Assembled(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneLatch);
-        var laneFactHeld = Assembled(alias: alias, length: ActionLaneCount, scratch: ref m_viewLaneFactHeld);
         var recencyCount = 0;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            laneLatch[lane] = m_laneActions[lane].Latch;
-            laneFactHeld[lane] = m_laneActions[lane].FactHeld;
-            recencyCount += (m_laneActions[lane].Recency?.Length ?? 0);
+            recencyCount += (m_laneRecency[lane]?.Length ?? 0);
         }
 
         var laneRecency = Assembled(alias: alias, length: recencyCount, scratch: ref m_viewLaneRecency);
         var recencyStart = 0;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            if (m_laneActions[lane].Recency is { } recency) {
+            if (m_laneRecency[lane] is { } recency) {
                 recency.CopyTo(array: laneRecency, index: recencyStart);
                 recencyStart += recency.Length;
             }
         }
 
-        sections.Action = new(
-            LaneFactHeld: laneFactHeld,
-            LaneLatch: laneLatch,
-            PendingPress: Table(alias: alias, live: m_pendingDefaultChannelPress),
-            PendingValue: Table(alias: alias, live: m_pendingDefaultChannelValue),
-            PreviousBit: Table(alias: alias, live: m_previousChannelBit),
-            TimerTicks: Table(alias: alias, live: m_laneTimers),
-            TimerValues: Table(alias: alias, live: m_channelTimerValues)
-        );
+        // The Action section lives behind its holder, which digests it for a fold; a fold's view leaves it out.
+        if (held) {
+            Unsafe.SkipInit(value: out sections.Action);
+        } else {
+            sections.Action = Action;
+        }
         sections.LaneRecency = new(Clocks: laneRecency);
 
         var registerWrites = Assembled(alias: alias, length: m_actionStateDirty.Length, scratch: ref m_viewRegisterWrites);
@@ -192,6 +187,20 @@ public sealed partial class WorldBody {
         registers = registerImage;
     }
 
+    /// <summary>Digests the sections this body keeps behind holders, each through its holder: the cached digest
+    /// while the section's version stands or its content is unchanged, a fresh encoding otherwise. A fold folds these
+    /// in the sections' places, so a section that did not change is neither captured nor encoded.</summary>
+    /// <param name="writer">The scratch the sections encode into.</param>
+    /// <param name="digests">The digests, by <see cref="WorldContinuationSectionKind"/>; only the held sections' are written.</param>
+    /// <param name="work">What each digest read did, by <see cref="WorldContinuationSectionKind"/>.</param>
+    /// <returns>The held sections, one bit per <see cref="WorldContinuationSectionKind"/>.</returns>
+    internal uint HeldDigests(WireWriter writer, Span<ulong> digests, Span<SectionDigestWork> work) {
+        digests[((int)WorldContinuationSectionKind.Action)] = m_action.Digest<ContinuationSectionCodec<BodyActionSection>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.Action)],
+            writer: writer
+        );
+        return (1U << ((int)WorldContinuationSectionKind.Action));
+    }
     // A table as a section holds it: the live array for a view, a copy for a capture.
     private static ReadOnlyMemory<T> Table<T>(bool alias, T[] live) => ((alias || (live.Length == 0))
         ? live
@@ -353,25 +362,15 @@ public sealed partial class WorldBody {
         m_channelReadScalar = readbacks.ReadScalar;
         CopyClamped(destination: m_relativeRemainders, source: readbacks.RelativeRemainders.Span);
 
-        ref readonly var action = ref sections.Action;
+        ActionEdit = sections.Action;
 
-        CopyClamped(destination: m_laneTimers, source: action.TimerTicks.Span);
-        CopyClamped(destination: m_channelTimerValues, source: action.TimerValues.Span);
-        CopyClamped(destination: m_previousChannelBit, source: action.PreviousBit.Span);
-        CopyClamped(destination: m_pendingDefaultChannelPress, source: action.PendingPress.Span);
-        CopyClamped(destination: m_pendingDefaultChannelValue, source: action.PendingValue.Span);
-
-        var laneLatch = action.LaneLatch.Span;
-        var laneFactHeld = action.LaneFactHeld.Span;
         var laneRecency = sections.LaneRecency.Clocks.Span;
         var recencyStart = 0;
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            if (lane < laneLatch.Length) { m_laneActions[lane].Latch = laneLatch[lane]; }
-            if (lane < laneFactHeld.Length) { m_laneActions[lane].FactHeld = laneFactHeld[lane]; }
             // The clocks are laid out by this body's own lanes: a lane takes as many as its compiled binding
             // declares, in lane order, from what the capture carried.
-            if (m_laneActions[lane].Recency is { } recency) {
+            if (m_laneRecency[lane] is { } recency) {
                 var available = Math.Max(val1: 0, val2: Math.Min(val1: recency.Length, val2: (laneRecency.Length - recencyStart)));
 
                 laneRecency.Slice(length: available, start: recencyStart).CopyTo(destination: recency);

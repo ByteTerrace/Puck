@@ -24,7 +24,7 @@ public sealed partial class WorldBody {
         actors?.Clear();
         if (tapeActor != default) { (actors ??= m_scriptActorScratch = []).Add(item: tapeActor); }
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            if (m_laneTimers[ordinal] == 0) { continue; }
+            if (Action.TimerTicks[ordinal] == 0) { continue; }
             actors ??= m_scriptActorScratch = [];
             if (!actors.Contains(item: m_scriptActors[ordinal])) { actors.Add(item: m_scriptActors[ordinal]); }
         }
@@ -35,17 +35,17 @@ public sealed partial class WorldBody {
                 var image = ((actor == tapeActor) ? tape : default);
 
                 for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                    if ((m_laneTimers[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
+                    if ((Action.TimerTicks[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
                         image = image.WithChannel(ordinal: ordinal, value: ((m_channelShapes[ordinal] == ChannelShape.Binary)
-                            ? ((m_channelTimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
-                            : m_channelTimerValues[ordinal]));
+                            ? ((Action.TimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
+                            : Action.TimerValues[ordinal]));
                     }
                 }
                 var accepted = runtime.AdmitScriptSnapshot(actor: actor, body: body, image: image, tick: tick);
 
                 if (actor == tapeActor) { acceptedTape = accepted; }
                 for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-                    if ((m_laneTimers[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
+                    if ((Action.TimerTicks[ordinal] > 0) && (m_scriptActors[ordinal] == actor)) {
                         m_scriptAccepted = m_scriptAccepted.WithChannel(ordinal: ordinal, value: accepted[ordinal]);
                     }
                 }

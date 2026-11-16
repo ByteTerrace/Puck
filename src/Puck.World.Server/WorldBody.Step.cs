@@ -103,7 +103,7 @@ public sealed partial class WorldBody {
         // bound action (a jump) the same tick it engages.
         var engageEdge = ((engageProbeOrdinal is { } probeOrdinal)
             && (intent[probeOrdinal] >= m_channelThresholds[probeOrdinal])
-            && !m_previousChannelBit[probeOrdinal]);
+            && !Action.PreviousBit[probeOrdinal]);
 
         if (
             m_engaged ||
@@ -159,12 +159,12 @@ public sealed partial class WorldBody {
         if (InputEpoch != inputEpoch) { intent = m_engagedIntent; }
         // The previous-bit image is written once after action evaluation; timed presses drain even under capture.
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            m_previousChannelBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
+            ActionEdit.PreviousBit[ordinal] = (intent[ordinal] >= m_channelThresholds[ordinal]);
         }
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            m_laneTimers[lane] = SubtractSaturating(
-                value: m_laneTimers[lane],
+            ActionEdit.TimerTicks[lane] = SubtractSaturating(
+                value: Action.TimerTicks[lane],
                 amount: stepTicks
             );
         }
@@ -935,10 +935,10 @@ public sealed partial class WorldBody {
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_channelShapes[ordinal] == ChannelShape.Relative) { continue; }
-            if (m_laneTimers[ordinal] > 0) {
+            if (Action.TimerTicks[ordinal] > 0) {
                 channels[ordinal] = ((m_stateLane?.Input is not null) ? m_scriptAccepted[ordinal] : ((m_channelShapes[ordinal] == ChannelShape.Binary)
-                    ? ((m_channelTimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
-                    : m_channelTimerValues[ordinal]));
+                    ? ((Action.TimerValues[ordinal] >= m_channelThresholds[ordinal]) ? FixedQ4816.One : FixedQ4816.Zero)
+                    : Action.TimerValues[ordinal]));
             } else if (
                 m_source.IsLive &&
                 !m_roleChannels[ordinal]

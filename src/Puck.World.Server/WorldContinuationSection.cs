@@ -83,3 +83,15 @@ public interface IContinuationSectionVisitor {
     /// <param name="section">The section, which a reading visitor assigns.</param>
     void Visit<TSection>(ref TSection section) where TSection : struct, IContinuationSection<TSection>;
 }
+/// <summary>The codec a state holder digests a continuation section through: the section's own static encoder into the
+/// fold's scratch writer, so a holder's cached digest is the digest a fresh fold of the section takes.</summary>
+/// <typeparam name="TSection">The section type.</typeparam>
+internal readonly struct ContinuationSectionCodec<TSection> : ISectionCodec<TSection, WireWriter> where TSection : struct, IContinuationSection<TSection> {
+    /// <inheritdoc/>
+    public static ulong Digest(WireWriter writer, in TSection section, out int bytes) {
+        var digest = WorldAuthorityCheckpointCodec.SectionDigest(section: in section, writer: writer);
+
+        bytes = writer.WrittenSpan.Length;
+        return digest;
+    }
+}

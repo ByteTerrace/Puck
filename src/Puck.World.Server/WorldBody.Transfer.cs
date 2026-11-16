@@ -25,9 +25,9 @@ public sealed partial class WorldBody {
         var laneRecency = Take<ulong[]?>(buffers: buffers, length: ActionLaneCount);
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
-            laneLatch[lane] = m_laneActions[lane].Latch;
-            laneFactHeld[lane] = m_laneActions[lane].FactHeld;
-            laneRecency[lane] = ((m_laneActions[lane].Recency is { } recency)
+            laneLatch[lane] = Action.LaneLatch[lane];
+            laneFactHeld[lane] = Action.LaneFactHeld[lane];
+            laneRecency[lane] = ((m_laneRecency[lane] is { } recency)
                 ? CopyInto(buffers: buffers, source: recency)
                 : null
             );
@@ -57,17 +57,17 @@ public sealed partial class WorldBody {
             DrivePitch: m_drivePitch,
             OverlayVelocity: m_overlayVelocity,
             OverlayRemainingTicks: m_overlayRemaining,
-            ChannelTimerTicks: CopyInto(buffers: buffers, source: m_laneTimers),
-            ChannelTimerValues: CopyInto(buffers: buffers, source: m_channelTimerValues),
+            ChannelTimerTicks: CopyInto(buffers: buffers, source: ((ReadOnlySpan<ulong>)Action.TimerTicks)),
+            ChannelTimerValues: CopyInto(buffers: buffers, source: ((ReadOnlySpan<FixedQ4816>)Action.TimerValues)),
             RelativeRemainders: CopyInto(buffers: buffers, source: m_relativeRemainders),
             BodyMotionProgramName: m_bodyMotionProgram.Name,
             Source: m_source,
-            PreviousChannelBit: CopyInto(buffers: buffers, source: m_previousChannelBit),
+            PreviousChannelBit: CopyInto(buffers: buffers, source: ((ReadOnlySpan<bool>)Action.PreviousBit)),
             HeldChannelImage: (m_hasTransferHeldChannels
             ? m_transferHeldChannels
             : m_channelReadHeld),
-            PendingDefaultChannelPress: CopyInto(buffers: buffers, source: m_pendingDefaultChannelPress),
-            PendingDefaultChannelValue: CopyInto(buffers: buffers, source: m_pendingDefaultChannelValue),
+            PendingDefaultChannelPress: CopyInto(buffers: buffers, source: ((ReadOnlySpan<bool>)Action.PendingPress)),
+            PendingDefaultChannelValue: CopyInto(buffers: buffers, source: ((ReadOnlySpan<FixedQ4816>)Action.PendingValue)),
             MotionRecency: CopyInto(buffers: buffers, source: m_motionRecency),
             PlanarRampRemainder: m_planarRampAccumulator.Remainder,
             DriveLongRemainder: m_driveLongAccumulator.Remainder,
@@ -246,10 +246,10 @@ public sealed partial class WorldBody {
         : new T[length]
     ));
     // A copy of the source, in an array taken as Take takes one.
-    private static T[] CopyInto<T>(CaptureBuffers? buffers, T[] source) {
+    private static T[] CopyInto<T>(CaptureBuffers? buffers, ReadOnlySpan<T> source) {
         var copy = Take<T>(buffers: buffers, length: source.Length);
 
-        source.AsSpan().CopyTo(destination: copy);
+        source.CopyTo(destination: copy);
 
         return copy;
     }
@@ -334,23 +334,23 @@ public sealed partial class WorldBody {
         );
 
         for (var ordinal = 0; (ordinal < timedCount); ordinal++) {
-            m_laneTimers[ordinal] = ticks[ordinal];
-            m_channelTimerValues[ordinal] = values[ordinal];
+            ActionEdit.TimerTicks[ordinal] = ticks[ordinal];
+            ActionEdit.TimerValues[ordinal] = values[ordinal];
         }
 
         CopyClamped(
             source: state.PreviousChannelBit,
-            destination: m_previousChannelBit
+            destination: ((Span<bool>)ActionEdit.PreviousBit)
         );
         m_transferHeldChannels = state.HeldChannelImage;
         m_hasTransferHeldChannels = (state.HeldChannelImage != default);
         CopyClamped(
             source: state.PendingDefaultChannelPress,
-            destination: m_pendingDefaultChannelPress
+            destination: ((Span<bool>)ActionEdit.PendingPress)
         );
         CopyClamped(
             source: state.PendingDefaultChannelValue,
-            destination: m_pendingDefaultChannelValue
+            destination: ((Span<FixedQ4816>)ActionEdit.PendingValue)
         );
         CopyClamped(
             source: state.MotionRecency,
@@ -418,13 +418,13 @@ public sealed partial class WorldBody {
         );
 
         for (var lane = 0; (lane < laneCount); lane++) {
-            m_laneActions[lane].Latch = state.LaneLatch[lane];
-            m_laneActions[lane].FactHeld = state.LaneFactHeld[lane];
+            ActionEdit.LaneLatch[lane] = state.LaneLatch[lane];
+            ActionEdit.LaneFactHeld[lane] = state.LaneFactHeld[lane];
 
             if (
                 (lane < state.LaneRecency.Length) &&
                 (state.LaneRecency[lane] is { } capturedRecency) &&
-                (m_laneActions[lane].Recency is { } targetRecency)
+                (m_laneRecency[lane] is { } targetRecency)
             ) {
                 CopyClamped(
                     destination: targetRecency,
