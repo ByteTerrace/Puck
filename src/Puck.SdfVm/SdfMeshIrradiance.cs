@@ -5,6 +5,7 @@ using System.Runtime.InteropServices;
 using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Cameras;
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -131,7 +132,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
 
     private void ReleaseScene() {
-        lock (m_gate) { m_scene?.Dispose(); m_scene = null; m_materialsScene = null; m_diagnosticDraws = []; }
+        lock (m_gate) {
+            m_scene?.Dispose();
+            m_scene = null;
+            m_materialsScene = null;
+            RentedArrays.Return(array: m_diagnosticDraws);
+            RentedArrays.Return(array: m_snapshotDraws);
+            (m_diagnosticDraws, m_diagnosticCount, m_snapshotDraws) = ([], 0, []);
+            m_snapshotClaims.Dispose();
+        }
     }
 
     // Each tier's levels, finest first. The finest is the tier's own; the storey level's 2 m vertical spacing puts a probe
@@ -345,13 +354,25 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var draw in frame.MeshDraws) {
                 if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-                if ((index >= m_diagnosticDraws.Length) || (draw != m_diagnosticDraws[index++])) { return null; }
+                if ((index >= m_diagnosticCount) || (draw != m_diagnosticDraws[index++])) { return null; }
             }
-            return ((index == m_diagnosticDraws.Length) ? m_scene?.Acquire() : null);
+            return ((index == m_diagnosticCount) ? m_scene?.Acquire() : null);
         }
     }
 
+    // The static draws the installed scene was built from (the first m_diagnosticCount of the array), and the array the
+    // next build's snapshot is written into, both rented. Builds run one at a time and swap the two as one installs, so
+    // the spare is read by nobody: the build that read it as its previous draws finished before the next one starts.
     private SdfMeshDraw[] m_diagnosticDraws = [];
+    private int m_diagnosticCount;
+    private SdfMeshDraw[] m_snapshotDraws = [];
+    // The meshes the latest snapshot names, claimed from the frame thread as the snapshot is taken and held until the
+    // next snapshot moves them, so a build reads only claimed meshes; a snapshot naming the meshes the last one named
+    // takes no claim.
+    private readonly SdfMeshClaims m_snapshotClaims = new();
+    // A build's count of the static draws the scene it replaces held, kept across builds (one runs at a time).
+    private readonly Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int> m_changeCounts = new(comparer: DrawKeyComparer.Instance);
+    private readonly List<Box> m_changeBoxes = [];
 
     private int m_sceneKey;
     private int m_buildingKey;
@@ -798,49 +819,49 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return (start <= end);
     }
-    // The world boxes of the static draws one draw list holds and the other does not, counted as multisets of their
+    // The world boxes of the static draws one static draw list holds and the other does not, counted as multisets of their
     // mesh, transform and material; null when one of them has no box. More than MaxChangeBoxes of them are answered as
-    // the one box that holds them all, which names every probe the boxes named and more.
-    private static Box[]? ChangedBoxes(SdfMeshDraw[] before, SdfMeshDraw[] after) {
-        var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
+    // the one box that holds them all, which names every probe the boxes named and more. The build's alone: it counts in
+    // workspace kept across builds.
+    private Box[]? ChangedBoxes(ReadOnlySpan<SdfMeshDraw> before, ReadOnlySpan<SdfMeshDraw> after) {
+        var counts = m_changeCounts;
+        var changed = m_changeBoxes;
 
-        foreach (var draw in before) {
-            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+        try {
+            foreach (ref readonly var draw in before) {
+                ref var count = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material), exists: out _);
 
-            counts[key] = (counts.GetValueOrDefault(key: key) + 1);
-        }
-
-        var changed = new List<Box>();
-
-        foreach (var draw in after) {
-            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
-            var count = counts.GetValueOrDefault(key: key);
-
-            if (count > 0) {
-                counts[key] = (count - 1);
-                continue;
+                count++;
             }
-            if (!TryBox(box: out var box, draw: in draw)) { return null; }
-            changed.Add(item: box);
-        }
-        foreach (var draw in before) {
-            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-            var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+            foreach (ref readonly var draw in after) {
+                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material));
 
-            if (counts.GetValueOrDefault(key: key) <= 0) { continue; }
-            counts[key]--;
-            if (!TryBox(box: out var box, draw: in draw)) { return null; }
-            changed.Add(item: box);
-        }
-        if (changed.Count > MaxChangeBoxes) {
-            var all = changed[0];
+                if (!System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref count) && (count > 0)) {
+                    count--;
+                    continue;
+                }
+                if (!TryBox(box: out var box, draw: in draw)) { return null; }
+                changed.Add(item: box);
+            }
+            foreach (ref readonly var draw in before) {
+                ref var count = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: counts, key: (draw.Mesh, draw.ObjectToWorld, draw.Material));
 
-            foreach (var box in changed) { all = new Box(High: Vector3.Max(value1: all.High, value2: box.High), Low: Vector3.Min(value1: all.Low, value2: box.Low)); }
-            return [all];
+                if (count <= 0) { continue; }
+                count--;
+                if (!TryBox(box: out var box, draw: in draw)) { return null; }
+                changed.Add(item: box);
+            }
+            if (changed.Count > MaxChangeBoxes) {
+                var all = changed[0];
+
+                foreach (var box in changed) { all = new Box(High: Vector3.Max(value1: all.High, value2: box.High), Low: Vector3.Min(value1: all.Low, value2: box.Low)); }
+                return [all];
+            }
+            return [.. changed];
+        } finally {
+            counts.Clear();
+            changed.Clear();
         }
-        return [.. changed];
     }
     private static bool TryBox(in SdfMeshDraw draw, out Box box) {
         if (!SdfMeshBox.TryOf(box: out var oriented, draw: in draw)) {
@@ -1298,26 +1319,44 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return true;
     }
-    private static int DrawKey(in SdfMeshDraw draw) =>
-        HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: draw.Mesh), value2: draw.ObjectToWorld, value3: draw.Material);
+    private static int DrawKey(in SdfMeshDraw draw) => DrawKeyComparer.Instance.GetHashCode(obj: (draw.Mesh, draw.ObjectToWorld, draw.Material));
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
     // matches the installed scene.
     private Task StartSceneBuild(SdfFrame frame, int key, int draws) {
+        lock (m_gate) { if (m_disposed) { return Task.CompletedTask; } }
         if (!m_trimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += TrimRetained; m_trimListening = true; }
-        var snapshot = frame.MeshDraws.ToArray();
+
+        // The frame's static draws alone, the scene's whole input, into the spare array (indexed: an interface list's
+        // enumerator is an allocation). Its tail past them is cleared, so the pooled array keeps no earlier draw's mesh.
+        var meshDraws = frame.MeshDraws;
+        var snapshot = ((m_snapshotDraws.Length < draws) ? RentedArrays.Grow(array: m_snapshotDraws, keep: 0, minimumLength: draws) : m_snapshotDraws);
+        var count = 0;
+
+        for (var index = 0; (index < meshDraws.Count); index++) {
+            var draw = meshDraws[index];
+
+            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            if (count == snapshot.Length) { snapshot = RentedArrays.Grow(array: snapshot, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
+            snapshot[count++] = draw;
+        }
+        snapshot.AsSpan(start: count).Clear();
+        m_snapshotDraws = snapshot;
+
+        var input = new ArraySegment<SdfMeshDraw>(array: snapshot, offset: 0, count: count);
+
+        m_snapshotClaims.Update(draws: input);
+
         var previous = m_scene?.Acquire();
-        var previousDraws = m_diagnosticDraws;
+        var (previousDraws, previousCount) = (m_diagnosticDraws, m_diagnosticCount);
         var hadScene = (m_scene is not null);
-        var snapshotClaims = new SdfMeshClaims(meshes: snapshot.Select(selector: static draw => draw.Mesh));
 
         m_buildingKey = key;
         m_sceneClock.Restart();
         m_build = Task.Run(action: () => {
-            using var snapshotBorrow = snapshotClaims;
             using var previousBorrow = previous;
             var clock = Stopwatch.StartNew();
-            var scene = SdfMeshIrradianceScene.Build(draws: snapshot, previous: previous, counters: Counters);
-            var changed = (hadScene ? ChangedBoxes(after: snapshot, before: previousDraws) : null);
+            var scene = SdfMeshIrradianceScene.Build(draws: input, previous: previous, counters: Counters);
+            var changed = (hadScene ? ChangedBoxes(after: snapshot.AsSpan(start: 0, length: count), before: previousDraws.AsSpan(start: 0, length: previousCount)) : null);
 
             Counters.Count(kind: Scenes);
             Counters.Add(amount: scene.GeometriesBuilt, kind: GeometriesBuilt);
@@ -1329,12 +1368,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
                 m_scene = scene;
                 oldScene?.Dispose();
-                m_diagnosticDraws = snapshot.Where(predicate: d => SdfMeshIrradianceScene.IsStatic(draw: d)).ToArray();
+                // The replaced draws' array becomes the next snapshot's.
+                (m_snapshotDraws, m_diagnosticDraws, m_diagnosticCount) = (m_diagnosticDraws, snapshot, count);
                 m_sceneKey = key;
                 m_buildingKey = 0;
                 AdvanceGeometry(changed: changed);
             }
-            Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
+            Console.Error.WriteLine(value: $"[sdf.mesh-gi] scene draws={draws} triangles={(scene?.TriangleCount ?? 0)} geometries={(scene?.GeometryCount ?? 0)} built={(scene?.GeometriesBuilt ?? 0)} built-triangles={(scene?.TrianglesBuilt ?? 0)} reused={(scene?.GeometriesReused ?? 0)} retained-triangles={(scene?.TrianglesRetained ?? 0)} prefix-words={(scene?.PrefixWords ?? 0)} seconds={clock.Elapsed.TotalSeconds:0.000}");
         });
         return m_build;
     }

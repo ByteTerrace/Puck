@@ -19,7 +19,7 @@ public sealed partial class SdfMeshIrradianceScene {
             bakeHalfDiagonal = 0;
             return false;
         }
-        ref readonly var nearest = ref m_instances[instance];
+        ref readonly var nearest = ref m_content.Instances[instance];
         normal = nearest.NormalOf(leaf);
         bakeHalfDiagonal = nearest.BakeHalfDiagonal;
         return true;
@@ -40,14 +40,15 @@ public sealed partial class SdfMeshIrradianceScene {
         TryNearestSurface(accept: accept, instance: out instance, leaf: out _, point: point, radius: radius, surface: out surface, triangle: out triangle);
 
     private bool TryNearestSurface(Vector3 point, float radius, Func<int, int, Vector3, bool>? accept, out Vector3 surface, out int instance, out int triangle, out int leaf) {
+        var content = m_content;
         var nearest = new NearestSurface { Squared = radius * radius, Instance = -1, Triangle = -1, Accept = accept };
-        if (m_nodes.Length > 0 && float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
-            NearestNode(m_nodes, 0, -1, point, ref nearest);
+        if (content.NodeCount > 0 && float.IsFinite(nearest.Squared) && radius >= 0 && float.IsFinite(point.LengthSquared())) {
+            NearestNode(content.Nodes, 0, -1, point, ref nearest);
         }
         surface = nearest.Point;
         instance = nearest.Instance;
         leaf = nearest.Triangle;
-        triangle = (instance < 0) ? -1 : m_instances[instance].Geometry.Triangles[leaf];
+        triangle = (instance < 0) ? -1 : content.Instances[instance].Geometry.Triangles[leaf];
         return (instance >= 0);
     }
 
@@ -76,11 +77,11 @@ public sealed partial class SdfMeshIrradianceScene {
         }
         for (var i = node.First; i < node.First + node.Count; i++) {
             if (instanceIndex < 0) {
-                var entry = m_entries[i];
-                NearestNode(m_instances[entry.Instance].Geometry.Nodes, entry.Node, entry.Instance, point, ref nearest);
+                var entry = m_content.Entries[i];
+                NearestNode(m_content.Instances[entry.Instance].Geometry.Nodes, entry.Node, entry.Instance, point, ref nearest);
                 continue;
             }
-            ref readonly var instance = ref m_instances[instanceIndex];
+            ref readonly var instance = ref m_content.Instances[instanceIndex];
             var geometry = instance.Geometry;
             geometry.Corner(e1: out var e1, e2: out var e2, index: i, v0: out var v0);
             var a = Vector3.Transform(v0, instance.ObjectToWorld);
@@ -99,8 +100,8 @@ public sealed partial class SdfMeshIrradianceScene {
     }
 
     private float NearestBox(in Node node, int instanceIndex, Vector3 point) {
-        var (low, high) = instanceIndex < 0 || m_instances[instanceIndex].Identity
-            ? (node.Low, node.High) : Bounds(m_instances[instanceIndex].ObjectToWorld, node.Low, node.High);
+        var (low, high) = instanceIndex < 0 || m_content.Instances[instanceIndex].Identity
+            ? (node.Low, node.High) : Bounds(m_content.Instances[instanceIndex].ObjectToWorld, node.Low, node.High);
         return Vector3.DistanceSquared(point, Vector3.Clamp(point, low, high));
     }
 }
