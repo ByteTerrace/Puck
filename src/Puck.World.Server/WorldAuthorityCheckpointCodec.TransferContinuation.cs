@@ -12,16 +12,13 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteString(value: row.Border);
         writer.WriteNullableString(value: row.AdjacencyCounterpart);
         writer.WriteFixedVector(value: row.SourceCrossingPoint);
-        writer.WriteBoolean(value: row.SourceFrame.HasValue);
-        if (row.SourceFrame is { } frame) {
-            writer.WriteFixedVector(value: frame.Origin);
-            writer.WriteFixedVector(value: frame.Right);
-            writer.WriteFixedVector(value: frame.Up);
-            writer.WriteFixedVector(value: frame.Normal);
-            writer.WriteFixed(value: frame.HalfWidth);
-            writer.WriteFixed(value: frame.HalfHeight);
-            writer.WriteFixed(value: frame.HalfDepth);
-        }
+        writer.WriteOptional(
+            value: row.SourceFrame,
+            writeValue: static (w, frame) => WorldWireLeaves.WriteFaceFrame(
+                frame: frame,
+                writer: w
+            )
+        );
         writer.WriteNullableString(value: row.DestinationName);
         writer.WriteNullableString(value: row.ScopeKey);
         writer.WriteBoolean(value: row.GenerationId.HasValue);
@@ -43,18 +40,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
         var point = reader.ReadFixedVector();
-        WorldFaceFrame? frame = (reader.ReadBoolean()
-            ? new(
-                reader.ReadFixedVector(),
-                reader.ReadFixedVector(),
-                reader.ReadFixedVector(),
-                reader.ReadFixedVector(),
-                reader.ReadFixed(),
-                reader.ReadFixed(),
-                reader.ReadFixed()
-            )
-            : null
-        );
+        var frame = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireLeaves.ReadFaceFrame(reader: ref r));
         var destination = reader.ReadNullableString(
             field: "transfer continuation destination",
             maxBytes: MaxStringBytes
