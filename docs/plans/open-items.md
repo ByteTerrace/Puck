@@ -1006,8 +1006,7 @@ The custom no-GC runtime port stays later work, on the
 Owner: specialist (rendering) · high · Next: the bake samples through the
 residency's background GPU work
 ([B1](graphics-architecture.md#b1-the-completion-driven-bake-service)), so
-the frame-pacing floor is gone and the cold bake is CPU-bound; narrow
-`SdfMeshBakeClosure` to the code that decides mesh contents and key one
+the frame-pacing floor is gone and the cold bake is CPU-bound; key one
 store for both backends from the HLSL source closure of `MeshBake` and
 `MeshBakeMask`; then cut the collapse (`SdfMeshCollapse`), now the bake's
 largest CPU stage, toward the owner's bar: one minute at most per backend from

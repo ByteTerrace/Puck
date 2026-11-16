@@ -135,8 +135,10 @@ scope's distance correction; unsupported parts use the generic interpreter.
 The shader implementation is in `Assets/Shaders/Sdf/field/sdf-parts.hlsli`.
 
 Mesh cache identity follows the positive production entries in `SdfMeshBakeClosure.BakeRoots`, including constructor
-defaults, batch taking and the point table's layout, the sample answer, contour/material/skin/level work and
-store normalization/encoding and `SdfMeshBakeBlock.Write`, together with the two bake kernels. `SdfMeshDresser` owns presentation separately:
+defaults, batch taking, the point and sampled tables' layout, the sample answer, contour/material/skin/level work,
+the store's encoder and `SdfMeshBakeBlock.Write`, together with the two bake kernels and the entry format's version
+(`SdfMeshStore.EntryVersion`). Reading an entry back and copying a mesh into native storage are outside it: what an
+entry's bytes mean is the format's, so a decode edit that changes it changes `SdfMeshStoreCodec.Magic`. `SdfMeshDresser` owns presentation separately:
 retained topology, poses, clipping, picking and mesh claims. It reads live landed products through the bake's locked
 `PrepareFrame` access and acknowledges the captured product revision only after publishing the dressed frame.
 The one copy-membership index serves both bake demand and dressing. Dresser disposal releases its claims before

@@ -11,6 +11,9 @@ namespace Puck.SdfVm;
 // Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
 internal static unsafe class SdfMeshStoreCodec {
+    // The entry format's version, which the bake identity folds (SdfMeshStore.BuildIdentityOf) and TryDecode checks. The
+    // bake closure roots Encode alone, so an edit to the decode moves no identity: change this tag in any edit after which
+    // a stored entry's bytes would decode to another mesh, or the store serves entries read under the new meaning.
     internal const ulong Magic = 0x4148534D4B435550ul; // PUCKMSHA
     internal const int HeaderBytes = 28;
 
@@ -308,7 +311,7 @@ internal static unsafe class SdfMeshStoreCodec {
                 destination[index] = new Vector3(x: BitConverter.UInt32BitsToSingle(value: px), y: BitConverter.UInt32BitsToSingle(value: py), z: BitConverter.UInt32BitsToSingle(value: pz));
             }
         } else {
-            var divisor = ((double)((1u << (width * 8)) - 1));
+            var divisor = Steps(width: width);
             var extentX = (((double)high.X) - low.X);
             var extentY = (((double)high.Y) - low.Y);
             var extentZ = (((double)high.Z) - low.Z);
@@ -317,8 +320,8 @@ internal static unsafe class SdfMeshStoreCodec {
                 px = ((width == 2) ? Add2(bytes: x.Bytes, count: x.Count, index: index, previous: px) : Add3(bytes: x.Bytes, count: x.Count, index: index, previous: px));
                 py = ((width == 2) ? Add2(bytes: y.Bytes, count: y.Count, index: index, previous: py) : Add3(bytes: y.Bytes, count: y.Count, index: index, previous: py));
                 pz = ((width == 2) ? Add2(bytes: z.Bytes, count: z.Count, index: index, previous: pz) : Add3(bytes: z.Bytes, count: z.Count, index: index, previous: pz));
-                destination[index] = new Vector3(x: ((float)(low.X + ((extentX * px) / divisor))),
-                    y: ((float)(low.Y + ((extentY * py) / divisor))), z: ((float)(low.Z + ((extentZ * pz) / divisor))));
+                destination[index] = new Vector3(x: Expand(divisor: divisor, extent: extentX, low: low.X, value: px),
+                    y: Expand(divisor: divisor, extent: extentY, low: low.Y, value: py), z: Expand(divisor: divisor, extent: extentZ, low: low.Z, value: pz));
             }
         }
     }
@@ -477,17 +480,26 @@ internal static unsafe class SdfMeshStoreCodec {
         var budget = (mesh.BakeCell.Length() / 1024f);
 
         if (!(budget > 0) || !float.IsFinite(f: budget)) { return false; }
+        var divisor = Steps(width: width);
+        var extentX = (((double)high.X) - low.X);
+        var extentY = (((double)high.Y) - low.Y);
+        var extentZ = (((double)high.Z) - low.Z);
+
         foreach (var position in mesh.Positions.Span) {
-            var decoded = new Vector3(x: Expand(Quantize(high: high.X, low: low.X, value: position.X, width: width), low.X, high.X, width),
-                y: Expand(Quantize(high: high.Y, low: low.Y, value: position.Y, width: width), low.Y, high.Y, width),
-                z: Expand(Quantize(high: high.Z, low: low.Z, value: position.Z, width: width), low.Z, high.Z, width));
+            var decoded = new Vector3(x: Expand(divisor: divisor, extent: extentX, low: low.X, value: Quantize(high: high.X, low: low.X, value: position.X, width: width)),
+                y: Expand(divisor: divisor, extent: extentY, low: low.Y, value: Quantize(high: high.Y, low: low.Y, value: position.Y, width: width)),
+                z: Expand(divisor: divisor, extent: extentZ, low: low.Z, value: Quantize(high: high.Z, low: low.Z, value: position.Z, width: width)));
 
             if (Vector3.Distance(value1: position, value2: decoded) > budget) { return false; }
         }
         return true;
     }
-    private static uint Quantize(float value, float low, float high, int width) => ((high == low) ? 0 : (uint)Math.Clamp(Math.Round(a: (((((double)value) - low) / (((double)high) - low)) * ((1u << (width * 8)) - 1))), 0, ((1u << (width * 8)) - 1)));
-    private static float Expand(uint value, float low, float high, int width) => ((float)(low + (((((double)high) - low) * value) / ((1u << (width * 8)) - 1))));
+    // The largest quantized value of a position width, which spans its axis's low to high.
+    private static double Steps(int width) => ((1u << (width * 8)) - 1);
+    private static uint Quantize(float value, float low, float high, int width) => ((high == low) ? 0 : (uint)Math.Clamp(Math.Round(a: (((((double)value) - low) / (((double)high) - low)) * Steps(width: width))), 0, Steps(width: width)));
+    // The position a quantized value decodes to: the one expansion both the decode and the encoder's fit check run, so the
+    // encoder's budget holds for what the decode writes.
+    private static float Expand(uint value, double low, double extent, double divisor) => ((float)(low + ((extent * value) / divisor)));
     private static void WriteMaterials(BinaryWriter writer, ReadOnlySpan<uint> materials, int[] from, int[] to) {
         var width = 1;
 
