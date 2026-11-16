@@ -40,9 +40,8 @@ public sealed partial class CorpusManifest {
         }
     }
     private static void ValidateRelativePath(string path, bool oneSegment = false) {
-        if (string.IsNullOrWhiteSpace(value: path) || Path.IsPathRooted(path: path) ||
-            (path.IndexOfAny(anyOf: ['\\', ':', '?', '#', '%', '\0']) >= 0) || (oneSegment && path.Contains(value: '/')) ||
-            path.Split(separator: '/').Any(predicate: static part => ((part is "" or "." or "..") || part.EndsWith(value: '.') || part.EndsWith(value: ' ')))) {
+        // '#' and '%' are portable in a file name but change a URL's meaning, and a corpus path is appended to a URL prefix.
+        if (!Puck.Confinement.PortablePath.IsRelative(allowDirectories: !oneSegment, path: path) || (path.IndexOfAny(anyOf: ['#', '%']) >= 0)) {
             throw new InvalidDataException(message: $"Invalid corpus relative path '{path}'.");
         }
     }

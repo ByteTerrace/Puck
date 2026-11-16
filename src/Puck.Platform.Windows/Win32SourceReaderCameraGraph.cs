@@ -856,42 +856,31 @@ internal sealed class Win32SourceReaderSharedGraph : Win32SourceReaderCameraGrap
     protected override void OnStopping() => m_stream?.CancelStart();
 
     /// <inheritdoc/>
-    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) {
-        ArgumentNullException.ThrowIfNull(ring);
-
+    public bool TryAttachKernel(in ProbeKernelRequest request, PublishBuffer<ProbeReading> ring, [NotNullWhen(true)] out IProbeKernelRun? run, out string fault) => m_bench.TryAttach(
+        fault: out fault,
+        refusal: Refuse(request: in request),
+        request: in request,
+        ring: ring,
+        run: out run
+    );
+    private static string? Refuse(in ProbeKernelRequest request) {
         foreach (var input in request.Inputs) {
             switch (input) {
                 case ProbeKernelInput.Sensor sensorInput:
                     if (CameraSensor.Color != sensorInput.Kind) {
-                        run = null;
-                        fault = "a single-sensor graph binds only its current color frame";
-
-                        return false;
+                        return "a single-sensor graph binds only its current color frame";
                     }
 
                     break;
                 case ProbeKernelInput.StrobePair:
-                    run = null;
-                    fault = "a single-sensor graph carries no strobe pair";
-
-                    return false;
+                    return "a single-sensor graph carries no strobe pair";
             }
         }
 
-        if (CameraSensor.Color != request.TriggerSensor) {
-            run = null;
-            fault = "the trigger sensor must be the graph's color stream";
-
-            return false;
-        }
-
-        run = m_bench.Attach(
-            request: in request,
-            ring: ring
+        return ((CameraSensor.Color != request.TriggerSensor)
+            ? "the trigger sensor must be the graph's color stream"
+            : null
         );
-        fault = "";
-
-        return true;
     }
 
     nint IProbeInputResolver.Resolve(CameraSensor sensor, bool previous) => (((m_latestSlot >= 0) && (CameraSensor.Color == sensor) && !previous)
