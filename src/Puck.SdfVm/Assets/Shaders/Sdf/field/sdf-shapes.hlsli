@@ -1,11 +1,11 @@
 // The primitive distance functions, the glyph and sampled-region primitives, the sweep, and evaluateShape.
 #ifndef FIELD_SDF_SHAPES_HLSLI
 #define FIELD_SDF_SHAPES_HLSLI
+// The 2D box distance (puckBoxDistance2) and the glyph median decode (puckMsdfReconstruct) are the overlays' too.
+#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli"
 // The exact distance to a box centred on the origin, from q = abs(p) - halfExtents: the outside part's length plus the
-// inside part's largest (never positive) component. Every box, slab and extrude below reads it.
-precise float sdfBoxDistance(float2 q) {
-    return (min(max(q.x, q.y), 0.0) + length(max(q, 0.0)));
-}
+// inside part's largest (never positive) component. Every box below reads it; the 2D cylinder, slab and extrude
+// profiles read puckBoxDistance2.
 precise float sdfBoxDistance(float3 q) {
     return (length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0));
 }
@@ -30,7 +30,7 @@ precise float sdfCapsule(float3 p, float3 endpoint, float radius, float inverseL
     return (length(p - (h * endpoint)) - radius);
 }
 precise float sdfCylinder(float3 p, float radius, float halfHeight) {
-    return sdfBoxDistance(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
+    return puckBoxDistance2(float2(length(p.xz), abs(p.y)) - float2(radius, halfHeight));
 }
 // The ellipsoid: the superellipsoid's scaled gauge at e = 2, (|p/r| - 1) * min(r). EXACTLY 1-Lipschitz at every
 // eccentricity (SdfProgramBuilder.Superellipsoid's proof covers e = 2), so it needs no step clamp and no field scope;
@@ -126,7 +126,7 @@ precise float sdfVesica(float3 p, float r, float d, float b) {
 // --- lift operators (extrude along Z / revolve around Y) ---
 // Extrude an exact 2D distance d (evaluated on the XY plane) to half-height h along Z: exact for any exact d.
 precise float sdfExtrude2D(float d, float pz, float h) {
-    return sdfBoxDistance(float2(d, (abs(pz) - h)));
+    return puckBoxDistance2(float2(d, (abs(pz) - h)));
 }
 // The chamfered extrude join: sdfExtrude2D's box/slab intersection, further intersected with a 45-degree bevel plane
 // across the cap seam — the chamfer-intersection of the 2D field and the +/-Z slab, so an extruded 2D shape's TOP/
@@ -137,7 +137,7 @@ precise float sdfExtrude2D(float d, float pz, float h) {
 // plain value unchanged to the bit.
 precise float sdfExtrudeChamfer2D(float d, float pz, float h, float c) {
     float2 w = float2(d, (abs(pz) - h));
-    float plain = sdfBoxDistance(w);
+    float plain = puckBoxDistance2(w);
     float bevel = ((w.x + w.y + c) * SDF_SQRT_HALF);
     return max(plain, bevel);
 }
@@ -150,7 +150,7 @@ precise float2 sdfRevolve2D(float3 p, float o) {
 // Rounded box, single corner radius r: the box half-extents are b, corners rounded by r (staying within b).
 precise float sdfRoundBox2D(float2 p, float2 b, float r) {
     float2 q = ((abs(p) - b) + r);
-    return (sdfBoxDistance(q) - r);
+    return (puckBoxDistance2(q) - r);
 }
 // 45-degree-chamfered box: the plain box field intersected (max) with a diagonal bevel plane offset by chamfer c.
 // Exact inside and on the surface and a 1-Lipschitz conservative LOWER BOUND outside, in the wedge past each bevel
@@ -160,7 +160,7 @@ precise float sdfRoundBox2D(float2 p, float2 b, float r) {
 // sqrt(2)*length(max(q,0)) for q outside the box, so the bevel arm never wins).
 precise float sdfChamferBox2D(float2 p, float2 b, float c) {
     float2 q = (abs(p) - b);
-    float boxDistance = sdfBoxDistance(q);
+    float boxDistance = puckBoxDistance2(q);
     float bevel = ((q.x + q.y + c) * SDF_SQRT_HALF);
     return max(boxDistance, bevel);
 }
@@ -365,7 +365,7 @@ precise float2 sdfGlyphUnpackUv(float packed) {
 // bound evaluates this — a conservative UNDERESTIMATE of the true glyph distance, since the letter is strictly inside
 // its cell, so a bound skip never holes. halfWidth/halfHeight in data1.yz, extrudeHalfDepth in data0.w.
 precise float sdfGlyphQuad(float3 p, float4 data0, float4 data1) {
-    return sdfExtrude2D(sdfBoxDistance(abs(p.xy) - float2(data1.y, data1.z)), p.z, data0.w);
+    return sdfExtrude2D(puckBoxDistance2(abs(p.xy) - float2(data1.y, data1.z)), p.z, data0.w);
 }
 
 #ifdef SDF_GLYPH_ATLAS
@@ -423,13 +423,12 @@ precise float sdfGlyphSampleFieldMedian(float2 uv) {
     float3 s10 = sdfGlyphTexelRgb((b + int2(1, 0)), dims);
     float3 s01 = sdfGlyphTexelRgb((b + int2(0, 1)), dims);
     float3 s11 = sdfGlyphTexelRgb((b + int2(1, 1)), dims);
-    float3 s = lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
 
-    return max(min(s.r, s.g), min(max(s.r, s.g), s.b));
+    return puckMsdfReconstruct(s00, s10, s01, s11, f);
 }
 precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float2 halfSize = float2(data1.y, data1.z);
-    float dQuad = sdfBoxDistance(abs(p.xy) - halfSize);
+    float dQuad = puckBoxDistance2(abs(p.xy) - halfSize);
     float distanceScale = data0.z;
     float dPlane = dQuad;
 
