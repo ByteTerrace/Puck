@@ -44,6 +44,15 @@ degenerate-bounds scene law reaches depth 62 and compares nearest and any hits
 with brute force, with zero overflow.
 The scene command reuses `LevelsOf(High)` and `SdfMeshProbeDepth.RayDirections`,
 so its comparison traces use the volume's actual finest window and quadrature.
+Its `tree-hash` hashes the exported tree as the trace walks it, so a change
+that claims to leave the scene alone compares base and head CLIs run back to
+back over the same store (a booting World adds meshes to it). The scene's draws,
+entries and top nodes are rented and go back to the pool at its last claim
+(`SdfMeshIrradianceScene.Content`, shared with the `WithoutRetained` copy): a
+new reader of a scene or its GPU export holds a scene claim for as long as it
+reads, or it reads an emptied scene. The top level's braid order follows leaf
+position, not the parallel build's node numbering, so a scene builds the same
+tree on every run.
 `world.budget` samples per-level median and maximum lighting ages when read,
 in addition to the work-list cycle's combined ages.
 Both work lists use the existing `Puck.Maths` three-way Morton interleave on

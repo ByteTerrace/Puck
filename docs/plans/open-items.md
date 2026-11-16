@@ -3655,13 +3655,9 @@ Grounded causes and leads, largest first:
 Bake and probe residency lifecycle lows (each read at the cited lines; a
 failing case is argued from source, not run):
 
-- [low] A probe-scene export that throws after allocating its prefix leaks the
-  prefix: `SdfMeshIrradianceScene.CreateGpuExport`
-  (`src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:47`) allocates it from the
-  arena before the geometry loop and frees nothing on a throw, and the scene
-  upload's `Dispose` swallows the faulted work
-  (`src/Puck.SdfVm/SdfMeshProbeGpuWork.Scene.cs:112-120`). Free the allocation
-  where the export throws, and count faulted work on cancel.
+- [low] The scene upload's `Dispose` swallows faulted export work
+  (`SdfMeshProbeGpuWork.SceneUpload.Dispose`), so a probe-scene export that
+  throws during teardown is never counted. Count faulted work on cancel.
 - [low · plausible] A probe job cancelled by the admission timeout never reads
   as stale-scene evidence: `SdfMeshProbeGpuWork.cs:155-162` dequeues the head
   after `AdmissionWait`, counts `GpuCancelled` and answers cancelled, while
