@@ -807,7 +807,7 @@ public static class SdfMeshAudit {
 
         var extent = (high - low);
         var spacing = MathF.Max(x: (MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)) / (Math.Max(val1: options.MissingSamples, val2: 2) - 1)), y: (1.5f * cell));
-        var dims = (X: (((int)MathF.Ceiling(x: (extent.X / spacing))) + 1), Y: (((int)MathF.Ceiling(x: (extent.Y / spacing))) + 1), Z: (((int)MathF.Ceiling(x: (extent.Z / spacing))) + 1));
+        var dims = SdfMeshLattice.Dims(cell: spacing, extent: extent);
         var values = new float[((dims.X * dims.Y) * dims.Z)];
 
         Vector3 PointAt(int x, int y, int z) => (low + (new Vector3(x: x, y: y, z: z) * spacing));

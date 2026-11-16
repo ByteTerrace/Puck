@@ -1,6 +1,5 @@
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
-using Puck.Shaders;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
@@ -129,7 +128,7 @@ public sealed partial class SdfWorldResidency {
     // Kept apart from PrepareShade, which runs every frame: the build's closure captures a parameter, so a method
     // holding it allocates the closure on entry whether or not it starts a build.
     private void StartShadeBuild(IGpuDeviceContext device, SdfShadeKernels request) {
-        var target = ((BytecodeExtension() == ".dxil") ? ShaderTarget.Dxil : ShaderTarget.Spirv);
+        var target = LoadedTarget();
         var catalog = m_pipelines.Catalog;
 
         m_shadeBuild.Start(build: token => SdfShadePipelines.BuildAsync(

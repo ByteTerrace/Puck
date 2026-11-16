@@ -6,6 +6,7 @@
 // (sdf-atmosphere.hlsli), as the haze does.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
+#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/low-discrepancy.hlsli"
 #include "../field/sdf-noise.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 #include "sdf-atmosphere.hlsli"
@@ -212,7 +213,7 @@ float3 shadeVolumes(float3 surface, float surfaceCoverage, float surfaceDistance
     float skyCoverage = (1.0 - surfaceCoverage);
     // The span a volume is selected over: the farther share's.
     float spanEnd = (skyShare ? farDistance : surfaceDistance);
-    float dither = ((sdfR2Dither(pixel) * 2.0) - 1.0);
+    float dither = ((puckR2Dither(pixel) * 2.0) - 1.0);
     float previousNear = 3.402823e+38;
     uint previousIndex = SDF_MAX_VOLUMES;
     [loop] for (uint rank = 0u; rank < SDF_MAX_VOLUMES; rank++) {

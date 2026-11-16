@@ -127,20 +127,16 @@ public sealed partial class SdfWorldResidency {
 
         try {
             m_reloadLoad = SdfKernelTreeLoad.Start(
-                bytecodeExtension: BytecodeExtension(),
                 compiler: Volatile.Read(location: ref m_pendingShaderCompiler)!,
-                directory: request.Directory!
+                directory: request.Directory!,
+                target: LoadedTarget()
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException)) {
             FinishShaderReload(failure: exception.Message);
         }
     }
     // Use the format already loaded into this residency, never an OS guess or a mutable host preference.
-    private string BytecodeExtension() =>
-        (ShaderBytecode.IsDxbcContainer(bytecode: m_kernels[SdfKernel.Surface].Span)
-            ? ".dxil"
-            : ".spv"
-        );
+    private ShaderTarget LoadedTarget() => ShaderTargets.Of(bytecode: m_kernels[SdfKernel.Surface].Span);
     // Starts building the batch the load delivered since the last one, or finishes the request once the load has
     // completed with nothing left to install.
     private void AdvanceShaderReload(SdfKernelTreeLoad load) {

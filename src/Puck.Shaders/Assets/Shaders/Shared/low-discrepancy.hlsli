@@ -7,4 +7,12 @@
 static const uint PuckR2AlphaX = 3242174889u;
 static const uint PuckR2AlphaY = 2447445414u;
 
+// One R2 dither sample in [0, 1] from integer pixel coordinates, in fixed point so both backends add the identical
+// pattern: the unsigned product wraps mod 2^32, which is the fractional part of the additive recurrence.
+precise float puckR2Dither(uint2 pixel) {
+    uint h = ((pixel.x * PuckR2AlphaX) + (pixel.y * PuckR2AlphaY));
+
+    return ((float)h * (1.0 / 4294967296.0));
+}
+
 #endif
