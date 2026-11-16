@@ -16,11 +16,13 @@ internal static class SdfMeshLattice {
     /// <summary>Gets the samples a lattice takes along each axis to span an extent.</summary>
     /// <param name="extent">The box's extent, in metres.</param>
     /// <param name="cell">The lattice's cell, in metres; positive.</param>
-    /// <returns>The samples per axis: the cells that cover the extent plus one, at least <see cref="MinimumSamples"/>.</returns>
-    public static (int X, int Y, int Z) Dims(Vector3 extent, float cell) => (
-        X: Math.Max(val1: MinimumSamples, val2: (((int)MathF.Ceiling(x: (extent.X / cell))) + 1)),
-        Y: Math.Max(val1: MinimumSamples, val2: (((int)MathF.Ceiling(x: (extent.Y / cell))) + 1)),
-        Z: Math.Max(val1: MinimumSamples, val2: (((int)MathF.Ceiling(x: (extent.Z / cell))) + 1))
+    /// <param name="minimum">The fewest samples along any axis, at least <see cref="MinimumSamples"/>: more keeps a thin
+    /// axis an inside sample.</param>
+    /// <returns>The samples per axis: the cells that cover the extent plus one, at least <paramref name="minimum"/>.</returns>
+    public static (int X, int Y, int Z) Dims(Vector3 extent, float cell, int minimum = MinimumSamples) => (
+        X: Math.Max(val1: minimum, val2: (((int)MathF.Ceiling(x: (extent.X / cell))) + 1)),
+        Y: Math.Max(val1: minimum, val2: (((int)MathF.Ceiling(x: (extent.Y / cell))) + 1)),
+        Z: Math.Max(val1: minimum, val2: (((int)MathF.Ceiling(x: (extent.Z / cell))) + 1))
     );
     /// <summary>Gets the lattice a contoured level lays over a box: the box widened on every side by the level's offset and
     /// <see cref="MarginCells"/> cells.</summary>

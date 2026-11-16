@@ -200,9 +200,9 @@ public sealed partial class SdfProgramBuilder {
     private float m_openInstanceDetail;
     private (Vector3 Low, Vector3 High)? m_openInstanceBox;
     // The box the open instance's text glyphs span, in the frame their chains ride (world axes, Slot -1, or a dynamic
-    // slot's), and the instructions they emitted; null until a run emits a glyph. Runs riding two frames leave Slot
-    // at GlyphFramesMixed, which fits nothing.
-    private (Vector3 Low, Vector3 High, int Slot, int Instructions)? m_openInstanceGlyphs;
+    // slot's), the instructions they emitted and the finest spacing their strokes ask (GlyphDetail); null until a run
+    // emits a glyph. Runs riding two frames leave Slot at GlyphFramesMixed, which fits nothing.
+    private (Vector3 Low, Vector3 High, int Slot, int Instructions, float Detail)? m_openInstanceGlyphs;
     private SdfHeightField? m_openInstanceHeightField;
     private Vector3 m_openInstanceCenter;
     private int m_openInstanceFirst = -1;

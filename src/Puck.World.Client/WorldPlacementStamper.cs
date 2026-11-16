@@ -552,16 +552,17 @@ public static class WorldPlacementStamper {
         return (hiddenOpaque, (any ? glassHidden : null));
     }
 
-    // The finest feature a creation's text runs carry, in world units: the thinner of a run's relief and its stroke, about
-    // a tenth of its em. A text instance declares it (SdfInstanceRange.Detail), static here or pooled (WorldCreationInstances).
+    // The spacing a creation's text runs ask their bake for, in world units: the finest of their runs'
+    // (SdfProgramBuilder.GlyphDetail). A text instance declares it (SdfInstanceRange.Detail), static here or pooled
+    // (WorldCreationInstances).
     internal static float TextDetail(CreationDocument creation, float scale) {
         var detail = float.PositiveInfinity;
 
         foreach (var run in (creation.TextRuns ?? [])) {
-            detail = MathF.Min(x: detail, y: MathF.Min(x: (run.Depth ?? 0.02f), y: (0.1f * run.EmHeight)));
+            detail = MathF.Min(x: detail, y: SdfProgramBuilder.GlyphDetail(extrudeHalfDepth: (run.Relief * scale), worldEmHeight: (run.EmHeight * scale)));
         }
 
-        return (float.IsFinite(f: detail) ? (detail * scale) : 0f);
+        return (float.IsFinite(f: detail) ? detail : 0f);
     }
     // A warped field stays separate from its neighbours under the existing static bake partition.
     internal static bool BakesAlone(ShapeDocument shape) => ShapePointOps.NeedsScope(shape: shape);
@@ -750,9 +751,11 @@ public static class WorldPlacementStamper {
             // noiseless creation bakes as its own detailed group after it, as in the per-shape branch above. A creation
             // whose every shown shape is glass has no opaque instance for the text to stay in, so it goes apart too.
             var anyOpaque = ((hiddenOpaque is null) || (Array.IndexOf(array: hiddenOpaque, value: false) >= 0));
-            var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => string.Equals(a: run.Mode, b: TextRunDocument.ModeEngrave, comparisonType: StringComparison.Ordinal)))));
+            var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => run.Engraves))));
 
             if (anyOpaque) {
+                // Text that stays among the shapes declares its detail through its glyphs (SdfInstanceRange.Glyphs), so it
+                // refines its own box and not the whole creation.
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin),

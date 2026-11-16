@@ -3433,23 +3433,13 @@ Owner: specialist lane (rendering, sdf-authoring) · high (it blocks authoring)
   edge only when its midpoint differs from both ends; the lists still need a
   bound the account enforces, and a cut that exceeds it should fail its group
   by name (`SdfMeshBakeReport.Failed`) instead of the process.
-- [medium] Glyphs have no CPU reference and drop fine strokes.
-  `SdfFieldEvaluator` has no interpreter for the `Glyph` shape, so
-  `puck mesh audit --cpu` refuses a plaque ("cannot interpret instruction 3's
-  shape Glyph") and no audit covers text. The gallery plaques' note lines
-  keep every word now that text bakes over its glyphs' box
-  (`SdfInstanceRange.Fitted`), and still lose thin strokes at their baked
-  cell (the UNION plaque's note reads "min of the two fie ds" from a metre
-  away). The arithmetic: a note line 0.03 m tall and 4 mm deep declares
-  `WorldPlacementStamper.TextDetail`, the lesser of its depth and a tenth of
-  its em, 3 mm, which is about a whole stroke where `WorldShapeDetail`
-  declares half a shape's thickness; a 1.2 m line's final lattice has an
-  18.75 mm cell, and the refinement stops at
-  `SdfMeshPathBake.MaxDetailRefinement` cells of it, 2.3 mm, so a 2.4 mm
-  stroke gets one cell. Declare half the stroke, and let a fitted line's
-  refinement follow its declared detail instead of its longest axis (a
-  line's lattice is long and thin, so the cap costs it most). Add the
-  interpreter, then audit a plaque.
+- [medium] Glyphs have no CPU reference. `SdfFieldEvaluator` has no
+  interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
+  `puck mesh preview` bake a plaque's text group empty ("baked no surface, or
+  the field evaluator refuses it") and no audit covers text; a plaque's
+  strokes are judged only from a windowed World's captures. Add the
+  interpreter (the atlas's alpha band, bilinear, and the cell quad past it, as
+  `sdfGlyph` reads them), then audit a plaque.
 - [medium] A rim thinner than a group's final cell is lost: `range-window`'s
   2 cm rim does not bake at its 26.2 mm final cell. The same question as the
   crease merge below: a declared feature narrower than the cell must refine or
