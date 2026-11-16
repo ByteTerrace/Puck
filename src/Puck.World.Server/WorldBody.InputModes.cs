@@ -10,16 +10,16 @@ public sealed partial class WorldBody {
         ClearTape();
         ActionEdit = default;
         if (m_laneRecency.Read.IndexOfAnyExcept(value: 0UL) >= 0) { m_laneRecency.Write.Clear(); }
-        m_channelReadHeld = default;
-        m_channelReadComposed = default;
-        m_channelReadScalar = default;
-        m_engagedIntent = default;
+        InputReadbacksEdit.ReadHeld = default;
+        InputReadbacksEdit.ReadComposed = default;
+        InputReadbacksEdit.ReadScalar = default;
+        InputReadbacksEdit.EngagedIntent = default;
     }
 
     /// <summary>The input tuple currently installed on this body's folded intent.</summary>
-    public ushort InputMappingId { get; private set; }
+    public ushort InputMappingId => InputImages.Mapping;
     /// <summary>The latest installed owner epoch; an address never carries authority without this boundary.</summary>
-    public ulong InputEpoch { get; private set; }
+    public ulong InputEpoch => InputImages.Epoch;
 
     /// <summary>Installs a committed input barrier by logical identity, clearing released edges and timed input.</summary>
     public void InstallInputMapping(WorldInputCatalog catalog, WorldInputMapping previous, WorldInputMapping next,
@@ -73,14 +73,14 @@ public sealed partial class WorldBody {
             if (address < 0) { continue; }
             if (next.Channels.IsRole(ordinal: address)) { submitted = submitted.WithChannel(ordinal: address, value: accepted[address]); } else { held = held.WithChannel(ordinal: address, value: accepted[address]); }
         }
-        m_submittedIntent = submitted;
-        m_heldChannels = held;
-        m_channelReadComposed = accepted;
-        m_channelReadHeld = held;
-        m_channelReadScalar = accepted;
-        m_engagedIntent = accepted;
-        m_transferHeldChannels = default;
-        m_hasTransferHeldChannels = false;
+        InputImagesEdit.Submitted = submitted;
+        InputImagesEdit.Held = held;
+        InputReadbacksEdit.ReadComposed = accepted;
+        InputReadbacksEdit.ReadHeld = held;
+        InputReadbacksEdit.ReadScalar = accepted;
+        InputReadbacksEdit.EngagedIntent = accepted;
+        InputImagesEdit.TransferHeld = default;
+        InputImagesEdit.HasTransferHeld = false;
         for (var offset = 0; (offset < m_tapeCount); offset++) {
             ref var segment = ref m_tape[((m_tapeHead + offset) % m_tape.Length)];
             var image = default(PlayerIntent);
@@ -114,7 +114,7 @@ public sealed partial class WorldBody {
         CopyChannelBindings(kit.Actions, kit.ActionThresholds, kit.ActionShapes, kit.RoleMask);
         LayoutLaneRecency(sources: recencySources);
         m_roleOrdinals = kit.RoleOrdinals;
-        InputMappingId = next.Id;
-        InputEpoch = epoch;
+        InputImagesEdit.Mapping = next.Id;
+        InputImagesEdit.Epoch = epoch;
     }
 }

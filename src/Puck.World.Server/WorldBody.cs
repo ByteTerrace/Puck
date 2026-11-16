@@ -45,11 +45,33 @@ public sealed partial class WorldBody {
     private CompiledBodyMotionProgram m_bodyMotionProgram;
     // The construction-validated program table and the program this body executes.
     private IReadOnlyDictionary<string, CompiledBodyMotionProgram> m_bodyMotionPrograms;
-    private PlayerIntent m_channelReadComposed;
-    // body.channels' post-fold read-back: the held overlay NextIntent actually admitted and the result after composing
-    // it with the resolved movement tier. Written on that existing join path, retained after the one-tick input images
-    // clear, and never read by simulation — diagnostic only, with no allocation and no feedback into either fold.
-    private PlayerIntent m_channelReadHeld;
+    // The input images that arrive and their routing, behind their write door (InputImages reads, InputImagesEdit
+    // writes). Submitted and Producer are the two one-tick images below the tape, consumed by the next Advance so a
+    // missed producer tick can never leave a stale entity moving: the submitted image is the live stream (a seat's
+    // device image or a remote client's submission), admitted unless the source is Idle; the producer image is the
+    // server-side producer's output, used only when no submission arrived and the source names it. Held is the
+    // per-tick live-held device image the client submits (only composition ordinals are meaningful there: a button
+    // down until its release edge; one-tick, republished each submission). TransferHeld is the last admitted fold a
+    // full body restore retains until the next input publication, neutral included; a cross-authority arrival clears
+    // it and starts a new input episode. Source is the intent-source axis (Live by default; a peer takes the
+    // population's stored default at activation), set by body.control and the peer sweep; see IntentSource for the
+    // merge rule it selects. Engaged is the screen-engagement route latch (disengaged by default), set by
+    // body.engage/disengage: while engaged the resolved intent is diverted to the bound screen's machine instead of
+    // the avatar, and Advance holds the avatar idle (no pose integration). Engagement is orthogonal to the source:
+    // it decides where the intent goes, the source decides what fills it. The source can name a producer, so the
+    // section is a record whose holder compares by value.
+    private readonly VersionedRecord<BodyInputImagesSection> m_inputImages;
+    // What the last advance resolved, behind its write door (InputReadbacks reads, InputReadbacksEdit writes): the
+    // intent an engaged body diverts; body.channels' post-fold read-back, which is the held overlay NextIntent
+    // admitted, the result after composing it with the resolved movement tier and that result's scalar projection,
+    // written on the join path and retained after the one-tick input images clear; and the relative input's
+    // fractions below scalar precision. Rules and a targeted impulse read the composed and scalar images.
+    private readonly Versioned<BodyInputReadbacksSection> m_inputReadbacks;
+
+    private ref readonly BodyInputImagesSection InputImages => ref m_inputImages.Read;
+    private ref BodyInputImagesSection InputImagesEdit => ref m_inputImages.Write;
+    private ref readonly BodyInputReadbacksSection InputReadbacks => ref m_inputReadbacks.Read;
+    private ref BodyInputReadbacksSection InputReadbacksEdit => ref m_inputReadbacks.Write;
     private FixedWorldCollider? m_collider;
     // The kit's rigid-dynamics facet, or null for a locomotion kit — see WorldBody.Rigid.cs. Non-null routes Advance
     // through the population's rigid solve instead of the grounded/free motion program entirely.
@@ -95,24 +117,7 @@ public sealed partial class WorldBody {
     private FixedQuaternion m_frame = FixedQuaternion.Identity;
 
     private ulong? m_continuumConsumedThroughEngineTick;
-    // The screen-engagement route latch (disengaged by default). Set by body.engage/disengage. While engaged the
-    // resolved intent is DIVERTED to the bound screen's machine instead of the avatar: Advance captures it into
-    // m_engagedIntent and holds the avatar idle (no pose integration). ORTHOGONAL to m_source — engagement decides
-    // where the intent GOES (avatar vs machine), the intent-source axis decides what FILLS it.
-    private bool m_engaged;
-    private PlayerIntent m_engagedIntent;
-    private bool m_hasProducerIntent;
-    private bool m_hasSubmittedIntent;
-    private bool m_hasTransferHeldChannels;
-    // The action track — the channel-generic buttons, independent of the movement tape/sticks. Peer producers of the
-    // same ordinals, merged every sub-step: m_heldChannels is the per-tick live-held device image the client submits
-    // (only composition ordinals are meaningful there — a button down until its release edge; one-tick, republished
-    // each submission), m_pendingDefaultChannelPress/m_pendingDefaultChannelValue hold argument-less taps until Advance
-    // can derive their duration from its host step, and m_channelTimers/m_channelTimerValues are materialized timed
-    // presses (body.press, reaching ANY ordinal including movement roles) that read held until their per-ordinal
-    // auto-release timer drains. m_previousChannelBit is the previous sub-step's threshold-crossing bit per ordinal —
-    // the model reads it to detect a rising (fire) and release (cut) edge, generalizing the old ActionLanes OR/XOR.
-    private PlayerIntent m_heldChannels;
+
     // The last grounded Advance's standing witness for the world.contacts read-back.
     private int m_lastContactCount;
     private FixedQ4816 m_maxSmoothError;
@@ -179,19 +184,12 @@ public sealed partial class WorldBody {
     // that resets m_verticalVelocity/m_planarVelocity for the identical reason: without the reset a warped body would
     // leave a ghost segment behind, sweeping a portal scan through space it never actually travelled.
     private FixedVector3 m_previousPosition;
-    private PlayerIntent m_producerIntent;
     private RoleChannelOrdinals m_roleOrdinals;
     private bool m_inMedium;
-    // The two one-tick intent images below the tape, both no-allocation and consumed by the next Advance so a missed
-    // producer tick can never leave a stale entity moving forever. The submitted image is the live stream (a seat's
-    // device image or a remote client's submission), admitted unless the source is Idle; the producer image is the
-    // server-side producer's output, used only when no submission arrived and the source names it.
-    private PlayerIntent m_submittedIntent;
+
     private int m_tapeCount;
     private int m_tapeHead;
-    // A full body restore retains its last admitted fold until the next input publication, including neutral.
-    // Cross-authority arrival explicitly clears this residue and starts a new input episode.
-    private PlayerIntent m_transferHeldChannels;
+
     // The compiled locomotion feel. A seated player reads its live
     // profile's move/turn speed instead (that is what makes identity.motion real-time); a profileless stand-in falls back
     // to the tuning's speeds. Swapped in place by
@@ -313,9 +311,7 @@ public sealed partial class WorldBody {
     private readonly ChannelShape[] m_channelShapes = new ChannelShape[ActionLaneCount];
     private readonly bool[] m_roleChannels = new bool[ActionLaneCount];
     private FixedVector3RateAccumulator m_overlayAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
-    // The intent-source axis (Live by default; a peer takes the population's stored default at activation). Set by
-    // body.control / the peer sweep. See IntentSource for the merge rule this selects.
-    private IntentSource m_source = IntentSource.Live;
+
     // Sub-Q48.16 integration state. Per-second velocity/rate numerators are divided by the exact engine time base;
     // these signed remainders carry the discarded tails into later steps instead of losing them every fixed update.
     // They are authoritative state: hard pose writes reset the affected channels. Each is bound to the engine time base
@@ -367,6 +363,8 @@ public sealed partial class WorldBody {
         var slot = new SlotBinding();
 
         m_action = new Versioned<BodyActionSection>(binding: slot);
+        m_inputImages = new VersionedRecord<BodyInputImagesSection>(binding: slot);
+        m_inputReadbacks = new Versioned<BodyInputReadbacksSection>(binding: slot);
         m_laneRecency = new VersionedArray<ulong>(binding: slot);
         m_registerWrites = new VersionedArray<WorldRegisterWriteImage>(binding: slot);
         m_durableInput = new VersionedRecord<BodyDurableInputSection>(binding: slot, value: BodyDurableInputSection.Empty(registers: 0));

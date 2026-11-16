@@ -6,27 +6,23 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
     private WorldChannelTable m_channels = WorldChannelTable.Empty;
-    private long[] m_relativeRemainders = [];
-
-    private PlayerIntent m_channelReadScalar;
-
     /// <summary>The body's current compiled input storage; addresses have meaning only in this mapping.</summary>
     public WorldChannelTable Channels => m_channels;
 
     /// <summary>Reads the step's scalar projection. Relative values round once with conserved fractional residue.</summary>
-    public FixedQ4816 ReadChannelScalar(int ordinal) => m_channelReadScalar[ordinal];
+    public FixedQ4816 ReadChannelScalar(int ordinal) => InputReadbacks.ReadScalar[ordinal];
 
     // Several ordered packets may reach one simulation interval. Levels take the latest value; relative
     // displacement accumulates until Advance consumes it. The later contribution fold replaces this derived sum.
     internal PlayerIntent MergeSubmittedRelative(PlayerIntent incoming) {
-        if (!m_hasSubmittedIntent) { return incoming; }
+        if (!InputImages.HasSubmitted) { return incoming; }
         var remaining = m_channels.RelativeMask;
 
         while (remaining != 0) {
             var ordinal = BitOperations.TrailingZeroCount(value: remaining);
 
             remaining &= (remaining - 1);
-            var sum = (((Int128)m_submittedIntent.Channels.Relative(ordinal: ordinal).Value) + incoming.Channels.Relative(ordinal: ordinal).Value);
+            var sum = (((Int128)InputImages.Submitted.Channels.Relative(ordinal: ordinal).Value) + incoming.Channels.Relative(ordinal: ordinal).Value);
 
             incoming = incoming.WithRelative(ordinal: ordinal, value: FixedQ3232.FromRawBits(value: long.CreateSaturating(value: sum)));
         }
@@ -47,7 +43,7 @@ public sealed partial class WorldBody {
             sameLayout = ((next.Name(ordinal: ordinal) == m_channels.Name(ordinal: ordinal)) && (next.RelativeUnit(ordinal: ordinal) == m_channels.RelativeUnit(ordinal: ordinal)));
         }
         m_channels = next;
-        if (!sameLayout) { m_relativeRemainders = ((next.RelativeMask == 0) ? [] : new long[ChannelLimits.MaxAxes]); }
+        if (!sameLayout && (((ReadOnlySpan<long>)InputReadbacks.RelativeRemainders).IndexOfAnyExcept(value: 0L) >= 0)) { InputReadbacksEdit.RelativeRemainders = default; }
     }
     private PlayerIntent WithoutRelative(PlayerIntent intent) {
         var remaining = m_channels.RelativeMask;
@@ -68,10 +64,10 @@ public sealed partial class WorldBody {
 
             remaining &= (remaining - 1);
             var delta = m_channels.ClampRelative(ordinal: ordinal, raw: intent.Channels.Relative(ordinal: ordinal).Value);
-            var raw = checked((delta.Value + m_relativeRemainders[ordinal]));
+            var raw = checked((delta.Value + InputReadbacks.RelativeRemainders[ordinal]));
             var projected = FixedQ3232.FromRawBits(value: raw).ToFixedQ4816();
 
-            m_relativeRemainders[ordinal] = (raw - (projected.Value << 16));
+            InputReadbacksEdit.RelativeRemainders[ordinal] = (raw - (projected.Value << 16));
             intent = intent.WithChannel(ordinal: ordinal, value: projected);
         }
         return intent;

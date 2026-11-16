@@ -109,18 +109,18 @@ namespace Puck.World.Server;
 /// timeout, never a wrong positive one. <c>m_inMedium</c>/<c>m_atMediumBand</c> — the medium hold's law
 /// re-derives both, purely as a function of the restored position and the freshly resampled medium surface, on
 /// the very next Advance.
-/// <c>m_heldChannels</c>/<c>m_channelReadHeld</c>/<c>m_channelReadComposed</c> — ordinary one-tick images; the
+/// The held image and the held and composed read-backs (<see cref="BodyInputImagesSection.Held"/>, <see cref="BodyInputReadbacksSection.ReadHeld"/>, <see cref="BodyInputReadbacksSection.ReadComposed"/>) — ordinary one-tick images; the
 /// last admitted held composition image is separately named in <paramref name="HeldChannelImage"/> solely for
 /// the bounded authority-handoff bridge.
-/// <c>m_submittedIntent</c>/<c>m_hasSubmittedIntent</c>/<c>m_producerIntent</c>/<c>m_hasProducerIntent</c> —
+/// The submitted and producer images and their flags (<see cref="BodyInputImagesSection.Submitted"/>, <see cref="BodyInputImagesSection.Producer"/>) —
 /// one-tick device/producer images, consumed and reset every <see cref="WorldBody.Advance"/> by design ("a missed producer
 /// tick can never leave a stale entity moving forever" — this type's own existing doc comment). <c>m_actionStateRequested</c>/
 /// <c>m_actionStateLastWriter</c>/<c>m_actionStateLastReason</c> — pure audit text for <see cref="WorldBody.DescribeActionState"/>'s
 /// echo; <see cref="WorldBody.GateOpen"/> reads only Values/Timers, never these, so losing them regresses a diagnostic
-/// string, not gameplay — the same exclusion class as <c>m_channelReadHeld</c>. <c>m_continuity</c> — overwritten
+/// string, not gameplay — the same exclusion class as the held read-back. <c>m_continuity</c> — overwritten
 /// unconditionally by <c>RestoreDetachedSeat</c>'s own <c>Pose()</c> call, which already writes the correct
 /// value (Teleport) for a genuinely discontinuous restore. <c>m_affectingSubject</c> — reset to <c>-1</c> at the
-/// tail of every <see cref="WorldBody.Advance"/>, one-tick, like <c>m_heldChannels</c>.</para>
+/// tail of every <see cref="WorldBody.Advance"/>, one-tick, like the held image.</para>
 /// <para><b>Same-frame continuation.</b> A checkpoint carries a body as its sections (<see cref="WorldBodySections"/>),
 /// which hold everything here and below. <see cref="WorldBodyIntegrationResidue"/> is the refused sweep's half of that:
 /// with this record it carries the same-world integration

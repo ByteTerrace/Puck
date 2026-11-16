@@ -797,12 +797,12 @@ public sealed partial class WorldBody {
     /// target now owns the intent. A no-op if the latch is unchanged.</summary>
     /// <param name="engaged">Whether this body's own intent is diverted away from its avatar.</param>
     public void SetEngaged(bool engaged) {
-        if (engaged == m_engaged) {
+        if (engaged == InputImages.Engaged) {
             return;
         }
 
-        m_engaged = engaged;
-        m_engagedIntent = default;
+        InputImagesEdit.Engaged = engaged;
+        InputReadbacksEdit.EngagedIntent = default;
         ClearTransientInput();
     }
     /// <summary>Stages this tick's live-held device channel image — the action overlay a held jump button rides onto a
@@ -811,9 +811,9 @@ public sealed partial class WorldBody {
     /// submission, and the merge admits it only under <see cref="IntentSource.Live"/>.</summary>
     /// <param name="channels">The channel image live-held this tick (composition ordinals only).</param>
     public void SetHeldChannels(in PlayerIntent channels) {
-        m_transferHeldChannels = default;
-        m_hasTransferHeldChannels = false;
-        m_heldChannels = WithoutRelative(intent: channels);
+        InputImagesEdit.TransferHeld = default;
+        InputImagesEdit.HasTransferHeld = false;
+        InputImagesEdit.Held = WithoutRelative(intent: channels);
     }
     /// <summary>Sets the intent-source axis — <c>body.control</c>'s write and the peer sweep's per-entity half. A
     /// transition drops the staged transient input images (the submitted, producer, and held-lane images), so a stale
@@ -822,13 +822,13 @@ public sealed partial class WorldBody {
     /// source is unchanged.</summary>
     /// <param name="source">The intent source to latch.</param>
     public void SetIntentSource(IntentSource source) {
-        if (source == m_source) {
+        if (source == InputImages.Source) {
             return;
         }
 
         // A new source is a new producer of intents for a program that slept under the old one, so the body wakes.
         WakeIfResting();
-        m_source = source;
+        InputImagesEdit.Source = source;
         ClearTransientInput();
     }
     /// <summary>Sets (or clears) the medium free surface this body's medium hold integrates against — sampled fresh
@@ -845,8 +845,8 @@ public sealed partial class WorldBody {
     /// image; same clamps.</summary>
     /// <param name="intent">The producer's fixed-point movement and action image.</param>
     public void StageProducerIntent(in PlayerIntent intent) {
-        m_producerIntent = Clamped(intent: in intent);
-        m_hasProducerIntent = true;
+        InputImagesEdit.Producer = Clamped(intent: in intent);
+        InputImagesEdit.HasProducer = true;
     }
     /// <summary>Clears every intent producer this body owns: drops the whole tape, the staged transient input images,
     /// every in-flight timed press (<c>body.press</c> hold), and any not-yet-materialized argument-less tap staged
@@ -867,7 +867,7 @@ public sealed partial class WorldBody {
         var releasedHeldChannels = 0;
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
-            if (m_heldChannels[ordinal] != FixedQ4816.Zero) {
+            if (InputImages.Held[ordinal] != FixedQ4816.Zero) {
                 releasedHeldChannels++;
             }
         }
@@ -905,8 +905,8 @@ public sealed partial class WorldBody {
     /// clamped to a physical stick's <c>[-1, 1]</c> range.</summary>
     /// <param name="intent">The fixed-point movement and action image to consume when no tape owns this step.</param>
     public void SubmitIntent(in PlayerIntent intent) {
-        m_submittedIntent = Clamped(intent: in intent);
-        m_hasSubmittedIntent = true;
+        InputImagesEdit.Submitted = Clamped(intent: in intent);
+        InputImagesEdit.HasSubmitted = true;
     }
     /// <summary>Consumes this tick's continuity hint for the snapshot: how the pose changed (ordinary integration, a
     /// hard teleport, or a smoothed correction). Resets to <see cref="EntityContinuityKind.Continuous"/>; within a tick
@@ -945,8 +945,8 @@ public sealed partial class WorldBody {
     internal bool RequiresFullRateAutonomy {
         get {
             if (
-                m_hasSubmittedIntent ||
-                m_hasTransferHeldChannels
+                InputImages.HasSubmitted ||
+                InputImages.HasTransferHeld
             ) {
                 return true;
             }
@@ -982,10 +982,10 @@ public sealed partial class WorldBody {
     /// <summary>Gets the last intent after the admitted held overlay composed with the movement tier, with the pointer
     /// ray the movement tier carried, retained for <c>body.channels</c> and the <c>$channel:</c> and <c>$pointer:</c>
     /// rule reads.</summary>
-    public PlayerIntent ChannelReadComposed => m_channelReadComposed;
+    public PlayerIntent ChannelReadComposed => InputReadbacks.ReadComposed;
     /// <summary>Gets the held-channel overlay admitted by the last <see cref="Advance"/>, retained only for
     /// <c>body.channels</c>.</summary>
-    public PlayerIntent ChannelReadHeld => m_channelReadHeld;
+    public PlayerIntent ChannelReadHeld => InputReadbacks.ReadHeld;
     /// <summary>Gets the kit-authored body volumes, or <see langword="null"/> for a volumeless kit.</summary>
     public FixedWorldCollider? Collider => m_collider;
     /// <summary>Gets the last <see cref="Advance"/>'s grounded witness echoed as a count — <c>1</c> when the resolve grounded
@@ -1006,11 +1006,11 @@ public sealed partial class WorldBody {
     /// has, the resolved per-frame intent reaches only the set's other targets (read via <see cref="EngagedIntent"/>)
     /// and the avatar stands idle. <see langword="false"/> while the own-body application is held — whether alone or
     /// beside a mirrored target — and the avatar keeps integrating normally.</summary>
-    public bool Engaged => m_engaged;
+    public bool Engaged => InputImages.Engaged;
     /// <summary>Gets the intent resolved on the most recent <see cref="Advance"/> — captured every tick regardless of
     /// the latch, so an applied body's channels are available for translation/passthrough whether or not the
     /// avatar itself is idled. The <see cref="PlayerIntent"/> default (all channels zero) before the first advance.</summary>
-    public PlayerIntent EngagedIntent => m_engagedIntent;
+    public PlayerIntent EngagedIntent => InputReadbacks.EngagedIntent;
     /// <summary>Gets the authoritative deterministic orientation.</summary>
     public FixedQuaternion FixedOrientation => m_orientation;
     /// <summary>Gets the authoritative deterministic position.</summary>
@@ -1089,13 +1089,13 @@ public sealed partial class WorldBody {
     /// <summary>Gets what fills this entity's intent gaps between tape segments — the per-entity axis (the
     /// <c>body.control</c> verb's read/write). <see cref="IntentSource.Live"/> by default; see
     /// <see cref="IntentSource"/> for the merge rule.</summary>
-    public IntentSource Source => m_source;
+    public IntentSource Source => InputImages.Source;
 
     /// <summary>Gets whether a scripted tape currently owns or awaits motion. Tapes retain full authority cadence even
     /// on an autonomously throttled kit because one batched advance consumes only one segment.</summary>
     internal bool HasMotionTape => (m_tapeCount > 0);
     /// <summary>Gets the most recently staged producer image for population-owned cadence reuse.</summary>
-    internal PlayerIntent StagedProducerIntent => m_producerIntent;
+    internal PlayerIntent StagedProducerIntent => InputImages.Producer;
 
     /// <summary>Gets a value indicating whether the body's origin sits below the medium's free surface, along
     /// its own resolved gravity-up, as of the medium hold's last evaluation — the <c>world.contacts</c> read-back's

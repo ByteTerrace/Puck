@@ -92,8 +92,8 @@ public sealed partial class WorldBody {
 
         if (
             (contactFieldVersion != m_lastContactFieldVersion) ||
-            m_hasSubmittedIntent ||
-            m_hasProducerIntent ||
+            InputImages.HasSubmitted ||
+            InputImages.HasProducer ||
             (m_tapeCount > 0)
         ) {
             WakeUp();

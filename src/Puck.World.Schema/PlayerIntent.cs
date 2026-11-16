@@ -42,10 +42,23 @@ public enum ChannelShape : byte {
     /// <summary>Ordered Unicode scalar events with no held value or numeric/button storage.</summary>
     Text,
 }
-/// <summary>The inline numeric bank; copying it allocates nothing.</summary>
+/// <summary>The inline numeric bank; copying it allocates nothing. It compares lane by lane: the equality the runtime
+/// gives a struct refuses an inline array, so the bank declares its own and everything that holds one rests on it.</summary>
 [InlineArray(ChannelLimits.MaxAxes)]
-public struct ChannelAxes {
+public struct ChannelAxes : IEquatable<ChannelAxes> {
     private long m_element0;
+
+    /// <inheritdoc/>
+    public readonly bool Equals(ChannelAxes other) => ((ReadOnlySpan<long>)this).SequenceEqual(other: other);
+    /// <inheritdoc/>
+    public override readonly bool Equals(object? obj) => ((obj is ChannelAxes other) && Equals(other: other));
+    /// <inheritdoc/>
+    public override readonly int GetHashCode() {
+        var hash = default(HashCode);
+
+        foreach (var lane in ((ReadOnlySpan<long>)this)) { hash.Add(value: lane); }
+        return hash.ToHashCode();
+    }
 }
 /// <summary>Thirty-two numeric lanes and sixty-four packed held buttons. Compiled addresses below
 /// <see cref="ChannelLimits.MaxAxes"/> select numeric lanes; the remaining addresses select buttons.</summary>
@@ -103,34 +116,16 @@ public readonly record struct PlayerIntent(ChannelValues Channels, SourceRay? So
     /// <param name="ordinal">The channel ordinal (<c>0..</c><see cref="ChannelLimits.MaxChannels"/><c>-1</c>).</param>
     public FixedQ4816 this[int ordinal] => Channels[ordinal];
 
-    /// <summary>Determines structural equality with <paramref name="other"/> over the WHOLE vector, comparing per
-    /// ordinal, and the pointer ray. Declared explicitly because the compiler-synthesized record-struct equality would
-    /// otherwise compare <see cref="ChannelValues"/> as a single opaque field (an <c>InlineArray</c> exposes only its
-    /// first backing field to reflection-based equality) — silently comparing only ordinal 0 instead of the
-    /// vector.</summary>
-    public bool Equals(PlayerIntent other) {
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
-            if (Channels.Axes[ordinal] != other.Channels.Axes[ordinal]) {
-                return false;
-            }
-        }
-
-        return ((Channels.Buttons == other.Channels.Buttons) && (SourceRay == other.SourceRay));
-    }
-    /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/> — folded over every ordinal and the
-    /// pointer ray, for the same reason <see cref="Equals(PlayerIntent)"/> is declared explicitly.</summary>
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxAxes); ordinal++) {
-            hash.Add(value: Channels.Axes[ordinal]);
-        }
-
-        hash.Add(value: Channels.Buttons);
-        hash.Add(value: SourceRay);
-
-        return hash.ToHashCode();
-    }
+    /// <summary>Determines structural equality with <paramref name="other"/> over the whole vector (every numeric
+    /// lane, <see cref="ChannelAxes.Equals(ChannelAxes)"/>, and the button bank) and the pointer ray. Declared
+    /// explicitly because the synthesized record-struct equality would compare <see cref="ChannelValues"/> through
+    /// the runtime's struct equality, which refuses the inline array it holds.</summary>
+    public bool Equals(PlayerIntent other) => (
+        Channels.Axes.Equals(other: other.Channels.Axes) && (Channels.Buttons == other.Channels.Buttons) && (SourceRay == other.SourceRay)
+    );
+    /// <summary>Returns a hash consistent with <see cref="Equals(PlayerIntent)"/>: folded over every lane, the button
+    /// bank and the pointer ray.</summary>
+    public override int GetHashCode() => HashCode.Combine(Channels.Axes, Channels.Buttons, SourceRay);
     /// <summary>Folds the whole image into a state hash: every axis lane in ordinal order, the button bank, then
     /// whether a pointer ray is present and, when one is, its origin and direction. Two images fold alike exactly
     /// when <see cref="Equals(PlayerIntent)"/> holds.</summary>

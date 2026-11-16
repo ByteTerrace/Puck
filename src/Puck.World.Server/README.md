@@ -1119,8 +1119,9 @@ fold takes each named body's slot digest and the digest of its whole tail.
 
 A body keeps some sections behind state holders (`Puck.State`'s `Versioned<T>`,
 `VersionedArray<T>` and `VersionedRecord<T>`), which is the only place their
-state is stored: the Action section, the lanes' recency clocks, the staged
-register writes, the staged durable input and the script actors. A write goes
+state is stored: the two Input sections, the Action section, the lanes'
+recency clocks, the staged register writes, the staged durable input and the
+script actors. A write goes
 through the holder's write side, which moves the section's version and notes
 the body's slot in the population's `SlotNotes`. A fold asks each holder for
 its digest (`WorldBody.HeldDigests`) and folds that in the section's place, so

@@ -110,7 +110,7 @@ public sealed partial class WorldBody {
 
         // This is the input-hold runtime replaying its selected historical image, not a new writer publication.
         // Keep restored fold residue until SetHeldChannels supplies a replacement image (neutral included).
-        m_heldChannels = input.HeldChannels;
+        InputImagesEdit.Held = input.HeldChannels;
     }
     internal void TakeDurableStateOutputs(ulong tick, int entityIndex, List<DurableStateOutput> outputs) {
         if (Profile is null) {
@@ -148,14 +148,14 @@ public sealed partial class WorldBody {
 
     public WorldSubmittedInput TakeSubmittedInput() {
         var input = new WorldSubmittedInput(
-            HasIntent: m_hasSubmittedIntent,
-            HeldChannels: m_heldChannels,
-            Intent: m_submittedIntent
+            HasIntent: InputImages.HasSubmitted,
+            HeldChannels: InputImages.Held,
+            Intent: InputImages.Submitted
         );
 
-        m_submittedIntent = default;
-        m_hasSubmittedIntent = false;
-        m_heldChannels = default;
+        InputImagesEdit.Submitted = default;
+        InputImagesEdit.HasSubmitted = false;
+        InputImagesEdit.Held = default;
 
         return input;
     }
@@ -448,13 +448,13 @@ public sealed partial class WorldBody {
     // switch (the hold belongs to whichever target now owns the intent), but NOT for Stop, which clears timed presses
     // itself right after calling this (see Stop's own remarks).
     private void ClearTransientInput() {
-        m_submittedIntent = default;
-        m_hasSubmittedIntent = false;
-        m_producerIntent = default;
-        m_hasProducerIntent = false;
-        m_heldChannels = default;
-        m_transferHeldChannels = default;
-        m_hasTransferHeldChannels = false;
+        InputImagesEdit.Submitted = default;
+        InputImagesEdit.HasSubmitted = false;
+        InputImagesEdit.Producer = default;
+        InputImagesEdit.HasProducer = false;
+        InputImagesEdit.Held = default;
+        InputImagesEdit.TransferHeld = default;
+        InputImagesEdit.HasTransferHeld = false;
     }
     // The stored values are not re-seeded here: they live in the arena's slot lanes, which a kit recompile leaves
     // alone and a re-declared register file carries across by name inside the arena's own relayout. Only the
@@ -718,7 +718,7 @@ public sealed partial class WorldBody {
         var inputEpoch = InputEpoch;
 
         AdvanceActionState(stepTicks: scratch.StepTicks);
-        if (InputEpoch != inputEpoch) { scratch.Intent = m_engagedIntent; return; }
+        if (InputEpoch != inputEpoch) { scratch.Intent = InputReadbacks.EngagedIntent; return; }
 
         for (var ordinal = 0; (ordinal < ActionLaneCount); ordinal++) {
             if (m_laneBindings[ordinal] is not { } binding) {

@@ -3,7 +3,6 @@ using System.Runtime.CompilerServices;
 using Puck.Maths;
 using Puck.Networking;
 using Puck.Physics;
-using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -12,9 +11,6 @@ namespace Puck.World.Server;
 // state for a checkpoint. The crossing's transfer state and the refused sweep's snapshot (WorldBody.Transfer.cs,
 // WorldBody.SweepRefusal.cs) are separate captures with their own purposes.
 public sealed partial class WorldBody {
-    // The remainders of a body with no relative channel: the zeros its section stands for, shared and never written.
-    private static readonly long[] NoRelativeRemainders = new long[ChannelLimits.MaxAxes];
-
     // Scratch a view assembles into, reused from one view to the next and shared with no capture.
     private ulong[]? m_viewLaneRecency;
     private long[]? m_viewRegisters;
@@ -101,30 +97,13 @@ public sealed partial class WorldBody {
             UpNeedsReseat: m_upNeedsReseat
         );
         sections.MotionRecency = new(Clocks: Table(alias: alias, live: m_motionRecency));
-        sections.InputImages = new(
-            Engaged: m_engaged,
-            Epoch: InputEpoch,
-            HasProducer: m_hasProducerIntent,
-            HasSubmitted: m_hasSubmittedIntent,
-            HasTransferHeld: m_hasTransferHeldChannels,
-            Held: m_heldChannels,
-            Mapping: InputMappingId,
-            Producer: m_producerIntent,
-            Source: m_source,
-            Submitted: m_submittedIntent,
-            TransferHeld: m_transferHeldChannels
-        );
-        sections.InputReadbacks = new(
-            EngagedIntent: m_engagedIntent,
-            ReadComposed: m_channelReadComposed,
-            ReadHeld: m_channelReadHeld,
-            ReadScalar: m_channelReadScalar,
-            RelativeRemainders: ((m_relativeRemainders.Length == 0) ? NoRelativeRemainders : Table(alias: alias, live: m_relativeRemainders))
-        );
 
-        // The Action section, the lanes' clocks and the staged register writes live behind holders, which digest them
-        // for a fold; a fold's view leaves them out. The two record sections are their holders' values as they stand.
+        // The two Input sections, the Action section, the lanes' clocks and the staged register writes live behind
+        // holders, which digest them for a fold; a fold's view leaves them out, and the fold reads none of them from
+        // the view. The two bookkeeping record sections are their holders' values as they stand.
         if (held) {
+            Unsafe.SkipInit(value: out sections.InputImages);
+            Unsafe.SkipInit(value: out sections.InputReadbacks);
             Unsafe.SkipInit(value: out sections.Action);
             sections.LaneRecency = default;
             sections.RegisterWrites = default;
@@ -134,6 +113,8 @@ public sealed partial class WorldBody {
 
             m_laneRecency.Read.CopyTo(destination: laneRecency);
             m_registerWrites.Read.CopyTo(destination: registerWrites);
+            sections.InputImages = InputImages;
+            sections.InputReadbacks = InputReadbacks;
             sections.Action = Action;
             sections.LaneRecency = new(Clocks: laneRecency);
             sections.RegisterWrites = new(Rows: registerWrites);
@@ -194,7 +175,17 @@ public sealed partial class WorldBody {
             work: ref work[((int)WorldContinuationSectionKind.DurableInput)],
             writer: writer
         );
+        digests[((int)WorldContinuationSectionKind.InputImages)] = m_inputImages.Digest<ContinuationSectionCodec<BodyInputImagesSection>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.InputImages)],
+            writer: writer
+        );
+        digests[((int)WorldContinuationSectionKind.InputReadbacks)] = m_inputReadbacks.Digest<ContinuationSectionCodec<BodyInputReadbacksSection>, WireWriter>(
+            work: ref work[((int)WorldContinuationSectionKind.InputReadbacks)],
+            writer: writer
+        );
         return (
+            (1U << ((int)WorldContinuationSectionKind.InputImages)) |
+            (1U << ((int)WorldContinuationSectionKind.InputReadbacks)) |
             (1U << ((int)WorldContinuationSectionKind.Action)) |
             (1U << ((int)WorldContinuationSectionKind.LaneRecency)) |
             (1U << ((int)WorldContinuationSectionKind.RegisterWrites)) |
@@ -357,27 +348,13 @@ public sealed partial class WorldBody {
         m_restingHoldTicks = clocks.RigidRestingHoldTicks;
         CopyClamped(destination: m_motionRecency, source: sections.MotionRecency.Clocks.Span);
 
-        ref readonly var images = ref sections.InputImages;
+        InputImagesEdit = sections.InputImages;
 
-        m_submittedIntent = images.Submitted;
-        m_hasSubmittedIntent = images.HasSubmitted;
-        m_heldChannels = images.Held;
-        m_producerIntent = images.Producer;
-        m_hasProducerIntent = images.HasProducer;
-        m_transferHeldChannels = images.TransferHeld;
-        m_hasTransferHeldChannels = images.HasTransferHeld;
-        m_source = images.Source;
-        m_engaged = images.Engaged;
-        InputMappingId = images.Mapping;
-        InputEpoch = images.Epoch;
+        var readbacks = sections.InputReadbacks;
 
-        ref readonly var readbacks = ref sections.InputReadbacks;
-
-        m_engagedIntent = readbacks.EngagedIntent;
-        m_channelReadHeld = readbacks.ReadHeld;
-        m_channelReadComposed = readbacks.ReadComposed;
-        m_channelReadScalar = readbacks.ReadScalar;
-        CopyClamped(destination: m_relativeRemainders, source: readbacks.RelativeRemainders.Span);
+        // A body with no relative channel carries no fractions, whatever the capture held.
+        if (m_channels.RelativeMask == 0) { readbacks.RelativeRemainders = default; }
+        InputReadbacksEdit = readbacks;
 
         ActionEdit = sections.Action;
 
