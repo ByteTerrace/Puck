@@ -1803,6 +1803,15 @@ Owner: an independent reviewer · high · Next: the disclosure plan's steps 5
 and 6; then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high] No principal but the host's console can declare a state row, moderate
+  a hosted world or operate a world it owns: the write door refuses every
+  recipient declaration, and the operator is a principal kind.
+  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is the design (an operator grant, a host audience, contribution scopes with a
+  typed door and a reserved quota) and answers the write door's four review
+  findings. Next: a design review by another family, then its steps D1 to D7 as
+  build briefs; a change to a trust boundary, so each step takes an adversarial
+  review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
   learns that a withheld declaration sits in a write's footprint (never its
@@ -1874,7 +1883,10 @@ and 6; then the researcher brief's priorities
   to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
-  rows if the grant vocabulary allows.
+  rows if the grant vocabulary allows. The `contribution:` subject of
+  [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  is that vocabulary where the rows can sit in a scope, which no rule may
+  read.
 
 ### Test runner and replay
 
@@ -3201,6 +3213,10 @@ screen and see the change hot reload.
   need no compiler.
 - Development only: editing C# runs arbitrary code, so it needs the SDK and an
   explicit grant to the owner's seat; published builds do not hot reload.
+- A seat that edits the world's own document is its operator:
+  [decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  designs that as an `Operate` grant the world gives, in place of the console's
+  principal kind.
 
 ### Media and capture
 
