@@ -491,11 +491,11 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var (u, v) = PlaneAxes(plane: instruction.Shape);
-        var angle = (Point(value: instruction.Data0X) * (Component(local, ((int)instruction.Blend)) - Point(value: instruction.Data0Y)));
+        var angle = (Point(value: instruction.Data0X) * (local[((int)instruction.Blend)] - Point(value: instruction.Data0Y)));
         var sin = FixedInterval.Sin(angle: angle);
         var cos = FixedInterval.Cos(angle: angle);
-        var pu = Component(axis: u, box: local);
-        var pv = Component(axis: v, box: local);
+        var pu = local[u];
+        var pv = local[v];
         var turnedU = ((cos * pu) + (sin * pv));
         var turnedV = ((cos * pv) - (sin * pu));
 
@@ -505,11 +505,6 @@ public sealed partial class SdfFieldEvaluator {
             Z: ((u == 2) ? turnedU : ((v == 2) ? turnedV : local.Z))
         );
     }
-    private static FixedInterval Component(IntervalVector3 box, int axis) => axis switch {
-        0 => box.X,
-        1 => box.Y,
-        _ => box.Z,
-    };
     [DoesNotReturn]
     private static void ThrowNoInclusionRule(SdfOp op) =>
         throw new NotSupportedException(message: $"The bounds interpreter has no inclusion rule for op {op}.");
@@ -1239,6 +1234,20 @@ public sealed partial class SdfFieldEvaluator {
     // A box of points: one interval per axis.
     private readonly record struct IntervalVector3(FixedInterval X, FixedInterval Y, FixedInterval Z) {
         public FixedInterval Length => FixedInterval.Magnitude(x: X, y: Y, z: Z);
+
+        public FixedInterval this[int axis] => axis switch {
+            0 => X,
+            1 => Y,
+            2 => Z,
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(axis)),
+        };
+
+        public IntervalVector3 With(int axis, FixedInterval value) => axis switch {
+            0 => (this with { X = value }),
+            1 => (this with { Y = value }),
+            2 => (this with { Z = value }),
+            _ => throw new ArgumentOutOfRangeException(paramName: nameof(axis)),
+        };
 
         public IntervalVector3 Abs() => new(
             X: FixedInterval.Abs(value: X),

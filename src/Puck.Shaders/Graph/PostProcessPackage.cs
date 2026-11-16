@@ -76,9 +76,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
     private byte[] Bytecode(string stem, bool directX) {
         var path = Path.Combine(
             path1: m_directory,
-            path2: (stem + (directX
-                ? ".dxil"
-                : ".spv"))
+            path2: (stem + ShaderBytecode.FileExtension(hostsOnDirectX: directX))
         );
         var bytecode = File.ReadAllBytes(path: path);
 
@@ -112,8 +110,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         }
 
         var stages = Package.Stages!;
-        var lease = context.Pipelines.Acquire(
-            device: context.Device,
+
+        return await PassPipelineBuild.AcquireAsync(
+            cancellationToken: cancellationToken,
+            context: context,
             key: GpuPassPipelineKey.OfGraphics(
                 description: new GpuGraphicsPipelineDescription(
                     Layout: context.Parameters.Layout.PipelineLayout(
@@ -143,18 +143,9 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
                     directX: context.HostsOnDirectX,
                     stem: stages.Vertex
                 )
-            )
-        );
-
-        try {
-            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        } catch {
-            lease.Release();
-
-            throw;
-        }
-
-        return new Built(lease: lease);
+            ),
+            package: Id
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -165,14 +156,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        if (built is not Built objects) {
-            built?.Dispose();
-
-            throw new ArgumentException(
-                message: $"Package '{Id}' was handed another package's build.",
-                paramName: nameof(built)
-            );
-        }
+        var objects = PassPipelineBuild.Of(
+            built: built,
+            package: Id
+        );
 
         return new Recorder(
             built: objects,
@@ -183,18 +170,10 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
         );
     }
 
-    // One pass's lease on its pipeline and the render pass it draws in, which its recorder owns once created.
-    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
-        public IGpuPipeline Pipeline { get; } = lease.Current!.Graphics!;
-        public IGpuRenderPass RenderPass { get; } = lease.Current!.RenderPass!;
-
-        public void Dispose() =>
-            lease.Release();
-    }
     // Records one post-process pass. Everything a frame slot binds is per slot, since the instance waits only that
     // slot's previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
-        private readonly Built m_built;
+        private readonly PassPipelineBuild m_built;
         // A framebuffer over each image the output can be, created at install, so a recording creates nothing.
         private readonly Dictionary<nint, IGpuFramebuffer> m_framebuffers;
         private readonly IGpuBuffer? m_geometry;
@@ -206,7 +185,7 @@ public sealed class PostProcessPackage : IRenderGraphPackageFactory {
 
         private bool m_disposed;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, string input, string[] samplers) {
+        public Recorder(RenderGraphPackageRecorderContext context, PassPipelineBuild built, RenderGraphPackageGroups groups, string input, string[] samplers) {
             var inFlight = context.InFlightFrames;
 
             m_built = built;

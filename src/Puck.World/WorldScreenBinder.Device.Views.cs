@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.SdfVm;
 using Puck.World.Client;
@@ -43,7 +44,7 @@ public sealed partial class WorldScreenBinder {
         );
     }
     private SdfKernelSet ViewKernels() =>
-        (m_viewKernels ??= m_viewPipelines!.LoadDeployed(bytecodeExtension: SdfWorldRenderBuilder.BytecodeExtension(hostsOnDirectX: m_viewHostsOnDirectX)));
+        (m_viewKernels ??= m_viewPipelines!.LoadDeployed(bytecodeExtension: ShaderBytecode.FileExtension(hostsOnDirectX: m_viewHostsOnDirectX)));
     // The view a session the presentation routed renders: a session of the boot world as a view of the World's own
     // residency, filmed after its seats' views, or one joined to its destination's endpoint scene there, from the one
     // residency that scene's seats and windows share; null while that residency is absent.

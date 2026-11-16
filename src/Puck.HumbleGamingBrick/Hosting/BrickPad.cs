@@ -50,20 +50,21 @@ internal static class BrickPad {
             buttons |= JoypadButtons.Right;
         }
 
-        // Actions and system buttons by position.
-        if (pad.Buttons.HasFlag(flag: MachineButtons.South)) {
+        var actions = MachineActionButtons.From(pad: in pad);
+
+        if (actions.A) {
             buttons |= JoypadButtons.A;
         }
 
-        if (pad.Buttons.HasFlag(flag: MachineButtons.East)) {
+        if (actions.B) {
             buttons |= JoypadButtons.B;
         }
 
-        if (pad.Buttons.HasFlag(flag: MachineButtons.Start)) {
+        if (actions.Start) {
             buttons |= JoypadButtons.Start;
         }
 
-        if (pad.Buttons.HasFlag(flag: MachineButtons.Back)) {
+        if (actions.Select) {
             buttons |= JoypadButtons.Select;
         }
 

@@ -402,6 +402,11 @@ add the row you found.
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
+| Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
+| Build a render-graph package's one cached pass pipeline and recover it in `Create` | `PassPipelineBuild.AcquireAsync` and `Of` | `src/Puck.Shaders/Graph` |
+| Read a presented surface back to CPU pixels in a backend's presenter | `PresentationCapture` | `src/Puck.Shaders` |
+| Size a bake lattice over a box at a cell, or find a sample's point | `SdfMeshLattice` (`Dims`, `Over`, `PointOf`) | `src/Puck.SdfVm` |
+| Pack or unpack an octahedral normal as signed-normalized N-bit fields | `SdfOctahedral.PackSigned`/`UnpackSigned`/`SignedScale` | `src/Puck.SignedDistance/Illumination` |
 | Divide by a fixed divisor, mix or hash packed keys, or compare keys, inside bake or presentation code | not rendering: the `Puck.Maths` primitives, which `maths-usage`'s Choose table lists | [`maths-usage`](../maths-usage/SKILL.md#choose); `puck scan --only duplicates --against <base>` before landing |
 
 ## Which dispatch owns the code

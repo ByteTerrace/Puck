@@ -125,20 +125,11 @@ public sealed class Machine : ISnapshotableMachine {
     public void Restore(MachineSnapshot snapshot) {
         ArgumentNullException.ThrowIfNull(argument: snapshot);
 
-        if (snapshot.Identity != m_identity) {
-            throw new InvalidOperationException(message: "Snapshot identity (format version / model / boot+cartridge ROM) does not match this machine; refusing to restore a mismatched image.");
-        }
-
-        var reader = snapshot.OpenReader();
-
-        RestoreState(reader: reader);
-
-        // A correctly-ordered snapshot leaves the reader exactly at the end; a shortfall or overrun means a SaveState /
-        // LoadState field-order drift that would otherwise be read as silently-wrong state — fault deterministically so a
-        // byte difference stays a genuine divergence, never a misread.
-        if (reader.Position != snapshot.Size) {
-            throw new InvalidOperationException(message: "Snapshot restore consumed a different number of bytes than the snapshot holds; the save/load field order has drifted.");
-        }
+        snapshot.RestoreInto(
+            expected: m_identity,
+            identityFields: "format version / model / boot+cartridge ROM",
+            machine: this
+        );
     }
     /// <summary>Reads the machine's entire mutable state back from a reader positioned at the start of a serialized
     /// image, repositioning the clock and every component and re-deriving model gates — the shared body of both
@@ -206,43 +197,24 @@ public sealed class Machine : ISnapshotableMachine {
     public MachineSnapshot Snapshot() {
         m_componentClock.Settle();
 
-        // The retained writer keeps its backing buffer sized to the last snapshot; Reset rewinds it so repeated
-        // snapshots reuse one allocation instead of newing a writer (and churning its doubling growth) every call. The
-        // snapshot then takes ownership of one exact-size copy of the written bytes — the only per-snapshot allocation.
-        m_stateWriter.Reset();
-
-        // The section table records each component's byte range as it is written — metadata riding alongside the
-        // identical serialized bytes, so a divergence localizer can map a raw byte offset back to the component that
-        // owns it. The master clock is written first (matching Restore's read order), then each snapshotable in turn.
-        var sections = new SnapshotSection[(m_snapshotables.Length + 1)];
-        var offset = 0;
+        // The master clock is written first (matching RestoreState's read order), then each snapshotable in turn.
+        var capture = new SnapshotCapture(
+            sectionCount: (m_snapshotables.Length + 1),
+            writer: m_stateWriter
+        );
 
         m_stateWriter.WriteUInt64(value: Now.RawBits);
         m_stateWriter.WriteUInt64(value: m_runTargetCycles);
-        sections[0] = new SnapshotSection(
-            Name: "clock",
-            Offset: offset,
-            Length: (m_stateWriter.Length - offset)
+        capture.EndSection(name: "clock");
+        capture.Save(
+            components: m_snapshotables,
+            names: m_snapshotableNames
         );
-        offset = m_stateWriter.Length;
-
-        for (var index = 0; (index < m_snapshotables.Length); ++index) {
-            m_snapshotables[index].SaveState(writer: m_stateWriter);
-            sections[(index + 1)] = new SnapshotSection(
-                Name: m_snapshotableNames[index],
-                Offset: offset,
-                Length: (m_stateWriter.Length - offset)
-            );
-            offset = m_stateWriter.Length;
-        }
 
         return new MachineSnapshot(
             identity: m_identity,
             takenAt: Now,
-            image: new SnapshotImage(
-                data: m_stateWriter.ToArray(),
-                sections: sections
-            )
+            image: capture.Finish()
         );
     }
     /// <summary>Executes exactly one instruction on the bus master, which drives the per-dot component ticks itself as

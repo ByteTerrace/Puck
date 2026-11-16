@@ -25,10 +25,10 @@ public static partial class SdfVisibility {
     /// <summary>The edge, in pixels, of the square workgroup the surface and views passes dispatch over the render
     /// extent.</summary>
     public const uint GroupEdgePixels = 8;
-    /// <summary>The scale of the record's normal word: two signed-normalized 16-bit octahedral coordinates
-    /// (<c>SdfOctahedral</c>, the kernels' <c>sdfOctEncode</c>), X in bits 0 to 15 and Y in bits 16 to 31, each its
-    /// coordinate times this, rounded.</summary>
-    public const float NormalScale = 32767f;
+    /// <summary>The width of each coordinate of the record's normal word: two signed-normalized octahedral coordinates
+    /// (<c>SdfOctahedral.PackSigned</c>, the kernels' <c>sdfOctEncode</c>), X in the low bits and Y above it, each its
+    /// coordinate times <c>SdfOctahedral.SignedScale</c>, rounded.</summary>
+    public const int NormalBits = 16;
     /// <summary>The normal word of a record with no normal: the reserved coordinate pair (-32768, -32768), which no
     /// encoded direction produces.</summary>
     public const uint ZeroNormal = 0x8000_8000u;

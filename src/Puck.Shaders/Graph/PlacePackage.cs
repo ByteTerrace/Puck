@@ -101,12 +101,12 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
 
         var bytecode = File.ReadAllBytes(path: Path.Combine(
             path1: m_directory,
-            path2: (KernelStem + (context.HostsOnDirectX
-                ? ".dxil"
-                : ".spv"))
+            path2: (KernelStem + ShaderBytecode.FileExtension(hostsOnDirectX: context.HostsOnDirectX))
         ));
-        var lease = context.Pipelines.Acquire(
-            device: context.Device,
+
+        return await PassPipelineBuild.AcquireAsync(
+            cancellationToken: cancellationToken,
+            context: context,
             key: GpuPassPipelineKey.OfCompute(
                 bytecode: bytecode,
                 description: new GpuComputePipelineDescription(
@@ -117,18 +117,9 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
                     Name: RenderGraphPackageCatalog.Place,
                     PushConstantBinding: null
                 )
-            )
-        );
-
-        try {
-            _ = await lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-        } catch {
-            lease.Release();
-
-            throw;
-        }
-
-        return new Built(lease: lease);
+            ),
+            package: RenderGraphPackageCatalog.Place
+        ).ConfigureAwait(continueOnCapturedContext: false);
     }
     /// <inheritdoc/>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> or <paramref name="groups"/> is
@@ -139,14 +130,10 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         ArgumentNullException.ThrowIfNull(argument: context);
         ArgumentNullException.ThrowIfNull(argument: groups);
 
-        if (built is not Built objects) {
-            built?.Dispose();
-
-            throw new ArgumentException(
-                message: $"Package '{RenderGraphPackageCatalog.Place}' was handed another package's build.",
-                paramName: nameof(built)
-            );
-        }
+        var objects = PassPipelineBuild.Of(
+            built: built,
+            package: RenderGraphPackageCatalog.Place
+        );
 
         return new Recorder(
             built: objects,
@@ -156,18 +143,11 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         );
     }
 
-    // One pass's lease on its pipeline, which its recorder owns once created.
-    private sealed class Built(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease) : IDisposable {
-        public IGpuComputePipeline Pipeline { get; } = lease.Current!.Compute!;
-
-        public void Dispose() =>
-            lease.Release();
-    }
     // Records one place pass. Everything a frame slot binds is per slot, since the instance waits only that slot's
     // previous submission before recording into it.
     private sealed class Recorder : IRenderGraphPackageRecorder {
         private readonly uint m_base;
-        private readonly Built m_built;
+        private readonly PassPipelineBuild m_built;
         private readonly uint m_destination;
         private readonly string m_instance;
         private readonly string m_pass;
@@ -191,7 +171,7 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
         private bool m_disposed;
         private nint m_sampler;
 
-        public Recorder(RenderGraphPackageRecorderContext context, Built built, RenderGraphPackageGroups groups, IRenderGraphPlacements? placements) {
+        public Recorder(RenderGraphPackageRecorderContext context, PassPipelineBuild built, RenderGraphPackageGroups groups, IRenderGraphPlacements? placements) {
             var parameters = context.Parameters;
 
             m_built = built;

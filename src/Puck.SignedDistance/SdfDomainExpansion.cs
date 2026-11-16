@@ -205,8 +205,8 @@ public static class SdfDomainExpansion {
                     // toward its second; a subject on the axis leaves the first axis as the bisector.
                     var (planeU, _) = SdfDomainOp.Polar.PlaneOf(axis: polar.Axis);
                     var relative = (FixedVector3.FromVector3(value: polar.Subject) - polarOrigin);
-                    var alongU = Component(vector: relative, index: planeU);
-                    var alongV = Component(vector: relative, index: v);
+                    var alongU = relative[planeU];
+                    var alongV = relative[v];
                     var mirrorNormal = (((alongU == FixedQ4816.Zero) && (alongV == FixedQ4816.Zero))
                         ? UnitAxis(index: v)
                         : ((UnitAxis(index: planeU) * (-alongV)) + (UnitAxis(index: v) * alongU)).Normalize());
@@ -295,11 +295,6 @@ public static class SdfDomainExpansion {
 
         return true;
     }
-    private static FixedQ4816 Component(FixedVector3 vector, int index) => index switch {
-        0 => vector.X,
-        1 => vector.Y,
-        _ => vector.Z,
-    };
     private static FixedVector3 UnitAxis(int index) {
         return index switch {
             0 => new FixedVector3(

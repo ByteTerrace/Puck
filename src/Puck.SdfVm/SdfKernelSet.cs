@@ -1,4 +1,5 @@
 using Puck.Abstractions.Counting;
+using Puck.Abstractions.Gpu;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -211,7 +212,7 @@ public sealed class SdfKernelSet {
             );
 
             // A Windows development build of one project ships DXIL alone (build/Shaders.targets).
-            if ((bytecodeExtension == ".spv") && !File.Exists(path: path)) {
+            if ((bytecodeExtension == ShaderBytecode.FileExtension(hostsOnDirectX: false)) && !File.Exists(path: path)) {
                 throw new FileNotFoundException(
                     fileName: path,
                     message: $"The Vulkan kernel '{path}' is missing: a Windows development build ships Direct3D 12 kernels alone. Build with -p:PuckShaderSpirvEnabled=true (or build the solution) to run on Vulkan."
