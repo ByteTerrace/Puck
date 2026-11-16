@@ -438,11 +438,11 @@ judges or live trees unnoticed:
 | `puck evals compare <a.json> <b.json>` | Compares two results case by case on the comparable score (below). |
 | `puck evals graders <result.json>` | Lists every grader below ceiling with its rubric, votes, evidence and trace: the hand-labelling work list. |
 
-The lead runs suites, as with any measurement: the session-launch hook
-refuses `puck evals run` from a lane, as it refuses `claude`, and passes its
-`--dry-run` and help forms. A lane writes cases and can run `compare`,
-`graders` and `run --dry-run`. `puck evals <verb> --help` holds each verb's
-contract.
+A lane runs the suites its own skill changes need (the owner's ruling): the
+session-launch hook passes `puck evals run` from a lane, whose `claude plugin
+eval` child the verb starts, while it still refuses a lane's direct `claude`
+launch. A lane that edits a skill lands its eval results in the commit, as
+below. `puck evals <verb> --help` holds each verb's contract.
 
 **A skill edit is unproven until its evals run.** Anthropic's guidance is to
 write evaluations before the teaching
