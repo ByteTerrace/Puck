@@ -60,8 +60,23 @@ public sealed partial class RenderGraphCadenceLawTests {
 
         var aboutAbandoned = factory.Events.Where(entry => entry.EndsWith($" {abandoned}", StringComparison.Ordinal)).ToArray();
 
+        // A later completion of the slot comes only after the node settled every other slot, and delivers nothing the
+        // abandoned submission carried (RenderGraphSlotResults below).
         Assert.Equal($"abandoned {abandoned}", aboutAbandoned[0]);
-        Assert.DoesNotContain($"completed {abandoned}", aboutAbandoned.TakeWhile(static entry => !entry.StartsWith("record ", StringComparison.Ordinal)));
+    }
+    [Fact]
+    public void AnAbandonedSlotsResultIsDroppedAndALaterCompletionDeliversNothing() {
+        var completed = new List<int>();
+        var dropped = new List<int>();
+        var results = new RenderGraphSlotResults<int>(slots: 2, complete: completed.Add, discard: dropped.Add);
+
+        results.Record(slot: 1, result: 7);
+        results.Submitted(slot: 1);
+        results.Abandoned(slot: 1);
+        results.Completed(slot: 1);
+
+        Assert.Empty(completed);
+        Assert.Equal([7], dropped);
     }
 
     private sealed class ArmingFactory : IRenderGraphPackageFactory {
