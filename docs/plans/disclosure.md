@@ -135,6 +135,8 @@ scheduling a step:
   fingerprints share the placement state-dependency collector. Whole-document validation and
   rule compilation judge declarations alone (`RuleCompiler.RequireEnclosedAudience` reads row
   policies, never seeded cells); the arena judges current cell policies at the firing.
+  This is the implemented collector's intended coverage, not a completeness
+  guarantee: decision 3a's W1–W7 reopen it and replace the mechanism.
 - A write's outcome reaches its submitter typed, not only as an echo:
   `WorldTick.CompletePendingOp` builds a `WorldMutationOutcome` from the real
   verdict with its decision, detail and the live document version
@@ -231,6 +233,9 @@ may run. The five game fixtures draw over the same verbs against placements,
 rules, search and sessions.
 Verbs a headless World does not register (the renderer, audio and capture
 levers) are judged from their source.
+This records the earlier audit, not proof of closure: decision 3a's W6–W8
+reopen the console writes, HUD templates and parked-body handler. Its D0a
+adds their missing argument and principal combinations to this same harness.
 
 | Verbs | Audience | Verdict | Fix |
 |---|---|---|---|
@@ -389,6 +394,10 @@ read door. A principal that is a recipient for reads and the authority for
 writes is a contradiction a reviewer finds every time. Local trust is a property
 of the shared screen, not of the seat principal: the same seat principal
 arrives over MCP, a schedule row or a session, and those are not the room.
+Which principals are the authority is decided by kind here;
+[decision 3a](#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+designs it as a grant the world gives, so a couch player's own world or a
+hosted world's remote owner can be its operator.
 
 ### 3. A writer that cannot read a row whole cannot write it
 
@@ -469,7 +478,7 @@ forwarded submission door, replacing `ReadsThroughDisclosure`,
 `TryAdmitGuardObservation`'s Observe-only arm and `WriteStateCell`'s
 `CanReadCell`.
 
-**The write footprint closes the class.** Two rounds of point fixes each
+**The first write footprint did not close the class.** Two rounds of point fixes each
 added a row to a forward list the admission checked, and each review found
 more of one shape: after admission the mutation flows through composition,
 whole-document validation, rule recompilation and the arena's commit checks,
@@ -526,13 +535,12 @@ the table does not resolve is answered exactly as a resolved key the row does
 not hold, so a read answers absent, a write refuses as absent, and nothing
 mints a key on a recipient's behalf.
 
-Enforcement is the one predicate, `WorldRecipientView.Admits(mutation)`, which
-every recipient door already calls; the class was closed by widening what it
-admits from a forward list to the declared footprint and by taking the one
-member-reading compile check out of validation. What enforcement does not cover,
-stated plainly: a future validator or compile check that reads current members
-of a row outside the footprint is a defect of this class, and nothing refuses it
-at build time. Two checks make it visible rather than silent: `puck disclosure`
+The current predicate, `WorldRecipientView.Admits(mutation)`, does not enforce
+that invariant structurally. The later review found existing reads outside its
+list, not merely a risk from future validators. The declared-footprint account
+above describes the attempted fix, superseded by
+[the structural write footprint](#the-structural-write-footprint) below. The
+current checks cover their examples, not completeness: `puck disclosure`
 marks a run INVALID when a variant's steps leave the authority's live document
 failing `WorldDefinitionValidator.TryValidateLocally` (the precondition for the
 fourth instance, which no probe write needs to hit), and `RecipientOracleLawTests`
@@ -600,8 +608,10 @@ recipient the document edits that need whole-document validation, which the
 engine cannot localise today. (d) One fixed outcome for every post-admission
 refusal: it narrows the text channel to one bit but cannot close the first
 instance, where the bit itself is the oracle, and it would take a builder's
-reasons away; the footprint makes it unnecessary. The ruling is (c) built from
-(a)'s declared closure, enforced at the existing predicate.
+reasons away. That earlier choice of (c) built from (a) is superseded by the
+restricted transaction and derived validation dependencies in decision 3a.
+In particular, a restricted transaction refuses an unavailable read; it never
+substitutes the projection's missing cells for the authority's cells as (b) did.
 
 **What the footprint costs.** Nothing per recipient per tick: `DependentRows`
 is computed once per catalog beside `ContainingZones`, and an admission reads
@@ -637,6 +647,618 @@ which is why it survives every consumer of outcomes (echo, typed completion,
 addon reply, replay) without a split between what the recipient is told and
 what happened. The authored inbox gives the game what blind writes promised,
 on rows the engine can reason about.
+
+### 3a. A declaration is judged inside a scope its declarer reads whole
+
+This decision is a design: nothing in it is built, and a design review by
+another model family reads it before any step below is briefed. It answers the
+question decision 3 closed without settling. The write door refuses every
+recipient's declaration of a new state row (`WorldRecipientView.Admits` refuses
+a name no row holds, and `WorldRecipientView.AdmitsDeclaration` says "a
+recipient replaces a row it reads whole and adds none"), because a door that
+admits a free name and refuses a name a withheld row holds tells the submitter
+whether a hidden row exists. The refusal costs a capability: a principal who is
+not the operator cannot add state to a world. Players and guest authors
+extending a shared world, an addon keeping rows of its own, a couch player
+building in their own world and
+[in-world editing](open-items.md#in-world-editing) all need it in a form that
+discloses nothing. A review of the write door raised four findings and one
+question about who the operator is; they are answered here because they share
+its cause. The subsequent eight-finding review is answered under
+[the structural write footprint](#the-structural-write-footprint). That design
+replaces the enumerated admission footprint for existing writes too; a
+contribution scope is one bounded use of the same transaction, not a second
+write implementation.
+
+**What must be decided.** How a principal who is not the operator declares
+state rows so that no verdict, refusal text, outcome code, version, tick or
+byte count it is shown differs between a world that holds a row withheld from
+it and the same world without that row; how the rows it declares are disclosed
+to others, bounded, persisted and carried across an author's edit; and who the
+operator is.
+
+**What exists**, read from the code:
+
+- **A declaration is a full install.** A row that changes the catalog is
+  `WorldInstallKind.Full` (`WorldDocument.InstallKindOf`): the whole document is
+  validated and every rule compiled (`WorldDocument.TryValidateMutationCandidate`
+  calls `WorldDefinitionValidator.TryValidateLocally`), and the arena is
+  installed whole (`WorldServer.SyncArena`: "Any other document is installed
+  whole"). Every one of those stages reads the whole document, and its refusal
+  reaches the submitter through the ordinary completion.
+- **The section's ceilings are shared.** `StateCapacity.MaxRows`,
+  `StateCapacity.MaxCellKeys` (the one key table, `StateArena.Keys`) and
+  `ArenaCapacity.MaxBytes` are counted over every row, hidden ones included. A
+  recipient's view carries no reservation for a row that can withhold
+  (`WorldStateDisclosure.WithoutStorageMetadata`), so the room left under a
+  ceiling is not something any recipient is delivered.
+- **The replica tier is delivered every row's declaration.**
+  `WorldStateDisclosure.DiscloseRow` keeps a withheld row and removes its cells.
+  Below `WorldDisclosureTier.Replica` a recipient is delivered no declaration,
+  and the write door is the same for every tier (`WorldServer.WriteView`), so
+  the door may not answer from declarations either.
+- **A namespace no author can spell exists, at compose time.** An import's
+  alias composes a fragment as `<alias>$<name>` (`WorldModuleNamespace`,
+  `GeneratedName.Qualify`), every name site the schema holds is listed once
+  (`WorldNameRegistry`), and a fragment's names are private unless exported
+  (`WorldModuleExports`). `GeneratedName.Joiner` appears in no name an author
+  writes.
+- **A host-authored slot a guest fills exists, for placements.** A placement's
+  `WorldPlacementContribution` is a slot whose frame and lifecycle the host
+  authors and whose creation a partner supplies through ordinary mutations; the
+  server stamps `WorldPlacementContribution.Contributor` from the acting
+  principal and refuses a submission that names it.
+- **A grant that confers a row not yet declared exists.**
+  `GrantSubjectKind.Creation` and `GrantSubjectKind.Placement` admit one row
+  apiece, as an alternative to the section hold, and are shape-checked rather
+  than bound-checked "because authoring a row that does not exist yet is what
+  the grant confers". `GrantSubjectKind.State` names one existing row.
+- **A document its owner declares rows in exists.** A character is an owned
+  world (`WorldOwnedWorlds`); `ChatCommandModule` declares rows on the acting
+  player's own identity document, validated alone, under generated names
+  (`WorldIdentityRows`).
+- **The operator is a principal kind.** `Principal.IsAuthority` is "console or
+  world", `CommandAudienceExtensions.Admits` gives `CommandAudience.Operator` to
+  `PrincipalKind.Console` alone, and the view's authority bypass reads the same
+  kind. On a silo the console is the machine's standard input.
+- **Saved rows reach a changed source by declaration.** A durable image's rows
+  load through `StateArena.TryValidateLoad`, which drops a row the current
+  catalog does not declare
+  ([the restore ladder](hub-and-saves.md#the-restore-ladder)); a row declared at
+  run time is in no source, so it would not survive the author's next edit.
+
+**The channels.** Each is a way a declaration's outcome reads something its
+declarer cannot, or a way a declared row harms the world that took it. An
+option is weighed by which it closes by construction.
+
+| | Channel | Where it reads outside the declarer's view |
+|---|---|---|
+| R1 | Name collision | The catalog refuses a duplicate row, pool or family name, so a door that admits free names answers "free" or "taken" for a hidden one |
+| R2 | A name the declaration spells | A token domain, a live audience, a derived board's rows, a phase protocol, a vector space, an enum or a generator resolves or fails against declarations the declarer may not hold |
+| R3 | Shared ceilings | Rows, keys, arena bytes and vector bytes left are a function of every row's reservation |
+| R4 | Whole-document checks | Validation and rule compilation run over everything on a full install, so any check a new row can fail or move (a price against `RuleCapacity.MaxWorkUnitsPerTick`, a relation, a binding) answers from the whole document |
+| R5 | Entanglement | A guest row keyed over an author's row joins that row's write footprint (`StateCatalog.DependentRows`): the author's rule can no longer remove a key the guest row holds, and another recipient's write to the author's row is refused while the guest row is withheld from it |
+| R6 | Capture and squatting | A guest takes a name the author's next edit declares, and the image's saved cells then load into the author's new row (an inference from the ladder's rule that a declared row keeps its saved cells); a guest row with `WorldStateRow.GatesDrive` can gate a body's input |
+| R7 | Work | Each declaration costs a full install of the host world, whoever submits it |
+| R8 | Persistence | A declared row is dropped at the first source change, or kept by a path that reads the old document |
+
+**Options.**
+
+| Option | Evidence | Closes | Leaves open, or fails at |
+|---|---|---|---|
+| a. Flat names, admitted when free | Simple; what a seat's seeded `Edit all` would give | Nothing | Every channel; R1 is the leak the write door refuses declarations to close |
+| b. Flat names, admitted only for a principal delivered declarations (a replica reader learns nothing from a collision) | Cheapest way back; collisions are a function of what the replica tier holds | R1 and R2 at the replica tier | The door reads the delivery ceiling again, which the write door was just made not to do; R3 leaks at every tier (reservations and the key table are never delivered); R4 to R8 untouched |
+| c. Server-minted row identities (the guest never names a row) | Closes naming outright | R1, R6's squatting | A shared counter counts other principals' declarations, so it must be per principal, which is a namespace with unreadable names; an addon cannot find its rows after a restart without a name map; R2 to R5, R7, R8 untouched |
+| d. A contribution scope: an author-declared namespace in the host's state section, closed under its own names, with a reserved quota, every row carrying the scope's own read policy | Built from `GeneratedName.Qualify`, `WorldNameRegistry` and the contribution slot's shape; the validator, not the door, keeps withheld rows out of it | R1, R2, R5, R6 by closure; R3 by reservation; R4 and R7 once a scope row installs without a full install; R8 through the image ladder | Programs: a scope holds rows, never rules (decision 3 stands). Scale: scopes share one catalog and one arena, so they are few. A scope's rows are declared to every replica reader, as every row is |
+| e. An overlay document per principal, composed into the host under an alias | Reuses the import machinery whole; the overlay file is the persistence | As d, with R8 by the file | Composition runs at load, so a live edit is a recomposition and a full install of the host (R7 stays); every principal's overlay enters the host's catalog, so it does not scale past d; a second persistence beside the image |
+| f. A world the declarer operates: the guest's state lives in a document it owns, mounted in the shared world through a portal, a screen or the cross-document write-back door | [The world model](../architecture/worlds.md#the-idea-in-plain-terms): "A character is a world"; [the hub plan](hub-and-saves.md#durable-images) gives a `user` or `group` scoped place an image of its own; the only form in which a guest authors rules | Every channel, since the declaration is validated against the guest's own document | Nothing of the guest's is in the host's arena: the host's rules and bindings reach it only across a seam (a claim, a write-back grant, a face) |
+| g. An operator grant: the world names who operates it | The reviewed finding that a hosted world's owner and a couch seat in its own world are refused as strangers | Every channel for its holder, who reads the document whole, so nothing is withheld from it | It is not a way for a stranger to declare; it decides who is not one |
+
+**Favoured: g, d and f together, as one rule.** A declaration is validated
+against a universe its declarer reads whole, and there are exactly three:
+
+1. **The document, for the world's operator** (g). Nothing is withheld from the
+   operator, so its declarations stay as they are. What changes is who it is.
+2. **A contribution scope, for a recipient the scope's policy admits** (d). The
+   in-world form: rows that live in the host's tick, are delivered by its sinks
+   and are bound by its HUD and placements.
+3. **A world of its own, for everything else** (f). A house, a guild hall or a
+   table with house rules has a program and an owner, and at an MMO's
+   population no one zone's catalog holds every visitor's rows; the model
+   already makes each of them a world, and nothing in this design is needed to
+   declare a row in a world one operates.
+
+Options a, b, c and e are rejected for the reasons in the table. **The
+strongest case against** is that d adds a mechanism where f alone would do:
+every channel is closed by construction in a world the guest owns, and the
+contribution scope must close each one by rule. The answer is that f cannot
+put a row in the host's own arena, which is what an addon's rows, a co-built
+exhibit's counters and a visitor's note on a shared board are, and that
+without d the capability the fix removed stays removed. d is kept small so
+that its closure is checkable: rows only, plain storage only, one policy per
+scope.
+
+**The rulings it rests on** ([AGENTS.md](../../AGENTS.md)): "Authors rule" (who
+may add to a world is the author's declaration, with a neutral default of
+nobody); "Unreached is not unwanted" (the capability returns rather than being
+deleted); "The proper fix is always preferred" (the scope closes the class
+instead of gating the old door by tier); the purpose statement's weighing rule
+(at the scale of a world per zone, a per-player row belongs to the player's
+world); and the generic-engine ruling (a scope is a mechanism, and housing or a
+guestbook is `.puck` data that uses it).
+
+**The scope invariant.** A recipient's declaration is decided by a function of the
+submission and one contribution scope: the scope's own declaration and the rows
+in it. The recipient reads that scope whole or the submission is refused before
+anything in that scope is looked at, with the one text. **The one door:** the
+restricted preparation transaction specified below, bounded to the scope;
+its schema validation receives scope-local handles, never a raw
+`WorldDefinition` or `StateArena`. The existing prepare/install boundary
+installs only its successful prepared result. **Where it
+stops:** the scope's rows are declarations, which a replica reader is
+delivered, so a scope hides its cells from the readers its policy excludes and
+never the fact that a row was declared. A scope write grant explicitly permits
+answers about that entire scope even below the replica tier. Outside reads and
+refusable install work are excluded by the transaction interfaces below;
+host resource failure and deliberately dishonest trusted engine code remain
+outside the guarantee.
+
+**Puck builds:**
+
+- **The operator is whoever holds `Operate` over the world.** A sixth
+  `WorldCapability`, over the subject `all` and no other, with no addon ABI
+  bit. The host's console
+  holds it structurally, as it holds everything today, and the world's own
+  program is structural as before. A seat holds it when the document's `grants`
+  section or an operator's `world.grant` says so: a couch player's own world
+  authors `seat1 operate all`. A remote owner holds it when the `admission` row
+  that matches its verified identity carries it as a grant template
+  (`WorldAdmissionGrant`); the validator refuses that template on a row whose
+  domain is `WorldAdmissionEntry.AnyAuthority` or whose tier is below
+  `WorldDisclosureTier.Replica`, since the holder is handed the authority's
+  document. A group may hold it; an addon may not, and the grant door refuses
+  one by name. Only an operator grants or revokes it (`WorldGrants`'
+  administration rule). One server predicate replaces every read of
+  `Principal.IsAuthority`: the view's bypass, the write door, the rebuild, undo
+  and checkpoint doors, and the audience check, so a grant or a revocation takes
+  effect at the next check, as an Observe grant does. A recipient
+  ([decision 2](#2-a-recipient-is-anyone-the-authority-is-not)) becomes every
+  principal that does not hold it.
+- **The host's verbs are a separate audience.** `CommandAudience.Operator`
+  admits whoever operates the addressed world. A new `Host` audience admits
+  `PrincipalKind.Console` alone, for a verb that touches the machine: a host
+  path, another connection's endpoint or verified identity, a wall-clock or
+  resource reading, a process or an instance's lifetime. Each verb the audit
+  table above lists as an operator's is assigned one of the two by that test.
+  `world.peers` is the operator's and prints arrivals, the population and the
+  door's refusal counts; its endpoint and verified-identity fields print for the
+  host alone, as a recipient's `world.status` omits the journal. The silo's
+  remote door (`SiloControlSessionHost`) admits its explicit list as now, and
+  every operator verb for a session whose principal holds `Operate`; it never
+  admits a host verb. [Decision 6](#6-the-compiler-holds-the-line)'s operator
+  context is minted for the operator predicate, not for the console kind.
+- **A contribution scope is declared in the state section.** A `contributions`
+  list, each entry a name, a `visibility` (the existing `StateVisibility`, absent
+  for public) and a quota. Membership is by name: every row named
+  `<scope>$<leaf>` is the scope's, whether a guest declared it or the author
+  wrote it, and the validator holds each to the rules below, so an author
+  cannot place a withheld row inside one. A scope name is refused when it is a
+  row, pool, family or set name.
+- **A scope's rows are plain storage with the scope's policy.** A row in a scope
+  carries the members an allowlist names and no other, read from the generated
+  model shape as `WorldPlacementDeal.UndisclosingMembers` is: its name, kind
+  (`Int`, `Fixed`, `Bool` or `Text`), value or cells, a required capacity for a
+  keyed row, bounds and overflow, `evicts`, and a token domain that names a row
+  of the same scope. Its `visibility` is the scope's, stamped by the server as a
+  contribution slot's contributor is, and a submission that names one is
+  refused. No cell policy, live audience of its own, value-over-time trait, draw,
+  lattice, board, phase protocol, vector or drive gate: a member the row model
+  gains later is refused until someone decides it reads nothing outside. Because
+  the stamp is the row's own policy, `WorldStateDisclosure`'s one question
+  answers for it unchanged, and no second predicate exists.
+- **A scope is closed in both directions.** Every name site
+  `WorldNameRegistry` lists in a submitted row names a row of the same scope or
+  the submission is refused, as a function of the submission alone. No rule,
+  interaction, search job, set, family or zone outside the scope may name a row
+  inside it (a validator refusal the author sees), so no program's price or
+  footprint moves when a guest declares, reshapes or removes. Outside consumers
+  may use a scope export only through an author-declared, total binding: the
+  binding supplies its missing/incompatible-value behavior and cannot constrain
+  the scope's next edit. A strict binding or relation across the boundary is
+  refused when the operator installs it. Otherwise a hidden outside consumer
+  could veto a scope removal, defeating R4 and R5. The validation read trace
+  below proves this closure; `CollectReferencedRows` is not its oracle.
+  A rule may consume a total scope export, priced against the scope's reserved
+  quota, through a fixed interface that returns absence for missing or
+  incompatible rows. It may not bind directly to a guest row's changing
+  declaration. This is how an authority's collecting rule serves a lower-tier
+  inbox without gaining a veto over its sender's writes; compilation reads the
+  export contract, not current scope members. D4 builds that generic export
+  seam and D6 wires the authored collecting program.
+- **The quota is reserved when the author's document is validated.** A scope
+  states its rows, its arena bytes as `ArenaLayout` measures a row at its
+  declared capacity, and its distinct key names. The validator counts every
+  scope's whole quota against the section's ceilings beside the authored rows,
+  so a declaration inside its quota cannot meet a shared ceiling, and the door
+  compares a submission with the scope's own remainder. A keyed row is laid out
+  at its declared capacity, so a later write into it never grows the arena.
+- **The door's order.** `WorldRecipientView.Admits` answers a name no row holds
+  by its head: when the head names a scope whose policy admits the recipient,
+  the name is admitted to grants; otherwise it is refused exactly as now,
+  whether the head names no scope, names one the recipient may not read, or the
+  name has no head at all. Grants come next: a new subject,
+  `contribution:<scope>`, satisfies the state section's Mutate gate as an
+  alternative to the section hold (the precedent is `GrantSubjectKind.Creation`)
+  and its Edit gate for every row of the scope, with the kind masks and the
+  untrusted dispatch budget (`WorldMutationBudgetMeter`) they carry today. The
+  typed check then decides shape, closure, quota and collision, and may answer
+  precisely ("`plaza` holds 8 of its 8 rows"), since everything it reads is in
+  the scope. A recipient's reshape or removal of a scope row takes the same
+  door.
+- **The install is proportional to the declaration.** A scope row installs
+  without whole-document validation, without compiling a rule and without
+  rebuilding the arena: the catalog gains a successor that keeps every existing
+  ordinal and the identity `StateHandle` binds to, and the arena takes the row
+  through the path that already replaces its layout in place for a
+  reservation. Nothing after the typed check can refuse. This is an engine
+  limit the feature exposes, fixed at its cause: an operator's own added row
+  costs a full install today too.
+- **Disclosure to others.** A scope's rows are delivered like any row: the
+  declaration to every replica reader, the cells to the readers the scope's
+  policy admits, through the view and the cursor with nothing added. A reader
+  the policy excludes is shown a row with no cells whose image never moves. A
+  row whose existence must be private belongs in a world its declarer operates.
+- **Persistence and migration.** A scope's rows are state the image carries:
+  the durable rows already hold each row's declaration. The restore ladder's
+  durable-row tier offers each saved row whose name lies in a scope the current
+  source declares to the same typed check before it loads the row's cells, in
+  saved order, against the current quota and allowlist; a row the check refuses,
+  or whose scope the source no longer declares, is dropped and named, as an
+  undeclared row is today. An author's edit therefore keeps what guests built
+  where it still fits, and an author who shrinks a quota or removes a scope has
+  chosen what is dropped. `world.save` writes scope rows as it writes every row.
+  R6's squatting has no path: a guest's name always has a head no authored row
+  outside a scope can carry.
+- **One refusal that does not mislead.** The recipient's text becomes
+  `'<name>' is not writable by <principal>` and the code
+  `world.mutation.unwritable`, the same for a withheld row, an absent one, a
+  name outside every scope and a program section. The precise cause is printed
+  where it leaks nothing: to the operator's log for each refused recipient
+  write, by `puck lint` and `puck compile --validate` over a document its
+  author holds, and at an addon's mount, when its manifest requests a row the
+  document does not declare.
+- **A whole-document guard is a read of the document the proposer holds.** A
+  batch's expected-definition guard, with a null, empty or nonempty state-row
+  selection, is answered through the proposer's read
+  door, not the policy-tier write view: a proposer the read door hands a replica
+  document is compared against that document's fingerprint
+  (`WorldDefinitionFingerprint.Compute`), and one it hands no document is refused
+  by shape. A selection limits only state rows; it does not turn this into a
+  named-input guard. The refusal then depends on the
+  proposer's own tier and Observe grant, which are equal in both worlds of a
+  pair, and never on what the document declares.
+- **An addon binds by name.** `WorldAddonRuntime`'s cell bind records names and
+  answers from the payload alone; the write answers per cell. A hidden or absent
+  subject answers `AddonVerdict.NoSuchSubject` on a read and on a write, and
+  `AddonVerdict.NotDisclosed` is deleted.
+
+**The fresh review's findings, one by one.** Each was checked against the
+source; none was reproduced by running.
+
+- **F1, nobody can moderate a hosted world remotely.** Confirmed:
+  `SiloControlSessionHost`'s remote list omits `world.peers`, and
+  `WorldNetworkCommandModule` registers it for `CommandAudience.Operator`, which
+  admits the console kind alone. Answered by the operator grant and the host
+  audience, step D1. A verb that disconnects a peer does not exist; D1 adds it
+  as an operator verb over the server's existing disconnect.
+- **F2, a whole-document guard is refused for every recipient.** Confirmed in
+  `WorldRecipientView.AdmitsDefinition`. The premise the finding left unconfirmed
+  is half true: the policy-tier view's definition omits every withheld cell and
+  the storage metadata of every row that can withhold, and keeps every row's
+  declaration and every other section. That is what a replica reader is
+  delivered, and the harness already compares that delivery byte for byte across
+  every pair, so the fingerprint, a function of those bytes, is equal across
+  them (an inference; D3's law is the proof). For a proposer below the replica
+  tier the same fingerprint would confirm guesses about a document it is not
+  delivered, so the guard is answered at the read door. The mutation's
+  documentation, which says an absent selection hashes every row, is corrected
+  in D3.
+- **F3, one absent row fails an addon's whole bind.** Confirmed in
+  `WorldAddonRuntime`'s cell bind, which asks `WorldRecipientView.Admits` per
+  entry and answers once. The bind resolves nothing (resolution is at the
+  write, which asks the view again), so the check at the bind protects nothing
+  and is removed; step D2.
+- **F4, the refusal text misleads on a typo.** Confirmed:
+  `WorldRecipientView.Refusal` answers "is not disclosed" for a name no row
+  holds. Step D2.
+- **The rule keys on the principal's kind.** Confirmed: `Principal.IsAuthority`.
+  Step D1.
+
+#### The structural write footprint
+
+**Evidence and status.** The eight findings below were checked by reopening
+their cited source, including the bodies of the collectors, compiler,
+validators and handlers. They are source findings, not executed reproductions.
+The read-door change's policy-only `WorldServer.WriteView` and caller-stamped
+`IServerLink.Query` remain useful; neither restricts what a later composer or
+validator reads. `WorldDocument.TryPrepareMutation` already separates refusable
+preparation from `InstallPrepared`, and `WorldPreparedMutation` already carries
+prepared resources. Extend those mechanisms; do not add a parallel composer,
+transform interpreter, journal or commit protocol.
+
+**Options and ruling.** This is the design's choice, not a new owner ruling.
+It follows the owner's proper-fix, one-implementation and change-proportional
+work rulings, and the hazards page's preference for a type over a convention.
+
+| Option | Evidence and cost | Attacks closed; failure |
+|---|---|---|
+| Add the missing fields to the collector | `WorldStateDocumentValues` deliberately walks `IDocumentStateValue`; other references have other representations | Closes named examples only. A new string, AST operand or reverse relation repeats findings 1–4 |
+| Generate a reference list from the schema | `WorldNameRegistry` and `WorldDocumentWalker` already describe syntax | Useful for names and fuzz inputs, not proof of semantic reads: negative lookup, enumeration, computed addresses, implicit property names and validator branches need no reference-valued field |
+| Validate a redacted copy, then commit against the authority | Existing view supplies a projection; costs a copy and a second validation | Hides reads but can accept an invalid domain removal. The later true refusal or missing public effect is still an oracle |
+| Run the real preparation against a restricted access interface, with dependencies recorded by those accesses | Reuses preparation, arena transactions and the compiler; requires their read interfaces to change | Closes unlisted reads, failed resolution and reverse validation reads. Needs a complete invalidation relation and a non-refusing install; chosen |
+| Give every writer its own world | The existing world model gives a complete independent validation universe | Best for a character, house or guest program. Does not provide rows in the host's tick; retained alongside contribution scopes |
+
+**Invariant.** Fix the acting principal, its grants and permitted declaration
+universe, the submission sequence and ticks, and everything it may read under
+the author's policy. Changing withheld cells, including their presence, must
+change neither a recipient write's full transcript nor its permitted effects.
+Every value that preparation uses to choose a branch, destination, diagnostic,
+guard or result comes through the restricted transaction. A read it cannot
+serve stops preparation before returning a value. Successful preparation proves
+the *authority's* candidate valid; it does not prove a projected substitute valid.
+Only that successful preparation can produce an installable result.
+
+**Declaration existence is a separate boundary.** Recording a forbidden read
+is insufficient when the *existence of the check* is secret: a hidden inverse
+board can make a public token edit fail even if no hidden cell is returned.
+General document writes therefore require an entitlement to the replica
+declaration universe, checked from the ingress's tier and current observation
+grant before any document lookup. Every lower-tier or non-observing caller is
+refused that form alike, whether a hidden dependent exists or not. Its granted
+scope writes remain available: the scope policy admits it whole, its namespace
+and quota are explicitly disclosed by that grant, and no outside check may veto
+it. An addon uses such a scope for its rows; it is not silently promoted to
+replica. This revises the earlier policy-only door for arbitrary lower-tier
+writes. It preserves useful low-tier input through authored inbox scopes and
+closes the open declaration-existence oracle rather than describing it as
+cell secrecy. D0c migrates the debug world's affected inputs and addon bindings
+in the same step. A full replica's withheld row *declarations* already differ
+when one is absent; that pair is not indistinguishable at its read door.
+Direct probes of an unavailable row still use the same refusal as an absent
+row. A row whose declaration must be secret belongs to a separate world.
+
+**The one enforcing door.** Make `WorldDocument.TryPrepareMutation` the sole
+recipient preparation entry, including the present state-command fast path,
+typed addon writes and detached batch composition. Its ingress is stamped by
+the existing ordered domain. It opens a bounded transaction (working name
+`WorldWriteTransaction`), whose private completion is the only mint for a
+recipient `WorldPreparedMutation`. An installer accepts that prepared result,
+not a raw mutation, definition or caller-supplied success flag. Authority
+preparation uses the same algorithms with an authority access implementation.
+The scope checker is a schema concern invoked inside this door, not another
+admission door that can install independently.
+
+The transaction exposes document and arena **operations**, not the backing
+objects. Looking up a row by name or ordinal, reading its kind, policy, members,
+order, count, key membership, clocks or resolved values, looking up an absent
+name, and enumerating a section all go through it. Write acquisition does too.
+Its restricted row handles cannot reveal a raw `WorldStateRow.Cells`, catalog,
+key table, mutable span or `StateArena`; a borrowed cell span exists only after
+whole-row admission and cannot outlive preparation. `IStateReader.Arena` is
+therefore not the interface for recipient evaluation. Narrow the common reader
+used by the existing kernels and compiler so both authority and recipient
+access implement it; do not write recipient-only kernels. A bound
+`IDocumentStateValue` must resolve through the transaction, never retain the
+live binder's authority closure. Serializers and fingerprints receive admitted
+materialized values or a read-view image, not a lazy authority-bound object.
+
+Before returning a state row, the access implementation applies the existing
+whole-row policy, including declared cell-policy capacity and containing zones.
+An absent or withheld row returns the same **unavailable** failure. It is not
+an empty row, zero, a successful `Try` result or an ordinary parse error.
+Failure is sticky in the transaction: catching a compiler exception, clearing
+a diagnostic list or returning `true` cannot mint a prepared result. Only the
+door formats that failure, using a stable submission target or section name;
+no dependency name, internal ordinal or diagnostic from a blocked read escapes.
+Details for a completely admitted computation remain available to its writer.
+
+**Derive the reverse footprint from executed validation.** Run each validity
+check as a unit with an owning declaration through the same access interface.
+At trusted installation, successful checks retain their actual read sets and
+the inverse index from input to checks. Reads include negative name lookups,
+section membership/enumeration and membership/order of a row, not just values
+of cells that happened to exist. A check's owning declaration is itself an
+input; a global check owns the section it validates. The unit and its inputs
+are acquired before it can produce even a diagnostic. This is why a withheld
+inverse board is refused before its name enters an error, even if its predicate
+first reads a public token row.
+
+A write invalidates every check that read the changed input. Re-run invalidated
+checks on the candidate through the writer's restricted transaction, replace
+their dependencies only after success, and repeat for derived changes until
+the existing bounded settling process has no dirty units. New declarations
+create checks through the same validation entry; removed ones retire theirs.
+A branch whose condition changes is invalidated by its condition's read, so
+its new branch records its new inputs. Enumerating all rows subscribes to the
+section's membership, including future rows. A miss subscribes to that name's
+existence. A new validator without a retained result runs; it cannot be skipped
+because the old index never saw it. The unpartitioned whole validator initially
+is one conservative unit, which may refuse more writes and costs more work;
+partitioning improves admission and cost, never soundness.
+
+This is a validity cache derived from live inputs, not a committed fingerprint
+ledger. It proves a skipped check remains true: every operation on which its
+previous execution depended has the same answer. It does not assume that a
+syntactic reference collector finds all future reads. Migrate
+`StateArena.TryValidateRelations`, document validation, rule pricing, binding
+validation and host transaction preparation to this same dependency source.
+`StateCatalog.DependentRows` may remain for its actual `KeysOf` semantics;
+it ceases to be a security closure. An authority-only check whose result
+changes with a recipient edit cannot be silently skipped: either its inputs
+are admitted, it is proven unaffected, or the recipient edit refuses.
+
+**Prepare once and land what was prepared.** Parse payload-only syntax,
+placeholder ids and program-kind prohibitions without a world read. Any
+schema-dependent parsing (`text` versus `vector`, for example), defaulting,
+classification such as `IsStateCommand`, grant-subject resolution, composition,
+transform compilation, current and incoming bindings, guards, settling,
+validation and all refusable resource preparation follow inside the transaction.
+Batch members share one candidate and one journal; a later member sees earlier
+members' changes, and each handle rechecks candidate policy. A refusal rolls
+back arena and enlisted host state and publishes nothing from preparation.
+Grant changes cannot authorize their own batch before installation. Future
+state readers installed by an edit (bindings, knowledge, witnesses, triggers)
+must acquire their sources through the restricted compile context too; checking
+only values evaluated immediately would leave a delayed disclosure door.
+
+Prepare and install occur without another mutation or tick between them in the
+ordered domain. A reusable preview is only input plus read-view guards; it is
+prepared anew at application. No global authority revision is returned as a
+staleness oracle. Grants and policy are checked at application, including
+revocation since preview. Install consumes the exact staged writes, products
+and reserved resources; it neither runs a hidden validator nor calls an
+unrestricted kernel again. Unexpected install failure is an engine fault, not
+a hidden-dependent ordinary recipient verdict. External effects are staged as
+the existing prepared addon/machine plans are, and delivered after commit.
+Receipt and echo formatting is shared by state and document writes. Versions
+come from the recipient's delivery cursor as before.
+
+**Guards have an explicit read universe.** All expected-definition guards,
+including `ExpectedStateRows: []`, hash the proposer's *read* view at its actual
+ceiling, or refuse by shape when no replica document is available. Named input,
+cell and spatial guards must likewise describe a read the proposer is entitled
+to receive; a write grant never upgrades their ceiling. In a scope, a guard may
+hash the explicitly granted scope image. State-row selections do not certify
+the rest of a definition. Do not compose the whole policy-tier definition to
+hash a small selection: named-input hashes traverse only selected inputs and
+their admitted resolution, while whole-document hashes consume the shared
+disclosed image. This preserves D3's useful whole-document guard without its
+empty-selection loophole.
+
+**Where the construction stops.** The access implementation, successful-result
+mint and install primitive are trusted; a deliberate raw capture, reflection
+escape or incorrect primitive remains a trust-boundary review obligation.
+Move preparation algorithms behind interfaces that cannot acquire the
+authority, and apply decision 6's acquisition wall to their constructors,
+fields, generic constraints and callbacks. A facade whose `Arena` property
+still returns the store proves nothing. Build-negative fixtures must reject
+these escapes, including an `IStateReader` alias and a live-value binder.
+The runtime fault marker additionally prevents an accidental swallowed failure.
+Host resource exhaustion and wall time remain outside the stated guarantee;
+semantic quota, rule-work or relation failures do not become resource exceptions
+merely because hidden rows influence them. Scopes reserve those budgets up
+front. General arena-growth work must be localized or admitted against declared
+reservations before the relevant write path is enabled. Authored authority
+rules can still reveal, and body/spatial observation needs the read door; a
+write transaction does not fix an unrelated read handler.
+
+**The eight findings and their witnesses.** Symbols identify the reopened
+source; the candidate transcripts remain to be executed in D0a. Finding
+numbers here are W1–W8 to distinguish them from rd2's F1–F4 above.
+
+| Finding | Reopened evidence and correction | Structural closure | Harness and step-0 fuzzer witness |
+|---|---|---|---|
+| W1, high: references outside document-value holders | `WorldStateDocumentValues.Finder.Enter` handles `IDocumentStateValue`; `WorldDefinitionFingerprint.CollectPlacementStateInputs` adds only deal/variant rows. `WorldDefinitionValidator.ValidateProperties` looks up the property's implicit same-name row. Board, response, HUD and overlay validators also resolve names outside that collector | Every semantic lookup in the real validator or compiler goes through transaction access, regardless of the field's spelling. New delayed bindings acquire sources there too | Typed `SetProperty` and nested placement/kit/creation/HUD/camera/overlay/host edits naming public, absent and withheld rows; malformed and valid values. Compare decisions and subsequent public bindings, not only text |
+| W2, high: transform indirections and failed resolution | `WorldRecipientView.AdmitsTransform` returns true on failed `RuleCompiler.TryCollectTransformRows`; `RuleCompiler.ResolveCellRef` checks kind and `DeclaresCell` before that collection succeeds. `StateTransform.Transfer.Subjects` omits its key | Resolution itself is restricted; unavailable is sticky before kind or key lookup. The compiler and kernel share that context; no preliminary collector grants permission | `$cell:`, `$zone:`, `$expr:` and computed-key forms with present/absent keys, wrong kinds and nested expressions; vary only withheld membership with declarations fixed. Generate both direct and batched forms |
+| W3, high: declaration omissions | `AdmitsDeclaration` checks domain, row readers, inverse and phase only; `ValidateDisclosureRow` reads knowledge source/mask/positions and cell readers; `ValidateWitnessRow` resolves the witness | Incoming declaration compilation, including its deferred source bindings, reads through access. Scope allowlist rejects these features from payload alone | Replace an admitted row with each knowledge, witness or per-cell-reader form. Include a public-source success control and inspect later delivery for copied values |
+| W4, high: reverse dependencies | `StateCatalog` builds `DependentRows` only from `KeysOf`; `ValidateDerivedBoard` compares token/code membership and order. Its shown error names the board and codes, **not the hidden keys themselves**. The packet overstates that text claim | Reverse invalidation comes from check reads, including the owner and negative lookups. All checks that could veto the change run restricted. Lower-tier general writes refuse by shape; scope checks cannot have outside dependents | Change tokens while a fixed hidden inverse's code membership varies; remove/reshape public sources of knowledge, phase, readers and witness checks. Add absent-dependent pairs below replica, and assert public state unchanged on refusal |
+| W5, high as a lower-tier oracle: empty selection | `WorldDefinitionFingerprint.Compute` filters `StateRaw.World` only; other sections remain. `DisclosedPlacements` deliberately emits one back per hidden cell under `Placeholder`. **One versus two backs is permitted disclosure to the seat in the packet, not a valid hidden-equivalent seat pair** | Every expected-definition form uses the actual read universe, never the write view. Null, empty and nonempty selection have identical ceiling admission | Recast the example as a Frames/Presentation writer not delivered those bytes; all forms refuse identically. Replica controls use their actual delivered fingerprints: equal for `Omit` hidden-only changes, different for a permitted back-count change |
+| W6, medium: console pre-reads | `WorldStateCommandModule.HandleCellSet` branches on `FindRow(server.ReadView(context))`; `WorldRowCommandModule.TryReadMutationRow` distinguishes `Withheld` from missing before admission; `WorldServer.ReadView` throws for unavailable sessions | Console submits raw edit intent; schema-dependent parsing/read-modify-write occurs inside preparation. Handler needs no write-side `ReadView` call | Multiword text, invalid vector and row set/remove/step/add through the real console for seats and session tiers, with Observe revoked too; compare synchronous reply, queued echo, outcome and stream survival |
+| W7, medium: route before admission | `WorldDocument.TryApplyMutation` calls `IsStateCommand` first; `TryApplyStateCommand` and the document path format denials differently | Classification is a transaction read; one outcome adapter handles every route and failure | Generate/upsert inside a batch also naming a placeholder, both state-only and mixed edits; same input, hidden row present/absent; compare the complete ordered transcript |
+| W8, medium: adjacent read doors | `WorldPopulationCommandModule.DescribeParked` reads population/body poses and its Anyone handler ignores context; `WorldHudCommandModule.ResolveDynamicTemplate` looks up the row before checking withholding | Parked read becomes a caller-stamped query over the existing body-observation policy, counts and deadlines included. HUD validation and substitution share a restricted read operation; unavailable/absent answer alike. Decision 6 prevents a handler obtaining population/authority state directly | Parked bodies with denied Observe and differing poses/membership; HUD placeholders naming withheld/absent rows and cells. Drive actual registered handlers for all ingresses; no GPU needed |
+
+The other W1 locations are leads, not proof that every submitted payload passes
+all intervening checks. In particular, a later audience check may already
+refuse a proposed knowledge copy. The design does not rely on the review's
+claimed final success or exact text: D0a runs each smallest case and records
+the actual first differing event, or marks the premise refuted. No quotation
+from that packet is used as source truth here.
+
+**What step 0 lacked.** Enumerating verbs is not enumerating their semantic
+arguments. The current fixture contract accepts whole transform JSON strings
+and a short session-action list; it does not generate every nested mutation,
+declaration and guard form. D0a extends that existing harness, not a second
+oracle: use the mutation/model registry and grammar to construct typed payloads,
+substitute fixture-owned public/absent/withheld names at nested sites, and
+compose batches of conflicting members. Name metadata guides coverage but is
+not the enforcement mechanism. Cover negative lookups, enumeration, delayed
+consumers and every early-error path; include a deliberately new field that
+reads state without adding any collector entry. The restricted door must
+catch it and the paired transcript must catch a deliberately bypassed door.
+Seeds and shrinking operate on payloads chosen independently of either world.
+
+Validate both variants before each probe and check their permitted images agree
+at every compared tick; do not silently normalize allowed differences away.
+Declaration-absence probes use a principal not delivered those declarations;
+member probes keep declarations fixed. An authorized success control prevents
+an all-refuse implementation from passing. Compare failed writes' subsequent
+public reads and deliveries too. Preserve minimized witnesses as authored
+fixture scripts or typed harness actions. Add socket-peer, mounted-addon and
+traveller capture through step 0b before claiming those ingresses proved.
+
+**Cost, counted rather than timed.** No per-recipient arena or full document
+copy is retained. The world retains successful validation results and their
+dependency edges; one in-flight edit retains its changed paths, journal entries,
+admitted handles and staged products. A warmed cell write pays for the resolved
+handle, live policy/grant checks, the kernel's reads/writes and invalidated
+validation units. Admission is cached only within that candidate generation;
+bound addon handles never cache permission. Reuse scratch and interned source
+ids; do not allocate a set or closure on each scalar read.
+
+Count accesses, denied accesses, dependency edges visited/replaced, validation
+units executed/reused, rows/cells copied, journal bytes, compiled rules and
+allocated scratch bytes separately, in operator diagnostics only. Target work
+is proportional to touched inputs and their affected checks, not total hidden
+cells or recipient count. A real global invariant may cost the section; the
+counter must say so. Cold installation builds the index once; adding a new
+validator invalidates its units. D0b measures sparse cell writes, transforms,
+mixed batches and dependency fan-out at 1 and 400 unrelated rows and 1 and
+1000 submitting recipients. D5 measures scoped declaration/removal against the
+same growth: zero outside rows validated, zero rules compiled and zero full
+arena copies. These are acceptance measurements to run during implementation,
+not measurements this documentation lane claims to have made. If a kernel
+cannot use the restricted reader or a validator needs a full scan, the named
+step fixes that engine limit; a second evaluator or field whitelist is not its
+fallback.
+
+**Rejected and watched.**
+
+| Approach | Verdict | Reason | What would change it |
+|---|---|---|---|
+| Hiding a scope's declarations from readers its policy excludes | Reject for now | A replica's row ordinals follow the authority's catalog (`WorldStateDisclosure.DisclosedFields` keeps an undisclosed field's row for that reason); omitting rows needs recipient-scoped ordinals in every delta | An authored world that needs private row names in a shared arena, rather than in a world of the declarer's own |
+| A scope per principal, minted at admission | Reject | A principal token is not durable (a peer's generation changes at reconnect), and one catalog cannot hold a scope per visitor | Nothing; a per-player scope is a world the player owns |
+| Rules inside a scope | Reject | Decision 3: a rule reads any row and fires as the world | Nothing; a guest's program runs in a world the guest operates |
+| Per-declarer shares inside one scope | Watch | Everyone a scope admits reads it whole, so one declarer can fill it, visibly | An authored world where that is griefing rather than use; a contributor stamp per row and a tenure, as the placement slot has, would bound it |
+| Vector rows and value-over-time traits in a scope | Watch | Each needs a reserved share of a section-wide budget (vector bytes, per-tick work) before it can be allowlisted | An addon that needs them |
+| Guards over a policy-tier image the proposer cannot receive | Reject | D3 uses actual read entitlement or the explicitly granted scope image; a write view never substitutes for a read view | An explicit authored disclosure, not another collector |
+
+**The steps.** This is the single build table for decision 3a, including the
+structural footprint. All are unbuilt. D0a establishes actual failing cases;
+D0b builds the restricted substrate and partitions the hot validators; D0c
+switches every write ingress together, with D2 and D3, so none retains a raw
+fallback. D0d closes the adjacent read handlers and depends on decision 6's
+acquisition wall (main build step 5), whose preparation-facing subset is part
+of D0b/D0c. D1 can proceed independently, but its operator predicate is used
+by D0c before the combined work lands. D4 follows D0b and D5 follows D4.
+D0c/D2/D3/D6 then land as one integration unit, after D1 and D5; D7 follows
+that unit. This avoids a dependency cycle and an interval that removes
+lower-tier inputs or opens an unprotected scope. Each step's mechanical checks are implementation
+work, not results of this memo. The lead commissions the Claude design review
+before these build briefs and the trust-boundary review of their implementation.
+
+| Step | Lands | Check |
+|---|---|---|
+| D0a. Actual witnesses and structured fuzzing | Extend step 0's existing fixture/action vocabulary using the mutation/model registry; minimized W1–W8 payloads, legitimate positive controls, missing declarations at appropriate tiers, fixed-declaration member variants; actual console, outcome and later-public-effect capture; step 0b supplies the remaining ingresses | Run each W row against the current code and record its actual first difference or refutation, including the W5 permitted-placeholder control. Invalid setup, unequal permitted images and all-refuse controls fail the harness. The fuzzer reaches each nested form without borrowing names from either world |
+| D0b. Restricted access and derived validity | Narrow the common compiler/kernel reader; transaction-local policy checks and sticky unavailable result; validation units and dependency index from actual accesses, including owners, misses and enumeration; scope-local access; prepared-result mint and non-refusing install; compiler wall against raw acquisition | A new validator/field that reads an unlisted withheld row refuses before the read; swallowing its failure cannot install. Build-negative fixtures for raw definition, arena, `IStateReader.Arena`, lazy binder and captured callback fail. A miss later becoming present, an added dependent and a changed branch invalidate the right checks. Counted 1/400-row and 1/1000-recipient workloads meet the cost contract; a full-validator authority check of each accepted candidate agrees with incremental validity |
+| D0c. One ingress and one result | Route console raw edits, state commands, typed addon writes, detached composition, transforms and ordered batches through preparation; classify inside it; no post-prepare refusable work or authority rerun. D1's predicate, D2's result mapping and D3's guard universe integrated. Lower-tier general writes refuse by form; scope input migration lands with D6 | W1–W7 paired transcripts equal, with admitted controls changing state. Revocation between preview/apply, earlier batch policy changes and a final-member failure leave no partial arena/host effect. A public-input change under a hidden dependent cannot read its cells or name it. Lower-tier absent-dependent pair equal. `puck references` finds no recipient caller of old admission collectors or raw prepare/install overloads; no new field needs a security-list edit |
+| D0d. Read-handler closure | Caller-stamped parked-body query over the existing Observe/session policy; restricted HUD template validation/substitution; remove direct population and raw row acquisition from Anyone handlers under main step 5 | W8 actual handlers compare equal for unobserved bodies and unavailable/absent rows, with observed-body and readable-template success controls; full transcripts include counts, deadlines, errors and session lifetime |
+| D1. The operator is a grant | `Operate`; the one operator predicate in place of `Principal.IsAuthority`; the `Host` audience and each operator verb assigned; `world.peers` split by field and a peer-disconnect verb; the silo's remote door; the admission-template refusals | A law in which a seat granted `Operate` reads a row withheld from seats, declares a row and runs an operator verb, and is a recipient again the tick it is revoked; `puck disclosure` marks a fixture INVALID when its observer holds `Operate`; a silo control session whose admission row carries `Operate` runs `world.peers` and is shown no endpoint, and is refused a host verb; a wildcard admission row carrying `Operate` is refused by `puck compile --validate`; the harness green over every fixture |
+| D2. The refusal and the addon verdicts | The neutral text and code; the precise cause in the operator's log, the lint and the mount check; bind by name; `AddonVerdict.NotDisclosed` deleted | `SessionWriteDoorLawTests` and `RecipientOracleLawTests` on the new text; an addon law in which a bind naming one absent and one present row is applied, the present row's write lands and the absent row's answers `NoSuchSubject`, alike in a world that withholds a row of that name; `puck lint` names the absent row in a world's authored command |
+| D3. Every guard's read universe | Expected-definition guards with null, empty and nonempty selections through the actual read door; named-input/cell/spatial and scope-image guards through their entitled images; remove policy-tier fingerprint shortcuts; correct the mutation's documentation | A replica guard computed from delivered bytes lands fresh and refuses stale; hidden-only `Omit` changes keep its result equal. Lower-tier/no-Observe definition guards refuse every selection alike. Fuzzer draws all forms, mixed guards, state-bound fields/placements, absent ids and permitted `Placeholder` count changes; only the last deliberately change replica fingerprints |
+| D4. The scope, authored | The `contributions` list, membership by name, allowlist, closure in both directions, total exports and reservation, in the restricted validator; the door still closed to recipients | `puck compile --validate` refuses a narrower row policy, cell policy, drive gate, external domain, rule reading the scope, strict outside binding and overcommitted quota. Adding an outside hidden consumer cannot change an admitted scope edit's verdict; a total export survives removal using its authored absence behavior. `puck schema --check` and `puck registry --check` pass |
+| D5. The proportional install | The successor catalog and the arena's row append, taken by the operator's declarations inside a scope | Counted, not timed: a scope declaration compiles no rule and validates no row outside the scope, and its counted work is equal in a world with and without four hundred more authored rows; a rule compiled before the declaration fires after it; a scenario that declares, writes and removes scope rows passes `puck test --reproduce` |
+| D6. The door opens | The `contribution:` subject; the policy route in `WorldRecipientView.Admits`; recipients' declarations, reshapes and removals through the typed check; a consumer in the debug world: an addon that declares its own rows in a scope its module authors, chosen in the step's brief for the rows no rule reads | A harness fixture, `worlds/debug/contribution-disclosure.puck`, whose variants differ in a hidden row under the flat name the observer tries, hidden rows that fill the section to its ceilings, a hidden row keyed over the public row the observer names as a domain, and a second scope withheld from the observer, present or absent; the observer declares inside its scope, outside it and in the withheld one, to and past its quota, and the fuzzer draws declarations over those names. Every pair equal at every door, typed outcomes included; the control declares and reads back its rows |
+| D7. Scope rows last | The restore ladder's durable-row tier re-declaring through the typed check | A scenario that declares scope rows, stops the world, edits its source and starts it: the rows and their cells are back after an unrelated authored row is added, the rows past a shrunken quota are dropped and named, and every row of a removed scope is dropped and named |
 
 ### 4. The physical layout follows the hidden policy
 
@@ -1302,21 +1924,22 @@ commit, as machine readings are not a repository baseline.
 
 ## Open items
 
+- Row declaration, the operator grant and the structural write footprint are designed in
+  [decision 3a](#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
+  and wait on the lead's Claude design review. Its single table D0a–D0d and
+  D1–D7 owns the build; none is implemented by the memo. D0a verifies the
+  eight later findings' witnesses, including the corrected W5 premise.
 - More seat-reachable control verbs: `player.confirm` acts on the host
   keyboard from a seat's typed line (`PlayerCommandModule.Admission.cs`,
   `ConfirmHandler`); `player.assign` (`PlayerAssignmentCommand.cs`) can name
   any device; `pipeline.commit` changes the shared view. All take
   `CommandAudience.Anyone`. Decide them as `player.claim`, `player.cycle` and
   `pipeline.load` were decided.
-- The write footprint reads declarations, which only a `Replica` recipient is
-  delivered. A write into a public row is refused while a row keyed over it, a
-  census placement reading it, or a placement chain under it depends on a row
-  withheld from the writer, so a `Frames` or `Presentation` session holding
-  Edit learns that some such declaration exists (never its name, which the
-  refusal does not carry). Decide whether write grants below `Replica` are
-  allowed at all (the validator already refuses an admission row that mints
-  grants at `Frames`), or whether the footprint's verdict for such a writer is
-  computed over its own tier's declarations.
+- Lower-tier write verdicts still reveal dependency existence today. Decision
+  3a's D0c/D6 closes this by making general writes require the declaration
+  entitlement and keeping lower-tier writes within wholly readable, closed
+  scopes. It migrates the debug world's inputs and addon state together; a
+  restricted reader alone does not close this channel.
 - Growth and memory admission read reservations. Work prices read declarations
   only ([the costing decision](../decisions/state-and-language.md#costing)), but
   an arena growth is still charged `StateArena.ReservationWork` over the whole
