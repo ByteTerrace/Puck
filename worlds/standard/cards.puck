@@ -15,6 +15,8 @@
 // figures, and the rank and suit index share the suit's colour. `prefix` renames the prototypes (`card` by default), so
 // a world can carry both variants under two prefixes.
 
+import "mirror"
+
 // Playing card dimensions (standard 2.5" x 3.5" proportion)
 let cardHalfWidth = 0.88
 let cardHalfHeight = 1.24
@@ -39,6 +41,13 @@ let courtFigureScale = 0.62
 // A figure layer's edge rounding: 0.9 of the layer's depth (courtRelief plus courtStep for each depth it stands in front
 // of the shapes behind), never past `cap`, the most the layer's own outline can round.
 function courtRound(depth, cap) = minimum(0.9 * (courtRelief + depth * courtStep), cap)
+
+// A court figure is two halves, the upper written out and the lower derived from it with `isLower` 0 or 1 (`mirror.puck`):
+// the Jack's lower half is the upper reflected across Y = 0, the Queen's and the King's the upper turned half way about
+// Z, and each shape's rotation, a half turn about an axis in the plane, takes the axis a quarter turn about Z.
+function courtMirrored(isLower, p) = signed(isLower, p, [1, -1, 1])
+function courtTurned(isLower, p) = signed(isLower, p, [-1, -1, 1])
+function courtHalfRotation(isLower, q) = isLower ? [0 - q[1], q[0], q[2], q[3]] : q
 
 // The corner radius shared by the court figures' hair and collar bars: three sevenths.
 let courtBarCornerRadius = 3 / 7
@@ -1242,1820 +1251,918 @@ template cardIndices(rankPath, suit) {
 }
 
 template courtJack() {
-  shape Prism "upper-cranium" {
-    position [0, 0.4712, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.24, 0.23, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+  for (half, isLower) in ["upper", "lower"] {
+    shape Prism $"{half}-cranium" {
+      position: courtMirrored(isLower, [0, 0.4712, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.24, 0.23, courtRelief + 0 * courtStep]
+      material: 5
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(0, 0.207)
     }
-    rounding: courtRound(0, 0.207)
-  }
-  shape Prism "upper-jaw" {
-    position [0, 0.3472, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.16, 0.135, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-jaw" {
+      position: courtMirrored(isLower, [0, 0.3472, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.16, 0.135, courtRelief + 0 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.062
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(0, 0.1215)
     }
-    rounding: courtRound(0, 0.1215)
-  }
-  shape Prism "upper-nose" {
-    position [0, 0.4278, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.02, 0.02, courtRelief + 21 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.015
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-nose" {
+      position: courtMirrored(isLower, [0, 0.4278, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.02, 0.02, courtRelief + 21 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.015
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(21, 0.018)
     }
-    rounding: courtRound(21, 0.018)
-  }
-  shape Prism "upper-lips" {
-    position [0, 0.375, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.035, 0.01, courtRelief + 19 * courtStep]
-    material: 4
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-lips" {
+      position: courtMirrored(isLower, [0, 0.375, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.035, 0.01, courtRelief + 19 * courtStep]
+      material: 4
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.003, courtRelief + 19 * courtStep)
     }
-    rounding: minimum(0.003, courtRelief + 19 * courtStep)
-  }
-  shape Prism "upper-hood" {
-    position [0, 0.5084, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.27, 0.25, courtRelief + 2 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.357
+    shape Prism $"{half}-hood" {
+      position: courtMirrored(isLower, [0, 0.5084, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.27, 0.25, courtRelief + 2 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.357
+      }
+      rounding: minimum(0.062, courtRelief + 2 * courtStep)
     }
-    rounding: minimum(0.062, courtRelief + 2 * courtStep)
-  }
-  shape Prism "upper-chest" {
-    position [0, 0.1488, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.24, 0.124, courtRelief + 1 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
+    shape Prism $"{half}-chest" {
+      position: courtMirrored(isLower, [0, 0.1488, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.24, 0.124, courtRelief + 1 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35
+      }
+      rounding: minimum(0.0434, courtRelief + 1 * courtStep)
     }
-    rounding: minimum(0.0434, courtRelief + 1 * courtStep)
-  }
-  shape Prism "upper-tunic-front" {
-    position [0, 0.1488, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.09, 0.12, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.2
-    }
-  }
-  shape Prism "upper-shoulder-left" {
-    position [0.325, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-shoulder-right" {
-    position [-0.325, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-hair-curl-left" {
-    position [0.22, 0.44, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.065, 0.09, courtRelief + 6 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0585)
-  }
-  shape Prism "upper-hair-curl-right" {
-    position [-0.22, 0.44, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.065, 0.09, courtRelief + 6 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0585)
-  }
-  shape Prism "upper-eye-left" {
-    position [0.0992, 0.465, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 16 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.0315)
-  }
-  shape Prism "upper-eye-right" {
-    position [-0.0992, 0.465, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 16 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.0315)
-  }
-  shape Prism "upper-iris-left" {
-    position [0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.027, 0.027, courtRelief + 18 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(18, 0.0243)
-  }
-  shape Prism "upper-iris-right" {
-    position [-0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.027, 0.027, courtRelief + 18 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(18, 0.0243)
-  }
-  shape Prism "upper-pupil-left" {
-    position [0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(20, 0.01116)
-  }
-  shape Prism "upper-pupil-right" {
-    position [-0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(20, 0.01116)
-  }
-  shape Prism "upper-eyebrow-left" {
-    position [0.105, 0.512, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.046, 0.007, courtRelief + 17 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 17 * courtStep)
-  }
-  shape Prism "upper-eyebrow-right" {
-    position [-0.105, 0.512, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.046, 0.007, courtRelief + 17 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 17 * courtStep)
-  }
-  shape Prism "upper-hair-fringe-left" {
-    position [0.066, 0.565, courtZ]
-    rotation [0.1, 0.995, 0, 0]
-    scale [0.07, 0.016, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.006, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-hair-fringe-right" {
-    position [-0.066, 0.565, courtZ]
-    rotation [-0.1, 0.995, 0, 0]
-    scale [0.07, 0.016, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.006, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-cap-crown" {
-    position [0.03, 0.645, courtZ]
-    rotation [-0.08, 0.996, 0, 0]
-    scale [0.24, 0.08, courtRelief + 9 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-    rounding: minimum(0.02, courtRelief + 9 * courtStep)
-  }
-  shape Prism "upper-cap-band" {
-    position [0.02, 0.595, courtZ]
-    rotation [-0.08, 0.996, 0, 0]
-    scale [0.22, 0.02, courtRelief + 11 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.006, courtRelief + 11 * courtStep)
-  }
-  shape Prism "upper-cap-brooch" {
-    position [-0.08, 0.615, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.022, courtRelief + 15 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.0198)
-  }
-  shape Prism "upper-cap-feather" {
-    position [0.05, 0.725, courtZ]
-    rotation [0.22, 0.975, 0, 0]
-    scale [0.12, 0.025, courtRelief + 12 * courtStep]
-    material: 4
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-    rounding: minimum(0.005, courtRelief + 12 * courtStep)
-  }
-  shape Prism "upper-cap-feather-plume" {
-    position [0.07, 0.735, courtZ]
-    rotation [0.22, 0.975, 0, 0]
-    scale [0.09, 0.018, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-  }
-  shape Prism "upper-ruff-collar" {
-    position [0, 0.248, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.165, 0.025, courtRelief + 3 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.008, courtRelief + 3 * courtStep)
-  }
-  shape Prism "upper-collar-trim" {
-    position [0, 0.248, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.145, 0.012, courtRelief + 5 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-  }
-  shape Prism "upper-halberd-shaft" {
-    position [-0.40, 0.38, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.014, 0.28, courtRelief + 7 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "upper-halberd-socket" {
-    position [-0.40, 0.58, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.024, 0.025, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.004, courtRelief + 8 * courtStep)
-  }
-  shape Prism "upper-halberd-spear" {
-    position [-0.40, 0.68, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.08, courtRelief + 8 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, -1] }
-              { end [0, -0.6] }
-              { end [-1, -1] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-tunic-front" {
+      position: courtMirrored(isLower, [0, 0.1488, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.09, 0.12, courtRelief + 4 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.2
       }
     }
-  }
-  shape Prism "upper-halberd-blade" {
-    position [-0.46, 0.58, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.045, 0.05, courtRelief + 8 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0.6, 0.8]
-            segments [
-              { end [-1, 0], arcCenter [0, 0] }
-              { end [0.6, -0.8], arcCenter [0, 0] }
-              { end [0.1, 0] }
-              { end [0.6, 0.8] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-shoulder-left" {
+      position: courtMirrored(isLower, [0.325, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.13, 0.115, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.355
+      }
+      rounding: minimum(0.04, courtRelief + 0 * courtStep)
+    }
+    shape Prism $"{half}-shoulder-right" {
+      position: courtMirrored(isLower, [-0.325, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.13, 0.115, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.355
+      }
+      rounding: minimum(0.04, courtRelief + 0 * courtStep)
+    }
+    shape Prism $"{half}-hair-curl-left" {
+      position: courtMirrored(isLower, [0.22, 0.44, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.065, 0.09, courtRelief + 6 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(6, 0.0585)
+    }
+    shape Prism $"{half}-hair-curl-right" {
+      position: courtMirrored(isLower, [-0.22, 0.44, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.065, 0.09, courtRelief + 6 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(6, 0.0585)
+    }
+    shape Prism $"{half}-eye-left" {
+      position: courtMirrored(isLower, [0.0992, 0.465, courtZ])
+      rotation: signed(isLower, [0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.047, 0.035, courtRelief + 16 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.0315)
+    }
+    shape Prism $"{half}-eye-right" {
+      position: courtMirrored(isLower, [-0.0992, 0.465, courtZ])
+      rotation: signed(isLower, [-0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.047, 0.035, courtRelief + 16 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.0315)
+    }
+    shape Prism $"{half}-iris-left" {
+      position: courtMirrored(isLower, [0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.027, 0.027, courtRelief + 18 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(18, 0.0243)
+    }
+    shape Prism $"{half}-iris-right" {
+      position: courtMirrored(isLower, [-0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.027, 0.027, courtRelief + 18 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(18, 0.0243)
+    }
+    shape Prism $"{half}-pupil-left" {
+      position: courtMirrored(isLower, [0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(20, 0.01116)
+    }
+    shape Prism $"{half}-pupil-right" {
+      position: courtMirrored(isLower, [-0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(20, 0.01116)
+    }
+    shape Prism $"{half}-eyebrow-left" {
+      position: courtMirrored(isLower, [0.105, 0.512, courtZ])
+      rotation: signed(isLower, [0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.046, 0.007, courtRelief + 17 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.44
+      }
+      rounding: minimum(0.003, courtRelief + 17 * courtStep)
+    }
+    shape Prism $"{half}-eyebrow-right" {
+      position: courtMirrored(isLower, [-0.105, 0.512, courtZ])
+      rotation: signed(isLower, [-0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.046, 0.007, courtRelief + 17 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.44
+      }
+      rounding: minimum(0.003, courtRelief + 17 * courtStep)
+    }
+    shape Prism $"{half}-hair-fringe-left" {
+      position: courtMirrored(isLower, [0.066, 0.565, courtZ])
+      rotation: signed(isLower, [0.1, 0.995, 0, 0], [-1, 1, 1, 1])
+      scale [0.07, 0.016, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.006, courtRelief + 14 * courtStep)
+    }
+    shape Prism $"{half}-hair-fringe-right" {
+      position: courtMirrored(isLower, [-0.066, 0.565, courtZ])
+      rotation: signed(isLower, [-0.1, 0.995, 0, 0], [-1, 1, 1, 1])
+      scale [0.07, 0.016, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.006, courtRelief + 14 * courtStep)
+    }
+    shape Prism $"{half}-cap-crown" {
+      position: courtMirrored(isLower, [0.03, 0.645, courtZ])
+      rotation: signed(isLower, [-0.08, 0.996, 0, 0], [-1, 1, 1, 1])
+      scale [0.24, 0.08, courtRelief + 9 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.45
+      }
+      rounding: minimum(0.02, courtRelief + 9 * courtStep)
+    }
+    shape Prism $"{half}-cap-band" {
+      position: courtMirrored(isLower, [0.02, 0.595, courtZ])
+      rotation: signed(isLower, [-0.08, 0.996, 0, 0], [-1, 1, 1, 1])
+      scale [0.22, 0.02, courtRelief + 11 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35
+      }
+      rounding: minimum(0.006, courtRelief + 11 * courtStep)
+    }
+    shape Prism $"{half}-cap-brooch" {
+      position: courtMirrored(isLower, [-0.08, 0.615, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.022, courtRelief + 15 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(15, 0.0198)
+    }
+    shape Prism $"{half}-cap-feather" {
+      position: courtMirrored(isLower, [0.05, 0.725, courtZ])
+      rotation: signed(isLower, [0.22, 0.975, 0, 0], [-1, 1, 1, 1])
+      scale [0.12, 0.025, courtRelief + 12 * courtStep]
+      material: 4
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.45
+      }
+      rounding: minimum(0.005, courtRelief + 12 * courtStep)
+    }
+    shape Prism $"{half}-cap-feather-plume" {
+      position: courtMirrored(isLower, [0.07, 0.735, courtZ])
+      rotation: signed(isLower, [0.22, 0.975, 0, 0], [-1, 1, 1, 1])
+      scale [0.09, 0.018, courtRelief + 13 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.45
       }
     }
-  }
-  shape Prism "upper-halberd-hand" {
-    position [-0.38, 0.22, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.036, 0.036, courtRelief + 10 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-ruff-collar" {
+      position: courtMirrored(isLower, [0, 0.248, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.165, 0.025, courtRelief + 3 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.008, courtRelief + 3 * courtStep)
     }
-    rounding: courtRound(10, 0.0324)
-  }
-
-  shape Prism "lower-cranium" {
-    position [0, -0.4712, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.24, 0.23, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(0, 0.207)
-  }
-  shape Prism "lower-jaw" {
-    position [0, -0.3472, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.16, 0.135, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(0, 0.1215)
-  }
-  shape Prism "lower-nose" {
-    position [0, -0.4278, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.02, 0.02, courtRelief + 21 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.015
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(21, 0.018)
-  }
-  shape Prism "lower-lips" {
-    position [0, -0.375, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.035, 0.01, courtRelief + 19 * courtStep]
-    material: 4
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.003, courtRelief + 19 * courtStep)
-  }
-  shape Prism "lower-hood" {
-    position [0, -0.5084, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.27, 0.25, courtRelief + 2 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.357
-    }
-    rounding: minimum(0.062, courtRelief + 2 * courtStep)
-  }
-  shape Prism "lower-chest" {
-    position [0, -0.1488, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.24, 0.124, courtRelief + 1 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.0434, courtRelief + 1 * courtStep)
-  }
-  shape Prism "lower-tunic-front" {
-    position [0, -0.1488, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.09, 0.12, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.2
-    }
-  }
-  shape Prism "lower-shoulder-left" {
-    position [0.325, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-shoulder-right" {
-    position [-0.325, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-hair-curl-left" {
-    position [0.22, -0.44, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.065, 0.09, courtRelief + 6 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0585)
-  }
-  shape Prism "lower-hair-curl-right" {
-    position [-0.22, -0.44, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.065, 0.09, courtRelief + 6 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0585)
-  }
-  shape Prism "lower-eye-left" {
-    position [0.0992, -0.465, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 16 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.0315)
-  }
-  shape Prism "lower-eye-right" {
-    position [-0.0992, -0.465, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 16 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.0315)
-  }
-  shape Prism "lower-iris-left" {
-    position [0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.027, 0.027, courtRelief + 18 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(18, 0.0243)
-  }
-  shape Prism "lower-iris-right" {
-    position [-0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.027, 0.027, courtRelief + 18 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(18, 0.0243)
-  }
-  shape Prism "lower-pupil-left" {
-    position [0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(20, 0.01116)
-  }
-  shape Prism "lower-pupil-right" {
-    position [-0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 20 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(20, 0.01116)
-  }
-  shape Prism "lower-eyebrow-left" {
-    position [0.105, -0.512, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.046, 0.007, courtRelief + 17 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 17 * courtStep)
-  }
-  shape Prism "lower-eyebrow-right" {
-    position [-0.105, -0.512, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.046, 0.007, courtRelief + 17 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 17 * courtStep)
-  }
-  shape Prism "lower-hair-fringe-left" {
-    position [0.066, -0.565, courtZ]
-    rotation [-0.1, 0.995, 0, 0]
-    scale [0.07, 0.016, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.006, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-hair-fringe-right" {
-    position [-0.066, -0.565, courtZ]
-    rotation [0.1, 0.995, 0, 0]
-    scale [0.07, 0.016, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.006, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-cap-crown" {
-    position [0.03, -0.645, courtZ]
-    rotation [0.08, 0.996, 0, 0]
-    scale [0.24, 0.08, courtRelief + 9 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-    rounding: minimum(0.02, courtRelief + 9 * courtStep)
-  }
-  shape Prism "lower-cap-band" {
-    position [0.02, -0.595, courtZ]
-    rotation [0.08, 0.996, 0, 0]
-    scale [0.22, 0.02, courtRelief + 11 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.006, courtRelief + 11 * courtStep)
-  }
-  shape Prism "lower-cap-brooch" {
-    position [-0.08, -0.615, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.022, courtRelief + 15 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.0198)
-  }
-  shape Prism "lower-cap-feather" {
-    position [0.05, -0.725, courtZ]
-    rotation [-0.22, 0.975, 0, 0]
-    scale [0.12, 0.025, courtRelief + 12 * courtStep]
-    material: 4
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-    rounding: minimum(0.005, courtRelief + 12 * courtStep)
-  }
-  shape Prism "lower-cap-feather-plume" {
-    position [0.07, -0.735, courtZ]
-    rotation [-0.22, 0.975, 0, 0]
-    scale [0.09, 0.018, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-  }
-  shape Prism "lower-ruff-collar" {
-    position [0, -0.248, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.165, 0.025, courtRelief + 3 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.008, courtRelief + 3 * courtStep)
-  }
-  shape Prism "lower-collar-trim" {
-    position [0, -0.248, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.145, 0.012, courtRelief + 5 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-  }
-  shape Prism "lower-halberd-shaft" {
-    position [0.40, -0.38, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.014, 0.28, courtRelief + 7 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "lower-halberd-socket" {
-    position [0.40, -0.58, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.024, 0.025, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.004, courtRelief + 8 * courtStep)
-  }
-  shape Prism "lower-halberd-spear" {
-    position [0.40, -0.68, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.08, courtRelief + 8 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, -1] }
-              { end [0, -0.6] }
-              { end [-1, -1] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-collar-trim" {
+      position: courtMirrored(isLower, [0, 0.248, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.145, 0.012, courtRelief + 5 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
       }
     }
-  }
-  shape Prism "lower-halberd-blade" {
-    position [0.46, -0.58, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.045, 0.05, courtRelief + 8 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0.6, 0.8]
-            segments [
-              { end [-1, 0], arcCenter [0, 0] }
-              { end [0.6, -0.8], arcCenter [0, 0] }
-              { end [0.1, 0] }
-              { end [0.6, 0.8] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-halberd-shaft" {
+      position: courtTurned(isLower, [-0.40, 0.38, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.014, 0.28, courtRelief + 7 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
       }
     }
-  }
-  shape Prism "lower-halberd-hand" {
-    position [0.38, -0.22, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.036, 0.036, courtRelief + 10 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-halberd-socket" {
+      position: courtTurned(isLower, [-0.40, 0.58, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.024, 0.025, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35
+      }
+      rounding: minimum(0.004, courtRelief + 8 * courtStep)
     }
-    rounding: courtRound(10, 0.0324)
+    shape Prism $"{half}-halberd-spear" {
+      position: courtTurned(isLower, [-0.40, 0.68, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.08, courtRelief + 8 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, -1] }
+                { end [0, -0.6] }
+                { end [-1, -1] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
+      }
+    }
+    shape Prism $"{half}-halberd-blade" {
+      position: courtTurned(isLower, [-0.46, 0.58, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.045, 0.05, courtRelief + 8 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0.6, 0.8]
+              segments [
+                { end [-1, 0], arcCenter [0, 0] }
+                { end [0.6, -0.8], arcCenter [0, 0] }
+                { end [0.1, 0] }
+                { end [0.6, 0.8] }
+              ]
+            }
+          ]
+        }
+      }
+    }
+    shape Prism $"{half}-halberd-hand" {
+      position: courtTurned(isLower, [-0.38, 0.22, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.036, 0.036, courtRelief + 10 * courtStep]
+      material: 5
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(10, 0.0324)
+    }
   }
 }
 
 template courtQueen(suit) {
-  shape Prism "upper-cranium" {
-    position [0, 0.4712, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.248, 0.2356, courtRelief + 4 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+  for (half, isLower) in ["upper", "lower"] {
+    shape Prism $"{half}-cranium" {
+      position: courtMirrored(isLower, [0, 0.4712, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.248, 0.2356, courtRelief + 4 * courtStep]
+      material: 5
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(4, 0.21204)
     }
-    rounding: courtRound(4, 0.21204)
-  }
-  shape Prism "upper-jaw" {
-    position [0, 0.3472, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.1612, 0.1364, courtRelief + 4 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-jaw" {
+      position: courtMirrored(isLower, [0, 0.3472, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.1612, 0.1364, courtRelief + 4 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.062
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(4, 0.12276)
     }
-    rounding: courtRound(4, 0.12276)
-  }
-  shape Prism "upper-nose" {
-    position [0, 0.69 * courtFigureScale, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.01984, 0.01984, courtRelief + 17 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.01488
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-nose" {
+      position: courtMirrored(isLower, [0, 0.69 * courtFigureScale, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.01984, 0.01984, courtRelief + 17 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.01488
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(17, 0.01786)
     }
-    rounding: courtRound(17, 0.01786)
-  }
-  shape Prism "upper-hood" {
-    position [0, 0.5084, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.2728, 0.42 * courtFigureScale, courtRelief + 6 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 5 / 14
+    shape Prism $"{half}-hood" {
+      position: courtMirrored(isLower, [0, 0.5084, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.2728, 0.42 * courtFigureScale, courtRelief + 6 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 5 / 14
+      }
+      rounding: minimum(0.062, courtRelief + 6 * courtStep)
     }
-    rounding: minimum(0.062, courtRelief + 6 * courtStep)
-  }
-  shape Prism "upper-chest" {
-    position [0, 0.1488, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.36 * courtFigureScale, 0.124, courtRelief + 5 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35000000000000003
+    shape Prism $"{half}-chest" {
+      position: courtMirrored(isLower, [0, 0.1488, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.36 * courtFigureScale, 0.124, courtRelief + 5 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35000000000000003
+      }
+      rounding: minimum(0.0434, courtRelief + 5 * courtStep)
     }
-    rounding: minimum(0.0434, courtRelief + 5 * courtStep)
-  }
-  shape Prism "upper-shoulder-left" {
-    position [0.3224, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 16 / 45
+    shape Prism $"{half}-shoulder-left" {
+      position: courtTurned(isLower, [0.3224, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 16 / 45
+      }
+      rounding: minimum(0.03968, courtRelief + 4 * courtStep)
     }
-    rounding: minimum(0.03968, courtRelief + 4 * courtStep)
-  }
-  shape Prism "upper-ear-left" {
-    position [0.2728, 0.78 * courtFigureScale, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-ear-left" {
+      position: courtTurned(isLower, [0.2728, 0.78 * courtFigureScale, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.0186, courtRelief + 4 * courtStep)
     }
-    rounding: minimum(0.0186, courtRelief + 4 * courtStep)
-  }
-  shape Prism "upper-eye-left" {
-    position [0.0992, 0.75 * courtFigureScale, courtZ]
-    rotation [0.039989334187, 0.999200106661, 0, 0]
-    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-eye-left" {
+      position: courtTurned(isLower, [0.0992, 0.75 * courtFigureScale, courtZ])
+      rotation: courtHalfRotation(isLower, [0.039989334187, 0.999200106661, 0, 0])
+      scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(13, 0.03125)
     }
-    rounding: courtRound(13, 0.03125)
-  }
-  shape Prism "upper-iris-left" {
-    position [0.10157336, 0.46356531999999995, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-iris-left" {
+      position: courtTurned(isLower, [0.10157336, 0.46356531999999995, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(15, 0.02455)
     }
-    rounding: courtRound(15, 0.02455)
-  }
-  shape Prism "upper-pupil-left" {
-    position [0.10157336, 0.46356531999999995, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-pupil-left" {
+      position: courtTurned(isLower, [0.10157336, 0.46356531999999995, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.01116)
     }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "upper-eyebrow-left" {
-    position [0.10256907999999999, 0.50702484, courtZ]
-    rotation [0.089878549198, 0.995952733012, 0, 0]
-    scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4444444444444445
+    shape Prism $"{half}-eyebrow-left" {
+      position: courtTurned(isLower, [0.10256907999999999, 0.50702484, courtZ])
+      rotation: courtHalfRotation(isLower, [0.089878549198, 0.995952733012, 0, 0])
+      scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.4444444444444445
+      }
+      rounding: minimum(0.00248, courtRelief + 14 * courtStep)
     }
-    rounding: minimum(0.00248, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-hair-left" {
-    position [0.06607982716066597, 0.5721270499788416, courtZ]
-    rotation [0.124674733385, 0.992197667229, 0, 0]
-    scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
+    shape Prism $"{half}-hair-left" {
+      position: courtTurned(isLower, [0.06607982716066597, 0.5721270499788416, courtZ])
+      rotation: courtHalfRotation(isLower, [0.124674733385, 0.992197667229, 0, 0])
+      scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: courtBarCornerRadius
+      }
+      rounding: minimum(0.00744, courtRelief + 11 * courtStep)
     }
-    rounding: minimum(0.00744, courtRelief + 11 * courtStep)
-  }
-  shape Prism "upper-shoulder-right" {
-    position [-0.3224, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 16 / 45
+    shape Prism $"{half}-shoulder-right" {
+      position: courtTurned(isLower, [-0.3224, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 16 / 45
+      }
+      rounding: minimum(0.03968, courtRelief + 4 * courtStep)
     }
-    rounding: minimum(0.03968, courtRelief + 4 * courtStep)
-  }
-  shape Prism "upper-ear-right" {
-    position [-0.2728, 0.78 * courtFigureScale, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-ear-right" {
+      position: courtTurned(isLower, [-0.2728, 0.78 * courtFigureScale, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.0186, courtRelief + 4 * courtStep)
     }
-    rounding: minimum(0.0186, courtRelief + 4 * courtStep)
-  }
-  shape Prism "upper-eye-right" {
-    position [-0.0992, 0.75 * courtFigureScale, courtZ]
-    rotation [-0.039989334187, 0.999200106661, 0, 0]
-    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-eye-right" {
+      position: courtTurned(isLower, [-0.0992, 0.75 * courtFigureScale, courtZ])
+      rotation: courtHalfRotation(isLower, [-0.039989334187, 0.999200106661, 0, 0])
+      scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(13, 0.03125)
     }
-    rounding: courtRound(13, 0.03125)
-  }
-  shape Prism "upper-iris-right" {
-    position [-0.10157336, 0.46356531999999995, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-iris-right" {
+      position: courtTurned(isLower, [-0.10157336, 0.46356531999999995, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(15, 0.02455)
     }
-    rounding: courtRound(15, 0.02455)
-  }
-  shape Prism "upper-pupil-right" {
-    position [-0.10157336, 0.46356531999999995, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-pupil-right" {
+      position: courtTurned(isLower, [-0.10157336, 0.46356531999999995, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.01116)
     }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "upper-eyebrow-right" {
-    position [-0.10256907999999999, 0.50702484, courtZ]
-    rotation [-0.089878549198, 0.995952733012, 0, 0]
-    scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4444444444444445
+    shape Prism $"{half}-eyebrow-right" {
+      position: courtTurned(isLower, [-0.10256907999999999, 0.50702484, courtZ])
+      rotation: courtHalfRotation(isLower, [-0.089878549198, 0.995952733012, 0, 0])
+      scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.4444444444444445
+      }
+      rounding: minimum(0.00248, courtRelief + 14 * courtStep)
     }
-    rounding: minimum(0.00248, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-hair-right" {
-    position [-0.06607982716066597, 0.5721270499788416, courtZ]
-    rotation [-0.124674733385, 0.992197667229, 0, 0]
-    scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
+    shape Prism $"{half}-hair-right" {
+      position: courtTurned(isLower, [-0.06607982716066597, 0.5721270499788416, courtZ])
+      rotation: courtHalfRotation(isLower, [-0.124674733385, 0.992197667229, 0, 0])
+      scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: courtBarCornerRadius
+      }
+      rounding: minimum(0.00744, courtRelief + 11 * courtStep)
     }
-    rounding: minimum(0.00744, courtRelief + 11 * courtStep)
-  }
-  shape Prism "upper-brow-band" {
-    position [0, 0.6572, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.186, 0.031, courtRelief + 10 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.39999999999999997
+    shape Prism $"{half}-brow-band" {
+      position: courtMirrored(isLower, [0, 0.6572, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.186, 0.031, courtRelief + 10 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.39999999999999997
+      }
+      rounding: minimum(0.0124, courtRelief + 10 * courtStep)
     }
-    rounding: minimum(0.0124, courtRelief + 10 * courtStep)
-  }
-  shape Prism "upper-crown-band" {
-    position [0, 0.7192, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.1488, 0.01488, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 5 / 12
+    shape Prism $"{half}-crown-band" {
+      position: courtMirrored(isLower, [0, 0.7192, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.1488, 0.01488, courtRelief + 10 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 5 / 12
+      }
+      rounding: minimum(0.0062, courtRelief + 10 * courtStep)
     }
-    rounding: minimum(0.0062, courtRelief + 10 * courtStep)
-  }
-  shape Prism "upper-crown-center" {
-    position [0, 0.7564, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0372, 0.05952, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-center" {
+      position: courtMirrored(isLower, [0, 0.7564, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0372, 0.05952, courtRelief + 10 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                {
+                  end [1, 0]
+                }
+                {
+                  end [0, -1]
+                }
+                {
+                  end [-1, 0]
+                }
+                {
+                  end [0, 1]
+                }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-left" {
-    position [0.093, 0.74152, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-left" {
+      position: courtTurned(isLower, [0.093, 0.74152, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                {
+                  end [1, 0]
+                }
+                {
+                  end [0, -1]
+                }
+                {
+                  end [-1, 0]
+                }
+                {
+                  end [0, 1]
+                }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-right" {
-    position [-0.093, 0.74152, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-right" {
+      position: courtTurned(isLower, [-0.093, 0.74152, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                {
+                  end [1, 0]
+                }
+                {
+                  end [0, -1]
+                }
+                {
+                  end [-1, 0]
+                }
+                {
+                  end [0, 1]
+                }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-gem" {
-    position [0, 0.744, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0186, 0.0186, courtRelief + 12 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-crown-gem" {
+      position: courtMirrored(isLower, [0, 0.744, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0186, 0.0186, courtRelief + 12 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(12, 0.01674)
     }
-    rounding: courtRound(12, 0.01674)
-  }
-  shape Prism "upper-collar" {
-    position [0, 0.248, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.1612, 0.01736, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
+    shape Prism $"{half}-collar" {
+      position: courtMirrored(isLower, [0, 0.248, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.1612, 0.01736, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: courtBarCornerRadius
+      }
+      rounding: minimum(0.00744, courtRelief + 8 * courtStep)
     }
-    rounding: minimum(0.00744, courtRelief + 8 * courtStep)
-  }
-  shape Prism "upper-brooch-rim" {
-    position [0, 0.1736, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.05084, 0.05084, courtRelief + 9 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.004
-        contours [
-          {
-            start [1, 0]
-            segments [
-              {
-                end [0, 1]
-                arcCenter [0, 0]
-              }
-              {
-                end [-1, 0]
-                arcCenter [0, 0]
-              }
-              {
-                end [0, -1]
-                arcCenter [0, 0]
-              }
-              {
-                end [1, 0]
-                arcCenter [0, 0]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-brooch-rim" {
+      position: courtMirrored(isLower, [0, 0.1736, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.05084, 0.05084, courtRelief + 9 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.004
+          contours [
+            {
+              start [1, 0]
+              segments [
+                {
+                  end [0, 1]
+                  arcCenter [0, 0]
+                }
+                {
+                  end [-1, 0]
+                  arcCenter [0, 0]
+                }
+                {
+                  end [0, -1]
+                  arcCenter [0, 0]
+                }
+                {
+                  end [1, 0]
+                  arcCenter [0, 0]
+                }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-brooch-gem" {
-    position [0, 0.1736, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.03224, 0.03224, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(9, 0.02902)
-  }
-  shape Prism "upper-sceptre" {
-    position [-0.3968, 0.2728, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.00992, 0.36 * courtFigureScale, courtRelief + 7 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.00496, courtRelief + 7 * courtStep)
-  }
-  suitMark(
-    name: "upper-sceptre-emblem",
-    suit: suit,
-    x: -0.40424,
-    y: 0.49736400000000003,
-    size: 0.154752,
-    flipped: 0,
-    rimZ: -0.0634,
-    coreZ: -0.06836,
-    rimDepth: 0.0124,
-    coreDepth: 0.00992,
-    rimMat: 1
-  )
-  shape Prism "lower-cranium" {
-    position [0, -0.4712, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.248, 0.2356, courtRelief + 4 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(4, 0.21204)
-  }
-  shape Prism "lower-jaw" {
-    position [0, -0.3472, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.1612, 0.1364, courtRelief + 4 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(4, 0.12276)
-  }
-  shape Prism "lower-nose" {
-    position [0, -0.69 * courtFigureScale, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.01984, 0.01984, courtRelief + 17 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.01488
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(17, 0.01786)
-  }
-  shape Prism "lower-hood" {
-    position [0, -0.5084, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.2728, 0.42 * courtFigureScale, courtRelief + 6 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 5 / 14
-    }
-    rounding: minimum(0.062, courtRelief + 6 * courtStep)
-  }
-  shape Prism "lower-chest" {
-    position [0, -0.1488, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.36 * courtFigureScale, 0.124, courtRelief + 5 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35000000000000003
-    }
-    rounding: minimum(0.0434, courtRelief + 5 * courtStep)
-  }
-  shape Prism "lower-shoulder-left" {
-    position [-0.3224, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 16 / 45
-    }
-    rounding: minimum(0.03968, courtRelief + 4 * courtStep)
-  }
-  shape Prism "lower-ear-left" {
-    position [-0.2728, -0.78 * courtFigureScale, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.0186, courtRelief + 4 * courtStep)
-  }
-  shape Prism "lower-eye-left" {
-    position [-0.0992, -0.75 * courtFigureScale, courtZ]
-    rotation [-0.999200106661, 0.039989334187, 0, 0]
-    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(13, 0.03125)
-  }
-  shape Prism "lower-iris-left" {
-    position [-0.10157336, -0.46356531999999995, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.02455)
-  }
-  shape Prism "lower-pupil-left" {
-    position [-0.10157336, -0.46356531999999995, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "lower-eyebrow-left" {
-    position [-0.10256907999999999, -0.50702484, courtZ]
-    rotation [-0.995952733012, 0.089878549198, 0, 0]
-    scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4444444444444445
-    }
-    rounding: minimum(0.00248, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-hair-left" {
-    position [-0.06607982716066597, -0.5721270499788416, courtZ]
-    rotation [-0.992197667229, 0.124674733385, 0, 0]
-    scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
-    }
-    rounding: minimum(0.00744, courtRelief + 11 * courtStep)
-  }
-  shape Prism "lower-shoulder-right" {
-    position [0.3224, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.124, 0.18 * courtFigureScale, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 16 / 45
-    }
-    rounding: minimum(0.03968, courtRelief + 4 * courtStep)
-  }
-  shape Prism "lower-ear-right" {
-    position [0.2728, -0.78 * courtFigureScale, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 4 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.0186, courtRelief + 4 * courtStep)
-  }
-  shape Prism "lower-eye-right" {
-    position [0.0992, -0.75 * courtFigureScale, courtZ]
-    rotation [-0.999200106661, -0.039989334187, 0, 0]
-    scale [0.076 * courtFigureScale, 0.03472, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(13, 0.03125)
-  }
-  shape Prism "lower-iris-right" {
-    position [0.10157336, -0.46356531999999995, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.02728, 0.02728, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.02455)
-  }
-  shape Prism "lower-pupil-right" {
-    position [0.10157336, -0.46356531999999995, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "lower-eyebrow-right" {
-    position [0.10256907999999999, -0.50702484, courtZ]
-    rotation [-0.995952733012, -0.089878549198, 0, 0]
-    scale [0.04216, 0.00558, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4444444444444445
-    }
-    rounding: minimum(0.00248, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-hair-right" {
-    position [0.06607982716066597, -0.5721270499788416, courtZ]
-    rotation [-0.992197667229, -0.124674733385, 0, 0]
-    scale [0.0744, 0.01736, courtRelief + 11 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
-    }
-    rounding: minimum(0.00744, courtRelief + 11 * courtStep)
-  }
-  shape Prism "lower-brow-band" {
-    position [0, -0.6572, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.186, 0.031, courtRelief + 10 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.39999999999999997
-    }
-    rounding: minimum(0.0124, courtRelief + 10 * courtStep)
-  }
-  shape Prism "lower-crown-band" {
-    position [0, -0.7192, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.1488, 0.01488, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 5 / 12
-    }
-    rounding: minimum(0.0062, courtRelief + 10 * courtStep)
-  }
-  shape Prism "lower-crown-center" {
-    position [0, -0.7564, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0372, 0.05952, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-brooch-gem" {
+      position: courtMirrored(isLower, [0, 0.1736, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.03224, 0.03224, courtRelief + 9 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
       }
+      rounding: courtRound(9, 0.02902)
     }
-  }
-  shape Prism "lower-crown-left" {
-    position [-0.093, -0.74152, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sceptre" {
+      position: courtTurned(isLower, [-0.3968, 0.2728, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.00992, 0.36 * courtFigureScale, courtRelief + 7 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
       }
+      rounding: minimum(0.00496, courtRelief + 7 * courtStep)
     }
+    suitMark(
+      name: $"{half}-sceptre-emblem",
+      suit: suit,
+      x: flip(isLower, -0.40424),
+      y: flip(isLower, 0.49736400000000003),
+      size: 0.154752,
+      flipped: isLower,
+      rimZ: -0.0634,
+      coreZ: -0.06836,
+      rimDepth: 0.0124,
+      coreDepth: 0.00992,
+      rimMat: 1
+    )
   }
-  shape Prism "lower-crown-right" {
-    position [0.093, -0.74152, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0248, 0.03968, courtRelief + 10 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              {
-                end [1, 0]
-              }
-              {
-                end [0, -1]
-              }
-              {
-                end [-1, 0]
-              }
-              {
-                end [0, 1]
-              }
-            ]
-          }
-        ]
-      }
-    }
-  }
-  shape Prism "lower-crown-gem" {
-    position [0, -0.744, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0186, 0.0186, courtRelief + 12 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(12, 0.01674)
-  }
-  shape Prism "lower-collar" {
-    position [0, -0.248, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.1612, 0.01736, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: courtBarCornerRadius
-    }
-    rounding: minimum(0.00744, courtRelief + 8 * courtStep)
-  }
-  shape Prism "lower-brooch-rim" {
-    position [0, -0.1736, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.05084, 0.05084, courtRelief + 9 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.004
-        contours [
-          {
-            start [1, 0]
-            segments [
-              {
-                end [0, 1]
-                arcCenter [0, 0]
-              }
-              {
-                end [-1, 0]
-                arcCenter [0, 0]
-              }
-              {
-                end [0, -1]
-                arcCenter [0, 0]
-              }
-              {
-                end [1, 0]
-                arcCenter [0, 0]
-              }
-            ]
-          }
-        ]
-      }
-    }
-  }
-  shape Prism "lower-brooch-gem" {
-    position [0, -0.1736, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.03224, 0.03224, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(9, 0.02902)
-  }
-  shape Prism "lower-sceptre" {
-    position [0.3968, -0.2728, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.00992, 0.36 * courtFigureScale, courtRelief + 7 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.00496, courtRelief + 7 * courtStep)
-  }
-  suitMark(
-    name: "lower-sceptre-emblem",
-    suit: suit,
-    x: 0.40424,
-    y: -0.49736400000000003,
-    size: 0.154752,
-    flipped: 1,
-    rimZ: -0.0634,
-    coreZ: -0.06836,
-    rimDepth: 0.0124,
-    coreDepth: 0.00992,
-    rimMat: 1
-  )
   shape Prism "sash-inlay" {
     position [0, 0, courtZ]
     rotation [0, 1, 0, 0]
@@ -3141,1190 +2248,599 @@ template courtQueen(suit) {
 }
 
 template courtKing() {
-  shape Prism "upper-cranium" {
-    position [0, 0.4712, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.248, 0.2356, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+  for (half, isLower) in ["upper", "lower"] {
+    shape Prism $"{half}-cranium" {
+      position: courtMirrored(isLower, [0, 0.4712, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.248, 0.2356, courtRelief + 0 * courtStep]
+      material: 5
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(0, 0.21204)
     }
-    rounding: courtRound(0, 0.21204)
-  }
-  shape Prism "upper-jaw" {
-    position [0, 0.3472, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.17, 0.14, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-jaw" {
+      position: courtMirrored(isLower, [0, 0.3472, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.17, 0.14, courtRelief + 0 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.062
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(0, 0.126)
     }
-    rounding: courtRound(0, 0.126)
-  }
-  shape Prism "upper-nose" {
-    position [0, 0.4278, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.022, courtRelief + 17 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.015
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-nose" {
+      position: courtMirrored(isLower, [0, 0.4278, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.022, courtRelief + 17 * courtStep]
+      material: 5
+      blend: "SmoothUnion"
+      smooth: 0.015
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(17, 0.0198)
     }
-    rounding: courtRound(17, 0.0198)
-  }
-  shape Prism "upper-beard" {
-    position [0, 0.305, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.075, 0.055, courtRelief + 12 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
+    shape Prism $"{half}-beard" {
+      position: courtMirrored(isLower, [0, 0.305, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.075, 0.055, courtRelief + 12 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.45
+      }
+      rounding: minimum(0.018, courtRelief + 12 * courtStep)
     }
-    rounding: minimum(0.018, courtRelief + 12 * courtStep)
-  }
-  shape Prism "upper-mustache-left" {
-    position [0.038, 0.395, courtZ]
-    rotation [0.08, 0.996, 0, 0]
-    scale [0.052, 0.016, courtRelief + 18 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-mustache-left" {
+      position: courtMirrored(isLower, [0.038, 0.395, courtZ])
+      rotation: signed(isLower, [0.08, 0.996, 0, 0], [-1, 1, 1, 1])
+      scale [0.052, 0.016, courtRelief + 18 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.005, courtRelief + 18 * courtStep)
     }
-    rounding: minimum(0.005, courtRelief + 18 * courtStep)
-  }
-  shape Prism "upper-mustache-right" {
-    position [-0.038, 0.395, courtZ]
-    rotation [-0.08, 0.996, 0, 0]
-    scale [0.052, 0.016, courtRelief + 18 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-mustache-right" {
+      position: courtMirrored(isLower, [-0.038, 0.395, courtZ])
+      rotation: signed(isLower, [-0.08, 0.996, 0, 0], [-1, 1, 1, 1])
+      scale [0.052, 0.016, courtRelief + 18 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.005, courtRelief + 18 * courtStep)
     }
-    rounding: minimum(0.005, courtRelief + 18 * courtStep)
-  }
-  shape Prism "upper-hood" {
-    position [0, 0.5084, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.28, 0.26, courtRelief + 2 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.357
+    shape Prism $"{half}-hood" {
+      position: courtMirrored(isLower, [0, 0.5084, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.28, 0.26, courtRelief + 2 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.357
+      }
+      rounding: minimum(0.062, courtRelief + 2 * courtStep)
     }
-    rounding: minimum(0.062, courtRelief + 2 * courtStep)
-  }
-  shape Prism "upper-chest" {
-    position [0, 0.1488, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.24, 0.124, courtRelief + 1 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
+    shape Prism $"{half}-chest" {
+      position: courtMirrored(isLower, [0, 0.1488, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.24, 0.124, courtRelief + 1 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35
+      }
+      rounding: minimum(0.0434, courtRelief + 1 * courtStep)
     }
-    rounding: minimum(0.0434, courtRelief + 1 * courtStep)
-  }
-  shape Prism "upper-shoulder-left" {
-    position [0.325, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
+    shape Prism $"{half}-shoulder-left" {
+      position: courtMirrored(isLower, [0.325, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.13, 0.115, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.355
+      }
+      rounding: minimum(0.04, courtRelief + 0 * courtStep)
     }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-shoulder-right" {
-    position [-0.325, 0.124, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
+    shape Prism $"{half}-shoulder-right" {
+      position: courtMirrored(isLower, [-0.325, 0.124, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.13, 0.115, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.355
+      }
+      rounding: minimum(0.04, courtRelief + 0 * courtStep)
     }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-ear-left" {
-    position [0.2728, 0.4836, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-ear-left" {
+      position: courtMirrored(isLower, [0.2728, 0.4836, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.0186, courtRelief + 0 * courtStep)
     }
-    rounding: minimum(0.0186, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-ear-right" {
-    position [-0.2728, 0.4836, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
+    shape Prism $"{half}-ear-right" {
+      position: courtMirrored(isLower, [-0.2728, 0.4836, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
+      material: 7
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
+      }
+      rounding: minimum(0.0186, courtRelief + 0 * courtStep)
     }
-    rounding: minimum(0.0186, courtRelief + 0 * courtStep)
-  }
-  shape Prism "upper-eye-left" {
-    position [0.0992, 0.465, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-eye-left" {
+      position: courtMirrored(isLower, [0.0992, 0.465, courtZ])
+      rotation: signed(isLower, [0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.047, 0.035, courtRelief + 13 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(13, 0.0315)
     }
-    rounding: courtRound(13, 0.0315)
-  }
-  shape Prism "upper-eye-right" {
-    position [-0.0992, 0.465, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-eye-right" {
+      position: courtMirrored(isLower, [-0.0992, 0.465, courtZ])
+      rotation: signed(isLower, [-0.04, 0.999, 0, 0], [-1, 1, 1, 1])
+      scale [0.047, 0.035, courtRelief + 13 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(13, 0.0315)
     }
-    rounding: courtRound(13, 0.0315)
-  }
-  shape Prism "upper-iris-left" {
-    position [0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.027, 0.027, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-iris-left" {
+      position: courtMirrored(isLower, [0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.027, 0.027, courtRelief + 15 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(15, 0.0243)
     }
-    rounding: courtRound(15, 0.0243)
-  }
-  shape Prism "upper-iris-right" {
-    position [-0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.027, 0.027, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-iris-right" {
+      position: courtMirrored(isLower, [-0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.027, 0.027, courtRelief + 15 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(15, 0.0243)
     }
-    rounding: courtRound(15, 0.0243)
-  }
-  shape Prism "upper-pupil-left" {
-    position [0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-pupil-left" {
+      position: courtMirrored(isLower, [0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.01116)
     }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "upper-pupil-right" {
-    position [-0.1016, 0.4636, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-pupil-right" {
+      position: courtMirrored(isLower, [-0.1016, 0.4636, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(16, 0.01116)
     }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "upper-eyebrow-left" {
-    position [0.105, 0.512, courtZ]
-    rotation [0.06, 0.998, 0, 0]
-    scale [0.046, 0.007, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
+    shape Prism $"{half}-eyebrow-left" {
+      position: courtMirrored(isLower, [0.105, 0.512, courtZ])
+      rotation: signed(isLower, [0.06, 0.998, 0, 0], [-1, 1, 1, 1])
+      scale [0.046, 0.007, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.44
+      }
+      rounding: minimum(0.003, courtRelief + 14 * courtStep)
     }
-    rounding: minimum(0.003, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-eyebrow-right" {
-    position [-0.105, 0.512, courtZ]
-    rotation [-0.06, 0.998, 0, 0]
-    scale [0.046, 0.007, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
+    shape Prism $"{half}-eyebrow-right" {
+      position: courtMirrored(isLower, [-0.105, 0.512, courtZ])
+      rotation: signed(isLower, [-0.06, 0.998, 0, 0], [-1, 1, 1, 1])
+      scale [0.046, 0.007, courtRelief + 14 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.44
+      }
+      rounding: minimum(0.003, courtRelief + 14 * courtStep)
     }
-    rounding: minimum(0.003, courtRelief + 14 * courtStep)
-  }
-  shape Prism "upper-hair-left" {
-    position [0.066, 0.572, courtZ]
-    rotation [0.125, 0.992, 0, 0]
-    scale [0.075, 0.018, courtRelief + 9 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
+    shape Prism $"{half}-hair-left" {
+      position: courtMirrored(isLower, [0.066, 0.572, courtZ])
+      rotation: signed(isLower, [0.125, 0.992, 0, 0], [-1, 1, 1, 1])
+      scale [0.075, 0.018, courtRelief + 9 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.007, courtRelief + 9 * courtStep)
     }
-    rounding: minimum(0.007, courtRelief + 9 * courtStep)
-  }
-  shape Prism "upper-hair-right" {
-    position [-0.066, 0.572, courtZ]
-    rotation [-0.125, 0.992, 0, 0]
-    scale [0.075, 0.018, courtRelief + 9 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
+    shape Prism $"{half}-hair-right" {
+      position: courtMirrored(isLower, [-0.066, 0.572, courtZ])
+      rotation: signed(isLower, [-0.125, 0.992, 0, 0], [-1, 1, 1, 1])
+      scale [0.075, 0.018, courtRelief + 9 * courtStep]
+      material: 8
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.007, courtRelief + 9 * courtStep)
     }
-    rounding: minimum(0.007, courtRelief + 9 * courtStep)
-  }
-  shape Prism "upper-crown-base-band" {
-    position [0, 0.685, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.18, 0.024, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
+    shape Prism $"{half}-crown-base-band" {
+      position: courtMirrored(isLower, [0, 0.685, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.18, 0.024, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.35
+      }
+      rounding: minimum(0.006, courtRelief + 8 * courtStep)
     }
-    rounding: minimum(0.006, courtRelief + 8 * courtStep)
-  }
-  shape Prism "upper-crown-base-gem" {
-    position [0, 0.685, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.018, 0.018, courtRelief + 10 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-crown-base-gem" {
+      position: courtMirrored(isLower, [0, 0.685, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.018, 0.018, courtRelief + 10 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(10, 0.0162)
     }
-    rounding: courtRound(10, 0.0162)
-  }
-  shape Prism "upper-crown-peak-center" {
-    position [0, 0.755, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.042, 0.065, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-peak-center" {
+      position: courtMirrored(isLower, [0, 0.755, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.042, 0.065, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, 0] }
+                { end [0, -1] }
+                { end [-1, 0] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-gem-center" {
-    position [0, 0.755, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.022, courtRelief + 11 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-crown-gem-center" {
+      position: courtMirrored(isLower, [0, 0.755, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.022, courtRelief + 11 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(11, 0.0198)
     }
-    rounding: courtRound(11, 0.0198)
-  }
-  shape Prism "upper-crown-peak-left" {
-    position [0.08, 0.735, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.028, 0.045, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-peak-left" {
+      position: courtMirrored(isLower, [0.08, 0.735, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.028, 0.045, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, 0] }
+                { end [0, -1] }
+                { end [-1, 0] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-gem-left" {
-    position [0.08, 0.735, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.014, 0.014, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-crown-gem-left" {
+      position: courtMirrored(isLower, [0.08, 0.735, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.014, 0.014, courtRelief + 9 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(9, 0.0126)
     }
-    rounding: courtRound(9, 0.0126)
-  }
-  shape Prism "upper-crown-peak-right" {
-    position [-0.08, 0.735, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.028, 0.045, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-peak-right" {
+      position: courtMirrored(isLower, [-0.08, 0.735, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.028, 0.045, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, 0] }
+                { end [0, -1] }
+                { end [-1, 0] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-gem-right" {
-    position [-0.08, 0.735, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.014, 0.014, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-crown-gem-right" {
+      position: courtMirrored(isLower, [-0.08, 0.735, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.014, 0.014, courtRelief + 9 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(9, 0.0126)
     }
-    rounding: courtRound(9, 0.0126)
-  }
-  shape Prism "upper-crown-peak-far-left" {
-    position [0.145, 0.715, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.034, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-peak-far-left" {
+      position: courtMirrored(isLower, [0.145, 0.715, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.034, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, 0] }
+                { end [0, -1] }
+                { end [-1, 0] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-crown-peak-far-right" {
-    position [-0.145, 0.715, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.022, 0.034, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-crown-peak-far-right" {
+      position: courtMirrored(isLower, [-0.145, 0.715, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.022, 0.034, courtRelief + 8 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.001
+          contours [
+            {
+              start [0, 1]
+              segments [
+                { end [1, 0] }
+                { end [0, -1] }
+                { end [-1, 0] }
+                { end [0, 1] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-collar" {
-    position [0, 0.248, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.165, 0.018, courtRelief + 5 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
+    shape Prism $"{half}-collar" {
+      position: courtMirrored(isLower, [0, 0.248, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.165, 0.018, courtRelief + 5 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.43
+      }
+      rounding: minimum(0.007, courtRelief + 5 * courtStep)
     }
-    rounding: minimum(0.007, courtRelief + 5 * courtStep)
-  }
-  shape Prism "upper-medallion-rim" {
-    position [0, 0.17, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.055, 0.055, courtRelief + 7 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.004
-        contours [
-          {
-            start [1, 0]
-            segments [
-              { end [0, 1], arcCenter [0, 0] }
-              { end [-1, 0], arcCenter [0, 0] }
-              { end [0, -1], arcCenter [0, 0] }
-              { end [1, 0], arcCenter [0, 0] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-medallion-rim" {
+      position: courtMirrored(isLower, [0, 0.17, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.055, 0.055, courtRelief + 7 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Path"
+        cornerRadius: 0
+        path {
+          tolerance: 0.004
+          contours [
+            {
+              start [1, 0]
+              segments [
+                { end [0, 1], arcCenter [0, 0] }
+                { end [-1, 0], arcCenter [0, 0] }
+                { end [0, -1], arcCenter [0, 0] }
+                { end [1, 0], arcCenter [0, 0] }
+              ]
+            }
+          ]
+        }
       }
     }
-  }
-  shape Prism "upper-medallion-gem" {
-    position [0, 0.17, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.035, 0.035, courtRelief + 7 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
+    shape Prism $"{half}-medallion-gem" {
+      position: courtMirrored(isLower, [0, 0.17, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.035, 0.035, courtRelief + 7 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
+      }
+      rounding: courtRound(7, 0.0315)
     }
-    rounding: courtRound(7, 0.0315)
-  }
-  shape Prism "upper-sword-blade" {
-    position [-0.39, 0.38, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.016, 0.26, courtRelief + 3 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.2
+    shape Prism $"{half}-sword-blade" {
+      position: courtTurned(isLower, [-0.39, 0.38, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.016, 0.26, courtRelief + 3 * courtStep]
+      material: 6
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.2
+      }
+      rounding: minimum(0.003, courtRelief + 3 * courtStep)
     }
-    rounding: minimum(0.003, courtRelief + 3 * courtStep)
-  }
-  shape Prism "upper-sword-fuller" {
-    position [-0.39, 0.38, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.005, 0.25, courtRelief + 4 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "upper-sword-crossguard" {
-    position [-0.39, 0.22, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.065, 0.012, courtRelief + 3 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4
-    }
-  }
-  shape Prism "upper-sword-grip" {
-    position [-0.39, 0.165, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.012, 0.04, courtRelief + 3 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "upper-sword-pommel" {
-    position [-0.39, 0.125, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.02, 0.02, courtRelief + 3 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(3, 0.018)
-  }
-  shape Prism "upper-sword-hand" {
-    position [-0.37, 0.165, courtZ]
-    rotation [0, 1, 0, 0]
-    scale [0.036, 0.036, courtRelief + 6 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0324)
-  }
-
-  shape Prism "lower-cranium" {
-    position [0, -0.4712, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.248, 0.2356, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(0, 0.21204)
-  }
-  shape Prism "lower-jaw" {
-    position [0, -0.3472, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.17, 0.14, courtRelief + 0 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.062
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(0, 0.126)
-  }
-  shape Prism "lower-nose" {
-    position [0, -0.4278, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.022, courtRelief + 17 * courtStep]
-    material: 5
-    blend: "SmoothUnion"
-    smooth: 0.015
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(17, 0.0198)
-  }
-  shape Prism "lower-beard" {
-    position [0, -0.305, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.075, 0.055, courtRelief + 12 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.45
-    }
-    rounding: minimum(0.018, courtRelief + 12 * courtStep)
-  }
-  shape Prism "lower-mustache-left" {
-    position [0.038, -0.395, courtZ]
-    rotation [-0.08, 0.996, 0, 0]
-    scale [0.052, 0.016, courtRelief + 18 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.005, courtRelief + 18 * courtStep)
-  }
-  shape Prism "lower-mustache-right" {
-    position [-0.038, -0.395, courtZ]
-    rotation [0.08, 0.996, 0, 0]
-    scale [0.052, 0.016, courtRelief + 18 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.005, courtRelief + 18 * courtStep)
-  }
-  shape Prism "lower-hood" {
-    position [0, -0.5084, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.28, 0.26, courtRelief + 2 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.357
-    }
-    rounding: minimum(0.062, courtRelief + 2 * courtStep)
-  }
-  shape Prism "lower-chest" {
-    position [0, -0.1488, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.24, 0.124, courtRelief + 1 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.0434, courtRelief + 1 * courtStep)
-  }
-  shape Prism "lower-shoulder-left" {
-    position [0.325, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-shoulder-right" {
-    position [-0.325, -0.124, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.13, 0.115, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.355
-    }
-    rounding: minimum(0.04, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-ear-left" {
-    position [0.2728, -0.4836, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.0186, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-ear-right" {
-    position [-0.2728, -0.4836, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0372, 0.0868, courtRelief + 0 * courtStep]
-    material: 7
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-    rounding: minimum(0.0186, courtRelief + 0 * courtStep)
-  }
-  shape Prism "lower-eye-left" {
-    position [0.0992, -0.465, courtZ]
-    rotation [-0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(13, 0.0315)
-  }
-  shape Prism "lower-eye-right" {
-    position [-0.0992, -0.465, courtZ]
-    rotation [0.04, 0.999, 0, 0]
-    scale [0.047, 0.035, courtRelief + 13 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(13, 0.0315)
-  }
-  shape Prism "lower-iris-left" {
-    position [0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.027, 0.027, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.0243)
-  }
-  shape Prism "lower-iris-right" {
-    position [-0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.027, 0.027, courtRelief + 15 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(15, 0.0243)
-  }
-  shape Prism "lower-pupil-left" {
-    position [0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "lower-pupil-right" {
-    position [-0.1016, -0.4636, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.0124, 0.0124, courtRelief + 16 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(16, 0.01116)
-  }
-  shape Prism "lower-eyebrow-left" {
-    position [0.105, -0.512, courtZ]
-    rotation [-0.06, 0.998, 0, 0]
-    scale [0.046, 0.007, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-eyebrow-right" {
-    position [-0.105, -0.512, courtZ]
-    rotation [0.06, 0.998, 0, 0]
-    scale [0.046, 0.007, courtRelief + 14 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.44
-    }
-    rounding: minimum(0.003, courtRelief + 14 * courtStep)
-  }
-  shape Prism "lower-hair-left" {
-    position [0.066, -0.572, courtZ]
-    rotation [-0.125, 0.992, 0, 0]
-    scale [0.075, 0.018, courtRelief + 9 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.007, courtRelief + 9 * courtStep)
-  }
-  shape Prism "lower-hair-right" {
-    position [-0.066, -0.572, courtZ]
-    rotation [0.125, 0.992, 0, 0]
-    scale [0.075, 0.018, courtRelief + 9 * courtStep]
-    material: 8
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.007, courtRelief + 9 * courtStep)
-  }
-  shape Prism "lower-crown-base-band" {
-    position [0, -0.685, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.18, 0.024, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.35
-    }
-    rounding: minimum(0.006, courtRelief + 8 * courtStep)
-  }
-  shape Prism "lower-crown-base-gem" {
-    position [0, -0.685, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.018, 0.018, courtRelief + 10 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(10, 0.0162)
-  }
-  shape Prism "lower-crown-peak-center" {
-    position [0, -0.755, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.042, 0.065, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sword-fuller" {
+      position: courtTurned(isLower, [-0.39, 0.38, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.005, 0.25, courtRelief + 4 * courtStep]
+      material: 2
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
       }
     }
-  }
-  shape Prism "lower-crown-gem-center" {
-    position [0, -0.755, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.022, courtRelief + 11 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(11, 0.0198)
-  }
-  shape Prism "lower-crown-peak-left" {
-    position [0.08, -0.735, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.028, 0.045, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sword-crossguard" {
+      position: courtTurned(isLower, [-0.39, 0.22, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.065, 0.012, courtRelief + 3 * courtStep]
+      material: 1
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.4
       }
     }
-  }
-  shape Prism "lower-crown-gem-left" {
-    position [0.08, -0.735, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.014, 0.014, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(9, 0.0126)
-  }
-  shape Prism "lower-crown-peak-right" {
-    position [-0.08, -0.735, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.028, 0.045, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sword-grip" {
+      position: courtTurned(isLower, [-0.39, 0.165, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.012, 0.04, courtRelief + 3 * courtStep]
+      material: 0
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "RoundedRectangle"
+        cornerRadius: 0.5
       }
     }
-  }
-  shape Prism "lower-crown-gem-right" {
-    position [-0.08, -0.735, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.014, 0.014, courtRelief + 9 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(9, 0.0126)
-  }
-  shape Prism "lower-crown-peak-far-left" {
-    position [0.145, -0.715, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.034, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sword-pommel" {
+      position: courtTurned(isLower, [-0.39, 0.125, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.02, 0.02, courtRelief + 3 * courtStep]
+      material: 9
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
       }
+      rounding: courtRound(3, 0.018)
     }
-  }
-  shape Prism "lower-crown-peak-far-right" {
-    position [-0.145, -0.715, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.022, 0.034, courtRelief + 8 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.001
-        contours [
-          {
-            start [0, 1]
-            segments [
-              { end [1, 0] }
-              { end [0, -1] }
-              { end [-1, 0] }
-              { end [0, 1] }
-            ]
-          }
-        ]
+    shape Prism $"{half}-sword-hand" {
+      position: courtTurned(isLower, [-0.37, 0.165, courtZ])
+      rotation: courtHalfRotation(isLower, [0, 1, 0, 0])
+      scale [0.036, 0.036, courtRelief + 6 * courtStep]
+      material: 5
+      blend: "Union"
+      smooth: 0
+      profile {
+        kind: "Ellipse"
       }
+      rounding: courtRound(6, 0.0324)
     }
-  }
-  shape Prism "lower-collar" {
-    position [0, -0.248, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.165, 0.018, courtRelief + 5 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.43
-    }
-    rounding: minimum(0.007, courtRelief + 5 * courtStep)
-  }
-  shape Prism "lower-medallion-rim" {
-    position [0, -0.17, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.055, 0.055, courtRelief + 7 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Path"
-      cornerRadius: 0
-      path {
-        tolerance: 0.004
-        contours [
-          {
-            start [1, 0]
-            segments [
-              { end [0, 1], arcCenter [0, 0] }
-              { end [-1, 0], arcCenter [0, 0] }
-              { end [0, -1], arcCenter [0, 0] }
-              { end [1, 0], arcCenter [0, 0] }
-            ]
-          }
-        ]
-      }
-    }
-  }
-  shape Prism "lower-medallion-gem" {
-    position [0, -0.17, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.035, 0.035, courtRelief + 7 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(7, 0.0315)
-  }
-  shape Prism "lower-sword-blade" {
-    position [0.39, -0.38, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.016, 0.26, courtRelief + 3 * courtStep]
-    material: 6
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.2
-    }
-    rounding: minimum(0.003, courtRelief + 3 * courtStep)
-  }
-  shape Prism "lower-sword-fuller" {
-    position [0.39, -0.38, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.005, 0.25, courtRelief + 4 * courtStep]
-    material: 2
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "lower-sword-crossguard" {
-    position [0.39, -0.22, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.065, 0.012, courtRelief + 3 * courtStep]
-    material: 1
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.4
-    }
-  }
-  shape Prism "lower-sword-grip" {
-    position [0.39, -0.165, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.012, 0.04, courtRelief + 3 * courtStep]
-    material: 0
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "RoundedRectangle"
-      cornerRadius: 0.5
-    }
-  }
-  shape Prism "lower-sword-pommel" {
-    position [0.39, -0.125, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.02, 0.02, courtRelief + 3 * courtStep]
-    material: 9
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(3, 0.018)
-  }
-  shape Prism "lower-sword-hand" {
-    position [0.37, -0.165, courtZ]
-    rotation [-1, 0, 0, 0]
-    scale [0.036, 0.036, courtRelief + 6 * courtStep]
-    material: 5
-    blend: "Union"
-    smooth: 0
-    profile {
-      kind: "Ellipse"
-    }
-    rounding: courtRound(6, 0.0324)
   }
 }
 

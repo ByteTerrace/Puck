@@ -1,0 +1,27 @@
+// Mirrored pairs, a library. A symmetric part is written once as a template (or a `for` over two names) that carries a
+// flag, 0 for the pair's first side and 1 for its second; these functions give the second side its values from the
+// first's, so the two sides cannot drift apart. Each returns its argument untouched on the first side.
+//
+//   template arm(side, second) {
+//     shape Sweep $"upper-arm-{side}" { position: mirrorX(second, [0.295, 1.45, 0]) }
+//   }
+//   arm("left", 0)
+//   arm("right", 1)
+
+// One of two values by side, for what is not a reflection of the other.
+function bySide(second, first, other) = second ? other : first
+
+// A number negated on the second side; the result of negating zero is zero.
+function flip(second, v) = second ? 0 - v : v
+
+// The components of `v` multiplied by `signs` (1 or -1) on the second side.
+function signed(second, v, signs) = second ? map(range(0, length(v)), i => signs[i] < 0 ? 0 - v[i] : v[i]) : v
+
+// A point reflected across the plane X = 0.
+function mirrorX(second, p) = signed(second, p, [-1, 1, 1])
+
+// A rotation quaternion (x, y, z, w) conjugated by that reflection.
+function mirrorRotation(second, q) = signed(second, q, [1, -1, -1, 1])
+
+// A reflected rotation that also turns half way about Y: the quaternion's components cycle two places.
+function mirrorTurnRotation(second, q) = second ? [q[2], q[3], q[0], q[1]] : q

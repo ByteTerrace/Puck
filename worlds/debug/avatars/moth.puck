@@ -5,6 +5,7 @@ import "../../standard/motion"
 import "../../standard/styles"
 import "../../standard/kits"
 import "../../standard/camera"
+import "../../standard/mirror"
 import "moth-head"
 import "moth-dash"
 import "moth-camera"
@@ -189,19 +190,8 @@ template braidChain(chainIdx, baseId, positions, rotations) {
   }
 }
 
-// One shape table for both sides of the body. A template expands once per side with `side` ("left" or "right") and
-// `isRight` (0 or 1); the left side is written out, and the right side's rows come from the helpers below.
-function bySide(isRight, left, right) = isRight ? right : left
-// A negation that keeps zero's sign positive.
-function flip(isRight, v) = isRight ? 0 - v : v
-// The components of `v` multiplied by `signs` (1 or -1) on the right side.
-function signed(isRight, v, signs) = isRight ? map(range(0, length(v)), i => signs[i] < 0 ? 0 - v[i] : v[i]) : v
-// A point reflected across the body's centre plane (X to -X).
-function mirrorX(isRight, p) = signed(isRight, p, [-1, 1, 1])
-// A rotation conjugated by that reflection.
-function mirrorRotation(isRight, q) = signed(isRight, q, [1, -1, -1, 1])
-// The reflected rotation of a part that also turns half way about Y, which is how the right pod's frame is written.
-function mirrorTurnRotation(isRight, q) = isRight ? [q[2], q[3], q[0], q[1]] : q
+// Both sides of the body: the left side is written out, and `standard/mirror` gives the right side its values from it.
+// `side` is "left" or "right" and `isRight` 0 or 1.
 
 template mothLimbs(side, isRight) {
   shape Sweep $"upperArm-{side}" {
