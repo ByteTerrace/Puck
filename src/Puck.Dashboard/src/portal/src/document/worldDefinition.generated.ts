@@ -2092,7 +2092,7 @@ export type CreationDocument = {
      */
     emHeight: number;
     /**
-     * The glyph extrude half-depth — the relief the slab straddles the surface by (null = a thin default).
+     * The glyph extrude half-depth — the relief the slab straddles the surface by (null = DefaultDepth).
      */
     depth?: number | null;
     /**

@@ -2166,7 +2166,7 @@
                     "number",
                     "null"
                   ],
-                  "description": "The glyph extrude half-depth \u2014 the relief the slab straddles the surface by (null = a thin default)."
+                  "description": "The glyph extrude half-depth \u2014 the relief the slab straddles the surface by (null = DefaultDepth)."
                 },
                 "mode": {
                   "type": [
