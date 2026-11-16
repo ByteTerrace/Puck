@@ -78,6 +78,22 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
         Assert.All(Keys(groups: first, glyphs: true).Zip(Keys(groups: other, glyphs: true)), static pair => Assert.NotEqual(pair.First, pair.Second));
         Assert.Equal(Keys(groups: first, glyphs: false), Keys(groups: other, glyphs: false));
 
+        // A retained emission replayed into a cleared builder (the static placements' cache) carries its glyphs' pixels.
+        var replaying = new SdfProgramBuilder();
+        var plain = replaying.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+        var mark = replaying.MarkEmission();
+
+        _ = replaying.BeginInstance(Vector3.Zero, 1f).ResetPoint().Glyph(Atlas(alpha: 128), Vector2.Zero, Vector2.One, 0.5f, 0.5f, 0.02f, 0.25f, plain).EndInstance();
+        var retained = replaying.RetainEmission(mark);
+        var emitted = replaying.Build().GlyphAtlas;
+
+        replaying.Clear();
+        _ = replaying.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
+        Assert.Equal(0UL, replaying.Build().GlyphAtlas);
+        replaying.AppendEmission(retained);
+        Assert.NotEqual(0UL, emitted);
+        Assert.Equal(emitted, replaying.Build().GlyphAtlas);
+
         // One atlas binds for a program, so glyphs of two atlas images refuse to share one.
         var mixed = new SdfProgramBuilder();
         var white = mixed.AddMaterial(new SdfMaterial(Albedo: Vector3.One));
