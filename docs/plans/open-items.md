@@ -639,6 +639,12 @@ Stalls and hitches to attribute:
 - [low] Pacing on a high-refresh, variable-rate display under Windows'
   Dynamic Refresh Rate: confirm the bar and VRR pacing hold in front of and
   behind another window, and that `world.target display` reaches the top rate.
+- [low] Dynamic resolution adapts on GPU timing only when a display period is
+  known (`WorldDynamicResolution`'s update, `displayHertz > 0`), so a view with
+  GPU timestamps but no display Hertz (an offscreen render, a frame streamed to
+  a thin client; unverified that those pass zero) holds its grid. Give the
+  controller a target period from the view's own cadence (its refresh divisor or
+  the session's frame rate).
 
 ### Bake proportional to change
 
@@ -839,6 +845,11 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [low] A test schedule admits no authored command (`WorldScheduleCommands`,
+  `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
+  (`world.state.cell.set liftCall`) where a player presses the car's buttons.
+  Admit authored commands in schedules under the step's own principal, then
+  drive the lift through its button reach boxes.
 - [medium] The seam walk's window counts its opening tick and each burst's
   tick from the route program's first line (`opens` and `captures[].at` in
   `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
@@ -1663,6 +1674,10 @@ Federation and transfers:
   [valley and moons](valley-and-moons.md#phases)' phase 6 says held input
   carries exactly once. Carry it through the seat's existing command path,
   never a second input route.
+  The seam walk's routes (`worlds/debug/walkthrough-tests.puck`) press the
+  stick again every 15 ticks to get across, so the instrument cannot show
+  this defect or a regression after it is fixed: when it lands, a hold-once
+  leg per crossing replaces the re-press.
 - [medium] Sound does not carry across a crossing: `WorldAudioDirector`
   re-enters an emitter from silence when its identity changes, and no plan
   owns continuity; the [audio reference](../reference/audio.md) is the
