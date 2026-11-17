@@ -72,7 +72,7 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
         if (!view.Present) { return null; }
         var report = diagnostics.Latest;
 
-        if ((report is null) || diagnostics.HasPending(view: diagnostics.Mode) || (m_revision != diagnostics.Revision) || (m_drawnReady != diagnostics.DrawnReady) || (frame.MeshDrawsRevision != m_meshRevision) ||
+        if ((report is null) || diagnostics.HasPending(view: diagnostics.Mode) || (m_revision != diagnostics.Revision) || (m_drawnReady != diagnostics.DrawnReady) || (frame.DrawRowsRevision != m_meshRevision) ||
             ((diagnostics.Mode == "contacts") && (diagnostics.Tick != m_lastTick))) {
             report = diagnostics.Report(diagnostics.Mode);
             m_lastTick = diagnostics.Tick;
@@ -83,13 +83,13 @@ internal sealed class WorldDiagnosticOverlay(WorldDiagnostics diagnostics, World
 
         if (instance is null) { return null; }
         m_sampler = graphs.Pickers?.DiagnosticPickerOf(instance: instance);
-        if ((frame.MeshDrawsRevision != m_meshRevision) || (m_camera != view.Camera)) {
+        if ((frame.DrawRowsRevision != m_meshRevision) || (m_camera != view.Camera)) {
             m_depth.Clear();
-            m_meshRevision = frame.MeshDrawsRevision;
+            m_meshRevision = frame.DrawRowsRevision;
             m_camera = view.Camera;
         }
         if ((m_sampler?.Result is { } answer) && (answer.Request == m_request) && (m_requestedFinding is { } id) &&
-            (answer.MeshRevision == frame.MeshDrawsRevision) && (diagnostics.Find(id: id) is { } sampled) && (answer.Sample is { } sample) && (sample.Camera == view.Camera)) {
+            (answer.MeshRevision == frame.DrawRowsRevision) && (diagnostics.Find(id: id) is { } sampled) && (answer.Sample is { } sample) && (sample.Camera == view.Camera)) {
             var witnessDistance = Vector3.Distance(value1: sample.Camera.Position, value2: (sampled.PinAnchor ?? sampled.Witness));
             var difference = (witnessDistance - answer.Distance);
 

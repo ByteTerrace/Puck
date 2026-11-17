@@ -104,7 +104,7 @@ internal sealed class WorldDiagnostics(WorldServer server, WorldRenderProbe? ren
         var bakeError = ((scene is null) ? 0 : frame!.MeshDraws.Where(predicate: static d => SdfMeshIrradianceScene.IsStatic(draw: d))
             .Select(selector: static d => (Vector3.TransformNormal(d.Mesh.BakeCell, d.ObjectToWorld).Length() * 0.5)).DefaultIfEmpty(defaultValue: 0).Max());
         var frameNumber = render?.Root?.FramesProduced;
-        var meshRevision = frame?.MeshDrawsRevision;
+        var meshRevision = frame?.DrawRowsRevision;
         var exactPose = ((frame is not null) && (frame.Clock.Whole == server.CompletedEngineTicks) && (frame.Clock.Fraction == 0));
         var rendered = (render is not null);
         var job = Task.Run(function: () => {
