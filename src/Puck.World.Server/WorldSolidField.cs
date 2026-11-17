@@ -66,6 +66,7 @@ public sealed class WorldSolidField : IContactField {
     private readonly IReadOnlyList<WorldFieldRegion> m_regions;
     private readonly SdfProgram m_program;
     private readonly IWorldQuery m_query;
+    private readonly IFieldEvaluator m_queryField;
     private readonly FixedFieldContactSolver m_solver;
 
     /// <summary>The moving roots sampled by either contact provider.</summary>
@@ -142,6 +143,8 @@ public sealed class WorldSolidField : IContactField {
             )
         );
         m_contactField = new UnionField(a: m_contactField, b: movingSolids.MovingField);
+        m_queryField = new UnionField(a: evaluator, b: movingSolids.MovingField);
+        m_query = new FieldWorldQuery(field: m_queryField);
         contactBounds = ((contactBounds is null) ? (IFieldBounds)movingSolids.MovingField : new FieldBoundsUnion(a: contactBounds, b: ((IFieldBounds)movingSolids.MovingField)));
         m_solver = new FixedFieldContactSolver(
             contactSkin: tuning.ContactSkin,
@@ -215,6 +218,7 @@ public sealed class WorldSolidField : IContactField {
     // The compiled material id's hold verdict — one material per solid screen and per solid placement, so an id
     // outside the recorded range is the field lattice's own terrain and falls back to the world-level policy.
     private bool Holdable(int material, out bool grantedByOverride) {
+        if (material < 0) { return MovingSolids.MovingHoldable(grantedByOverride: out grantedByOverride, row: (-material - 1)); }
         grantedByOverride = ((material >= 0) && (material < m_holdableGrantedByOverride.Length) && m_holdableGrantedByOverride[material]);
 
         return (((material >= 0) && (material < m_holdableMaterials.Length))
@@ -271,7 +275,7 @@ public sealed class WorldSolidField : IContactField {
     // orientation read from the field gradient one step back into open space (a march reports WHERE, never which
     // way -- RayHit.Normal is documented zero).
     private bool TryCast(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate) =>
-        FixedSurfaceQuery.TryRaycast(m_query, m_evaluator, origin, direction, maxDistance, GradientBackoff,
+        FixedSurfaceQuery.TryRaycast(m_query, m_queryField, origin, direction, maxDistance, GradientBackoff,
             out candidate, out _);
 
     /// <summary>Queries the wrapped deterministic SDF evaluator for an unobstructed segment.</summary>
@@ -546,10 +550,10 @@ public sealed class WorldSolidField : IContactField {
             up: out up
         );
     /// <summary>Reuses immutable authored solids with the population's live physical regions.</summary>
-    public WorldSolidField WithRegions(IReadOnlyList<WorldFieldRegion> regions, FixedWorldCollision tuning) => new(
+    public WorldSolidField WithRegions(IReadOnlyList<WorldFieldRegion> regions, FixedWorldCollision tuning, WorldColliderSet? movingSolids = null) => new(
         program: m_program, evaluator: m_evaluator, grid: m_banded?.Grid, kitReach: m_kitReach, regions: regions,
         placementShapeCount: PlacementShapeCount, census: Census, tuning: tuning, holdableMaterials: m_holdableMaterials,
-        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip, movingSolids: MovingSolids);
+        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip, movingSolids: (movingSolids ?? MovingSolids));
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
     /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
     /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning

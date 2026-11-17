@@ -154,7 +154,7 @@ public sealed partial class WorldGrants {
             foreach (var row in proposed.Rows(peer)) { proposed.RemoveGrant(row.Grantee, row.Capability, row.Subject); }
         }
         if (!PreparedAuthorityTransition.TryPrepare(this, actor, m_authorityDefinition, definition, [], [], true,
-            out var prepared, out var reason, checkpoint: proposed.Capture())) {
+            out var prepared, out var reason, checkpoint: proposed.Capture(), resetSessionEpochs: resetSessionEpochs)) {
             throw new InvalidOperationException(reason);
         }
         prepared!.Install();
@@ -200,25 +200,26 @@ public sealed partial class WorldGrants {
         private readonly IReadOnlyList<WorldGrant> m_adds;
         private readonly IReadOnlyList<WorldGrant> m_removes;
         private readonly bool m_reset;
+        private readonly bool m_resetSessionEpochs;
         private readonly WorldGrantsCheckpoint? m_checkpoint;
         private bool m_installed;
-        private PreparedAuthorityTransition(WorldGrants owner, WorldDefinition? candidate, IReadOnlyList<WorldGrant> adds, IReadOnlyList<WorldGrant> removes, bool reset, WorldGrantsCheckpoint? checkpoint) {
-            m_owner = owner; m_candidate = candidate; m_adds = adds; m_removes = removes; m_reset = reset; m_checkpoint = checkpoint;
+        private PreparedAuthorityTransition(WorldGrants owner, WorldDefinition? candidate, IReadOnlyList<WorldGrant> adds, IReadOnlyList<WorldGrant> removes, bool reset, WorldGrantsCheckpoint? checkpoint, bool resetSessionEpochs) {
+            m_owner = owner; m_candidate = candidate; m_adds = adds; m_removes = removes; m_reset = reset; m_checkpoint = checkpoint; m_resetSessionEpochs = resetSessionEpochs;
         }
         internal static bool TryPrepare(WorldGrants owner, Principal actor, WorldDefinition? current, WorldDefinition? candidate,
             IReadOnlyList<WorldGrant> adds, IReadOnlyList<WorldGrant> removes, bool grantsWrite,
-            out PreparedAuthorityTransition? prepared, out string reason, bool reset = false, WorldGrantsCheckpoint? checkpoint = null) {
+            out PreparedAuthorityTransition? prepared, out string reason, bool reset = false, WorldGrantsCheckpoint? checkpoint = null, bool resetSessionEpochs = false) {
             prepared = null;
             if (!owner.TryValidateAuthority(actor, current, candidate, adds, removes, grantsWrite, out var ordered, out reason,
                 reset: reset, restore: checkpoint is not null, checkpoint: checkpoint)) { return false; }
-            prepared = new(owner, candidate, ordered, removes, reset, checkpoint);
+            prepared = new(owner, candidate, ordered, removes, reset, checkpoint, resetSessionEpochs);
             return true;
         }
         internal void Install() {
             if (m_owner.m_host is { } host && (m_adds.Count != 0 || m_removes.Count != 0 || !ReferenceEquals(m_owner.m_authorityDefinition?.Groups, m_candidate?.Groups))) { host.Document.MarkDefinitionDeliveryPending(); }
             if (m_installed) { throw new InvalidOperationException("Authority transition already consumed."); }
             m_installed = true;
-            if (m_checkpoint is not null) { m_owner.RestoreRaw(m_checkpoint); }
+            if (m_checkpoint is not null) { m_owner.RestoreRaw(m_checkpoint, m_resetSessionEpochs); }
             if (m_reset) { m_owner.ResetRaw(m_owner.m_localSeatCount); }
             if (m_candidate is not null) {
                 var groups = m_candidate.Groups ?? WorldGroupsSection.Empty;

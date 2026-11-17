@@ -12,6 +12,8 @@ namespace Puck.World;
 /// the whole switch; <see langword="null"/> means decoration — the row is drawn but bodies pass through it.</summary>
 /// <param name="Margin">The signed skin added to the shape for contact purposes. Positive fattens the collider past the
 /// drawn surface; negative lets a body sink in. Compensates the smooth-union blend.</param>
+/// <remarks>A creation's live <c>sizeBy</c> uniformly scales its complete contact shape, including this margin.
+/// Numerical query padding and the world's body-contact skin remain in world units.</remarks>
 public sealed record WorldSolid(float Margin);
 /// <summary>A kit's closed body-volume vocabulary. A kit with no collider is not solved against the contact field.</summary>
 [JsonDerivedType(typeof(WorldCollider.Sphere), typeDiscriminator: "sphere")]
@@ -355,6 +357,7 @@ public readonly record struct FixedWorldCollision(
         DefaultHold: collision.DefaultHold,
         GridCellSize: FixedQ4816.FromDouble(value: collision.GridCellSize)
     );
+
     /// <summary>Gets how far past a body's collider surface a contact still acts on the body, in metres: two contact
     /// skins (a carrier's support reaches that far) and one fixed-point step, beyond the single skin every other contact
     /// keeps. A change to the contact field farther than this from a body cannot reach it.</summary>

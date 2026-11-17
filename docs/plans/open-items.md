@@ -1501,6 +1501,18 @@ colliders and the field provider read one certified surface solve
 Owner: next geometry and bake lane · ordinary · Next: the groups sharp boxes
 left worse, then the valley sectors' buried colliders.
 
+- [medium] Moving solid fields have no spatial culling in
+  `WorldColliderSet.MovingField`: each active row evaluates its creation's
+  field bounds even far from the body. In the isolated carved-support field
+  scenario, the same ten-tick body path with size zero and size one counts 40
+  `physics.contact.field-bounds` queries in either case; the active distant
+  solid adds 347 `sdf.bounds.evaluations` and 5,552 `sdf.bounds.instructions`
+  (zero when absent). A plain outside-box rejection cannot replace the raw
+  distances and intervals the union promises. Give the moving set a bounds
+  hierarchy and a query contract that distinguishes a positive clearance
+  certificate from an exact field value; prove skipped rows cannot change
+  contact, raycasts, navigation, gradients or materials. Verify with the same
+  pinned paths and counters, with many distant rows and a nearby carved row.
 - [medium] Sub-cell features draw badly where boxes touch or a thin layer sits
   inside a union. `puck mesh audit --cpu` reads these worse since boxes became
   sharp: `goTable` (its flush face prisms' seams), `hall-floor-2` and `-3` (a

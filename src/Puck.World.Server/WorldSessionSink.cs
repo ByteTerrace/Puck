@@ -28,7 +28,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
+    private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldRecipientView m_view = observation.View;
+
     private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
 
     /// <summary>Gets the reason the observer ended its own subscription with, or <see langword="null"/> while it still
@@ -164,7 +166,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         var time = server.DeliveryTime;
 
         Present(
-            delivery: m_feed.Compose(m_view, m_cursor),
+            delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
             engineTick: time.EngineTick,
             tick: time.Tick,
             version: Version
@@ -178,7 +180,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
         m_withheld = false;
 
-        DeliverDefinition(server.Definition, server.DocumentVersion);
+        DeliverDefinition(definition: server.Definition, version: server.DocumentVersion);
 
         FollowObserverDetach();
     }
@@ -191,7 +193,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         m_cursor.Release();
         server.DetachCursor(observation.Session, m_cursor);
     }
-    private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(m_view);
+
+    private WorldDefinition? DiscloseToReplica(WorldDefinition definition) => m_cursor.DeliverDefinition(view: m_view);
     // Replacing a replica document replaces its state arena and observation metadata together. Complete that
     // delivery with the existing non-consuming primer now, rather than leaving policy-dependent work for a later
     // quiet tick. The primer has the actual entity table too; an empty synthetic snapshot would erase bodies.
@@ -203,8 +206,9 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
         // borrowed carrier while the hub is still fanning it out to other sinks.
         if (m_deliveringSnapshot) { return; }
         FollowObserverDetach();
-        if (DetachReason is null) { DeliverSnapshot(server.Document.BuildPrimerSnapshot()); }
+        if (DetachReason is null) { DeliverSnapshot(snapshot: server.Document.BuildPrimerSnapshot()); }
     }
+
     /// <summary>Discloses a definition as this session's tier shows it, for a read door — see
     /// <see cref="Disclose(WorldDefinition, WorldDisclosureTier, StateArena, Principal?, bool)"/>. Whether the session observes right now is the
     /// delivery's question, not this one's.</summary>
@@ -275,7 +279,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             server.AttachCursor(observation.Session, m_cursor);
 
             if (Tier == WorldDisclosureTier.Replica) {
-                if (DiscloseToReplica(definition) is { } delivered) { inner.DeliverDefinition(delivered, Version); PrimeReplica(); }
+                if (DiscloseToReplica(definition: definition) is { } delivered) { inner.DeliverDefinition(definition: delivered, version: Version); PrimeReplica(); }
             } else {
                 Project(
                     definition: definition,
@@ -323,7 +327,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // A state clock's anchor reaches the observer ahead of the tick whose phase it holds.
             if (Tier == WorldDisclosureTier.Presentation) {
                 Present(
-                    delivery: m_feed.Step(m_view, m_cursor, tick, engineTick),
+                    delivery: m_feed.Step(cursor: m_cursor, engineTick: engineTick, tick: tick, view: m_view),
                     engineTick: engineTick,
                     tick: tick,
                     version: Version
@@ -337,6 +341,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             redacted = redacted with {
                 FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };
@@ -363,7 +368,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(
-                    delivery: m_feed.Compose(m_view, m_cursor),
+                    delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
                     engineTick: stamp.EngineTick,
                     tick: stamp.Tick,
                     version: Version
@@ -375,7 +380,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (m_withheld) {
                 m_withheld = false;
-                if (DiscloseToReplica(definition) is { } resumed) { inner.DeliverDefinition(resumed, Version); PrimeReplica(); }
+                if (DiscloseToReplica(definition: definition) is { } resumed) { inner.DeliverDefinition(definition: resumed, version: Version); PrimeReplica(); }
                 FollowObserverDetach();
 
                 return;
@@ -386,8 +391,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             // zone move can change without a placement install), never because a hidden-only install happened; the
             // observer's state stands, so it is handed the same section again, never a state exported and loaded
             // whole.
-            if (stamp.ArenaValues && !m_cursor.FrameMoved(m_view)) { return; }
-            if (DiscloseToReplica(definition) is { } delivered) {
+            if (stamp.ArenaValues && !m_cursor.FrameMoved(view: m_view)) { return; }
+            if (DiscloseToReplica(definition: definition) is { } delivered) {
                 inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false });
                 PrimeReplica();
             }

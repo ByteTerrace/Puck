@@ -237,7 +237,7 @@ internal sealed class WorldTestBatch {
                 if (probe.StaleDigest is { } stale) { throw new InvalidOperationException(message: $"'{name}': {stale}"); }
 
                 results.Add(item: new { world = name, divergence, hashes = probe.Hashes });
-                if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}"); }
+                if (divergence >= 0) { throw new InvalidOperationException(message: $"reproduction diverged in '{name}' at recorded tick {divergence}: {probe.Divergence}"); }
             }
             // One row per authority: the per-tick hashes the probe recorded during the authored run, and under
             // --reproduce the replay's first divergent tick (-1 when it reproduced).

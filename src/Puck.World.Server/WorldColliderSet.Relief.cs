@@ -214,7 +214,7 @@ public sealed partial class WorldColliderSet {
     }
     // One static copy's field collider: its frame is the world box's centre, unturned, so the program carries the stamp's
     // own translation less that centre, and its rotation. Null for a copy contact keeps no shape of.
-    private static FixedStaticCollider? ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin) {
+    private static FixedStaticCollider? ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin, bool partitioned = true) {
         if (!CreationStampEmitter.EmitsContact(document: document)) {
             return null;
         }
@@ -225,7 +225,7 @@ public sealed partial class WorldColliderSet {
         var relieved = Relieves(document: document);
         var growth = ((relieved ? (FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) * transform.Scale) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
-            partitioned: !relieved, transform: transform, unbounded: out var unbounded);
+            partitioned: (partitioned && !relieved), transform: transform, unbounded: out var unbounded);
 
         var (center, half) = ((unbounded || box.IsEmpty) ? (transform.Origin, FixedVector3.Zero) : (box.Center, box.Extent));
         var local = (transform with { Origin = (transform.Origin - center) });

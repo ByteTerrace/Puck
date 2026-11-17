@@ -5,14 +5,16 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldBody {
     private FixedVector3? m_diagnosticManifoldPoint;
+
     /// <summary>The actual last analytic support solve, absent when ungrounded or not evaluated by that provider.</summary>
     public ContactSupportWitness? DiagnosticSupport { get; private set; }
     /// <summary>The authored snap search reach, information only, never a diagnostic hover tolerance.</summary>
-    public double DiagnosticSnapReach => (double)GroundSnap;
+    public double DiagnosticSnapReach => ((double)GroundSnap);
     /// <summary>Whether the solved normal velocity is within one fixed-point unit of rest.</summary>
-    public bool DiagnosticSettled => DiagnosticSupport is { } support &&
-        FixedQ4816.Abs(FixedVector3.Dot(IsRigid ? m_rigidVelocity : m_planarVelocity + m_up * m_verticalVelocity,
-            support.Push.Normal)) <= FixedQ4816.Epsilon;
+    public bool DiagnosticSettled => ((DiagnosticSupport is { } support) &&
+        (FixedQ4816.Abs(value: FixedVector3.Dot(left: (IsRigid ? m_rigidVelocity : (m_planarVelocity + (m_up * m_verticalVelocity))),
+            right: support.Push.Normal)) <= FixedQ4816.Epsilon));
+
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
     // body still shouldn't clip through a wall. The vertical WRITE-BACK (m_verticalVelocity, m_planarVelocity, the
     // grounded position-accumulator reset) is gated on CompiledBodyMotionProgram.OwnsVerticalContactState — see its
@@ -311,6 +313,7 @@ public sealed partial class WorldBody {
             !field.TryRideDisplacement(
                 up: in m_up,
                 displacement: out var displacement,
+                supportRow: out var supportRow,
                 orientation: in m_orientation,
                 position: m_position,
                 volumes: ScaledColliderVolumes()
@@ -319,8 +322,17 @@ public sealed partial class WorldBody {
             return;
         }
 
+        var next = (m_position + displacement);
+        var velocity = ComposedVelocity();
+        ContactResolution resolution;
+
+        using (field.ExcludeRideSupport(row: supportRow)) {
+            resolution = SweepContact((m_contactField ?? field), m_entityIndex, m_position, ref next, ref velocity,
+                m_orientation, ScaledColliderVolumes(), m_up);
+        }
+        if (resolution.Refusal != ContactRefusal.None) { NoteSweepRefusal(refusal: resolution.Refusal); return; }
         WakeUp();
-        m_position += displacement;
+        m_position = next;
     }
 
     // One body step's support-distance answer, so the step's two ground snaps (the support search before integration
@@ -385,8 +397,9 @@ public sealed partial class WorldBody {
                 ? entityField.ResolveEntitySupportSweep(entityIndex: m_entityIndex, orientation: in m_orientation,
                     position: ref position, previousPosition: in previousPosition, responseOrigin: in responseOrigin, up: in m_axis,
                     velocity: ref velocity, volumes: m_volumes)
-                : Sweep(previousPosition: in previousPosition, position: ref position, velocity: ref velocity));
+                : Sweep(position: ref position, previousPosition: in previousPosition, velocity: ref velocity));
     }
+
     // The one dispatch every sweep that moves a body goes through: an entity-aware field learns which local body it
     // moves, so what a neighbour answers is admitted against that body (WorldPopulation.AdmitAdjacencyResponse). A probe
     // that moves no body calls the field directly and names none.
