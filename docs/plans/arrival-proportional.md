@@ -1124,7 +1124,6 @@ is a verification request to the lead.
 
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
-| R0. Count's reading | Owed | The counts are built (`SdfMeshStagingCause` stated by the dresser and classified in `SdfWorldTables.StageMeshRegion`, per-cause totals, `rows.owned.changed`, the topology reasons and the peaks). What remains is the reading | None | The lead reads the windows on a windowed World and applies [the rule](#r0-the-counts-and-the-rule) |
 | R1h. The hit door's checks | Owed | The resolver is built (`sdfMeshResolveHit`, the kernel kind `gpu.mesh-hits.rejected`, `sdf.instances.targets.stale`, `world.rows force hit-bound`). What remains is its windowed check | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation |
 | R1a. The staged table is the producer's | Medium to large | The absent bit and its kernel branch; the staging function's two branches and the per-row retire; rows by mesh and a landing staging them; the journal taken while meshes are owed; the reader and the one cursor in every consumer; the tables' glass row set; the queue precondition; the pack, ledger, seed and device comparisons; the levers for refusal, relocation, trim, a skipping consumer and new tables | The tables' one staging function; the cursor | The cross-check over a cold boot with its forcing counts; the law's part without a row table; a boot's captures fill in as before; `world.wait residency` still names what is owed |
 | R1b. Rows | Large | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
@@ -1138,16 +1137,24 @@ by mesh are what R1b's free rows and R2's piece rows stand on, and the scene
 build's pooled arrays (built) are what a cluster keeps. Decoding into the
 mesh's own storage (decision 4) is built too.
 
-**S2 is conditional, and the first reading says drop it.** By
-[R0's rule](#r0-the-counts-and-the-rule), one scene's prefix read offline over
-the store's static meshes is a small fraction of
-`SdfGpuWork.MostUploadJobBytes`, and an arrival that rebuilds the scene once
-per `SdfMeshIrradiance.PendingSceneInterval` sends well under a second of
-`SdfGpuWork.UploadBytesPerSecond` **[inference]**. Neither clause of the rule
-holds, so S2 is dropped unless the frame's own static draws, which add rigid
-copies that the offline reading leaves out, show more: the `[sdf.mesh-gi]
-scene` line prints `prefix-words`, and the lead's windowed meadow arrival reads
-it **[unconfirmed]**.
+**S2 follows S1: the windowed reading reverses the offline one.** The offline
+reading over the store's static meshes put one scene's prefix at a small
+fraction of `SdfGpuWork.MostUploadJobBytes`. The frame's own static draws,
+rigid copies included, are what the scene exports: a cold windowed debug World
+prints `prefix-words` above twelve million in its `[sdf.mesh-gi] scene` lines,
+several times `SdfGpuWork.MostUploadJobBytes` in one build, so the rule's first
+clause holds and S2 is built after the R steps.
+
+**The rule's reading.** Read from the seam walk's nine windows on both
+backends, whose per-cause counts span an arrival (the valley door, the lift)
+and a crossing (the gallery glass): no `frames.over-chunk.cursor` or `retry`
+moved, so no lost cursor stands before R1a; `frames.over-chunk.landing` rose in
+every arrival window, so R1a is on the arrival's path and takes the cold
+boot's queued timing; `frames.over-chunk.rebuild` rose in the arrival windows,
+so R1b follows R1a; the glass crossing moved no `frames.over-chunk.portal`, so
+R1c follows R1b without a timing; `frames.over-chunk.hand-over` stayed at zero,
+so R2 stays with the visibility plan's V1b. The order is R1h, R1a, R1b, R1c,
+then S2.
 
 ## Systems considered
 

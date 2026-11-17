@@ -61,8 +61,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the scheduling stage's and C0.3's windowed readings, the control plane's
    step C0.4, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-   work proportional to change, steps R0 to R2 of
-   [its memo](arrival-proportional.md), then the frame thread's field queries.
+   work proportional to change, steps R1h, R1a, R1b, R1c and S2 of
+   [its memo](arrival-proportional.md) in that order (R0's rule has read
+   them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
 8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
@@ -129,9 +130,6 @@ head, each named by the lane whose landing waits on it:
   whole, on both backends.
 - c03: the converged still at a lockstep stop against the build before c03,
   on both backends (the control gap is read on both).
-- r0: the arrival memo's windowed scripts on both backends
-  ([its measurement section](arrival-proportional.md#the-measurement-each-step-lands-on)),
-  then its rule's table re-ranks R1a, R1b, R2 and S2.
 - sm7p: the indexed slab read's paired cost on both backends, two frozen
   builds through `puck measure` (the recipe is in
   [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
@@ -524,12 +522,8 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
-  R0's counting is built, including producer-local serial attribution and the
-  device-free partition, threshold and steady-window laws. Its
-  [windowed verification request](arrival-proportional.md#windowed-verification-request)
-  still owns the boot, arrival, crossing and steady readings that select the
-  later steps; headless presentation stages no draw records.
+  design and its remaining steps, R1h, R1a, R1b, R1c and S2 in that order;
+  R2 stays with the visibility plan's V1b. R0's rule has read them.
   No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
