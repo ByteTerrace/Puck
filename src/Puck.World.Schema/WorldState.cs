@@ -114,47 +114,47 @@ public sealed record WorldStateSection(
 }
 /// <summary>
 /// One row of the document's <c>state</c> section: a <see cref="StateRow"/> plus the three traits only a world
-/// reads — the drive-admission gate, the physical-field storage, and the test verdict. <see cref="StateRow.Name"/> is the
+/// reads — the drive-admission gate, the physical-field storage, and the test verdict. <see cref="StateRowShape.Name"/> is the
 /// <c>UpsertStateRow</c>/<c>RemoveStateRow</c> key, the <c>state:&lt;name&gt;</c> grant subject, and — for a
 /// slot-shaped row — the <c>state.&lt;name&gt;</c> HUD binding token.
 /// </summary>
 /// <param name="Name">The row's stable string name (unique within the section).</param>
 /// <param name="Kind">Which cell kind every cell in this row carries.</param>
-/// <param name="Min">See <see cref="StateRow.Min"/>.</param>
-/// <param name="Max">See <see cref="StateRow.Max"/>.</param>
-/// <param name="Capacity">See <see cref="StateRow.Capacity"/>.</param>
-/// <param name="Overflow">See <see cref="StateRow.Overflow"/>.</param>
+/// <param name="Min">See <see cref="StateRowShape.Min"/>.</param>
+/// <param name="Max">See <see cref="StateRowShape.Max"/>.</param>
+/// <param name="Capacity">See <see cref="StateRowShape.Capacity"/>.</param>
+/// <param name="Overflow">See <see cref="StateRowShape.Overflow"/>.</param>
 /// <param name="GatesDrive">Whether this row is a drive-admission gate. When set, this must be a keyed row
-/// (<see cref="StateRow.IsKeyed"/>) whose per-body cell — keyed by the body's 0-based entity index — is consulted
+/// (<see cref="StateRowShape.IsKeyed"/>) whose per-body cell — keyed by the body's 0-based entity index — is consulted
 /// before admitting a drive or action intent for that body: a nonzero cell refuses the body's intents until the cell
 /// reads zero again, checked fresh every tick. The engine does not interpret the row's name; several independently
 /// named gate rows may exist at once, any one of which can refuse. Legitimate only on a row declaring
-/// <see cref="StateRow.Capacity"/>, and only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>/
+/// <see cref="StateRowShape.Capacity"/>, and only for <see cref="CellKind.Int"/>/<see cref="CellKind.Fixed"/>/
 /// <see cref="CellKind.Bool"/>. Default <see langword="false"/>.</param>
-/// <param name="Evicts">See <see cref="StateRow.Evicts"/>.</param>
+/// <param name="Evicts">See <see cref="StateRowShape.Evicts"/>.</param>
 /// <param name="Cells">See <see cref="StateRow.Cells"/>.</param>
-/// <param name="Advance">See <see cref="StateRow.Advance"/>.</param>
+/// <param name="Advance">See <see cref="StateRowShape.Advance"/>.</param>
 /// <param name="Draw">See <see cref="StateRow.Draw"/>.</param>
 /// <param name="DrawCursor">See <see cref="StateRow.DrawCursor"/>.</param>
 /// <param name="DrawnMasks">See <see cref="StateRow.DrawnMasks"/>.</param>
-/// <param name="Dynamics">See <see cref="StateRow.Dynamics"/>.</param>
+/// <param name="Dynamics">See <see cref="StateRowShape.Dynamics"/>.</param>
 /// <param name="Field">The physical-field trait — carried only by a <see cref="StateDomain.CellsOf"/> row over a
 /// <c>Field</c>-kind topology (see <see cref="WorldStateFieldTrait"/>); <see langword="null"/> for every other row,
 /// including a discrete (board) <see cref="StateDomain.CellsOf"/> row. Never together with
-/// <see cref="StateRow.Cycle"/>.</param>
-/// <param name="Cycle">See <see cref="StateRow.Cycle"/>.</param>
-/// <param name="Domain">See <see cref="StateRow.Domain"/>.</param>
-/// <param name="ValuesFrom">See <see cref="StateRow.ValuesFrom"/>.</param>
-/// <param name="Inverse">See <see cref="StateRow.Inverse"/>.</param>
+/// <see cref="StateRowShape.Cycle"/>.</param>
+/// <param name="Cycle">See <see cref="StateRowShape.Cycle"/>.</param>
+/// <param name="Domain">See <see cref="StateRowShape.Domain"/>.</param>
+/// <param name="ValuesFrom">See <see cref="StateRowShape.ValuesFrom"/>.</param>
+/// <param name="Inverse">See <see cref="StateRowShape.Inverse"/>.</param>
 /// <param name="Phase">See <see cref="StateRow.Phase"/>.</param>
-/// <param name="CellVisibility">See <see cref="StateRow.CellVisibility"/>.</param>
-/// <param name="Visibility">See <see cref="StateRow.Visibility"/>.</param>
-/// <param name="Knowledge">See <see cref="StateRow.Knowledge"/>.</param>
-/// <param name="PhaseOf">See <see cref="StateRow.PhaseOf"/>.</param>
+/// <param name="CellVisibility">See <see cref="StateRowShape.CellVisibility"/>.</param>
+/// <param name="Visibility">See <see cref="StateRowShape.Visibility"/>.</param>
+/// <param name="Knowledge">See <see cref="StateRowShape.Knowledge"/>.</param>
+/// <param name="PhaseOf">See <see cref="StateRowShape.PhaseOf"/>.</param>
 /// <param name="HistoryCursor">See <see cref="StateRow.HistoryCursor"/>.</param>
-/// <param name="Space">See <see cref="StateRow.Space"/>.</param>
-/// <param name="Enum">See <see cref="StateRow.Enum"/>.</param>
-/// <param name="HostOwned">See <see cref="StateRow.HostOwned"/>.</param>
+/// <param name="Space">See <see cref="StateRowShape.Space"/>.</param>
+/// <param name="Enum">See <see cref="StateRowShape.Enum"/>.</param>
+/// <param name="HostOwned">See <see cref="StateRowShape.HostOwned"/>.</param>
 /// <param name="Verdict">The test-verdict trait (see <see cref="WorldVerdictTrait"/>) — this row is a test
 /// expectation's answer; <see langword="null"/> for every other row.</param>
 /// <param name="Witness">The verdict row whose gate this row records (see <see cref="WorldVerdict"/>): the row holds

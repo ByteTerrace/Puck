@@ -1206,7 +1206,7 @@ substrate (`StateCell`, `CellKind`—
 `int`/`fixed`/`bool`/`text`, never float, the determinism contract), capped
 at `StateCapacity.MaxRows` rows and `MaxTextValueLength` characters per
 text cell. A SLOT (the common one-value case) is a row with exactly one
-cell keyed by the reserved `StateRow.SlotKey`; a KEYED row carries
+cell keyed by the reserved `StateRowShape.SlotKey`; a KEYED row carries
 author-chosen keys—**a slot is a table with one key**, one mechanism under
 ONE authored spelling (`WorldStateRowJsonConverter` in
 `WorldDefinitionSerialization.cs`):
@@ -1256,7 +1256,7 @@ less than `Max`. `overflow` (`Refuse`, the default, or `Saturate`) says what a
 write leaving that range—or a genuine 64-bit arithmetic overflow, even on a
 row declaring no range at all—does: refuse it by name, or clamp it to the
 crossed bound (or to the storage limit on a side with no declared bound).
-`StateRow.TryAdmitWrite` is the one method every write path decides through.
+`StateRowShape.TryAdmitWrite` is the one method every write path decides through.
 Both `min`/`max` and `overflow` are legitimate only on `Int`/`Fixed` rows. A
 HUD gauge bound to `state.<row>` (the slot form)
 or `state.<row>.<key>` (the cell form) reads that declared range off the ROW
@@ -1714,7 +1714,7 @@ Each cell's stored `value` is its own BASE, accumulating from its own
 `clock.epochEngineTick` at its own rate—a body's HP, threat, or resource
 regenerates (or drains) on its own clock, independent of every other cell in
 the same row. A cell's own `advance` (or `dynamics`/`cycle`) is legitimate
-only on a NON-reserved cell key: the reserved slot key (`StateRow.SlotKey`)
+only on a NON-reserved cell key: the reserved slot key (`StateRowShape.SlotKey`)
 has no separate default of its own to override—the two never both name the
 same cell, so "which advance governs this cell" is never an open question. A
 DRAW SITE's own bookkeeping is not reachable here at all: `drawCursor`/
@@ -2344,7 +2344,7 @@ rebuilds (document write, population entry, and solid-field geometry) rather
 than a flat number.
 
 Predicates and effects address a (row, KEY) PAIR: an omitted `key` means the
-row's slot cell, and `StateRow.IsKeyed` is the discriminator, so rules reach
+row's slot cell, and `StateRowShape.IsKeyed` is the discriminator, so rules reach
 keyed rows and not just scalars. `IsKeyed` is deliberately NOT `!IsSlot`—a row
 carrying no cells at all is not a slot yet IS slot-addressable, because the first
 write mints its slot cell exactly as `world.state.cell.set` does; `IsSlot` asks

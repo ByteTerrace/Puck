@@ -339,7 +339,7 @@ public abstract record WorldMutation(Principal Principal) {
     /// <param name="Defaults">The whole HUD defaults row.</param>
     [MutationKind(ordinal: 43, section: WorldSection.Hud)]
     public sealed record SetHudDefaults(Principal Principal, WorldHudDefaults Defaults) : WorldMutation(Principal);
-    /// <summary>Upserts a <c>state</c> row addressed by <see cref="StateRow.Name"/> — replaces the matching row
+    /// <summary>Upserts a <c>state</c> row addressed by <see cref="StateRowShape.Name"/> — replaces the matching row
     /// or appends a new one. Applies live. Checked twice: the standard <see cref="WorldCapability.Mutate"/> hold over
     /// <see cref="WorldSection.State"/> every mutation kind requires, plus a second, row-scoped
     /// <see cref="WorldCapability.Edit"/> hold over the concrete <c>state:&lt;name&gt;</c> subject the row names (or
@@ -361,7 +361,7 @@ public abstract record WorldMutation(Principal Principal) {
     /// revalidation if the resulting value falls outside the row's declared envelope, a non-negative row's value
     /// would go negative, the write would grow the row past its effective capacity, or (a <c>Text</c>-kind row) the
     /// written text exceeds <see cref="StateCapacity.MaxTextValueLength"/>. Reaches any row — a slot-shaped
-    /// row's implicit cell (keyed <see cref="StateRow.SlotKey"/>) as much as an author-keyed cell, since a slot
+    /// row's implicit cell (keyed <see cref="StateRowShape.SlotKey"/>) as much as an author-keyed cell, since a slot
     /// is a table with one key (see <see cref="WorldStateRow"/>'s remarks); the console's <c>world.state.cell.set</c>
     /// (numeric/bool and text alike, dispatching on the row's declared kind) / <c>world.state.cell.remove</c> verbs are its whole
     /// spelling, in the same verb family the whole-row pair uses — <see cref="Value"/> carries the former,

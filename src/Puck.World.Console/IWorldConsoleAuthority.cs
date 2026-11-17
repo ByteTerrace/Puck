@@ -29,6 +29,18 @@ public interface IWorldConsoleAuthority : ICommandAuthority {
 }
 /// <summary>Shared resolve-and-echo helper every moved command module's handler opens with.</summary>
 public static class WorldConsoleAuthorityExtensions {
+    /// <summary>Acquires the addressed world's authority only for a registry-admitted operator invocation.</summary>
+    public static bool TryResolveOperator(this IWorldConsoleAuthority authority, OperatorContext context, string verb,
+        out WorldOperatorAuthority world, out CommandResult error) {
+        if (!authority.TryResolveInstance(context.Invocation, verb, out var instance, out error)) {
+            world = null!;
+            return false;
+        }
+        world = instance.Server.AcquireOperatorAuthority(context);
+        error = default;
+        return true;
+    }
+
     /// <summary>Resolves this invocation's row and hands back its <see cref="WorldServer"/> directly — the shape
     /// every moved handler that reads or mutates through the server (rather than through <c>IServerLink</c>) needs.</summary>
     /// <param name="authority">The authority to resolve against.</param>
@@ -102,13 +114,13 @@ public static class WorldConsoleAuthorityExtensions {
     /// <param name="error">The inline refusal echo, on failure.</param>
     /// <returns><see langword="true"/> when a row was resolved.</returns>
     public static bool TryResolveReadView(this IWorldConsoleAuthority authority, CommandContext context, string verb, out WorldStateReadView view, out CommandResult error) {
-        if (!authority.TryResolve(
+        if (!authority.TryResolveInstance(
             context: context,
             instance: out var instance,
-            refusal: out var refusal
+            verb: verb,
+            error: out error
         )) {
             view = null!;
-            error = CommandResult.Error(output: $"[{verb}: refused ({refusal})]");
 
             return false;
         }

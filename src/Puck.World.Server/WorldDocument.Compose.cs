@@ -133,38 +133,25 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-    private static T? FindById<T>(IReadOnlyList<T> list, string id, Func<T, string> idOf) where T : class {
-        foreach (var item in list) {
-            if (string.Equals(
-                a: idOf(arg: item),
-                b: id,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return item;
-            }
-        }
-
-        return null;
-    }
     private static WorldGroupKind? FindGroupKind(IReadOnlyList<WorldGroupKind> kinds, string name) =>
-        FindById(
-            id: name,
-            idOf: static kind => kind.Name,
-            list: kinds
+        Puck.Abstractions.NamedRows.Find(
+            name: name,
+            selector: static kind => kind.Name,
+            rows: kinds
         );
     private static WorldGroup? FindGroupRow(IReadOnlyList<WorldGroup> groups, string id) =>
-        FindById(
-            id: id,
-            idOf: static row => row.Id,
-            list: groups
+        Puck.Abstractions.NamedRows.Find(
+            name: id,
+            selector: static row => row.Id,
+            rows: groups
         );
     // The HUD element mutations' panel lookup — a single-element read-modify-write needs its OWNING panel by id
     // before it can rewrite that panel's Elements list; null when no panel declares that id.
     private static WorldHudPanel? FindHudPanel(IReadOnlyList<WorldHudPanel> panels, string id) =>
-        FindById(
-            id: id,
-            idOf: static panel => panel.Id,
-            list: panels
+        Puck.Abstractions.NamedRows.Find(
+            name: id,
+            selector: static panel => panel.Id,
+            rows: panels
         );
     // The Ownership section's own find — keyed by the Subject value (a readonly record struct, so structural
     // equality is exact) rather than a name string, since a subject is (kind, id) rather than one bare identifier.

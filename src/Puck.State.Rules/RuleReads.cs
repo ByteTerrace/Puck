@@ -172,7 +172,7 @@ public static class RuleReads {
         });
     }
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
-    /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateArena, int, int, Span{int})"/>
+    /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateReadAccess, int, int, Span{int})"/>
     /// ranked by <see cref="StateReader.ArrangementRank(ReadOnlySpan{int})"/>.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The ordered zone's catalog ordinal.</param>

@@ -17,7 +17,7 @@ public static class BoardCombination {
     /// <param name="direction">The resolved shift direction, or -1.</param>
     /// <param name="element">The resolved image element, or -1.</param>
     /// <param name="value">The admitted member value to write — <see cref="StateTransform.BoardCombine.Value"/> as
-    /// the row's <see cref="StateRow.TryAdmitWrite"/> decides it (clamped under
+    /// the row's <see cref="StateRowShape.TryAdmitWrite"/> decides it (clamped under
     /// <see cref="StateOverflow.Saturate"/>), or zero when refused.</param>
     /// <param name="reason">The refusal, or empty.</param>
     /// <returns>Whether the operation is admissible; source existence and topology agreement remain the adapter's responsibility.</returns>

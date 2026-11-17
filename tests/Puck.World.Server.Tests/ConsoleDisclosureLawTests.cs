@@ -263,6 +263,8 @@ public sealed partial class ConsoleDisclosureLawTests {
         private readonly CommandRegistry m_registry;
         private readonly TextCommandSource m_source;
         private readonly TextCommandSession[] m_seats;
+        private readonly InputRouter m_router;
+        private ulong m_tick;
 
         private CommandResult m_last;
 
@@ -294,9 +296,9 @@ public sealed partial class ConsoleDisclosureLawTests {
                 new WorldStateCommandModule(authority: authority, echoes: echoes),
                 new WorldTabletopCommandModule(authority: authority),
                 new WorldUpdateCommandModule(authority: authority),
-            ]);
+            ], authority: authority);
 
-            var router = new InputRouter(
+            m_router = new InputRouter(
                 bindings: new NoBindings(),
                 principalResolver: new SeatPrincipals(),
                 registry: m_registry
@@ -305,7 +307,9 @@ public sealed partial class ConsoleDisclosureLawTests {
             m_source = new TextCommandSource(registry: m_registry);
             m_seats = [.. Enumerable.Range(count: 2, start: 0).Select(selector: slot => m_source.CreateSeatSession(
                 onResult: (_, result) => m_last = result,
-                router: router,
+                onSettled: (_, result) => m_last = result,
+                dueNextTick: true,
+                router: m_router,
                 slot: slot
             ))];
         }
@@ -316,6 +320,10 @@ public sealed partial class ConsoleDisclosureLawTests {
             m_last = CommandResult.None;
             m_seats[slot].Enqueue(line: line);
             m_source.Collect();
+
+            if (m_registry.RoutesToSimulation(line: line, slot: slot)) {
+                m_registry.ApplySnapshot(m_router.SnapshotForTick(tick: ++m_tick, windowEndTick: ulong.MaxValue));
+            }
 
             return m_last;
         }
