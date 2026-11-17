@@ -21,6 +21,7 @@ namespace Puck.SdfVm;
 // primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena;
+    private readonly Dictionary<SdfMesh, GpuBufferPages.Lease> m_meshPages = new(comparer: ReferenceEqualityComparer.Instance);
 
     private long m_meshPlacementVersion;
 
@@ -47,9 +48,10 @@ public sealed partial class SdfWorldTables {
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 1) == 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.DeferTrim(); }
     }
 
-    /// <summary>Releases, on the frame thread, the placement claims of meshes the latest draws no longer name when the
-    /// process account has asked its caches to trim since the last call; otherwise does nothing.</summary>
+    /// <summary>Polls retired device objects on the frame thread, including for hidden residencies. If the process
+    /// account has asked for a trim, also releases placement claims the latest draws no longer name.</summary>
     internal void ServiceMemoryTrim() {
+        ServiceRetirements();
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
@@ -245,6 +247,7 @@ public sealed partial class SdfWorldTables {
     private void ForgetArenaMeshes() {
         foreach (var mesh in m_meshArena.Forgotten) {
             ForgetLanding(mesh: mesh);
+            m_meshPages.Remove(mesh);
             _ = m_meshesOwed.Remove(mesh: mesh);
         }
         m_meshForgotten += m_meshArena.Forgotten.Count;
@@ -438,6 +441,7 @@ public sealed partial class SdfWorldTables {
             // draw reserve moved are written in this frame's upload, which carries the records naming them, since
             // their draws were drawn from the words the reserve took; the rest this list placed are owed.
             if (m_meshArena.Relocated || !m_meshSectionWritten) {
+                m_meshPages.Clear();
                 m_meshesOwed.ReplaceWith(meshes: m_meshArena.Placements.Keys);
                 ForgetAllLanding();
             } else {
@@ -445,6 +449,7 @@ public sealed partial class SdfWorldTables {
                 foreach (var mesh in m_meshArena.Moved) {
                     m_meshMoved++;
                     ForgetLanding(mesh: mesh);
+                    m_meshPages.Remove(mesh);
                     // A moved mesh no free run held is refused: it owes nothing until a plan places it.
                     if (!m_meshArena.Placements.TryGetValue(key: mesh, value: out var placement)) {
                         _ = m_meshesOwed.Remove(mesh: mesh);
@@ -452,7 +457,9 @@ public sealed partial class SdfWorldTables {
                     }
                     // A moved mesh whose normals and levels are still coming back from the store stays owed and
                     // lands through the background work, its rows absent until it does.
-                    if (!mesh.Resident) { continue; }
+                    var pages = m_meshRegion.TryLease((long)placement.VertexWord * sizeof(uint), (long)SdfMeshRegion.WordsOf(mesh) * sizeof(uint));
+                    if (!mesh.Resident || pages is null) { m_meshesOwed.Add(mesh); continue; }
+                    m_meshPages[mesh] = pages.Value;
                     mesh.Need();
                     m_meshesWithUpload.Add(item: mesh);
                     _ = m_meshesOwed.Remove(mesh: mesh);
@@ -639,10 +646,12 @@ public sealed partial class SdfWorldTables {
         OrderLandingAhead();
     }
     /// <summary>Returns whether a mesh's words stand in the mesh region where a draw naming it would read them: the
-    /// arena holds it and the region owes none of its words. Read on the frame's thread.</summary>
+    /// arena holds it, the region owes none of its words, and its destination page generation still stands.
+    /// Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
-    public bool MeshStands(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) && !m_meshesOwed.Contains(mesh: mesh));
+    public bool MeshStands(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) &&
+        !m_meshesOwed.Contains(mesh: mesh) && m_meshPages.TryGetValue(mesh, out var pages) && pages.IsCurrent);
     /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read
     /// (<see cref="SdfMeshRegionArena.AheadRefused"/>): it can land only in the words the mesh it replaces gives up.
     /// Read on the frame's thread.</summary>
@@ -808,7 +817,7 @@ public sealed partial class SdfWorldTables {
     // region is written again.
     private void ReplacedMeshRegion(IDisposable replaced, long oldBytes, ulong newBytes) {
         RequireMeshUpload();
-        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced));
+        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced), carryingRegion: m_meshRegion);
         m_meshGrant.Grown(newBytes: ((long)newBytes), oldBytes: oldBytes);
         m_seedMeshHistory = true;
         m_bindingRevision++;
