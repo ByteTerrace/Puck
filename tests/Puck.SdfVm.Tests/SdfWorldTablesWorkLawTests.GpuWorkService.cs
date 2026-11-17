@@ -122,7 +122,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         account.Record(reading: GpuMemoryReading.Read(
             estimated: false,
             readings: [
-                new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(40L * Mebibyte)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXLocal], Usage: null),
+                new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(4L << 30)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXLocal], Usage: null),
                 new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(64L << 30)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXNonLocal], Usage: null),
             ],
             segments: segments,
@@ -132,7 +132,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var limit = account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value;
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
         // Each job holds a device-local buffer of which two fit the pool and three do not.
-        var scratch = (((limit / 5L) * 2L) & ~(Mebibyte - 1L));
+        var scratch = ((limit / 5L) * 2L);
         var client = new HoldingClient(scratchBytes: ((ulong)scratch)) { Remaining = 3 };
         var work = new SdfGpuWork(device: rig.Gpu, name: "law", selector: selector);
 
@@ -178,7 +178,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         account.Record(reading: GpuMemoryReading.Read(
             estimated: false,
             readings: [
-                new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(8L * Mebibyte)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXLocal], Usage: null),
+                new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(1L << 30)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXLocal], Usage: null),
                 new GpuSegmentReading(AvailableForReservation: null, Budget: ((ulong)(64L << 30)), CurrentReservation: null, Segment: segments[GpuMemorySegments.DirectXNonLocal], Usage: null),
             ],
             segments: segments,
@@ -187,7 +187,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
         // One job's buffer is larger than the whole pool.
-        var client = new HoldingClient(scratchBytes: ((ulong)(64L * Mebibyte))) { Remaining = 2 };
+        var client = new HoldingClient(scratchBytes: ((ulong)(2L * account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value))) { Remaining = 2 };
         using var work = new SdfGpuWork(device: rig.Gpu, name: "law", selector: selector);
 
         work.Add(client);

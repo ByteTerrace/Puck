@@ -253,9 +253,11 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// <see cref="SdfGpuWorkRecording.DeviceBuffer"/>, <see cref="SdfGpuWorkRecording.CopyToReadback"/>), which raises the
 /// service's reservation (<see cref="SdfResidencySelector.WorkOwner"/>, workspace) by the growth before it creates the
 /// buffer and lowers it when the buffer goes. A job the pool has no room for is handed back and offered again once a
-/// job of the service completes; a service with nothing in flight reserves its job as its floor, so the work always
-/// progresses. It stops at the owner (every service shares one account entry, so another service's idle buffers stand
-/// against a floor until they go) and at the clients' own tables and caches, which are not a job's.</para>
+/// slot of the service comes back or <see cref="DeferralRetry"/> has passed; a service with no job in flight and no
+/// slot still held by a reader reserves its job as its floor, as does one whose job has waited
+/// <see cref="ForcedPatience"/>, so the work always progresses. It stops at the owner (every service shares one
+/// account entry, so another service's idle buffers stand against a floor until they go) and at the clients' own
+/// tables and caches, which are not a job's.</para>
 /// <para>Sizing: a slot's buffer grows to the largest job that used it and goes once no job in the last
 /// <see cref="IdleSeconds"/> used it, so buffers sized for a cold bake's largest batch go once the bake settles rather
 /// than living as long as the tables.</para>
@@ -321,6 +323,13 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>The recording time one step spends at most, however long since the last.</summary>
     public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(milliseconds: 16);
 
+    /// <summary>The wall time after which a job handed back for want of device room is offered again although no slot
+    /// has come back since: a quarter of a second, so room another holder gave up is found.</summary>
+    public static readonly TimeSpan DeferralRetry = TimeSpan.FromSeconds(value: 0.25);
+    /// <summary>The wall time a service with no job in flight lets a job wait for a slot a reader still holds before it
+    /// reserves the job as its floor whatever the pool holds: one second.</summary>
+    public static readonly TimeSpan ForcedPatience = TimeSpan.FromSeconds(value: 1.0);
+
     private static readonly WaitReason ServiceReason = new(Subsystem: "sdf.gpu-work", WaitsFor: "a background job's completion or its next job");
     private const string ReadbackPart = "readback";
 
@@ -348,8 +357,11 @@ public sealed class SdfGpuWork : IDisposable {
     private int m_nextClient;
     private bool m_disposed;
     private bool m_faulted;
-    // Whether a job was handed back for want of room since a job of the service last completed.
-    private bool m_deferred;
+    // While a job handed back for want of room waits: when the first was handed back since a job was last submitted
+    // (zero for none), when the latest was, and the slots that were not free then.
+    private long m_deferredSince;
+    private long m_deferredAt;
+    private int m_deferredBusy;
     private long m_pumpedAt;
     // Since the first job: jobs submitted and answered, the GPU seconds they measured, the wall time some job was in
     // flight, the most in flight at once, the steps, and the steps the tables' World set could not be bound in.
@@ -676,8 +688,6 @@ public sealed class SdfGpuWork : IDisposable {
             slot.Lease = readback;
             slot.Job = null;
             slot.Client = null;
-            // A completed job gave its room back to whatever waited on it.
-            m_deferred = false;
             if (--m_inFlight == 0) { m_busyTicks += (Stopwatch.GetTimestamp() - m_busySince); }
             try {
                 client.Complete(job: job, readback: readback);
@@ -765,8 +775,9 @@ public sealed class SdfGpuWork : IDisposable {
             var slot = m_slots[index];
 
             if (!slot.IsFree) { continue; }
-            // A job handed back for want of room is offered again once a job in flight has completed.
-            if (m_deferred && (m_inFlight > 0)) { return Stop.None; }
+            // A job handed back for want of room is offered again once a slot has come back, whose buffers it may then
+            // take, or after a while, since room can come from another holder.
+            if ((m_deferredSince != 0L) && (BusySlots() >= m_deferredBusy) && (Stopwatch.GetElapsedTime(startingTimestamp: m_deferredAt) < DeferralRetry)) { return Stop.None; }
             if (budgeted && !m_budget.Holds) {
                 // The next accrual banks the whole gap for a service that waited on the budget.
                 m_budget.Want();
@@ -831,7 +842,9 @@ public sealed class SdfGpuWork : IDisposable {
                 recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
                 client.Abandon(job: job);
                 m_deferrals++;
-                m_deferred = true;
+                m_deferredAt = Stopwatch.GetTimestamp();
+                m_deferredBusy = BusySlots();
+                if (m_deferredSince == 0L) { m_deferredSince = m_deferredAt; }
                 return false;
             }
             if (m_timestamps is { } timestamps) {
@@ -854,6 +867,7 @@ public sealed class SdfGpuWork : IDisposable {
             m_gpu.QueueSubmitter.Submit(commandBufferHandles: [commandBuffer], fence: slot.Fence);
         }
         slot.Fence.SignalOnCompletion(signal: m_service!.Signal);
+        m_deferredSince = 0L;
         slot.SubmittedAt = Stopwatch.GetTimestamp();
         slot.Estimate = estimate;
         slot.Charged = charged;
@@ -912,10 +926,14 @@ public sealed class SdfGpuWork : IDisposable {
 
         if ((m_hold is { } hold) && !hold.TryRaise(bytes: ((long)size), forced: false, hostVisible: hostVisible)) {
             // With no room, what the other free slots still hold for jobs to come goes first. Past that a service
-            // with nothing in flight reserves its job as its floor, so its work always progresses, and any other
-            // hands the job back.
+            // with nothing in flight and no slot a reader still holds reserves its job as its floor, so its work always
+            // progresses; one whose reader is slow waits for the slot, but not past its patience. Any other hands the
+            // job back.
             ReleaseFree(except: slot);
-            if (!hold.TryRaise(bytes: ((long)size), forced: (m_inFlight == 0), hostVisible: hostVisible)) {
+
+            var forced = ((m_inFlight == 0) && ((BusySlots() == 0) || ((m_deferredSince != 0L) && (Stopwatch.GetElapsedTime(startingTimestamp: m_deferredSince) >= ForcedPatience))));
+
+            if (!hold.TryRaise(bytes: ((long)size), forced: forced, hostVisible: hostVisible)) {
                 throw new SdfGpuWorkDeferredException(bytes: ((long)size), part: part);
             }
         }
@@ -936,6 +954,13 @@ public sealed class SdfGpuWork : IDisposable {
         }
         held.Add(item: new HeldBuffer(Buffer: buffer, Client: client, HostVisible: hostVisible, Part: part, Readback: readback, Sizing: sizing) { WindowBytes = Math.Max(val1: bytes, val2: 1UL), WindowStart = now });
         return buffer;
+    }
+    // The slots that are not free: a job in flight, or a readback its client has not released.
+    private int BusySlots() {
+        var busy = 0;
+
+        foreach (var slot in m_slots) { busy += (slot.IsFree ? 0 : 1); }
+        return busy;
     }
     // Gives back every buffer the free slots but one hold: no job in flight and no client reads them.
     private void ReleaseFree(int except) {
