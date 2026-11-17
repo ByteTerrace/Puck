@@ -22,6 +22,9 @@ public enum CommandAudience : byte {
     /// touches the machine it runs on (writes local files, watches local sources), which a remote or authored
     /// principal must never reach. A seat's answer owes the same disclosure as <see cref="Anyone"/>'s.</summary>
     Local = 3,
+    /// <summary>Only the host console may run this command. It accesses host files, connection identities,
+    /// endpoints, resources or process lifetime; world administration never confers this authority.</summary>
+    Host = 4,
 }
 /// <summary>The one predicate behind <see cref="CommandAudience"/>: the registry's dispatch check and every reader
 /// that asks which verbs a principal may run (an authored command's check, a fuzzer's verb draw) call it.</summary>
@@ -34,6 +37,7 @@ public static class CommandAudienceExtensions {
         CommandAudience.Anyone => true,
         CommandAudience.Operator => (principal.Kind == PrincipalKind.Console),
         CommandAudience.Local => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat),
+        CommandAudience.Host => principal.Kind == PrincipalKind.Console,
         _ => false,
     };
     /// <summary>Describes, for a refusal, who an audience admits.</summary>
@@ -41,6 +45,7 @@ public static class CommandAudienceExtensions {
     /// <returns>A short clause: <c>an operator verb</c>, <c>a local verb</c>, or <c>a verb</c>.</returns>
     public static string Describe(this CommandAudience audience) => audience switch {
         CommandAudience.Operator => "an operator verb",
+        CommandAudience.Host => "a host verb, for the host console",
         CommandAudience.Local => "a local verb, for the console or a local seat",
         _ => "a verb",
     };

@@ -144,7 +144,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return Simulation(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             name: "world.instance.start",
             description: $"Starts another world running in THIS process from a world document and admits it under a name: {WorldInstanceStartForms.Spelling}. The instance ticks every fixed step alongside the boot world (its own zero-based tick count, own definition, own population, own owned-world store — nothing shared) and mounts its declared addons. It has no seats, replay tape or machines: a document declaring machine-sourced screens starts anyway with every one of them dark, and the echo counts them. Reachable only through world.instance.status/stop. Refuses, naming which: an empty name, the reserved name 'boot', a name carrying '~' (the character joining the instance names the engine generates), a name that is not a single safe path segment (the name IS the directory its owned worlds live in), a name already running, a name whose owned-world directory would land outside the instances root, a path resolving to no file, a document the validator rejects, or an owned-world store that cannot be opened.",
             forms: WorldInstanceStartForms,
@@ -180,7 +180,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             }
         );
         yield return Simulation(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             name: "world.instance.stop",
             description: $"Retires a running world instance and disposes what it owned, never the companion custody it holds: {WorldInstanceStopForms.Spelling}. An instance embodying visiting companions sends them home and retires after the drain that settles them ('stopping', then a narrated 'retired'); one holding a companion's title abroad is refused, since no durable image here carries the title until its custodian returns it. Refuses the reserved name 'boot' (the world this process booted with — every other verb, the client, the seats and the tape address it), an unknown name, or an instance currently presenting a local traveler (transfer that seat out first), naming which. world.instance.status <name> reads the custody an instance holds.",
             forms: WorldInstanceStopForms,
@@ -202,7 +202,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
             name: "world.instance.status",
             forms: WorldInstanceStatusForms,
@@ -377,7 +377,7 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
             routing: CommandRouting.Immediate
         );
         yield return Simulation(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             name: "world.transfer",
             description: "Queues a same-process transfer: " + WorldTransferForms.Spelling + ". body:<index> addresses any zero-based body index; a bare seat number is 1-based within the four local seats; party selects the source world's active local-seat cohort. Destination is an existing instance name, ephemeral <site> <path>, or persisted <name> <path>. The acting principal must hold Drive for each source body, and destination admission must authorize the arrival. Actual capacity, occupancy, grants, and destination resolution are checked at the transfer drain. Reservation precedes detach; a confirmed refusal restores detached members, while an ambiguous commit retains recovery state until resolved. Accepted moves echo their source and destination; refusals echo a reason. A forwarding authority remains alive after its last traveler departs. An ephemeral destination can otherwise reap when empty; persisted destinations remain until explicitly stopped. The existing-name destination also accepts forcejoinrefusal:<ordinal> as a verification-only modifier; every transfer id is minted by its source and never reused. Transfer handshakes are checkpointed host state, not boot-only replay input.",
             forms: WorldTransferForms,

@@ -355,7 +355,7 @@ internal sealed partial class WorldViewCommandModule(IServerLink link, WorldView
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
             name: "world.view.trace",
             description: $"Observes final composed presentation inputs over a finite inclusive tick interval: {WorldViewTraceForms.Spelling}. The JSON reports exact tick coverage, duplicates and ordering, clock/interpolation bits, public camera/program/transform signatures, render extent and lighting policy. Timing excludes ticks before measureFirstTick. It compares presentation inputs, never pixels or private motion continuations; a headless World captures no frames. The observer is absent outside an armed interval.",

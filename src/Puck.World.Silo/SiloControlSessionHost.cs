@@ -8,6 +8,7 @@ namespace Puck.World.Silo;
 /// <summary>Admits a host-validated OAuth identity into an explicitly authorized World row. Every command retains that peer generation.</summary>
 internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRouting routing) : IControlSessionHost {
     private static bool Allows(CommandMetadata command, WorldServer server, WorldPeerEventEntry peer, ControlIdentity identity) {
+        if (command.Audience == CommandAudience.Host) { return false; }
         // This is an explicit remote surface. New local/admin verbs never become remotely callable by registration.
         if (!IsRemoteCommand(name: command.Name)) { return false; }
         return (

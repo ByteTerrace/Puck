@@ -675,7 +675,7 @@ An authored id belongs to the `Global` map.
 Safety is data, enforced twice. When a document validates against a live
 registry (boot's post-build admission, `world.reload`, `world.load`), a
 command taking an engine verb's name, a line calling a verb a binding may not
-name (an `Operator`-audience verb, or one declared `Unbindable` such as
+name (an `Operator`- or `Host`-audience verb, or one declared `Unbindable` such as
 `quit`, `world.save` and `storage.*`), a line calling nothing registered, and
 a loop through the set are refused by name. When a line runs, its verb is
 checked against the same rule and against the calling session's `authorize`
@@ -988,7 +988,7 @@ member-by-member surface.
 | `Principal` / `PrincipalKind` | Who is acting: the one identity a dispatch, and every world submission after it, carries — `Console`, `Seat`, `Addon`, `Peer`, `Session` (an unembodied joined session), or `World` (a world's own authored program). The default, `Unspecified`, is no identity, and a context refuses it. |
 | `IPrincipalResolver` | The host's answer to *who is acting through slot N*, which the router stamps onto that slot's commands. |
 | `CommandBindability` | Whether a binding document may name a command. Required at every registration; `Unspecified` is refused by name. |
-| `CommandAudience` | Who a command answers, declared by every registration (the factories take no default and the registry refuses `Unspecified` by name): `Anyone` (whose answer to a recipient derives only from that recipient's view), `Local` (`Console` or a `Seat`, for a verb that touches the machine it runs on, such as writing local files) or `Operator` (`Console` alone). The registry refuses every principal the audience does not admit (`CommandAudienceExtensions.Admits`) at its dispatch boundary, before the handler runs, whichever door the line or press arrived through: `[<verb>: refused — an operator verb; seat2 is not the operator]`. An authored command may call a `Local` verb, never an `Operator` one. |
+| `CommandAudience` | Who a command answers, declared by every registration (the factories take no default and the registry refuses `Unspecified` by name): `Anyone` (whose answer to a recipient derives only from that recipient's view), `Local` (`Console` or a `Seat`, for a verb that touches the machine it runs on, such as writing local files) or `Operator` (currently `Console` alone; the live Operate predicate is pending D1), and `Host` (`Console` alone, for host resources and process lifetime). The registry refuses every principal the audience does not admit (`CommandAudienceExtensions.Admits`) at its dispatch boundary, before the handler runs, whichever door the line or press arrived through: `[<verb>: refused — an operator verb; seat2 is not the operator]`. An authored command may call a `Local` verb, never an `Operator` or `Host` one. |
 | `CommandMetadata` | The public read-only face of a registration, the registry's own three verbs included—what `Definitions` returns. Its nine members are the name, value kind, routing, bindability, input scope, map, whether the command is a held verb, whether it accepts wire arguments, and its audience; the vocabulary gate reads the wire-argument member to decide whether a binding row may carry authored text. |
 | `CommandResult` | What a handler returns for the transcript (output text + optional clear). |
 | `CommandValue` / `CommandValueKind` | The per-frame value, tagged with its shape, packed into a `Vector4`. |

@@ -10,8 +10,8 @@ namespace Puck.World;
 /// traveller an authenticated federation authority handed over. <c>world.admission</c> echoes the document half.
 /// </summary>
 public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, WorldInstanceHost? instances = null) : ICommandModule {
-    private static string Describe(WorldServer server, WorldPeerHost? peerHost) {
-        var arrivals = DescribeArrivals(server: server);
+    private static string Describe(WorldServer server, WorldPeerHost? peerHost, bool host) {
+        var arrivals = DescribeArrivals(server: server, host: host);
 
         if (peerHost is not { IsListening: true }) {
             return $"[world.peers: not listening — no host.listen/--listen endpoint{arrivals}]";
@@ -28,35 +28,38 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
         );
 
         if (connections.Count == 0) {
-            return $"[world.peers: listening on {peerHost.ListenEndpoint}, 0 connections{arrivals}{refusalEcho}]";
+            return $"[world.peers: listening{(host ? $" on {peerHost.ListenEndpoint}" : string.Empty)}, 0 connections{arrivals}{refusalEcho}]";
         }
 
         var rows = string.Join(
             separator: " | ",
-            values: connections.Select(selector: c => $"conn:{c.ConnectionId} peer:{c.PeerIndex}:{c.Generation} identity:{c.IdentityDomain}/{c.IdentitySubject} tier:{c.Tier} @ {c.RemoteEndpoint}")
+            values: connections.Select(selector: c => $"conn:{c.ConnectionId} peer:{c.PeerIndex}:{c.Generation} tier:{c.Tier}" +
+                (host ? $" identity:{c.IdentityDomain}/{c.IdentitySubject} @ {c.RemoteEndpoint}" : string.Empty))
         );
 
-        return $"[world.peers: listening on {peerHost.ListenEndpoint}, {connections.Count} connections | {rows}{arrivals}{refusalEcho}]";
+        return $"[world.peers: listening{(host ? $" on {peerHost.ListenEndpoint}" : string.Empty)}, {connections.Count} connections | {rows}{arrivals}{refusalEcho}]";
     }
-    private static string DescribeArrivals(WorldServer server) {
+    private static string DescribeArrivals(WorldServer server, bool host) {
         var population = server.Population;
         var rows = new List<string>();
 
         for (var slot = population.LocalSeatCount; (slot < population.Capacity); slot++) {
             if (
                 !population.IsActive(index: slot) ||
-                !population.PeerAuthorityTransferred(bodyIndex: slot) ||
+                population.IsParked(index: slot) ||
                 !population.IsAdmittedPeer(bodyIndex: slot)
             ) {
                 continue;
             }
 
-            rows.Add(item: $"body:{slot} {population.PeerPrincipal(index: slot).Describe()} authority:{population.PeerIdentity(bodyIndex: slot).Domain}");
+            rows.Add(item: $"body:{slot} {population.PeerPrincipal(index: slot).Describe()}" +
+                (population.PeerAuthorityTransferred(bodyIndex: slot) ? " transferred" : " admitted") +
+                (host ? $" identity:{population.PeerIdentity(bodyIndex: slot).Domain}/{population.PeerIdentity(bodyIndex: slot).Subject}" : string.Empty));
         }
 
         return ((rows.Count == 0)
             ? string.Empty
-            : $" | arrivals: {string.Join(
+            : $" | population: {string.Join(
                 separator: " | ",
                 values: rows
             )}"
@@ -243,7 +246,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.peers",
-            description: "Lists every body the admission door admitted: whether the host is listening (and on what endpoint), one line per admitted remote connection — connection id, its peer principal (peer:<index>:<generation>), its verified admission identity (domain/subject), and the remote endpoint — then one line per arrived traveller, naming the body, its peer principal, and the authenticated source authority its verdict was decided against, then every federation refusal this door has written, counted by its stable name. Identity fields are only ever what the door verified, never what a payload asserted. Not listening (no host.listen/--listen) prints that plainly rather than an empty table. An operator read: live population membership, other connections' endpoints and identities and the door's refusal counts are the host's, never a recipient's.",
+            description: "Lists live admitted peer bodies, transferred travellers, connection ids, peer principals, disclosure tiers and federation refusal counts. The host console also sees listen and remote endpoints and verified admission identities. Population rows include control sessions even when no QUIC listener runs. Identity fields come only from verified admission. This remains an Operator verb; remote operator admission is pending the atomic Operate implementation.",
             valueKind: CommandValueKind.Digital,
             handler: context => {
                 if (!authority.TryResolve(
@@ -256,7 +259,8 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
 
                 return new CommandResult(Output: Describe(
                     server: instance.Server,
-                    peerHost: instance.Door
+                    peerHost: instance.Door,
+                    host: context.Principal.Kind == PrincipalKind.Console
                 ));
             }
         );

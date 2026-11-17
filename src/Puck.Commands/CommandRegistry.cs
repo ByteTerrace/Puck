@@ -259,7 +259,7 @@ public sealed partial class CommandRegistry {
             // The same gate for the audience axis: a verb readable by every principal is a choice its author makes,
             // never what an unset value falls to.
             if (definition.Audience == CommandAudience.Unspecified) {
-                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no audience. Every registration must pass CommandAudience.Anyone, CommandAudience.Local or CommandAudience.Operator.");
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no audience. Every registration must pass CommandAudience.Anyone, CommandAudience.Local, CommandAudience.Operator or CommandAudience.Host.");
             }
 
             if (
@@ -702,7 +702,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             forms: WireAckForms,
             name: WireAckCommandName,
             description: "Sets or reports the acknowledgement mode for accepted commands: " + WireAckForms.Spelling + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
@@ -710,7 +710,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             forms: WireErrorsForms,
             name: WireErrorsCommandName,
             description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: " + WireErrorsForms.Spelling + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",

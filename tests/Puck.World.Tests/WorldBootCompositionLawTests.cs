@@ -63,16 +63,16 @@ public sealed class WorldBootCompositionLawTests {
     }
 
     [Theory]
-    [InlineData("world.interactions")]
-    [InlineData("world.fields")]
-    [InlineData("world.flock")]
-    [InlineData("world.navigation")]
-    [InlineData("world.explain")]
-    [InlineData("pipeline.load")]
-    [InlineData("world.transfer")]
-    public void CompiledDiagnosticsAndPixelMaterialsRequireOperator(string verb) => WithHeadlessRegistry(registry => {
+    [InlineData("world.interactions", CommandAudience.Operator)]
+    [InlineData("world.fields", CommandAudience.Operator)]
+    [InlineData("world.flock", CommandAudience.Operator)]
+    [InlineData("world.navigation", CommandAudience.Operator)]
+    [InlineData("world.explain", CommandAudience.Host)]
+    [InlineData("pipeline.load", CommandAudience.Host)]
+    [InlineData("world.transfer", CommandAudience.Host)]
+    public void CompiledDiagnosticsAndPixelMaterialsRequireTheirAudience(string verb, CommandAudience audience) => WithHeadlessRegistry(registry => {
         // Compiled diagnostics and GPU material inspection cannot be reconstructed from a recipient's document.
-        Assert.Equal(CommandAudience.Operator, Assert.Single(registry.Definitions, command => command.Name == verb).Audience);
+        Assert.Equal(audience, Assert.Single(registry.Definitions, command => command.Name == verb).Audience);
 
         var source = new TextCommandSource(registry);
         using var router = new InputRouter(bindings: new NoBindings(), registry: registry, principalResolver: new SeatPrincipals());
@@ -84,8 +84,8 @@ public sealed class WorldBootCompositionLawTests {
         registry.ApplySnapshot(snapshot: in tick);
         source.Collect();
         Assert.True(answer.IsError, answer.Output);
-        Assert.Contains("an operator verb", answer.Output);
-        Assert.DoesNotContain("an operator verb", registry.Submit(verb).Output, StringComparison.Ordinal);
+        Assert.Contains(audience.Describe(), answer.Output);
+        Assert.DoesNotContain(audience.Describe(), registry.Submit(verb).Output, StringComparison.Ordinal);
     });
 
     [Theory]

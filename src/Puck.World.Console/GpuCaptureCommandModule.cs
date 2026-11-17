@@ -11,7 +11,7 @@ namespace Puck.World;
 /// <c>gpu.capture &lt;path&gt; [&lt;frames&gt;]</c> arms a capture of the next frames (one when absent) to the path, made
 /// absolute against the process's working directory, and answers what it armed; each written file is narrated on
 /// standard error as <c>[gpu.capture] &lt;tool&gt; wrote &lt;file&gt;</c>. A bare <c>gpu.capture</c> describes the tool
-/// and what is armed. The verb answers the operator alone (<see cref="CommandAudience.Operator"/>).
+/// and what is armed. The verb answers the operator alone (<see cref="CommandAudience.Host"/>).
 /// </summary>
 /// <param name="capture">The host's frame capture.</param>
 public sealed class GpuCaptureCommandModule(GpuFrameCapture capture) : ICommandModule {
@@ -50,7 +50,7 @@ public sealed class GpuCaptureCommandModule(GpuFrameCapture capture) : ICommandM
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
             description: $"Captures the next frames a GPU host produces with the capture tool the World loaded before its device (--capture-tool pix|renderdoc; operator only): {GpuCaptureForms.Spelling} arms a capture of the next 1 to {GpuFrameCapture.MaxFrames} frames (default 1) to the path, made absolute against the working directory; PIX writes one .wpix holding them all, RenderDoc one .rdc a frame (<path>_capture.rdc, then <path>_capture_2.rdc and on). Each written file is narrated on stderr as [gpu.capture] <tool> wrote <file>. A bare gpu.capture describes the tool and what is armed. Refused with no tool loaded, or while a capture is still armed or being written. Position a capture with world.wait: a crossing's tick is the same on every run of one document and input.",
             forms: GpuCaptureForms,
