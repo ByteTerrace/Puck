@@ -396,6 +396,38 @@ also records whether the overlay was requested at entry and changed during
 the run. A run with the overlay on is compared only with another that had it
 on throughout; stage 3's comparer enforces this.
 
+Stage 2's remaining windowed proof runs on each backend (`directx` and
+`vulkan`). Start `worlds/debug` through `puck_world_start` from the checkout
+being verified, with `paused: true`, `windowed: true`, and the selected
+backend, under its GPU lease. Before arming the run, wait for startup once:
+
+```text
+world.wait ready 120
+world.wait bakes 120
+world.benchmark run worlds/debug/walkthrough-tests.puck "seam walk: the valley into the gallery, walking" at 30
+world.rate resume
+world.wait until 150
+world.hud
+host.frames 1 16.667 1
+world.gpu-timing
+```
+
+Capture eight presented frames with `puck_capture_frame` (`mode: "presented"`,
+`frames: 8`, naming that World), while the chapter is moving. Then run:
+
+```text
+world.wait until 1130
+world.benchmark
+```
+
+Keep the run's reported `report.json` and the presented burst, then stop the
+World through `puck_world_stop` immediately. Nothing settles or holds a frame
+inside the run. The panel must remain readable in motion, with both series
+scrolling and the white budget line in the authored range. `world.hud` must
+agree with `host.frames` at the same sample index, and the overlay pass must
+have completed samples in both `world.gpu-timing` and the report's `gpu`
+window. Those observations close the proof; rendering alone does not.
+
 ### Artifacts in motion
 
 The owner's difficulty is knowing when and how an artifact shows. Every
