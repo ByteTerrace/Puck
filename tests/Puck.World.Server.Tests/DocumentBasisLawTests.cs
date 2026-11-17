@@ -12,6 +12,22 @@ namespace Puck.World.Server.Tests;
 /// when stale; a basis surviving to validation refuses; and
 /// <see cref="WorldDefinitionSerialization.SavePreservingBasis"/> writes a proved delta that round-trips.</summary>
 public sealed class DocumentBasisLawTests {
+    [Theory]
+    [InlineData("""{"b":2,"a":1}""")]
+    [InlineData("""{"b":3,"new":0,"a":1}""")]
+    public void ReloadPreservesObjectKeyOrderInsideAKeyedRow(string configuration) {
+        var basis = System.Text.Json.Nodes.JsonNode.Parse(Fixtures.DefaultWorldBytes())!.AsObject();
+        basis["_reload"] = JsonNode.Parse("""[{"name":"row","configuration":{"a":1,"b":2}}]""");
+        var target = (JsonObject)basis.DeepClone();
+        target["_reload"]![0]!["configuration"] = JsonNode.Parse(configuration);
+        var current = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(basis.ToJsonString()));
+        var next = WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(target.ToJsonString()));
+        var version = new Puck.World.Protocol.WorldDocumentVersion(Guid.NewGuid(), 1);
+        var delta = Puck.World.Protocol.WorldReloadDelta.Create(current, version, next);
+        Assert.True(delta.TryPrepare(current, version, out var prepared, out var reason), reason);
+        Assert.Equal(WorldDefinitionSerialization.SerializeCompact(next), WorldDefinitionSerialization.SerializeCompact(prepared!));
+    }
+
     [Fact]
     public void KeyedPositionsResolveForwardReferencesAndRefuseMissingTargetsAndCycles() {
         var basis = JsonNode.Parse("""{"holds":[{"name":"ground"},{"name":"fall"}]}""")!.AsObject();

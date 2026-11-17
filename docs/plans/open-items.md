@@ -1558,17 +1558,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `FixedDynamicBodyContacts.ClosestDelta` forms carrier-rounded
-  Q48.16 dot products before its segment-pair divisions: a sphere core at
-  `(0.001, 0, 0)` against a capsule core from the origin to `(0.002, 0, 0)`
-  returns `(66, 0, 0)` raws instead of zero, so overlap can miss the pair.
-  Replace the whole segment-pair solve with full-width arithmetic and verify
-  short, crossing, parallel and extreme-coordinate pairs against exact
-  geometry.
-- [medium] `physics.contact` adds three or four shared `CompareExchange`
-  updates to every surviving convex query whether or not a reader exists
-  (`FixedStaticContactWork`). Count per thread or per tick and publish on
-  read.
+- [medium] `physics.contact` still counts through the shared atomic
+  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
+  a surviving convex query adds three or four `WorkCount.AddShared` CAS
+  updates, even without a reader. The cause is shared counter storage, not
+  the physics wrapper. Add single-writer shards in the common counting home
+  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
+  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
+  handling rather than making physics carry a second aggregator. Preserve
+  totals when a writer thread exits, and bound retained shard state under
+  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
+  Check concurrent writers, reads and retirement for exact monotonic totals,
+  then physics ordering/friction laws and `world.counters physics.contact`.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -1590,10 +1591,7 @@ collider, then the lifecycle lows as one pass.
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
   a carried body's contacts are never released, so the box beneath cannot
   park; one refused probe drops a body's surface warm start
-  (`ReleaseUntouchedRigidContacts`); the rest latch's hold counter grows
-  unclamped past `policy.RestHoldTicks`, so a still body's replay hash can
-  move; `FixedPairManifoldSlot.IsPersistentStateEqual` and
-  `FixedPairManifoldSlotTable.Fold` have no caller; a lattice spill into an
+  (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).
 
@@ -1950,9 +1948,6 @@ State and server:
   `PeerAdmitted` and so no default peer control grant (`SelectCensus`'s
   `reports` flag in `WorldPopulation.Reconcile.cs`). Decide whether a moved
   census body keeps its grant.
-- [low] `WorldDisclosureImages` reads `m_windowVersions[row]` unchecked; it
-  would throw if an arena grew rows mid-window. `StateArena.TryRelayout` has
-  no caller, so it is latent: guard it.
 - Findings read from the code and not reproduced; confirm each with a failing
   case before fixing: `WorldServer.WriteStateCell` throws on a stale `CellKey`
   instead of returning `StaleAddress`; `ResolveDevelopmentRequest` and
@@ -2162,17 +2157,9 @@ lane's.
   machines its stopped-machines import does not stop, and each root tick
   advances four authorities. Remove the avoidable companion workload, keeping
   the scenarios' claims.
-- [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
-  cannot capture pumped addon guests or a stepped machine without durable
-  checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
-  stepped machine: the message names a condition that no longer refuses.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.
-- [low] `Fixtures.FreshServer` deserializes without
-  `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document
-  with a seeded responsive placement can show one prototype and collide as
-  another. Settle in the fixture as the loader does.
 - [low] `--cache-dir` redirects only the `puck test` workers: the process
   itself still persists compiles to the per-user directory (`WorldsRoot`).
   Make it cover the compile cache, or narrow its wording.
@@ -2442,6 +2429,15 @@ the windowed C# loop and the cold and warm builds timed on a quiet machine.
 
 The edit loop:
 
+- [low] Staging unchanged source bytes invalidates a pending World build:
+  `WorldArtifactKey` hashes `CheckoutContent.Change.Entry`, including Git's
+  index/worktree status. An easy-b2 headless start was refused after its
+  build-lease wait with "sources changed while waiting" when only `git add`
+  changed that status. Key the effective source content independently of
+  staging, preserving additions, deletions and paths. Check that staging and
+  unstaging identical bytes retain the key and a queued build, while changing
+  a source byte still invalidates it.
+
 - [high] A fresh landscape World artifact builds for minutes before boot,
   against the 30-second bar. A live compiler stack sat in ILLink's data-flow
   analysis and in `StaleCaptureAnalyzer.CompilationState.Collect`; every
@@ -2457,13 +2453,6 @@ The edit loop:
   Zig's incremental compiler as the design
   ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
   per-declaration units, recorded dependencies, early cutoff.
-- [medium] Reload deltas cannot express key order: the sender proves its delta
-  with `JsonNode.DeepEquals`, which ignores key order, and the diff and merge
-  keep old order and append new keys, so fields that serialize in key order
-  (kit `actions`, `pad`, `producers`; machine, probe and view configurations)
-  rebuild differently on the server, which refuses
-  `world.reload.target-mismatch` on every retry. Sort keys canonically in the
-  serializer, or let a delta replace an object whole.
 - A shading edit still runs the whole validator over its candidate and
   canonicalizes and digests the edited creation twice; reload's sender
   serializes and diffs whole trees and the server validates the whole
@@ -2590,10 +2579,16 @@ its lifecycle an explicit state.
 - [medium] `puck_world_start` discards a build when any file under the
   checkout changes mid-build, documentation and `worlds/` edits included. Key
   the source state on what the World's build reads.
-- [medium] `Puck.World`'s `--workers` validator reads a value whose parse
-  already failed (`src/Puck.World/Program.cs`), so `--workers abc` crashes
-  with a stack trace. Skip the check when the parse failed, as `CliOptions`'
-  validators do.
+- [low] A cancelled or expired `puck_world_start` abandons its isolated build
+  rather than stopping it (`src/Puck.Cli.Release/Mcp/McpCommand.cs`,
+  `StartWorldAsync`: `Task.Run` uses `CancellationToken.None`, and cancellation
+  only arranges disposal of a future result). A headless start's deadline
+  returned refusal and left no pending start or owned World, while its
+  adapter-owned `dotnet build` and compiler children still ran and needed
+  manual termination. Give the build an explicit lifetime: cancel and reap it
+  when its last requester leaves, while preserving another requester's live
+  shared build. Check by cancelling during compilation and inspecting both
+  adapter jobs and child processes, including two callers sharing one build.
 - [medium] `puck measure` cannot time `bench world` across builds whose
   in-process types differ: the bench loads the frozen build's assemblies
   under the requesting checkout's CLI. Run each side's bench from that side's
@@ -2616,9 +2611,22 @@ its lifecycle an explicit state.
     from it;
   - a failed after side leaves a half-frozen request directory with no
     `request.json` (`MeasureCommand`); stage and rename, or delete it.
-- [low] `puck locks` re-resolves floating packages throughout an affected lock
-  file after a reference change, even without `--update` (`LockFiles`).
-  Preserve resolved versions and reserve upgrades for `--update`.
+- [medium] `puck locks` re-resolves floating packages throughout an affected
+  lock file after a reference change, even without `--update`
+  (`src/Puck.Cli.Gate/Locks/LockFiles.cs`, `RecordArguments` and `Record`).
+  A local-feed reproduction pins `1.*` at `1.0.0`, publishes `1.1.0`, then adds
+  only a project reference: the non-update restore records `1.1.0` as well as
+  the new project entry. `--force` differs from `--force-evaluate`, but an
+  invalidated graph still re-evaluates its floating dependencies. Preserve
+  existing resolutions during graph repair, without retaining a version that
+  a changed constraint excludes, and reserve upgrades for `--update`. This
+  needs a restore-resolution design, not a switch-only fix: cover direct and
+  transitive floating dependencies, multiple target frameworks, changed
+  constraints and removed references. Check with an isolated local feed whose
+  newer package appears between the initial restore and the reference edit;
+  non-update must retain the admissible old version, update must take the new
+  one, and a subsequent locked restore must pass. Do not rewrite resolved
+  versions in the output lock file without resolving their dependency graph.
 - [low] `puck format --check` reports thousands of files drifted, mostly from
   its whitespace phase: the phase or its settings disagree with
   `.editorconfig`. Fix it at the cause and sweep once.
@@ -2633,9 +2641,6 @@ its lifecycle an explicit state.
   starved, or nothing once stdin closes.
 - [low] An old-protocol CLI that already holds a lease keeps it:
   `HostAdmission.Wait` does not read `CliLease.RecordedProtocol`.
-- [low] `puck test` strands temporary run directories that contain links
-  (`build/RunDirectory.cs`'s sweep never removes one). Remove a link without
-  following it, or create none.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion` deletes a
   lock file while it holds it, and the artifact store deletes keyed locks, so
   two builders can lock different inodes at one path
@@ -2675,12 +2680,8 @@ CLI maturity remainders, each a [low]:
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck bundle verify` dereferences null on a
-  `release.json` with no `files`; `puck official build --channel` goes
+  line on the same output; `puck official build --channel` goes
   unvalidated into `Path.Combine`.
-- `puck compile --validate` does not run the binding compiler, so a page
-  binding an Axis1D source to a digital command passes it and is refused at
-  boot.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,

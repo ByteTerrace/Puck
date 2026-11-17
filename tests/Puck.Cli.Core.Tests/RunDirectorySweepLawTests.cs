@@ -62,7 +62,7 @@ public sealed class RunDirectorySweepLawTests : IDisposable {
         Assert.Equal(expected: "", actual: report.ToString());
     }
     [Fact]
-    public void AStaleDirectoryHoldingALinkOutOfTheRootIsLeftWithTheTargetUntouchedAndNamed() {
+    public void AStaleDirectoryHoldingALinkOutOfTheRootIsRemovedWithTheTargetUntouched() {
         var outside = m_root.PathOf(name: "outside");
         var stale = StaleDirectory(token: "linked");
 
@@ -73,19 +73,17 @@ public sealed class RunDirectorySweepLawTests : IDisposable {
 
         var report = new StringWriter();
 
-        Assert.Equal(expected: 0, actual: RunDirectory.Sweep(age: TimeSpan.FromHours(value: 1), prefix: Kind, report: report, root: m_root.RootPath));
-        Assert.True(condition: Directory.Exists(path: stale));
+        Assert.Equal(expected: 1, actual: RunDirectory.Sweep(age: TimeSpan.FromHours(value: 1), prefix: Kind, report: report, root: m_root.RootPath));
+        Assert.False(condition: Directory.Exists(path: stale));
         Assert.Equal(expected: "kept", actual: File.ReadAllText(path: Path.Combine(path1: outside, path2: "evidence.txt")));
-        Assert.Contains(expectedSubstring: "run directory not removed", actualString: report.ToString());
-        Assert.Contains(expectedSubstring: stale, actualString: report.ToString());
+        Assert.Equal(expected: "", actual: report.ToString());
 
-        // The sweep names what it refused; it does not stop the next directory being swept.
+        // A later sweep still removes another finished run.
         var next = StaleDirectory(token: "plain");
 
         File.WriteAllText(contents: "gone", path: Path.Combine(path1: next, path2: "loose.txt"));
         Assert.Equal(expected: 1, actual: RunDirectory.Sweep(age: TimeSpan.FromHours(value: 1), prefix: Kind, report: new StringWriter(), root: m_root.RootPath));
         Assert.False(condition: Directory.Exists(path: next));
-        DirectoryLinks.Remove(link: Path.Combine(path1: stale, path2: "escape"));
     }
 
     public void Dispose() => m_root.Dispose();
