@@ -146,7 +146,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
         if (sampledReplaced || !SameSampled(batch: batch, slot: slot)) {
             // The table lives only through this write: native storage from the bake's allocator, charged while it lasts,
             // rather than a pooled array a large table would allocate afresh and drop.
-            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-sampled");
+            using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-bake-sampled");
             using var words = new OwnedBuffer<uint>(allocator: m_bake.Library.Allocator, observer: owner);
 
             words.Resize(length: batch.SampledWords, clear: false, preserve: false);
@@ -190,7 +190,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             var length = readback.Length;
             // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts
             // (the shared pool allocates anything past a mebibyte afresh and drops it, which the samples are).
-            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-bake-readback");
+            using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-bake-readback");
             using var bytes = new OwnedBuffer<byte>(allocator: m_bake.Library.Allocator, observer: owner);
 
             try {

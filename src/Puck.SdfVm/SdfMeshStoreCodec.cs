@@ -90,7 +90,7 @@ internal static unsafe class SdfMeshStoreCodec {
         try {
             // Expanded entries belong to this decode alone. A shared pool retains a large buffer per size bucket
             // on every worker after a parallel store load, even though no mesh borrows the encoded planes.
-            using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-decode");
+            using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-decode");
             using var decoded = new OwnedBuffer<byte>(allocator: allocator, observer: owner);
 
             decoded.Resize(clear: false, length: length, preserve: false);

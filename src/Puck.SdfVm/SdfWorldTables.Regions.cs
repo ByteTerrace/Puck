@@ -54,7 +54,7 @@ public sealed partial class SdfWorldTables {
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
     // Names the regions' host copies, native storage outside the allocator, in the process account; each region reports
     // its own changes, and the owner outlives them (DisposeRegions).
-    private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateObservedOwner(name: "sdf.world.region-host-copies");
+    private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(name: "sdf.world.region-host-copies");
 
     // The mesh region's slots: the upload ring's, then one per background GPU work slot, which lands meshes
     // (MeshLandingSlot).
@@ -86,7 +86,7 @@ public sealed partial class SdfWorldTables {
             byteCount: byteCount,
             copyPipeline: m_regionCopyPipeline,
             memory: GpuHostVisibleMemory.Host,
-            name: RegionName(region: region),
+            name: MeshRegionName,
             policy: GpuResidencyPolicy.Staged,
             recorder: m_gpu.Recorder,
             slotCount: MeshRegionSlotCount,
@@ -105,6 +105,10 @@ public sealed partial class SdfWorldTables {
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize
         ));
+    // The mesh region's buffers are named under an owner of their own, apart from the tables' other objects, so the
+    // account reserves and classes them as the elastic storage they are (SdfResidencySelector.RegionOwner).
+    private static GpuObjectName MeshRegionName => new(owner: SdfResidencySelector.RegionOwner, part: "mesh-region");
+
     // Disposes every region, then the copy pool reserved for them.
     private void DisposeRegions() {
         for (var index = 0; (index < RegionCount); index++) {

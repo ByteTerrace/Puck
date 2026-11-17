@@ -187,14 +187,14 @@ public sealed partial record SdfMesh {
         public override bool Begin(SdfMeshShape shape) {
             Abandon();
             m_shape = shape;
-            m_payload = new Payload(owner: account.CreateOwner("mesh"));
+            m_payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
             try {
                 var restorable = ((restore is { } from) ? new Restorable(geometry: from.Geometry, identity: from.Identity, library: from.Library) : null);
 
                 m_restorable = restorable;
                 m_parts = new Part[shape.Pieces.Length];
                 if (shape.Chunked) {
-                    var shared = m_payload.Part(owner: account.CreateOwner("mesh"));
+                    var shared = m_payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
 
                     m_positions = Take<Vector3>(block: out _, length: shape.Pieces.Sum(selector: static piece => piece.Vertices), owner: shared);
                     m_normals = Take<Vector3>(block: out var normals, length: shape.Pieces.Sum(selector: static piece => piece.Normals), owner: shared);
@@ -206,7 +206,7 @@ public sealed partial record SdfMesh {
 
                     for (var index = 0; (index < m_parts.Length); index++) {
                         var piece = shape.Pieces[index];
-                        var owner = m_payload.Part(owner: account.CreateOwner("mesh"));
+                        var owner = m_payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
 
                         owner.Borrow(source: shared);
                         m_parts[index] = new Part {
@@ -374,7 +374,7 @@ public sealed partial record SdfMesh {
     // chunked mesh's chunks view one renumbered copy of its triangle materials. A native chunked mesh's chunks always
     // view its attributes (NativeCopy refuses any other, and NativeStorage builds no other).
     internal SdfMesh RenumberNative(int[] from, int[] to, IAllocator allocator, MemoryAccount account) {
-        var payload = new Payload(owner: account.CreateOwner("mesh-materials"));
+        var payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials"));
 
         ReadOnlyMemory<uint> Remap(Payload owner, ReadOnlyMemory<uint> source) {
             if (source.IsEmpty) { return default; }
@@ -390,13 +390,13 @@ public sealed partial record SdfMesh {
             payload.Borrow(source: m_payload);
 
             var chunks = new SdfMesh[Chunks.Count];
-            var shared = ((chunks.Length != 0) ? payload.Part(owner: account.CreateOwner("mesh-materials")) : payload);
+            var shared = ((chunks.Length != 0) ? payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials")) : payload);
             var materials = Remap(owner: shared, source: TriangleMaterials);
             var triangle = 0;
 
             for (var index = 0; (index < chunks.Length); index++) {
                 var chunk = Chunks[index];
-                var part = payload.Part(owner: account.CreateOwner("mesh-materials"));
+                var part = payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials"));
 
                 part.Borrow(source: chunk.m_payload);
                 part.Borrow(source: shared);

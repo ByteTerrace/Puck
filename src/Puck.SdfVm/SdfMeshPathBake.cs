@@ -7,7 +7,6 @@ using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
 using Puck.Abstractions.Memory;
-using Puck.Hosting;
 using Puck.Hosting.Jobs;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
@@ -457,9 +456,9 @@ public sealed partial class SdfMeshPathBake {
     private long m_handed;
     private long m_handedRefused;
 
-    // Whether a residency's tables land this bake's meshes: they have read it their region's limit (ObserveResidency).
+    // Whether a residency's tables land this bake's meshes: they have handed it their grant (ObserveResidency).
     // A bake no tables observe (an offline bake) draws every product at once, since nothing would hand it its draws.
-    private bool LandsAhead => (m_regionLimitBytes != 0L);
+    private bool LandsAhead => (m_detail is not null);
     private enum AheadState : byte { Landing, Stands, StandsRefused }
 
     private void AwaitAhead(Group group) {
@@ -664,8 +663,6 @@ public sealed partial class SdfMeshPathBake {
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
-            long? available = null;
-            var availableRead = false;
             var backlogged = false;
             var backlogRead = false;
 
@@ -703,20 +700,19 @@ public sealed partial class SdfMeshPathBake {
 
                     var peak = PeakOf(final: group.Final!);
 
-                    // The machine's free memory paces admission; it is read outside the account, at most every
-                    // AvailableSeconds.
-                    if (!availableRead) { available = AvailablePhysicalBytes(); availableRead = true; }
-                    if (!group.Memory.TryReserve(available: available, peak: peak)) {
-                        if (admitted > 0) {
-                            if (!group.DeferredReported) { SdfMeshBakeReport.Deferred(admitted: admitted, available: available, peak: peak, residency: Residency, selector: group.Selector); group.DeferredReported = true; }
+                    // The account's host pool paces admission: its budget, and the machine's free memory as the
+                    // account reads it.
+                    if (!group.Memory.TryReserve(peak: peak)) {
+                        // With nothing of the bake admitted, the group is admitted whatever the pool holds, as the
+                        // process's one forced job, so the bake always progresses; while another bake holds that
+                        // allowance this one waits for it, as it waits for room. The library's cache stays: the
+                        // groups following a leader take its mesh from there rather than baking it again.
+                        if ((admitted > 0) || !group.Memory.TryReserveForced(peak: peak)) {
+                            if (!group.DeferredReported) { SdfMeshBakeReport.Deferred(admitted: admitted, peak: peak, residency: Residency, selector: group.Selector); group.DeferredReported = true; }
                             admissionWaits = true;
                             continue;
                         }
-                        // With nothing of the bake admitted, the group is admitted whatever the budget and the machine's
-                        // free memory read, so the bake always progresses, one group at a time. The library's cache
-                        // stays: the groups following a leader take its mesh from there rather than baking it again.
-                        group.Memory.Reserve(peak: peak);
-                        if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(available: available, peak: peak, residency: Residency, selector: group.Selector); }
+                        if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(peak: peak, residency: Residency, selector: group.Selector); }
                     }
                     group.DeferredReported = false;
                     group.Admitted = true;
@@ -754,23 +750,6 @@ public sealed partial class SdfMeshPathBake {
             }
             return true;
         }
-    }
-
-    // How long a reading of the machine's free memory paces admission before it is read again.
-    private const double AvailableSeconds = 0.25;
-
-    private long? m_available;
-    private long m_availableAt;
-
-    // The machine's free physical memory, read again once the last reading is AvailableSeconds old. Under the gate.
-    private long? AvailablePhysicalBytes() {
-        var now = Stopwatch.GetTimestamp();
-
-        if ((m_availableAt == 0) || (Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_availableAt).TotalSeconds >= AvailableSeconds)) {
-            m_available = HostMemory.AvailablePhysicalBytes();
-            m_availableAt = now;
-        }
-        return m_available;
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
@@ -2432,7 +2411,7 @@ public sealed partial class SdfMeshPathBake {
         public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); } TryRelease(); } }
         public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
 
-        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner("mesh-bake-group");
+        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
 
         private SdfMesh? m_mesh;
 

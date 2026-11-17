@@ -167,6 +167,24 @@ public readonly struct GpuObjectName : IEquatable<GpuObjectName> {
         );
     }
 
+    /// <summary>Returns the owner a family's device memory is reserved under: the family's text before its part, which
+    /// is the object's owner without its instance suffixes. Every part of one owner, and every instance of it, shares
+    /// one reservation key, so a holder that creates many kinds of object reserves once for all of them.</summary>
+    /// <param name="family">A family (<see cref="MemoryFamily"/>).</param>
+    /// <returns>The owner's text; the whole family when it names no part.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="family"/> is <see langword="null"/>.</exception>
+    public static string MemoryOwnerOf(string family) {
+        ArgumentNullException.ThrowIfNull(argument: family);
+
+        var part = family.IndexOf(value: '/');
+
+        return ((part < 0) ? family : family[..part]);
+    }
+    /// <summary>Returns the owner the object's device memory is reserved under (<see cref="MemoryOwnerOf"/> of its
+    /// <see cref="MemoryFamily"/>).</summary>
+    /// <returns>The owner's text.</returns>
+    public string MemoryOwner() => MemoryOwnerOf(family: MemoryFamily());
+
     /// <summary>The family of an object created with the default name (<see cref="MemoryFamily"/>).</summary>
     public const string UnnamedFamily = "unnamed";
 

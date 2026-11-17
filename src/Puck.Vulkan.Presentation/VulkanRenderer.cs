@@ -99,9 +99,12 @@ public sealed class VulkanRenderer(
 
     private GpuMemoryReading m_memoryReading = GpuMemoryReading.Absent;
     private VulkanLogicalDevice? m_memoryReadDevice;
+    // The ledger's device refusals as the last refresh read them; a count that moved makes the reading stale.
+    private long m_memoryRefusals;
 
     /// <summary>Reads the device's budget and usage per heap under the backends' one refresh rule
-    /// (<see cref="GpuMemoryReadingRefresh"/>): when a second has passed since the last read, or the device changed,
+    /// (<see cref="GpuMemoryReadingRefresh"/>): when a second has passed since the last read, the device changed, or
+    /// the device refused an allocation since (<see cref="GpuDeviceMemoryWork.DeviceRefusals"/>),
     /// publishing a new reading whose serial moves when a budget differs from the last; otherwise makes no driver call. A
     /// renderer with no device publishes nothing and brings none up.</summary>
     public void RefreshMemoryReading() {
@@ -113,9 +116,13 @@ public sealed class VulkanRenderer(
 
         var now = Stopwatch.GetTimestamp();
 
-        if (!m_memoryRefresh.Due(signalled: !ReferenceEquals(objA: device, objB: m_memoryReadDevice), timestamp: now)) {
+        var refusals = (device.Commands.Memory?.DeviceRefusals ?? 0L);
+
+        if (!m_memoryRefresh.Due(signalled: (!ReferenceEquals(objA: device, objB: m_memoryReadDevice) || (refusals != m_memoryRefusals)), timestamp: now)) {
             return;
         }
+
+        m_memoryRefusals = refusals;
 
         var readings = physicalDeviceApi.ReadMemoryBudget(
             budgetEnabled: device.MemoryBudgetEnabled,

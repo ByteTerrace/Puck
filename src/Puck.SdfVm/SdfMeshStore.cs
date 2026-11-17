@@ -185,7 +185,7 @@ public sealed class SdfMeshStore {
         mesh = null;
         materials = [];
 
-        using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-entry");
+        using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-entry");
         using var entry = new OwnedBuffer<byte>(allocator: null, observer: owner);
 
         try {
@@ -247,7 +247,7 @@ public sealed class SdfMeshStore {
         damaged = false;
         declined = false;
 
-        using var owner = MemoryAccount.Shared.CreateOwner(name: "mesh-entry");
+        using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-entry");
         using var entry = new OwnedBuffer<byte>(allocator: m_allocator, observer: owner);
 
         try {

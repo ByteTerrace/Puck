@@ -264,27 +264,32 @@ public static unsafe partial class DirectXCommandCalls {
     /// <param name="description">The resource's description.</param>
     /// <param name="initialState">The state it is created in.</param>
     /// <param name="clearValue">The optimized clear value, or <see langword="null"/>.</param>
+    /// <param name="grant">The ledger's grant for the resource's memory (<see cref="DirectXDeviceMemory.Admit"/>), which a
+    /// failed creation hands back; <see langword="null"/> when nothing was asked.</param>
     /// <returns>The resource, owned by the caller.</returns>
     /// <exception cref="DeviceLostException">The device was removed.</exception>
-    /// <exception cref="DirectXException">The creation failed for another reason, such as exhausted memory.</exception>
-    public static ID3D12Resource* CreateCommittedResource<TCalls>(TCalls calls, in D3D12_HEAP_PROPERTIES heapProperties, D3D12_HEAP_FLAGS heapFlags, in D3D12_RESOURCE_DESC description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue) where TCalls : IDirectXCommandCalls {
+    /// <exception cref="GpuMemoryRefusedException">The device had no memory for the resource, and a grant was given.</exception>
+    /// <exception cref="DirectXException">The creation failed for another reason.</exception>
+    public static ID3D12Resource* CreateCommittedResource<TCalls>(TCalls calls, in D3D12_HEAP_PROPERTIES heapProperties, D3D12_HEAP_FLAGS heapFlags, in D3D12_RESOURCE_DESC description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE? clearValue, GpuMemoryGrant? grant = null) where TCalls : IDirectXCommandCalls {
         ID3D12Resource* resource = null;
         var heap = heapProperties;
         var resourceDescription = description;
         var clear = clearValue.GetValueOrDefault();
 
-        calls.CreateCommittedResource(
-            clearValue: (clearValue.HasValue
-                ? &clear
-                : null),
-            description: &resourceDescription,
-            heapFlags: heapFlags,
-            heapProperties: &heap,
-            initialState: initialState,
-            resource: &resource
-        ).ThrowIfFailed(
+        DirectXDeviceMemory.Settle(
             calls: calls,
-            operation: "ID3D12Device::CreateCommittedResource"
+            grant: grant,
+            operation: "ID3D12Device::CreateCommittedResource",
+            result: calls.CreateCommittedResource(
+                clearValue: (clearValue.HasValue
+                    ? &clear
+                    : null),
+                description: &resourceDescription,
+                heapFlags: heapFlags,
+                heapProperties: &heap,
+                initialState: initialState,
+                resource: &resource
+            )
         );
 
         return resource;

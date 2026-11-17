@@ -667,7 +667,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         );
         yield return Immediate(
             forms: PipelineBudgetForms,
-            description: $"{PipelineBudgetForms.Spelling} — show the instance's memory budget in bytes: the device's (1/{ShaderPipelineMemoryBudget.DeviceLocalShare} of its device-local memory, or {ShaderPipelineMemoryBudget.UnreportedBytes} when it reports none), a cap that only lowers it, and the installed graph's owned, steady-state and reload-peak bytes. A byte count sets the cap; device clears it. A replacement whose peak does not fit is refused by name before it allocates, and the installed graph keeps running; lowering the cap never frees it.",
+            description: $"{PipelineBudgetForms.Spelling} — show the instance's memory budget in bytes: the device figure (what the instance owns or has reserved in the process memory account plus the room its pool has left, which host.memory prints), a cap that only lowers it, and the installed graph's owned, steady-state and reload-peak bytes. A byte count sets the cap; device clears it. A replacement whose peak does not fit is refused by name before it allocates, and the installed graph keeps running; lowering the cap never frees it.",
             (context, args) => {
                 if (args.Count is < 1 or > 2) {
                     return PipelineBudgetForms.Refuse();

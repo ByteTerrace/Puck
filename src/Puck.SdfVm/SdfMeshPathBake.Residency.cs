@@ -347,6 +347,11 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
         lock (m_gate) {
+            // The grant is the tables', read once: its budget and bias are the selector's from then on (Retier).
+            if (!ReferenceEquals(objA: m_detail, objB: tables.Grant)) {
+                m_detail = tables.Grant;
+                Volatile.Write(location: ref m_bias, value: m_detail.Bias);
+            }
             // The region's account is read every frame: the next frame's tiers are budgeted by it (Retier).
             m_regionLimitBytes = ((long)tables.MeshRegionLimitBytes);
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
@@ -575,10 +580,11 @@ public sealed partial class SdfMeshPathBake {
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers
             // landed, and the resident triangles by the tier they were baked at.
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tiers-owed={m_tiersOwed} owed-error={m_owedError:0.00}px owed-frames={m_owedFrames} worst-owed-error={m_worstOwedError:0.00}px worst-owed-frames={m_worstOwedFrames} retiers={m_retiers} retiers-reused={m_retiersReused}");
-            // The region's budget (Retier): the bytes the frame's draws name against it, the meshes the region refuses,
-            // the groups drawing a finer tier than their demand asks, the finer tiers the budget holds back, the coarser
-            // tiers landed to make room, and the half rungs every demand is coarsened by, with the steps up and down.
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={RegionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={m_biasRaised} bias-lowered={m_biasLowered}");
+            // The residency's budget from its presentation's selector (Retier): the bytes the frame's draws name
+            // against it, the meshes the region refuses, the groups drawing a finer tier than their demand asks, the
+            // finer tiers the budget holds back, the coarser tiers landed to make room, and the half rungs every demand
+            // is coarsened by, the selector's one bias, with its steps up and down.
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
             for (var tier = 0; (tier < tierTriangles.Length); tier++) {
                 if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }
             }

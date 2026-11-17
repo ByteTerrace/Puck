@@ -162,14 +162,20 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
 
     // A descriptor heap is no resource heap, and Direct3D 12 names no memory pool for one; it is counted in the local
     // segment group, where its device-local role places it on a discrete adapter and the only group on a unified one.
+    // The heaps are the device's own, created with it and fixed by the binding budget, so they are admitted as they are
+    // counted: descriptor heaps name no class, and storage that names none is admitted past a limit and counted.
     private void Count(nint heap, ulong bytes) =>
         m_memory?.CountAllocated(
             allocation: heap,
-            bytes: checked((long)bytes),
-            device: m_device,
-            family: GpuDeviceMemoryWork.DescriptorHeapFamily,
-            role: GpuMemoryRole.DeviceLocal,
-            segment: GpuMemorySegments.DirectXLocal
+            grant: m_memory.Admit(
+                bytes: checked((long)bytes),
+                device: m_device,
+                family: GpuDeviceMemoryWork.DescriptorHeapFamily,
+                payer: GpuDeviceMemoryWork.DescriptorHeapFamily,
+                payerBytes: checked((long)bytes),
+                role: GpuMemoryRole.DeviceLocal,
+                segment: GpuMemorySegments.DirectXLocal
+            )
         );
 
     /// <summary>Binds both heaps to a command list, once per recording: a reset clears a command list's heaps.</summary>

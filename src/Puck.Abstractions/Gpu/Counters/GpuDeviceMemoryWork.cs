@@ -16,8 +16,13 @@ namespace Puck.Abstractions.Gpu;
 /// in) are device-local; host-visible, staging, upload and readback buffers are host-visible, even on a unified-memory
 /// device. The segment its backend placed it in (a DXGI segment group, a Vulkan heap) chooses its segment row and the
 /// pool it is charged to, through the <see cref="GpuMemorySegments"/> registered for its device
-/// (<see cref="BeginDevice"/>); the role never chooses a pool. <see cref="CountAllocated"/> is the one door: each counted
-/// byte is in exactly one role row and exactly one segment row, so each set of rows adds up to what the backend's
+/// (<see cref="BeginDevice"/>); the role never chooses a pool. <see cref="CountAllocated"/> is the one door, and it takes
+/// only a <see cref="GpuMemoryGrant"/>, which <see cref="TryAdmit"/> alone makes: a backend asks before its native
+/// allocation, at the size the device will be asked for, and the host's account answers whether the segment's pool and
+/// the segment itself have room (<see cref="IGpuMemoryOwners.Admit"/>), so no byte is counted that was not admitted
+/// first. A native allocation the device refuses hands its grant back (<see cref="GpuMemoryGrant.Refuse"/>), which
+/// lowers the segment's limit to what it holds and marks the device's reading stale (<see cref="DeviceRefusals"/>). Each
+/// counted byte is in exactly one role row and exactly one segment row, so each set of rows adds up to what the backend's
 /// counted allocations hold, and an allocation whose role and pool disagree on a discrete adapter (a device-local role
 /// placed in system memory, or the reverse) is counted (<see cref="PlacementDisagreements"/>). Each segment row reports
 /// its held bytes to the observer the host hands the constructor, called under this ledger's lock. Swapchain images,
@@ -61,6 +66,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly IGpuMemoryOwners? m_owners;
 
     private long m_tokens;
+    private long m_deviceRefusals;
 
     private readonly WorkCounterSet m_counts;
 
@@ -97,6 +103,16 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the allocations whose role and placement disagree on a discrete adapter: a
     /// device-local role placed in a segment of host memory, or a host-visible role placed in the adapter's own.</summary>
     public static WorkKind PlacementDisagreements { get; } = new(name: "gpu.memory.placement-disagreements", unit: "count", workClass: WorkClass.Pacing);
+
+    /// <summary>Gets the kind counting the allocations the account refused before the device was asked
+    /// (<see cref="TryAdmit"/>).</summary>
+    public static WorkKind AdmissionRefusals { get; } = new(name: "gpu.memory.admission-refusals", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the allocations admitted past a limit because their class cannot give way
+    /// (<see cref="GpuMemoryVerdict.OverLimit"/>).</summary>
+    public static WorkKind OverLimitGrants { get; } = new(name: "gpu.memory.over-limit-grants", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the admitted allocations the device itself refused
+    /// (<see cref="GpuMemoryGrant.Refuse"/>).</summary>
+    public static WorkKind DeviceRefusalCount { get; } = new(name: "gpu.memory.device-refusals", unit: "count", workClass: WorkClass.Pacing);
 
     /// <summary>The family of a backend's descriptor heaps, which no caller names.</summary>
     public const string DescriptorHeapFamily = "backend/descriptor-heaps";
@@ -232,33 +248,105 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 ))];
         }
     }
-    /// <summary>Counts one allocation into the role row its role names (<see cref="IsDeviceLocal"/>) and the segment row
-    /// of the segment it was placed in, charging the segment's pool, keyed by its device and the native object whose
-    /// release frees it.</summary>
-    /// <param name="device">The native device that made the allocation: a <c>VkDevice</c> or an
+    /// <summary>Gets how many admitted allocations the device refused over the process's life. A backend reads it when it
+    /// refreshes its memory reading: a count that moved marks the reading stale. Safe to read from any thread.</summary>
+    public long DeviceRefusals => Volatile.Read(location: ref m_deviceRefusals);
+
+    /// <summary>Asks whether a device allocation may be made, before the native call that makes it, at the size the device
+    /// will be asked for: a shared block's whole size or a resource's own allocation, never the size of the resource that
+    /// prompted a block. The host's account answers for the pool and the segment the allocation would be placed in
+    /// (<see cref="IGpuMemoryOwners.Admit"/>); a ledger with no account grants everything. A grant is settled exactly
+    /// once: by <see cref="CountAllocated"/> when the native allocation succeeded, by <see cref="GpuMemoryGrant.Refuse"/>
+    /// when the device refused it, or by <see cref="GpuMemoryGrant.Return"/> when it was never attempted.</summary>
+    /// <param name="device">The native device that will make the allocation: a <c>VkDevice</c> or an
     /// <c>ID3D12Device</c>; must be non-zero and registered (<see cref="BeginDevice"/>).</param>
-    /// <param name="allocation">The native object the allocation is released through: a <c>VkDeviceMemory</c>, an
-    /// <c>ID3D12Heap</c> or an <c>ID3D12Resource</c>; must be non-zero and not already counted on
-    /// <paramref name="device"/>.</param>
-    /// <param name="bytes">The allocation's actual size, in bytes.</param>
+    /// <param name="bytes">The allocation's size, in bytes, as the device will be asked for it.</param>
     /// <param name="role">What the allocation is for.</param>
-    /// <param name="segment">The index of the segment the device placed it in: the heap of the Vulkan memory type it
-    /// allocated from (<see cref="GpuMemorySegments.OfMemoryType"/>), or the segment group of its Direct3D 12 heap's
+    /// <param name="segment">The index of the segment the device will place it in: the heap of the Vulkan memory type it
+    /// allocates from (<see cref="GpuMemorySegments.OfMemoryType"/>), or the segment group of its Direct3D 12 heap's
     /// memory pool on the device's adapter.</param>
     /// <param name="family">The family that names the whole allocation, for one a single resource holds (a committed
     /// resource, a resource's own memory, a descriptor heap); <see langword="null"/> for a block shared by placements,
     /// which each name their own part (<see cref="CountPlaced"/>).</param>
-    /// <exception cref="ArgumentException"><paramref name="device"/> or <paramref name="allocation"/> is zero, the
-    /// allocation is already counted on the device, or <paramref name="family"/> is empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> is negative, <paramref name="role"/> is
-    /// not a defined value, or the device has no segment <paramref name="segment"/>.</exception>
+    /// <param name="payer">The family of the resource that prompted the allocation, whose reservation the grant draws on
+    /// first; <see langword="null"/> draws on unreserved room alone.</param>
+    /// <param name="payerBytes">The bytes of the resource that prompted the allocation: the most of
+    /// <paramref name="payer"/>'s reservation this allocation consumes.</param>
+    /// <param name="grant">The grant, when the allocation may be made.</param>
+    /// <returns><see langword="true"/> when the allocation may be made; <see langword="false"/> when the account refused
+    /// it, and nothing was allocated or counted.</returns>
+    /// <exception cref="ArgumentException"><paramref name="device"/> is zero, or <paramref name="family"/> is empty.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="bytes"/> or <paramref name="payerBytes"/> is
+    /// negative, <paramref name="role"/> is not a defined value, or the device has no segment
+    /// <paramref name="segment"/>.</exception>
     /// <exception cref="InvalidOperationException"><paramref name="device"/> is not registered.</exception>
-    public void CountAllocated(nint device, nint allocation, long bytes, GpuMemoryRole role, int segment, string? family) {
+    public bool TryAdmit(nint device, long bytes, GpuMemoryRole role, int segment, string? family, string? payer, long payerBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out GpuMemoryGrant? grant) {
         if (0 == device) {
             throw new ArgumentException(
-                message: "A counted allocation needs the device that made it.",
+                message: "An admitted allocation needs the device that will make it.",
                 paramName: nameof(device)
             );
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: payerBytes);
+        if (family is { Length: 0 }) {
+            throw new ArgumentException(message: "A family is absent or non-empty.", paramName: nameof(family));
+        }
+
+        _ = IsDeviceLocal(role: role);
+
+        GpuMemorySegment placed;
+
+        lock (m_gate) {
+            placed = SegmentsOfLocked(device: device)[segment];
+            _ = RowOf(segment: placed);
+        }
+
+        var admission = (m_owners?.Admit(bytes: bytes, payer: payer, payerBytes: Math.Min(val1: payerBytes, val2: bytes), segment: placed) ?? new GpuMemoryAdmission(Bytes: bytes, Net: bytes, Verdict: GpuMemoryVerdict.Granted));
+
+        if (admission.Verdict == GpuMemoryVerdict.Refused) {
+            m_counts.Add(amount: 1L, kind: AdmissionRefusals);
+            grant = null;
+
+            return false;
+        }
+        if (admission.Verdict == GpuMemoryVerdict.OverLimit) { m_counts.Add(amount: 1L, kind: OverLimitGrants); }
+        grant = new GpuMemoryGrant(admission: admission, bytes: bytes, device: device, family: family, ledger: this, role: role, segment: placed);
+
+        return true;
+    }
+    /// <summary>Asks as <see cref="TryAdmit"/> does and throws when the account refuses, for a creation door whose
+    /// caller handles a refusal as an exception.</summary>
+    /// <param name="device">The native device that will make the allocation.</param>
+    /// <param name="bytes">The allocation's size, in bytes, as the device will be asked for it.</param>
+    /// <param name="role">What the allocation is for.</param>
+    /// <param name="segment">The index of the segment the device will place it in.</param>
+    /// <param name="family">The family that names the whole allocation, or <see langword="null"/> for a shared block.</param>
+    /// <param name="payer">The family of the resource that prompted the allocation, or <see langword="null"/>.</param>
+    /// <param name="payerBytes">The bytes of the resource that prompted the allocation.</param>
+    /// <returns>The grant.</returns>
+    /// <exception cref="GpuMemoryRefusedException">The account refused the allocation; nothing was allocated.</exception>
+    public GpuMemoryGrant Admit(nint device, long bytes, GpuMemoryRole role, int segment, string? family, string? payer, long payerBytes) => (TryAdmit(bytes: bytes, device: device, family: family, grant: out var grant, payer: payer, payerBytes: payerBytes, role: role, segment: segment)
+        ? grant
+        : throw new GpuMemoryRefusedException(bytes: bytes, byDevice: false, family: (family ?? payer), segment: SegmentsOf(device: device)[segment].Name));
+    /// <summary>Counts one admitted allocation into the role row its role names (<see cref="IsDeviceLocal"/>) and the
+    /// segment row of the segment it was placed in, charging the segment's pool, keyed by its device and the native object
+    /// whose release frees it, and settles its grant.</summary>
+    /// <param name="grant">The grant <see cref="TryAdmit"/> made for the allocation, not yet settled: it carries the
+    /// device, the size, the role, the segment and the family.</param>
+    /// <param name="allocation">The native object the allocation is released through: a <c>VkDeviceMemory</c>, an
+    /// <c>ID3D12Heap</c> or an <c>ID3D12Resource</c>; must be non-zero and not already counted on the grant's
+    /// device.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="grant"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="grant"/> is another ledger's, <paramref name="allocation"/>
+    /// is zero, or the allocation is already counted on the device.</exception>
+    /// <exception cref="InvalidOperationException">The grant was settled already, or its device is no longer
+    /// registered.</exception>
+    public void CountAllocated(GpuMemoryGrant grant, nint allocation) {
+        ArgumentNullException.ThrowIfNull(argument: grant);
+        if (!ReferenceEquals(objA: grant.Ledger, objB: this)) {
+            throw new ArgumentException(message: "The grant was made by another ledger.", paramName: nameof(grant));
         }
         if (0 == allocation) {
             throw new ArgumentException(
@@ -267,10 +355,11 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             );
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(value: bytes);
-        if (family is { Length: 0 }) {
-            throw new ArgumentException(message: "A family is absent or non-empty.", paramName: nameof(family));
-        }
+        var device = grant.Device;
+        var bytes = grant.Bytes;
+        var role = grant.Role;
+        var family = grant.Family;
+        var segment = grant.Segment.Index;
 
         var deviceLocal = IsDeviceLocal(role: role);
 
@@ -280,6 +369,14 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             var row = RowOf(segment: placed);
             var named = ((family is null) ? null : FamilyOf(family: family, segment: placed));
 
+            if (m_live.ContainsKey(key: (device, allocation))) {
+                throw new ArgumentException(
+                    message: $"The allocation 0x{allocation:X} is already counted on device 0x{device:X}.",
+                    paramName: nameof(allocation)
+                );
+            }
+
+            grant.Take();
             if (!m_live.TryAdd(
                 key: (device, allocation),
                 value: new Allocation(bytes: bytes, family: named, role: role, row: row)
@@ -294,10 +391,13 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 amount: 1L,
                 kind: Allocations
             );
+            // The row is charged before the grant is settled, so the account never reads the block as neither held nor
+            // promised.
             row.Allocate(bytes: bytes);
+            m_owners?.Settle(admission: grant.Admission, segment: placed, settlement: GpuMemorySettlement.Counted);
             named?.Allocate(bytes: bytes);
 
-            if (!segments.UnifiedMemory && (deviceLocal != (placed.Pool == PhysicalMemory.Device))) {
+            if (segments.ExpectedPool(role: role) != placed.Pool) {
                 row.Disagreements++;
                 m_counts.Add(
                     amount: 1L,
@@ -505,6 +605,15 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             value: out value
         );
 
+    // Hands back a grant whose allocation was not made: returned unattempted, or refused by the device.
+    internal void Settle(GpuMemoryGrant grant, GpuMemorySettlement settlement) {
+        if (settlement == GpuMemorySettlement.DeviceRefused) {
+            _ = Interlocked.Increment(location: ref m_deviceRefusals);
+            m_counts.Add(amount: 1L, kind: DeviceRefusalCount);
+        }
+        m_owners?.Settle(admission: grant.Admission, segment: grant.Segment, settlement: settlement);
+    }
+
     // Under m_gate.
     private GpuMemorySegments SegmentsOfLocked(nint device) => (m_devices.TryGetValue(key: device, value: out var segments)
         ? segments
@@ -532,7 +641,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.
     private static class Counts {
-        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations, PlacementDisagreements];
+        internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations, PlacementDisagreements, AdmissionRefusals, OverLimitGrants, DeviceRefusalCount];
     }
 
     // One counted allocation: its size, role and segment row, the family that names it whole, or else the bytes its

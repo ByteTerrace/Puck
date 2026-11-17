@@ -183,12 +183,13 @@ public readonly ref struct SdfGpuWorkRecording {
 /// in the last <see cref="IdleSeconds"/> needed that size, as each client gives back its own buffers for a slot it has
 /// not recorded into for as long (<see cref="ISdfGpuWorkClient.ReleaseIdle"/>): buffers sized for a cold bake's largest
 /// batch go once the bake settles rather than living as long as the tables.</para>
-/// <para>Budget: the service takes at most <see cref="GpuShare"/> of the GPU's time, by each job's measured GPU time
-/// (its timestamps, or its client's estimate on a queue without them), stages at most <see cref="UploadBytesPerSecond"/>
-/// of host payload, records for at most <see cref="HostShare"/> of the wall time between pumps, and keeps at most
-/// <see cref="SlotCount"/> jobs in flight. Every budget is a rate of wall time, never a count a pump, so work such as
-/// landing a mesh region takes as many seconds whatever the frame rate. The GPU budget banks at most
-/// <see cref="FrameShareSeconds"/>, and a client cuts its jobs to that share at its kind's measured rate
+/// <para>Budget: the service draws on its presentation's one budget (<see cref="SdfGpuWorkBudget"/>), which every
+/// residency's service shares: together they take at most <see cref="GpuShare"/> of the GPU's time, by each job's
+/// measured GPU time (its timestamps, or its client's estimate on a queue without them), and stage at most
+/// <see cref="UploadBytesPerSecond"/> of host payload. Each service also records for at most <see cref="HostShare"/> of
+/// the wall time between its pumps and keeps at most <see cref="SlotCount"/> jobs in flight. Every budget is a rate of
+/// wall time, never a count a pump, so work such as landing a mesh region takes as many seconds whatever the frame
+/// rate. A client cuts its jobs to <see cref="FrameShareSeconds"/> at its kind's measured rate
 /// (<see cref="SdfGpuWorkRate"/>): the queue runs a job whole before the frame submitted after it, so a job longer than
 /// the share delays that frame by its length whatever the average share.</para>
 /// </summary>
@@ -205,10 +206,10 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>The most host payload bytes one upload job stages: eight MiB, within a staged region slot's staging floor
     /// (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
     public const int MostUploadJobBytes = 8 << 20;
-    /// <summary>The host payload, in bytes a second, background uploads stage at most: a chunk in every slot each frame
-    /// at the 60 Hz frame bar. It accrues by wall time between pumps, so a residency whose frames come slower (a heavy
-    /// frame, or a presentation the compositor throttles) stages more a pump and lands its words in the same
-    /// seconds.</summary>
+    /// <summary>The host payload, in bytes a second, a presentation's background uploads stage at most: a chunk in every
+    /// slot of one service each frame at the 60 Hz frame bar. It accrues by wall time between pumps, so a presentation
+    /// whose frames come slower (a heavy frame, or one the compositor throttles) stages more a pump and lands its words
+    /// in the same seconds.</summary>
     public const double UploadBytesPerSecond = (SlotCount * UploadChunkBytes) * 60.0;
     /// <summary>The share of wall time, between pumps, one pump spends recording jobs at most: two milliseconds of a
     /// 60 Hz frame. A pump spends at least <see cref="HostBudget"/> and at most <see cref="MostHostBudget"/>.</summary>
@@ -238,13 +239,8 @@ public sealed class SdfGpuWork : IDisposable {
     public static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
     /// <summary>The recording time one pump spends at most, however long since the last.</summary>
     public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(16);
-    // The GPU time, in seconds, an idle service may bank: an idle spell admits no more than one frame's share at once, so
-    // a frame after an idle spell carries no more background work than any other.
-    private const double MostCreditSeconds = FrameShareSeconds;
-    // The host payload bytes an idle service may bank: a full slot ring of the largest jobs.
-    private const double MostUploadCreditBytes = (SlotCount * (double)MostUploadJobBytes);
-
     private readonly GpuDeviceServices m_gpu;
+    private readonly SdfGpuWorkBudget m_budget;
     private readonly Slot[] m_slots = new Slot[SlotCount];
     private readonly List<ISdfGpuWorkClient> m_clients = [];
     private readonly IGpuTimestampPool? m_timestamps;
@@ -256,9 +252,7 @@ public sealed class SdfGpuWork : IDisposable {
     private bool m_disposed;
     private bool m_faulted;
 
-    private double m_credit = MostCreditSeconds;
-    private double m_uploadCredit = MostUploadCreditBytes;
-    private long m_creditAt;
+    private long m_pumpedAt;
 
     // Since the first job: jobs submitted and answered, the GPU seconds they measured, the wall time some job was in
     // flight, the most in flight at once, the pumps, and the pumps the tables' World set could not be bound in.
@@ -287,14 +281,18 @@ public sealed class SdfGpuWork : IDisposable {
     /// <param name="device">The device; the service records and submits through its services on the recording
     /// thread.</param>
     /// <param name="name">The owner's name, which the slots' objects are named for.</param>
+    /// <param name="budget">The presentation's budget the service draws on, shared with every other residency's
+    /// service (<see cref="SdfResidencySelector.Work"/>); <see langword="null"/> gives the service a budget of its
+    /// own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="name"/> is
     /// <see langword="null"/>.</exception>
-    public SdfGpuWork(IGpuDeviceContext device, string name) {
+    public SdfGpuWork(IGpuDeviceContext device, string name, SdfGpuWorkBudget? budget = null) {
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: name);
 
         m_gpu = device.Services;
         m_name = name;
+        m_budget = (budget ?? new SdfGpuWorkBudget());
 
         using var scope = new GpuCreationScope();
         var gpu = m_gpu;
@@ -553,20 +551,19 @@ public sealed class SdfGpuWork : IDisposable {
             var ticks = ((BitConverter.ToUInt64(value: times[sizeof(ulong)..]) - BitConverter.ToUInt64(value: times)) & mask);
 
             seconds = ((ticks * timestamps.NanosecondsPerTick) * 1e-9);
-            if (slot.Charged) { m_credit += (slot.Estimate - seconds); }
+            if (slot.Charged) { m_budget.SettleGpu(estimate: slot.Estimate, measured: seconds); }
         }
         m_gpuSeconds += seconds;
         return seconds;
     }
-    // Banks the GPU time and the upload bytes their rates allow since the last pump, each up to its most, and returns the
-    // seconds since the last pump (zero at the first).
+    // Banks what the presentation's budget accrued since any service last asked, and returns the seconds since this
+    // service's last pump (zero at the first), which its recording time is a share of.
     private double Accrue() {
         var now = Stopwatch.GetTimestamp();
-        var seconds = ((m_creditAt != 0) ? ((now - m_creditAt) / ((double)Stopwatch.Frequency)) : 0.0);
+        var seconds = ((m_pumpedAt != 0) ? ((now - m_pumpedAt) / ((double)Stopwatch.Frequency)) : 0.0);
 
-        m_credit = Math.Min(val1: MostCreditSeconds, val2: (m_credit + (seconds * GpuShare)));
-        m_uploadCredit = Math.Min(val1: MostUploadCreditBytes, val2: (m_uploadCredit + (seconds * UploadBytesPerSecond)));
-        m_creditAt = now;
+        m_budget.Accrue();
+        m_pumpedAt = now;
         return seconds;
     }
     // Takes each free slot's next job, the clients in turn, while the budgets hold credit; a job may overdraw each once.
@@ -580,12 +577,18 @@ public sealed class SdfGpuWork : IDisposable {
             var slot = m_slots[index];
 
             if (!slot.IsFree) { continue; }
-            if (budgeted && ((m_credit <= 0.0) || (m_uploadCredit <= 0.0) || (Stopwatch.GetElapsedTime(began) >= hostBudget))) { m_budgetHolds++; return; }
+            if (budgeted && !m_budget.Holds) {
+                // The next accrual banks the whole gap for a service that waited on the budget.
+                m_budget.Want();
+                m_budgetHolds++;
+                return;
+            }
+            if (budgeted && (Stopwatch.GetElapsedTime(began) >= hostBudget)) { m_budgetHolds++; return; }
 
-            var allowance = (budgeted ? (int)Math.Clamp(value: m_uploadCredit, min: UploadChunkBytes, max: MostUploadJobBytes) : MostUploadJobBytes);
+            var allowance = (budgeted ? m_budget.UploadAllowance : MostUploadJobBytes);
 
             if (!TryTake(tables: tables, uploadBytes: allowance, client: out var client, estimate: out var estimate, job: out var job)) { return; }
-            if (budgeted) { m_uploadCredit -= client.UploadBytes(job); }
+            if (budgeted) { m_budget.ChargeUpload(bytes: client.UploadBytes(job)); }
             Submit(charged: budgeted, client: client, estimate: estimate, index: index, job: job, slot: slot);
         }
     }
@@ -639,7 +642,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
         slot.Estimate = estimate;
         slot.Charged = charged;
-        if (charged) { m_credit -= estimate; }
+        if (charged) { m_budget.ChargeGpu(seconds: estimate); }
         m_submitted++;
         if (m_inFlight++ == 0) { m_busySince = Stopwatch.GetTimestamp(); }
         m_mostInFlight = Math.Max(val1: m_mostInFlight, val2: m_inFlight);

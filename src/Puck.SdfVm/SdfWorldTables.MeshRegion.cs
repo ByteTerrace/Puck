@@ -199,7 +199,8 @@ public sealed partial class SdfWorldTables {
     public int MeshRegionWords => m_meshArena.Words;
 
     /// <summary>The most bytes one mesh region can hold on any device, a whole number of words
-    /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of a device's own limit (<see cref="MeshRegionLimitOf"/>).</summary>
+    /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of the limit its grant reserves for it
+    /// (<see cref="MeshRegionLimitBytes"/>).</summary>
     public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
     /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
     public const ulong MeshRegionGranuleBytes = (16UL << 20);
@@ -211,26 +212,40 @@ public sealed partial class SdfWorldTables {
     /// places, which <see cref="MeshRegionBytes"/> holds with room to grow. Safe to read from any thread.</summary>
     public ulong MeshRegionUsedBytes => Volatile.Read(location: ref m_meshRegionUsedBytes);
 
-    /// <summary>The divisor of a device's device-local memory its mesh region is limited to: a quarter of it, so the
-    /// region, the copy of it a growth holds until the next upload completes, and everything else the device holds fit
-    /// together.</summary>
-    public const ulong MeshRegionDeviceLocalShare = 4UL;
+    // The residency's part of its presentation's selector: the reservation the region grows under, and the budget and
+    // bias its bake holds its detail to.
+    private readonly SdfResidencyGrant m_meshGrant;
 
-    /// <summary>Returns the most bytes a device's mesh region places: <see cref="MeshRegionDeviceLocalShare"/> of its
-    /// device-local memory (<see cref="GpuMemoryProfile.DeviceLocalShare"/>), a whole number of words, at least
-    /// <see cref="MeshRegionGranuleBytes"/> and at most <see cref="MostMeshRegionBytes"/>, which is also the limit on a
-    /// device whose profile reports no device-local memory.</summary>
-    /// <param name="profile">The device's memory profile.</param>
-    /// <returns>The limit in bytes.</returns>
-    public static ulong MeshRegionLimitOf(GpuMemoryProfile profile) => (Math.Clamp(
-        max: MostMeshRegionBytes,
-        min: MeshRegionGranuleBytes,
-        value: profile.DeviceLocalShare(divisor: MeshRegionDeviceLocalShare, unreportedBytes: MostMeshRegionBytes)
-    ) & ~((ulong)(sizeof(uint) - 1)));
+    /// <summary>Gets the residency's grant from its presentation's selector, which its bake reads its budget and bias
+    /// from.</summary>
+    public SdfResidencyGrant Grant => m_meshGrant;
 
-    /// <summary>Gets the most bytes the mesh region places (<see cref="MeshRegionLimitOf"/>): a mesh the latest list
-    /// names that finds no room under it is refused, and its draws wait until a later list fits.</summary>
+    /// <summary>Gets the most bytes the mesh region places, as its grant last reserved them before a plan
+    /// (<see cref="SdfResidencyGrant.ReserveGrowth"/>): the buffer that stands when the pool has no room for a
+    /// replacement beside it, and otherwise what the pool has room for. A mesh the latest list names that finds no room
+    /// under it is refused, and its draws wait until a later list fits.</summary>
     public ulong MeshRegionLimitBytes => (((ulong)m_meshArena.LimitWords) * sizeof(uint));
+
+    // Reserves room for the region to grow before a plan places meshes, and holds the arena to what was reserved, so no
+    // mesh is placed in words the region could not be grown to hold.
+    private void PrepareMeshRegionLimit() => m_meshArena.SetLimit(limitBytes: ((ulong)m_meshGrant.ReserveGrowth(capacityBytes: m_meshRegion.ByteCount, mostBytes: ((long)MostMeshRegionBytes))));
+    // A plan forgot these meshes: their words are free for the next mesh they hold, so they owe none and their landing
+    // starts again should a list place them later.
+    private void ForgetArenaMeshes() {
+        foreach (var mesh in m_meshArena.Forgotten) {
+            ForgetLanding(mesh: mesh);
+            _ = m_meshesOwed.Remove(mesh: mesh);
+        }
+        m_meshForgotten += m_meshArena.Forgotten.Count;
+    }
+    // A region buffer a growth or a shrink replaced, which leaves the grant's reservation when its readers finish and
+    // it is released.
+    private sealed class ReplacedRegion(IDisposable replaced, long bytes, SdfResidencyGrant grant) : IDisposable {
+        public void Dispose() {
+            replaced.Dispose();
+            grant.Released(bytes: bytes);
+        }
+    }
     /// <summary>Gets the bytes the latest planned draw list asks of the mesh region: its reserved draw records and every
     /// mesh it names, each once, placed or refused. Past <see cref="MeshRegionLimitBytes"/> the list cannot be resident
     /// whole. Safe to read from any thread.</summary>
@@ -413,7 +428,9 @@ public sealed partial class SdfWorldTables {
             ) ||
             (revision != m_meshSourceRevision)
         ) {
+            PrepareMeshRegionLimit();
             m_meshArena.Plan(draws: draws);
+            m_meshGrant.Floor(bytes: (((long)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes));
             if (!m_meshArena.Unchanged) { m_meshPlacementVersion++; }
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingPlanRecords, draws.Count);
             SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsPlanned, value: draws.Count);
@@ -426,14 +443,7 @@ public sealed partial class SdfWorldTables {
                 location: ref m_meshRegionNamedBytes,
                 value: ((((ulong)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes) + (((ulong)m_meshArena.NamedWords) * sizeof(uint)))
             );
-            // A forgotten mesh's words are free for the next mesh they hold, so it owes none and its landing starts
-            // again should a list place it later.
-            foreach (var mesh in m_meshArena.Forgotten) {
-                ForgetLanding(mesh: mesh);
-                _ = m_meshesOwed.Remove(mesh: mesh);
-            }
-            m_meshForgotten += m_meshArena.Forgotten.Count;
-            if (!m_meshArena.Unchanged) { m_meshRefusals += m_meshArena.Refused.Count; }
+            ForgetArenaMeshes();
 
             if (m_meshArena.Words > 0) {
                 if (m_meshArena.Relocated) {
@@ -469,6 +479,8 @@ public sealed partial class SdfWorldTables {
                 }
                 m_meshSectionWritten = true;
             }
+            if (m_meshArena.Words == 0) { m_meshGrant.Kept(); }
+            if (!m_meshArena.Unchanged) { m_meshRefusals += m_meshArena.Refused.Count; }
             // An owed mesh this list stopped naming lets its need go, and one it names again takes it back.
             if (!m_meshArena.Unchanged) { m_meshesOwed.Sync(); }
 
@@ -693,21 +705,20 @@ public sealed partial class SdfWorldTables {
     public void NameMeshesAhead(IReadOnlyList<SdfMesh> meshes) {
         ArgumentNullException.ThrowIfNull(argument: meshes);
         if (m_disposed) { return; }
+        PrepareMeshRegionLimit();
         m_meshArena.PlanAhead(meshes: meshes);
         if ((m_meshArena.Placed.Count > 0) || (m_meshArena.Forgotten.Count > 0)) {
             m_meshPlacementVersion++;
             m_meshOrderStale = true;
-            foreach (var mesh in m_meshArena.Forgotten) {
-                ForgetLanding(mesh: mesh);
-                _ = m_meshesOwed.Remove(mesh: mesh);
-            }
-            m_meshForgotten += m_meshArena.Forgotten.Count;
-            Volatile.Write(location: ref m_meshRegionUsedBytes, value: (((ulong)m_meshArena.Words) * sizeof(uint)));
+            ForgetArenaMeshes();
             if (m_meshArena.Words > 0) {
                 EnsureMeshRegionCapacity(bytes: (((ulong)m_meshArena.Words) * sizeof(uint)));
                 ShadowMeshRecords();
             }
+            Volatile.Write(location: ref m_meshRegionUsedBytes, value: (((ulong)m_meshArena.Words) * sizeof(uint)));
             m_meshesOwed.UnionWith(meshes: m_meshArena.Placed);
+        } else {
+            m_meshGrant.Kept();
         }
         // A mesh that left the set unnamed lets its need go, and one named again takes it back and its place in line.
         m_meshesOwed.Sync();
@@ -856,14 +867,28 @@ public sealed partial class SdfWorldTables {
     // again, so the meshes no list names any more give back their device-local, staging and host-copy bytes. The shrunk
     // region owes its draw records; a relocation owes every mesh, which lands through the background work.
     private void FitMeshRegion(ulong bytes) {
-        var fitted = MeshRegionGrownBytes(needBytes: bytes, mostBytes: MeshRegionLimitBytes);
+        var fitted = MeshRegionGrownBytes(needBytes: bytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes));
+        var held = m_meshRegion.ByteCount;
 
-        if (((ulong)m_meshRegion.ByteCount) <= (fitted + (fitted / 2UL))) {
+        // A shrink holds both buffers until the old one's readers finish: one the pool has no room for waits for a
+        // later relocation, and the region keeps what it holds.
+        if ((((ulong)held) <= (fitted + (fitted / 2UL))) || !m_meshGrant.TryReserveReplacement(newBytes: ((long)fitted))) {
+            return;
+        }
+
+        IGpuBuffer replaced;
+
+        try {
+            replaced = m_meshRegion.Shrink(byteCount: ((long)fitted));
+        } catch (GpuMemoryRefusedException) {
+            m_meshGrant.Kept(refused: true);
+
             return;
         }
 
         RequireMeshUpload();
-        Retire(replaced: m_meshRegion.Shrink(byteCount: ((long)fitted)));
+        Retire(replaced: new ReplacedRegion(bytes: held, grant: m_meshGrant, replaced: replaced));
+        m_meshGrant.Grown(newBytes: ((long)fitted), oldBytes: held);
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
@@ -871,17 +896,38 @@ public sealed partial class SdfWorldTables {
             value: fitted
         );
     }
+    // The growth is reserved before the plan that asks for it (PrepareMeshRegionLimit), so the ledger admits the new
+    // buffer against the grant. A device that refuses it all the same leaves the region as it is: the placements past
+    // what it holds are taken back and refused (SdfMeshRegionArena.Clip), their draws wait, and nothing throws. Only a
+    // region that cannot hold its draw records, which a residency cannot draw without, is an error.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
         if (bytes <= current) {
+            m_meshGrant.Kept();
+
             return;
         }
 
-        var grown = MeshRegionGrownBytes(needBytes: bytes, mostBytes: MeshRegionLimitBytes);
+        var grown = MeshRegionGrownBytes(needBytes: bytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes));
+        IDisposable replaced;
+
+        try {
+            replaced = m_meshRegion.Grow(byteCount: ((long)grown));
+        } catch (GpuMemoryRefusedException refusal) {
+            m_meshGrant.Kept(refused: true);
+            m_meshArena.Clip(limitBytes: current);
+            ForgetArenaMeshes();
+            if ((((ulong)m_meshArena.Words) * sizeof(uint)) > current) {
+                throw new InvalidOperationException(innerException: refusal, message: $"The mesh region holds {current} bytes and could not grow to the {(((ulong)m_meshArena.Words) * sizeof(uint))} its draw records need.");
+            }
+
+            return;
+        }
 
         RequireMeshUpload();
-        Retire(replaced: m_meshRegion.Grow(byteCount: ((long)grown)));
+        Retire(replaced: new ReplacedRegion(bytes: ((long)current), grant: m_meshGrant, replaced: replaced));
+        m_meshGrant.Grown(newBytes: ((long)grown), oldBytes: ((long)current));
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(

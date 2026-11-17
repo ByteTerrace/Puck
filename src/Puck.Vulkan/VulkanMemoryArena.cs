@@ -68,7 +68,7 @@ public sealed unsafe class VulkanMemoryArena {
             }
 
             // The bind and its record run inside the pool's lock: a throw from either gives the range back.
-            return m_pool.Place(alignment: alignment, key: (memoryTypeIndex, role, image), size: size, bind: placement => {
+            return m_pool.Place(alignment: alignment, key: (memoryTypeIndex, role, image), payer: family, size: size, bind: placement => {
                 (image ? m_device.BindImageMemory : m_device.BindBufferMemory)(
                     m_device.Handle,
                     resource,
@@ -129,22 +129,18 @@ public sealed unsafe class VulkanMemoryArena {
         }
     }
 
-    // Allocates a block, counts it, and maps it for its life when its memory is host-visible.
-    private (nint Memory, nint Mapped) Allocate((uint Type, GpuMemoryRole Role, bool Image) key, ulong bytes) {
+    // Asks the ledger for a block at its size, allocates it, counts it, and maps it for its life when its memory is
+    // host-visible. A block the account or the device refuses is never allocated, and its grant is handed back.
+    private (nint Memory, nint Mapped) Allocate(GpuMemoryBlockRequest<(uint Type, GpuMemoryRole Role, bool Image)> request) {
+        var key = request.Key;
+        var bytes = request.Bytes;
         var role = key.Role;
         var allocateInfo = new VkMemoryAllocateInfo {
             AllocationSize = bytes,
             MemoryTypeIndex = key.Type,
             SType = StructureTypeMemoryAllocateInfo,
         };
-
-        m_device.AllocateMemory(
-            m_device.Handle,
-            in allocateInfo,
-            0,
-            out var memory
-        ).ThrowIfFailed(device: m_device, operation: "vkAllocateMemory");
-        m_device.CountAllocated(allocationSize: bytes, family: null, memoryHandle: memory, memoryTypeIndex: key.Type, role: role);
+        var memory = m_device.AllocateCounted(allocateInfo: in allocateInfo, family: null, payer: request.Payer, payerBytes: request.PayerBytes, role: role);
 
         var mapped = ((nint)0);
 

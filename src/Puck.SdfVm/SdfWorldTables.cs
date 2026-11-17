@@ -202,7 +202,9 @@ public sealed partial class SdfWorldTables : IDisposable {
     /// <param name="shadowGlassRaster">The cascade glass extinction pipeline.</param>
     public SdfWorldTables(IGpuDeviceContext device, SdfWorldPipelines pipelines, IGpuComputePipeline regionCopy, GpuPassPipeline meshRaster, GpuPassPipeline shadowRaster, GpuPassPipeline shadowExitRaster, GpuPassPipeline shadowGlassRaster, GpuPassPipeline glassRaster, GpuPassPipeline occlusion, SdfWorldTablesOptions options) {
         ArgumentNullException.ThrowIfNull(device);
-        m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionLimitOf(profile: device.MemoryProfile));
+        // The arena places nothing past the region's first granule until the grant reserves room to grow
+        // (PrepareMeshRegionLimit).
+        m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionGranuleBytes);
         m_meshesOwed = new OwedMeshes(arena: m_meshArena);
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(regionCopy);
@@ -328,6 +330,9 @@ public sealed partial class SdfWorldTables : IDisposable {
             byteCount: ((DecalBufferCells * DecalWordsPerCell) * sizeof(uint)),
             region: DecalRegionIndex
         ));
+        // Reserved before it is created, so the ledger admits the region's first buffer against the grant.
+        m_meshGrant = scope.Own(created: SdfResidencySelector.Of(device: device).Register(name: ObjectOwner));
+        m_meshGrant.Created(capacityBytes: SdfMeshRegion.DrawBytes);
         m_meshRegion = scope.Own(created: CreateRegion(
             byteCount: SdfMeshRegion.DrawBytes,
             region: MeshRegionIndex
@@ -397,7 +402,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         }
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
-        m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner));
+        m_gpuWork = scope.Own(created: new SdfGpuWork(budget: m_meshGrant.Selector.Work, device: device, name: ObjectOwner));
         // The mesh region's owed words land through it (SdfWorldTables.MeshLanding.cs).
         m_gpuWork.Add(client: new MeshLanding(tables: this));
 
@@ -459,6 +464,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         }
 
         DisposeRegions();
+        m_meshGrant.Dispose();
         m_previousDynamicTransforms.Dispose();
         m_previousMeshTransforms.Dispose();
         m_meshHistoryCopies.Dispose();

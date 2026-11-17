@@ -126,16 +126,19 @@ public sealed partial class ShaderPipelineRenderNode {
                 extent: extent,
                 pipeline: pipeline
             );
-            if (
-                candidate &&
-                (Account(
+            if (candidate) {
+                var account = Account(
                     counts: key.Counts,
                     plan: pipeline.Plan,
                     preview: key.Preview,
                     rows: key.Rows
-                ) is { Fits: false } account)
-            ) {
-                throw account.Refusal();
+                );
+
+                // The peak is reserved before the build allocates anything, so the promise is the account's and no
+                // other holder is given the same room; a peak over the cap, or one the account has no room for, refuses.
+                if (!account.Fits || !TryReservePeak(peakBytes: account.PeakBytes)) {
+                    throw account.Refusal();
+                }
             }
         } catch (Exception error) {
             Refuse(

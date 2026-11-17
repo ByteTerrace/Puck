@@ -80,6 +80,23 @@ public sealed class GpuMemorySegments {
             paramName: nameof(memoryTypeIndex)
         );
 
+    /// <summary>Returns the pool an allocation of a role is expected in: host memory on unified memory and for
+    /// <see cref="GpuMemoryRole.HostVisible"/>, the adapter's own memory for the device-local roles on a discrete
+    /// adapter (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>). The placement decides the pool an allocation is charged
+    /// to; this is the pool a reservation made before any placement names, and the one a placement disagrees with when
+    /// the device placed it elsewhere.</summary>
+    /// <param name="role">The role.</param>
+    /// <returns>The expected pool.</returns>
+    public PhysicalMemory ExpectedPool(GpuMemoryRole role) => ExpectedPool(role: role, unifiedMemory: UnifiedMemory);
+    /// <summary>Returns the pool an allocation of a role is expected in on a device whose memory is, or is not, the
+    /// host's (<see cref="GpuMemoryProfile.UnifiedMemory"/>).</summary>
+    /// <param name="unifiedMemory">Whether the device's memory is the host's.</param>
+    /// <param name="role">The role.</param>
+    /// <returns>The expected pool.</returns>
+    public static PhysicalMemory ExpectedPool(bool unifiedMemory, GpuMemoryRole role) => ((!unifiedMemory && GpuDeviceMemoryWork.IsDeviceLocal(role: role))
+        ? PhysicalMemory.Device
+        : PhysicalMemory.Host);
+
     /// <summary>Returns Direct3D 12's segments for a device: the local segment group, and on a discrete adapter the
     /// non-local one. A unified adapter's non-local group names no memory of its own (its system pool and its local
     /// group are one memory), so it is not a segment.</summary>

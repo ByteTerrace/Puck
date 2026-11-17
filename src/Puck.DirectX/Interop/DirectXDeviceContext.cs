@@ -176,9 +176,21 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         : GpuMemoryReading.Absent));
 
     /// <inheritdoc />
-    /// <remarks>Tests the budget-change event without waiting and queries the adapter only when it is set; a device not
-    /// brought up is not brought up by it.</remarks>
-    public void RefreshMemoryReading() => _ = m_videoMemory?.Refresh();
+    /// <remarks>Tests the budget-change event without waiting and queries the adapter only when it is set, a second has
+    /// passed or the device refused an allocation since the last refresh; a device not brought up is not brought up by
+    /// it.</remarks>
+    public void RefreshMemoryReading() {
+        var refusals = (Memory?.DeviceRefusals ?? 0L);
+
+        _ = m_videoMemory?.Refresh(stale: (refusals != m_seenRefusals));
+        m_seenRefusals = refusals;
+    }
+    /// <inheritdoc />
+    /// <remarks>Passed to the adapter the device was created on (<see cref="DirectXVideoMemory.Reserve"/>).</remarks>
+    public ulong? ReserveMemory(ulong bytes) => m_videoMemory?.Reserve(bytes: bytes);
+
+    // The ledger's device refusals as the last refresh read them; a count that moved makes the reading stale.
+    private long m_seenRefusals;
     /// <inheritdoc />
     /// <remarks>Reading it first hands the open batch's deferred submissions to the queue
     /// (<see cref="DirectXGpuQueueSubmitter.Split"/>), so an execute, signal or drain a caller puts on the returned queue

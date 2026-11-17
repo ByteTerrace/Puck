@@ -104,10 +104,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// hierarchy and its probe caches in the process account (<see cref="Puck.Hosting.Jobs.MemoryAccount.CreateSampledOwner"/>)
     /// until it is disposed.</summary>
     public SdfMeshIrradiance() {
-        m_sceneOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, name: "sdf.mesh-gi.trace-scene", read: () => {
+        m_sceneOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "sdf.mesh-gi.trace-scene", read: () => {
             lock (m_gate) { return (m_scene?.HierarchyBytes ?? 0L); }
         });
-        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, name: "sdf.mesh-gi.probe-cache", read: CacheBytes);
+        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, memoryClass: Puck.Abstractions.Memory.MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheBytes);
     }
 
     // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
