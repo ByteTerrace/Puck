@@ -13,7 +13,6 @@ public sealed class WorldReplayProbe : IDisposable {
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
     private readonly List<ulong[]> m_components = [];
-    private WorldInputRuntimeCheckpoint? m_firstInput;
 
     /// <summary>Gets the per-tick authoritative hashes recorded by <see cref="WorldReplayTape.NoteTick"/> while this probe was attached.</summary>
     public IReadOnlyList<ulong> Hashes => m_hashes;
@@ -60,7 +59,6 @@ public sealed class WorldReplayProbe : IDisposable {
         m_skipIntents = 0;
         m_hashes.Add(item: hash);
         m_components.Add(item: components);
-        if (m_hashes.Count == 1) { m_firstInput = m_server.Input.Capture(); }
         if (VerifiesIncrementalHash && (m_staleDigest is null) &&
             (WorldStateHashComposition.DescribeStaleDigest(hash: hash, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale)) {
             m_staleDigest = $"recorded tick {(m_hashes.Count - 1)}: {stale}";
@@ -75,6 +73,7 @@ public sealed class WorldReplayProbe : IDisposable {
     /// <exception cref="InvalidOperationException">The start did not restore, a replayed mutation's outcome differs
     /// from the recording, or an incremental hash differs from its full recompute.</exception>
     public int Verify(Action<int>? progress = null) {
+        Divergence = null;
         Dispose();
         m_tape.SuspendCapture();
         try {
@@ -111,10 +110,6 @@ public sealed class WorldReplayProbe : IDisposable {
                 if (replayed != m_hashes[tick]) {
                     Divergence = string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: m_components[tick],
                         right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1))));
-                    if (tick == 0) {
-                        Divergence += "\nsize2 expected input: " + System.Text.Json.JsonSerializer.Serialize(m_firstInput);
-                        Divergence += "\nsize2 replayed input: " + System.Text.Json.JsonSerializer.Serialize(m_server.Input.Capture());
-                    }
                     return tick;
                 }
                 progress?.Invoke((tick + 1));

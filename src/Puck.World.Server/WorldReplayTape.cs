@@ -369,7 +369,7 @@ public sealed partial class WorldReplayTape {
         var authority = m_currentAuthority;
         var intents = m_currentIntents;
         // One authoritative fold per tick, shared by the recording's verdict trace, its per-component trace and the
-        // history's own: a recording reads the components and folds them, anything else folds the hash alone.
+        // history's own: recordings and probes retain the components; history alone folds the hash without a trace.
         var components = ((((m_mode == WorldReplayMode.Recording) && (m_ticks is not null)) || (m_probes.Count != 0))
             ? WorldStateHashComposition.AuthoritativeComponents(server: m_liveServer, tick: (m_liveServer.NextInputTick - 1UL))
             : null);
