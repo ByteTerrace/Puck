@@ -13,6 +13,7 @@ public sealed partial class OperatorGrantLawTests {
         var server = fixture.Server;
 
         Assert.True(condition: Apply(fixture: fixture, mutation: new WorldMutation.RemoveGrant(Principal: Principal.Console, Target: row)));
+        Assert.True(condition: server.GrantTable.Revoke(Principal.Seat(slot: 3), WorldCapability.Drive, row.Subject, Principal.Console));
         Assert.True(condition: server.GrantTable.TryGrant(row with { Grantee = Principal.Seat(slot: 1), Exclusive = true }, Principal.Console, out var reason), userMessage: reason);
         var definition = server.Definition;
         var solids = server.SolidField;

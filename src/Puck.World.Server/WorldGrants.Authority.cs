@@ -37,18 +37,15 @@ public sealed partial class WorldGrants {
     }
 
     /// <summary>Admits and installs a direct grant using the actor's authority before the change.</summary>
-    public bool TryGrant(WorldGrant grant, Principal actor, out string reason) => TryGrantSet(actor: actor, grants: [grant], reason: out reason);
-
-    internal bool TryGrantSet(IReadOnlyList<WorldGrant> grants, Principal actor, out string reason) {
-        if (!TryPrepareAuthority(actor: actor, adds: grants, candidate: m_authorityDefinition, current: m_authorityDefinition, grantsWrite: false, prepared: out var prepared, reason: out reason, removes: [])) { return false; }
+    public bool TryGrant(WorldGrant grant, Principal actor, out string reason) {
+        if (!TryPrepareAuthority(actor: actor, adds: [grant], candidate: m_authorityDefinition, current: m_authorityDefinition, grantsWrite: false, prepared: out var prepared, reason: out reason, removes: [])) { return false; }
         prepared!.Install();
         return true;
     }
-
     /// <summary>Admits and removes a direct grant using the actor's authority before the change.</summary>
     public bool Revoke(Grantee grantee, WorldCapability capability, GrantSubject subject, Principal actor) {
         var row = new WorldGrant(grantee, capability, subject, false);
-        var held = Held(grantee: grantee).Contains(value: (capability, subject));
+        var held = (m_byGrantee.TryGetValue(key: grantee, value: out var rows) && (rows.For(capability: capability) is { } subjects) && subjects.Contains(item: subject));
 
         if (!TryPrepareAuthority(actor: actor, adds: [], candidate: m_authorityDefinition, current: m_authorityDefinition, grantsWrite: false, prepared: out var prepared, reason: out _, removes: [row])) { return false; }
         prepared!.Install();
