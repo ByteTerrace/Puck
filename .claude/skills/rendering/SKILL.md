@@ -885,10 +885,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   closure would move a stored mesh's key. Add to the bake's closure only what
   the bake reads, and check with `puck mesh identity --against`.
 - **A shared header is included as `Shared/<name>.hlsli`.** It resolves
-  through the include directory `ShaderIncludeDirectories.Of` names
-  (`src/Puck.Shaders/Assets/Shaders` in a checkout, `Assets/Shaders` beside the
-  application, where `Puck.Shaders` deploys `Shared` as content), which the
-  build, `SdfKernelSource.Read` and a reload all ask. Never climb out of a
+  through an include directory: the build passes the checkout's
+  (`$(PuckShaderIncludeDirectory)`, `src/Puck.Shaders/Assets/Shaders`), and a
+  runtime reader (`SdfKernelSource.Read`, a reload) asks
+  `ShaderIncludeDirectories.Of` for the deployment's `Assets/Shaders`, where
+  `Puck.Shaders` deploys `Shared` as content; a reload of a checkout tree
+  therefore reads the World's deployed headers. Never climb out of a
   project with `../`: the deployed tree (`Assets/Shaders/Sdf`) cannot reach it,
   its sources are refused, and every specialization stays interpreted. A
   source refused at load is named by `SdfKernelSet.SourceRefusalOf`, printed

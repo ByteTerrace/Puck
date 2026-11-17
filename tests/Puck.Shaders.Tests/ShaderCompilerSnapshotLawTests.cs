@@ -61,7 +61,7 @@ public sealed class ShaderCompilerSnapshotLawTests {
     }
 
     // One spelling of a shared header resolves in a checkout's layout (the header in another project) and in a deployed one
-    // (the header beside the kernel tree), through the include directory ShaderIncludeDirectories names for each, and the
+    // (the header beside the kernel tree), through the include directory each layout names, and the
     // shared header's own relative include resolves beside it; an error in the shared header reports at its own path.
     [InlineData(false, false)]
     [InlineData(true, false)]
@@ -91,13 +91,18 @@ public sealed class ShaderCompilerSnapshotLawTests {
         var text = "#include \"Shared/scale.hlsli\"\nRWStructuredBuffer<uint> output : register(u0);\n[numthreads(1, 1, 1)]\nvoid CSMain() { output[0] = Scale; }\n";
 
         File.WriteAllText(contents: text, path: source);
-        Assert.Equal(expected: [shaders], actual: ShaderIncludeDirectories.Of(sourcePath: source));
+
+        // A runtime reader finds a deployment's directory itself; the build names a checkout's
+        // (ShaderIncludeDirectories.CheckoutDirectory below the checkout's root).
+        var includeDirectories = (deployed ? ShaderIncludeDirectories.Of(sourcePath: source) : [Path.Combine(path1: scratch.RootPath, path2: ShaderIncludeDirectories.CheckoutDirectory)]);
+
+        Assert.Equal(expected: [Path.GetFullPath(path: shaders)], actual: includeDirectories.Select(selector: static directory => Path.GetFullPath(path: directory)));
 
         var compiled = new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: "cache")).Compile(descriptor: new ShaderCompilationRequest(
             name: "shared",
             stages: [new ShaderStageSource(
                 EntryPoint: "CSMain",
-                IncludeDirectories: ShaderIncludeDirectories.Of(sourcePath: source),
+                IncludeDirectories: includeDirectories,
                 Path: source,
                 Source: text,
                 Stage: ShaderStage.Compute

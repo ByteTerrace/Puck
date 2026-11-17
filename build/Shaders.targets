@@ -41,6 +41,11 @@
         <!-- The lock belongs to the source-tree bytecode, which all configurations and intermediate-output paths share. -->
         <_PuckShaderPublishLock>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'obj', 'shader-publish.lock'))</_PuckShaderPublishLock>
         <DxcCommand Condition="'$(DxcCommand)' == ''">dxc</DxcCommand>
+        <!-- The include directory every stage source resolves a shared header through (#include "Shared/luma.hlsli"):
+             Puck.Shaders' Assets/Shaders, ShaderIncludeDirectories.CheckoutDirectory, the two stating one directory. A
+             deployed kernel tree finds the same headers in Assets/Shaders beside the application, where Puck.Shaders
+             deploys them. -->
+        <PuckShaderIncludeDirectory Condition="'$(PuckShaderIncludeDirectory)' == ''">$([MSBuild]::NormalizePath('$(MSBuildThisFileDirectory)', '..', 'src', 'Puck.Shaders', 'Assets', 'Shaders'))</PuckShaderIncludeDirectory>
         <PuckShaderDxilEnabled Condition="'$(PuckShaderDxilEnabled)' == ''">true</PuckShaderDxilEnabled>
         <PuckComputeShaderDxilEnabled Condition="'$(PuckComputeShaderDxilEnabled)' == ''">true</PuckComputeShaderDxilEnabled>
         <!-- Whether this host builds DXIL: Windows alone (see above). It is the host's fact, not a project knob; a law
@@ -114,7 +119,7 @@
              compiles everything afresh) never reads another's record, and a build that enables a backend the last one left
              off (SPIR-V after a DXIL-only build) never reads that build's record as making the backend's older outputs
              current. -->
-        <_PuckShaderBuildInputs>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.$([MSBuild]::StableStringHash('$(PuckShaderCacheDirectory)|$(DxcCommand)|$(PuckShaderSpirvEnabled)|$(PuckShaderDxilEnabled)|$(PuckComputeShaderDxilEnabled)|$(_PuckShaderHostBuildsDxil)').ToString('x8')).inputs'))</_PuckShaderBuildInputs>
+        <_PuckShaderBuildInputs>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.$([MSBuild]::StableStringHash('$(PuckShaderCacheDirectory)|$(DxcCommand)|$(PuckShaderIncludeDirectory)|$(PuckShaderSpirvEnabled)|$(PuckShaderDxilEnabled)|$(PuckComputeShaderDxilEnabled)|$(_PuckShaderHostBuildsDxil)').ToString('x8')).inputs'))</_PuckShaderBuildInputs>
     </PropertyGroup>
     <Target Name="_PuckReadShaderBuildInputs" Condition="'$(DesignTimeBuild)' != 'true'">
         <ReadLinesFromFile File="$(_PuckShaderBuildInputs)" Condition="Exists('$(_PuckShaderBuildInputs)')">
@@ -131,7 +136,7 @@
          *.interface.hlsli): the generator writes those as it builds, which ResolveProjectReferences finishes first. -->
     <Target Name="CompileShaders" AfterTargets="ResolveProjectReferences" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool;_PuckReadShaderBuildInputs"
             Inputs="@(_PuckShaderBuildRead);@(_PuckShaderBuildProduct);@(_PuckExistingShaderBytecode);$(PuckShaderBuildTool);$(MSBuildProjectFullPath);$(MSBuildThisFileFullPath)" Outputs="$(_PuckShaderBuildInputs)">
-        <PuckBuildTask Operation="shaders" CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" InputsFile="$(_PuckShaderBuildInputs)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
+        <PuckBuildTask Operation="shaders" CacheDirectory="$(PuckShaderCacheDirectory)" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" IncludeDirectory="$(PuckShaderIncludeDirectory)" InputsFile="$(_PuckShaderBuildInputs)" LockFile="$(_PuckShaderPublishLock)" Mode="compile" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-build.txt'))" Tool="$(PuckShaderBuildTool)" />
         <PropertyGroup>
             <_PuckShadersCompiled>true</_PuckShadersCompiled>
         </PropertyGroup>
@@ -141,7 +146,7 @@
          skips the build (CI packs over a finished build) instead checks that each is on disk with the sidecar its
          current closure and options publish, compiling nothing, so it ships exactly what a build would. -->
     <Target Name="CollectShaderBytecode" AfterTargets="CompileShaders" BeforeTargets="AssignTargetPaths;_GetPackageFiles" Condition="'$(DesignTimeBuild)' != 'true' and ('@(PuckShaderOutput)' != '' or '@(_PuckExistingShaderBytecode)' != '')" DependsOnTargets="ResolveShaderBuildTool">
-        <PuckBuildTask Operation="shaders" Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
+        <PuckBuildTask Operation="shaders" Condition="'$(_PuckShadersCompiled)' != 'true'" DxcCommand="$(DxcCommand)" Host="$(_PuckShaderBuildHost)" IncludeDirectory="$(PuckShaderIncludeDirectory)" LockFile="$(_PuckShaderPublishLock)" Mode="check" Outputs="@(PuckShaderOutput)" ProjectDirectory="$(MSBuildProjectDirectory)" RequestFile="$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', '$(IntermediateOutputPath)', 'shader-check.txt'))" Tool="$(PuckShaderBuildTool)" />
         <ItemGroup>
             <Content Include="@(PuckShaderOutput)" CopyToOutputDirectory="PreserveNewest" RemoveMetadata="Stage;Backend;SourcePath" />
         </ItemGroup>

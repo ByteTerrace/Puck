@@ -126,14 +126,16 @@ order, as DXC searches its `-I` directories; the snapshot mirrors each
 directory an include resolved through and passes it as `-I`. The headers every
 project shares (`Puck.Shaders/Assets/Shaders/Shared`) take one spelling,
 `#include "Shared/luma.hlsli"`, never a relative path that climbs out of a
-project. `ShaderIncludeDirectories.Of` names the directory holding `Shared`
-for an engine source: `src/Puck.Shaders/Assets/Shaders` in a checkout, and
-`Assets/Shaders` beside an application, where `Puck.Shaders` deploys its
-`Shared` headers as content next to the kernel trees that include them. The
-build, the deployed kernel tree's source reader (`SdfKernelSource`) and a
-`world.shaders.reload` ask it, so one spelling resolves in every layout; a
-tree in neither layout resolves through the running application's
-deployment.
+project. In a checkout the directory is `src/Puck.Shaders/Assets/Shaders`
+(`ShaderIncludeDirectories.CheckoutDirectory`): `build/Shaders.targets` passes
+it as `$(PuckShaderIncludeDirectory)` to every shader project's build, and the
+repository tools join it to the checkout's root. Beside an application it is
+`Assets/Shaders`, where `Puck.Shaders` deploys its `Shared` headers as content
+next to the kernel trees that include them; a runtime reader of a kernel tree
+(`SdfKernelSource`, `world.shaders.reload`) asks `ShaderIncludeDirectories.Of`,
+which finds the deployment the tree lies in, or the running application's own
+for a tree in none (a checkout's or a scratch copy), so a reload of a checkout
+tree compiles against the headers the World deployed.
 
 The cache lives in `shaders` under the per-user Puck directory
 (`ShaderCompiler.DefaultCacheDirectory`: `%LOCALAPPDATA%/Puck/shaders` on Windows,
