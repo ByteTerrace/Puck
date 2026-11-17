@@ -47,7 +47,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var replacementBytes = checked((GpuKernelCounters.SlotBytesOf(rows: rows) * 2UL));
         var peak = checked((OwnedBytes + replacementBytes));
 
-        if (peak > BudgetBytes) {
+        if ((peak > BudgetBytes) || !TryReservePeak(peakBytes: peak)) {
             throw new InvalidOperationException(message: $"Instance '{m_name}' kernel work details need {peak} peak bytes; budget is {BudgetBytes}.");
         }
         var before = counters.TotalBytes;

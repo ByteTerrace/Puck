@@ -26,8 +26,14 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
     private nint m_adapter;
     private uint m_cookie;
     private HANDLE m_event;
+
     private readonly GpuMemoryReadingRefresh m_refresh;
+
     private GpuMemoryReading m_reading = GpuMemoryReading.Absent;
+    // The reservation last passed to the adapter, after clamping, and whether the adapter took it; null before the first.
+    private ulong? m_reserved;
+    private bool m_reservationRefused;
+    private bool m_stale;
 
     /// <summary>Initializes a new instance of the <see cref="DirectXVideoMemory"/> class, taking ownership of an
     /// adapter reference, and registers its budget-change event. A registration the adapter refuses leaves the reading
@@ -78,19 +84,23 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
 
     /// <summary>Reads every segment group again when the budget-change event is set, tested without waiting, or a second
     /// has passed since the last read (<see cref="GpuMemoryReadingRefresh"/>); otherwise makes no driver call.</summary>
+    /// <param name="stale">Whether something outside the adapter's own signal made the reading stale: the device
+    /// refused an allocation since the last refresh.</param>
     /// <returns>Whether a new reading was published.</returns>
-    public bool Refresh() {
+    public bool Refresh(bool stale = false) {
         if (0 == m_adapter) {
             return false;
         }
 
         // The wait resets the auto-reset event, so it is tested whether or not the interval has passed.
-        var signalled = (!m_event.IsNull && (PInvoke.WaitForSingleObject(hHandle: m_event, dwMilliseconds: 0U) == WAIT_EVENT.WAIT_OBJECT_0));
+        var signalled = (!m_event.IsNull && (PInvoke.WaitForSingleObject(dwMilliseconds: 0U, hHandle: m_event) == WAIT_EVENT.WAIT_OBJECT_0));
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
 
-        if (!m_refresh.Due(signalled: signalled, timestamp: now)) {
+        if (!m_refresh.Due(signalled: (signalled || stale || m_stale), timestamp: now)) {
             return false;
         }
+
+        m_stale = false;
 
         var readings = new GpuSegmentReading[m_segments.Segments.Count];
 
@@ -119,6 +129,41 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
         Volatile.Write(location: ref m_reading, value: m_refresh.Publish(estimated: false, last: m_reading, readings: readings, segments: m_segments, timestamp: now));
 
         return true;
+    }
+    /// <summary>Passes the bytes the process cannot run without to the adapter's local segment group
+    /// (<c>IDXGIAdapter3::SetVideoMemoryReservation</c>), clamped to what the last reading says may be reserved there,
+    /// when the clamped figure differs from the one last passed; the next refresh then reads the reservation again.
+    /// Before the first reading nothing is passed, since nothing says what may be reserved.</summary>
+    /// <param name="bytes">The bytes the process cannot run without.</param>
+    /// <returns>The bytes the adapter last took, or <see langword="null"/> before the first reading, after disposal or
+    /// when the adapter refused the call.</returns>
+    public ulong? Reserve(ulong bytes) {
+        if ((0 == m_adapter) || (Reading is not { State: GpuMemoryReadingState.Read } reading)) {
+            return null;
+        }
+
+        var available = 0UL;
+
+        foreach (var segment in reading.Segments) {
+            if (segment.Segment.Index == GpuMemorySegments.DirectXLocal) { available = (segment.AvailableForReservation ?? 0UL); }
+        }
+
+        var clamped = Math.Min(val1: bytes, val2: available);
+
+        if (m_reserved == clamped) {
+            return (m_reservationRefused ? null : clamped);
+        }
+
+        m_reserved = clamped;
+        m_stale = true;
+        try {
+            ((IDXGIAdapter3*)m_adapter)->SetVideoMemoryReservation(MemorySegmentGroup: DXGI_MEMORY_SEGMENT_GROUP.DXGI_MEMORY_SEGMENT_GROUP_LOCAL, NodeIndex: 0U, Reservation: clamped);
+            m_reservationRefused = false;
+        } catch (COMException) {
+            m_reservationRefused = true;
+        }
+
+        return (m_reservationRefused ? null : clamped);
     }
     /// <summary>Unregisters the budget-change event, closes it and releases the adapter. Safe to call more than once.</summary>
     public void Dispose() {

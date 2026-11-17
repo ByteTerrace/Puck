@@ -217,7 +217,7 @@ All paths are under `src/` unless stated.
 | `MemoryAccount.Shared` | Puck.Hosting/Jobs/MemoryAccount.cs:29 | `DefaultBudget` = 3/4 installed RAM (:58), `Headroom` 1/32 clamped 16..512 MiB (:60), settable via `host.memory budget` (HostMemoryCommandModule.cs:95-100) | Admission budget only; `Change` never refuses (`MemoryAccount.Owner.Change`) |
 | Account owners actually created | `"mesh"`, `"mesh-materials"` (SdfMesh.Storage.cs:190-209, 377-399); `"mesh-bake-group"` (SdfMeshPathBake.cs:2396); `"mesh-bake-sampled"`, `"mesh-bake-readback"` (SdfMeshBakeGpuWork.cs:149, 193); `"mesh-entry"` (SdfMeshStore.cs:188, 250); `"mesh-decode"` (SdfMeshStoreCodec.cs:93) | Only the bake group reserves (`TryReserve`); payloads only report | Payloads: high-water. Bake: bounded by admission |
 | Account trim subscribers | `SdfMeshLibrary.Trim` (SdfMeshLibrary.cs:322), `SdfWorldTables.RequestMeshTrim` (MeshRegion.cs:307), `SdfMeshIrradiance.TrimRetained` (SdfMeshIrradiance.cs:1359) | Fired by `SetBudget` lowering or `host.memory collect` (MemoryAccount.cs:80; HostMemoryCommandModule.cs:106) | Nothing fires a trim from a reading of pressure **[opened: only those two callers of `TrimCaches`]** |
-| `ShaderPipelineMemoryBudget` | Puck.Shaders/Pipeline/ShaderPipelineMemoryBudget.cs:12-23 | `DeviceLocalShare = 4UL` of `GpuMemoryProfile.DeviceLocalBytes` per pipeline instance; 512 MiB when unreported | Bounded per instance; refuses a replacement (`SHADERPIPE_BUDGET`, :39-46); not a reservation from anything |
+| `ShaderPipelineMemoryBudget` | the pipeline's budget file, since replaced by a reservation in the account | `DeviceLocalShare = 4UL` of `GpuMemoryProfile.DeviceLocalBytes` per pipeline instance; 512 MiB when unreported | Bounded per instance; refuses a replacement (`SHADERPIPE_BUDGET`); not a reservation from anything |
 | Mesh region (per residency) | SdfWorldTables.MeshRegion.cs:217-229 | Quarter of device-local, ≤ ~4 GiB | Bounded per residency, not across residencies |
 | Every other `GpuRegion` (program tables, probe tables, probe scene, ...) | GpuRegion.cs | `MaxByteCount` only | High-water; grows, shrinks only where an owner calls `Shrink` |
 | `GpuRegion` host copies | GpuRegion.cs:394, 950, 1046, 1177 | None; `NativeMemory` outside `IAllocator` and the account | High-water |
@@ -265,8 +265,8 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 ### Duplicates (two mechanisms, one job)
 
 1. **Two device-local quarter budgets, uncoordinated:** `MeshRegionDeviceLocalShare = 4UL` (MeshRegion.cs:217) and
-   `ShaderPipelineMemoryBudget.DeviceLocalShare = 4UL` (:14), both over `GpuMemoryProfile.DeviceLocalShare`
-   (GpuMemoryProfile.cs:53-59), neither a reservation from anything. The mesh one is per residency, so two routed
+   `ShaderPipelineMemoryBudget.DeviceLocalShare = 4UL` (:14), both over the device-local share helper on
+   `GpuMemoryProfile`, neither a reservation from anything. The mesh one is per residency, so two routed
    residencies plus a pipeline instance can "own" three quarters at once **[inference]**.
 2. **Demand points derived twice from `frame.Views`:** `SdfMeshDemand.Observe` (SdfMeshDemand.cs:49-74) and
    `SdfMeshIrradiance.CaptureViewCameras`/`WindowLow`/`WindowCamera` (:1225-1235, :966-976, :573-575), with

@@ -89,19 +89,22 @@ public sealed class VulkanRenderer(
     // Published by RefreshMemoryReading on the frame thread; any thread may read it.
     GpuMemoryReading IGpuDeviceContext.MemoryReading => ((m_device is not null)
         ? Volatile.Read(location: ref m_memoryReading)
-        : (m_memoryRefresh.Serial == 0UL)
+        : ((m_memoryRefresh.Serial == 0UL)
             ? GpuMemoryReading.Absent
-            : GpuMemoryReading.Lost(serial: m_memoryRefresh.Serial));
+            : GpuMemoryReading.Lost(serial: m_memoryRefresh.Serial)));
 
     // Vulkan's budget has no change signal, so the frame thread reads it at the backends' fixed interval; one rule across
     // devices, so a recreated device's serial keeps moving forward.
     private readonly GpuMemoryReadingRefresh m_memoryRefresh = new(serial: 0UL);
-
     private GpuMemoryReading m_memoryReading = GpuMemoryReading.Absent;
+
     private VulkanLogicalDevice? m_memoryReadDevice;
+    // The ledger's device refusals as the last refresh read them; a count that moved makes the reading stale.
+    private long m_memoryRefusals;
 
     /// <summary>Reads the device's budget and usage per heap under the backends' one refresh rule
-    /// (<see cref="GpuMemoryReadingRefresh"/>): when a second has passed since the last read, or the device changed,
+    /// (<see cref="GpuMemoryReadingRefresh"/>): when a second has passed since the last read, the device changed, or
+    /// the device refused an allocation since (<see cref="GpuDeviceMemoryWork.DeviceRefusals"/>),
     /// publishing a new reading whose serial moves when a budget differs from the last; otherwise makes no driver call. A
     /// renderer with no device publishes nothing and brings none up.</summary>
     public void RefreshMemoryReading() {
@@ -113,9 +116,13 @@ public sealed class VulkanRenderer(
 
         var now = Stopwatch.GetTimestamp();
 
-        if (!m_memoryRefresh.Due(signalled: !ReferenceEquals(objA: device, objB: m_memoryReadDevice), timestamp: now)) {
+        var refusals = (device.Commands.Memory?.DeviceRefusals ?? 0L);
+
+        if (!m_memoryRefresh.Due(signalled: (!ReferenceEquals(objA: device, objB: m_memoryReadDevice) || (refusals != m_memoryRefusals)), timestamp: now)) {
             return;
         }
+
+        m_memoryRefusals = refusals;
 
         var readings = physicalDeviceApi.ReadMemoryBudget(
             budgetEnabled: device.MemoryBudgetEnabled,
@@ -124,6 +131,7 @@ public sealed class VulkanRenderer(
             physicalDeviceHandle: m_physicalDevice.Handle,
             segments: segments
         );
+
         m_memoryReadDevice = device;
         Volatile.Write(location: ref m_memoryReading, value: m_memoryRefresh.Publish(
             estimated: estimated,
@@ -492,12 +500,12 @@ public sealed class VulkanRenderer(
     /// swapchain exists, it does not present FIFO, present wait is unsupported, fewer than two presents reached it,
     /// nothing was presented since the last wait, or the bounded wait did not succeed.</returns>
     public bool TryWaitForPresentQueue() =>
-        (m_device is not null) &&
+        ((m_device is not null) &&
         (m_swapchain is { PresentMode: VulkanPresentMode.Fifo }) &&
         framePresenter.TryWaitForPresentQueue(
             logicalDevice: m_device,
             swapchain: m_swapchain
-        );
+        ));
     /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
     /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
     /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined

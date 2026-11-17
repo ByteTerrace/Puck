@@ -83,7 +83,7 @@ public sealed unsafe class DirectXHeapArena {
 
         // The resource is created and registered under the pool's lock, so FreeAll, which takes it too, never releases its
         // heap between the placement and the creation, and its sweep of Placed sees every resource the arena created.
-        return ((ID3D12Resource*)m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), size: info.SizeInBytes, bind: placement => {
+        return ((ID3D12Resource*)m_pool.Place(alignment: info.Alignment, key: (heapType, category, role), payer: family, size: info.SizeInBytes, bind: placement => {
             var placedDescription = resourceDescription;
             var placedClear = clear;
             ID3D12Resource* resource = null;
@@ -136,24 +136,28 @@ public sealed unsafe class DirectXHeapArena {
         }
     }
 
-    // Creates a heap and counts it in the segment its type's memory pool lies in.
-    private nint Allocate((D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role) key, ulong bytes) {
+    // Asks the ledger for the heap at its size, creates it and counts it in the segment its type's memory pool lies in.
+    // A heap the account or the device refuses is never created, and its grant is handed back.
+    private nint Allocate(GpuMemoryBlockRequest<(D3D12_HEAP_TYPE Type, D3D12_HEAP_FLAGS Category, GpuMemoryRole Role)> request) {
+        var key = request.Key;
         var description = new D3D12_HEAP_DESC {
             Flags = key.Category,
             Properties = new D3D12_HEAP_PROPERTIES { Type = key.Type },
-            SizeInBytes = bytes,
+            SizeInBytes = request.Bytes,
         };
-        ID3D12Heap* heap = null;
-
-        m_calls.CreateHeap(description: &description, heap: &heap).ThrowIfFailed(calls: m_calls, operation: "ID3D12Device::CreateHeap");
-        m_memory?.CountAllocated(
-            allocation: ((nint)heap),
-            bytes: checked((long)bytes),
+        var grant = m_memory?.Admit(
+            bytes: checked((long)request.Bytes),
             device: m_device,
             family: null,
+            payer: request.Payer,
+            payerBytes: checked((long)request.PayerBytes),
             role: key.Role,
             segment: DirectXDeviceMemory.SegmentOf(calls: m_calls, heap: in description.Properties, segments: m_memory.SegmentsOf(device: m_device))
         );
+        ID3D12Heap* heap = null;
+
+        DirectXDeviceMemory.Settle(calls: m_calls, grant: grant, operation: "ID3D12Device::CreateHeap", result: m_calls.CreateHeap(description: &description, heap: &heap));
+        if (grant is not null) { m_memory!.CountAllocated(allocation: ((nint)heap), grant: grant); }
 
         return ((nint)heap);
     }

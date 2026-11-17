@@ -43,21 +43,6 @@ public readonly record struct GpuMemoryProfile(
     /// <summary>Gets whether any device-local memory is host-visible and coherent.</summary>
     public bool IsDeviceLocalHostVisible => (HostVisibleDeviceLocalBytes > 0UL);
 
-    /// <summary>Returns a share of the device-local memory, what one holder of device memory budgets itself to so the
-    /// budget scales with the device.</summary>
-    /// <param name="divisor">The divisor of <see cref="DeviceLocalBytes"/>; positive.</param>
-    /// <param name="unreportedBytes">The share, in bytes, on a device whose profile reports no device-local memory.</param>
-    /// <returns><see cref="DeviceLocalBytes"/> over <paramref name="divisor"/>, in bytes;
-    /// <paramref name="unreportedBytes"/> when that is zero.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="divisor"/> is zero.</exception>
-    public ulong DeviceLocalShare(ulong divisor, ulong unreportedBytes) {
-        ArgumentOutOfRangeException.ThrowIfZero(value: divisor);
-
-        var share = (DeviceLocalBytes / divisor);
-
-        return ((share == 0UL) ? unreportedBytes : share);
-    }
-
     /// <summary>Fills a profile from what Direct3D 12 and DXGI report: <c>D3D12_FEATURE_DATA_ARCHITECTURE</c>'s
     /// <c>UMA</c> and <c>CacheCoherentUMA</c>, <c>DXGI_ADAPTER_DESC1</c>'s dedicated video and shared system memory, and
     /// <c>D3D12_FEATURE_DATA_D3D12_OPTIONS16</c>'s <c>GPUUploadHeapSupported</c>. Unified memory is one pool holding the

@@ -1,5 +1,7 @@
 using System.Runtime.Versioning;
 using Puck.DirectX.Apis;
+using Puck.DirectX.Interop;
+using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Direct3D12;
 
 namespace Puck.DirectX;
@@ -82,18 +84,85 @@ public static unsafe class DirectXDeviceMemory {
                 : GpuMemorySegments.DirectXNonLocal),
         };
     }
-    /// <summary>Counts a committed resource created or opened on a device, in the role row its role names
-    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>) and the segment its heap lies in (<see cref="SegmentOf"/>), read
-    /// from the resource itself (<c>ID3D12Resource::GetHeapProperties</c>).</summary>
-    /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
-    /// <param name="device">The device that created or opened the resource; registered with
-    /// <paramref name="memory"/>.</param>
-    /// <param name="resource">The resource.</param>
+
+    /// <summary>The <c>HRESULT</c> a creation answers when the device has no memory for it (<c>E_OUTOFMEMORY</c>).</summary>
+    public const int OutOfMemory = unchecked((int)0x8007000E);
+
+    /// <summary>Asks the ledger whether a committed resource may be created, before it is: at the size the device
+    /// reports for its description, in the segment its heap lies in (<see cref="SegmentOf"/>).</summary>
+    /// <typeparam name="TCalls">The calls' answerer.</typeparam>
+    /// <param name="memory">The ledger, or <see langword="null"/> to ask nothing.</param>
+    /// <param name="calls">The device's calls.</param>
+    /// <param name="device">The device that will create the resource; registered with <paramref name="memory"/>.</param>
+    /// <param name="description">The resource's description.</param>
+    /// <param name="heap">The properties of the heap it will be committed in.</param>
     /// <param name="role">What the resource is for.</param>
     /// <param name="family">The family the resource's memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>),
     /// which names the whole committed allocation.</param>
+    /// <returns>The grant, which <see cref="CountAllocated(GpuDeviceMemoryWork?, GpuMemoryGrant?, ID3D12Resource*)"/>
+    /// takes once the resource exists; <see langword="null"/> when <paramref name="memory"/> is.</returns>
+    /// <exception cref="GpuMemoryRefusedException">The account refused the allocation; nothing was created.</exception>
+    public static GpuMemoryGrant? Admit<TCalls>(GpuDeviceMemoryWork? memory, TCalls calls, ID3D12Device* device, in D3D12_RESOURCE_DESC description, in D3D12_HEAP_PROPERTIES heap, GpuMemoryRole role, string family) where TCalls : IDirectXCommandCalls {
+        if (memory is null) {
+            return null;
+        }
+
+        var sized = description;
+        var bytes = checked((long)calls.AllocationInfo(description: &sized).SizeInBytes);
+
+        return memory.Admit(
+            bytes: bytes,
+            device: ((nint)device),
+            family: family,
+            payer: family,
+            payerBytes: bytes,
+            role: role,
+            segment: SegmentOf(calls: calls, heap: in heap, segments: memory.SegmentsOf(device: ((nint)device)))
+        );
+    }
+    /// <summary>Settles a grant against the result of the native creation it was made for: a creation the device
+    /// refused for want of memory hands the grant back as a device refusal, any other failure returns it, and both
+    /// throw; a success leaves the grant for <see cref="GpuDeviceMemoryWork.CountAllocated"/>.</summary>
+    /// <typeparam name="TCalls">The calls' answerer.</typeparam>
+    /// <param name="calls">The device's calls.</param>
+    /// <param name="grant">The grant, or <see langword="null"/> when nothing was asked.</param>
+    /// <param name="result">The creation's result.</param>
+    /// <param name="operation">The native operation, for the failure's message.</param>
+    /// <exception cref="GpuMemoryRefusedException">The device refused the creation for want of memory.</exception>
+    /// <exception cref="DeviceLostException">The device was removed.</exception>
+    /// <exception cref="DirectXException">The creation failed for another reason.</exception>
+    public static void Settle<TCalls>(TCalls calls, GpuMemoryGrant? grant, HRESULT result, string operation) where TCalls : IDirectXCommandCalls {
+        if (!result.Failed) {
+            return;
+        }
+        if ((result.Value == OutOfMemory) && (grant is not null)) {
+            throw grant.Refuse();
+        }
+
+        grant?.Return();
+        result.ThrowIfFailed(calls: calls, operation: operation);
+    }
+    /// <summary>Counts a committed resource created under a grant (<see cref="Admit"/>).</summary>
+    /// <param name="memory">The ledger, or <see langword="null"/> to count nothing.</param>
+    /// <param name="grant">The grant the resource was created under, or <see langword="null"/> when nothing was asked.</param>
+    /// <param name="resource">The resource.</param>
+    public static void CountAllocated(GpuDeviceMemoryWork? memory, GpuMemoryGrant? grant, ID3D12Resource* resource) {
+        if ((memory is not null) && (grant is not null)) { memory.CountAllocated(allocation: ((nint)resource), grant: grant); }
+    }
+    /// <summary>Counts a resource opened on a device from a handle another device or process shared: its memory exists
+    /// already, so it is admitted as it is opened, at the size the device reports for it, in the role row its role names
+    /// (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>) and the segment its heap lies in (<see cref="SegmentOf"/>), read
+    /// from the resource itself (<c>ID3D12Resource::GetHeapProperties</c>).</summary>
+    /// <param name="memory">The counts, or <see langword="null"/> to count nothing.</param>
+    /// <param name="device">The device that opened the resource; registered with <paramref name="memory"/>.</param>
+    /// <param name="resource">The resource.</param>
+    /// <param name="role">What the resource is for.</param>
+    /// <param name="family">The family the resource's memory is attributed to (<see cref="GpuObjectName.MemoryFamily"/>),
+    /// which names the whole allocation.</param>
     /// <exception cref="InvalidOperationException">The device registered no segments with <paramref name="memory"/>.</exception>
-    public static void CountAllocated(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role, string family) {
+    /// <exception cref="GpuMemoryRefusedException">The account refused the opened memory; the caller releases the
+    /// resource.</exception>
+    public static void CountOpened(GpuDeviceMemoryWork? memory, ID3D12Device* device, ID3D12Resource* resource, GpuMemoryRole role, string family) {
         if ((memory is null) || (resource is null)) {
             return;
         }
@@ -112,14 +181,18 @@ public static unsafe class DirectXDeviceMemory {
         var heap = default(D3D12_HEAP_PROPERTIES);
         var flags = default(D3D12_HEAP_FLAGS);
 
-        resource->GetHeapProperties(&heap, &flags);
+        resource->GetHeapProperties(pHeapFlags: &flags, pHeapProperties: &heap);
         memory.CountAllocated(
             allocation: ((nint)resource),
-            bytes: checked((long)allocation.SizeInBytes),
-            device: owner,
-            family: family,
-            role: role,
-            segment: SegmentOf(calls: calls, heap: in heap, segments: memory.SegmentsOf(device: owner))
+            grant: memory.Admit(
+                bytes: checked((long)allocation.SizeInBytes),
+                device: owner,
+                family: family,
+                payer: family,
+                payerBytes: checked((long)allocation.SizeInBytes),
+                role: role,
+                segment: SegmentOf(calls: calls, heap: in heap, segments: memory.SegmentsOf(device: owner))
+            )
         );
     }
     /// <summary>Counts the release of a resource <see cref="CountAllocated"/> counted; any other resource counts

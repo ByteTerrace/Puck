@@ -1,26 +1,5 @@
-using Puck.Abstractions.Gpu;
-
 namespace Puck.Shaders;
 
-/// <summary>
-/// The device memory a shader pipeline instance may hold while it replaces its graph. A replacement is refused, before
-/// anything is allocated for it, when its <see cref="ShaderPipelineMemoryAccount.PeakBytes"/> would exceed the budget;
-/// the installed graph keeps running and is never freed to make room. The budget is a <see cref="DeviceLocalShare"/>
-/// share of the device-local memory the device's <see cref="GpuMemoryProfile"/> reports, so it scales with the device,
-/// and <see cref="UnreportedBytes"/> on a device whose profile reports none.
-/// </summary>
-public static class ShaderPipelineMemoryBudget {
-    /// <summary>The divisor of the device-local memory a pipeline instance may hold: a quarter of it.</summary>
-    public const ulong DeviceLocalShare = 4UL;
-    /// <summary>The budget on a device whose profile reports no device-local memory: 512 MiB.</summary>
-    public const ulong UnreportedBytes = ((512UL * 1024UL) * 1024UL);
-
-    /// <summary>Gets the budget for a device.</summary>
-    /// <param name="profile">The device's memory profile.</param>
-    /// <returns>The device-local bytes divided by <see cref="DeviceLocalShare"/>; <see cref="UnreportedBytes"/> when
-    /// that share is zero.</returns>
-    public static ulong For(GpuMemoryProfile profile) => profile.DeviceLocalShare(divisor: DeviceLocalShare, unreportedBytes: UnreportedBytes);
-}
 /// <summary>
 /// What installing a graph costs a shader pipeline instance, counted from the plan before anything is allocated. Bytes
 /// are the storage images, storage buffers, render targets, vertex buffers and preview targets the graph creates;
@@ -33,7 +12,8 @@ public static class ShaderPipelineMemoryBudget {
 /// readback's staging buffer) plus the
 /// candidate's <paramref name="SteadyBytes"/>, all of which exist together while the candidate allocates, less the history
 /// the candidate carries from the installed graph, whose instances it takes over rather than allocates.</param>
-/// <param name="BudgetBytes">The budget the peak is held to.</param>
+/// <param name="BudgetBytes">The budget the peak is held to: the peak the instance has reserved in the process's memory
+/// account and the room the account has left for it to raise, lowered to the instance's own cap.</param>
 public readonly record struct ShaderPipelineMemoryAccount(ulong SteadyBytes, ulong PeakBytes, ulong BudgetBytes) {
     /// <summary>The refusal code a candidate over the budget carries.</summary>
     public const string RefusalCode = "SHADERPIPE_BUDGET";

@@ -7,7 +7,9 @@ namespace Puck.Abstractions.Gpu;
 /// (<see cref="GpuRangeAllocator"/>), one that no shared block holds in a new shared block or, larger than half a block,
 /// in a block of its own, a block every resource left freed when it was a resource's own or its key keeps another empty
 /// shared block, and every block freed once by <see cref="FreeAll"/>, which
-/// retires the pool. The backend supplies only the native calls: <c>allocate</c> makes a block's memory, <c>free</c>
+/// retires the pool. The backend supplies only the native calls: <c>allocate</c> makes a block's memory, told the
+/// resource that prompted it (<see cref="GpuMemoryBlockRequest{TKey}"/>) so that it can ask the device's memory ledger
+/// first, at the block's size (<see cref="GpuDeviceMemoryWork.TryAdmit"/>), <c>free</c>
 /// releases it, and the <c>bind</c> each <see cref="Place"/> takes binds or places the resource at its
 /// <see cref="GpuMemoryPlacement{TBlock}"/>; the backend finds that placement again when the resource is released.
 /// <para>Placements never overlap: a block's ranges are handed out only here, and each placement carries its range's
@@ -22,24 +24,25 @@ namespace Puck.Abstractions.Gpu;
 /// <typeparam name="TKey">The key of a pool of blocks: what keeps resources apart, such as memory type and role.</typeparam>
 /// <typeparam name="TBlock">A block's native memory, as the backend's calls name it.</typeparam>
 public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
-    private readonly Func<TKey, ulong, TBlock> m_allocate;
+    private readonly Func<GpuMemoryBlockRequest<TKey>, TBlock> m_allocate;
     private readonly Action<TBlock, bool> m_free;
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<TKey, List<GpuMemoryBlock<TBlock>>> m_pools = [];
+
     private bool m_retired;
 
     /// <summary>Initializes a new instance of the <see cref="GpuMemoryPool{TKey, TBlock}"/> class, holding no
     /// block.</summary>
     /// <param name="blockBytes">The bytes of a shared block.</param>
-    /// <param name="allocate">The call that makes a block's memory for a key, of a size in bytes; it throws when the device
-    /// refuses, and the pool then holds nothing new.</param>
+    /// <param name="allocate">The call that makes a block's memory for a request; it throws when the block is refused,
+    /// by the account or the device (<see cref="GpuMemoryRefusedException"/>), and the pool then holds nothing new.</param>
     /// <param name="free">The call that releases a block's memory; its flag is <see langword="true"/> when
     /// <see cref="FreeAll"/> frees the block as it retires the pool.</param>
     /// <exception cref="ArgumentNullException"><paramref name="allocate"/> or <paramref name="free"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="blockBytes"/> is under two.</exception>
-    public GpuMemoryPool(ulong blockBytes, Func<TKey, ulong, TBlock> allocate, Action<TBlock, bool> free) {
+    public GpuMemoryPool(ulong blockBytes, Func<GpuMemoryBlockRequest<TKey>, TBlock> allocate, Action<TBlock, bool> free) {
         ArgumentNullException.ThrowIfNull(argument: allocate);
         ArgumentNullException.ThrowIfNull(argument: free);
         ArgumentOutOfRangeException.ThrowIfLessThan(other: 2UL, value: blockBytes);
@@ -82,12 +85,15 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
     /// for none.</param>
     /// <param name="bind">The call that binds or places the resource at its placement and records the placement for the
     /// resource's release, which returns it (<see cref="Return"/>); it must not call back into the pool.</param>
+    /// <param name="payer">The family the resource is created under, which a new block's allocation is told
+    /// (<see cref="GpuMemoryBlockRequest{TKey}.Payer"/>); <see langword="null"/> for none.</param>
     /// <returns>What <paramref name="bind"/> answered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="bind"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="size"/> is zero, or <paramref name="alignment"/> is
     /// not a power of two.</exception>
     /// <exception cref="ObjectDisposedException">The pool was retired (<see cref="FreeAll"/>).</exception>
-    public TResult Place<TResult>(TKey key, ulong size, ulong alignment, Func<GpuMemoryPlacement<TBlock>, TResult> bind) {
+    /// <exception cref="GpuMemoryRefusedException">A new block was refused; nothing was placed.</exception>
+    public TResult Place<TResult>(TKey key, ulong size, ulong alignment, Func<GpuMemoryPlacement<TBlock>, TResult> bind, string? payer = null) {
         ArgumentNullException.ThrowIfNull(argument: bind);
         ArgumentOutOfRangeException.ThrowIfZero(value: size);
         GpuRangeAllocator.ThrowIfNotAlignment(alignment: alignment);
@@ -110,7 +116,7 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
             }
             if (placement.Block is null) {
                 var bytes = (own ? size : BlockBytes);
-                var created = new GpuMemoryBlock<TBlock>(native: m_allocate(arg1: key, arg2: bytes), own: own, owner: this, pool: pool, ranges: new GpuRangeAllocator(size: bytes));
+                var created = new GpuMemoryBlock<TBlock>(native: m_allocate(arg: new GpuMemoryBlockRequest<TKey>(Bytes: bytes, Key: key, Own: own, Payer: payer, PayerBytes: size)), own: own, owner: this, pool: pool, ranges: new GpuRangeAllocator(size: bytes));
 
                 pool.Add(item: created);
 
@@ -193,6 +199,15 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
         return false;
     }
 }
+/// <summary>One block a <see cref="GpuMemoryPool{TKey, TBlock}"/> asks its backend to allocate, with the resource that
+/// prompted it.</summary>
+/// <typeparam name="TKey">The key of a pool of blocks.</typeparam>
+/// <param name="Key">The key of the blocks the new one joins.</param>
+/// <param name="Bytes">The block's size, in bytes: what the device is asked for.</param>
+/// <param name="Own">Whether the block is the prompting resource's own, which a family names whole.</param>
+/// <param name="Payer">The family of the resource that prompted the block, or <see langword="null"/>.</param>
+/// <param name="PayerBytes">The bytes of the resource that prompted the block.</param>
+public readonly record struct GpuMemoryBlockRequest<TKey>(TKey Key, ulong Bytes, bool Own, string? Payer, ulong PayerBytes);
 /// <summary>Where a <see cref="GpuMemoryPool{TKey, TBlock}"/> placed one resource: its block's native memory and the
 /// range of it the resource holds until the placement is returned.</summary>
 /// <typeparam name="TBlock">A block's native memory, as the backend's calls name it.</typeparam>
@@ -215,6 +230,7 @@ public readonly struct GpuMemoryPlacement<TBlock> {
     // The ticket of the range in its block, which tells this placement from a later one at the same offset.
     internal ulong Ticket { get; }
 }
+
 /// <summary>One block of a <see cref="GpuMemoryPool{TKey, TBlock}"/>: its native memory, its ranges, whether it is one
 /// resource's own, and the key's blocks it belongs to.</summary>
 /// <typeparam name="TBlock">A block's native memory.</typeparam>
