@@ -61,8 +61,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the scheduling stage's and C0.3's windowed readings, the control plane's
    step C0.4, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-   work proportional to change, steps R0 to R2 of
-   [its memo](arrival-proportional.md), then the frame thread's field queries.
+   work proportional to change, steps R1h, R1a, R1b, R1c and S2 of
+   [its memo](arrival-proportional.md) in that order (R0's rule has read
+   them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
 8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
@@ -122,19 +123,16 @@ head, each named by the lane whose landing waits on it:
 - crease1: the 24 tour exhibits' stored meshes against their CPU bakes, from
   a cold boot per backend with a fresh `--cache-dir` (the Moth is read; see
   [bake detail](#bake-detail)).
-- sm0: the seam walk's baseline legs, `puck bench frames --plan
-  worlds/debug/seam-walk.sweep.json --stop <stop> --window` on both backends
-  over its nine stops, in a quiet window; correct the burst ticks after.
 - js1 at `debug.go overlook` (the desktop reading is taken), and vrr1's
   `world.rates` burst at `debug.go desktop` on the variable-rate display
   (expect `screens` at most 4).
 - relief1: a World boot and captures of a noise-relieved creation moving as a
   whole, on both backends.
-- c03: on Vulkan, at a lockstep stop that converges lighting, a console verb
-  issued during the drain answers within one iteration (`host.frames`'
-  control gap under the wait budget plus a pacer period); on both backends,
-  the stop's still against the build before c03. Direct3D 12's control gap
-  is read.
+- c03: the converged still at a lockstep stop against the build before c03,
+  on both backends (the control gap is read on both).
+- sm7p: the indexed slab read's paired cost on both backends, two frozen
+  builds through `puck measure` (the recipe is in
+  [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
 
@@ -345,6 +343,12 @@ step C0.4 (C0.1 to C0.3 are built), then the pool's design (J1). The garbage-col
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
+- [medium] On Vulkan, during a lighting convergence under lockstep, the
+  control gap reads p99 119 ms and max 247 ms over 300 iterations, made of
+  simulation (`simulate` p99 93 ms, max 116 ms) and produce work (max 70 ms),
+  not waits; Direct3D 12 read `simulate` at 0 over the same kind of window.
+  Find what the Vulkan run's ticks do in those iterations and whether a held
+  tick catches up in a burst, which C0.5's tick waits should bound.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period
@@ -518,12 +522,8 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
-  R0's counting is built, including producer-local serial attribution and the
-  device-free partition, threshold and steady-window laws. Its
-  [windowed verification request](arrival-proportional.md#windowed-verification-request)
-  still owns the boot, arrival, crossing and steady readings that select the
-  later steps; headless presentation stages no draw records.
+  design and its remaining steps, R1h, R1a, R1b, R1c and S2 in that order;
+  R2 stays with the visibility plan's V1b. R0's rule has read them.
   No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
@@ -2565,6 +2565,16 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
+- [medium] A World start under a held execution lease gets an admission bound
+  of zero (`HostAdmission.Wait`, `CliLease.HoldsExecution`), so inside the
+  lead's quiet window a seam-walk stop started right after the previous one
+  was refused at 15.3 GB free against 15.5 GB, before the exited World's
+  memory had come back. A holder that owns the machine (quiet) loses nothing
+  by waiting: give it the step's bound, or wait while a just-exited start's
+  memory returns, instead of refusing.
+- [low] `puck bench frames --window` still names "each physical row's owners
+  and residual" absent, "supplied by step 2", though step 2 has landed; wire
+  `host.memory`'s owner rows into the window or correct the text.
 - [medium] `puck integrate`: the lead's integration steps as one verb under
   one report: the build, each generator's `--check`, `puck docs links`, a
   headless boot of the debug world, windowed Direct3D 12 and Vulkan boots, and
