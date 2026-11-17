@@ -2344,13 +2344,20 @@ the wire, then the float duration fields' schema migration.
 - Classify the public Maths surface with no law or waiver (algebra wrappers,
   coordinates, continued-fraction certificates, research APIs): bind existing
   evidence, give precise category waivers, delete unreachable code.
-- [low] `Pcg3dLatticeNoise.ScatterPoint` reduces a stateless hash with
-  `hash % inset`, a bias of inset/2^32, and a lattice's boot-time paint throws
-  on draw exhaustion where compose refuses.
+- [low] A lattice's boot-time paint throws on draw exhaustion where compose
+  refuses.
 - [low] The alias table rounds each threshold to 32 fractional bits
-  (`WeightedSampler`), so `weightedNumeric`, `symmetryOrbit` and Markov draws
-  keep a small bias. Exact thresholds with a bounded rejection through
-  `BoundedRandomSampling` remove it.
+  (`WeightedSampler.BuildColumns`), so `weightedNumeric`, `symmetryOrbit` and
+  Markov draws keep a bias of at most 2^-33 per column. An exact threshold
+  needs a draw that sometimes consumes more than two advances (the word equal
+  to the floored threshold, probability 2^-32, then an exact wide draw through
+  `BoundedRandomSampling.TrySampleWide`), which breaks the fixed two-advance
+  cost that `GeneratorEngine`'s draw cursor (`TryDrawNumeric`, `TryFireMarkov`
+  add `WeightedSampler.AdvancesPerDraw`), `WorldDecision`'s documented two
+  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Settle first
+  whether the weighted draws keep a fixed cost with the bias, or report their
+  consumed advances (`DrawEntry` and the cursor carry the count) and the
+  constant goes.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
