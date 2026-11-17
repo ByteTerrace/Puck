@@ -12,6 +12,32 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Size is sampled once by authority; contact, carrier motion and snapshot agree on that sample.</summary>
 public sealed class SolidSizeLawTests {
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [Theory]
+    public void RestoredScaleContinuesFromTheAuthorityArena(bool field, bool warm) {
+        var definition = GrowingDocument(field: field);
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        _ = fixture.JoinSeat(slot: 0);
+        if (warm) { fixture.Step(); }
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var start, out var reason), userMessage: reason);
+        fixture.Step();
+        var expectedScale = Assert.Single(collection: fixture.Server.Population.SolidScales());
+        var expectedComponents = WorldStateHashComposition.AuthoritativeComponents(fixture.Server, fixture.Server.NextInputTick - 1);
+
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "growth", WorldStateRow.SlotKey.Value,
+            FixedQ4816.One.Value, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.Equal(FixedQ4816.One, Assert.Single(collection: fixture.Server.Population.SolidScales()).Scale);
+        fixture.Server.Persistence.RestoreReplayStart(checkpoint: start!);
+        fixture.Step();
+
+        Assert.Equal(expectedScale, Assert.Single(collection: fixture.Server.Population.SolidScales()));
+        Assert.Empty(collection: WorldStateHashComposition.DifferingComponents(expectedComponents,
+            WorldStateHashComposition.AuthoritativeComponents(fixture.Server, fixture.Server.NextInputTick - 1)));
+    }
     [InlineData(false)]
     [InlineData(true)]
     [Theory]
@@ -69,16 +95,7 @@ public sealed class SolidSizeLawTests {
     [InlineData(true)]
     [Theory]
     public void GrowthAndShrinkRideTheSampledSurface(bool field) {
-        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
-        var creation = CreationCanonicalizer.Canonicalize(document: new CreationDocument(CreationDocument.CurrentSchema, "growing", null,
-            [new ShapeDocument(0, "platform", SdfSolidPrimitive.Box, new Vector3(x: 0, y: 1, z: 0), Quaternion.Identity,
-                new Vector3(x: 3, y: 1, z: 3), 0, SdfBlendOp.Union, 0, 0)], null, SizeBy: "state.growth"), source: "growing");
-        var definition = source with {
-            CollisionRaw = source.Collision with { Requirements = (field ? [WorldContactRequirement.SmoothUnionContact] : []) },
-            StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot(name: "growth", rawBits: (FixedQ4816.One.Value / 2))]),
-            CreationsRaw = [new WorldPrototype("growing", creation.Document, creation.Hash)],
-            PlacementRowsRaw = [new WorldPlacement("growing", "growing", new Vector3(x: 20, y: 0, z: 0), 0, 1, Solid: new WorldSolid(Margin: 0))],
-        };
+        var definition = GrowingDocument(field: field);
         using var fixture = Fixtures.FreshServer(definition: definition);
         var body = fixture.JoinSeat(slot: 0);
 
@@ -97,5 +114,17 @@ public sealed class SolidSizeLawTests {
 
             Assert.Equal(scale, sampled.Scale);
         }
+    }
+    private static WorldDefinition GrowingDocument(bool field) {
+        var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
+        var creation = CreationCanonicalizer.Canonicalize(document: new CreationDocument(CreationDocument.CurrentSchema, "growing", null,
+            [new ShapeDocument(0, "platform", SdfSolidPrimitive.Box, new Vector3(x: 0, y: 1, z: 0), Quaternion.Identity,
+                new Vector3(x: 3, y: 1, z: 3), 0, SdfBlendOp.Union, 0, 0)], null, SizeBy: "state.growth"), source: "growing");
+        return source with {
+            CollisionRaw = source.Collision with { Requirements = (field ? [WorldContactRequirement.SmoothUnionContact] : []) },
+            StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot(name: "growth", rawBits: (FixedQ4816.One.Value / 2))]),
+            CreationsRaw = [new WorldPrototype("growing", creation.Document, creation.Hash)],
+            PlacementRowsRaw = [new WorldPlacement("growing", "growing", new Vector3(x: 20, y: 0, z: 0), 0, 1, Solid: new WorldSolid(Margin: 0))],
+        };
     }
 }

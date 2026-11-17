@@ -412,6 +412,7 @@ public sealed partial class WorldTick {
         Host.Population.SampleMediumSurfaces();
         SampleTravelResistance(tick: tick);
         Host.Population.AdvanceSimulated(
+            definition: Host.Document.Definition,
             tick: tick,
             stepTicks: context.StepTicks,
             stepStartEngineTick: stepStartEngineTick

@@ -812,11 +812,15 @@ public sealed partial class WorldPopulation {
     /// <see cref="AdvanceSeats"/>.</summary>
     /// <remarks>Runs first, before any body (peer or seat) advances this tick, so an attached solid placement's
     /// colliders (<see cref="WorldColliderSet.RefreshAttached"/>) are refreshed exactly once and every body's push
-    /// this tick resolves against the same snapshot — the analytic contact provider only; the field provider compiles
-    /// its whole SDF program once and a bad-op world already fails loudly at boot/apply if it cannot (attach+solid
-    /// stays refused there, see the document validator).</remarks>
+    /// this tick resolves against the same snapshot. Both contact providers sample size; attached body poses are
+    /// admitted by the analytic provider. Scale reads the current authority definition, never the definition
+    /// retained when geometry compiled, whose arena may have been replaced.</remarks>
+    /// <param name="definition">The authority's current live definition and state binding.</param>
+    /// <param name="tick">The authority tick being advanced.</param>
+    /// <param name="stepTicks">The sub-step duration in engine ticks.</param>
+    /// <param name="stepStartEngineTick">The engine-time boundary at the start of the sub-step.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="stepTicks"/> is zero.</exception>
-    public void AdvanceSimulated(ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
+    public void AdvanceSimulated(WorldDefinition definition, ulong tick, ulong stepTicks, ulong stepStartEngineTick) {
         ArgumentOutOfRangeException.ThrowIfZero(value: stepTicks);
         SimulatedBodyVisits = 0;
         m_rigidTickStepTicks = stepTicks;
@@ -824,7 +828,7 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        if (MovingSolids is { } attached) { attached.RefreshAttached(definition: m_adjacencyDefinition!, engineTick: stepStartEngineTick, population: this, tick: tick); }
+        if (MovingSolids is { } attached) { attached.RefreshAttached(definition: definition, engineTick: stepStartEngineTick, population: this, tick: tick); }
         var stepBodies = PrepareBodyStep();
 
         if (MovingSolids is { } colliders) {

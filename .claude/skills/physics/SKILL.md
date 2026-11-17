@@ -118,6 +118,10 @@ same change.
 - **Scale reaches every contact query.** A body's `Scale` multiplies its
   collider volumes for world contact, body pairs, events, the adjacency
   sweep's local side and rigid probing alike.
+- **Solid size reads the current authority.** `WorldTick` passes its live definition to
+  `WorldPopulation.AdvanceSimulated` for `WorldColliderSet.RefreshAttached` to sample.
+  The geometry compiler's retained definition can still name a retired arena after a
+  checkpoint restore. Restore keeps the captured sample; the next tick reads the restored arena.
 - **Workspaces are reused and not thread-safe.** The hierarchical gravity
   solvers and navigation domains allocate once and keep their arrays.
 
