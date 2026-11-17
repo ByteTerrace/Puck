@@ -5,8 +5,18 @@ using Puck.SignedDistance.Queries;
 namespace Puck.SdfVm;
 /// <summary>The shared CPU render-field sampler for offline contours and rigid seam fallback.</summary>
 public sealed class SdfMeshCpuField : ISdfMeshLevelField, IDisposable {
-    /// <summary>The minimum gradient spacing in metres, outside fixed-point roundoff.</summary>
-    public const float MinimumSpacing = 0.0005f;
+    /// <summary>The narrowest spacing, in metres, the evaluator answers a gradient tap at: it reads positions and values in
+    /// 2⁻¹⁶ m steps, and four taps closer than a few steps read that rounding as slope, which a loose field (a flare's
+    /// slope near a fifth) multiplies.</summary>
+    public const float ResolutionSpacing = (8f / 65536f);
+
+    /// <summary>Returns the spacing a CPU answer places a lattice's gradient taps at: the lattice's own
+    /// (<see cref="SdfMeshBakeRequest.TapSpacing"/>), as the bake kernel places them, except where that is narrower than
+    /// <see cref="ResolutionSpacing"/>. There the taps straddle every crease within this spacing of a sample and read a blend
+    /// of its two faces where the kernel reads one, so a CPU bake's normals near such a crease are not the device's.</summary>
+    /// <param name="requested">The lattice's tap spacing, in metres.</param>
+    /// <returns>The spacing, in metres.</returns>
+    public static float TapSpacing(float requested) => MathF.Max(x: ResolutionSpacing, y: requested);
 
     /// <summary>Reads one value and material, with a positive far value outside the evaluation frame.</summary>
     public static float Sample(SdfFieldEvaluator field, Vector3 point, out int material) => (field.TryDistance(FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point)), out var distance, out material) ? (float)((double)distance) : 1000f);
@@ -29,7 +39,7 @@ public sealed class SdfMeshCpuField : ISdfMeshLevelField, IDisposable {
     /// <inheritdoc/>
     public void Values(ReadOnlySpan<Vector3> points, Span<float> values, Span<int> materials, SdfMeshLevelWork work) => Read(gradients: default, materials: materials, points: points, spacing: 0f, values: values);
     /// <inheritdoc/>
-    public void Gradients(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<Vector3> gradients, SdfMeshLevelWork work) => Read(points, MathF.Max(x: MinimumSpacing, y: spacing), values, default, gradients);
+    public void Gradients(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<Vector3> gradients, SdfMeshLevelWork work) => Read(points, TapSpacing(requested: spacing), values, default, gradients);
 
     private void Read(ReadOnlySpan<Vector3> points, float spacing, Span<float> values, Span<int> materials, Span<Vector3> gradients) {
         var at = points.ToArray();

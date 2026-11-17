@@ -515,8 +515,13 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R0's owed windows, R1a to R1c, R2, and S2's
-  conditional measure). No capture has yet shown a hand-over frame by frame;
+  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
+  R0's counting is built, including producer-local serial attribution and the
+  device-free partition, threshold and steady-window laws. Its
+  [windowed verification request](arrival-proportional.md#windowed-verification-request)
+  still owns the boot, arrival, crossing and steady readings that select the
+  later steps; headless presentation stages no draw records.
+  No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
@@ -836,14 +841,19 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
-- [high] The GPU bake contours the Moth's shin worse than the CPU bake of the
-  same group, so the CPU audit that judges bake changes does not see what
-  ships: `puck mesh audit --prototype moth --group shin-right` reads 866
-  folds and 1690 flipped triangles from a cold Direct3D 12 store, 866 and
-  1689 from a cold Vulkan store, and 578 and 1041 with `--cpu`
-  (`MeshCpuBake`). The two backends agree with each other, so the difference
-  is between the CPU twin and the bake kernels. Find where they diverge and
-  make them one result; then a change judged by `--cpu` holds on the device.
+- [high] `puck mesh audit --cpu` still differs from the device wherever a
+  lattice's gradient taps lie closer than the fixed-point evaluator resolves
+  (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a
+  tier finer than about 8 mm cells, which covers 178 of the Moth's 180 groups,
+  each printing a `cpu taps:` line. Over those 180 groups the CPU and Direct3D 12 audits still
+  disagree by 743 folds and 468 flipped triangles in sum. A judgement made with
+  `--cpu` on such a group is confirmed against a store audit. Closing the gap
+  needs a CPU answer of the field finer than 2⁻¹⁶ m. A narrower floor reads
+  the evaluator's rounding (4 steps disagreed more than 8); the flare's loose
+  bound, below, multiplies that rounding. `shape-groove-union` differs by its
+  field alone (its taps match the kernel's): 32 folds and 20 flipped on the
+  CPU against 47 and 14 on the device, so the two interpreters' groove-union
+  arithmetic is the next pair to compare.
 - [medium] `puck mesh audit` over a cold store audits only the groups stored
   at the tier it plans: over the whole debug world it read 238 of 6544
   groups and reported 6306 "with no stored mesh", although the residency
@@ -862,7 +872,11 @@ the tour's remaining reds and the Moth's shin groups share, then
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
   triangles on six of the fourteen blend exhibits (`shape-groove-union` and
-  `shape-blend-subtraction` worst) and on none of the primitives. Every quad
+  `shape-blend-subtraction` worst) and on none of the primitives. Those counts
+  came from CPU taps wider than the kernel's; on the exhibits' tiers the CPU
+  now places the kernel's taps, which turned `shape-chamfer-union` from 6 folds
+  and 2 flipped to 0 and 0, as on the device, so the six are read again first.
+  Every quad
   of those contours faces out as its lattice edge says
   ([the contour's facing](../../.claude/skills/rendering/references/mesh-bake.md#contouring)),
   so what remains is geometry the lattice's facts do not judge, in three
@@ -2698,6 +2712,13 @@ that stops compiling.
   (`gh run view --log-failed` on the latest `main` run).
 - Red on the integration tip, each to update to the behaviour it now meets or
   delete:
+  - SdfVm: eight `SdfMeshPathBakeLawTests` cases (`ACachedReplacement…`,
+    `ADynamicSlotRefines…`, `AFrameTakesTheLattices…`,
+    `AGroupWhoseShapesRideTwoSlots…`, `AKeptSeparateGeometry…`,
+    `AMovedIdentity…`, `AStaticCopyBakesItsUnion…`, `AStaticCopyOfThinPlates…`)
+    and `SdfMeshPathBakeSampledLawTests.AReferenceRepublishedEveryFrame…`,
+    red before the tap-spacing change too; read each for a real bake
+    regression before updating or deleting it.
   - Server: `HoldLawTests` (two checkpoint cases) and
     `TetherLawTests.TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically`
     compare `WorldBody.CaptureIntegrationResidue` records whole, which differ

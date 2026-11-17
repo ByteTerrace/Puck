@@ -2376,7 +2376,12 @@ by vertex-stage path, riding the draw's slot, riding one moving member rigidly,
 or blending two. It registers `sdf.mesh-gi` too, the world
 residency's irradiance volume (`SdfMeshIrradiance`): its trace scene builds,
 the geometries they built and took from the scene they replaced, the triangles
-they built, and the probe sweeps traced. The
+they built, static draws, top-level entries, exported prefix bytes, the peaks
+of entries and prefix bytes, and the probe sweeps traced. The process source
+`sdf.instances` reports packed records by cause and topology builds by reason,
+changed owners' rows and staging peaks; the
+[arrival memo](../../docs/plans/arrival-proportional.md#r0-the-counts-and-the-rule)
+defines their reading. The
 `allocation` section names the GC mode and the fewest managed bytes one read of
 every count allocated (`world.counters.read`, measured with
 `AllocationWindow.Measure`); only zero or not zero is meaningful. A render host
@@ -2402,8 +2407,11 @@ nothing is refused and lists the sources. `--json` prints one line:
 The `kinds` legend gives every reported kind's unit and class
 (`deterministic`, `per-backend-deterministic` or `pacing`), which
 `puck counters` reads to tag each count.
-A headless host has no `gpu` section. Counts only go up; read twice and
-subtract for a window.
+A headless host has no `gpu` section. Totals only go up; read twice and subtract
+for a window. A peak kind has `"peak":true` in the legend and holds the largest
+value one staging or build raised since `world.counters <source-or-prefix>
+clear-peaks` cleared the selected sources' peaks. Clear peaks at a window's
+start and read them directly at its end; clearing leaves totals unchanged.
 
 `world.sdf.dump <path>` exports the live packed GPU program as little-endian
 32-bit words, replacing the destination file. Use it to inspect the instructions,

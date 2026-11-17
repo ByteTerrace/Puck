@@ -53,7 +53,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
         ReadOnlySpan<Vector3> taps = [new(x: 1f, y: -1f, z: -1f), new(x: -1f, y: -1f, z: 1f), new(x: -1f, y: 1f, z: -1f), new(x: 1f, y: 1f, z: 1f)];
 
         foreach (var lattice in batch.Lattices) {
-            var spacing = (0.015625f * MathF.Min(x: lattice.Cell.X, y: MathF.Min(x: lattice.Cell.Y, y: lattice.Cell.Z)));
+            var spacing = lattice.TapSpacing;
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);

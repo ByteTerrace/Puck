@@ -917,22 +917,28 @@ skill already describes, taken across a hand-over that changes a count.
 
 ## R0: the counts and the rule
 
-R0 adds counts and decides nothing by time. Every staging passes
+R0's counts are built and decide nothing by time. Every staging passes
 `SdfWorldTables.StageMeshRegion`, which ends in `SdfWorldTables.TryStageDrawChanges`
-or in `SdfWorldTables.StageMeshRegionCore` **[opened]**, so one tally there
-sees every record packed whichever path packed it. Today
+or in `SdfWorldTables.StageMeshRegionCore` **[opened]**. Both packing paths call
+`SdfWorldTables.StageMeshDraw` through one staging tally, which publishes the
+packed total and its causes together. The invariant is that every packed record
+has exactly one cause; the tally's publication enforces that partition.
 `SdfMeshHistory.RecordsChanged` is added only by the changed-run staging
 (`SdfWorldTables.StageChangedDraws`), never by the whole pack
 (`SdfWorldTables.StageMeshMotion`) an arrival takes while a waiting draw is
-filtered out, and every kind in `SdfMeshHistory.ProcessWork` is a running
-total with no per-frame reading.
+filtered out, so the rule reads `SdfMeshHistory.RecordsPacked` and its cause
+totals instead. These are presentation counts; they never decide simulation
+state or schedule work.
 
 **The cause of a packed record.** Each record a staging packs is counted under
 one cause. A staging that does not take the journal has one cause for all its
 records, the first of the top five below that holds; one that takes it splits
 its records between the last two. The dresser states why a frame owes
 everything beside the serial it publishes, so the tables can tell the first
-three apart.
+three apart (`SdfFrame.MeshDrawChangesCause`). A serial is local to its
+producer: a replacement draw list's stated cause applies even when its serial
+equals the preceding list's. Restaging the same published frame after a landing
+does not consume its stated cause again.
 
 | Cause | Holds when |
 |---|---|
@@ -944,7 +950,7 @@ three apart.
 | `hand-over` | The journal is taken; this cause counts the records whose mesh differs from the one staged |
 | `pose` | The journal is taken; this cause counts the rest |
 
-**The counts** (working names, in `sdf.instances`; `<cause>` is each cause
+**The counts** (in `sdf.instances`; `<cause>` is each cause
 above):
 
 | Count | Kind | Holds |
@@ -958,20 +964,26 @@ above):
 | `peak.rows.planned` | Peak | The most rows one staging submitted to `SdfMeshRegionArena.Plan` |
 | `peak.rows.extent` | Peak | The most rows the table held |
 
-And in the scene's counters (`SdfMeshIrradiance.Counters`): totals of scene
-builds, static draws, top-level entries and prefix bytes exported, and the
-peak of the entries and of the prefix bytes of one build.
+The scene's counters (`SdfMeshIrradiance.Counters`, source `sdf.mesh-gi`) expose
+`scenes`, `static-draws`, `entries` and `prefix-bytes`, and `peak.entries` and
+`peak.prefix-bytes`. Builds count their static draws and top-level entries;
+each GPU export counts its prefix bytes, including an export abandoned before
+publication. Re-exporting a scene counts another prefix, because it owes another
+upload. An empty export still owes its one zero word.
 
-`SdfMeshHistory.ProcessWork` lists its kinds by hand today, so a kind can be
-declared and left out of the set. R0 moves its kinds to a
-`WorkKindRegistry`, where declaring a kind is what lists it
-(`WorkKindRegistry.Declare`), before it adds the per-cause families.
+`SdfMeshHistory.ProcessWork` takes its kinds from the existing
+`WorkKindRegistry`: declaring a kind is what lists it
+(`WorkKindRegistry.Declare`, and `WorkKindRegistry.DeclarePeak` for a peak).
+The first read of `WorkKindRegistry.Kinds` closes the registry, so a declaration
+cannot be added behind the set that reports it.
 
 **A peak** is a per-frame high-water count: the largest value one staging (or
 one scene build) published since the peaks were last cleared. `WorkCounterSet`
-gains the raise beside `WorkCounterSet.Add`, and `world.counters` gains a form
-that clears a source's peaks, as `host.frames reset` opens a frame window. A
-reading clears the peaks at the start of its window and reads them at its end.
+raises it with `WorkCounterSet.Raise` beside the total's `WorkCounterSet.Add`.
+`world.counters <source-or-prefix> clear-peaks` clears the selected sources'
+peaks without changing totals, as `host.frames reset` opens a frame window.
+The JSON kind legend marks peaks with `peak: true`. A reading clears the peaks
+at the start of its window and reads them at its end; totals are end minus start.
 
 **The threshold** is one upload chunk of records: `SdfGpuWork.UploadChunkBytes`
 divided by `SdfMeshRegion.DrawBytes`. A staging over it packs, on the frame
@@ -1003,6 +1015,88 @@ glass. Steady: a settled stop with nothing arriving.
 `SdfMeshHistory.RecordsPacked`, the reasons sum to
 `SdfMeshHistory.DressTopologyBuilds`, a cold boot shows `landing` above zero,
 and a steady window shows every `frames.over-chunk` count unchanged.
+`SdfMeshStagingCauseLawTests` proves the partition over the real tables on the
+CPU upload model, the topology reason sum, a landing, a publication retry and
+a pose. It also exercises a replacement producer at the same serial, exactly
+one chunk versus one record over it, and a settled window longer than the frame
+ring. `WorkPeakLawTests` proves raising, clearing and forwarding peaks without
+clearing totals. A headless World with presentation `none` stages no draws;
+its zero totals do not replace the table law's nonzero witnesses.
+
+### Windowed verification request
+
+The lead runs these console scripts through the named World's Operator
+attachment on `worlds/debug`, with physical devices disabled. Repeat on
+Direct3D 12 and Vulkan. Use a fresh process for the boot window and the shared
+mesh store; this does not require an empty mesh cache. Do not clear boot peaks:
+they start at zero with the process, so the first frames remain in the window.
+
+```text
+world.wait ready 600
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances --json
+world.counters sdf.mesh-gi --json
+```
+
+For arrival, settle at the stage, then clear peaks and read the start totals
+before travelling to the meadow. The end reads follow both settle reports.
+
+```text
+debug.go stage
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances clear-peaks
+world.counters sdf.mesh-gi clear-peaks
+world.counters sdf.instances --json
+world.counters sdf.mesh-gi --json
+debug.go meadow
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances --json
+world.counters sdf.mesh-gi --json
+```
+
+For the steady window, remain at that settled meadow stop:
+
+```text
+world.counters sdf.instances clear-peaks
+world.counters sdf.mesh-gi clear-peaks
+world.counters sdf.instances --json
+world.counters sdf.mesh-gi --json
+world.wait 300
+world.counters sdf.instances --json
+world.counters sdf.mesh-gi --json
+```
+
+For crossing, use the gallery's same-world linked paintings. The west glass
+is at the authored wall's x plus its canvas offset; the pose below holds the
+Moth just in front of it, within her body's reach. This pose's straddle is a
+windowed check, not a headless observation. If `frames.portal` does not advance,
+the window has not exercised clipping and supplies no reading for the rule.
+
+```text
+debug.go portal-link
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances clear-peaks
+world.counters sdf.instances --json
+body.stop 0
+body.pose 51.5 0.05 34.5 90 0 0
+world.wait 30
+world.counters sdf.instances --json
+debug.go portal-link
+```
+
+For each window, sum the seven packed-row deltas and compare with
+`SdfMeshHistory.RecordsPacked`'s delta; sum the six reason deltas and compare
+with `SdfMeshHistory.DressTopologyBuilds`' delta. Read peaks directly, never
+subtract them. The steady over-chunk deltas must all be zero. Boot must show
+landing; crossing must show portal staging. Apply the fixed rule above to
+these readings; the headless checks select none of R1b, R1c, R2 or S2. Bakes
+and residency do not wait for the trace scene's lighting convergence, so an
+end read with a scene build still pending is reported as incomplete rather
+than used to drop S2.
 
 ## The measurement each step lands on
 

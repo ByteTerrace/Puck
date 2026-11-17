@@ -165,7 +165,8 @@ public static class MeshCommand {
         var results = new Outcome?[groups.Count];
         var selected = groups.Where(predicate: group => Selected(group: group, request: request, scene: scene)).ToArray();
         var evaluations = new Dictionary<int, long>();
-        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene, tier: tier) : null);
+        var taps = new Dictionary<int, MeshCpuTaps>();
+        var baked = (request.Cpu ? MeshCpuBake.Bake(evaluations: evaluations, farDistance: farDistance, groups: selected, scene: scene, taps: taps, tier: tier) : null);
 
         _ = Parallel.For(fromInclusive: 0, toExclusive: groups.Count, body: ordinal => {
             var group = groups[ordinal];
@@ -192,7 +193,7 @@ public static class MeshCommand {
             .ToArray();
 
         foreach (var ordinal in ordered) {
-            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, top: request.Top);
+            Write(ordinal: ordinal, outcome: results[ordinal]!, output: output, taps: taps.GetValueOrDefault(key: groups[ordinal].Selector, defaultValue: MeshCpuTaps.None), top: request.Top);
             if (request.History && (results[ordinal]!.Field is { } field)) {
                 History(field: field, group: groups[ordinal], options: options, output: output, store: store);
             }
@@ -318,7 +319,7 @@ public static class MeshCommand {
 
         return (near >= (HistoryShare * count));
     }
-    private static void Write(int ordinal, Outcome outcome, StringBuilder output, int top) {
+    private static void Write(int ordinal, Outcome outcome, StringBuilder output, MeshCpuTaps taps, int top) {
         if (outcome.Report is not { } report) {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"group {ordinal} {outcome.Label}: {outcome.Refusal}\n");
             return;
@@ -329,6 +330,11 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  normal (deg): face {Statistic(statistic: report.NormalError, scale: 1f)} | shading {Statistic(statistic: report.ShadingError, scale: 1f)} | rough {Statistic(statistic: report.RoughError, scale: 1f)}\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  field slope deficit: {Statistic(statistic: report.SlopeDeficit, scale: 1f)}{((report.LooseShapes.Count == 0) ? string.Empty : $"; loose near {string.Join(separator: ", ", values: report.LooseShapes.Select(selector: static shape => $"{shape.Name} {shape.Count}"))}")}\n");
         output.Append(value: MeshAuditLines.TopologyLine(report: report)).Append(value: '\n');
+        // Taps the evaluator could not place where the kernel does straddle a crease the device's do not, so the crease
+        // normals near them, and the folds and flips they place, are not what a World bakes.
+        if (taps.Widened > 0L) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cpu taps: {taps.Widened} of {taps.Samples} gradient samples answered {(SdfMeshCpuField.ResolutionSpacing * 1.0e6f):0} um out where the device's lie as close as {(taps.Narrowest * 1.0e6f):0} um; crease normals near them are not the device's\n");
+        }
         if (outcome.Mesh is { } skin) {
             var influences = SdfMeshSkin.Audit(mesh: skin);
 
