@@ -48,7 +48,6 @@ public sealed class SdfMeshDresser : IDisposable {
     private bool m_disposed;
     private bool m_faultThisDress;
     private SdfDressedPickMap? m_map;
-    private (SdfFrame Input, SdfFrame Result)? m_dressedFrame;
     private long m_skipHostThrough;
 
     /// <summary>Creates a dresser and its private write capability.</summary>
@@ -182,26 +181,13 @@ public sealed class SdfMeshDresser : IDisposable {
             return Dress(frame: frame);
         }
         if (SdfRowChecks.Enabled) { CheckDress(access: access, frame: frame); }
-        m_writer.Publish();
-        if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.PickMap)) { m_map = ((frame.PickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
-        SdfMeshStagingCause? cause = (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null));
-        // An input frame that stands, dressed to the same rows, is answered by the frame it was answered with: the copy
-        // is made only when the rows, their journal or the pick map moved, and its identity lets the tables see a stand.
-        var result = (((m_dressedFrame is { } held) && ReferenceEquals(objA: held.Input, objB: frame) && ReferenceEquals(objA: held.Result.MeshRows, objB: m_rows) &&
-            ReferenceEquals(objA: held.Result.PickMap, objB: m_map) && (held.Result.MeshDrawsRevision == m_rows.Revision) &&
-            ReferenceEquals(objA: held.Result.MeshDrawChanges, objB: m_rows.Changes) && (held.Result.MeshDrawChangesSerial == m_rows.Serial) &&
-            (held.Result.MeshDrawChangesCause == cause))
-            ? held.Result
-            : (frame with {
-                MeshRows = m_rows,
-                PickMap = m_map,
-                MeshDrawsRevision = m_rows.Revision,
-                MeshDrawChanges = m_rows.Changes,
-                MeshDrawChangesSerial = m_rows.Serial,
-                MeshDrawChangesCause = cause,
-            }));
+        m_writer.Publish(cause: (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null)));
+        if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.HostPickMap)) { m_map = ((frame.HostPickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
+        // The frame answers with this dresser's rows and map by reference, so a frame that stands is the frame answered
+        // and no copy is made. A frame another dresser dressed is copied first: its rows are theirs to keep.
+        var result = (((frame.MeshRows is null) || ReferenceEquals(objA: frame.MeshRows, objB: m_rows)) ? frame : (frame with { }));
 
-        m_dressedFrame = (frame, result);
+        result.AdoptDressing(rows: m_rows, picks: m_map);
 
         if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; }
         for (var i = 0; (i < m_copies.Length); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
@@ -244,7 +230,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void StartOver() {
         m_writer.StartOver();
         m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
-        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear(); m_dressedFrame = null;
+        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear();
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
         for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }

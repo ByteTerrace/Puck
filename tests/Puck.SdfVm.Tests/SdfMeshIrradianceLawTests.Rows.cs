@@ -18,7 +18,7 @@ public sealed partial class SdfMeshIrradianceLawTests {
             for (var i = 0; (i < source.Length); i++) { writer.Set(run, i, source[(reverse ? ((source.Length - 1) - i) : i)], new(Host: i)); }
             writer.Publish();
         }
-        SdfFrame Current() => input with { MeshRows = rows, MeshDrawsRevision = rows.Revision, MeshDrawChanges = rows.Changes, MeshDrawChangesSerial = rows.Serial };
+        SdfFrame Current() => input with { MeshRows = rows };
         var volume = Volume();
 
         Publish(reverse: false);

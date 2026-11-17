@@ -21,12 +21,7 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
             var authored = new SdfMeshDraw[12][];
             var random = new Random(Seed: 0x51df);
 
-            SdfFrame FrameNow() => Frame(program: rig.LiveProgram, time: 0, transforms: Transforms(slots: 1)) with {
-                MeshRows = rows,
-                MeshDrawsRevision = rows.Revision,
-                MeshDrawChanges = rows.Changes,
-                MeshDrawChangesSerial = rows.Serial,
-            };
+            SdfFrame FrameNow() => Frame(program: rig.LiveProgram, time: 0, transforms: Transforms(slots: 1)) with { MeshRows = rows };
             void Put(int owner, int count, SdfMeshDraw draw) {
                 var old = runs[owner];
                 var run = ((old.Count == count) ? old : writer.Allocate(count: count));
