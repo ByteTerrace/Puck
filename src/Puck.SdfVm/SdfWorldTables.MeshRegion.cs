@@ -134,6 +134,7 @@ public sealed partial class SdfWorldTables {
     private object? m_meshSource;
     private long m_meshSourceRevision;
     private long m_meshSourceSerial;
+    private object? m_meshCauseSource;
     private bool m_meshStaged;
 
     // Consumer identity, captured endpoint and bounds are owned by the cursor; landing never changes row indices.
@@ -350,7 +351,7 @@ public sealed partial class SdfWorldTables {
                 var old = m_stagedDraws[row].Mesh;
                 var mesh = draws[row].Mesh;
                 var occupantChanged = ((draws.Occupancy(row: row) != m_stagedOccupancies[row]) ||
-                    ((draws.Rows is not null) && !ReferenceEquals(objA: m_meshSource, objB: draws.Roster)));
+                    ((draws.Rows is not null) && !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster)));
 
                 if (ReferenceEquals(objA: old, objB: mesh) && !occupantChanged) { continue; }
                 if (occupantChanged && ReferenceEquals(objA: old, objB: mesh) && (mesh is not null)) { m_meshArena.NameRow(index: row, mesh: null); }
@@ -370,7 +371,7 @@ public sealed partial class SdfWorldTables {
         var words = (draws.Count * SdfMeshRecord.DrawWords);
 
         if (m_meshDrawWords.Length < words) { Array.Resize(array: ref m_meshDrawWords, newSize: Math.Max(val1: words, val2: (2 * m_meshDrawWords.Length))); }
-        m_stagingCause = (((frame.MeshDrawChangesSerial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshSource, objB: draws.Roster))
+        m_stagingCause = (((frame.MeshDrawChangesSerial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster))
             ? frame.MeshDrawChangesCause : null);
         _ = StageChangedDraws(candidates: m_owedDraws, draws: draws);
         if (m_meshDrawCount != ((uint)draws.Count)) { m_meshRevision++; }
@@ -379,7 +380,7 @@ public sealed partial class SdfWorldTables {
         m_stagedCount = draws.Count;
         m_meshHistory.RetireAfter(count: draws.Count);
         EnsurePreviousMeshCapacity(count: draws.Count);
-        m_meshSource = draws.Roster; m_meshSourceRevision = frame.MeshDrawsRevision; m_meshSourceSerial = frame.MeshDrawChangesSerial; m_meshStaged = true;
+        m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = frame.MeshDrawsRevision; m_meshSourceSerial = frame.MeshDrawChangesSerial; m_meshStaged = true;
         OrderLanding(draws: draws); CountOwed();
         FinishMeshStaging(frame: frame);
     }
