@@ -74,16 +74,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint x = (local % dims.x);
         uint y = ((local / dims.x) % dims.y);
         uint z = ((local / (dims.x * dims.y)) + plane);
-        float3 cell = row1.xyz;
         // A points lattice (mode two, or three with gradients) samples the point table's entry at the sample's place in
         // the dispatch: a surface point of a contoured mesh whose material the bake reads, or a corner of a crossed cell
-        // of a final lattice whose gradient the contour reads. A grid lattice samples its grid.
+        // of a final lattice whose gradient the contour reads. A grid lattice samples its grid at the spacing its second
+        // row holds; a points lattice's second row holds instead how far its gradient taps lie from each sample
+        // (SdfMeshBakeRequest.TapSpacing, the one place that decides it, which every CPU answer of a lattice reads too).
         bool points = (mode >= 2u);
-        float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * cell)));
-        // The gradient taps lie a sixty-fourth of the contour's finest cell out: a crossing a tap's spacing from a sharp
-        // edge reads both faces' blend, and its tangent plane cuts the edge by about that much (SdfSampledLatticeLawTests
-        // samples the same stencil).
-        float spacing = (0.015625 * min(cell.x, min(cell.y, cell.z)));
+        float3 position = (points ? sdfMeshBakePoints[sample].xyz : (row0.xyz + (float3(x, y, z) * row1.xyz)));
+        float spacing = row1.x;
         uint maskBase = worldInstanceMaskBase(lattice);
         int selector = asint(row1.w);
 
