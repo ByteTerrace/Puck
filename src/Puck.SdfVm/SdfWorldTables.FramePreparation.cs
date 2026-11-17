@@ -13,7 +13,7 @@ public sealed partial class SdfWorldTables {
     // the previous tables usable, so the next frame can retry the same growth.
     private void EnsureDynamicTransformCapacity(int count) {
         if (count <= m_dynamicTransformCapacity) { return; }
-        if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException($"The frame needs {count} transform slots, beyond the packed slot representation."); }
+        if (count > (SdfProgram.MaxDynamicTransformSlot + 1)) { throw new InvalidOperationException(message: $"The frame needs {count} transform slots, beyond the packed slot representation."); }
         var bytes = checked((((long)count) * DynamicTransformByteLength));
 
         // Neither retirement allocates after the region has grown.
@@ -48,35 +48,10 @@ public sealed partial class SdfWorldTables {
         var transforms = frame.DynamicTransforms;
         var moved = frame.MovedTransforms;
 
-        EnsureDynamicTransformCapacity(transforms.Count);
+        EnsureDynamicTransformCapacity(count: transforms.Count);
         var count = transforms.Count;
-        var everything = (
-            !m_dynamicTransformsPacked ||
-            (m_packedTransformCount != count) ||
-            !ReferenceEquals(
-            objA: moved,
-            objB: m_movedTransformsSource
-        ) ||
-            ((moved is null)
-                ? !ReferenceEquals(
-                    objA: transforms,
-                    objB: m_movedTransformsTable
-                )
-                : !moved.TryCollect(
-                    into: m_owedTransforms,
-                    reseated: m_reseatedTransforms,
-                    since: m_movedTransformsSerial,
-                    through: frame.MovedTransformsSerial
-                ))
-        );
-
-        if (moved is null) {
-            m_owedTransforms.Clear();
-        }
-
-        m_movedTransformsSource = moved;
-        m_movedTransformsSerial = frame.MovedTransformsSerial;
-        m_movedTransformsTable = transforms;
+        var everything = m_dynamicCursor.Collect(moved?.Changes, frame.MovedTransformsSerial, transforms, count, 0,
+            m_owedTransforms, m_reseatedTransforms, force: !m_dynamicTransformsPacked);
 
         Span<float> floats = stackalloc float[DynamicTransformWordCount];
         var changed = (!m_dynamicTransformsPacked || (m_packedTransformCount != count));
@@ -108,6 +83,7 @@ public sealed partial class SdfWorldTables {
             }
 
             m_dynamicTransformsPacked = true;
+            m_dynamicCursor.Commit();
             if (changed) { m_dynamicTransformRevision++; }
 
             return changed;
@@ -136,6 +112,7 @@ public sealed partial class SdfWorldTables {
             m_dynamicTransformRevision++;
         }
 
+        m_dynamicCursor.Commit();
         return changed;
     }
     // Writes each packed slot's update tier into its position row's fourth component while a tier view shows
@@ -253,6 +230,7 @@ public sealed partial class SdfWorldTables {
         ScreenCount: BoundScreenCount(),
         ShadeDefaultFirst: m_shadeDefaultFirst
     );
+
     // Frames still to prepare with the hit door's bound forced to zero, and whether the frame being prepared is one.
     private int m_hitBoundArmed;
     private bool m_hitBoundForced;
@@ -267,20 +245,23 @@ public sealed partial class SdfWorldTables {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: frames, other: 1);
         Volatile.Write(location: ref m_hitBoundArmed, value: frames);
     }
+
     /// <summary>Gets the prepared frames <see cref="ForceHitBound"/> still forces.</summary>
     public int HitBoundArmed => Volatile.Read(location: ref m_hitBoundArmed);
+
     // Takes one armed frame for the frame being prepared, on the frame thread, once a preparation.
     internal void AdvanceHitBound() {
         var armed = Volatile.Read(location: ref m_hitBoundArmed);
 
         m_hitBoundForced = false;
         while (armed > 0) {
-            var replaced = Interlocked.CompareExchange(location1: ref m_hitBoundArmed, value: (armed - 1), comparand: armed);
+            var replaced = Interlocked.CompareExchange(comparand: armed, location1: ref m_hitBoundArmed, value: (armed - 1));
 
             if (replaced == armed) { m_hitBoundForced = true; break; }
             armed = replaced;
         }
     }
+
     /// <summary>Gets the live program's instance-mask width, which every pass block carries.</summary>
     public uint InstanceMaskWordCount => ((uint)m_liveInstanceMaskWordCount);
 
@@ -307,7 +288,7 @@ public sealed partial class SdfWorldTables {
                 paramName: nameof(frame)
             );
         }
-        PackShadeDefault(frame);
+        PackShadeDefault(frame: frame);
 
         if (frame.DynamicTransforms.Count < m_requiredDynamicTransformCapacity) {
             throw new ArgumentException(

@@ -14,15 +14,15 @@ namespace Puck.SdfVm;
 //
 // Invariant: a mesh leaves m_meshesOwed, and so may be named by a staged draw record, only once every word of it at its
 // current placement has been copied by a completed submission: CompleteLanding, on the fence the service observed, or
-// the frame upload that writes a moved mesh together with the records naming it. The landing filter in
-// StageMeshRegionCore is the one place a draw is held out while its mesh is owed. A plan that relocates the arena, moves
+// the frame upload that writes a moved mesh together with the records naming it. StageMeshDraw is the one place a row
+// is staged live or absent according to MeshStands. A plan that relocates the arena, moves
 // a mesh, or forgets a placement drops that mesh's progress, so a job taken for its old words records none of them, and
 // one already in flight completes into a progress no longer kept (LandingProgress identity) and lands nothing; its
 // words were queued before any later job's, which rewrites them for the mesh the arena gave them to.
 public sealed partial class SdfWorldTables {
     /// <summary>The stages that read the tables' regions, the mesh region included: what a region copy hands its buffer
     /// to.</summary>
-    internal const GpuStage RegionReaders = (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader);
+    internal const GpuStage RegionReaders = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
 
     // Each owed mesh whose words a job has taken, with how many have been taken and how many have landed.
     private readonly Dictionary<SdfMesh, LandingProgress> m_landing = new(comparer: ReferenceEqualityComparer.Instance);
@@ -30,15 +30,17 @@ public sealed partial class SdfWorldTables {
     // words to take.
     private readonly List<SdfMesh> m_landingOrder = [];
     private readonly HashSet<SdfMesh> m_landingOrdered = new(comparer: ReferenceEqualityComparer.Instance);
+
     private int m_landingCursor;
+
     // The owed meshes named ahead of the draws that the order above does not hold, and the first that may still
     // have words to take: listed again whenever the set named ahead changes, whether or not a draw list is staged.
     private readonly List<SdfMesh> m_landingAhead = [];
+
     private int m_landingAheadCursor;
     // Whether a mesh has landed since the draws were last staged: a frame that stands is staged again then
     // (StageLandedMeshes).
     private bool m_meshLandedSinceStaging;
-
     // The landing jobs submitted and the bytes they carried, the largest one, and those that landed nothing because a
     // plan dropped their progress while they were in flight.
     private long m_landingJobs;
@@ -49,6 +51,7 @@ public sealed partial class SdfWorldTables {
     // A mesh region slot a background slot stages into: past the upload ring's, each reused only after that background
     // slot's job completed.
     private static int MeshLandingSlot(int backgroundSlot) => (FrameRingSize + backgroundSlot);
+
     // The most slices one landing job carries: half the runs a region copy keeps apart, leaving the rest to draw records
     // a frame wrote since its upload.
     private const int LandingSlices = (GpuRegion.MaxCopyRuns / 2);
@@ -92,7 +95,6 @@ public sealed partial class SdfWorldTables {
             if (m_meshesOwed.Contains(mesh: mesh) && !m_landingOrdered.Contains(item: mesh)) { m_landingAhead.Add(item: mesh); }
         }
     }
-
     // Drops the progress of meshes whose words a plan moved or forgot: their next words land from the start, at their
     // current placement.
     private void ForgetLanding(SdfMesh mesh) {
@@ -105,7 +107,6 @@ public sealed partial class SdfWorldTables {
         m_landingCursor = 0;
         m_landingAheadCursor = 0;
     }
-
     // Takes the next owed words in landing order, up to one chunk, from as many meshes as fit and at most LandingSlices of
     // them, each slice one run of the region's copy, so the copy never merges runs across the words between them; none
     // when every ordered mesh's words are taken.
@@ -152,11 +153,13 @@ public sealed partial class SdfWorldTables {
         }
         if (waiting >= 0) { cursor = Math.Min(val1: cursor, val2: waiting); }
     }
-
     // Owes each slice's words at its mesh's current placement and records their copy into the job's slot of the region.
     // A slice whose progress a plan dropped since the take owes nothing: its mesh was moved or forgotten, and the words
     // it was taken for may be another mesh's.
     private void RecordLanding(LandingJob job, in SdfGpuWorkRecording recording) {
+        if (!ReferenceEquals(objA: recording.Queue, objB: m_deviceContext.Services.QueueSubmitter)) {
+            throw new InvalidOperationException(message: "Mesh landing must submit on the tables' frame queue; row reuse requires its order.");
+        }
         foreach (var slice in job.Slices) {
             if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
                 !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement)) { continue; }
@@ -169,7 +172,7 @@ public sealed partial class SdfWorldTables {
         recording.CopyRegion(readers: RegionReaders, region: m_meshRegion, regionSlot: MeshLandingSlot(backgroundSlot: recording.Slot));
         // A mesh sliced over several jobs is written into the scratch once (MeshWordsOf); the scratch lets go of it once
         // its last slice is staged.
-        if (job.Slices[^1] is var last && ((last.Word + last.Count) == last.Progress.Words)) { m_meshWordsMesh = null; }
+        if ((job.Slices[^1] is var last) && ((last.Word + last.Count) == last.Progress.Words)) { m_meshWordsMesh = null; }
 
         var bytes = (((long)job.Words) * sizeof(uint));
 
@@ -178,7 +181,6 @@ public sealed partial class SdfWorldTables {
         m_landingBytes += bytes;
         m_landingMostBytes = Math.Max(val1: m_landingMostBytes, val2: bytes);
     }
-
     // Lands each slice whose progress is still the mesh's: a mesh all of whose words have completed leaves the owed set,
     // and the next staging names its draws. A mesh the staged list does not name (one named ahead) held no draw out,
     // so its landing stages nothing again.
@@ -194,8 +196,10 @@ public sealed partial class SdfWorldTables {
             // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
             // until it renders again) reads resident once they have; any render stages the landed draws first.
             if (m_meshesOwed.Remove(mesh: slice.Mesh) && m_activeOwed.Remove(item: slice.Mesh)) {
-                m_meshStaged = false;
                 m_meshLandedSinceStaging = true;
+                for (var row = m_rowsByMesh.First(key: slice.Mesh); (row >= 0); row = m_rowsByMesh.Next(row: row)) {
+                    m_landedRows.Add(length: 1, start: row);
+                }
                 Volatile.Write(location: ref m_owedWords, value: (m_owedWords - progress.Words));
             }
         }
@@ -208,7 +212,6 @@ public sealed partial class SdfWorldTables {
             }
         }
     }
-
     // The landing's counts for DescribeLanding.
     private string DescribeLandingJobs() => string.Create(provider: CultureInfo.InvariantCulture,
         handler: $"landing-jobs={m_landingJobs} landing-bytes={m_landingBytes}B landing-most={m_landingMostBytes}B landing-stale={m_landingStale} landing-job-most={SdfGpuWork.MostUploadJobBytes}B");
@@ -227,6 +230,7 @@ public sealed partial class SdfWorldTables {
 
         public IReadOnlySet<SdfMesh> Set => m_set;
         public int Count => m_set.Count;
+
         public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
         public void Add(SdfMesh mesh) {
             if (m_set.Add(item: mesh) && arena.Names(mesh: mesh) && m_needed.Add(item: mesh)) { mesh.Need(); }
@@ -274,7 +278,6 @@ public sealed partial class SdfWorldTables {
             m_set.Clear();
         }
     }
-
     private sealed class LandingProgress(int words) {
         public int Words { get; } = words;
         public int Taken { get; set; }
@@ -285,7 +288,6 @@ public sealed partial class SdfWorldTables {
         public List<LandingSlice> Slices { get; } = [];
         public int Words { get; set; }
     }
-
     // The background GPU work's client that lands the mesh region's owed words; the tables own its state, and every call
     // runs on the frame thread.
     private sealed class MeshLanding(SdfWorldTables tables) : ISdfGpuWorkClient {
@@ -293,7 +295,7 @@ public sealed partial class SdfWorldTables {
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
 
         public bool TryTake(SdfWorldTables current, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
-            if (current.TryTakeLanding(uploadBytes: uploadBytes, job: out var landing)) {
+            if (current.TryTakeLanding(job: out var landing, uploadBytes: uploadBytes)) {
                 job = landing;
                 estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: (((long)landing.Words) * sizeof(uint)));
                 return true;
@@ -303,13 +305,13 @@ public sealed partial class SdfWorldTables {
             return false;
         }
         public int UploadBytes(object job) => (((LandingJob)job).Words * sizeof(uint));
-        public void Record(object job, in SdfGpuWorkRecording recording) => tables.RecordLanding(job: (LandingJob)job, recording: in recording);
+        public void Record(object job, in SdfGpuWorkRecording recording) => tables.RecordLanding(job: ((LandingJob)job), recording: in recording);
         public void Complete(object job, SdfGpuWorkReadback readback) {
             readback.Release();
-            tables.CompleteLanding(job: (LandingJob)job);
+            tables.CompleteLanding(job: ((LandingJob)job));
         }
         public void Abandon(object job) {
-            if (!tables.m_disposed) { tables.AbandonLanding(job: (LandingJob)job); }
+            if (!tables.m_disposed) { tables.AbandonLanding(job: ((LandingJob)job)); }
         }
         public void Dispose() { }
     }

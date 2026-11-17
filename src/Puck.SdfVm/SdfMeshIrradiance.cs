@@ -326,6 +326,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={(m_scene?.HierarchyBytes ?? 0)} {GpuTrace?.DescribeMemory()}");
     }
+
     // The probe caches' table and block bytes over every level, as DescribeCache prints them.
     private long CacheBytes() {
         var (table, blocks, _, _) = CacheFigures();
@@ -421,13 +422,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     private int m_sceneKey;
     private int m_buildingKey;
+
     // The static-draw key as StaticKey last folded it, and what it read: the list and its journal, the journal serial and
     // list revision, and per draw whether it was static and its own hash. A frame whose journal names only rows that are
     // and were not static, or that hash as they did, keeps the key without reading the rest of the list.
-    private IReadOnlyList<SdfMeshDraw>? m_keyList;
-    private Puck.Abstractions.Gpu.GpuChangedRows? m_keyJournal;
-    private long m_keySerial;
-    private long m_keyRevision;
+    private readonly Puck.Abstractions.Gpu.GpuRowCursor m_keyCursor = new();
+
     private int m_keyValue;
     private int m_keyStatic;
 
@@ -774,7 +774,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static readonly WaitReason RefillWait = new(Subsystem: SourceName, WaitsFor: "a converging frame's window refill");
     private static readonly WaitReason YieldWait = new(Subsystem: SourceName, WaitsFor: "the background trace yielding to a converging frame");
     private static readonly WaitReason DrainWait = new(Subsystem: SourceName, WaitsFor: "a converging frame's drain");
-
     // How long a lighting-converged frame's waits may take in all, counted from its convergence's first wait and never
     // restarted by a later frame: off the pump, the longest a caller blocks for one convergence. Its expiry gives up
     // nothing: a frame past it answers waiting at once until its work lands, and a debug world's whole convergence on
@@ -1422,16 +1421,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var journal = frame.MeshDrawChanges;
 
         if (
-            ReferenceEquals(objA: meshDraws, objB: m_keyList) &&
-            (journal is not null) &&
-            ReferenceEquals(objA: journal, objB: m_keyJournal) &&
-            (meshDraws.Count == m_drawKeys.Length) &&
-            !((frame.MeshDrawsRevision != m_keyRevision) && (frame.MeshDrawChangesSerial <= m_keySerial)) &&
-            journal.TryCollect(since: m_keySerial, through: frame.MeshDrawChangesSerial, into: m_keyRuns) &&
+            !m_keyCursor.Collect(journal, frame.MeshDrawChangesSerial, meshDraws, meshDraws.Count,
+                frame.MeshDrawsRevision, m_keyRuns) &&
             JournalKeepsKey(meshDraws: meshDraws)
         ) {
-            m_keySerial = frame.MeshDrawChangesSerial;
-            m_keyRevision = frame.MeshDrawsRevision;
+            m_keyCursor.Commit();
 
             return (m_keyValue, m_keyStatic);
         }
@@ -1454,10 +1448,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             draws++;
         }
 
-        m_keyList = meshDraws;
-        m_keyJournal = journal;
-        m_keySerial = frame.MeshDrawChangesSerial;
-        m_keyRevision = frame.MeshDrawsRevision;
+        m_keyCursor.Commit();
         m_keyValue = key;
         m_keyStatic = draws;
 

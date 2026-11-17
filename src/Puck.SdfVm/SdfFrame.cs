@@ -29,14 +29,12 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
 
     /// <summary>The camera's cut revision, moved when its framing is reseeded or a layout slot changes its source.</summary>
     public long CutRevision { get; init; }
-
     /// <summary>The pixels high the mesh demand measures the view's projected sizes in (<see cref="SdfMeshDemand"/>)
     /// when the view renders into an image apart from the residency's output: a camera filmed for a screen its own
     /// image's height, and a window fitted to its glass the display pixels the glass spans from the viewer's eye, since
     /// its image is the viewer's own view carried through the glass. Zero, the default, for a view whose region places
     /// it in the residency's output.</summary>
     public float DemandHeight { get; init; }
-
     /// <summary>Whether the view demands meshes only inside its frustum (<see cref="SdfMeshDemand"/>): a window fitted
     /// to its glass, whose frustum is the aperture from the viewer's eye however the viewer turns, so nothing beside or
     /// before the glass can enter its image without the viewer walking. <see langword="false"/>, the default, for a view
@@ -185,6 +183,7 @@ public sealed record SdfFrame(
         get => (m_sampled ?? Program.Sampled);
         init => m_sampled = value;
     }
+
     private SdfSampledSet? m_sampled;
 
     /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
@@ -209,10 +208,12 @@ public sealed record SdfFrame(
         get => m_movedTransforms;
         init {
             m_movedTransforms = value;
-            MovedTransformsSerial = value?.Serial ?? 0;
+            MovedTransformsSerial = (value?.Serial ?? 0);
         }
     }
+
     private SdfMovedTransforms? m_movedTransforms;
+
     /// <summary>Gets the moved-set endpoint captured with this frame's borrowed transform table.</summary>
     public long MovedTransformsSerial { get; private init; }
 
@@ -237,7 +238,7 @@ public sealed record SdfFrame(
     public long MeshDrawsRevision { get; init; }
     /// <summary>Gets the producer's bounded draw-row changes, or null when a consumer must compare the revised list.
     /// The list and journal are borrowed together until their producer next rewrites them.</summary>
-    public GpuChangedRows? MeshDrawChanges { get; init; }
+    public GpuRowChanges? MeshDrawChanges { get; init; }
     /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. Consumers collect only through this
     /// serial and retain their own staged records when a later producer frame rewrites the borrowed list.</summary>
     public long MeshDrawChangesSerial { get; init; }
@@ -278,6 +279,7 @@ public sealed record SdfFrame(
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;
+
     /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
     /// before temporal reconstruction; the default is off.</summary>
     public SdfToon Toon { get; init; }
@@ -286,8 +288,9 @@ public sealed record SdfFrame(
     /// <summary>The authored default for materials that omit a program. Runtime overrides upload only presentation data.</summary>
     public SdfShadeProgram? ShadeDefault { get; init; }
     /// <summary>All programs the frame's shading jobs may invoke.</summary>
-    public IEnumerable<SdfShadeProgram> ShadingPrograms => ShadeDefault is { } fallback
-        ? Program.Appearance.ShadingPrograms.Append(fallback) : Program.Appearance.ShadingPrograms;
+    public IEnumerable<SdfShadeProgram> ShadingPrograms => ((ShadeDefault is { } fallback)
+        ? Program.Appearance.ShadingPrograms.Append(element: fallback) : Program.Appearance.ShadingPrograms);
+
     /// <summary>Gets every program the documents behind the frame declare, which the residency specializes together with
     /// the frame's active programs (<see cref="ShadingPrograms"/>), so its specialized kernels do not change while the
     /// scene's composition does. The emitter passes one list for one set of documents, compared by reference; empty
@@ -362,11 +365,9 @@ public sealed record SdfFrame(
 
     /// <summary>Gets requested feedback sweeps after direct, capped by the tier. Null uses its layout limit.</summary>
     public int? IndirectBounces { get; init; }
-
     /// <summary>Gets the irradiance work each frame grants the volume and the lighting age it reports past; the default
     /// bounds nothing.</summary>
     public SdfIndirectBudget IndirectBudget { get; init; }
-
     /// <summary>The fixed angular and radiometric grids used by indirect captures. Zero leaves values continuous.</summary>
     public SdfIndirectLightingGrid IndirectLightingGrid { get; init; }
 
@@ -379,7 +380,6 @@ public sealed record SdfFrame(
     /// state mirror of the world the frame draws, never from <see cref="Time"/>, which advances by wall-clock
     /// deltas, so a frame at a given tick and fraction draws the same sky and media on every run.</summary>
     public PresentedTick Clock { get; init; }
-
     /// <summary>Gets the world's four render lanes (<see cref="SdfLanes"/> 4 to 7), which every surface reads alike: the
     /// host resolves them from the world's state at the frame's presented tick, as it resolves the sky's bindings, and the
     /// pass block carries them (<c>SdfWorldPackage.WorldLanes</c>). Zero where the world authors none.</summary>

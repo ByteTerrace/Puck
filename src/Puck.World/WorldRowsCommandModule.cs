@@ -9,21 +9,43 @@ namespace Puck.World;
 /// pass blocks a mesh draw count of zero while the mesh and glass passes still draw into their targets
 /// (<see cref="SdfVm.SdfWorldTables.ForceHitBound"/>), so every hit a pass reads is rejected by the mesh hit door, shades
 /// as a miss and is counted in <c>world.counters gpu counter mesh-hits</c>; <c>status</c> prints what is armed. Each
-/// form answers <c>[world.rows: hit-bound=&lt;frames&gt;]</c>, the forced frames still to prepare. The verb answers the
-/// operator alone, and refuses until the renderer is built.
+/// hit-bound form answers the forced frames still to prepare. <c>check on|off</c> enables the independent pack,
+/// generation ledger, seed and quiescent device comparisons in <c>sdf.rows.check</c>, including after device loss.
+/// <c>force limit bytes|auto</c> caps admission through the arena's placing function; <c>force relocate</c> packs its
+/// meshes; <c>force skip tables</c> leaves that consumer's cursor uncommitted beyond its retained history. The existing
+/// <c>host.memory collect</c> and <c>gpu.faults lose</c> force trim and replacement tables. The verb answers the
+/// operator alone; forcing forms refuse until the renderer is built.
 /// </summary>
 /// <param name="probe">The live render objects, whose world residency the levers act on.</param>
 public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandModule {
     private const string Verb = "world.rows";
-    private static readonly CommandForms WorldRowsForms = CommandForms.Of(verb: Verb, "force hit-bound [<frames>]", "status");
+
+    private static readonly CommandForms WorldRowsForms = CommandForms.Of(verb: Verb, "check <on|off>",
+        "force hit-bound [<frames>]", "force limit <bytes|auto>", "force relocate", "force skip tables", "status");
 
     private CommandResult Handle(WireArgs args) {
+        if ((args.Count == 2) && args.Is(index: 0, value: "check") && (args.Is(index: 1, value: "on") || args.Is(index: 1, value: "off"))) {
+            SdfVm.SdfRowChecks.Enabled = args.Is(index: 1, value: "on");
+            return new(Output: $"[{Verb}: check={(SdfVm.SdfRowChecks.Enabled ? "on" : "off")}]");
+        }
         if (probe.Residency?.Tables is not { } tables) {
             return CommandResult.Error(output: $"[{Verb}: the renderer has not been built]");
         }
 
         if ((args.Count == 1) && args.Is(index: 0, value: "status")) {
-            return Describe(armed: tables.HitBoundArmed);
+            return new(Output: $"[{Verb}: check={(SdfVm.SdfRowChecks.Enabled ? "on" : "off")} hit-bound={tables.HitBoundArmed} failure={(tables.RowCheckFailure ?? "none")}]");
+        }
+        if ((args.Count == 2) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "relocate")) {
+            tables.ForceMeshRelocation();
+            return new(Output: $"[{Verb}: relocation armed]");
+        }
+        if ((args.Count == 3) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "skip") && args.Is(index: 2, value: "tables")) {
+            tables.ForceSkipTables();
+            return new(Output: $"[{Verb}: tables cursor skip armed]");
+        }
+        if ((args.Count == 3) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "limit")) {
+            if (args.Is(index: 2, value: "auto")) { tables.ForceMeshLimit(bytes: null); } else if (ulong.TryParse(args[2], NumberStyles.None, CultureInfo.InvariantCulture, out var bytes)) { tables.ForceMeshLimit(bytes: bytes); } else { return WorldRowsForms.Refuse(args: in args); }
+            return new(Output: $"[{Verb}: admission limit armed]");
         }
 
         if ((args.Count is < 2 or > 3) || !args.Is(index: 0, value: "force") || !args.Is(index: 1, value: "hit-bound")) {
@@ -48,7 +70,7 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
-            description: $"Forces a guarded path of the world residency's draw rows, so a check counts what an ordinary run does not reach (operator only): {WorldRowsForms.Spelling}. force hit-bound gives the next frames' pass blocks (default 1) a mesh draw count of zero while the mesh and glass passes still draw into their targets, so the mesh hit door rejects every hit a pass reads: the surface pass writes a miss, the glass pass shades no glass there, the reprojection answers no previous point, and each rejection counts in world.counters gpu counter mesh-hits (gpu.mesh-hits.rejected), which reads zero on every frame it does not force. status prints what is armed. Each form prints hit-bound=<frames>, the forced frames still to prepare.",
+            description: $"Operator row checks and forcing levers: {WorldRowsForms.Spelling}. check compares packing, an independent generation ledger, previous-matrix seeds and quiescent device bytes; world.counters sdf.rows.check reads comparisons, mismatches and forcing counts. force limit caps admission in bytes (auto restores the device limit). force relocate packs the mesh arena. force skip tables leaves the table cursor uncommitted beyond journal history. host.memory collect forces trim; gpu.faults lose creates new tables. force hit-bound zeroes the next frames' reader bound (default 1), so hits become counted misses in gpu.mesh-hits.rejected. status prints the check state, hit-bound frames and first comparison failure.",
             forms: WorldRowsForms,
             handler: (_, args) => Handle(args: args),
             name: Verb

@@ -1,5 +1,4 @@
 using Puck.Abstractions.Gpu;
-using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
@@ -35,16 +34,12 @@ public sealed partial class SdfWorldTables {
 
     // One observation door supplies both matrix seed decisions and the GPU history generation.
     private readonly SdfMeshHistory m_meshHistory = new();
-
     // Mesh history consumes the transform journal independently of the dynamic-table and draw-journal cursors.
     // A successful stage commits this endpoint, while GPU seed runs remain pending until Upload consumes them.
-    private SdfMovedTransforms? m_meshTransformsSource;
-    private IReadOnlyList<DynamicTransform>? m_meshTransformsTable;
-    private long m_meshTransformsSerial;
+    private readonly GpuRowCursor m_meshTransformCursor = new();
+    private readonly GpuUploadRuns m_meshTransformChanges = new(capacity: GpuRegion.MaxCopyRuns);
+
     private ulong m_meshTransformsGeometryRevision;
-
-    private int m_meshTransformsCount = -1;
-
     private int m_meshCutTransformCount;
     private bool m_meshTransformCutsAll;
 
@@ -54,22 +49,19 @@ public sealed partial class SdfWorldTables {
     private void PrepareMeshTransformCuts(SdfFrame frame) {
         m_meshTransformReseats.Clear();
         m_reseatedDraws.Clear();
+        m_namedRowCuts.Clear();
         m_meshCutTransformCount = frame.DynamicTransforms.Count;
         var moved = frame.MovedTransforms;
 
-        m_meshTransformCutsAll = ((m_meshTransformsCount != m_meshCutTransformCount) ||
-            (m_meshTransformsGeometryRevision != m_programGeometryRevision) ||
-            !ReferenceEquals(objA: moved, objB: m_meshTransformsSource) ||
-            ((moved is null)
-                ? !ReferenceEquals(objA: frame.DynamicTransforms, objB: m_meshTransformsTable)
-                : !moved.TryCollect(since: m_meshTransformsSerial, through: frame.MovedTransformsSerial,
-                    into: null, reseated: m_meshTransformReseats)));
+        m_meshTransformCutsAll = m_meshTransformCursor.Collect(moved?.Changes, frame.MovedTransformsSerial,
+            frame.DynamicTransforms, m_meshCutTransformCount, 0, m_meshTransformChanges, m_meshTransformReseats,
+            force: (m_meshTransformsGeometryRevision != m_programGeometryRevision));
 
         if (m_meshTransformCutsAll) { SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.ReseatFallbacks); }
         if (!m_meshTransformCutsAll && (m_meshTransformReseats.Count == 0)) { return; }
 
         // A roster walk is needed only on a cut, never for ordinary continuous movement. These indices are used only
-        // with the complete producer roster; the observation door rechecks actual draws after landing filters.
+        // with the producer roster, whose row indices are also the staged indices.
         var draws = frame.MeshDraws;
 
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatDrawsScanned, draws.Count);
@@ -80,10 +72,7 @@ public sealed partial class SdfWorldTables {
         }
     }
     private void CommitMeshTransformCuts(SdfFrame frame) {
-        m_meshTransformsSource = frame.MovedTransforms;
-        m_meshTransformsTable = frame.DynamicTransforms;
-        m_meshTransformsSerial = frame.MovedTransformsSerial;
-        m_meshTransformsCount = frame.DynamicTransforms.Count;
+        m_meshTransformCursor.Commit();
         m_meshTransformsGeometryRevision = m_programGeometryRevision;
     }
     private bool MeshTransformWasReseated(in SdfMeshDraw draw) {
@@ -258,33 +247,55 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging.
     private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
-        var observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: MeshTransformWasReseated(draw: in draw));
+        var absent = !MeshStands(mesh: draw.Mesh);
+        var wasAbsent = m_absentRows.Contains(item: index);
+        Span<uint> before = stackalloc uint[SdfMeshRecord.DrawWords];
+
+        if (incremental && (absent || wasAbsent)) { record.CopyTo(destination: before); }
+        var observation = default(SdfMeshObservation);
         var packedWords = SdfMeshRecord.DrawWords;
         var changedWords = 0UL;
 
-        if (incremental) {
-            // Incremental staging admits only standing arena addresses. An unchanged mesh already names its
-            // placement in this retained record; only a mesh replacement needs the arena's reference lookup.
-            var placement = (ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)
-                ? SdfMeshRegion.ReadPlacement(record: record)
-                : m_meshArena.Placements[draw.Mesh]);
-            var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
-                placement: placement, generation: observation.Generation, record: record);
-
-            packedWords = work.PackedWords;
-            changedWords = work.ChangedWords;
-            if (work.NormalComputed) { tally.Normals++; }
-            if (work.SelectionComputed) { tally.Selections++; }
+        if (absent) {
+            m_meshHistory.Retire(index: index);
+            SdfMeshRegion.WriteAbsent(record: record);
+            _ = m_absentRows.Add(item: index);
+            if (m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
         } else {
-            SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
-            tally.Normals++;
-            tally.Selections++;
+            var reseat = MeshTransformWasReseated(draw: in draw);
+
+            if (reseat) { _ = m_namedRowCuts.Add(item: index); }
+            observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat);
+            _ = m_absentRows.Remove(item: index);
+            if (incremental && !wasAbsent) {
+                // Both ordinary edits and landing use the arena's current placement, never an absent record's zeros.
+                var placement = m_meshArena.Placements[draw.Mesh];
+                var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
+                    placement: placement, generation: observation.Generation, record: record);
+
+                packedWords = work.PackedWords;
+                changedWords = work.ChangedWords;
+                if (work.NormalComputed) { tally.Normals++; }
+                if (work.SelectionComputed) { tally.Selections++; }
+            } else {
+                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+                tally.Normals++;
+                tally.Selections++;
+            }
         }
+        if (incremental && (absent || wasAbsent)) {
+            for (var word = 0; (word < record.Length); word++) { if (record[word] != before[word]) { changedWords |= (1UL << word); } }
+        }
+        if (!absent && draw.Glass) { _ = m_glassIndices.Add(item: index); } else { _ = m_glassIndices.Remove(item: index); }
+        m_glassDrawCount = ((uint)m_glassIndices.Count);
+        m_meshRevision++;
         tally.Records++;
-        if (incremental && !ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)) { tally.HandOvers++; }
+        if (incremental && wasAbsent && !absent) { tally.Landings++; } else if (incremental && !ReferenceEquals(objA: draw.Mesh, objB: m_stagedDraws[index].Mesh)) { tally.HandOvers++; }
         tally.RecordBytes += (packedWords * sizeof(uint));
+        if (absent) { return changedWords; }
         if (observation.Seed) {
             m_seededMeshDraws.Add(length: 1, start: index);
+            if (wasAbsent) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.ReturnedLive); }
             return changedWords;
         }
         var offset = (index * SdfMeshRegion.DrawBytes);
@@ -308,6 +319,7 @@ public sealed partial class SdfWorldTables {
         public long Selections;
         public long Records;
         public long HandOvers;
+        public long Landings;
         public long RecordBytes;
         public long Matrices;
 
@@ -316,10 +328,11 @@ public sealed partial class SdfWorldTables {
             Span<long> causes = stackalloc long[SdfMeshStagingCauses.Count];
 
             if (cause is { } single) {
-                causes[(int)single] = Records;
+                causes[((int)single)] = Records;
             } else {
-                causes[(int)SdfMeshStagingCause.HandOver] = HandOvers;
-                causes[(int)SdfMeshStagingCause.Pose] = (Records - HandOvers);
+                causes[((int)SdfMeshStagingCause.HandOver)] = HandOvers;
+                causes[((int)SdfMeshStagingCause.Landing)] = Landings;
+                causes[((int)SdfMeshStagingCause.Pose)] = ((Records - HandOvers) - Landings);
             }
             work.Add(kind: SdfMeshHistory.NormalMatricesComputed, amount: Normals);
             work.Add(kind: SdfMeshHistory.SelectionBoxesComputed, amount: Selections);

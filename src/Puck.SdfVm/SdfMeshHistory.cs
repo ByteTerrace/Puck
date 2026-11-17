@@ -30,7 +30,7 @@ public sealed class SdfMeshHistory {
     public static WorkKind Reseated { get; } = Registry.Declare(name: "sdf.instances.reseated", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts observations starting a new surface incarnation.</summary>
     public static WorkKind Seeded { get; } = Registry.Declare(name: "sdf.instances.seeded", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Counts live cells retired when their staged list shrinks.</summary>
+    /// <summary>Counts live cells retired by absence or a vanished suffix.</summary>
     public static WorkKind Retired { get; } = Registry.Declare(name: "sdf.instances.retired", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts continuous observations whose object-to-world matrix changed.</summary>
     public static WorkKind MatricesChanged { get; } = Registry.Declare(name: "sdf.instances.matrices.changed", unit: "count", workClass: WorkClass.Pacing);
@@ -89,10 +89,11 @@ public sealed class SdfMeshHistory {
     public static WorkKind PeakRowsPlanned { get; } = Registry.DeclarePeak(name: "sdf.instances.peak.rows.planned", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the most rows one staging's draw list held since the peaks were last cleared.</summary>
     public static WorkKind PeakRowsExtent { get; } = Registry.DeclarePeak(name: "sdf.instances.peak.rows.extent", unit: "count", workClass: WorkClass.Pacing);
-    private static readonly WorkKind[] RowsPackedKinds = DeclareCauses(prefix: "sdf.instances.rows.packed", peak: false);
-    private static readonly WorkKind[] FramesKinds = DeclareCauses(prefix: "sdf.instances.frames", peak: false);
-    private static readonly WorkKind[] FramesOverChunkKinds = DeclareCauses(prefix: "sdf.instances.frames.over-chunk", peak: false);
-    private static readonly WorkKind[] PeakRowsPackedKinds = DeclareCauses(prefix: "sdf.instances.peak.rows.packed", peak: true);
+
+    private static readonly WorkKind[] RowsPackedKinds = DeclareCauses(peak: false, prefix: "sdf.instances.rows.packed");
+    private static readonly WorkKind[] FramesKinds = DeclareCauses(peak: false, prefix: "sdf.instances.frames");
+    private static readonly WorkKind[] FramesOverChunkKinds = DeclareCauses(peak: false, prefix: "sdf.instances.frames.over-chunk");
+    private static readonly WorkKind[] PeakRowsPackedKinds = DeclareCauses(peak: true, prefix: "sdf.instances.peak.rows.packed");
     private static readonly WorkKind[] TopologyBuildKinds = DeclareTopologyReasons();
 
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
@@ -107,26 +108,26 @@ public sealed class SdfMeshHistory {
     /// causes' totals sum to <see cref="RecordsPacked"/>.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The <c>sdf.instances.rows.packed.&lt;cause&gt;</c> kind.</returns>
-    public static WorkKind RowsPackedOf(SdfMeshStagingCause cause) => RowsPackedKinds[(int)cause];
+    public static WorkKind RowsPackedOf(SdfMeshStagingCause cause) => RowsPackedKinds[((int)cause)];
     /// <summary>Returns the kind counting the stagings that packed a record under a cause.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The <c>sdf.instances.frames.&lt;cause&gt;</c> kind.</returns>
-    public static WorkKind FramesOf(SdfMeshStagingCause cause) => FramesKinds[(int)cause];
+    public static WorkKind FramesOf(SdfMeshStagingCause cause) => FramesKinds[((int)cause)];
     /// <summary>Returns the kind counting the stagings whose records under a cause number more than
     /// <see cref="ChunkRecords"/>.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The <c>sdf.instances.frames.over-chunk.&lt;cause&gt;</c> kind.</returns>
-    public static WorkKind FramesOverChunkOf(SdfMeshStagingCause cause) => FramesOverChunkKinds[(int)cause];
+    public static WorkKind FramesOverChunkOf(SdfMeshStagingCause cause) => FramesOverChunkKinds[((int)cause)];
     /// <summary>Returns the peak kind holding the most records one staging packed under a cause since the peaks were
     /// last cleared.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The <c>sdf.instances.peak.rows.packed.&lt;cause&gt;</c> kind.</returns>
-    public static WorkKind PeakRowsPackedOf(SdfMeshStagingCause cause) => PeakRowsPackedKinds[(int)cause];
+    public static WorkKind PeakRowsPackedOf(SdfMeshStagingCause cause) => PeakRowsPackedKinds[((int)cause)];
     /// <summary>Returns the kind counting the dresser's topology rebuilds for which a reason was the first that fired.
     /// The six reasons' totals sum to <see cref="DressTopologyBuilds"/>.</summary>
     /// <param name="reason">The reason.</param>
     /// <returns>The <c>sdf.instances.dress.topology-builds.&lt;reason&gt;</c> kind.</returns>
-    public static WorkKind TopologyBuildsOf(SdfMeshTopologyReason reason) => TopologyBuildKinds[(int)reason];
+    public static WorkKind TopologyBuildsOf(SdfMeshTopologyReason reason) => TopologyBuildKinds[((int)reason)];
 
     /// <summary>Publishes the records one staging packed under each cause: each cause's total, its staging count, its
     /// over-chunk count and its peak. <paramref name="records"/> is indexed by <see cref="SdfMeshStagingCause"/>, and its
@@ -148,7 +149,7 @@ public sealed class SdfMeshHistory {
         var kinds = new WorkKind[SdfMeshStagingCauses.Count];
 
         for (var cause = 0; (cause < kinds.Length); cause++) {
-            var name = $"{prefix}.{SdfMeshStagingCauses.NameOf(cause: (SdfMeshStagingCause)cause)}";
+            var name = $"{prefix}.{SdfMeshStagingCauses.NameOf(cause: ((SdfMeshStagingCause)cause))}";
 
             kinds[cause] = (peak
                 ? Registry.DeclarePeak(name: name, unit: "count", workClass: WorkClass.Pacing)
@@ -188,6 +189,16 @@ public sealed class SdfMeshHistory {
     /// <summary>Gets the prefix that may contain live observed cells. Capacity and retired generation storage do not shrink.</summary>
     public int ActiveCount => m_activeCount;
 
+    /// <summary>Retires one row without reusing its generation lifetime. Its next observation seeds even if the
+    /// returning draw has the same identity.</summary>
+    /// <param name="index">The nonnegative row.</param>
+    public void Retire(int index) {
+        ArgumentOutOfRangeException.ThrowIfNegative(index);
+        if ((index >= m_cells.Length) || (m_cells[index].Key is null)) { return; }
+        m_cells[index].Key = null;
+        m_cells[index].Mesh = null;
+        ProcessWork.Count(kind: Retired);
+    }
     /// <summary>Observes a surface at its staged index. Ordinary matrix motion retains its generation; changes to
     /// stable motion key, mesh, slot interpretation, clipping/carry or semantic flags, and explicit transform cuts,
     /// seed both CPU and GPU history.</summary>
@@ -231,9 +242,10 @@ public sealed class SdfMeshHistory {
         return new(Generation: cell.Generation, Seed: seed);
     }
     /// <summary>Retires a vanished suffix without reusing its generations. Passing zero retires an empty draw list.</summary>
-    /// <param name="count">The staged list's current length, at most the observed prefix.</param>
+    /// <param name="count">The staged table's current extent, including absent rows with no observed cell.</param>
     public void RetireAfter(int count) {
-        if ((count < 0) || (count > m_activeCount)) { throw new ArgumentOutOfRangeException(paramName: nameof(count)); }
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        count = Math.Min(val1: count, val2: m_activeCount);
         var retired = 0;
 
         for (var index = count; (index < m_activeCount); index++) {

@@ -9,31 +9,31 @@ namespace Puck.SdfVm;
 // composability last packed, packs nothing, and any other packs its draw records and only the meshes the arena newly
 // placed: a body that moves rewrites its record's matrix, and a mesh that lands writes its own words, never the meshes
 // already placed. Placed meshes land through the background GPU work (SdfWorldTables.MeshLanding.cs), those the views see
-// largest first (MeshDemand), and a draw whose mesh is still owed waits out of the staged records until it lands, so a
+// largest first (MeshDemand), and an owed draw keeps its producer row as an absent record until it lands, so a
 // boot, a relocation or a body crossing into a world with all its meshes at once fills in over several frames from the
 // cameras outward rather than staging every word in one upload. The region is created with the tables, one draw record
 // long so every set that binds it binds a buffer, and grows to the need plus an eighth without waiting for the device, the
 // next upload carrying the words it held on the GPU; a frame without draws keeps it. It never grows past its limit
 // (MeshRegionLimitBytes), a share of the device's memory: a mesh the arena finds no room for under it is refused, its
-// draws wait out of the staged records like an owed mesh's, and the bake coarsens what the views can spare until the
+// draws stay absent like an owed mesh's, and the bake coarsens what the views can spare until the
 // list fits (SdfMeshPathBake.ObserveResidency). A mesh that replaces one a draw reads is named ahead of the draws
 // (NameMeshesAhead) and lands beside the one it replaces, which the draws read until the new mesh stands
 // (MeshStands), so the swap holds no draw out of a frame. A view's mesh pass reads the draws' triangles from it, and
 // primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena;
+
     private long m_meshPlacementVersion;
 
     // Called only during a background admission on the frame thread. An owed geometry is never bound.
     internal bool TryProbeScene(SdfMeshIrradianceScene scene, out IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> placements, out IGpuBuffer meshes, out long version) {
         placements = m_meshArena.Placements;
-        meshes = m_meshRegion.Buffer(m_currentSlot);
+        meshes = m_meshRegion.Buffer(slot: m_currentSlot);
         version = m_meshPlacementVersion;
-        return BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed.Set);
+        return (BindsBackgroundWork && (m_meshRequiredUpload <= m_uploads) && scene.HasGpuPlacements(placements, m_meshesOwed.Set));
     }
-
     internal GpuRegion CreateProbeSceneRegion(int bytes, int slots = 1) => new(
-        policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(m_deviceContext.MemoryProfile),
+        policy: GpuResidencyPolicy.Staged, memory: GpuResidency.RingMemory(profile: m_deviceContext.MemoryProfile),
         byteCount: bytes, slotCount: slots, buffers: m_gpu.BufferFactory, bindings: m_gpu.Bindings,
         recorder: m_gpu.Recorder, copyPipeline: m_regionCopyPipeline, name: NameOf("probe-scene"));
 
@@ -53,6 +53,7 @@ public sealed partial class SdfWorldTables {
     internal void ServiceMemoryTrim() {
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
             m_meshArena.TrimUnused();
             m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
             ForgetAllLanding();
@@ -72,19 +73,16 @@ public sealed partial class SdfWorldTables {
     private ulong m_meshRequiredUpload;
 
     /// <summary>Gets whether the latest staged draws name a mesh whose words the region still owes: the mesh lands through
-    /// the background GPU work, and its draws wait out of the staged records until it does. It turns false as the last
+    /// the background GPU work, and its draws stay absent until it does. It turns false as the last
     /// such mesh lands, before a staging names its draws (<see cref="DrawsAwaitMeshes"/>). Read on the frame
     /// thread.</summary>
     public bool MeshesLanding => (Volatile.Read(location: ref m_owedWords) != 0);
-    /// <summary>Gets whether the latest staging held a draw out of the staged records because its mesh had not landed, so
-    /// the frame it staged renders without it. Read on the frame thread.</summary>
-    public bool DrawsAwaitMeshes => (m_meshSource is not null) && !m_stagedWhole;
-
+    /// <summary>Gets whether a producer row is staged absent because its mesh is owed or refused. Read on the frame thread.</summary>
+    public bool DrawsAwaitMeshes => (m_absentRows.Count > 0);
     /// <summary>Gets whether the current staged mesh geometry owes no mesh words, the region refuses none of its meshes,
     /// and its required upload has completed. Pose, draw-record and irradiance uploads do not delay it. Read on the frame
     /// thread; never waits.</summary>
     public bool MeshesResident => (MeshResidencyPending() is null);
-
     /// <summary>Gets whether the current staged mesh geometry is still on its way to the region, and only frames that
     /// render the tables' views bring it: words the region owes, which land through background GPU work that binds only
     /// the World set of an upload after the latest pack (<see cref="BindsBackgroundWork"/>), or a required upload not yet
@@ -111,8 +109,10 @@ public sealed partial class SdfWorldTables {
         if (m_disposed) { return "the tables are disposed"; }
         var owed = Volatile.Read(location: ref m_owedWords);
         var required = m_meshRequiredUpload;
+
         if (owed != 0) {
             var restoring = 0;
+
             foreach (var mesh in m_activeOwed) { if (!mesh.Resident) { restoring++; } }
             return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler:
                 $"owes {(owed * sizeof(uint))}B of {m_activeOwed.Count} staged meshes ({restoring} restoring from the store, {m_landing.Count} in landing) binds-background={BindsBackgroundWork} uploads={m_uploads} binding-revision={m_bindingRevision}/{m_uploadedBindingRevision} relocations={m_meshArena.Relocations} ({m_meshArena.RelocationReason}) moved={m_meshMoved} refused={m_meshArena.Refused.Count}");
@@ -128,23 +128,28 @@ public sealed partial class SdfWorldTables {
 
     // Invalidate before staging words or replacing their buffer: until the next submission completes, the geometry
     // currently bound by these tables is not resident, even if an earlier slot's fence is already signaled.
-    private void RequireMeshUpload() => m_meshRequiredUpload = checked(m_uploads + 1UL);
+    private void RequireMeshUpload() => m_meshRequiredUpload = checked((m_uploads + 1UL));
+
     // The draw list last planned and its revision, and whether its draws are all staged: a list whose meshes' words are
     // still owed stages again each frame as they land.
     private IReadOnlyList<SdfMeshDraw>? m_meshSource;
     private long m_meshSourceRevision;
     private bool m_meshStaged;
-    // A consumed draw journal belongs to the exact staged roster, not just a revision number. Landing filters and
-    // unknown/missing history go through ordinary planning before establishing a new cursor.
-    private GpuChangedRows? m_drawChangesSource;
-    private long m_drawChangesSerial;
+
+    // Consumer identity, captured endpoint and bounds are owned by the cursor; landing never changes row indices.
+    private readonly GpuRowCursor m_drawCursor = new();
+    private readonly GpuRowIndex<SdfMesh> m_rowsByMesh = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly GpuUploadRuns m_landedRows = new(capacity: GpuRegion.MaxCopyRuns);
+    private readonly HashSet<int> m_absentRows = [];
     private readonly GpuUploadRuns m_owedDraws = new(capacity: GpuRegion.MaxCopyRuns);
+
     /// <summary>Gets the logical array payload retained by this consumer's changed-draw and transform-cut runs.</summary>
-    public long DrawChangeScratchBytes => (m_owedDraws.StorageBytes +
-        m_meshTransformReseats.StorageBytes + m_reseatedDraws.StorageBytes);
+    public long DrawChangeScratchBytes => (((((m_owedDraws.StorageBytes + m_landedRows.StorageBytes) + m_rowsByMesh.StorageBytes) +
+        m_meshTransformChanges.StorageBytes) + m_meshTransformReseats.StorageBytes) + m_reseatedDraws.StorageBytes);
 
     // The placed meshes whose words the region still owes, and the draws of the planned list whose meshes are written.
     private readonly OwedMeshes m_meshesOwed;
+
     // The meshes a grown draw reserve moved, written by the next frame upload's flush: each holds a need until that upload
     // is submitted (ReleaseUploadNeeds).
     private readonly List<SdfMesh> m_meshesWithUpload = [];
@@ -153,24 +158,24 @@ public sealed partial class SdfWorldTables {
         foreach (var mesh in m_meshesWithUpload) { mesh.Unneed(); }
         m_meshesWithUpload.Clear();
     }
+
     private readonly HashSet<SdfMesh> m_activeOwed = new(comparer: ReferenceEqualityComparer.Instance);
-    private readonly List<SdfMeshDraw> m_meshLanded = [];
-    // A copy of each draw last staged, by index, and whether that staging staged its whole list (no draw waiting on an
-    // owed mesh): what StageChangedDraws compares a list against.
+    // A copy of each producer draw last staged, including rows staged absent: the comparison for changed runs.
     private SdfMeshDraw[] m_stagedDraws = [];
 
     private int m_stagedCount;
-    private bool m_stagedWhole;
 
     private readonly GpuRegion m_meshRegion;
 
     // One more for every new draw list the region packs: the cadence signature folds it, so a frame whose draws moved
     // renders.
     private long m_meshRevision;
+
     /// <summary>Gets the revision of the staged draw records: one more for every staging that wrote a record. A target a
     /// pass rasterized holds hits that resolve through the records of the revision it was recorded under. Read on the
     /// frame thread.</summary>
     public long MeshRevision => m_meshRevision;
+
     // The cause the records the current staging packs count under, or null while it takes the draw journal, which splits
     // them between a hand-over and a pose (StagingTally).
     private SdfMeshStagingCause? m_stagingCause;
@@ -222,11 +227,11 @@ public sealed partial class SdfWorldTables {
     /// device whose profile reports no device-local memory.</summary>
     /// <param name="profile">The device's memory profile.</param>
     /// <returns>The limit in bytes.</returns>
-    public static ulong MeshRegionLimitOf(GpuMemoryProfile profile) => (Math.Clamp(
+    public static ulong MeshRegionLimitOf(GpuMemoryProfile profile) => Math.Clamp(
         max: MostMeshRegionBytes,
         min: MeshRegionGranuleBytes,
         value: profile.DeviceLocalShare(divisor: MeshRegionDeviceLocalShare, unreportedBytes: MostMeshRegionBytes)
-    ) & ~((ulong)(sizeof(uint) - 1)));
+    ) & ~((ulong)(sizeof(uint) - 1));
 
     /// <summary>Gets the most bytes the mesh region places (<see cref="MeshRegionLimitOf"/>): a mesh the latest list
     /// names that finds no room under it is refused, and its draws wait until a later list fits.</summary>
@@ -257,7 +262,7 @@ public sealed partial class SdfWorldTables {
             throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {mostBytes} the region may hold.");
         }
 
-        return (ulong)GpuCapacity.Headroom(required: ((long)needBytes), ceiling: ((long)mostBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes));
+        return ((ulong)GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: 8, granule: ((long)MeshRegionGranuleBytes), required: ((long)needBytes)));
     }
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
@@ -268,9 +273,8 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the opaque draws the latest frame's mesh pass and shadow cascades rasterize.</summary>
     public uint OpaqueDrawCount => (m_meshDrawCount - m_glassDrawCount);
 
-    // The staged draws that are glass, by index, as of the mesh revision they were collected at.
-    private readonly List<int> m_glassIndices = [];
-    private long m_glassIndicesRevision = -1;
+    // The staging door maintains exactly the live glass rows; a pose or landing needs no glass roster scan.
+    private readonly HashSet<int> m_glassIndices = [];
 
     /// <summary>Returns whether the glass pass would draw any glass draw of the staged list under a cull: the test the
     /// pass's own selection applies to each draw's host box (<see cref="SdfMeshCull.Keeps"/>), so a draw no host box
@@ -280,13 +284,6 @@ public sealed partial class SdfWorldTables {
     public bool GlassMaySee(in SdfMeshCull cull) {
         if (m_glassDrawCount == 0) {
             return false;
-        }
-        if (m_glassIndicesRevision != m_meshRevision) {
-            m_glassIndices.Clear();
-            for (var index = 0; (index < m_stagedCount); index++) {
-                if (m_stagedDraws[index].Glass) { m_glassIndices.Add(index); }
-            }
-            m_glassIndicesRevision = m_meshRevision;
         }
         foreach (var index in m_glassIndices) {
             SdfMeshBox? box = (SdfMeshBox.TryOf(draw: in m_stagedDraws[index], box: out var bounded) ? bounded : null);
@@ -304,31 +301,46 @@ public sealed partial class SdfWorldTables {
     private void StageMeshRegion(SdfFrame frame) {
         var draws = frame.MeshDraws;
         var revision = frame.MeshDrawsRevision;
+
         if (!m_meshTrimListening) { Puck.Hosting.Jobs.MemoryAccount.Shared.TrimRequested += RequestMeshTrim; m_meshTrimListening = true; }
         ServiceMemoryTrim();
         if (draws.Count == 0) { m_meshHistory.RetireAfter(count: 0); }
         SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
-        PrepareMeshTransformCuts(frame);
-        if (TryStageDrawChanges(frame, out var refused)) { CommitMeshTransformCuts(frame); return; }
+        PrepareMeshTransformCuts(frame: frame);
+        var whole = m_drawCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, draws, draws.Count,
+            revision, m_owedDraws, force: !m_meshStaged);
+
+        if (whole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.TablesWhole); }
+        if (TryStageDrawChanges(frame: frame, refused: out var refused, whole: whole)) {
+            FinishMeshStaging(frame: frame);
+            return;
+        }
         // Every record the rest of this staging packs, on either path, counts under the one cause it took the whole
         // list for.
         m_stagingCause = refused;
-        // Equal-pose cuts need staging too. This also forces the ordinary landing-filter path to observe its actual
-        // staged roster, where producer draw indices cannot be used.
+        if (whole) { m_meshStaged = false; }
+        // Equal-pose cuts need staging even when the draw's packed content stands unchanged.
         if (m_reseatedDraws.Count > 0) { m_meshStaged = false; }
         // The staged list's meshes hold live claims; the arena's placement claims keep every placed mesh's storage, the
         // ones the list stopped naming included, until the arena forgets them.
-        if (!ReferenceEquals(draws, m_meshSource) || (revision != m_meshSourceRevision)) {
+        if (!ReferenceEquals(objA: draws, objB: m_meshSource) || (revision != m_meshSourceRevision)) {
             (m_meshClaims ??= new SdfMeshClaims()).Update(draws: draws);
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingClaimRecords, draws.Count);
         }
-        StageMeshRegionCore(draws: draws, revision: revision);
-        // Publish the cursor only after the whole roster has staged successfully. No landing-filtered index can be
-        // interpreted as an index into the producer's list.
-        m_drawChangesSource = (m_meshStaged && m_stagedWhole) ? frame.MeshDrawChanges : null;
-        m_drawChangesSerial = frame.MeshDrawChangesSerial;
-        CommitMeshTransformCuts(frame);
+        StageMeshRegionCore(draws: draws, forcePlan: whole, revision: revision);
+        // Commit only after every returned run has staged successfully.
+        FinishMeshStaging(frame: frame);
     }
+    private void FinishMeshStaging(SdfFrame frame) {
+        CheckMeshRows(frame: frame);
+        if ((m_skipDrawThrough > 0) && (frame.MeshDrawChangesSerial <= m_skipDrawThrough)) {
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Skipped);
+        } else { m_drawCursor.Commit(); m_skipDrawThrough = 0; }
+        m_landedRows.Clear();
+        m_meshLandedSinceStaging = false;
+        CommitMeshTransformCuts(frame: frame);
+    }
+
     /// <summary>Stages again the draws of the frame the tables last packed when meshes its draws name have landed since,
     /// so a frame that stands draws them; does nothing otherwise. Staging the same frame again consumes no transform or
     /// draw change a staging already consumed.</summary>
@@ -336,39 +348,40 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public void StageLandedMeshes(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
-        if (m_disposed || m_meshStaged || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawsRevision != m_meshSourceRevision)) { return; }
+        if (m_disposed || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawsRevision != m_meshSourceRevision)) { return; }
         StageMeshRegion(frame: frame);
     }
+
     // The cause a staging that does not take the frame's journal packs its records under: the cause the frame states for
     // the journal entry this staging is the first to consume, then a landing's refusal, then a lost cursor.
     private SdfMeshStagingCause RefusalOf(SdfFrame frame) {
         // Serials belong to one producer. A replacement list can start at the serial the previous list ended at.
         if ((frame.MeshDrawChangesCause is { } stated) &&
-            (!ReferenceEquals(frame.MeshDraws, m_meshSource) || (frame.MeshDrawChangesSerial != m_drawChangesSerial))) { return stated; }
+            (!ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawChangesSerial != m_drawCursor.Serial))) { return stated; }
         if ((frame.MeshDrawChanges is null) || (m_meshSource is null)) { return SdfMeshStagingCause.Cursor; }
-        return ((!m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (frame.MeshDraws.Count != m_stagedCount))
+        return ((!m_meshStaged || (frame.MeshDraws.Count != m_stagedCount))
             ? SdfMeshStagingCause.Landing
             : SdfMeshStagingCause.Cursor);
     }
-    private bool TryStageDrawChanges(SdfFrame frame, out SdfMeshStagingCause refused) {
-        var changes = frame.MeshDrawChanges;
+    private bool TryStageDrawChanges(SdfFrame frame, bool whole, out SdfMeshStagingCause refused) {
         var draws = frame.MeshDraws;
+
         refused = RefusalOf(frame: frame);
-        if ((changes is null) || !ReferenceEquals(changes, m_drawChangesSource) || !ReferenceEquals(draws, m_meshSource) ||
-            !m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (draws.Count != m_stagedCount) ||
-            ((frame.MeshDrawsRevision != m_meshSourceRevision) && (frame.MeshDrawChangesSerial <= m_drawChangesSerial)) ||
-            !changes.TryCollect(since: m_drawChangesSerial, through: frame.MeshDrawChangesSerial, into: m_owedDraws)) { return false; }
+        if (whole || !ReferenceEquals(objA: draws, objB: m_meshSource) || !m_meshStaged || (draws.Count != m_stagedCount)) { return false; }
 
         CopyRuns(from: m_reseatedDraws, to: m_owedDraws);
+        CopyRuns(from: m_landedRows, to: m_owedDraws);
         var checkedMeshes = 0;
         var renamed = 0;
-        for (var run = 0; run < m_owedDraws.Count; run++) {
-            var end = Math.Min(draws.Count, checked(m_owedDraws.Start(run) + m_owedDraws.Length(run)));
-            for (var index = m_owedDraws.Start(run); index < end; index++) {
+
+        for (var run = 0; (run < m_owedDraws.Count); run++) {
+            var end = Math.Min(val1: draws.Count, val2: checked((m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run))));
+
+            for (var index = m_owedDraws.Start(index: run); (index < end); index++) {
                 var mesh = draws[index].Mesh;
 
                 checkedMeshes++;
-                if (ReferenceEquals(mesh, m_stagedDraws[index].Mesh)) { continue; }
+                if (ReferenceEquals(objA: mesh, objB: m_stagedDraws[index].Mesh)) { continue; }
                 // A row takes another mesh here only when that mesh's words already stand in the region (one that
                 // landed ahead of the draws): any other change of a row's mesh is planned and lands.
                 if (!MeshStands(mesh: mesh)) {
@@ -382,15 +395,17 @@ public sealed partial class SdfWorldTables {
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.StagingMeshChecks, checkedMeshes);
         // The arena and the staged list's claims follow each row that names another standing mesh, as a plan of the
         // list would leave them, so the rows alone are staged: no plan, no walk of the claims, no landing.
-        for (var run = 0; (renamed > 0) && (run < m_owedDraws.Count); run++) {
-            var end = Math.Min(draws.Count, checked(m_owedDraws.Start(run) + m_owedDraws.Length(run)));
-            for (var index = m_owedDraws.Start(run); index < end; index++) {
+        for (var run = 0; ((renamed > 0) && (run < m_owedDraws.Count)); run++) {
+            var end = Math.Min(val1: draws.Count, val2: checked((m_owedDraws.Start(index: run) + m_owedDraws.Length(index: run))));
+
+            for (var index = m_owedDraws.Start(index: run); (index < end); index++) {
                 var mesh = draws[index].Mesh;
                 var staged = m_stagedDraws[index].Mesh;
 
-                if (ReferenceEquals(mesh, staged)) { continue; }
+                if (ReferenceEquals(objA: mesh, objB: staged)) { continue; }
                 m_meshArena.Rename(index: index, mesh: mesh);
                 m_meshClaims?.Move(from: staged, to: mesh);
+                m_rowsByMesh.Set(key: mesh, row: index);
             }
         }
         if (renamed > 0) {
@@ -402,18 +417,17 @@ public sealed partial class SdfWorldTables {
         // Every mesh is held at its arena address. Pose, metadata and such a renamed row need neither a new placement
         // plan nor a walk of all mesh claims. Coarsened journal runs may include unchanged records; compare them once.
         m_stagingCause = null;
-        if ((draws.Count > 0) && (StageChangedDraws(draws, m_owedDraws) > 0)) { m_meshRevision++; }
+        if (draws.Count > 0) { _ = StageChangedDraws(candidates: m_owedDraws, draws: draws); }
         m_meshSourceRevision = frame.MeshDrawsRevision;
-        m_drawChangesSerial = frame.MeshDrawChangesSerial;
         return true;
     }
-    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision) {
+    private void StageMeshRegionCore(IReadOnlyList<SdfMeshDraw> draws, long revision, bool forcePlan) {
         if (
             !ReferenceEquals(
                 objA: draws,
                 objB: m_meshSource
             ) ||
-            (revision != m_meshSourceRevision)
+            (revision != m_meshSourceRevision) || forcePlan
         ) {
             m_meshArena.Plan(draws: draws);
             if (!m_meshArena.Unchanged) { m_meshPlacementVersion++; }
@@ -461,7 +475,7 @@ public sealed partial class SdfWorldTables {
                             continue;
                         }
                         // A moved mesh whose normals and levels are still coming back from the store stays owed and
-                        // lands through the background work, its draws held out until it does.
+                        // lands through the background work, its rows absent until it does.
                         if (!mesh.Resident) { continue; }
                         mesh.Need();
                         m_meshesWithUpload.Add(item: mesh);
@@ -485,31 +499,20 @@ public sealed partial class SdfWorldTables {
 
         m_meshLandedSinceStaging = false;
         OrderLanding(draws: draws);
-        CountOwed(draws);
+        CountOwed(draws: draws);
 
-        // A draw whose mesh's words are still owed, or whose mesh the region refuses, waits for them: the staged list
-        // holds the draws whose meshes are written, and a landing or a later plan stages the rest.
+        // The staged table has exactly the producer extent. The one staging door writes live or absent at each row.
         var staged = draws;
-
-        if ((m_meshesOwed.Count > 0) || (m_meshArena.Refused.Count > 0)) {
-            m_meshLanded.Clear();
-            foreach (var draw in draws) {
-                if (!m_meshesOwed.Contains(mesh: draw.Mesh) && !m_meshArena.Refused.Contains(item: draw.Mesh)) { m_meshLanded.Add(item: draw); }
-            }
-            if (m_meshLanded.Count != draws.Count) { staged = m_meshLanded; }
-        }
 
         // While existing mesh addresses stand, a same-sized list owes only its changed draws, including draws
         // that swapped meshes. Every other record, box and motion row stands as it was staged.
         if (
             !m_meshArena.Relocated &&
             (m_meshArena.Moved.Count == 0) &&
-            m_stagedWhole &&
-            ReferenceEquals(objA: staged, objB: draws) &&
             (staged.Count == m_stagedCount) &&
             (m_meshArena.Words > 0)
         ) {
-            if (StageChangedDraws(draws: staged) > 0) { m_meshRevision++; }
+            _ = StageChangedDraws(draws: staged);
             m_meshStaged = true;
 
             return;
@@ -532,26 +535,26 @@ public sealed partial class SdfWorldTables {
             _ = m_meshRegion.Write(bytes: MemoryMarshal.AsBytes(span: records), offset: 0);
         }
 
+        if (m_meshDrawCount != ((uint)staged.Count)) { m_meshRevision++; }
         m_meshDrawCount = ((uint)staged.Count);
-        m_glassDrawCount = 0;
-        for (var index = 0; (index < staged.Count); index++) {
-            var draw = staged[index];
-
-            if (draw.Glass) { m_glassDrawCount++; }
-        }
         if (m_stagedDraws.Length < staged.Count) {
             m_stagedDraws = new SdfMeshDraw[Math.Max(val1: staged.Count, val2: (2 * m_stagedDraws.Length))];
         }
         for (var index = 0; (index < staged.Count); index++) {
             m_stagedDraws[index] = staged[index];
+            m_rowsByMesh.Set(index, staged[index].Mesh);
         }
+        for (var index = staged.Count; (index < m_stagedCount); index++) {
+            m_rowsByMesh.Remove(row: index);
+            _ = m_absentRows.Remove(item: index);
+            _ = m_glassIndices.Remove(item: index);
+        }
+        m_glassDrawCount = ((uint)m_glassIndices.Count);
         Array.Clear(array: m_stagedDraws, index: staged.Count, length: (m_stagedCount - Math.Min(val1: m_stagedCount, val2: staged.Count)));
         m_stagedCount = staged.Count;
-        m_meshRevision++;
         // The records stand until a mesh lands (CompleteLanding), a trim frees words for a refused one
         // (ServiceMemoryTrim) or a list is planned, each of which stages again; a frame between them stages nothing.
         m_meshStaged = true;
-        m_stagedWhole = ReferenceEquals(objA: staged, objB: draws);
     }
     // Stages changed draws at their indices while existing mesh addresses stand: each changed record, box and motion
     // row, and the region's words for each run of them.
@@ -562,42 +565,46 @@ public sealed partial class SdfWorldTables {
             length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
             offset: 0
         );
+
         m_meshDrawDifferences.Clear();
         var changedRecords = 0;
         var changedWords = 0L;
         var comparedRecords = 0;
         var tally = new StagingTally(cause: m_stagingCause);
 
-        for (var run = 0; run < (candidates?.Count ?? 1); run++) {
-            var start = candidates?.Start(run) ?? 0;
-            var end = candidates is null ? draws.Count : Math.Min(draws.Count, checked(start + candidates.Length(run)));
-            for (var index = start; index < end; index++) {
+        for (var run = 0; (run < (candidates?.Count ?? 1)); run++) {
+            var start = (candidates?.Start(index: run) ?? 0);
+            var end = ((candidates is null) ? draws.Count : Math.Min(val1: draws.Count, val2: checked((start + candidates.Length(index: run)))));
+
+            for (var index = start; (index < end); index++) {
                 var draw = draws[index];
+
                 comparedRecords++;
 
-                if (!draw.SameStagedContent(in m_stagedDraws[index]) ||
-                    (m_reseatedDraws.Contains(index) && MeshTransformWasReseated(in draw))) {
+                if (!draw.SameStagedContent(other: in m_stagedDraws[index]) ||
+                    (m_absentRows.Contains(item: index) == MeshStands(mesh: draw.Mesh)) ||
+                    (m_reseatedDraws.Contains(value: index) && MeshTransformWasReseated(draw: in draw))) {
                     var record = records.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords));
 
-                    var mask = StageMeshDraw(draw: in draw, index: index, old: old, record: record, tally: ref tally, incremental: true);
+                    var mask = StageMeshDraw(draw: in draw, incremental: true, index: index, old: old, record: record, tally: ref tally);
+
                     changedWords += m_meshDrawDifferences.AddMask(mask, start: (index * SdfMeshRecord.DrawWords));
                     changedRecords++;
-                    if (draw.Glass != m_stagedDraws[index].Glass) {
-                        m_glassDrawCount = (draw.Glass ? (m_glassDrawCount + 1) : (m_glassDrawCount - 1));
-                    }
+                    m_rowsByMesh.Set(index, draw.Mesh);
                     m_stagedDraws[index] = draw;
                 }
             }
         }
         // Every previous-matrix decision above reads the unmodified shadow. Only the exact packed-word delta is
         // copied and owed now; bounded run coarsening may include unchanged words already valid in records.
-        if (m_meshDrawDifferences.Count > 0) { _ = m_meshRegion.WriteRuns(words: records, runs: m_meshDrawDifferences); }
+        if (m_meshDrawDifferences.Count > 0) { _ = m_meshRegion.WriteRuns(runs: m_meshDrawDifferences, words: records); }
         tally.Publish();
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsCompared, amount: comparedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RecordsChanged, amount: changedRecords);
         SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.PackedWordsChanged, amount: changedWords);
         return changedRecords;
     }
+
     /// <summary>Gets or sets the demand points the mesh region lands owed meshes by (<see cref="SdfMeshDemand"/>): the
     /// draws they see largest first, a draw no host box bounds (a skinned body) before any, and the list's order among
     /// equals; <see langword="null"/>, or one with no point, lands them in the list's order. Read on the frame's
@@ -636,7 +643,6 @@ public sealed partial class SdfWorldTables {
     private long m_owedSince;
     // The uploads submitted when a staging last stopped owing words; zero while none has.
     private long m_owedClearedUpload;
-
     // The mesh region bytes the frame uploads staged: the latest upload's, the most one upload staged, and the sum.
     private long m_frameStagedLast;
     private long m_frameStagedMost;
@@ -650,19 +656,20 @@ public sealed partial class SdfWorldTables {
         Volatile.Write(location: ref m_frameStagedTotal, value: (m_frameStagedTotal + bytes));
         if (bytes > m_frameStagedMost) {
             Volatile.Write(location: ref m_frameStagedMost, value: bytes);
-            Volatile.Write(location: ref m_frameStagedMostUpload, value: (long)(m_uploads + 1UL));
+            Volatile.Write(location: ref m_frameStagedMostUpload, value: ((long)(m_uploads + 1UL)));
         }
     }
-
     // Counts a staging that still owes meshes, and the time from the first such staging to the one that owes none.
     private void CountOwed(IReadOnlyList<SdfMeshDraw> draws) {
         var words = 0L;
+
         m_activeOwed.Clear();
         // Retained placements can be absent from the current roster. They still need an upload if reused, but they
         // neither block this roster's residency nor disable its changed-draw fast path. Count a shared mesh once.
         foreach (var draw in draws) {
             var mesh = draw.Mesh;
-            if (m_meshesOwed.Contains(mesh) && m_activeOwed.Add(mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
+
+            if (m_meshesOwed.Contains(mesh: mesh) && m_activeOwed.Add(item: mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
         }
         Volatile.Write(location: ref m_owedWords, value: words);
 
@@ -674,17 +681,16 @@ public sealed partial class SdfWorldTables {
         } else if (m_owedSince != 0) {
             m_owedTicks += (now - m_owedSince);
             m_owedSince = 0;
-            Volatile.Write(location: ref m_owedClearedUpload, value: (long)m_uploads);
+            Volatile.Write(location: ref m_owedClearedUpload, value: ((long)m_uploads));
         }
     }
 
     /// <summary>Returns whether the mesh region still owes a mesh's words: the latest staged draw list placed it and its
-    /// draws wait out of the staged records until a frame writes them, or the list names it and the region refuses it
+    /// rows stay absent until a frame stages them live, or the list names it and the region refuses it
     /// under its limit. Read on the frame's thread.</summary>
     /// <param name="mesh">The mesh, a chunk of a chunked group's mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     public bool OwesMesh(SdfMesh mesh) => (m_meshArena.Refused.Contains(item: mesh) || (m_meshArena.Placements.ContainsKey(key: mesh) && m_meshesOwed.Contains(mesh: mesh)));
-
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before
     /// (<see cref="SdfMeshRegionArena.PlanAhead"/>): each is placed beside the meshes the draws read and lands through
     /// the background work after the meshes a draw waits on, and the region keeps it until a draw list names it or it
@@ -866,6 +872,7 @@ public sealed partial class SdfWorldTables {
 
         RequireMeshUpload();
         Retire(replaced: m_meshRegion.Shrink(byteCount: ((long)fitted)));
+        SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Shrinks);
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
