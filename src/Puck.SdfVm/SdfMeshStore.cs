@@ -60,10 +60,17 @@ public sealed class SdfMeshStore {
         m_allocator = allocator;
     }
 
+    /// <summary>Gets the account a read reserves its workspace in before it allocates it: the process's.</summary>
+    public MemoryAccount Account { get; init; } = MemoryAccount.Shared;
+    /// <summary>Gets how long a read waits for <see cref="Account"/> to have room for its workspace before it declines
+    /// the entry (<see cref="DefaultWorkspacePatience"/>).</summary>
+    public TimeSpan WorkspacePatience { get; init; } = DefaultWorkspacePatience;
+
     /// <summary>Gets the bytes the entries hold at most.</summary>
     public long CapacityBytes { get; }
     /// <summary>Gets the absolute directory the entries are kept in.</summary>
     public string Directory { get; }
+
     /// <summary>Gets the entry format's eight-byte version tag (<see cref="SdfMeshStoreCodec.Magic"/>). The identity folds it
     /// (<see cref="BuildIdentityOf"/>), so a bump starts a new set while the decode refuses any entry of another tag;
     /// <see cref="Record"/> writes it beside the identity's parts so <see cref="ExplainMisses"/> can name the bump.</summary>
@@ -189,26 +196,40 @@ public sealed class SdfMeshStore {
         mesh = null;
         materials = [];
 
-        using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-entry");
+        var workspace = SdfMeshStoreWorkspace.Shared;
+        using var owner = workspace.CreateOwner(name: "mesh-entry");
         using var entry = new OwnedBuffer<byte>(allocator: null, observer: owner);
 
         try {
-            ReadEntryBytes(entry: entry, path: path);
+            if (!TryReadEntryBytes(entry: entry, owner: owner, path: path, workspace: in workspace)) { return false; }
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return false;
         }
 
         var bytes = entry.GetSpan();
 
-        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null));
+        return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && SdfMeshStoreCodec.TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null, owner: owner, workspace: in workspace));
     }
 
-    // Reads a file's bytes into a buffer sized to it.
-    private static void ReadEntryBytes(OwnedBuffer<byte> entry, string path) {
+    /// <summary>How long a store read waits for its account to have room for its workspace before it declines the
+    /// entry, unless a store says otherwise: two seconds. A read holds a worker while it waits, so the wait is
+    /// bounded.</summary>
+    public static TimeSpan DefaultWorkspacePatience { get; } = TimeSpan.FromSeconds(seconds: 2);
+
+    /// <summary>Why a sound entry was declined when its account had no room for the workspace its read needs; the
+    /// refusal a read reports ends with it.</summary>
+    public const string WorkspaceRefusal = "waits for workspace memory";
+
+    private SdfMeshStoreWorkspace Workspace => new(Account: Account, Patience: WorkspacePatience);
+
+    // Reads a file's bytes into a buffer sized to it, reserved before it is allocated; false when the account had no
+    // room for it, and nothing was read.
+    private static bool TryReadEntryBytes(OwnedBuffer<byte> entry, MemoryAccount.Owner owner, string path, in SdfMeshStoreWorkspace workspace) {
         using var handle = File.OpenHandle(path: path, mode: FileMode.Open, access: FileAccess.Read, share: FileShare.Read, options: FileOptions.SequentialScan);
         var length = RandomAccess.GetLength(handle: handle);
 
         if (length > int.MaxValue) { throw new IOException(message: "The entry is larger than an array."); }
+        if (!workspace.TryReserve(bytes: length, owner: owner)) { return false; }
         entry.Resize(clear: false, length: ((int)length), preserve: false);
 
         var bytes = entry.GetSpan();
@@ -221,6 +242,8 @@ public sealed class SdfMeshStore {
             read += count;
         }
         entry.Resize(clear: false, length: read, preserve: true);
+
+        return true;
     }
 
     // The entries this store read, their file bytes, and the time its readers spent reading and decoding them, summed over
@@ -252,11 +275,17 @@ public sealed class SdfMeshStore {
         damaged = false;
         declined = false;
 
-        using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-entry");
+        var workspace = Workspace;
+        using var owner = workspace.CreateOwner(name: "mesh-entry");
         using var entry = new OwnedBuffer<byte>(allocator: m_allocator, observer: owner);
 
         try {
-            ReadEntryBytes(entry: entry, path: path);
+            if (!TryReadEntryBytes(entry: entry, owner: owner, path: path, workspace: in workspace)) {
+                refusal = $"{Path.GetFileName(path: path)} {WorkspaceRefusal}";
+                declined = true;
+
+                return false;
+            }
         } catch (Exception exception) when ((exception is FileNotFoundException or DirectoryNotFoundException)) {
             return false;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
@@ -266,7 +295,7 @@ public sealed class SdfMeshStore {
         }
 
         var read = System.Diagnostics.Stopwatch.GetTimestamp();
-        var decoded = TryDecode(bytes: entry.GetSpan(), allocator: m_allocator, declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking);
+        var decoded = SdfMeshStoreCodec.TryDecode(allocator: m_allocator, bytes: entry.GetSpan(), declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking, owner: owner, workspace: in workspace);
 
         _ = Interlocked.Increment(location: ref m_reads);
         _ = Interlocked.Add(location1: ref m_readBytes, value: entry.Length);
@@ -472,7 +501,6 @@ public sealed class SdfMeshStore {
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
-    private static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(allocator: allocator, bytes: bytes, declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.
@@ -485,4 +513,28 @@ public sealed class SdfMeshStore {
             return false;
         }
     }
+}
+
+/// <summary>
+/// How a store read gets the scratch it reads and expands an entry in: the account it is reserved in before it is
+/// allocated, and how long the read waits for room (<see cref="MemoryAccount.Owner.TryReserveWithin"/>). A read that is
+/// not admitted declines the entry, which stays in the store.
+/// </summary>
+/// <param name="Account">The account.</param>
+/// <param name="Patience">The longest wait for room.</param>
+internal readonly record struct SdfMeshStoreWorkspace(MemoryAccount Account, TimeSpan Patience) {
+    /// <summary>Gets the process account at the default patience.</summary>
+    public static SdfMeshStoreWorkspace Shared => new(Account: MemoryAccount.Shared, Patience: SdfMeshStore.DefaultWorkspacePatience);
+
+    /// <summary>Creates the owner one read's scratch is counted under.</summary>
+    /// <param name="name">The owner's name.</param>
+    /// <returns>The owner.</returns>
+    public MemoryAccount.Owner CreateOwner(string name) => Account.CreateOwner(memoryClass: MemoryClass.Workspace, name: name);
+    /// <summary>Reserves a read's scratch before it is allocated: admitted when the host pool has room or as the
+    /// process's one forced job, and otherwise after a wait for room no longer than the patience.</summary>
+    /// <param name="owner">The read's owner.</param>
+    /// <param name="bytes">The scratch's bytes.</param>
+    /// <returns><see langword="false"/> when the read does without.</returns>
+    public bool TryReserve(MemoryAccount.Owner owner, long bytes) =>
+        owner.TryReserveWithin(patience: Patience, peak: bytes, reason: new Puck.Abstractions.Waiting.WaitReason(Subsystem: "mesh store", WaitsFor: "room in the memory account for a read's workspace"));
 }

@@ -1,5 +1,6 @@
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Testing;
 
 namespace Puck.Shaders.Tests;
 
@@ -363,11 +364,17 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: (Owned: node.BudgetBytes, Live: node.BudgetBytes)
         );
     }
-    [Fact]
-    public void AReplacementTheAccountHasNoRoomForIsRefusedByNameAndInstallsOnceItHas() {
+
+    // A node on a fake device whose allocations a ledger admits and counts into an account of its own, with the feedback
+    // graph installed and every frame slot warm: what the account holds for the node is what the device allocated.
+    private static (ShaderPipelineRenderNode Node, FakePipelineGpu Gpu, Puck.Hosting.Jobs.MemoryAccount Account) AccountedNode() {
         var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
-        var gpu = new FakePipelineGpu();
-        using var node = new ShaderPipelineRenderNode(
+        var ledger = new GpuDeviceMemoryWork(backend: "law", owners: account.DeviceOwners(backend: "law"));
+
+        ledger.BeginDevice(device: FakePipelineGpu.MemoryDevice, segments: GpuMemorySegments.FromDirectX(profile: default));
+
+        var gpu = new FakePipelineGpu { Memory = ledger };
+        var node = new ShaderPipelineRenderNode(
             pipelines: new GpuPassPipelineCache(),
             deviceContext: gpu,
             height: Extent,
@@ -376,40 +383,120 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             name: "feedback",
             width: Extent
         ) { MemoryAccount = account };
-        var candidate = Feedback();
-        var peak = node.Account(pipeline: candidate).PeakBytes;
 
-        // The device's pool holds one byte less than the graph's peak: the reservation is refused, so the candidate is
-        // refused by name before anything is created for it.
-        account.SetBudget(bytes: (((long)peak) - 1L), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
-        Assert.Equal(expected: (peak - 1UL), actual: node.DeviceBudgetBytes);
-
-        var creations = gpu.CreationCount;
-
-        node.Swap(pipeline: candidate);
-        _ = Produce(node: node);
-        Assert.StartsWith(actualString: node.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
-        Assert.Equal(expected: (creations, 0L), actual: (gpu.CreationCount, account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).Promised));
-        // With room for the peak the same candidate installs, and its peak is what the account promised it.
-        account.SetBudget(bytes: ((long)peak), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
-        node.Swap(pipeline: candidate);
+        node.Swap(pipeline: Feedback());
         _ = node.ProduceUntilInstalled();
-        Assert.Null(@object: node.LastSwapError);
-        Assert.Equal(expected: ((long)peak), actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).Promised);
-        // A second instance finds the room taken: no two instances are promised the same bytes.
-        using var other = new ShaderPipelineRenderNode(
-            pipelines: new GpuPassPipelineCache(),
-            deviceContext: gpu,
-            height: Extent,
-            hostsOnDirectX: false,
-            inFlightFrames: InFlight,
-            name: "other",
-            width: Extent
-        ) { MemoryAccount = account };
+        Produce(frames: WarmFrames, node: node);
 
-        other.Swap(pipeline: candidate);
-        _ = Produce(node: other);
-        Assert.StartsWith(actualString: other.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
+        return (node, gpu, account);
+    }
+    private static Puck.Hosting.Jobs.MemoryAdmissionReading Device(Puck.Hosting.Jobs.MemoryAccount account) => account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+
+    [Fact]
+    public void AReplacementTheAccountHasNoRoomForIsRefusedByNameAndInstallsOnceItHas() {
+        var (node, gpu, account) = AccountedNode();
+
+        using (node) {
+            var installedPlan = node.Plan;
+            var candidate = Feedback(historyFormat: "R32G32B32A32Float");
+            var more = (node.Account(pipeline: candidate).PeakBytes - node.OwnedBytes);
+            var held = Device(account: account).Held;
+
+            // The first graph installed with no limit read, and the account holds what the device allocated for it,
+            // with nothing promised.
+            Assert.Equal(expected: (((long)gpu.LiveBytes), 0L), actual: (held, Device(account: account).Promised));
+            // The pool has one byte less than the candidate adds: its reservation is refused, so the candidate is refused
+            // by name before anything is created for it, and nothing stays promised.
+            account.SetBudget(bytes: ((held + ((long)more)) - 1L), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+
+            var creations = gpu.CreationCount;
+
+            node.Swap(pipeline: candidate);
+            _ = Produce(node: node);
+            Assert.StartsWith(actualString: node.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
+            Assert.Equal(expected: (creations, 0L, installedPlan), actual: (gpu.CreationCount, Device(account: account).Promised, node.Plan));
+            // With room for it the same candidate installs, and once the graph it replaced is released nothing is
+            // promised and nothing stands past the limit.
+            account.SetBudget(bytes: (held + ((long)more)), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+            _ = SwapAndProduce(gpu: gpu, node: node, pipeline: candidate);
+            Produce(frames: (2 * WarmFrames), node: node);
+            Assert.Null(@object: node.LastSwapError);
+            Assert.Equal(expected: (candidate.Plan, 0L, 0L, ((long)gpu.LiveBytes)), actual: (node.Plan, Device(account: account).Promised, Device(account: account).OverLimit, Device(account: account).Held));
+        }
+    }
+    [Fact]
+    public void ACandidateThatFailsAfterItWasAdmittedGivesItsPromiseBack() {
+        var (node, gpu, account) = AccountedNode();
+
+        using (node) {
+            var installedPlan = node.Plan;
+
+            // The candidate is admitted, and a creation fails while it builds or allocates: only the installed graph is
+            // kept, and the promise made for the candidate ends with it.
+            gpu.FailAtCreation = (gpu.CreationCount + 1);
+            _ = SwapAndProduce(gpu: gpu, node: node, pipeline: Feedback(historyFormat: "R32G32B32A32Float", revision: 1));
+            Produce(frames: (2 * WarmFrames), node: node);
+            Assert.NotNull(@object: node.LastSwapError);
+            Assert.Equal(expected: (installedPlan, 0L, ((long)gpu.LiveBytes)), actual: (node.Plan, Device(account: account).Promised, Device(account: account).Held));
+        }
+    }
+    [Fact]
+    public void ReleasingAnEarlierGraphKeepsTheRunningBuildsPromise() {
+        var (node, gpu, account) = AccountedNode();
+
+        using (node)
+        using (var opener = new PipelineGateOpener()) {
+            // B replaces A while the queue is held, so A waits in retirement on its readers.
+            gpu.QueueHeld = true;
+
+            var replacement = Feedback(historyFormat: "R32G32B32A32Float", revision: 1);
+
+            _ = SwapAndProduce(gpu: gpu, node: node, pipeline: replacement);
+            Assert.Equal(expected: replacement.Plan, actual: node.Plan);
+            // C is admitted and its build is held in the driver.
+            gpu.PipelineGate = opener.Gate;
+            node.Swap(pipeline: Feedback(revision: 2));
+            _ = Produce(node: node);
+            Assert.True(condition: gpu.PipelineGateEntered.Wait(cancellationToken: TestContext.Current.CancellationToken, timeout: TestLiveness.Bound));
+
+            var promised = Device(account: account).Promised;
+            var held = Device(account: account).Held;
+
+            Assert.True(condition: (promised > 0L));
+            // A's readers finish and A is released while C still builds: what the account holds falls by A, and what it
+            // promised C stands.
+            gpu.QueueHeld = false;
+            Produce(frames: WarmFrames, node: node);
+            Assert.True(condition: node.IsBuildingCandidate);
+            Assert.True(condition: (Device(account: account).Held < held));
+            Assert.Equal(expected: promised, actual: Device(account: account).Promised);
+            // C installs, and its promise is spent.
+            opener.Gate.Set();
+            node.WaitForBuild();
+            Produce(frames: (2 * WarmFrames), node: node);
+            Assert.Equal(expected: (0L, ((long)gpu.LiveBytes)), actual: (Device(account: account).Promised, Device(account: account).Held));
+        }
+    }
+    [Fact]
+    public void ACandidateWhoseAllocationsThePoolCannotHoldIsRefusedByNameAndTheInstalledGraphKeepsRunning() {
+        var (node, gpu, account) = AccountedNode();
+
+        using (node) {
+            var installedPlan = node.Plan;
+            var candidate = Feedback(historyFormat: "R32G32B32A32Float");
+            var more = (node.Account(pipeline: candidate).PeakBytes - node.OwnedBytes);
+            var held = Device(account: account).Held;
+
+            // The pool has room for exactly what the candidate's objects hold, which is what its reservation counts, and
+            // the device allocates a page more for each. The reservation is admitted; the allocation that passes it is
+            // refused, where the installed graph's own storage would be admitted past the limit.
+            account.SetBudget(bytes: (held + ((long)more)), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+            gpu.PaddingBytes = 4096UL;
+            _ = SwapAndProduce(gpu: gpu, node: node, pipeline: candidate);
+            Produce(frames: (2 * WarmFrames), node: node);
+            Assert.StartsWith(actualString: node.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] The candidate was refused while it allocated");
+            Assert.Equal(expected: (installedPlan, 0L, 0L, held), actual: (node.Plan, Device(account: account).Promised, Device(account: account).OverLimitGrants, Device(account: account).Held));
+        }
     }
     [Fact]
     public void TheBudgetIsTheAccountsRoomAndACapOnlyLowersIt() {

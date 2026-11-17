@@ -21,8 +21,10 @@ public interface IGpuMemoryOwners {
     /// and whose class decides what a full pool answers; <see langword="null"/> for none.</param>
     /// <param name="payerBytes">The most of <paramref name="payer"/>'s reservation the allocation consumes, at most
     /// <paramref name="bytes"/>.</param>
+    /// <param name="givesWay">Whether the allocation is one its holder can do without
+    /// (<see cref="GpuMemoryAdmissionScope"/>): with no room it is refused whatever the payer's class.</param>
     /// <returns>The answer, handed back to <see cref="Settle"/> unless it refuses.</returns>
-    GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes);
+    GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay);
     /// <summary>Ends a grant <see cref="Admit"/> made: its promise is released. A counted allocation's bytes are charged
     /// through the segment's observer by the ledger before this call; a device refusal also lowers the segment's limit to
     /// what the segment holds.</summary>

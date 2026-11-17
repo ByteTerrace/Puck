@@ -205,4 +205,72 @@ public sealed class SdfResidencySelectorLawTests {
         }
         Assert.Equal(actual: jobs, expected: 1);
     }
+    [Fact]
+    public void AReportMadeBeforeTheLimitWasRestoredDoesNotRaiseTheBias() {
+        var (account, _, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var valley = selector.Register(name: "valley");
+        using var painting = selector.Register(name: "painting");
+        var pressing = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: true);
+        var fitting = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: false);
+
+        // Under a lowered budget both residencies name more than it holds, and the bias rises on the larger one's
+        // report.
+        account.SetBudget(bytes: (512L * Mebibyte), pool: PhysicalMemory.Device);
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        _ = valley.Budget(filled: Gibibyte, named: Gibibyte);
+        _ = painting.Budget(filled: (10L * Mebibyte), named: (10L * Mebibyte));
+        _ = valley.Decide(report: in pressing);
+        _ = painting.Decide(report: in pressing);
+        Assert.Equal(expected: 1, actual: selector.Bias);
+        // The limit is restored. The painting's last report still says the budget presses, and is a moment old; the
+        // valley decides against the limit as it stands, where everything named fits, and the bias does not rise.
+        account.SetBudget(bytes: null, pool: PhysicalMemory.Device);
+        for (var decision = 0; (decision < 8); decision++) {
+            _ = valley.Budget(filled: Gibibyte, named: Gibibyte);
+            _ = valley.Decide(report: in fitting);
+        }
+        Assert.Equal(expected: (1, (1, 0)), actual: (selector.Bias, selector.BiasSteps));
+        // And what every residency names passing the budget presses whatever the deciding one reports of itself.
+        account.SetBudget(bytes: (512L * Mebibyte), pool: PhysicalMemory.Device);
+        _ = valley.Decide(report: in fitting);
+        Assert.Equal(expected: 2, actual: selector.Bias);
+    }
+    [Fact]
+    public void AMeshRegionsStagingIsAdmittedOnUnifiedMemoryWhereItsGrowthIsRefused() {
+        // Unified memory: one segment in the host's pool, which the regions' buffers and their staging share.
+        var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L * Gibibyte));
+        var ledger = new GpuDeviceMemoryWork(backend: "law", owners: account.DeviceOwners(backend: "law"));
+        var segments = GpuMemorySegments.FromDirectX(profile: new GpuMemoryProfile(CoherentUnifiedMemory: true, DeviceLocalBytes: (16UL << 30), HostVisibleDeviceLocalBytes: (16UL << 30), LargestDeviceLocalHeapBytes: (16UL << 30), UnifiedMemory: true));
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Host);
+        using var grant = selector.Register(name: "valley");
+        const string RegionFamily = (SdfResidencySelector.RegionOwner + "/mesh-region");
+        const string StagingFamily = (SdfResidencySelector.RegionStagingOwner + "/mesh-region");
+
+        bool Allocate(nint allocation, long bytes, string family, out bool overLimit) {
+            overLimit = false;
+            if (!ledger.TryAdmit(bytes: bytes, device: Device, family: family, grant: out var admitted, payer: family, payerBytes: bytes, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal)) { return false; }
+            overLimit = admitted.OverLimit;
+            ledger.CountAllocated(allocation: allocation, grant: admitted);
+
+            return true;
+        }
+
+        ledger.BeginDevice(device: Device, segments: segments);
+        account.SetBudget(bytes: (account.Headroom + (256L * Mebibyte)));
+        grant.Created(capacityBytes: (64L * Mebibyte));
+        Assert.True(condition: Allocate(allocation: 0x10, bytes: (64L * Mebibyte), family: RegionFamily, overLimit: out _));
+        // The pool is filled to its limit by the views.
+        Assert.True(condition: Allocate(allocation: 0x11, bytes: (192L * Mebibyte), family: "view/targets", overLimit: out var first));
+        Assert.False(condition: first);
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Room);
+        // The region cannot grow: its limit is what it holds, and an allocation past it is refused.
+        Assert.Equal(expected: (64L * Mebibyte), actual: grant.ReserveGrowth(capacityBytes: (64L * Mebibyte), mostBytes: (64L * Gibibyte)));
+        Assert.False(condition: Allocate(allocation: 0x12, bytes: (128L * Mebibyte), family: RegionFamily, overLimit: out _));
+        // Its staging is transfer storage under another owner: a flush that stages more than any before it is admitted,
+        // past the limit and counted, never refused, so an upload does not throw for want of room.
+        Assert.True(condition: Allocate(allocation: 0x13, bytes: (128L * Mebibyte), family: StagingFamily, overLimit: out var staged));
+        Assert.True(condition: staged);
+        Assert.Equal(expected: ((128L * Mebibyte), 1L), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).OverLimit, account.ReadAdmission(pool: PhysicalMemory.Host).OverLimitGrants));
+    }
 }

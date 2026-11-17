@@ -984,11 +984,15 @@ and every memory owner are its steps. This packet holds the defects beside it.
   a queue of its own, the bake's backlog admission as a rate of wall time, jobs
   that lease the generations they read and reserve what they hold. The plan's
   step 3 names the measurement that chooses between the two.
-- [medium] On unified memory a mesh region's staging lies in the pool its
-  buffers do and is elastic storage there: the grant covers
-  `SdfResidencyGrant.StagingAllowanceBytes` of it, and a flush that stages
-  more with the pool at its limit is refused as a region's growth is, where it
-  throws from the upload. Reserve the staging with the flush that sizes it.
+- [low] A mesh region's staging is named for its own owner
+  (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
+  that stages more than the pool has room for is admitted past the limit and
+  counted. Reserve the staging with the flush that sizes it, so the elastic
+  budget leaves room for it on unified memory.
+- [low] A mesh store read that finds no workspace within
+  `SdfMeshStore.WorkspacePatience` is a miss. A native mesh restoring its
+  parts (`SdfMesh`'s restore) then ends lost and bakes its groups again; it
+  could wait as a deferred job does instead.
 - [low] A mesh region whose draw records pass the buffer it holds grows for
   them whatever the pool holds (`SdfResidencyGrant.ReserveFloorGrowth`), and
   the meshes the old buffer could not hold are refused until a later plan. If
@@ -1000,9 +1004,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   resize or reload at a full pool keeps the installed graph
   (`SHADERPIPE_BUDGET`) until the bias has made room. The plan's step 5 is
   what gives way.
-- [low] A shader pipeline's reservation is lowered when its replaced objects
-  are released; a build discarded before it installs keeps its peak promised
-  until the instance's next build or release.
 - [low] A test schedule admits no authored command (`WorldScheduleCommands`,
   `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
   (`world.state.cell.set liftCall`) where a player presses the car's buttons.

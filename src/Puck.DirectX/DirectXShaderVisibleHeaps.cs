@@ -123,32 +123,28 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         );
 
         try {
-            heaps.m_viewHeap = ((nint)DirectXDescriptorHeaps.CreateShaderVisible(
+            // Each heap's bytes are its descriptors at the device's increment, known before it exists, so the ledger is
+            // asked first and the heap is created under its grant.
+            heaps.ViewIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            heaps.m_viewHeap = heaps.CreateCounted(
+                bytes: heaps.ViewHeapBytes,
                 count: heaps.m_budget.ViewDescriptors,
                 created: ref shaderVisibleHeapsCreated,
                 device: device,
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV
-            ));
-            heaps.ViewIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+            );
             heaps.ViewCpuStart = DirectXConstants.GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_viewHeap)).ptr;
             heaps.ViewGpuStart = DirectXConstants.GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_viewHeap)).ptr;
-            heaps.Count(
-                bytes: heaps.ViewHeapBytes,
-                heap: heaps.m_viewHeap
-            );
-            heaps.m_samplerHeap = ((nint)DirectXDescriptorHeaps.CreateShaderVisible(
+            heaps.SamplerIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            heaps.m_samplerHeap = heaps.CreateCounted(
+                bytes: heaps.SamplerHeapBytes,
                 count: heaps.m_budget.SamplerDescriptors,
                 created: ref shaderVisibleHeapsCreated,
                 device: device,
                 type: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER
-            ));
-            heaps.SamplerIncrement = device->GetDescriptorHandleIncrementSize(DescriptorHeapType: D3D12_DESCRIPTOR_HEAP_TYPE.D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            );
             heaps.SamplerCpuStart = DirectXConstants.GetCpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_samplerHeap)).ptr;
             heaps.SamplerGpuStart = DirectXConstants.GetGpuHeapStart(heap: ((ID3D12DescriptorHeap*)heaps.m_samplerHeap)).ptr;
-            heaps.Count(
-                bytes: heaps.SamplerHeapBytes,
-                heap: heaps.m_samplerHeap
-            );
             heaps.m_clearHeap = ((nint)DirectXDescriptorHeaps.Create(
                 count: ClearDescriptors,
                 device: device,
@@ -163,23 +159,35 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
         return heaps;
     }
 
-    // A descriptor heap is no resource heap, and Direct3D 12 names no memory pool for one; it is counted in the local
-    // segment group, where its device-local role places it on a discrete adapter and the only group on a unified one.
-    // The heaps are the device's own, created with it and fixed by the binding budget, so they are admitted as they are
-    // counted: descriptor heaps name no class, and storage that names none is admitted past a limit and counted.
-    private void Count(nint heap, ulong bytes) =>
-        m_memory?.CountAllocated(
-            allocation: heap,
-            grant: m_memory.Admit(
-                bytes: checked((long)bytes),
-                device: m_device,
-                family: GpuDeviceMemoryWork.DescriptorHeapFamily,
-                payer: GpuDeviceMemoryWork.DescriptorHeapFamily,
-                payerBytes: checked((long)bytes),
-                role: GpuMemoryRole.DeviceLocal,
-                segment: GpuMemorySegments.DirectXLocal
-            )
+    // Asks the ledger for a shader-visible heap at its size, creates it under the grant and counts it. A descriptor heap
+    // is no resource heap, and Direct3D 12 names no memory pool for one; it is counted in the local segment group, where
+    // its device-local role places it on a discrete adapter and the only group on a unified one. The heaps name no
+    // class, so one a full pool has no room for is admitted past the limit and counted; one the device has no memory
+    // for hands its grant back as the device's refusal.
+    private nint CreateCounted(ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE type, uint count, ulong bytes, ref long created) {
+        var grant = m_memory?.Admit(
+            bytes: checked((long)bytes),
+            device: m_device,
+            family: GpuDeviceMemoryWork.DescriptorHeapFamily,
+            payer: GpuDeviceMemoryWork.DescriptorHeapFamily,
+            payerBytes: checked((long)bytes),
+            role: GpuMemoryRole.DeviceLocal,
+            segment: GpuMemorySegments.DirectXLocal
         );
+        nint heap;
+
+        try {
+            heap = ((nint)DirectXDescriptorHeaps.CreateShaderVisible(count: count, created: ref created, device: device, type: type));
+        } catch (COMException failure) when (((failure.HResult == DirectXDeviceMemory.OutOfMemory) && (grant is not null))) {
+            throw grant.Refuse();
+        } catch {
+            grant?.Return();
+            throw;
+        }
+        if (grant is not null) { m_memory!.CountAllocated(allocation: heap, grant: grant); }
+
+        return heap;
+    }
 
     /// <summary>Binds both heaps to a command list, once per recording: a reset clears a command list's heaps.</summary>
     /// <param name="commandList">The command list being recorded.</param>

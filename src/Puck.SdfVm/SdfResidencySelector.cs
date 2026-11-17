@@ -45,6 +45,11 @@ public sealed class SdfResidencySelector {
     /// <summary>The owner every mesh region's buffers are named under (<see cref="GpuObjectName.Owner"/>), apart from
     /// the tables' other objects, so the account reserves and classes the regions on their own.</summary>
     public const string RegionOwner = "sdf.mesh-region";
+    /// <summary>The owner every mesh region's staging buffers are named under: transfer storage, which the account
+    /// neither reserves nor classes with the regions, so a flush that stages more than the last is never refused as a
+    /// region's growth is. On unified memory it lies in the pool the regions do, where it is fixed storage: admitted,
+    /// counted, and past a full pool's limit counted as that.</summary>
+    public const string RegionStagingOwner = "sdf.mesh-region-staging";
 
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
     // How long a residency's report counts toward the bias after it was made; a residency no frame prepares stops
@@ -247,28 +252,35 @@ public sealed class SdfResidencySelector {
     }
 
     // Moves the one bias on the report of the residency that names the most among those reporting: it presses when any
-    // residency is over its budget, rises half a rung once the budget has pressed for the hold with no residency holding
+    // residency names more than the budget holds, rises half a rung once the budget has pressed for the hold with no residency holding
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
     // which doubles when a rise follows a fall closely.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
         var now = Stopwatch.GetTimestamp();
+        var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
         lock (m_gate) {
             grant.Report = report;
             grant.ReportedAt = now;
 
             var primary = grant;
-            var over = false;
+            // Whether the budget presses is read here, from the limit as it stands and what every residency names, and
+            // from the deciding residency's own report, made a moment ago against that limit. Another residency's
+            // report was made against the limit of its own last decision: one made before a limit was restored would
+            // press on a budget that no longer does.
+            var over = report.Over;
             var anySpare = false;
             var canLower = true;
+            var named = 0L;
 
             foreach (var other in m_grants) {
+                named += other.Named;
                 if ((other.ReportedAt == 0) || ((now - other.ReportedAt) > FreshTicks)) { continue; }
                 if (other.Named > primary.Named) { primary = other; }
-                over |= other.Report.Over;
                 anySpare |= other.Report.AnySpare;
                 canLower &= other.Report.CanLower;
             }
+            if (bounded) { over |= (named > ((UsableOf(held: held, limit: limit, promised: promised) / 8L) * SdfMeshTier.BudgetEighths)); }
             if (!ReferenceEquals(objA: primary, objB: grant)) { return m_bias; }
 
             var elapsed = report.Elapsed;
@@ -319,17 +331,12 @@ public sealed class SdfResidencySelector {
 /// Invariant: the region's buffers are allocated only under the grant's reservation. A growth reserves the buffer that
 /// stands and the one that replaces it together before the replacement is created (<see cref="ReserveGrowth"/>,
 /// <see cref="Grown"/>), and the reservation falls to the standing buffer once the replaced one's readers finish
-/// (<see cref="Released"/>). Where the region's staging lies in the pool its buffers do, on unified memory, the
-/// reservation covers it too, at <see cref="StagingAllowanceBytes"/>; on a discrete adapter the staging is host
-/// memory, which the region's class does not govern.
+/// (<see cref="Released"/>). The region's staging is another owner's memory
+/// (<see cref="SdfResidencySelector.RegionStagingOwner"/>), outside the reservation on every device.
 /// </para>
 /// Called on the frame thread, apart from the reads the selector's line makes.
 /// </summary>
 public sealed class SdfResidencyGrant : IDisposable {
-    /// <summary>The bytes of staging a region's reservation covers beside its buffers on unified memory: twice the floor
-    /// a staged slot's staging buffer shrinks to (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
-    public const long StagingAllowanceBytes = (2L * ((long)GpuRegion.StagingFloorBytes));
-
     private readonly MemoryAccount.DeviceReservation m_reservation;
     private readonly SdfResidencySelector m_selector;
 
@@ -450,9 +457,9 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// <returns>The selector's bias.</returns>
     public int Decide(in SdfDetailReport report) => m_selector.Decide(grant: this, report: in report);
 
-    // What the region holds whatever the pool says: its standing buffer, the replaced ones waiting on their readers
-    // and its staging. Reserved as the reservation's floor, so a full pool reads over its limit and the residency draws.
-    private long Standing => ((Capacity + Retiring) + ((m_selector.Pool == PhysicalMemory.Host) ? StagingAllowanceBytes : 0L));
+    // What the region holds whatever the pool says: its standing buffer and the replaced ones waiting on their
+    // readers. Reserved as the reservation's floor, so a full pool reads over its limit and the residency draws.
+    private long Standing => (Capacity + Retiring);
 
     private void ReserveStanding() => _ = Reserve(floor: Standing, peak: Standing);
     // Sets the reservation's peak; a raise past the floor that the pool has no room for changes nothing.

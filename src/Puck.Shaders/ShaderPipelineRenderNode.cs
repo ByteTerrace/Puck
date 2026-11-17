@@ -557,7 +557,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
 
                     foreach (var pass in built.Passes) {
                         if ((pass?.PackageContext is { } context) && context.Outputs.Any(predicate: output => planned.Versions.Contains(value: output.Name))) {
-                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, resource: declaration, previous: null);
+                            borrowed = pass.PackageFactory!.BorrowedBuffer(built: pass.PackageBuilt, context: context, previous: null, resource: declaration);
                             if (borrowed is not null) {
                                 resource.BorrowedFactory = pass.PackageFactory;
                                 resource.BorrowedContext = context;
@@ -963,12 +963,18 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_passes = [];
         m_ready = false;
         try {
-            Allocate(
-                built: built,
-                carried: carried,
-                counts: key.Counts,
-                rows: key.Rows
-            );
+            // A candidate replaces a graph that keeps running, so it can be done without: inside the scope an
+            // allocation the pool has no room for is refused instead of admitted past the limit, here as in its build
+            // (BuildRequest.GivesWay). A first graph, or the installed one rebuilt after a device loss, is the
+            // instance's least and allocates outside it.
+            using (GpuMemoryAdmissionScope.Enter(givesWay: (key.Candidate && previousReady))) {
+                Allocate(
+                    built: built,
+                    carried: carried,
+                    counts: key.Counts,
+                    rows: key.Rows
+                );
+            }
             PreserveCompatibleHistory(
                 carried: carried,
                 previousPlan: previousPipeline?.Plan
@@ -1039,7 +1045,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             }
             Refuse(
                 candidate: true,
-                error: error
+                error: ((error is GpuMemoryRefusedException refused) ? AllocationRefusal(refusal: refused) : error)
             );
 
             return;
@@ -1779,8 +1785,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             job: in job
         );
     }
+
     // What preparation reserved for one frame's recording.
     private readonly record struct FrameJob(int Slot, RuntimeResource Selected, bool Previewed, IGpuExportableImage? Exported);
+
     // Reserves the next slot: its previous submission retired, its leases retired, its regions bound, this frame's leases
     // held and the cadence checkpointed, so a failed recording can roll back.
     private FrameJob PrepareFrame(IGpuExportableImage? exported) {

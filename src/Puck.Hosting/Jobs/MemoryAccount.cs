@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
+using Puck.Abstractions.Waiting;
 using Puck.Maths;
 
 namespace Puck.Hosting.Jobs;
@@ -82,7 +83,14 @@ public sealed class MemoryAccount {
     private readonly List<SampledOwner> m_sampled = [];
 
     private readonly Func<long?> m_readAvailable;
+    private readonly Func<long> m_clock;
 
+    // Pulsed when a pool may have gained room: what an owner waiting for room sleeps on (Owner.TryReserveWithin). Never
+    // held while the account's lock is taken.
+    private readonly object m_room = new();
+
+    // The owners asking or sleeping in TryReserveWithin; with none, a release pulses nothing.
+    private int m_roomWaiters;
     private long m_reserved;
     private long? m_budget;
     private long m_negativeResiduals;
@@ -92,8 +100,10 @@ public sealed class MemoryAccount {
 
     private HostMemorySample? m_sample;
     private long m_sampledAt;
-    // The machine's free physical memory as last read, and when; null where the host reports none.
+    // The machine's free physical memory as last read, what the host pool held at that reading, and when; null where
+    // the host reports none.
     private long? m_available;
+    private long m_availableHeld;
     private long m_availableAt;
     // The owner holding the process's one forced admission, the bytes it was forced with, and the forced admissions made.
     private Owner? m_forced;
@@ -111,9 +121,13 @@ public sealed class MemoryAccount {
     /// <see cref="HostMemory.AvailablePhysicalBytes"/>.</param>
     /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes, which the budget and the
     /// headroom derive from; <see langword="null"/> reads the host's.</param>
-    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null) {
+    /// <param name="clock">Reads the time, in <see cref="Stopwatch"/> ticks, which paces the free-memory reading, the
+    /// pressure trim and a refused segment's probe; <see langword="null"/> reads
+    /// <see cref="Stopwatch.GetTimestamp"/>.</param>
+    public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null, Func<long>? clock = null) {
         var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
+        m_clock = (clock ?? Stopwatch.GetTimestamp);
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AvailablePhysicalBytes);
         DefaultBudget = Math.Max(val1: 0, val2: ((installed * 3) / 4));
         Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
@@ -125,6 +139,17 @@ public sealed class MemoryAccount {
     /// <summary>Gets the shortest time between two trims pressure fires (<see cref="ServicePressure"/>), in
     /// <see cref="Stopwatch"/> ticks: one second.</summary>
     public static long PressureInterval { get; } = Stopwatch.Frequency;
+    /// <summary>Gets how long a segment's limit stands at what it held when the device first refused an allocation in
+    /// it, in <see cref="Stopwatch"/> ticks, before the account lets one allocation probe it again: one second. Each
+    /// refusal that follows without an allocation succeeding between doubles the wait, up to
+    /// <see cref="MostRefusalProbeInterval"/>; an allocation the device makes resets it.</summary>
+    public static long RefusalProbeInterval { get; } = Stopwatch.Frequency;
+    /// <summary>Gets the longest a refused segment waits between probes, in <see cref="Stopwatch"/> ticks: sixty-four
+    /// seconds.</summary>
+    public static long MostRefusalProbeInterval { get; } = (64L * Stopwatch.Frequency);
+    /// <summary>Gets the longest an owner waiting for room sleeps before it asks again
+    /// (<see cref="Owner.TryReserveWithin"/>): a twentieth of a second.</summary>
+    public static TimeSpan RoomSlice { get; } = TimeSpan.FromMilliseconds(milliseconds: 50);
 
     /// <summary>Requests that cache owners detach idle claims. Active consumer claims are unaffected.</summary>
     public event Action? TrimRequested;
@@ -297,9 +322,13 @@ public sealed class MemoryAccount {
             m_device = reading;
             m_segmentLimits = limits;
             foreach (var state in m_segments.Values) {
-                if ((state.RefusedLimit is not null) && (RecordedLimit(segment: state.Segment) is { } recorded) && (recorded.Budget != state.RefusedBudget)) { state.RefusedLimit = null; }
+                if ((state.RefusedLimit is not null) && (RecordedLimit(segment: state.Segment) is { } recorded) && (recorded.Budget != state.RefusedBudget)) {
+                    state.RefusedLimit = null;
+                    state.RefusedWait = 0L;
+                }
             }
-            if (Pressed(pool: PhysicalMemory.Device) || Pressed(pool: PhysicalMemory.Host)) { m_pressure = 1; }
+            NotePressure(pool: PhysicalMemory.Device);
+            NotePressure(pool: PhysicalMemory.Host);
         }
     }
     /// <summary>Fires the trim pressure asks for: when an admission was refused, a device refused an allocation or a
@@ -310,7 +339,7 @@ public sealed class MemoryAccount {
     public bool ServicePressure() {
         if (Volatile.Read(location: ref m_pressure) == 0) { return false; }
 
-        var now = Stopwatch.GetTimestamp();
+        var now = m_clock();
 
         lock (m_gate) {
             if ((m_pressureAt != 0) && ((now - m_pressureAt) < PressureInterval)) { return false; }
@@ -429,7 +458,7 @@ public sealed class MemoryAccount {
             var segments = new List<MemorySegmentAdmission>(capacity: m_segments.Count);
 
             foreach (var ((backend, _, _), state) in m_segments) {
-                segments.Add(item: new(Backend: backend, Granted: state.Granted, Held: state.Owner.HeldLocked, Limit: EffectiveLimit(state: state), Peak: state.Owner.PeakLocked, RefusedLimit: state.RefusedLimit, Segment: state.Segment));
+                segments.Add(item: new(Backend: backend, Granted: state.Granted, Held: state.Owner.HeldLocked, Limit: EffectiveLimit(state: state), Peak: state.Owner.PeakLocked, RefusedLimit: RefusedLimitOf(state: state), Segment: state.Segment));
             }
             segments.Sort(comparison: static (left, right) => ((string.CompareOrdinal(strA: left.Backend, strB: right.Backend) is var order and not 0) ? order : left.Segment.Index.CompareTo(value: right.Segment.Index)));
 
@@ -442,7 +471,7 @@ public sealed class MemoryAccount {
     // Reads the machine's free physical memory again once the last reading is AvailableInterval old, outside the
     // account's lock, so the host pool's limit follows the machine without an admission calling the host each time.
     private void RefreshAvailable() {
-        var now = Stopwatch.GetTimestamp();
+        var now = m_clock();
         var last = Volatile.Read(location: ref m_availableAt);
 
         if ((last != 0) && ((now - last) < AvailableInterval)) { return; }
@@ -451,8 +480,11 @@ public sealed class MemoryAccount {
 
         lock (m_gate) {
             m_available = available;
+            // The free memory is what was free beside what the pool held then: what the pool has taken since comes out
+            // of it, so the reading is spent once however long it stands.
+            m_availableHeld = HeldOf(pool: PhysicalMemory.Host);
             Volatile.Write(location: ref m_availableAt, value: Math.Max(val1: 1L, val2: now));
-            if (Pressed(pool: PhysicalMemory.Host)) { m_pressure = 1; }
+            NotePressure(pool: PhysicalMemory.Host);
         }
     }
     // Under m_gate.
@@ -480,7 +512,7 @@ public sealed class MemoryAccount {
         if (pool == PhysicalMemory.Host) {
             var budget = (m_budget ?? DefaultBudget);
 
-            if (m_available is { } available) { budget = Math.Min(val1: budget, val2: available.AddSaturating(right: HeldOf(pool: pool))); }
+            if (m_available is { } available) { budget = Math.Min(val1: budget, val2: available.AddSaturating(right: m_availableHeld)); }
 
             return Math.Max(val1: 0L, val2: (budget - Headroom));
         }
@@ -494,7 +526,7 @@ public sealed class MemoryAccount {
             var spend = recorded.SpendLimit;
 
             foreach (var state in m_segments.Values) {
-                if ((state.Segment == recorded.Segment) && (state.RefusedLimit is { } refused)) { spend = Math.Min(val1: spend, val2: refused); }
+                if ((state.Segment == recorded.Segment) && (RefusedLimitOf(state: state) is { } refused)) { spend = Math.Min(val1: spend, val2: refused); }
             }
             limit = ((limit ?? 0L) + spend);
         }
@@ -521,7 +553,20 @@ public sealed class MemoryAccount {
             ? recorded.SpendLimit
             : ((state.Segment.Bytes != 0UL) ? SpendLimitOf(budget: ((long)Math.Min(val1: state.Segment.Bytes, val2: ((ulong)long.MaxValue)))) : null));
 
-        return ((state.RefusedLimit is { } refused) ? Math.Min(val1: (limit ?? long.MaxValue), val2: refused) : limit);
+        return ((RefusedLimitOf(state: state) is { } refused) ? Math.Min(val1: (limit ?? long.MaxValue), val2: refused) : limit);
+    }
+    // Under m_gate: the limit a device refusal left on a segment, or null once it has stood for the segment's wait: the
+    // next allocation is then admitted on the reading alone and probes the device. A probe the device refuses puts the
+    // limit back with twice the wait (Settle); one it makes ends the refusal.
+    private long? RefusedLimitOf(SegmentState state) {
+        if ((state.RefusedLimit is not null) && ((m_clock() - state.RefusedAt) >= state.RefusedWait)) { state.RefusedLimit = null; }
+
+        return state.RefusedLimit;
+    }
+    // Wakes the owners waiting for room; called with the account's lock held or not, never the reverse.
+    private void SignalRoom() {
+        if (Volatile.Read(location: ref m_roomWaiters) == 0) { return; }
+        lock (m_room) { Monitor.PulseAll(obj: m_room); }
     }
     // Under m_gate: the entry of the owner a family belongs to.
     private FamilyEntry FamilyOf(PhysicalMemory pool, string family) {
@@ -535,13 +580,18 @@ public sealed class MemoryAccount {
         return entry;
     }
     // Under m_gate: moves a family's held bytes or reserved peak, keeping the pool's and the class's promises with it.
-    private void ChangeFamily(FamilyEntry entry, long held, long peak) {
+    // Bytes a grant drew from the reservation stay pending until the owner's resources name them, so a second grant
+    // made before the first is counted and named finds them spent.
+    private void ChangeFamily(FamilyEntry entry, long held, long peak, long pending = 0L) {
         var before = entry.Promise;
 
         entry.Held += held;
         entry.Peak += peak;
+        entry.Pending = Math.Max(val1: 0L, val2: ((entry.Pending + pending) - Math.Max(val1: 0L, val2: held)));
 
         var promise = (entry.Promise - before);
+
+        if ((promise < 0L) || (held < 0L)) { SignalRoom(); }
 
         m_pools[((int)entry.Pool)].FamilyPromised += promise;
         if (entry.Classified) {
@@ -593,8 +643,18 @@ public sealed class MemoryAccount {
     // Under m_gate: counts a refused admission. A refusal is admission working, not pressure: pressure is a limit that
     // fell under what its pool holds, a device that refused, or storage admitted past a limit.
     private void Refused(PhysicalMemory pool) => m_pools[((int)pool)].Refusals++;
-    // Under m_gate: whether a pool holds and has promised more than its limit beyond the forced job.
-    private bool Pressed(PhysicalMemory pool) => ((LimitOf(pool: pool) is { } limit) && (((HeldOf(pool: pool) + PromisedOf(pool: pool)) - (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L)) > limit));
+    // Under m_gate: marks pressure when what a pool holds and has promised past its limit, beyond the forced job, has
+    // grown since it was last read. A pool that stands over a limit it cannot get back under asks for one trim, not one
+    // at every reading; one that falls back and passes it again asks again.
+    private void NotePressure(PhysicalMemory pool) {
+        var state = m_pools[((int)pool)];
+        var over = ((LimitOf(pool: pool) is { } limit)
+            ? Math.Max(val1: 0L, val2: (((HeldOf(pool: pool) + PromisedOf(pool: pool)) - (((pool == PhysicalMemory.Host) && (m_forced is not null)) ? m_forcedBytes : 0L)) - limit))
+            : 0L);
+
+        if (over > state.PressureOver) { m_pressure = 1; }
+        state.PressureOver = over;
+    }
     // Under m_gate: keeps the most a pool has held at once.
     private void RaisePeak(PhysicalMemory pool) {
         var state = m_pools[((int)pool)];
@@ -602,13 +662,15 @@ public sealed class MemoryAccount {
         state.Peak = Math.Max(val1: state.Peak, val2: HeldOf(pool: pool));
     }
     // The ledger's door: whether a device allocation may be made, and the promise it stands as until it settles.
-    private GpuMemoryAdmission Admit(string backend, GpuMemorySegment segment, long bytes, string? payer, long payerBytes) {
+    private GpuMemoryAdmission Admit(string backend, GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay) {
         RefreshAvailable();
         lock (m_gate) {
             var pool = segment.Pool;
             var entry = (((payer is not null) && m_families.TryGetValue(key: (pool, GpuObjectName.MemoryOwnerOf(family: payer)), value: out var found)) ? found : null);
-            // What the payer's reservation already promised is not promised again.
-            var net = (bytes - Math.Min(val1: payerBytes, val2: (entry?.Promise ?? 0L)));
+            // What the payer's reservation already promised is not promised again, and is drawn from it here, under
+            // the lock, so no other grant is given the same credit.
+            var credit = Math.Min(val1: payerBytes, val2: (entry?.Promise ?? 0L));
+            var net = (bytes - credit);
             var state = m_pools[((int)pool)];
             var segmentState = (m_segments.TryGetValue(key: (backend, segment.Index, pool), value: out var known) ? known : null);
             var fits = Fits(extra: net, pool: pool);
@@ -622,34 +684,49 @@ public sealed class MemoryAccount {
             if (!fits) {
                 // An owner's storage gives way only past the floor its reservations state: what it cannot run without is
                 // admitted like fixed storage.
-                if ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + bytes) > entry.Floor)) {
+                if (givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + bytes) > entry.Floor))) {
                     Refused(pool: pool);
 
-                    return new(Bytes: bytes, Net: net, Verdict: GpuMemoryVerdict.Refused);
+                    return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);
                 }
                 verdict = GpuMemoryVerdict.OverLimit;
                 state.OverLimitGrants++;
                 state.OverLimitBytes += net;
                 m_pressure = 1;
             }
-            state.Granted += net;
+            state.Granted += bytes;
             if (segmentState is not null) { segmentState.Granted += bytes; }
+            if (credit > 0L) { ChangeFamily(entry: entry!, held: 0L, peak: 0L, pending: credit); }
 
-            return new(Bytes: bytes, Net: net, Verdict: verdict);
+            return new(Bytes: bytes, Net: net, Payer: ((credit > 0L) ? payer : null), Verdict: verdict);
         }
     }
     private void Settle(string backend, GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) {
         lock (m_gate) {
             var state = m_pools[((int)segment.Pool)];
 
-            state.Granted -= admission.Net;
+            state.Granted -= admission.Bytes;
+            // A grant that was not counted gives its credit back to the reservation; a counted one keeps it pending
+            // until the owner's resources name the bytes.
+            if ((settlement != GpuMemorySettlement.Counted) && (admission.Payer is { } payer) && m_families.TryGetValue(key: (segment.Pool, GpuObjectName.MemoryOwnerOf(family: payer)), value: out var entry)) {
+                ChangeFamily(entry: entry, held: 0L, peak: 0L, pending: -Math.Min(val1: entry.Pending, val2: (admission.Bytes - admission.Net)));
+            }
+            SignalRoom();
             if (!m_segments.TryGetValue(key: (backend, segment.Index, segment.Pool), value: out var segmentState)) { return; }
             segmentState.Granted -= admission.Bytes;
+            if (settlement == GpuMemorySettlement.Counted) {
+                // The device made an allocation with no refusal standing: the next refusal waits the first interval.
+                if (segmentState.RefusedLimit is null) { segmentState.RefusedWait = 0L; }
+
+                return;
+            }
             if (settlement != GpuMemorySettlement.DeviceRefused) { return; }
             // The device said no under the limit the reading gave: the segment holds what it can until its budget is
-            // read differently.
+            // read differently or the refusal has stood its wait, which doubles while refusals follow one another.
             segmentState.RefusedLimit = segmentState.Owner.HeldLocked;
             segmentState.RefusedBudget = (RecordedLimit(segment: segment)?.Budget ?? -1L);
+            segmentState.RefusedAt = m_clock();
+            segmentState.RefusedWait = ((segmentState.RefusedWait == 0L) ? RefusalProbeInterval : Math.Min(val1: (2L * segmentState.RefusedWait), val2: MostRefusalProbeInterval));
             state.DeviceRefusals++;
             m_pressure = 1;
         }
@@ -674,6 +751,8 @@ public sealed class MemoryAccount {
         public long OverLimitBytes;
         public long OverLimitGrants;
         public long Peak;
+        // What the pool held and had promised past its limit when pressure last read it.
+        public long PressureOver;
         public long Refusals;
         public long Retiring;
     }
@@ -684,6 +763,9 @@ public sealed class MemoryAccount {
 
         public Owner Owner { get; } = owner;
 
+        // When the device last refused an allocation in the segment, and how long that refusal stands before a probe.
+        public long RefusedAt;
+        public long RefusedWait;
         public long RefusedBudget;
         public long? RefusedLimit;
 
@@ -702,10 +784,12 @@ public sealed class MemoryAccount {
         public long Floor;
         public long Held;
         public long Peak;
+        // The bytes grants drew from the reservation that its resources have not named yet.
+        public long Pending;
 
         public PhysicalMemory Pool { get; } = pool;
 
-        public long Promise => Math.Max(val1: 0L, val2: (Peak - Held));
+        public long Promise => Math.Max(val1: 0L, val2: ((Peak - Held) - Pending));
     }
 
     /// <summary>One lifecycle's allocation totals and simultaneous-peak reservation, with no buffer registry. Each charge
@@ -719,11 +803,16 @@ public sealed class MemoryAccount {
         private readonly OwnerKind m_kind;
         private readonly MemoryClass m_class;
         private readonly FamilyEntry? m_family;
+
         private readonly long[] m_rows = new long[Backings];
 
         private MemoryCategory m_category;
         private long m_bytes;
         private long m_reservationPeak;
+
+        // The peak the owner was last refused, until a reservation of it is held; -1 for none.
+        private long m_refusedPeak = -1L;
+
         private long m_ownedPeak;
         private bool m_closed;
         private bool m_tracked;
@@ -767,6 +856,7 @@ public sealed class MemoryAccount {
             m_account.m_reserved += change;
             m_account.m_ownerPromised[((int)EffectiveClass)] += change;
             Track();
+            if (change < 0L) { m_account.SignalRoom(); }
         }
 
         internal MemoryOwnerReading Read() {
@@ -790,9 +880,14 @@ public sealed class MemoryAccount {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if (!m_account.Fits(extra: (Math.Max(val1: 0, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) {
-                    m_account.Refused(pool: PhysicalMemory.Host);
+                    // An owner that asks again for the peak it was just refused is one wait, counted once.
+                    if (m_refusedPeak != peak) {
+                        m_account.Refused(pool: PhysicalMemory.Host);
+                        m_refusedPeak = peak;
+                    }
                     return false;
                 }
+                m_refusedPeak = -1L;
                 SetPeak(peak: peak);
                 return true;
             }
@@ -816,6 +911,7 @@ public sealed class MemoryAccount {
                 if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
                 m_account.m_forced = this;
                 m_account.m_forcedBytes = peak;
+                m_refusedPeak = -1L;
                 SetPeak(peak: peak);
                 return true;
             }
@@ -828,7 +924,50 @@ public sealed class MemoryAccount {
                 if (ReferenceEquals(objA: m_account.m_forced, objB: this)) {
                     m_account.m_forced = null;
                     m_account.m_forcedBytes = 0;
+                    m_account.SignalRoom();
                 }
+            }
+        }
+        /// <summary>Reserves the owner's simultaneous peak for transient work that holds nothing else, waiting for room
+        /// when the pool has none: it is admitted when the reservation fits (<see cref="TryReserve"/>) or, with no other
+        /// forced job in the process, as the forced job (<see cref="TryReserveForced"/>), and otherwise sleeps on the
+        /// host until a pool gains room or <paramref name="patience"/> runs out, asking again at least every
+        /// <see cref="RoomSlice"/>. A caller that is refused does without: its work is a cache's, and a miss is derived
+        /// again by work that is admitted on its own terms. The wait is bounded because a waiter can hold a worker the
+        /// forced job needs.</summary>
+        /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
+        /// <param name="patience">How long the owner waits for room before it does without.</param>
+        /// <param name="reason">Why the calling thread waits, for the host's wait records.</param>
+        /// <returns><see langword="true"/> when the reservation is held; <see langword="false"/> when the patience ran
+        /// out, and nothing was reserved.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
+        /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
+        /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
+        public bool TryReserveWithin(long peak, TimeSpan patience, in WaitReason reason) {
+            if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
+
+            var deadline = WaitDeadline.In(budget: patience);
+
+            // Counted as a waiter before each ask, so a release after the ask pulses. One made between the ask and the
+            // sleep is missed, and the slice bounds what that costs.
+            _ = Interlocked.Increment(location: ref m_account.m_roomWaiters);
+            try {
+                while (true) {
+                    if (TryReserve(peak: peak) || TryReserveForced(peak: peak)) { return true; }
+                    if (deadline.HasPassed) { return false; }
+
+                    var slice = WaitDeadline.In(budget: RoomSlice);
+                    WaitOutcome outcome;
+
+                    lock (m_account.m_room) {
+                        outcome = HostWaits.OnCondition(deadline: ((slice.Timestamp < deadline.Timestamp) ? slice : deadline), monitor: m_account.m_room, reason: in reason);
+                    }
+                    // A pulse and a slice that ran out both ask again; only the patience running out ends the wait,
+                    // after one last ask.
+                    if ((outcome == WaitOutcome.DeadlinePassed) && deadline.HasPassed) { return (TryReserve(peak: peak) || TryReserveForced(peak: peak)); }
+                }
+            } finally {
+                _ = Interlocked.Decrement(location: ref m_account.m_roomWaiters);
             }
         }
         /// <inheritdoc/>
@@ -856,6 +995,7 @@ public sealed class MemoryAccount {
                 m_bytes = next;
                 m_rows[((int)backing)] = row;
                 m_ownedPeak = Math.Max(val1: m_ownedPeak, val2: next);
+                if (bytes < 0L) { m_account.SignalRoom(); }
                 switch (m_kind) {
                     case OwnerKind.Segment:
                         m_account.m_deviceBlocks[((int)m_pool)] += bytes;
@@ -1039,8 +1179,8 @@ public sealed class MemoryAccount {
     // What a backend's ledger asks and reports to: the admission door, a segment owner per segment and a family owner
     // per family and segment.
     private sealed class LedgerOwners(MemoryAccount account, string backend) : IGpuMemoryOwners {
-        public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes) =>
-            account.Admit(backend: backend, bytes: bytes, payer: payer, payerBytes: payerBytes, segment: segment);
+        public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay) =>
+            account.Admit(backend: backend, bytes: bytes, givesWay: givesWay, payer: payer, payerBytes: payerBytes, segment: segment);
         public void Settle(GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) =>
             account.Settle(admission: admission, backend: backend, segment: segment, settlement: settlement);
         public IAllocationObserver OfSegment(GpuMemorySegment segment) {
