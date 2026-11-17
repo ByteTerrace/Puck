@@ -342,7 +342,9 @@ public sealed partial class SdfWorldTables {
     // The cause a staging that does not take the frame's journal packs its records under: the cause the frame states for
     // the journal entry this staging is the first to consume, then a landing's refusal, then a lost cursor.
     private SdfMeshStagingCause RefusalOf(SdfFrame frame) {
-        if ((frame.MeshDrawChangesCause is { } stated) && (frame.MeshDrawChangesSerial != m_drawChangesSerial)) { return stated; }
+        // Serials belong to one producer. A replacement list can start at the serial the previous list ended at.
+        if ((frame.MeshDrawChangesCause is { } stated) &&
+            (!ReferenceEquals(frame.MeshDraws, m_meshSource) || (frame.MeshDrawChangesSerial != m_drawChangesSerial))) { return stated; }
         if ((frame.MeshDrawChanges is null) || (m_meshSource is null)) { return SdfMeshStagingCause.Cursor; }
         return ((!m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (frame.MeshDraws.Count != m_stagedCount))
             ? SdfMeshStagingCause.Landing
