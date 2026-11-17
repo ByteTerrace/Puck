@@ -550,8 +550,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public bool Settling {
         get {
             lock (m_gate) {
-                // A faulted worker settles nothing: the next Stage reports it.
-                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                // A faulted worker, meter or scene build settles nothing: the next Stage reports it.
+                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
             }
         }
     }
@@ -559,7 +559,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Whether the published geometry is still changing: a scene build, a trace or a window's refill owed. A relight in
     // progress leaves the probes' cells, origins and surface maps as they stand.
     private bool GeometrySettling =>
-        ((m_worker is { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_traceOwed) || m_refillOwed || Unwritten ||
+        ((m_worker is { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_traceOwed) || m_refillOwed || Unwritten ||
         m_tracedLanded || m_geometryWrote);
     private bool Unwritten {
         get {
@@ -818,7 +818,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return m_published;
     }
     // Whether this frame's static draws are the installed scene, waiting for a build in flight. A build already in flight
-    // may belong to an older frame, so the frame resolves again after it lands until its own draws are installed.
+    // may belong to an older frame, so the frame resolves again after it lands until its own draws are installed; a build
+    // that faulted fails the frame as it resolves (RefreshScene).
     private bool AwaitScene(SdfFrame frame, WaitDeadline deadline) {
         while (true) {
             Task? build;
@@ -828,20 +829,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 build = RefreshScene(frame: frame);
             }
             if (build is null) { return true; }
-            if (!AwaitLanding(deadline: deadline, failure: "The irradiance volume's scene build failed.", reason: in SceneWait, task: build)) { return false; }
+            if (HostWaits.Wait(deadline: deadline, reason: in SceneWait, task: build) == WaitOutcome.DeadlinePassed) { return false; }
         }
     }
-    // Whether the windows' refill has landed, waiting for the one in flight.
+    // Whether the windows' refill has landed, waiting for the one in flight. A refill that faulted leaves its refill
+    // owed, so Settling holds the frame and every converging frame fails with it here.
     private bool AwaitRefill(WaitDeadline deadline) {
         Task? refill;
 
         lock (m_gate) { refill = (m_refillOwed ? m_refill : null); }
-        return ((refill is null) || AwaitLanding(deadline: deadline, failure: "The irradiance volume's window refill failed.", reason: in RefillWait, task: refill));
-    }
-    // Whether a scene build or refill a converging frame needs has finished, waiting for it; its fault fails the frame.
-    private static bool AwaitLanding(Task task, in WaitReason reason, WaitDeadline deadline, string failure) {
-        if (HostWaits.Wait(deadline: deadline, reason: in reason, task: task) == WaitOutcome.DeadlinePassed) { return false; }
-        if (task.IsFaulted) { throw new InvalidOperationException(message: failure, innerException: task.Exception); }
+        if (refill is null) { return true; }
+        if (HostWaits.Wait(deadline: deadline, reason: in RefillWait, task: refill) == WaitOutcome.DeadlinePassed) { return false; }
+        if (refill.IsFaulted) { throw new InvalidOperationException(message: "The irradiance volume's window refill failed.", innerException: refill.Exception); }
         return true;
     }
     // Whether no background trace runs, asking the one in flight to return at its next batch and waiting for it, so the
@@ -1394,8 +1393,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
     // to it builds; the old scene traces until the new one lands. While the bake still owes opaque static meshes, a frame
     // with none landed builds nothing: an empty scene would measure open sky where the walls have yet to land.
-    // Returns the build to wait for before this frame can use its scene, or null when it is already installed.
+    // Returns the build to wait for before this frame can use its scene, or null when it is already installed. A build
+    // that faulted is reported here, the one door every build passes, so whichever frame resolves next fails with it,
+    // whatever its draws; until then Settling holds the frame, and the next frame builds again.
     private Task? RefreshScene(SdfFrame frame, bool bakePending = false) {
+        if (m_build is { IsFaulted: true } faulted) {
+            (m_build, m_buildingKey) = (null, 0);
+            throw new InvalidOperationException(message: "The irradiance volume's scene build failed.", innerException: faulted.Exception);
+        }
+
         var (key, draws) = StaticKey(frame: frame);
 
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
