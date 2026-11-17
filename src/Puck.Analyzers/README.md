@@ -121,7 +121,8 @@ and fails that project's build under `TreatWarningsAsErrors`. It reads symbols:
 a call, a method group or delegate conversion, or a property read of any
 managed wait family (task waits and results, wait handles, slim events and
 semaphores, `Monitor.Wait`, thread joins, sleeps and spins, blocking
-collections) and of `ConfinedDirectory.AcquireLock`. A call with a constant
+collections) and of `ConfinedDirectory.AcquireLock`, `FileLock.Acquire` and
+`FileLockWait.Acquire`. A call with a constant
 zero timeout polls and passes; a task's `Result` or `GetResult` passes inside a
 branch whose condition tests the same expression's completion. To list a
 project's sites without failing it, build it with `-p:PuckWaitRule=true
