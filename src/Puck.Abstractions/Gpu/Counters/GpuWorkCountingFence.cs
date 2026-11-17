@@ -24,6 +24,9 @@ internal sealed class GpuWorkCountingFence(IGpuSubmissionFence inner, GpuWorkLed
     public void SignalOnCompletion(EventWaitHandle signal) =>
         inner.SignalOnCompletion(signal: signal);
     /// <inheritdoc/>
+    public void HandOff() =>
+        inner.HandOff();
+    /// <inheritdoc/>
     public void Dispose() {
         inner.Dispose();
         ArmedSubmission = 0L;

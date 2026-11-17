@@ -323,7 +323,8 @@ do, and `world.residency`'s `gpu-work` line counts the jobs measured past it
 (`over-frame-share`) and names the longest (`most-job`). A frame the graph
 withholds (`SdfWorldResidency.FrameWithheld`: a locked tick completing its
 meshes, or a frame held for its lighting) queues nothing behind the work: its
-staging drives the jobs outside the share (`SdfGpuWork.Drive`), the view's
+staging drives the jobs outside the share (`SdfGpuWork.Drive`, and its
+top-of-frame pump takes them unmetered too), the view's
 image waits until the hold ends (`IRenderGraphPackageFactory.WaitingOf` and
 `WithheldOf`), and the same line
 counts the drives and where their wall time went. The three cascades and `mesh`

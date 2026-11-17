@@ -1565,7 +1565,10 @@ the fixed shares are gone.
   wait's deadline, and a failure there is kept for the next pump, where the
   host's recovery catches a lost device. A held frame's drive
   (`SdfGpuWork.Drive`) waits on the same event through the door, with a
-  deadline, in place of an unbounded fence wait.
+  deadline, in place of an unbounded fence wait. It runs inside the frame's
+  open batch, so it hands its jobs to the queue before each wait
+  (`IGpuSubmissionFence.HandOff`, the split a fence wait makes), and starts
+  no step once its slice has passed.
 - **The backlog as time.** The bake's admission compares two wall times the
   pool measures of itself (`SdfMeshBakeBacklog`): what its workers take to
   drain the stages queued and those of groups admitted and still on their way,
@@ -1580,7 +1583,10 @@ the fixed shares are gone.
   rewrites (`SdfGpuWork.EndLeases`); upload counts never certify retirement.
 - **A job's hold.** A slot's buffers, its readback among them, come from one
   door (`SdfGpuWorkRecording.HostBuffer`, `SdfGpuWorkRecording.DeviceBuffer`,
-  `SdfGpuWorkRecording.CopyToReadback`), which raises the service's
+  `SdfGpuWorkRecording.CopyToReadback`, `SdfGpuWorkRecording.ReserveReadback`),
+  which creates nothing once the job has consumed state
+  (`SdfGpuWorkRecording.CopyRegion`), so a job is handed back only whole, and
+  which raises the service's
   reservation before it creates one (`SdfGpuWorkHold`, workspace under
   `SdfResidencySelector.WorkOwner`, in the device's pool and the host's) and
   lowers it when the buffer goes. A job the pool has no room for is handed
