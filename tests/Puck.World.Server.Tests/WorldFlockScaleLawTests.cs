@@ -265,6 +265,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
         Coincide(fixture: fixture);
         for (ulong tick = 1; (tick <= 20); tick++) {
             population.AdvanceSimulated(
+                fixture.Server.Definition,
                 tick,
                 Fixtures.StepTicks,
                 ((tick - 1) * Fixtures.StepTicks)
@@ -290,6 +291,7 @@ public sealed class WorldFlockScaleLawTests(ITestOutputHelper output) {
             var start = ((tick - 1) * Fixtures.StepTicks);
 
             advance += Measure(action: () => population.AdvanceSimulated(
+                fixture.Server.Definition,
                 tick,
                 Fixtures.StepTicks,
                 start

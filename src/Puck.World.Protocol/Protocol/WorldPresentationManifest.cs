@@ -626,6 +626,9 @@ public sealed class WorldPresentationManifest {
                     }
 
                     return true;
+                case CreationDocument creation:
+                    AddBodyToken(token: creation.SizeBy, truth: true);
+                    return true;
                 case CreationDriverDocument driver:
                     if (CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
                         AddBodyToken(

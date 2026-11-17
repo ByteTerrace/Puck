@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Reflection;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Waiting;
 using Puck.SignedDistance;
 using Xunit;
 
@@ -768,6 +769,112 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.NotEqual(actual: words, expected: landed);
         // Removing the slab retraces only the probes it reached; the rest keep hits a trace would reproduce.
         Assert.InRange(actual: (locked.Counters.Read(kind: SdfMeshIrradiance.Traced) - tracedBefore), low: 1L, high: (SdfMeshIrradiance.MaxProbes - 1L));
+    }
+    /// <summary>THE LAW: a converging frame's scene build that faults after the frame's slice returned keeps the volume
+    /// Settling, so its frame stays withheld, and the next frame to resolve a scene fails with the fault, whatever its
+    /// draws; the frame after it builds again.</summary>
+    [Fact]
+    public void AConvergingFramesSceneBuildThatFaultsAfterItsSliceKeepsTheFrameWithheldAndReportsTheFault() {
+        const BindingFlags Private = (BindingFlags.Instance | BindingFlags.NonPublic);
+        var plinth = Box(low: new Vector3(x: 1f, y: 0f, z: 1f), high: new Vector3(x: 2f, y: 1f, z: 2f));
+        var trap = new FaultingIndices(indices: plinth.Indices.ToArray(), owner: Environment.CurrentManagedThreadId);
+        var frame = Frame();
+
+        frame = frame with { ConvergesLighting = true, MeshDraws = [.. frame.MeshDraws, Draw(mesh: new SdfMesh(indices: trap.Memory, positions: plinth.Positions))] };
+
+        var volume = Volume();
+        var build = typeof(SdfMeshIrradiance).GetField(name: "m_build", bindingAttr: Private)!;
+
+        try {
+            HostWaits.BeginPumpIteration(allowance: TimeSpan.Zero);
+            _ = volume.Stage(bakePending: false, frame: frame, tier: SdfIndirectTier.Medium, write: static _ => { });
+            Assert.Equal(expected: SdfMeshConvergenceStage.Scene, actual: volume.Convergence.Stage);
+            trap.Release();
+            Assert.True(condition: SpinWait.SpinUntil(condition: () => (build.GetValue(obj: volume) is Task { IsFaulted: true }), millisecondsTimeout: 30_000));
+            Assert.True(condition: volume.Settling);
+
+            // Another frame's draws: the fault still reaches the frame, not a replacement build.
+            HostWaits.BeginPumpIteration(allowance: TimeSpan.Zero);
+            var thrown = Assert.Throws<InvalidOperationException>(testCode: () => volume.Stage(bakePending: false, frame: Frame() with { ConvergesLighting = true }, tier: SdfIndirectTier.Medium, write: static _ => { }));
+
+            Assert.Equal(expected: "The irradiance volume's scene build failed.", actual: thrown.Message);
+            Assert.Null(@object: build.GetValue(obj: volume));
+        } finally {
+            HostWaits.EndPump();
+            trap.Release();
+        }
+    }
+    // Indices a mesh reads freely on the thread that made it and that fault anywhere else once released, so a scene
+    // build on the pool is held until the law lets it fail.
+    private sealed class FaultingIndices(uint[] indices, int owner) : System.Buffers.MemoryManager<uint> {
+        private readonly ManualResetEventSlim m_released = new();
+
+        public void Release() => m_released.Set();
+        public override Span<uint> GetSpan() {
+            if (Environment.CurrentManagedThreadId == owner) { return indices; }
+            _ = m_released.Wait(millisecondsTimeout: 30_000);
+            throw new InvalidOperationException(message: "The trapped mesh's indices fault its scene build.");
+        }
+        public override System.Buffers.MemoryHandle Pin(int elementIndex = 0) => throw new NotSupportedException();
+        public override void Unpin() { }
+        protected override void Dispose(bool disposing) { }
+    }
+    /// <summary>THE LAW: on the host loop's pump a lighting-converged frame waits only within its iteration's allowance.
+    /// With no allowance its drain spans iterations, a control phase before each, every frame returning Settling with
+    /// the drain's progress and its waits expiring on the pump through the wait door. A lighting change mid-drain stops
+    /// that pass and leaves nothing in the light the next drain converges to: the words equal those of a fresh volume
+    /// drained under the new lighting alone, off the pump, where the frame waits for its work to the end.</summary>
+    [Fact]
+    public void AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged() {
+        var frame = (Frame() with { ConvergesLighting = true });
+        var lights = new SdfLights();
+
+        lights.Set(index: 0, light: frame.Lights.Records[0] with { Weight = (0.5f * frame.Lights.Records[0].Weight) });
+        lights.Count = 1;
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+
+        var dimmed = (frame with { Lights = lights });
+        var expected = Array.Empty<uint>();
+
+        _ = Volume().Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.High, write: memory => expected = memory.ToArray());
+        Assert.NotEmpty(collection: expected);
+
+        var volume = Volume();
+        var words = Array.Empty<uint>();
+        var phases = 0;
+        var stages = new HashSet<SdfMeshConvergenceStage>();
+        SdfMeshConvergence? interrupted = null;
+        var until = DateTime.UtcNow.AddSeconds(value: 120d);
+
+        try {
+            do {
+                // The control phase: a fresh allowance of nothing, so no wait the frame takes may block.
+                HostWaits.BeginPumpIteration(allowance: TimeSpan.Zero);
+                phases++;
+                _ = volume.Stage(bakePending: false, frame: ((interrupted is null) ? frame : dimmed), tier: SdfIndirectTier.High, write: memory => words = memory.ToArray());
+
+                var convergence = volume.Convergence;
+
+                _ = stages.Add(item: convergence.Stage);
+                if ((interrupted is null) && (convergence is { Stage: SdfMeshConvergenceStage.Drain, Done: > 0 })) {
+                    Assert.True(condition: volume.Settling);
+                    interrupted = convergence;
+                }
+                Thread.Sleep(millisecondsTimeout: 1);
+            } while (((interrupted is null) || volume.Settling) && (DateTime.UtcNow < until));
+        } finally {
+            HostWaits.EndPump();
+        }
+
+        var expired = new WaitRecord[16];
+        var count = HostWaits.Expired(destination: expired);
+
+        Assert.True(condition: (interrupted is { Done: > 0 } drain) && (drain.Done < drain.Total), userMessage: $"stages={string.Join(separator: ',', values: stages)} interrupted={interrupted}");
+        Assert.False(condition: volume.Settling);
+        Assert.Equal(expected: SdfMeshConvergenceStage.None, actual: volume.Convergence.Stage);
+        Assert.True(condition: (phases > 2), userMessage: $"phases={phases}");
+        Assert.Contains(collection: expired.AsSpan(start: 0, length: count).ToArray(), filter: static record => (record.Reason.Subsystem == SdfMeshIrradiance.SourceName) && record.OnPump && (record.BudgetTicks == 0L));
+        Assert.Equal(expected: expected, actual: words);
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>

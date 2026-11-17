@@ -51,7 +51,7 @@ public static class HostQuiet {
         long? idleSince = null;
         string? reported = null;
 
-        progress.WriteLine(value: $"lease quiet: waiting for {settle.TotalSeconds:0} seconds of idle machine (at most {timeout.TotalSeconds:0}): no GPU work, no heavy test run, cpu mean under {thresholds.CapacityCpuPercent:0.#}%, free memory over {thresholds.CapacityRamGb:0.0}GB.");
+        progress.WriteLine(value: $"lease quiet: waiting for {settle.TotalSeconds:0} seconds of idle machine (at most {timeout.TotalSeconds:0}): no GPU work, no heavy test run, cpu mean under {thresholds.CapacityCpuPercent:0.#}%, no memory pressure.");
 
         while (true) {
             cancellationToken.ThrowIfCancellationRequested();

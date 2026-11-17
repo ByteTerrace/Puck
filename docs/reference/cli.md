@@ -987,10 +987,10 @@ Before the solution build, affected run, each baseline check, selected canaries
 and parity, each device suite, each counters
 workload and citations, admission uses
 [`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s default
-thresholds in-process. Memory and disk decide: every heavy step waits for free
-memory over the capacity threshold (5 GB) and free disk over the pressure
-threshold (10 GB), since running out of either is what fails a build or a heavy
-suite. CPU load only slows a step, so it is advisory: a step admitted while the
+thresholds in-process. Memory and disk decide: every heavy step waits while free
+memory is under the pressure threshold or the step's own expected peak does not
+fit in free memory above it, and while free disk is under its pressure threshold
+(10 GB), since running out of either is what fails a build or a heavy suite. CPU load only slows a step, so it is advisory: a step admitted while the
 CPU is over the capacity threshold (50%) runs, and the gate prints the load it
 ran under; the gate never waits or refuses for CPU alone. A step that opens a
 device (the canaries, parity, each device suite, counters and citations, the steps that run only with `--gpu`) also waits for an idle GPU; the
@@ -1042,11 +1042,15 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 `--json` writes one JSON object per reading that prints a line instead: `at`,
 `cpuPercent` (the window's mean), `freeRamGb`, `freeDiskGb`, `commitPercent`,
 `commitChargeGb`, `commitLimitGb`, `starts` (PID, kind, private GB, readiness and start ticks),
-`demands` (headroom, own peak, growth, total need and commit coverage by kind),
+`demands` (headroom, free RAM, own peak, growth, total need, commit and RAM coverage by kind),
 `reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`. Text readings add the
 same per-kind admission demands and running starts after each transition.
-These demand lines judge commit coverage; the capacity lines also judge RAM,
-disk and CPU, and device admission separately checks GPU ownership.
+A demand line's `admitted` is the memory decision a start of that kind gets: its private
+bytes (expected peak plus the growth running starts have left) fit the commit headroom
+with the commit reserve left over (`commit-covered`), and its working set (the same sum
+in resident memory) fits free RAM with the pressure floor left over (`ram-covered`). The
+capacity lines judge CPU, commit headroom against its reserve and pressure, and device
+admission separately checks GPU ownership.
 
 - `GPU busy` or `GPU idle` appears at the first reading and on every change
   after. GPU work is the World (`Puck.World` or `Puck.World.dll`) when its
@@ -1072,23 +1076,38 @@ disk and CPU, and device admission separately checks GPU ownership.
 - `PRESSURE` appears when free memory falls under `--pressure-ram` or free
   disk under `--pressure-disk`, and again when those reasons change.
 - Otherwise `CAPACITY` appears when the CPU mean falls under `--capacity-cpu`
-  with free memory over `--capacity-ram` and the commit charge under
-  `--capacity-commit` percent of the commit limit (default 75: allocation fails
-  at the limit while physical memory is still free), and `LOADED` when that ends without
+  and the commit headroom at or above `--commit-reserve` percent of the commit
+  limit (default 10: allocation fails at the limit while physical memory is
+  still free, and builds charge commit that admission does not predict), and `LOADED` when that ends without
   pressure. Both wait for a full CPU window. `PRESSURE` wins over `CAPACITY`
   within one reading.
 - Each line marks a transition: while a state holds, `--watch` prints nothing
   more, so a watcher sees each change once.
 
 The default thresholds scale with the machine (`HostLoadThresholds.For`).
-Memory thresholds are fractions of the installed memory, rounded up to whole
-gigabytes: capacity needs more than five sixteenths of it free, and pressure
-begins below one eighth. Capacity also needs idle logical processors for the
+The memory threshold is a fraction of the installed memory, rounded up to whole
+gigabytes: pressure begins when free memory is below one eighth of it. No fixed
+amount of free memory or of commit gates a start. A start has two needs. Its
+working set (its expected peak resident memory plus the working-set growth the
+running starts have left) must fit in free memory with the pressure floor left
+over (`HostLoadThresholds.PhysicalCovers`). Its private bytes (its expected commit
+peak plus the running starts' private-byte growth) must fit in the commit headroom
+with the commit reserve left over (`HostLoadThresholds.CommitCovers`; the reserve
+is 10% of the commit limit, `--commit-reserve`). The two are not the same
+quantity: private bytes are commit, which includes memory a process has reserved and
+never touched, so a windowed World's 20 GB of private bytes holds about 14 GB
+resident, and judging free memory against private bytes would refuse every start
+on an idle 32 GB machine. Free memory is what the operating system can hand out
+without writing to disk (Windows `ullAvailPhys`, the sum of the standby, free and
+zero lists; Linux `MemAvailable`), so reclaimable cache already counts. Commit is
+the hard limit and physical memory short of a start makes every process page, so
+the first is judged against the headroom and the second against the pressure
+floor. Capacity also needs idle logical processors for the
 work being admitted: three, but never fewer than 40% of them nor more than half.
 Free disk below 10GB is pressure on every machine, because a build writes the
 same outputs whatever the machine's size. A hypothetical machine with 16GB and
-six logical processors therefore has capacity with CPU below 50% and more than
-5GB free, and is under pressure below 2GB. Options override these
+six logical processors therefore has capacity with CPU below 50% and is under
+pressure below 2GB. Options override these
 defaults, and `puck gate` and `puck affected` admit their heavy steps, `puck lease heavy`
 and `puck lease gpu` their commands, and the MCP server's `puck_world_start` its World
 (a windowed World as a device step, a headless one as an ordinary step) by the
@@ -4810,13 +4829,15 @@ that takes the same lease waits on a sibling, never on itself.
 `puck lease heavy` and `puck lease gpu` also pass the host admission before they hold their lease
 and before the command runs, the one `gate`, `affected` and the MCP server's World start wait on
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
-over the capacity threshold, a commit charge under its share of the commit limit, commit headroom that covers the start's expected peak
-(the machine's observed peak for that kind, plus what admitted starts still running have left to grow), free disk
+above the pressure threshold, commit headroom that covers the start's expected peak in private bytes
+(the machine's observed peak for that kind, plus what admitted starts still running have left to grow) and still holds the
+commit reserve (10% of the commit limit), free memory that covers the start's expected working set (measured per kind the same way,
+plus the running starts' working-set growth) and still sits at the pressure floor, free disk
 over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
 heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
 (exit 2, ticket withdrawn) when the machine has no headroom; wait lines go to standard error
 (`gate: waiting for host capacity before lease heavy <holder> (at most N minutes): no memory
-headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s))).`) and a heartbeat repeats them
+headroom: commit headroom 16.0GB (admission needs at least 24.4GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s) plus the 6.4GB commit reserve)).`) and a heartbeat repeats them
 while it lasts. The final refusal names the last blocker even before a heartbeat
 is due; growth shortfalls also name the live starts by kind and PID. `lease build` and `lease quiet` take no admission of their own: a World build
 holds its own limits, and a quiet window settles on the same readings.
@@ -4827,13 +4848,15 @@ Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch`
 the unused reserve over one minute without a material allocation (64 MB),
 releasing it entirely at the plateau and restoring it if growth resumes. A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
-`HostStartTracker` learns the maximum private bytes observed in plateaued or
+`HostStartTracker` learns the maximum private bytes and the maximum working set observed in plateaued or
 finished processes observed for a full plateau window of each kind, then raises known measurements when live usage
 exceeds them. These measurements replace the fallback in either direction,
 without clipping real peaks, and persist per machine in the shared lease root
-under `host-peaks/<HostStartKind>`. An exclusive sibling guard merges concurrent
+under `host-peaks/<HostStartKind>` (private bytes) and `host-peaks/<HostStartKind>.resident`
+(working set). An exclusive sibling guard per file merges concurrent
 measurements. Before the first measurement, `HostLoadThresholds.DefaultPeakGb`
-provides the fallback. The ordinary host samplers feed this same tracker,
+provides the private-byte fallback, and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
+private-byte peak is the working-set fallback until the kind's working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
 Pre-process reservations remain local and expire when a matching process appears
 or after `HostStartTracker.ReservationHold`. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.

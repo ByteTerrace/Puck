@@ -7,6 +7,7 @@ using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Memory;
+using Puck.Abstractions.Waiting;
 using Puck.Maths;
 using Puck.SignedDistance;
 
@@ -549,8 +550,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public bool Settling {
         get {
             lock (m_gate) {
-                // A faulted worker settles nothing: the next Stage reports it.
-                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                // A faulted worker, meter or scene build settles nothing: the next Stage reports it.
+                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
             }
         }
     }
@@ -558,7 +559,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Whether the published geometry is still changing: a scene build, a trace or a window's refill owed. A relight in
     // progress leaves the probes' cells, origins and surface maps as they stand.
     private bool GeometrySettling =>
-        ((m_worker is { IsFaulted: true }) || (m_build is { IsCompleted: false }) || ((m_scene is not null) && m_traceOwed) || m_refillOwed || Unwritten ||
+        ((m_worker is { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_traceOwed) || m_refillOwed || Unwritten ||
         m_tracedLanded || m_geometryWrote);
     private bool Unwritten {
         get {
@@ -650,19 +651,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
         }
 
-        // A lighting-converged frame must trace its own scene, not whichever asynchronous build happened to land first.
-        // Wait outside the gate: the builder takes it to publish. A build already in flight may belong to an older
-        // frame, so resolve again after it lands until this frame's static draws are the installed scene.
-        if (frame.ConvergesLighting && !bakePending) {
-            while (true) {
-                Task? build;
+        // A lighting-converged frame's own work (its scene, its windows' refill, the background trace's yield and the
+        // drain) runs on the thread pool, and the frame waits for each through the wait door under one deadline counted
+        // from the convergence's first wait. On the host loop's pump the door clips every wait to what the iteration's
+        // allowance has left, so a frame whose work outlasts it returns at once, Settling, and its residency answers
+        // waiting with Convergence while the loop holds the tick; the next frame resumes the same work. Elsewhere the
+        // frame waits for its work up to the deadline.
+        var converging = frame.ConvergesLighting;
+        var deadline = (converging ? ConvergenceDeadline() : default);
 
-                lock (m_gate) {
-                    build = RefreshScene(frame: frame);
-                }
-                if (build is null) { break; }
-                build.GetAwaiter().GetResult();
-            }
+        // A lighting-converged frame must trace its own scene, not whichever asynchronous build happened to land first.
+        if (converging && !bakePending && !AwaitScene(deadline: deadline, frame: frame)) {
+            return Converging(stage: SdfMeshConvergenceStage.Scene);
         }
 
         var layout = Layout.Of(tier: tier, bounces: frame.IndirectBounces, reach: MathF.Max(x: 1f, y: frame.FarDistance));
@@ -714,34 +714,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_windowValid = true;
                 Owe();
                 m_traceOwed = true;
-                OweRefill(pooled: !frame.ConvergesLighting);
+                OweRefill();
             }
-            drain = (frame.ConvergesLighting && (m_scene is not null) && (m_lighting is not null) && (m_owed || (m_drained != DrainKey())));
+            drain = (converging && (m_scene is not null) && (m_lighting is not null) && (m_owed || (m_drained != DrainKey())));
         }
 
-        // A lighting-converged frame refills its window before it renders, waiting for a refill in flight, which takes the gate.
-        if (frame.ConvergesLighting) {
-            m_refill?.Wait();
-            Refill();
-        }
+        // A lighting-converged frame renders the window refilled, then traced and relit to the end, so its indirect light
+        // and its views' exposure meters never depend on how far asynchronous work had got by the time the frame was
+        // asked for, nor on the bounce earlier frames left in the cache. Every wait runs outside the gate, which the work
+        // waited for takes to land.
+        var stage = SdfMeshConvergenceStage.None;
 
-        // A lighting-converged frame renders the window traced and relit to the end, so its indirect light and its views' exposure
-        // meters never depend on how far asynchronous work had got by the time the frame was asked for, nor on the
-        // bounce earlier frames left in the cache. The drain takes the gate itself, so it runs outside it, after the
-        // worker in flight, which may hold it, has finished.
-        if (drain && (GpuTrace is null)) {
-            // The worker returns at its next batch, so the drain takes over whatever budgeted work it had left.
-            lock (m_gate) { m_yield = true; }
-            try {
-                m_worker?.Wait();
-            } catch (AggregateException) {
-                // A faulted worker is reported below, as it is for any frame.
-            }
-            lock (m_gate) { m_yield = false; }
-            if (m_worker is not { IsFaulted: true }) {
-                Drain();
-            }
-        }
+        if (converging && !AwaitRefill(deadline: deadline)) { stage = SdfMeshConvergenceStage.Refill; }
+        if (drain && (stage == SdfMeshConvergenceStage.None) && !AwaitYield(deadline: deadline)) { stage = SdfMeshConvergenceStage.Yield; }
+
+        Task? draining = null;
 
         lock (m_gate) {
             if (m_worker is { IsFaulted: true } faulted) {
@@ -752,22 +739,126 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_gpuMeterTask = null;
                 throw new InvalidOperationException(message: "The GPU exposure meter failed.", innerException: meterFault.Exception);
             }
-            if (drain && (GpuTrace is not null) && !m_gpuDraining) { m_yield = true; }
-            if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
-                m_yield = false;
-                m_gpuDraining = (drain && (GpuTrace is not null));
-                m_worker = StartWorker(drain: drain);
+            // A converging frame still waiting for its refill or the yield starts no worker: the drain takes over the
+            // background trace's work, and starts only from the windows it renders.
+            if (!converging || (stage == SdfMeshConvergenceStage.None)) {
+                if (drain && !m_draining) { m_yield = true; }
+                if ((m_owed || drain) && (m_scene is not null) && (m_lighting is not null) && (m_worker is null or { IsCompleted: true }) && (Granted || drain)) {
+                    m_yield = false;
+                    m_draining = drain;
+                    if (drain) { (m_drainPass, m_drainDone, m_drainTotal) = (0, 0, 0); }
+                    m_worker = StartWorker(drain: drain);
+                }
+                if (drain && m_draining) { draining = m_worker; }
             }
+        }
+        if ((draining is not null) && !AwaitWorker(deadline: deadline, reason: in DrainWait, worker: draining)) { stage = SdfMeshConvergenceStage.Drain; }
+        lock (m_gate) {
+            // A drain that stopped for a change of what it drew from leaves the frame's drain owed, which the next
+            // frame starts afresh.
+            if (drain && (stage == SdfMeshConvergenceStage.None) && (m_owed || (m_drained != DrainKey()))) { stage = SdfMeshConvergenceStage.Drain; }
             Publish(layout: layout, write: write);
         }
         ScheduleGpuMeters(frame: frame);
-        return m_published;
+        // A frame that does not converge lighting ends any convergence one left behind.
+        return Converging(stage: stage);
     }
 
-    // Starts the trace worker. Apart from Stage, whose every call would otherwise allocate the closure over `drain`.
+    // Starts the trace worker: the drain of a lighting-converged frame, or the budgeted background work. Apart from
+    // Stage, whose every call would otherwise allocate the closure over `drain`.
     private Task StartWorker(bool drain) => Task.Run(action: () => {
-        try { if (drain && (GpuTrace is not null)) { Drain(); } else { Work(); } } catch (OperationCanceledException) when ((GpuTrace is not null)) { m_listed = false; }
+        try { if (drain) { Drain(); } else { Work(); } } catch (OperationCanceledException) when ((GpuTrace is not null)) { m_listed = false; }
     });
+
+    private static readonly WaitReason SceneWait = new(Subsystem: SourceName, WaitsFor: "a converging frame's trace scene");
+    private static readonly WaitReason RefillWait = new(Subsystem: SourceName, WaitsFor: "a converging frame's window refill");
+    private static readonly WaitReason YieldWait = new(Subsystem: SourceName, WaitsFor: "the background trace yielding to a converging frame");
+    private static readonly WaitReason DrainWait = new(Subsystem: SourceName, WaitsFor: "a converging frame's drain");
+
+    // How long a lighting-converged frame's waits may take in all, counted from its convergence's first wait and never
+    // restarted by a later frame: off the pump, the longest a caller blocks for one convergence. Its expiry gives up
+    // nothing: a frame past it answers waiting at once until its work lands, and a debug world's whole convergence on
+    // the pump can outlast it. Presentation only.
+    private static readonly TimeSpan ConvergenceStall = TimeSpan.FromMinutes(value: 2d);
+
+    // The convergence's first wait as a Stopwatch timestamp, zero while none stands, the frame thread's; and where it
+    // stands, as Convergence reports it, under the gate.
+    private long m_convergingSince;
+    private SdfMeshConvergenceStage m_convergence;
+    // The drain's progress: its pass, the probes the pass has landed and the probes a pass takes. The drain's, under the gate.
+    private int m_drainPass;
+    private int m_drainDone;
+    private int m_drainTotal;
+    // Whether the latest worker started is a drain, so a frame that asks for one does not ask the drain to yield.
+    private bool m_draining;
+
+    /// <summary>Gets where the latest lighting-converged frame's own work stands: the part its held frame still waits
+    /// for and the drain's progress; <see cref="SdfMeshConvergenceStage.None"/> once it has landed, and for a frame
+    /// that does not converge lighting. Safe to read from any thread.</summary>
+    public SdfMeshConvergence Convergence {
+        get {
+            lock (m_gate) {
+                return ((m_convergence == SdfMeshConvergenceStage.Drain)
+                    ? new SdfMeshConvergence(Done: m_drainDone, Pass: m_drainPass, Stage: m_convergence, Total: m_drainTotal)
+                    : new SdfMeshConvergence(Done: 0, Pass: 0, Stage: m_convergence, Total: 0));
+            }
+        }
+    }
+
+    // The deadline of the standing convergence's waits, starting one when none stands.
+    private WaitDeadline ConvergenceDeadline() {
+        if (m_convergingSince == 0L) { m_convergingSince = Stopwatch.GetTimestamp(); }
+        return WaitDeadline.At(timestamp: m_convergingSince.AddSaturating(right: WaitDeadline.TicksOf(budget: ConvergenceStall)));
+    }
+    // Records where a converging frame's work stands, ending the convergence once it has landed, and returns the
+    // published parameters.
+    private SdfMeshIrradianceParameters Converging(SdfMeshConvergenceStage stage) {
+        lock (m_gate) { m_convergence = stage; }
+        if (stage == SdfMeshConvergenceStage.None) { m_convergingSince = 0L; }
+        return m_published;
+    }
+    // Whether this frame's static draws are the installed scene, waiting for a build in flight. A build already in flight
+    // may belong to an older frame, so the frame resolves again after it lands until its own draws are installed; a build
+    // that faulted fails the frame as it resolves (RefreshScene).
+    private bool AwaitScene(SdfFrame frame, WaitDeadline deadline) {
+        while (true) {
+            Task? build;
+
+            lock (m_gate) {
+                if (m_disposed) { return true; }
+                build = RefreshScene(frame: frame);
+            }
+            if (build is null) { return true; }
+            if (HostWaits.Wait(deadline: deadline, reason: in SceneWait, task: build) == WaitOutcome.DeadlinePassed) { return false; }
+        }
+    }
+    // Whether the windows' refill has landed, waiting for the one in flight. A refill that faulted leaves its refill
+    // owed, so Settling holds the frame and every converging frame fails with it here.
+    private bool AwaitRefill(WaitDeadline deadline) {
+        Task? refill;
+
+        lock (m_gate) { refill = (m_refillOwed ? m_refill : null); }
+        if (refill is null) { return true; }
+        if (HostWaits.Wait(deadline: deadline, reason: in RefillWait, task: refill) == WaitOutcome.DeadlinePassed) { return false; }
+        if (refill.IsFaulted) { throw new InvalidOperationException(message: "The irradiance volume's window refill failed.", innerException: refill.Exception); }
+        return true;
+    }
+    // Whether no background trace runs, asking the one in flight to return at its next batch and waiting for it, so the
+    // drain takes over whatever budgeted work it had left. A faulted worker is reported as any frame reports it.
+    private bool AwaitYield(WaitDeadline deadline) {
+        Task? worker;
+
+        lock (m_gate) {
+            if (m_draining || (m_worker is not { IsCompleted: false } running)) { return true; }
+            m_yield = true;
+            worker = running;
+        }
+        return AwaitWorker(deadline: deadline, reason: in YieldWait, worker: worker);
+    }
+    // Whether a worker has finished, waiting for a CPU trace's. A GPU trace's jobs advance only as the frame pumps its
+    // residency's GPU work, after this staging, so the frame never waits for that worker: it reads whether it finished.
+    private bool AwaitWorker(Task worker, in WaitReason reason, WaitDeadline deadline) =>
+        ((GpuTrace is null) ? (HostWaits.Wait(deadline: deadline, reason: in reason, task: worker) == WaitOutcome.Completed) : worker.IsCompleted);
     // What a drain's light is a function of: the geometry, the lighting, the windows and the layout.
     private (int Geometry, int Lighting, int Windows, Layout Layout) DrainKey() => (m_geometry, m_lightingVersion, m_windowVersion, m_layout);
 
@@ -1302,8 +1393,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Rebuilds the scene on the thread pool when the static draws changed, from the scene it replaces so only geometry new
     // to it builds; the old scene traces until the new one lands. While the bake still owes opaque static meshes, a frame
     // with none landed builds nothing: an empty scene would measure open sky where the walls have yet to land.
-    // Returns the build to wait for before this frame can use its scene, or null when it is already installed.
+    // Returns the build to wait for before this frame can use its scene, or null when it is already installed. A build
+    // that faulted is reported here, the one door every build passes, so whichever frame resolves next fails with it,
+    // whatever its draws; until then Settling holds the frame, and the next frame builds again.
     private Task? RefreshScene(SdfFrame frame, bool bakePending = false) {
+        if (m_build is { IsFaulted: true } faulted) {
+            (m_build, m_buildingKey) = (null, 0);
+            throw new InvalidOperationException(message: "The irradiance volume's scene build failed.", innerException: faulted.Exception);
+        }
+
         var (key, draws) = StaticKey(frame: frame);
 
         // Even a frame matching the installed scene waits for an older build: that build could otherwise replace
@@ -1579,12 +1677,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return lows;
     }
     // Owes the refill of the windows the volume just moved: no level publishes until it lands, and it runs on the thread
-    // pool (Refill), or in a lighting-converged frame on the frame's thread, since a window that jumps far re-stores every slot.
-    private void OweRefill(bool pooled) {
+    // pool (Refill), since a window that jumps far re-stores every slot; a lighting-converged frame waits for it.
+    private void OweRefill() {
         m_windowVersion++;
         m_refillOwed = true;
         foreach (var level in m_levels) { level.Unwritten = m_layout.CountOf(level: level.Index); }
-        if (pooled && !m_refillRunning) {
+        if (!m_refillRunning) {
             m_refillRunning = true;
             m_refill = Task.Run(action: Refill);
         }
@@ -1741,6 +1839,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Whether the windows, the layout and the geometry a worker listed its probes for still stand.
     private bool Stands(in Snapshot snapshot) =>
         ((snapshot.Geometry == m_geometry) && (snapshot.WindowVersion == m_windowVersion) && (snapshot.Layout == m_layout));
+    // Whether everything a drain's light is a function of (DrainKey) still stands as the drain snapshot it, on a volume
+    // not disposed: the one test a drain's every batch and its record of what it drained pass.
+    private bool DrainStands(in Snapshot snapshot) => (!m_disposed && Stands(snapshot: in snapshot) && (snapshot.Lighting.Version == m_lightingVersion));
     // The background worker. Stable lighting takes whole-window bounce sweeps; changing lighting interleaves coarse
     // phases, with overdue probes forced. Work takes trace demand first, then relative age, view/change weight and
     // spatial bands, each probe reading the volume about its hits as it stands; another sweep starts while any
@@ -1850,6 +1951,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // then the whole window relit from no bounce, each later pass relighting every probe from the bounce the one before
     // left, until a whole pass moves no probe past the convergence bound (or MaxSweeps passes), so the light it renders
     // is a function of its scene, lighting and windows alone and never of the bounce earlier frames left in the cache.
+    // The drain keeps the geometry, lighting, windows and layout it snapshot as it started. When any of them changes it
+    // stops at its next batch and records nothing drained, so the next converging frame drains again from the new ones;
+    // that drain's first pass relights from no bounce, so nothing this one landed reaches its light.
     private void Drain() {
         if (TakeSnapshot() is not { } snapshot) { return; }
         using var sceneBorrow = snapshot.Scene;
@@ -1862,8 +1966,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var pass = 0; (pass < MaxSweeps); pass++) {
             bool moved;
 
-            lock (m_gate) { m_sweepMoved = false; }
+            lock (m_gate) {
+                m_sweepMoved = false;
+                (m_drainPass, m_drainDone, m_drainTotal) = (pass, 0, candidates.Count);
+            }
             for (var index = 0; (index < candidates.Count); index += DrainBatchProbes) {
+                lock (m_gate) {
+                    if (!DrainStands(snapshot: in snapshot)) { return; }
+                    m_drainDone = index;
+                }
                 Batch(candidates: candidates, count: Math.Min(val1: DrainBatchProbes, val2: (candidates.Count - index)), first: index, lighting: snapshot.Lighting, parallel: parallel, pass: pass, snapshot: in snapshot);
             }
             // Every probe holds a trace now; later passes relight them all from the bounce this one left.
@@ -1873,7 +1984,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         lock (m_gate) {
             m_sweepMoved = false;
-            if (!Stands(snapshot: in snapshot) || (snapshot.Lighting.Version != m_lightingVersion)) { return; }
+            if (!DrainStands(snapshot: in snapshot)) { return; }
             m_drained = DrainKey();
             m_owed = false;
             m_traceOwed = false;

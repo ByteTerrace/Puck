@@ -289,7 +289,7 @@ slide. Details, caps, every refusal, and the Moth's driver map are in
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
 The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength
 under root scaling. Parts that move within that frame refuse it: per-part relief would change the composed
-surface at their seams. `sizeBy` remains presentation-only, so a solid placement refuses it.
+surface at their seams. `sizeBy` reads a numeric state binding in authority fixed point; solid contact and the drawn root share the tick's sampled size, and zero removes contact.
 
 **Blends between shapes that move apart (owner's ruling).** A pooled `group`
 bakes one mesh at the pose its program arrives in, and each vertex then rides

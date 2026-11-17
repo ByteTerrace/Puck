@@ -65,13 +65,18 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 
 ## Drivers
 
-`sizeBy` on a creation names a driver whose phase uniformly scales its rendered
-geometry about the creation origin, clamped to [0, 1]. Driver weight blends from
-size 1. At zero the ordinary hidden-slot position hides the whole creation;
-solid placements refuse `sizeBy`, since this presentation driver cannot scale deterministic contact.
-Author the origin where the contraction should end.
-This uses the existing dynamic transform scale and keeps the mesh; anchors read
-the packed pose and scale. The debug glacier is the standard family's example.
+`sizeBy: "state.<row>[.<key>]"` reads a numeric authority-state value, clamped
+to [0, 1], and uniformly scales the creation about its origin. It reads stored
+truth, without a presentation driver, easing or a driver weight. Author the
+origin where contraction should end; author any cadence, gate or smoothing as
+state rules or state dynamics. A solid's size is sampled before body motion,
+checkpointed with the moving root, and published in the tick's snapshot, so its
+drawn root uses the size contact actually read even when a later rule writes a
+new value. Attached solids may use `$body` for their carrier's keyed state.
+At zero it hides and contributes no contact. Growing and shrinking supports use
+the same ride, step-up, snap, depenetration and sleeper-wake path as translated
+supports. Relief and blend radii scale with that root, and the local mesh stays
+baked. The debug glacier is the standard family's example.
 
 `drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,
 blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.

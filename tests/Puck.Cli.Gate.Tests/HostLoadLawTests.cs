@@ -9,25 +9,25 @@ namespace Puck.Cli.Gate.Tests;
 /// Every law feeds injected readings and command lines; none reads the machine.</summary>
 public sealed class HostLoadLawTests {
     private static readonly DateTimeOffset Start = new(day: 1, hour: 0, minute: 0, month: 1, offset: TimeSpan.Zero, second: 0, year: 2000);
-    private static readonly HostLoadThresholds Laptop = new(CapacityCpuPercent: 50, CapacityRamGb: 5, PressureDiskGb: 10, PressureRamGb: 2);
+    private static readonly HostLoadThresholds Laptop = new(CapacityCpuPercent: 50, PressureDiskGb: 10, PressureRamGb: 2);
 
     private static HostSample Reading(int seconds, double cpu = 10, double ram = 8, double disk = 50, string? gpu = null, int reuse = 0) =>
         new(At: Start.AddSeconds(seconds: seconds), CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, ReuseNodes: reuse);
     private static string[] Kinds(IReadOnlyList<string> lines) => [.. lines.Select(selector: static line => (line.Split(separator: ' ')[0] + ((line.StartsWith(comparisonType: StringComparison.Ordinal, value: "GPU ")) ? $" {line.Split(separator: ' ')[1]}" : string.Empty)))];
 
-    // Installed memory and logical processors, then the expected CPU, capacity RAM and pressure RAM thresholds.
-    [InlineData(16, 6, 50, 5, 2)]
-    [InlineData(15.7, 6, 50, 5, 2)]
-    [InlineData(32, 16, 60, 10, 4)]
-    [InlineData(64, 32, 60, 20, 8)]
-    [InlineData(8, 4, 50, 2.5, 1)]
-    [InlineData(4, 2, 50, 1.25, 0.5)]
-    [InlineData(24, 8, 60, 7.5, 3)]
+    // Installed memory and logical processors, then the expected CPU and pressure RAM thresholds.
+    [InlineData(16, 6, 50, 2)]
+    [InlineData(15.7, 6, 50, 2)]
+    [InlineData(32, 16, 60, 4)]
+    [InlineData(64, 32, 60, 8)]
+    [InlineData(8, 4, 50, 1)]
+    [InlineData(4, 2, 50, 0.5)]
+    [InlineData(24, 8, 60, 3)]
     [Theory]
-    public void ThresholdsScaleWithTheInstalledMemoryAndTheLogicalProcessors(double installedRamGb, int logicalProcessors, double cpu, double capacityRam, double pressureRam) {
+    public void ThresholdsScaleWithTheInstalledMemoryAndTheLogicalProcessors(double installedRamGb, int logicalProcessors, double cpu, double pressureRam) {
         var thresholds = HostLoadThresholds.For(installedRamGb: installedRamGb, logicalProcessors: logicalProcessors);
 
-        Assert.Equal(actual: thresholds, expected: new HostLoadThresholds(CapacityCommitPercent: HostLoadThresholds.CommitCapacityPercent, CapacityCpuPercent: cpu, CapacityRamGb: capacityRam, PressureDiskGb: HostLoadThresholds.DiskPressureGb, PressureRamGb: pressureRam));
+        Assert.Equal(actual: thresholds, expected: new HostLoadThresholds(CommitReservePercent: HostLoadThresholds.DefaultCommitReservePercent, CapacityCpuPercent: cpu, PressureDiskGb: HostLoadThresholds.DiskPressureGb, PressureRamGb: pressureRam));
     }
     [Fact]
     public void ThresholdsRefuseAMachineWithNoMemoryOrNoProcessors() {
@@ -37,7 +37,7 @@ public sealed class HostLoadLawTests {
     }
     [Fact]
     public void TheGpuStateIsReportedOnceAtTheStartAndOnEveryChangeAfter() {
-        var monitor = new HostLoadMonitor(cpuSamples: 6, thresholds: new HostLoadThresholds(CapacityCpuPercent: null, CapacityRamGb: null, PressureDiskGb: null, PressureRamGb: null));
+        var monitor = new HostLoadMonitor(cpuSamples: 6, thresholds: new HostLoadThresholds(CapacityCpuPercent: null, PressureDiskGb: null, PressureRamGb: null));
 
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0))), expected: ["GPU idle"]);
         Assert.Empty(collection: monitor.Observe(sample: Reading(seconds: 10)));
@@ -47,7 +47,7 @@ public sealed class HostLoadLawTests {
     }
     [Fact]
     public void WithoutThresholdsNoReadingIsJudged() {
-        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: new HostLoadThresholds(CapacityCpuPercent: null, CapacityRamGb: null, PressureDiskGb: null, PressureRamGb: null));
+        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: new HostLoadThresholds(CapacityCpuPercent: null, PressureDiskGb: null, PressureRamGb: null));
 
         _ = monitor.Observe(sample: Reading(seconds: 0));
 
@@ -102,15 +102,16 @@ public sealed class HostLoadLawTests {
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(cpu: 0, seconds: 30))), expected: ["CAPACITY"]);
     }
     [Fact]
-    public void CapacityNeedsBothItsCpuAndItsMemoryThreshold() {
-        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop with { CapacityRamGb = null });
+    public void CapacityNeedsItsCpuThresholdAndNeedsNoFreeMemoryBeyondThePressureFloor() {
+        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop with { CapacityCpuPercent = null });
 
         Assert.Equal(actual: Kinds(lines: monitor.Observe(sample: Reading(seconds: 0))), expected: ["GPU idle"]);
 
         var full = new HostLoadMonitor(cpuSamples: 1, thresholds: Laptop);
 
-        // Free memory not over the capacity threshold holds CAPACITY back without being PRESSURE.
-        Assert.Equal(actual: Kinds(lines: full.Observe(sample: Reading(ram: 4, seconds: 0))), expected: ["GPU idle", "LOADED"]);
+        // Free memory over the pressure floor and under what a large start needs is still CAPACITY: each start is judged
+        // by its own need (HostStartTracker), not by a fixed free-memory floor.
+        Assert.Equal(actual: Kinds(lines: full.Observe(sample: Reading(ram: 2.5, seconds: 0))), expected: ["GPU idle", "CAPACITY"]);
     }
     [InlineData("Puck.World.Tests", @"C:\Puck\tests\Puck.World.Tests\bin\Release\net11.0\Puck.World.Tests.exe --filter-not-trait Category=Gpu")]
     [InlineData("Puck.World.Tests", "Puck.World.Tests.exe --filter-trait Category=Gpu")]
@@ -160,7 +161,7 @@ public sealed class HostLoadLawTests {
     [InlineData("--capacity-cpu", "Infinity")]
     [InlineData("--capacity-cpu", "-1")]
     [InlineData("--capacity-cpu", "101")]
-    [InlineData("--capacity-ram", "-1")]
+    [InlineData("--commit-reserve", "-1")]
     [InlineData("--pressure-ram", "NaN")]
     [InlineData("--pressure-disk", "-1")]
     [Theory]

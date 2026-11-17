@@ -25,7 +25,8 @@ internal sealed record MeshBuildIdentity(
             var identityType = RequiredType(assembly, "Puck.SdfVm.SdfMeshBakeIdentity");
             var code = Invoke(RequiredMethod(closureType, "Of", typeof(string)), directory);
             var passes = Invoke(RequiredMethod(kernelsType, "PassesDirectory", typeof(string)), Path.Combine(directory, "Assets", "Shaders", "Sdf"));
-            var kernels = Invoke(RequiredMethod(kernelsType, "Load", typeof(string), typeof(string)), extension, passes);
+            var target = ShaderTargetOf(kernelsType, extension);
+            var kernels = Invoke(RequiredMethod(kernelsType, "Load", target.GetType(), typeof(string)), target, passes);
             var identity = Invoke(RequiredMethod(identityType, "Of", closureType, kernelsType), code, kernels);
             return new MeshBuildIdentity(
                 Value: Property<UInt128>(identity, "Value"),
@@ -50,6 +51,18 @@ internal sealed record MeshBuildIdentity(
     private static MethodInfo RequiredMethod(Type type, string name, params Type[] parameters) =>
         type.GetMethod(name, BindingFlags.Public | BindingFlags.Static, parameters)
         ?? throw new MissingMethodException(type.FullName, name);
+
+    // The target's ShaderTarget is its own type in its own load context, so it is minted there through the target's
+    // ShaderTargets.Of, never cast from the CLI's copy.
+    private static object ShaderTargetOf(Type kernelsType, string extension) {
+        var load = kernelsType.GetMethods(BindingFlags.Public | BindingFlags.Static)
+            .SingleOrDefault(method => (method.Name == "Load") && method.GetParameters() is [{ ParameterType.IsEnum: true }, { } directory] && (directory.ParameterType == typeof(string)))
+            ?? throw new MissingMethodException(kernelsType.FullName, "Load");
+        var targetType = load.GetParameters()[0].ParameterType;
+        var targets = RequiredType(targetType.Assembly, $"{targetType.Namespace}.ShaderTargets");
+        var hostsOnDirectX = string.Equals(extension, Puck.Abstractions.Gpu.ShaderBytecode.FileExtension(hostsOnDirectX: true), StringComparison.Ordinal);
+        return Invoke(RequiredMethod(targets, "Of", typeof(bool)), hostsOnDirectX);
+    }
 
     private static object Invoke(MethodInfo method, params object?[] arguments) =>
         method.Invoke(null, arguments) ?? throw new InvalidOperationException($"Target method {method.DeclaringType?.FullName}.{method.Name} returned no value.");

@@ -80,6 +80,11 @@ public sealed partial class WorldPopulation {
 
     private FixedWorldKit[][] m_inputKits = [];
 
+    private WorldColliderSet? MovingSolids => m_baseContactField switch { WorldColliderSet set => set, WorldSolidField solidField => solidField.MovingSolids, _ => null };
+
+    /// <summary>The authority-sampled moving-solid sizes for the current contact step.</summary>
+    public WorldSolidScale[] SolidScales() => (MovingSolids?.SampledScales() ?? []);
+
     /// <summary>The live definition's analytic collider census, including placement-derived colliders even when the
     /// selected provider is the SDF field or collision is disabled, measured on first ask after the definition moved.</summary>
     public WorldContactCensus ContactCensus => (m_contactCensus ??= WorldColliderSet.Measure(definition: m_censusDefinition!));
@@ -135,13 +140,13 @@ public sealed partial class WorldPopulation {
     public WorldSolidField? SolidField => (m_baseContactField as WorldSolidField);
     /// <summary>The static collider inputs actually held by the analytic solver, with authored provenance.</summary>
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders =>
-        ((m_baseContactField as WorldColliderSet)?.DiagnosticColliders ?? []);
+        (MovingSolids?.DiagnosticColliders ?? []);
 
-    /// <summary>The attached solid rows held by the analytic solver at the pose its latest refresh sampled, with their
-    /// colliders and authored provenance (<see cref="WorldColliderSet.DiagnosticAttached"/>); empty under another provider.</summary>
+    /// <summary>The moving solid rows held by either solver at the pose and size its latest refresh sampled, with their
+    /// colliders and authored provenance (<see cref="WorldColliderSet.DiagnosticAttached"/>).</summary>
     /// <returns>The posed rows.</returns>
     public IReadOnlyList<WorldAttachedDiagnostic> DiagnosticAttached() =>
-        ((m_baseContactField as WorldColliderSet)?.DiagnosticAttached() ?? []);
+        (MovingSolids?.DiagnosticAttached() ?? []);
 
     /// <summary>Gets or sets the hub this population narrates through, the owning server's own; <see langword="null"/>
     /// narrates nothing.</summary>
@@ -158,7 +163,7 @@ public sealed partial class WorldPopulation {
     /// observation is what a checkpoint keeps; the absolute value is process-local.</summary>
     public ulong ContactFieldVersion {
         get {
-            var terms = (m_contactFieldInstallVersion, ((m_baseContactField as WorldColliderSet)?.AttachedRevision ?? 0UL), FieldRegionsRevision());
+            var terms = (m_contactFieldInstallVersion, (MovingSolids?.AttachedRevision ?? 0UL), FieldRegionsRevision());
 
             if (terms != m_contactFieldTerms) {
                 m_contactFieldTerms = terms;

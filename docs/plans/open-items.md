@@ -52,12 +52,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-4. [high] [Collision versus drawn mesh](#collision-versus-drawn-mesh): a solid
-   creation that grows or shrinks, refused since the moving-root relief
-   change; contact that follows a simulated `sizeBy`, then the refusal goes.
+4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
+   seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
-   the scheduling stage's windowed reading, the control plane's step C0.3,
-   then the pool's design.
+   the scheduling stage's and C0.3's windowed readings, the control plane's
+   step C0.4, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
@@ -117,10 +116,9 @@ batched window holds the GPU at once.
 **Windowed readings owed** to the lead's next GPU window, on the integration
 head, each named by the lane whose landing waits on it:
 
-- crease1: the GPU bake against the CPU audit (a cold boot per backend with a
-  fresh `--cache-dir`, then `puck mesh audit --backend` over the 24 tour
-  exhibits and the Moth), the whole debug world's store audit, and the cold
-  bake time against the one-minute bar.
+- crease1: the 24 tour exhibits' stored meshes against their CPU bakes, from
+  a cold boot per backend with a fresh `--cache-dir` (the Moth is read; see
+  [bake detail](#bake-detail)).
 - sm0: the seam walk's baseline legs, `puck bench frames --plan
   worlds/debug/seam-walk.sweep.json --stop <stop> --window` on both backends
   over its nine stops, in a quiet window; correct the burst ticks after.
@@ -129,6 +127,11 @@ head, each named by the lane whose landing waits on it:
   (expect `screens` at most 4).
 - relief1: a World boot and captures of a noise-relieved creation moving as a
   whole, on both backends.
+- c03: on Vulkan, at a lockstep stop that converges lighting, a console verb
+  issued during the drain answers within one iteration (`host.frames`'
+  control gap under the wait budget plus a pacer period); on both backends,
+  the stop's still against the build before c03. Direct3D 12's control gap
+  is read.
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
 
@@ -181,7 +184,9 @@ is filed with `puck measure`.
   [rendering plan](rendering.md) still owes.
 - The cold bake against the one-minute bar,
   `bench startup worlds/debug --bake --backend <backend>` through
-  `puck measure`; and the cold-bake pause comparison, at least three
+  `puck measure`: a cold windowed boot beside two writing lanes read the
+  world residency's bake over the bar on both backends; and the cold-bake
+  pause comparison, at least three
   alternating runs with collections read from the trace.
 - The field-query counts ([frame-time findings](#other-frame-time-findings)),
   and the gen2 count and pause per 45 s settled, standing and walking.
@@ -331,10 +336,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's windowed reading, then
+order once: the scheduling stage's windowed reading and C0.3's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.3 (its review is answered and C0.1 and C0.2 are built), then the pool's
-design (J1). The garbage-collection cuts
+step C0.4 (C0.1 to C0.3 are built), then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -511,8 +515,13 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R0's owed windows, R1a to R1c, R2, and S2's
-  conditional measure). No capture has yet shown a hand-over frame by frame;
+  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
+  R0's counting is built, including producer-local serial attribution and the
+  device-free partition, threshold and steady-window laws. Its
+  [windowed verification request](arrival-proportional.md#windowed-verification-request)
+  still owns the boot, arrival, crossing and steady readings that select the
+  later steps; headless presentation stages no draw records.
+  No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
@@ -831,6 +840,20 @@ Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
+
+- [high] The GPU bake contours the Moth's shin worse than the CPU bake of the
+  same group, so the CPU audit that judges bake changes does not see what
+  ships: `puck mesh audit --prototype moth --group shin-right` reads 866
+  folds and 1690 flipped triangles from a cold Direct3D 12 store, 866 and
+  1689 from a cold Vulkan store, and 578 and 1041 with `--cpu`
+  (`MeshCpuBake`). The two backends agree with each other, so the difference
+  is between the CPU twin and the bake kernels. Find where they diverge and
+  make them one result; then a change judged by `--cpu` holds on the device.
+- [medium] `puck mesh audit` over a cold store audits only the groups stored
+  at the tier it plans: over the whole debug world it read 238 of 6544
+  groups and reported 6306 "with no stored mesh", although the residency
+  baked 7525 meshes. A whole-world store audit needs the tier each group was
+  stored at (the store records it), not tier 0 for every group.
 
 - [medium] A small relieved union retains contour defects in both its static
   and root-moving forms: the relief1 CPU audit finds 6 folds, 2 flipped
@@ -1438,22 +1461,6 @@ colliders and the field provider read one certified surface solve
 Owner: next geometry and bake lane · ordinary · Next: the groups sharp boxes
 left worse, then the valley sectors' buried colliders.
 
-- [high] A solid creation cannot grow or shrink: `WorldDefinitionValidator`
-  refuses a `solid` placement whose creation has `sizeBy` ("its driver scales
-  presentation only and cannot move a deterministic contact surface"), added
-  with the moving-root relief change. Before it, such a creation compiled and
-  its contact stayed at the unscaled size while the picture scaled, so the
-  refusal surfaced a silent mismatch by removing a capability: a rising
-  platform, a melting ice shelf a player stands on, an inflating balloon that
-  pushes a body. Fix at the cause: drive `sizeBy`'s phase from the simulation
-  (fixed-point, from the authority's tick and state, rule 4), scale the
-  contact field by the same factor (the relief change already scales a fixed
-  placement's amplitude, blend radii and contact bounds together), and give a
-  body standing on or pushed by a growing solid the step-up, snap and
-  depenetration a moving solid gets; then delete the refusal. Check: a scratch
-  world whose solid grows under a standing body and shrinks away from it,
-  with contact and drawn surface agreeing at sampled points per tick, and
-  `puck test --reproduce` bit-identical.
 - [medium] Sub-cell features draw badly where boxes touch or a thin layer sits
   inside a union. `puck mesh audit --cpu` reads these worse since boxes became
   sharp: `goTable` (its flush face prisms' seams), `hall-floor-2` and `-3` (a

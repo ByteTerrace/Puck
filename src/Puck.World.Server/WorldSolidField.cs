@@ -68,6 +68,9 @@ public sealed class WorldSolidField : IContactField {
     private readonly IWorldQuery m_query;
     private readonly FixedFieldContactSolver m_solver;
 
+    /// <summary>The moving roots sampled by either contact provider.</summary>
+    public WorldColliderSet MovingSolids { get; }
+
     // The hold policy per compiled material id — TryBuild adds exactly one material per solid screen and per solid
     // placement, so a probe's reported material id IS the row that composed it. A material id outside these (the
     // field lattice's own terrain, which no placement row owns) falls back to the world's collision.defaultHold.
@@ -76,7 +79,8 @@ public sealed class WorldSolidField : IContactField {
     // gradient a side to face. Small enough that no authored surface curves meaningfully across it.
     private static readonly FixedQ4816 GradientBackoff = FixedQ4816.FromDouble(value: 0.02);
 
-    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, IReadOnlyList<WorldFieldRegion> regions, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip) {
+    private WorldSolidField(SdfProgram program, SdfFieldEvaluator evaluator, SdfDistanceGrid? grid, FixedQ4816 kitReach, IReadOnlyList<WorldFieldRegion> regions, long placementShapeCount, WorldContactCensus census, FixedWorldCollision tuning, bool[] holdableMaterials, bool[] holdableGrantedByOverride, bool defaultGrip, WorldColliderSet movingSolids) {
+        MovingSolids = movingSolids;
         m_program = program;
         m_evaluator = evaluator;
         m_kitReach = kitReach;
@@ -124,7 +128,7 @@ public sealed class WorldSolidField : IContactField {
         // One certified box reading of the contact field's solids, the program's and the lattice's: the sweep proves its
         // steps with it and the endpoint solve proves bodies clear with it.
         var contactBounds = (sweepBounds, latticeBounds) switch {
-            ( { } bounds, null) => (IFieldBounds?)bounds,
+            ( { } bounds, null) => ((IFieldBounds?)bounds),
             ( { } bounds, { } solid) => new FieldBoundsUnion(a: bounds, b: solid),
             (null, { } solid) => solid,
             (null, null) => null,
@@ -137,6 +141,8 @@ public sealed class WorldSolidField : IContactField {
                 b: latticeSolid
             )
         );
+        m_contactField = new UnionField(a: m_contactField, b: movingSolids.MovingField);
+        contactBounds = ((contactBounds is null) ? (IFieldBounds)movingSolids.MovingField : new FieldBoundsUnion(a: contactBounds, b: ((IFieldBounds)movingSolids.MovingField)));
         m_solver = new FixedFieldContactSolver(
             contactSkin: tuning.ContactSkin,
             field: m_contactField,
@@ -162,7 +168,7 @@ public sealed class WorldSolidField : IContactField {
     /// <summary>Gets the field evaluator the <c>world.collision.probe</c> verb reads distance/material/gradient from, so the
     /// surface the simulation itself solves against is directly observable — beyond <see cref="ContactBand"/> it
     /// reads the grid's corner bound, as the simulation does.</summary>
-    public IFieldEvaluator Evaluator => m_field;
+    public IFieldEvaluator Evaluator => m_contactField;
     /// <summary>Gets a value indicating whether this field's collision tuning authors <see cref="WorldContactRequirement.GradientDerivedUp"/>.</summary>
     public bool GradientUp => m_solver.GradientUp;
     /// <summary>Gets the baked distance grid, or <see langword="null"/> when the world authors no cell size or the
@@ -411,11 +417,12 @@ public sealed class WorldSolidField : IContactField {
                 continue;
             }
 
-            var (material, reach) = BeginRow(placement: placement, creation: creation, solid: solid);
+            if (creation.Document.SizeBy is not null) { continue; }
+            var (material, reach) = BeginRow(creation: creation, placement: placement, solid: solid);
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
             var fixedRotation = stamp.FixedRotation;
 
-            stamp.ForEachFixed(instance => EmitCopy(creation: creation, material: material, reach: reach, solid: solid,
+            stamp.ForEachFixed(visitor: instance => EmitCopy(creation: creation, material: material, reach: reach, solid: solid,
                 transform: new FixedCreationStampTransform(
                     Origin: instance.Origin,
                     Rotation: fixedRotation,
@@ -484,6 +491,7 @@ public sealed class WorldSolidField : IContactField {
             holdableGrantedByOverride: [.. holdableGrantedByOverride],
             holdableMaterials: [.. holdableMaterials],
             defaultGrip: defaultGrip,
+            movingSolids: WorldColliderSet.Build(definition, movingOnly: true),
             tuning: tuning
         );
 
@@ -541,7 +549,7 @@ public sealed class WorldSolidField : IContactField {
     public WorldSolidField WithRegions(IReadOnlyList<WorldFieldRegion> regions, FixedWorldCollision tuning) => new(
         program: m_program, evaluator: m_evaluator, grid: m_banded?.Grid, kitReach: m_kitReach, regions: regions,
         placementShapeCount: PlacementShapeCount, census: Census, tuning: tuning, holdableMaterials: m_holdableMaterials,
-        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip);
+        holdableGrantedByOverride: m_holdableGrantedByOverride, defaultGrip: m_defaultGrip, movingSolids: MovingSolids);
     /// <summary>Re-wraps this field's already-compiled program with fresh solver scalars, reusing the wrapped
     /// <see cref="SdfFieldEvaluator"/> (safe to share by reference — it holds only an immutable instruction array) and
     /// the distance grid when the cell size is unchanged. A <c>SetCollision</c> edit touches only the collision tuning
@@ -569,6 +577,7 @@ public sealed class WorldSolidField : IContactField {
             holdableGrantedByOverride: m_holdableGrantedByOverride,
             holdableMaterials: m_holdableMaterials,
             defaultGrip: m_defaultGrip,
+            movingSolids: MovingSolids,
             tuning: tuning
         );
 }

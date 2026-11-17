@@ -1169,17 +1169,24 @@ partial landings. Falling or resting at the same edge retains its surface
 normal and rounded support. `body.motion` echoes
 the body's effective `stepHeight=`, and `world.kits` the kit's.
 
-A body grounded on an attached solid rides it (the analytic provider only,
-which is the one that admits attach with solid). `WorldColliderSet` keeps the
-previous refresh's attached colliders and each attached row's resolved origin
-at its last two refreshes; right after `RefreshAttached`,
+A body grounded on a scaling solid rides it with either contact provider;
+an attached solid's carrier pose is admitted by the analytic provider.
+`WorldColliderSet` keeps the previous refresh's colliders and each moving row's
+resolved origin, rotation and scale at its last two refreshes; right after `RefreshAttached`,
 `WorldPopulation.AdvanceSimulated` asks it, for every active grounded
 locomotion body (seats included, rigid and carried bodies excluded), whether
 the previous geometry supplies a walkable narrowphase contact. The carrier's
-translation and yaw move the rider's foot point before its own step. This works
+translation, yaw and scale move the rider's foot point before its own step. This works
 for yawed boxes and cylinders as well as axis-aligned boxes. The rider's attitude
 remains owned by its motion program. `AttachedPlatformRideLawTests` covers rise
 and descent on both axis-aligned and yawed support.
+
+`WorldTick` supplies the current authority definition to the population step.
+The scale sample reads that definition's live arena, including after checkpoint
+restoration replaces it; the definition retained by compiled geometry is not a
+live state source. The checkpoint restores the captured sample without consuming
+the following tick's carrier displacement. `SolidSizeLawTests` covers boot and
+warm restoration with both contact providers.
 
 A kit shaping its planar velocity through a `dynamics` row (rather than a
 whole-vector `along` row) carries the follower's Q32 state—position

@@ -49,7 +49,7 @@ public sealed class PresentPacingControl {
     /// the simulation rate slows the simulation rather than skipping ticks; the simulation's own state never depends on
     /// it.</summary>
     public bool TickLocked => HostPacing.StepsOneTickPerFrame;
-    /// <summary>Gets whether tick-locked frames synchronously converge indirect lighting. Clock pinning alone can
+    /// <summary>Gets whether tick-locked frames hold their tick until indirect lighting converges. Clock pinning alone can
     /// retain normal budgeted lighting; ordinary display-paced frames never request convergence here.</summary>
     public bool ConvergesLighting => (TickLocked && Volatile.Read(ref m_convergesLighting));
     /// <summary>Selects whether tick-locked frames converge lighting; the default is true for settled stills.</summary>

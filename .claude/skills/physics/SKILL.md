@@ -39,6 +39,7 @@ same change.
 | A body resolves its swept position against the world | the seam `IContactField` (`Resolve`, `ResolveSweep`, `TrySupportDistance`, `TryUp`), providers `WorldColliderSet` (analytic) and `WorldSolidField` (signed distance) | [contact seam](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Every sweep that moves a body, entity-aware | `WorldBody.SweepContact`, the one dispatch; an `IEntityContactField` learns which body moves | [below](#the-body-step-and-the-seam-door) |
 | Analytic colliders: spheres, boxes (rounded, chamfered, oriented), superellipsoids, cylinders, half-spaces | `FixedStaticCollider` (`TryGetPush`, `RoundedBox`, `ChamferedBox`, `Cylinder`), `FixedOrientedBox`, `FixedConvexContact` (GJK and EPA), `FixedStaticContactSolver` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
+| A solid creation grows or shrinks with contact | `WorldCreationSize` reads `sizeBy` state in fixed point; `WorldColliderSet.RefreshAttached` samples scale beside pose for either provider; `TryRideDisplacement` carries it, and `WorldSnapshot.SolidScales` publishes the sample | [rig size](../sdf-authoring/references/rig.md#drivers) |
 | A carved, relieved or smoothly blended creation collides as drawn | field colliders (`WorldColliderSet.CollidesAsField`) with a `FixedFieldPartition` narrowing hard unions to their exact pieces | [sdf-authoring contact admission](../sdf-authoring/references/shapes.md#contact-admission) |
 | Never tunnel, however fast or thin | `FixedFieldContactSolver.ResolveSweep` (certified sweep through `ICertifiedSweepQuery`); `FixedStaticContactSolver.ResolveSweep` (sliced analytic sweep); both refuse with `ContactRefusal` rather than wrap | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Walk up a kerb; stick to a downhill slope | `FixedStepUp.TryStep` and `FixedStepUp.TrySnap` over one `IContactField.TrySupportDistance` query, driven by kit `motion.stepHeight` and `motion.groundSnap` | [motion](../puck-world/references/documents-motion.md) |
@@ -117,6 +118,10 @@ same change.
 - **Scale reaches every contact query.** A body's `Scale` multiplies its
   collider volumes for world contact, body pairs, events, the adjacency
   sweep's local side and rigid probing alike.
+- **Solid size reads the current authority.** `WorldTick` passes its live definition to
+  `WorldPopulation.AdvanceSimulated` for `WorldColliderSet.RefreshAttached` to sample.
+  The geometry compiler's retained definition can still name a retired arena after a
+  checkpoint restore. Restore keeps the captured sample; the next tick reads the restored arena.
 - **Workspaces are reused and not thread-safe.** The hierarchical gravity
   solvers and navigation domains allocate once and keep their arrays.
 

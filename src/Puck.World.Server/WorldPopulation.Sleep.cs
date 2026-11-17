@@ -12,7 +12,6 @@ public sealed partial class WorldPopulation {
     private readonly BodyWorkSet m_awakeBodies;
     private readonly BodyWorkSet m_sleepingBodies;
     private readonly BodyWorkSet m_eventBodies;
-
     private readonly Dictionary<int, FixedVector3?> m_sleepGravity = [];
     // The parked bodies by the island root they parked with (one plus the root slot), each list in slot order: the
     // index of each body's Parked(root) state (WorldBody.RigidSleepRootPlusOne), which a wake reads instead of walking
@@ -22,17 +21,15 @@ public sealed partial class WorldPopulation {
     private readonly List<int> m_island = [];
     private readonly HashSet<int> m_islandVisited = [];
     private readonly HashSet<int> m_parkVisited = [];
-
     private readonly int[] m_stepBodies;
     private readonly int[] m_eventBodyImage;
     private readonly int[] m_sleepQueries;
-
     // A retained broadphase over frozen bounds, rebuilt only when island membership changes, so no sleeping body's
     // object is read on an idle tick.
     private readonly FixedSweepGrid m_sleepIndex;
     private readonly FixedSweepSphere[] m_sleepSpheres;
-    private bool m_sleepIndexDirty = true;
 
+    private bool m_sleepIndexDirty = true;
     private bool m_wakingIsland;
     private ulong m_sleepFieldVersion;
     // The contact-field terms the sleepers last answered for (RecordSleepFieldObservation), and whether they are known. A restore
@@ -40,6 +37,7 @@ public sealed partial class WorldPopulation {
     // uninterrupted run's global change did.
     private (ulong Install, ulong Attached, ulong Fields) m_sleepFieldTerms;
     private bool m_sleepFieldTermsKnown;
+
     private readonly List<int> m_fieldWakes = [];
 
     /// <summary>Number of rigid bodies parked outside the tick's integration and contact work sets.</summary>
@@ -53,6 +51,7 @@ public sealed partial class WorldPopulation {
         m_eventBodies.Add(item: index);
         if (m_entries[index] is { Active: true, Body: not null }) { m_awakeBodies.Add(item: index); } else { m_awakeBodies.Remove(item: index); }
     }
+
     /// <summary>Wakes a body and every parked island it touches: the body's continuous change (an input, a press, a
     /// glide, a rest-latch break) means whatever rests on it or holds it must solve again.</summary>
     /// <param name="index">The body's population index.</param>
@@ -74,6 +73,7 @@ public sealed partial class WorldPopulation {
         WakeBodyIsland(index: index);
         ForgetRigidContacts(index: index, keepReferred: false);
     }
+
     // Wakes the body's own island, by the root it parked with, then every parked island one of its contacts joins it to:
     // the contacts it owns and the contacts other bodies own with it, occupied or not. Membership is read from what
     // parking recorded and from the contact lists, never from slot occupancy, so a contact cleared or a body removed a
@@ -132,6 +132,7 @@ public sealed partial class WorldPopulation {
     }
     private FixedVector3? SolvedSleepGravity(int index) =>
         (((m_gravityField is { } gravity) && gravity.TryAcceleration(acceleration: out var acceleration, entityIndex: index)) ? acceleration : null);
+
     /// <summary>Parks a body a scoped replay restored under the island root its captured clocks name, as the
     /// checkpoint restore does for a whole population (<see cref="RestoreSleepingIslands"/>): a section restore never
     /// writes island membership itself.</summary>
@@ -142,6 +143,7 @@ public sealed partial class WorldPopulation {
         ParkIslandMember(contactFieldVersion: m_sleepFieldVersion, index: index, rootPlusOne: rootPlusOne);
         m_sleepGravity[index] = SolvedSleepGravity(index: index);
     }
+
     // Collects into m_island, in slot order, the rigid bodies the root's occupied rigid contacts join it to: the island
     // parking records. Waking never re-derives it (WakeBodyIsland).
     private void CollectRigidIsland(int root) {
@@ -178,6 +180,7 @@ public sealed partial class WorldPopulation {
         foreach (var index in m_awakeBodies) { m_eventBodies.Add(item: index); }
         return m_stepBodies.AsSpan(start: 0, length: m_awakeBodies.Count);
     }
+
     /// <summary>Settles the parked rigid bodies on the field lattices' step, right after
     /// <see cref="WorldTick.StepFields"/>: the sleepers a changed cell can reach wake to join the next tick's
     /// integration, and the rest observe the change, so the tick ends with no sleeper behind the lattices and a
@@ -192,6 +195,7 @@ public sealed partial class WorldPopulation {
         }
         ObserveContactFieldChange();
     }
+
     // Wakes every sleeper a change since the sleepers last observed the field can reach, then records the observation.
     // A change bounded to boxes (attached colliders that moved, regions whose body-read cells changed) reaches only the
     // sleepers whose bounds, grown by FieldWakeMargin, meet the box; an install, an unbounded collider, an attached move
@@ -199,7 +203,7 @@ public sealed partial class WorldPopulation {
     private void ObserveContactFieldChange() {
         var version = ContactFieldVersion;
         var terms = m_contactFieldTerms;
-        var box = ((m_baseContactField as WorldColliderSet)?.TakeAttachedChange() ?? default);
+        var box = (MovingSolids?.TakeAttachedChange() ?? default);
 
         if (m_sleepFieldVersion != version) {
             var local = (
@@ -209,7 +213,7 @@ public sealed partial class WorldPopulation {
             );
 
             if (local && (terms.Fields != m_sleepFieldTerms.Fields)) { FoldFieldRegionChanges(box: ref box); }
-            if (local && box is { Any: true, Unbounded: false }) {
+            if (local && (box is { Any: true, Unbounded: false })) {
                 WakeSleepersNear(box: in box, margin: FieldWakeMargin());
             } else {
                 WorldBodyWork.Process.Add(amount: m_sleepingBodies.Count, kind: WorldBodyWork.FieldWakes);
@@ -379,6 +383,7 @@ public sealed partial class WorldPopulation {
     /// <returns>The number of indices written.</returns>
     internal int NearbySleepingBodies(WorldBody body, FixedQ4816 reach, int[] destination) =>
         SleepIndex().Query(box: FixedAabb.Around(center: body.FixedPosition, radius: reach), destination: destination);
+
     // The sleeping index, rebuilt from the sleepers' bounds when island membership has changed since it was last read.
     private FixedSweepGrid SleepIndex() {
         if (m_sleepIndexDirty) {
@@ -389,11 +394,12 @@ public sealed partial class WorldPopulation {
 
                 m_sleepSpheres[count++] = new FixedSweepSphere(Index: index, Center: body.FixedPosition, Radius: body.BroadphaseRadius);
             }
-            m_sleepIndex.Rebuild(spheres: m_sleepSpheres.AsSpan(start: 0, length: count));
+            m_sleepIndex.Rebuild(spheres: m_sleepSpheres.AsSpan(length: count, start: 0));
             m_sleepIndexDirty = false;
         }
         return m_sleepIndex;
     }
+
     // Membership mutates only on admission, wake and sleep. Pay for ordered insertion there, rather than a tree
     // enumerator's traversal stack on every tick. Iteration borrows the array; callers that can wake bodies copy it.
     private sealed class BodyWorkSet(int capacity) {

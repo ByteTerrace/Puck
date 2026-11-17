@@ -1,0 +1,16 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+state {
+  world [{ name: "size", kind: Fixed, cells [{ key: "$value", value: "0.5" }] }]
+}
+test "fractions" {
+  when {
+    seat1: world.state.cell.set size $value 0.515625
+    ticks 1
+    seat1: world.state.cell.set size $value 0.53125
+    ticks 1
+  }
+  expect {
+    size > 0.5
+  }
+}
