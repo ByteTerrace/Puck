@@ -369,6 +369,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
 
         using var fixture = Fixtures.FreshServer(definition: (document with {
             Rules = [],
+            CreationsRaw = [CreationFixtures.UnitSphere(id: BaseCreation), CreationFixtures.Sphere(id: TargetCreation, scale: 3f)],
             StateRaw = new WorldStateSection(World: [
                 new WorldStateRow(
                 Name: CellName.Parse(candidate: CounterRow),
@@ -380,6 +381,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             ),
             ]),
             PlacementRowsRaw = [(placement with {
+                Solid = new WorldSolid(Margin: 0f),
                 Holding = authoredHolding,
                 Respond = [(placement.Respond![0] with {
                     When = new WorldPlacementResponseCondition.StateCondition(
@@ -397,6 +399,10 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
 
         Assert.Equal(expected: shown, actual: row.ShownPrototypeId);
         Assert.Equal(expected: holding, actual: row.Holding);
+        // The fixture builds its population before the server: both must start from the settled document.
+        var expected = new WorldPopulation(fixture.Server.Definition);
+        Assert.Equal(Assert.Single(expected.DiagnosticColliders).Collider,
+            Assert.Single(fixture.Server.Population.DiagnosticColliders).Collider);
     }
     /// <summary>A response is derived state, not an edit: two rows crossing on the same tick, one of them solid, both
     /// show their entry after it with nothing journalled. The solid row's colliders follow the creation it shows, and

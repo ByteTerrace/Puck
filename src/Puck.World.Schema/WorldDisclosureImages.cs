@@ -280,7 +280,8 @@ public sealed class WorldDisclosureImages {
         var key = (row, audience);
         if (m_rows.TryGetValue(key, out var entry) && entry.Dependencies == dependencies) {
             if (entry.Version == version) { return entry.Image; }
-            if (ReferenceEquals(arena, m_windowArena) && entry.Version >= m_windowVersions[row] &&
+            // Rows born after the window opened have no captured version to prove a key-only skip against.
+            if (ReferenceEquals(arena, m_windowArena) && (uint)row < (uint)m_windowVersions.Length && entry.Version >= m_windowVersions[row] &&
                 m_changes is not null && !m_changes.Overlaps(row, entry.Keys) &&
                 !arena.ChangedKeys.Overlaps(row, entry.Keys)) {
                 Skipped++;
