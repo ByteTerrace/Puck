@@ -994,6 +994,17 @@ public static class WorldBootComposition {
             timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
             view: WorldPatrolCommandModule.ViewOf(graphs: sp.GetService<WorldViewGraphHost>(), viewports: sp.GetService<WorldSeatViewports>())
         ));
+        // world.benchmark: plays a route's chapters through the seat's own ingress in real time and records every host
+        // iteration. Core, so a headless boot plays a route and reports its arrivals; the timeline, the pacing control
+        // and the state root are each optional.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldBenchmarkCommandModule(
+            pacing: sp.GetService<PresentPacingControl>(),
+            router: sp.GetRequiredService<Func<InputRouter>>(),
+            script: sp.GetRequiredService<WorldTickScript>(),
+            source: sp.GetRequiredService<WorldDefinitionSource>(),
+            stateRoot: sp.GetService<Puck.World.Server.WorldStateRoot>(),
+            timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>()
+        ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();
         services.AddSingleton<ICommandModule, WorldDebugViewCommandModule>();
