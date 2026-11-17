@@ -74,6 +74,86 @@ public static class WorldDrawBootResolver {
         return true;
     }
 
+    /// <summary>Runs one whole-field pass of a lattice row's draw fill without keeping its values: the one admission
+    /// of "this row's source can draw a pass at this position" that boot admission, the <c>generate</c> compose and
+    /// the live paint all rest on, so the paint never meets a refusal the others did not.</summary>
+    /// <param name="definition">The document the row's source and field region resolve against.</param>
+    /// <param name="instanceIdentity">The running instance identity.</param>
+    /// <param name="row">The lattice row carrying a draw fill.</param>
+    /// <param name="cursor">The raw-word position the pass starts at.</param>
+    /// <param name="masks">The drawn masks the pass starts from.</param>
+    /// <param name="advances">The raw-word cursor delta the pass consumed, on success.</param>
+    /// <param name="masksAfter">The drawn masks to persist after the pass, on success.</param>
+    /// <param name="reason">Why the pass was refused, naming the row, on failure.</param>
+    /// <returns><see langword="true"/> when every cell of the pass drew.</returns>
+    public static bool TryAdvanceLatticePass(WorldDefinition definition, string instanceIdentity, WorldStateRow row, long cursor, IReadOnlyList<ClosedBitset256>? masks, out long advances, out IReadOnlyList<ClosedBitset256>? masksAfter, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        advances = 0L;
+        masksAfter = null;
+
+        if (WorldLatticeFill.FindDraw(trait: row.Field) is not { } fill) {
+            reason = $"state row '{row.Name}' is a lattice row with no draw paint";
+
+            return false;
+        }
+
+        if (!GeneratorEngine.TryResolveSource(
+            generators: definition.Generators,
+            draw: new Draw(
+                Source: fill.Source,
+                Generator: fill.Generator
+            ),
+            generator: out var generator,
+            reason: out var resolveReason
+        )) {
+            reason = $"state row '{row.Name}' draw fill {resolveReason}";
+
+            return false;
+        }
+
+        var region = definition.FieldRegions.FirstOrDefault(predicate: candidate => candidate.Fields.Any(predicate: field => (field.Name == row.Name.Value)));
+
+        if (region is null) {
+            reason = $"state row '{row.Name}' draw fill names no field region that carries the row";
+
+            return false;
+        }
+
+        var shape = region.Lattice;
+        var site = WorldDrawSites.StateRow(rowName: row.Name);
+
+        if (!GeneratorEngine.TryAdvanceBatch(
+            generator: generator,
+            targetKind: CellKind.Fixed,
+            seedState: GeneratorEngine.ComputeSeedState(
+                documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
+                instanceIdentity: instanceIdentity,
+                site: site
+            ),
+            stream: GeneratorEngine.ComputeStreamId(site: site),
+            cursor: cursor,
+            masks: masks,
+            sampleCount: ((shape.Width * shape.Layers) * shape.Depth),
+            masksAfter: out var fired,
+            advances: out advances,
+            reason: out var fireReason
+        )) {
+            reason = $"state row '{row.Name}' draw fill {fireReason}";
+
+            return false;
+        }
+
+        masksAfter = GeneratorEngine.MasksAfter(
+            generator: generator,
+            fired: fired,
+            previous: masks
+        );
+        reason = string.Empty;
+
+        return true;
+    }
     /// <summary>Draws one numeric sample per selected cell of a keyed draw site, in cell order, advancing the site's
     /// cursor by the raw words actually consumed — the whole-row roll of a dice tray, or a re-roll of the named <paramref name="keys"/>
     /// alone with every other cell held.</summary>
@@ -286,6 +366,28 @@ public static class WorldDrawBootResolver {
             ),
             };
             changed = true;
+        }
+
+        // A lattice row's draw fill paints a whole pass at its persisted cursor and masks when the world starts, so a
+        // pass its source refuses (an exhausted bounded draw, a drawn-out mask) refuses the load here, by name.
+        for (var index = 0; (index < authored.Count); index++) {
+            var row = authored[index];
+
+            if (
+                (WorldLatticeFill.FindDraw(trait: row.Field) is not null) &&
+                !TryAdvanceLatticePass(
+                    definition: definition,
+                    instanceIdentity: instanceIdentity,
+                    row: row,
+                    cursor: row.DrawCursor,
+                    masks: row.DrawnMasks,
+                    advances: out _,
+                    masksAfter: out _,
+                    reason: out reason
+                )
+            ) {
+                return false;
+            }
         }
 
         // SITE READS run AFTER row first-fills, so a Boot-drawn row is readable the same boot it draws. The value

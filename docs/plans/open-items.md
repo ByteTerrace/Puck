@@ -718,10 +718,6 @@ Stalls and hitches to attribute:
   the commit touched (`StateArena.CollectOpenLaneOrdinals`).
 - [low] Every rigid advance zero-fills the step's capture snapshot
   (`WorldBody.CaptureMotion` into `CaptureIntegrationResidue`).
-- [low] `PaintLatticeDraw` rents its draw buffer from
-  `ArrayPool<long>.Shared`; the paint's determinism rests on
-  `GeneratorEngine.TryRunBatch` writing every index. Keep the buffer with the
-  lattice that owns the row.
 - [low] A reading taken while the compositor is not composing looks like a
   slow frame, and nothing flags it; a present-side signal (the frame-latency
   wait reaching its bound) would. The Linux windows hold no display request.
@@ -1357,8 +1353,7 @@ frame and the pixel-pass gap at locked clocks.
   backend; the wave-sum proof assumes 64 lanes; per-geometry facts are copied
   into every draw record and the level count is stored twice; a mesh with 256
   or more levels throws at staging instead of being refused where it is built;
-  `IGpuRecorder.CanDrawIndirectCount` is dead; stale comments in
-  `SdfMeshOcclusion.cs`, `SdfWorldPassRecorder.cs`, `SdfMesh.cs`,
+  stale comments in `SdfMeshOcclusion.cs`, `SdfWorldPassRecorder.cs`, `SdfMesh.cs`,
   `sdf-mesh-shadow.vert.hlsl` and `IGpuRecorder.cs`; and, unconfirmed, a
   discarded recording that grew history leaves it uninitialized.
 - [low] `ShaderPipelineRenderNode`'s frame recording is several machines with
@@ -2328,8 +2323,6 @@ the wire, then the float duration fields' schema migration.
 - Classify the public Maths surface with no law or waiver (algebra wrappers,
   coordinates, continued-fraction certificates, research APIs): bind existing
   evidence, give precise category waivers, delete unreachable code.
-- [low] A lattice's boot-time paint throws on draw exhaustion where compose
-  refuses.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
@@ -3059,8 +3052,7 @@ proves itself with `puck compile` lowering to the same document.
     `PuckCompileDirect3D11Kernels` rejects `#include`, so the compile needs an
     include handler first;
   - rumble duration expiry in `GamepadDevice` (`NextRumbleDeadline`) beside
-    `XInputGamepadConnection`'s own, unconfirmed; the portal's Node
-    `pathToFileURL` boot helper in both `workerBoot.ts` and `engineBoot.ts`;
+    `XInputGamepadConnection`'s own, unconfirmed;
   - test helpers whose copies differ per file: the raw-bit `FixedVector3`
     builders in `tests/Puck.Maths.Tests`, the `Position` overloads in
     `BakedWorldQueryTests.cs` and `SdfFieldEvaluatorCullBoundaryLawTests.cs`,
