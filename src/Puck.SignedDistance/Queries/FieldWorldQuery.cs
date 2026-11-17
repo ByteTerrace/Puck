@@ -21,8 +21,7 @@ public sealed class FieldWorldQuery(IFieldEvaluator field) : IWorldQuery, ISdfFi
     public bool SphereCast(FixedPosition origin, FixedVector3 dir, FixedQ4816 radius, FixedQ4816 maxDist, out RayHit hit) =>
         SdfFieldMarch.SphereCast(direction: dir, hit: out hit, marcher: this, maxDistance: maxDist, origin: origin, radius: radius);
     /// <inheritdoc/>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) => (!field.TryDistance(distance: out var distance, material: out _, position: center) ||
-        (SdfFieldMarch.ScaleDistanceDown(distance: distance, scale: field.Capabilities.StepScale) <= FixedQ4816.Max(x: radius, y: FixedQ4816.Zero)));
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) => SdfFieldMarch.Overlap(center: center, evaluator: field, hasShape: true, radius: radius);
     /// <inheritdoc/>
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) =>
         SdfFieldMarch.GroundHeight(groundY: out groundY, marcher: this, position: position, probeDown: probeDown, probeUp: probeUp);

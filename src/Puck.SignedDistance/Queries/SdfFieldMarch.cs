@@ -60,6 +60,12 @@ internal static class SdfFieldMarch {
 
         return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
     }
+    // Occupancy compares the same lower-bound clearance as a radius cast. A missing reading is occupied
+    // when geometry exists; a genuinely empty field is clear even outside its representable frame.
+    internal static bool Overlap(IFieldEvaluator evaluator, FixedPosition center, FixedQ4816 radius, bool hasShape) {
+        if (!evaluator.TryDistance(distance: out var distance, material: out _, position: center)) { return hasShape; }
+        return (ScaleDistanceDown(distance: distance, scale: evaluator.Capabilities.StepScale) <= FixedQ4816.Max(x: radius, y: FixedQ4816.Zero));
+    }
 
     // The march accept threshold: a sample within this of the surface counts as a hit rather than one more step.
     // Matches the scale of SdfFieldEvaluator.GradientEpsilon (both are "close enough" tolerances against the same

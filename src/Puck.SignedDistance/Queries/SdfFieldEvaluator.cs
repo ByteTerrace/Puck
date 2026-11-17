@@ -1614,23 +1614,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     /// direction a placement/spawn consumer can survive being wrong about. If the center cannot be rebased into the
     /// program's signed-Q48.16 frame, a shape-bearing program reports occupied: inability to evaluate must not become
     /// a false-clear placement result. A shape-free program still reports clear everywhere.</remarks>
-    public bool Overlap(FixedPosition center, FixedQ4816 radius) {
-        if (!TryDistance(
-            distance: out var distance,
-            material: out _,
-            position: center
-        )) {
-            return m_hasShape;
-        }
-
-        return (SdfFieldMarch.ScaleDistanceDown(
-            distance: distance,
-            scale: m_stepScale
-        ) <= FixedQ4816.Max(
-            x: radius,
-            y: FixedQ4816.Zero
-        ));
-    }
+    public bool Overlap(FixedPosition center, FixedQ4816 radius) => SdfFieldMarch.Overlap(center: center, evaluator: this, hasShape: m_hasShape, radius: radius);
     /// <inheritdoc/>
     /// <remarks>A march that cannot safely complete its hit-or-clear proof reports a HIT at the last marched point,
     /// carrying <see cref="WorldQueryConfidence.Bounded"/>. This occurs when the scaled field can no longer clear the
