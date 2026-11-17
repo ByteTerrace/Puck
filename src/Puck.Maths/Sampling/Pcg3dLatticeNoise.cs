@@ -96,28 +96,49 @@ public static class Pcg3dLatticeNoise {
     /// <param name="seed">The hash seed.</param>
     /// <param name="spacing">The block edge in cells.</param>
     /// <param name="radius">The radius inset from the block's edge, in cells.</param>
-    /// <returns>The point's cell coordinates: <c>block·spacing + radius</c> on each axis, plus the matching
-    /// <see cref="Pcg3d"/> lane (X for X, Y for Z) modulo the inset <c>max(0, spacing − 2·radius)</c> when that inset
-    /// is positive.</returns>
+    /// <returns>The point's cell coordinates: <c>block·spacing + radius</c> on each axis, plus an offset in
+    /// <c>[0, inset)</c>, where the inset is <c>max(0, spacing − 2·radius)</c> (no offset when it is zero), drawn
+    /// exactly uniformly: the matching <see cref="Pcg3d"/> lane (X for X, Y for Z) goes through
+    /// <see cref="BoundedRandomSampling.TryMap"/>, and an axis whose word falls in the rejected window draws again from
+    /// the same lane of <c>Pcg3d(blockX, blockZ, seed + attempt·</c><see cref="HashStreamA"/><c>)</c>. Every attempt
+    /// rejects with probability below one half, and the sequence is a pure function of the arguments.</returns>
     public static (int X, int Z) ScatterPoint(int blockX, int blockZ, uint seed, int spacing, int radius) {
-        var hash = Pcg3d(
-            x: unchecked((uint)blockX),
-            y: unchecked((uint)blockZ),
-            z: seed
-        );
         var inset = Math.Max(
             val1: 0,
             val2: (spacing - (2 * radius))
         );
+        var x = unchecked((blockX * spacing) + radius);
+        var z = unchecked((blockZ * spacing) + radius);
 
-        return (
-            (((blockX * spacing) + radius) + ((inset > 0)
-                ? ((int)(hash.X % ((uint)inset)))
-                : 0)),
-            (((blockZ * spacing) + radius) + ((inset > 0)
-                ? ((int)(hash.Y % ((uint)inset)))
-                : 0))
-        );
+        if (inset > 0) {
+            var hash = Pcg3d(
+                x: unchecked((uint)blockX),
+                y: unchecked((uint)blockZ),
+                z: seed
+            );
+
+            x = unchecked(x + ((int)ScatterOffset(blockX: blockX, blockZ: blockZ, bound: ((uint)inset), laneZ: false, seed: seed, word: hash.X)));
+            z = unchecked(z + ((int)ScatterOffset(blockX: blockX, blockZ: blockZ, bound: ((uint)inset), laneZ: true, seed: seed, word: hash.Y)));
+        }
+
+        return (x, z);
+    }
+    // An exactly uniform offset in [0, bound) from one lane of a stateless hash: the first attempt's word, then fresh
+    // hashes of the same block under a decorrelated seed for as long as the word lands in the rejected window.
+    private static uint ScatterOffset(int blockX, int blockZ, uint seed, uint bound, bool laneZ, uint word) {
+        for (var attempt = 1U; ; ++attempt) {
+            if (BoundedRandomSampling.TryMap(exclusiveHigh: bound, value: out var offset, word: word)) {
+                return offset;
+            }
+
+            var next = Pcg3d(
+                x: unchecked((uint)blockX),
+                y: unchecked((uint)blockZ),
+                z: unchecked(seed + (attempt * HashStreamA))
+            );
+
+            word = (laneZ ? next.Y : next.X);
+        }
     }
     /// <summary>Samples one octave of 3D value noise at a lattice point, Q48.16 throughout: the CPU twin of the
     /// renderer's <c>sdfValueNoise3</c>, which a relieved creation's bake and its contact both read.</summary>
