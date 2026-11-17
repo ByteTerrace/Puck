@@ -1216,7 +1216,12 @@ a lane held for anything but the integration lane's next batch, a stalled lane
 When an owner correction reveals a process rule, change the repository skill
 that drives the behavior (this one, `review-passes`, `verification`) in the
 same turn. Agents and the lead's own briefs read the skills; a private note
-beside a skill that still says otherwise changes nothing.
+beside a skill that still says otherwise changes nothing. Generalize the
+correction before writing it (the owner's ruling): name the behaviour the
+correction points at, write the principle that prevents the whole pattern, and
+keep the incident only as its case. A rule that patches the one symptom named
+lets the next symptom of the same pattern through, and two narrow rules for one
+pattern are a sign the principle was missed.
 
 ## No bad loops
 
@@ -1319,20 +1324,24 @@ and not a spiral:
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet
   for weeks while engine work ran, and the owner found them unfixed.
-- A run does not end while work is owed or ready (the owner's ruling: "If you
-  still owe, then why'd you stop prematurely?"). Owed windowed readings, ready
-  queue items and filed fixes are the next work, not a closing summary; the
-  lead reports progress and keeps launching and measuring. A lead that landed a
-  batch at night, listed seven owed readings and six ready lanes, and stopped
-  is the case.
-- Owed windows come before new lanes (the owner's ruling, a running issue: the
-  owner had to say both "why'd you stop" and "why not lead with the owed
-  window first"). Whenever the machine is idle or a batch has just landed, the
-  lead first runs every owed reading it can take (quiet legs while nothing
-  builds, then GPU-lease legs), records them, and only then launches the next
-  lanes, briefing them with what the window found. On resuming a session the
-  first action is the owed window, not a launch. Windows are part of the normal
-  flow between landings, never a separate phase that waits for an invitation.
+- What the lead owes is open work it carries until it is closed (the owner's
+  ruling, after a running pattern of corrections). Debts are the readings and
+  verifications a landing left owed, the findings not yet routed or fixed, the
+  regressions the lead's own process caused, and anything promised to the
+  owner. The lead pays them continuously in the normal flow, not as a phase
+  that waits for an invitation:
+  - It never winds down while it owes: a summary that lists owed items is a
+    progress report, never an end state, and the run goes on paying them.
+  - Paying debt the machine can pay now comes before opening new work: an idle
+    machine or a just-landed batch takes the owed readings first (quiet legs
+    while nothing builds, then GPU-lease legs), and the next lanes are briefed
+    with what they found. New lanes run beside debt only where the debt cannot
+    run yet.
+  - It applies the same at a session's start, after a landing, after a review,
+    and at every pause.
+  The cases: a lead that landed a night's batch, listed seven owed readings and
+  six ready lanes, and stopped; then, told to resume, launched six lanes onto
+  the idle machine before taking the owed window.
 - At each landing the lead checks that the top of Next has lanes on it. Review
   rounds, fix lanes and landings fill a lead's attention without filling the
   machine: once, only three review-bound lanes ran for hours while Next's top
