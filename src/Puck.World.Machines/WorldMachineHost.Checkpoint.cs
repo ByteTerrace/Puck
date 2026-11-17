@@ -72,8 +72,37 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
         RequireCheckpointInventory();
         CheckpointRestore.Validate(
             checkpoint: checkpoint,
-            host: this
+            host: this,
+            instances: m_instances,
+            screenEntries: m_slots.ToDictionary(
+                keySelector: static pair => pair.Key,
+                elementSelector: static pair => (pair.Value.Magazine?.Entries.Count ?? 0)
+            )
         ).Apply();
+    }
+    /// <inheritdoc/>
+    public void ValidateCheckpoint(WorldMachineHostCheckpoint checkpoint, IWorldMachinePreparedPlan plan) {
+        ArgumentNullException.ThrowIfNull(checkpoint);
+        ArgumentNullException.ThrowIfNull(plan);
+        if (
+            (plan is not PreparedMachinePlan prepared) ||
+            !ReferenceEquals(
+            objA: prepared.Instances.Owner,
+            objB: this
+        )
+        ) {
+            throw new ArgumentException(message: "The machine plan was not prepared by this host.", paramName: nameof(plan));
+        }
+        RequireCheckpointInventory();
+        _ = CheckpointRestore.Validate(
+            checkpoint: checkpoint,
+            host: this,
+            instances: prepared.Instances.Candidate,
+            screenEntries: prepared.CandidateScreens.ToDictionary(
+                keySelector: static screen => screen.Index,
+                elementSelector: static screen => (screen.Magazine?.Entries.Count ?? 0)
+            )
+        );
     }
 
     private void RequireCheckpointInventory() {
@@ -105,9 +134,10 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
             m_rows = rows;
         }
 
-        public static CheckpointRestore Validate(WorldMachineHost host, WorldMachineHostCheckpoint checkpoint) {
-            var instances = host.m_instances;
-            var hostSlots = host.m_slots;
+        // instances and screenEntries describe the host the restore runs against: its live machines and screens, or
+        // the ones a prepared plan would commit (screenEntries maps a screen index to its magazine's entry count).
+        public static CheckpointRestore Validate(WorldMachineHost host, WorldMachineHostCheckpoint checkpoint, IReadOnlyDictionary<string, MachineInstance> instances, IReadOnlyDictionary<int, int> screenEntries) {
+            var hostSlots = screenEntries;
 
             if (
                 (checkpoint.Instances is null) ||
@@ -158,8 +188,7 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
                 throw new InvalidDataException(message: $"machine checkpoint names screens [{string.Join(separator: ", ", values: (checkpoint.Slots ?? []).Select(selector: static row => row.Index))}] where this host declares [{string.Join(separator: ", ", values: hostSlots.Keys.Order())}]");
             }
             foreach (var row in checkpoint.Slots) {
-                var slot = hostSlots[row.Index];
-                var entries = (slot.Magazine?.Entries.Count ?? 0);
+                var entries = hostSlots[row.Index];
 
                 if (
                     (row.SelectedEntry < 0) ||

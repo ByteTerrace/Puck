@@ -1948,11 +1948,6 @@ Companions, beside the protocol's steps:
 Player state, beside [the hub plan](hub-and-saves.md#build-order)'s durable
 images (H7), battery saves (H8) and minimal identities:
 
-- [high] The deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`)
-  admits a solid variant whose shape the load validator refuses
-  (`CreationShapeLaws.SolidRefusals` runs only on the template's base
-  prototype), so the sweep can install a document that load rejects. The gate
-  should be the load validator's own child laws.
 - [medium] `world.save` refuses on the debug world: it names the
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
@@ -2143,8 +2138,6 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   and counts a failure (`ReadFlockAffinity`), and a binding whose local is
   absent is dropped at its sweep's end, re-arming an Edge rule
   (`RuleEvaluator`'s `HoldOnFault`). Decide what each absence means.
-- [low] A routed `body.where` appends ` anchor=body:N` to a refusal as well as
-  to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
   rows if the grant vocabulary allows. The `contribution:` subject of
@@ -2170,13 +2163,13 @@ lane's.
   hearth companions the debug world's `references` name, beside the boot
   authority. Hall's scenarios cross none of them; a fixture that overrides
   `references` and `destinations` to none runs one authority.
-- [medium] The authority-level replay start commits before it validates: with
-  geometry or machine configuration edited after the checkpoint,
-  `WorldPersistence.ReplayStart.cs` installs the machine reconfiguration and
-  the definition, and only then does `RestoreCheckpointCore` validate, so a
-  refused checkpoint leaves both moved. The debugger's machine-snapshot
-  restore has the same shape (`WorldAddonRuntime.Debugger.cs`). Validate first
-  with `TryValidateCheckpoint` (`IMachineCheckpointRuntime`).
+- [low] The replay start validates a changed configuration's checkpoint against a
+  `WorldPopulation` its definition builds and the machine plan, before anything
+  moves (`WorldPersistence.ValidateCheckpointRestore`). The attached-solid
+  rows (`MovingSolids.ValidateAttached`) read the contact field an install
+  gives the population, which the scratch population lacks (unverified), so
+  they are checked only after the install, and a refusal there still leaves the
+  reconfiguration installed.
 - [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
@@ -2477,8 +2470,8 @@ The edit loop:
   `TryValidateTouchedStateRows` narrows a state write.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
-  reload a same-catalog arena in place (`StateCatalog.HasSameShape` is
-  unused).
+  reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers
+  whether the catalog survives).
 - A state-section edit builds five arenas on the debug world
   (`world.boot.arena-builds`), one not yet attributed, and an undisturbed run
   grows the counter with no edit at all.
