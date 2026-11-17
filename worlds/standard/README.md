@@ -56,6 +56,12 @@ the garden and the night field import in the standard's place; the debug world's
 Go and Tour pages, Places ring and gallery icons live in
 [`../debug/controls.puck`](../debug/controls.puck), which refines those.
 
+`free-camera.puck` is a library whose `freeCamera(...)` template authors Free Cam (a seat leaves its body and flies a camera):
+the `camera` seat-mode family, the first-person `views.cameraRig`, a `camera-seat-<slot>` body per local seat with the kit
+that flies it, and the key that toggles it. The importing world owns the population, so it adds `freeCameraBodies` to its
+`bodies.capacity` and expands the template in a fragment imported ahead of its other inhabitants
+([`../debug/free-camera.puck`](../debug/free-camera.puck)); a world that does not expand it has no Free Cam.
+
 `styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits
 (`render { toon: celStyle }`), which `world.toon` switches live.
