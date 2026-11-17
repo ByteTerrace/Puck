@@ -286,6 +286,11 @@ special case. A shape carrying `domain` folds may not also carry a swing or
 slide. Details, caps, every refusal, and the Moth's driver map are in
 `references/rig.md`.
 
+Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
+The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength
+under root scaling. Parts that move within that frame refuse it: per-part relief would change the composed
+surface at their seams. `sizeBy` remains presentation-only, so a solid placement refuses it.
+
 **Blends between shapes that move apart (owner's ruling).** A pooled `group`
 bakes one mesh at the pose its program arrives in, and each vertex then rides
 one shape's slot, so a smooth or non-union blend joining shapes with different

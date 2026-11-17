@@ -199,19 +199,8 @@ public sealed partial class WorldRigidAssets {
         scratch.Surfaces = (m_slots.Count - firstSurface);
         void EmitSurface(int surfaceSlot, bool[]? hidden, bool textRuns) {
             m_slots.Add(item: surfaceSlot);
-            builder.BeginInstanceDynamic(surfaceSlot, Vector3.Zero, (CreationStampEmitter.RenderReach(document, 1, ((text is null) ? null : text.Resolve), composeBlends: true) + 0.4f));
-            var scoped = CreationStampEmitter.ComposesInternally(document: document);
-
-            if (scoped) { builder.PushField(SdfBlendOp.Union); }
-            var transform = new CreationStampTransform(Vector3.Zero, Quaternion.Identity, 1, null, DynamicSlot: surfaceSlot);
-
-            CreationStampEmitter.Emit(builder, document, transform, MaterialFor, inScope: scoped, hidden: hidden);
-            if (document.Noise is { } noise) { CreationStampEmitter.EmitNoise(builder: builder, noise: noise, transform: transform); }
-            if (textRuns && (text is not null) && (document.TextRuns is { Count: > 0 })) {
-                CreationStampEmitter.EmitText(builder, document, transform, text!.Resolve, run => palette[Math.Clamp((run.Material ?? 0), 0, (palette.Length - 1))]);
-            }
-            if (scoped) { builder.PopField(); }
-            builder.EndInstance();
+            WorldPlacementStamper.EmitRootSurface(builder, document, surfaceSlot, hidden, textRuns, text, MaterialFor,
+                run => palette[Math.Clamp((run.Material ?? 0), 0, (palette.Length - 1))], glass: (hasGlass && (!mixed || (surfaceSlot != slot))));
         }
     }
 

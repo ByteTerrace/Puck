@@ -280,21 +280,18 @@ public static class WorldMotionTuningFactory {
 
         for (var index = 0; (index < rows.Count); index++) {
             var row = rows[index];
-            var gate = new List<CompiledPredicate>();
-
             // The shaping table shares ONE recency-clock table across all rows (as one lane's press/release channels
             // share one), slotted by the same predicate flattener the action lanes use — extended here to resolve a
             // `held` predicate's channel against the world's own table.
-            BodyActionSpecFactory.FlattenPredicate(
+            var gate = BodyActionSpecFactory.CompileGate(
                 predicate: row.When,
-                gate: gate,
                 recencyFacts: recencyFacts,
                 recencyWindows: recencyWindows,
                 channels: channels
             );
 
             compiled[index] = new FixedBodyShaping(
-                When: gate.ToArray(),
+                When: gate,
                 Along: ((row.Along is { } along)
                 ? new FixedShapingAlong(
                         Engage: FixedQ4816.FromDouble(value: (along.Engage ?? 0f)),

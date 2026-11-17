@@ -487,7 +487,13 @@ falls below the tier, and a steady 60 Hz holds the same frames as a two- or
 four-frame divisor. Off a grid the comparison allows a millisecond for the
 jitter of a sampled frame time, without which a steady 60 Hz on a
 variable-refresh display refreshed the far cascade on three frames of every
-five instead of every second one.
+five instead of every second one. Frames that land within a quarter of a step of
+the pacing cadence (`PresentationRate.PacedFrameLow`) are counted in whole
+pacing steps as a fixed signal's are, since summing their jittered spans at an
+integer ratio of the period (60 Hz frames, a 15 Hz tier) flips an interval
+between n and n - 1 frames and walks two items that took a tier half a period
+apart onto one frame; a frame far from the pacing step (a hitch, a display
+running off its target) is counted by its time.
 A tier above the display's rate holds nothing. Under
 lockstep the period is whole ticks, so a capture's frames do not depend on the
 display. A cap is the other meaning of a rate ("at most N Hz": an authored

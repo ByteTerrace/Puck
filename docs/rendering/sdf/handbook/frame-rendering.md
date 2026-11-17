@@ -285,7 +285,10 @@ tier, so 75 Hz updates the 30 Hz tier every second refresh (37.5 Hz) and 144 Hz
 every fourth (36 Hz); off a grid, on a variable-refresh display, it is the
 tier's own period with a millisecond's slack for the jitter of a sampled frame
 time (`PresentationRate.ToleranceSeconds`), and a frame slower than the pacing
-target shortens the hold rather than the rate. No estimate foresees a frame
+target shortens the hold rather than the rate. While the latest frame spans
+within a quarter of one pacing step the frames count as whole steps of the
+pacing rate, as a fixed signal's do, so timer jitter never moves an item's
+frame within its period. No estimate foresees a frame
 that comes later than the one before it, so an interval can pass its period by
 that frame's surprise. The scheduler measures a floor footprint's time since the
 producer's latest render on the frame's presentation clock

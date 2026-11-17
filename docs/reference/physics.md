@@ -109,11 +109,12 @@ spherical-harmonic expansion.
 reads a document: `BodyMotionOp` (the closed opcode set), `CompiledBodyMotionProgram`
 (the compiler that validates a declared name/version/kind/opcode set and its
 operations' parameters, such as `ComputePlanarTargetVelocity`'s `FixedPlanarTarget`,
-and groups the selection into its intrinsic host phases), the per-body trigger and action-state IR
-(`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `CompiledPredicate`,
-`CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
-and the compiled fixed-point tunings the stages read (`FixedMotionTuning`,
-`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`,
+and groups the selection into its intrinsic host phases), the action-state and instruction IR
+(`CompiledBodyInstruction`, `CompiledActionStateSlot`, `CompiledActionStateEnvelope`),
+and fixed-point tuning primitives. The World schema owns the gate-bearing host records
+(`CompiledActionSpec`, `CompiledTrigger`, `CompiledFactTrigger`, `FixedBodyShaping`, `FixedMotionTuning`);
+their `Puck.State.Rules.GateToken` programs run through `RuleEvaluation.Decide`, with
+`ActionGateOperand` reading the World's `IActionGateFacts`. The remaining tuning primitives are in Physics (`FixedMotionDefaults`, `FixedMotionScalarEnvelope`, `FixedSpeed`, `FixedTurn`,
 `FixedUpTurnRates`, `FixedObstructionLatch`).
 `ShapeVelocity` reads the one unified velocity-shaping table,
 `FixedMotionTuning.Shaping` (`FixedBodyShaping[]`): the first row whose gate
@@ -130,7 +131,7 @@ own speed-scaled authority curve and the governing row's `TurnScale` apply
 identically whichever yaw-writing frame operation (`ResolveDriveFrame`,
 `ResolveYawAttitudeAndPlanarFrame`, `IntegrateLocalAttitude`) is selected. A
 held low-traction row (a kart's drift) is an ordinary row gated on a `Held`
-predicate (`CompiledPredicateKind.Held`, a live channel-threshold read),
+predicate (`ActionGateOperand.Held`, a live channel-threshold read through `IActionGateFacts`),
 authored ahead of the row it overrides. An absent engage/release/reversalRate/lateral
 rate compiles to an explicit instant-convergence flag; zero is not overloaded
 as either instant or disabled. The vertical channel is a hold row's

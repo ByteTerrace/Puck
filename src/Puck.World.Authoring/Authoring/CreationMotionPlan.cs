@@ -21,9 +21,7 @@ public sealed class CreationMotionPlan {
             }
         }
         for (var index = 0; (index < shapes.Count); index++) {
-            var shape = shapes[index];
-            var own = ((CreationMotion.Owner(document: document, index: index, parents: parents) == index) || followed.Contains(item: index) ||
-                (document.Frames ?? []).Any(predicate: frame => (frame.Transforms ?? []).Any(predicate: pose => (pose.Id == shape.Id))));
+            var own = ((CreationMotion.Owner(document: document, index: index, parents: parents) == index) || followed.Contains(item: index));
 
             if (own) {
                 owners.Add(item: index);
@@ -33,6 +31,9 @@ public sealed class CreationMotionPlan {
             }
         }
         Owners = owners.ToArray();
+        if ((document.Noise is not null) && (Owners.Length > 0)) {
+            throw new ArgumentException(message: "Noise relief requires every shape to ride the creation root; independently moving parts cannot share its field.", paramName: nameof(document));
+        }
         var rejected = CreationMotion.CreasedGroups(document: document);
         // A follower has no finite authored envelope. Partition its entire group by owner as well.
         var followedSlots = followed.Select(selector: index => ShapeSlots[index]).ToHashSet();

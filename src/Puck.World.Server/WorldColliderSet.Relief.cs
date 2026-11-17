@@ -223,7 +223,7 @@ public sealed partial class WorldColliderSet {
         // The unrelieved program, at the stamp's own origin: its blends bound how far the relief's union reaches.
         var envelope = ReliefProgram(document: document, margin: margin, relieved: false, transform: transform);
         var relieved = Relieves(document: document);
-        var growth = ((relieved ? FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
+        var growth = ((relieved ? (FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) * transform.Scale) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
             partitioned: !relieved, transform: transform, unbounded: out var unbounded);
 

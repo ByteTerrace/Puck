@@ -317,6 +317,23 @@ design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
+- [medium] A rated item's phase is held by its own cadence, so a long frame
+  that spans an interval for one item and not another (a hitch, a missed
+  frame on a fixed signal) can land two items that took a tier half a period
+  apart on one frame, and nothing moves them back: coalescing is absorbing.
+  A phase kept on the shared presentation clock (an item's position within
+  the period carried across its updates, or a lattice of period boundaries)
+  restores the spread but lets an interval pass the floor by up to a frame
+  where the greedy rule never does, so it changes what `PresentationRate.Holds`
+  promises; decide that before building it. `PresentationRateLawTests`
+  pins the cadence and the irregular frames.
+- [high] Gen-1 collections dominate the slow frames: at `debug.go desktop` on
+  Direct3D 12, 600 iterations held 64 over 16.7 ms, the worst carrying 20 to
+  28 ms pauses (47 collections pausing 674 ms), one iteration allocating
+  68763816 bytes. The machine was loaded, so the times are indicative; the
+  pauses and allocation are not load-bound. Attribute the allocation with
+  `dotnet-trace --profile gc-verbose` and cut it at its sources (the churn
+  item below names the probe cache and the dressed frame copies).
 - [high] Concurrency is hand-rolled across the engine (`lock`, `Task.Run`,
   `new Thread`, `ThreadPool`, `Parallel.For`), densest in the bake and
   irradiance code; the memo's C0 and J1 move it. Beside them: make thread
@@ -794,6 +811,15 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
+- [medium] A small relieved union retains contour defects in both its static
+  and root-moving forms: the relief1 CPU audit finds 6 folds, 2 flipped
+  triangles and 16 slivers, with no open edges or uncovered crossings, in
+  19,424 triangles. Reproduce with two Sphere shapes at `[-0.22, 0, 0]` and
+  `[0.22, 0, 0]`, scales `[0.42, 0.32, 0.38]` and `[0.4, 0.36, 0.32]`, the
+  second joining by SmoothUnion of radius 0.12, and creation noise frequency
+  2, amplitude 0.12, octaves 3, seed 11. The static and moving audits agree
+  in counted work and error; carrying the relief did not introduce these
+  defects. Inspect the contour's narrow triangles before changing its detail.
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
   triangles on six of the fourteen blend exhibits (`shape-groove-union` and
@@ -2816,8 +2842,7 @@ validation that makes the skill suites believable.
 
 ### Refactoring campaign
 
-Owner: the lead, one implementer lane per group · high · Next: the body
-gate-program merge and the groups below, largest payoff first; the two snapshot
+Owner: the lead, one implementer lane per group · high · Next: the groups below, largest payoff first; the two snapshot
 mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
@@ -2831,8 +2856,15 @@ proves itself with `puck compile` lowering to the same document.
   `ConfinedDirectory.AcquireLock` as a blocking member, so the merged loop is
   answered at its callers.
 - [low] `Puck.World.Console` references `Puck.Launcher` and no code in it uses
-  the reference; drop it, re-record the lock files (`puck locks`) and narrow its
+  the reference; drop it, re-record the lock files (`puck locks`, minding the item below) and narrow its
   profile in `build/Architecture.props`.
+- [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
+  which can re-resolve unrelated transitive packages after a project-reference change.
+  The verb's promise to keep every other pinned version needs an enforcing mechanism:
+  an rf2 reference experiment rewrote 52 lock files and advanced System.IO.Hashing
+  and FSharp.Core without `--update`. The experiment was backed up and reverted;
+  rf2's final project graph needs no lock changes. Fix the non-update path in
+  `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events
@@ -2841,12 +2873,6 @@ proves itself with `puck compile` lowering to the same document.
   the walk to a `puck` verb attached over the diagnostics port, and drop the
   reference. The verb also blocks the World for the walk (671 to 926 ms on a
   headless debug world), since commands have no asynchronous form.
-- [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
-  beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
-  stack, but body predicates keep a separate dispatch over recency clocks,
-  counters, timers and held input. One home: operands and gate programs in
-  `Puck.State.Rules`, body facts served by the World host, moved with their
-  validation and checked through the authored body-action scenarios.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers
