@@ -12,9 +12,13 @@ public sealed class WorldReplayProbe : IDisposable {
 
     private readonly List<WorldReplayTickInput> m_inputs = [];
     private readonly List<ulong> m_hashes = [];
+    private readonly List<ulong[]> m_components = [];
 
     /// <summary>Gets the per-tick authoritative hashes recorded by <see cref="WorldReplayTape.NoteTick"/> while this probe was attached.</summary>
     public IReadOnlyList<ulong> Hashes => m_hashes;
+
+    /// <summary>Gets the named components that differed at the first divergent replay tick.</summary>
+    public string? Divergence { get; private set; }
 
     private readonly ulong[] m_startComponents;
 
@@ -49,11 +53,12 @@ public sealed class WorldReplayProbe : IDisposable {
 
     private string? m_staleDigest;
 
-    internal void NoteTick(WorldReplayTickInput input, ulong hash) {
+    internal void NoteTick(WorldReplayTickInput input, ulong hash, ulong[] components) {
         m_inputs.Add(item: new WorldReplayTickInput(Authority: [.. input.Authority.Skip(count: m_skipAuthority)], Intents: [.. input.Intents.Skip(count: m_skipIntents)]));
         m_skipAuthority = 0;
         m_skipIntents = 0;
         m_hashes.Add(item: hash);
+        m_components.Add(item: components);
         if (VerifiesIncrementalHash && (m_staleDigest is null) &&
             (WorldStateHashComposition.DescribeStaleDigest(hash: hash, server: m_server, tick: (m_server.NextInputTick - 1)) is { Length: > 0 } stale)) {
             m_staleDigest = $"recorded tick {(m_hashes.Count - 1)}: {stale}";
@@ -102,6 +107,8 @@ public sealed class WorldReplayProbe : IDisposable {
                     throw new InvalidOperationException(message: $"replayed tick {tick}: {stale}");
                 }
                 if (replayed != m_hashes[tick]) {
+                    Divergence = string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: m_components[tick],
+                        right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1))));
                     return tick;
                 }
                 progress?.Invoke((tick + 1));
