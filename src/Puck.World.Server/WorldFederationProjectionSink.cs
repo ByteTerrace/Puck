@@ -43,6 +43,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
+    private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldRecipientView? m_view = view ?? server?.DeliveryView(recipient, tier);
     private WorldDocumentVersion Version => (server?.DocumentVersion ?? default) with { Sequence = m_cursor.Sequence };
 
@@ -197,7 +198,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             );
         }
         if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
-        projected = projected with { Revision = checked((int)m_cursor.Sequence) };
+        projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = m_view is null ? default : m_scales.Filter(m_view, projected.SolidScales) };
         projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
         Write(
             WorldFederationResponse.Snapshot,

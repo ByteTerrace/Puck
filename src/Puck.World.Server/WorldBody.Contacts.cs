@@ -311,6 +311,7 @@ public sealed partial class WorldBody {
             !field.TryRideDisplacement(
                 up: in m_up,
                 displacement: out var displacement,
+                supportRow: out var supportRow,
                 orientation: in m_orientation,
                 position: m_position,
                 volumes: ScaledColliderVolumes()
@@ -319,8 +320,16 @@ public sealed partial class WorldBody {
             return;
         }
 
+        var next = m_position + displacement;
+        var velocity = ComposedVelocity();
+        ContactResolution resolution;
+        using (field.ExcludeRideSupport(supportRow)) {
+            resolution = SweepContact(m_contactField ?? field, m_entityIndex, m_position, ref next, ref velocity,
+                m_orientation, ScaledColliderVolumes(), m_up);
+        }
+        if (resolution.Refusal != ContactRefusal.None) { NoteSweepRefusal(resolution.Refusal); return; }
         WakeUp();
-        m_position += displacement;
+        m_position = next;
     }
 
     // One body step's support-distance answer, so the step's two ground snaps (the support search before integration

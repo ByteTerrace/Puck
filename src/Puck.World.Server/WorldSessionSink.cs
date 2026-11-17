@@ -28,6 +28,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     private EntitySnapshot[] m_redacted = [];
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
+    private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldRecipientView m_view = observation.View;
     private WorldDocumentVersion Version => server.DocumentVersion with { Sequence = m_cursor.Sequence };
 
@@ -337,6 +338,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             redacted = redacted with {
                 FieldCells = m_rows.Advance(m_view, m_cursor, redacted.FieldCells, (Tier == WorldDisclosureTier.Replica)),
+                SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
             };
             redacted = redacted with { Revision = checked((int)m_cursor.Sequence) };

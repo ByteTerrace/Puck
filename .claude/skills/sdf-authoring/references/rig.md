@@ -75,7 +75,11 @@ drawn root uses the size contact actually read even when a later rule writes a
 new value. Attached solids may use `$body` for their carrier's keyed state.
 At zero it hides and contributes no contact. Growing and shrinking supports use
 the same ride, step-up, snap, depenetration and sleeper-wake path as translated
-supports. Relief and blend radii scale with that root, and the local mesh stays
+supports. The support's material point supplies the ride; the body's skin and
+overhang do not scale, and the ride sweeps against every other solid. A solid
+born at zero lifts an intersecting grounded body onto its new support surface.
+Relief, blend radii and the solid's authored contact margin scale with that root;
+query padding and the body's contact skin stay in world units. The local mesh stays
 baked. The debug glacier is the standard family's example.
 
 `drivers` is up to 32 named `{ name, signal, cadence, when, blendInSeconds,

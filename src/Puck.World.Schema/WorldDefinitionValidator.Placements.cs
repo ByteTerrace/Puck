@@ -553,6 +553,10 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} '{reference}' names no declared state row.");
         } else if (row.Kind is not (CellKind.Int or CellKind.Fixed)) {
             errors.Add(item: $"{path} '{reference}' names a {StateSpelling.Kind(kind: row.Kind)} row; {subject} reads an int or fixed cell.");
+        } else if (StateBinding.Parse(reference) is { Key: null } && row.IsKeyed) {
+            errors.Add($"{path} '{reference}' needs a key for keyed row '{rowName}'.");
+        } else if (StateBinding.Parse(reference) is { Key: { } key } && row.IsSlot && key != StateRow.SlotKey.Value) {
+            errors.Add($"{path} '{reference}' names a key on slot row '{rowName}'.");
         }
     }
     private static void RequireGateTokens(WorldDefinition definition, IReadOnlyList<string>? gate, List<string> errors, string path) {
@@ -1714,6 +1718,9 @@ public static partial class WorldDefinitionValidator {
                             continue;
                         }
 
+                        if (StateBinding.Parse(variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey } && placement.Attach is null) {
+                            errors.Add($"{path}.solid creation '{variantId}' sizeBy needs an attached body for '$body'.");
+                        }
                         var variantColliders = 0L;
 
                         foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {

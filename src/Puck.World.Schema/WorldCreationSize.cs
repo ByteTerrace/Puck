@@ -10,11 +10,4 @@ public static class WorldCreationSize {
         CellKind.Int or CellKind.Bool => ((value.Raw > 0) ? FixedQ4816.One : FixedQ4816.Zero),
         _ => FixedQ4816.Zero,
     });
-    /// <summary>Reads an authored size binding at the authority's tick, without presentation easing.</summary>
-    public static FixedQ4816 Read(WorldDefinition definition, string? reference, ulong tick, ulong engineTick, int bodyIndex = -1) {
-        if (reference is null) { return FixedQ4816.One; }
-        return ((StateBinding.TryParse(binding: out var binding, token: reference) && StateBinding.TryResolveBodyKey(binding.Key, bodyIndex, out var key) &&
-            WorldStateReader.TryReadValue(definition, binding.Row, key, tick, engineTick, out _, out var value))
-            ? Of(value: value) : FixedQ4816.Zero);
-    }
 }

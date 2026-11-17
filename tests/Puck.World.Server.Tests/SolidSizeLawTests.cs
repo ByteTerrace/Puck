@@ -12,6 +12,130 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Size is sampled once by authority; contact, carrier motion and snapshot agree on that sample.</summary>
 public sealed class SolidSizeLawTests {
+    [Theory]
+    [InlineData(false, 0f)]
+    [InlineData(true, 0f)]
+    [InlineData(false, 0.2f)]
+    [InlineData(true, 0.2f)]
+    public void MovingSolidsAnswerGripAndFieldGameplayQueries(bool field, float margin) {
+        var definition = GrowingDocument(field, carved: false);
+        definition = definition with { CollisionRaw = definition.Collision with { DefaultHold = true },
+            PlacementRowsRaw = [definition.Placements[0] with { Solid = new WorldSolid(margin) }] };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.Step();
+        var from = FixedVector3.FromVector3(new Vector3(20, 3, 0));
+        var to = FixedVector3.FromVector3(new Vector3(20, -1, 0));
+        var contact = field ? (IContactField)fixture.Server.Population.SolidField! : WorldColliderSet.Build(fixture.Server.Definition);
+        if (contact is WorldColliderSet analytic) { analytic.RefreshAttached(fixture.Server.Population, fixture.Server.Definition, 1, 1); }
+        Assert.True(contact.TryHoldableSurfaceAlongDirection(from, -FixedVector3.UnitY, FixedQ4816.FromInteger(5), out var grip, out _));
+        Assert.InRange((double)grip.Point.Y, 0.99 + margin / 2, 1.01 + margin / 2);
+        Assert.True(contact.TryNearestSurfaceAlongDirection(from, -FixedVector3.UnitY, FixedQ4816.FromInteger(5), FixedQ4816.Zero, out _));
+        if (field) {
+            var solid = fixture.Server.Population.SolidField!;
+            Assert.False(solid.LineOfSight(from, to));
+            Assert.True(solid.Query.Raycast(FixedPosition.FromLocal(from), -FixedVector3.UnitY, FixedQ4816.FromInteger(5), out _));
+            Assert.True(solid.Query.TryGroundHeight(FixedPosition.FromLocal(from), FixedQ4816.Zero, FixedQ4816.FromInteger(5), out var height));
+            Assert.InRange((double)height, 0.99 + margin / 2, 1.01 + margin / 2);
+            Assert.True(solid.Query.Overlap(FixedPosition.FromLocal(FixedVector3.FromVector3(new Vector3(20, 0.5f, 0))), FixedQ4816.Zero));
+        }
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ContactRebuildKeepsTheLatestMovingSample(bool field) {
+        using var fixture = Fixtures.FreshServer(GrowingDocument(field));
+        fixture.Step();
+        var before = fixture.Server.Population.Capture().AttachedSolids;
+        fixture.Server.Population.Rebuild(fixture.Server.Definition, null);
+        Assert.Equal(before, fixture.Server.Population.Capture().AttachedSolids);
+    }
+    [Fact]
+    public void StaticResponseToSizedCreationRebuildsItsColliderClass() {
+        var definition = GrowingDocument(false, carved: false);
+        var full = CreationCanonicalizer.Canonicalize(definition.Creations[0].Document with { SizeBy = null }, "full");
+        var before = definition with { CreationsRaw = [definition.Creations[0], new WorldPrototype("full", full.Document, full.Hash)],
+            PlacementRowsRaw = [definition.Placements[0] with { PrototypeId = "full" }] };
+        using var fixture = Fixtures.FreshServer(before);
+        Assert.True(fixture.Server.Population.InstallResponseSolids(fixture.Server.Definition, definition, [0], null));
+        Assert.Empty(fixture.Server.Population.DiagnosticColliders);
+    }
+    [Theory]
+    [InlineData("state.growth.$body", false)]
+    [InlineData("state.growth", true)]
+    public void UnresolvableSolidSizeIsACompileError(string binding, bool keyed) {
+        var definition = GrowingDocument(false, carved: false);
+        var creation = CreationCanonicalizer.Canonicalize(definition.Creations[0].Document with { SizeBy = binding }, "bad");
+        var row = StateFixtures.FixedSlot("growth", FixedQ4816.One.Value);
+        definition = definition with { CreationsRaw = [new WorldPrototype("growing", creation.Document, creation.Hash)],
+            StateRaw = new WorldStateSection(World: [keyed ? row with { Domain = StateDomain.Keys.Instance, Cells = [] } : row]) };
+        Assert.False(WorldDefinitionValidator.TryValidate(definition: definition, neighbours: null, reason: out var reason));
+        Assert.Contains(keyed ? "needs a key" : "$body", reason);
+    }
+    [Fact]
+    public void SampleDeliveryRechecksTheSourceCellsDisclosure() {
+        var definition = GrowingDocument(false);
+        definition = definition with { StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot("growth", FixedQ4816.One.Value)
+            with { CellVisibility = true, Visibility = new StateVisibility(Readers: ["seat1"]) }]) };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.Step();
+        WorldRecipientView View(int seat) => new(() => fixture.Server.Definition, () => fixture.Server.Arena, Principal.Seat(seat),
+            WorldDisclosureTier.Replica, () => true, new WorldDisclosureImages(), fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime);
+        var filter = new WorldSolidScaleDisclosure();
+        Assert.Empty(filter.Filter(View(1), fixture.Server.Population.SolidScales()).ToArray());
+        Assert.Single(filter.Filter(View(0), fixture.Server.Population.SolidScales()).ToArray());
+        Assert.True(fixture.Server.Arena.Catalog.TryResolve(StateLane.Document, "growth", out var row));
+        Assert.True(fixture.Server.Arena.Keys.TryResolve(StateRow.SlotKey, out var key));
+        Assert.True(fixture.Server.Arena.TryWriteVisibility(row.Ordinal, key, new StateVisibility(Readers: ["seat2"])));
+        Assert.Empty(filter.Filter(View(0), fixture.Server.Population.SolidScales()).ToArray());
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ScaledFieldBoundsRoundOutward(bool field) {
+        var definition = GrowingDocument(field);
+        var shapes = definition.Creations[0].Document.Shapes!.ToArray();
+        shapes[0] = shapes[0] with { Scale = new Vector3(3 + 1f / 65536, 1, 3) };
+        var creation = CreationCanonicalizer.Canonicalize(definition.Creations[0].Document with { Shapes = shapes }, "odd");
+        definition = definition with { CreationsRaw = [new WorldPrototype("growing", creation.Document, creation.Hash)] };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "growth", StateRow.SlotKey.Value,
+            FixedQ4816.One.Value, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        var full = Assert.Single(Assert.Single(fixture.Server.Population.DiagnosticAttached()).Colliders).Collider;
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "growth", StateRow.SlotKey.Value,
+            FixedQ4816.One.Value / 2, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        var half = Assert.Single(Assert.Single(fixture.Server.Population.DiagnosticAttached()).Colliders).Collider;
+        Assert.True(half.Extent.X >= (FixedInterval.FromPoint(full.Extent.X) * FixedInterval.FromPoint(FixedQ4816.FromDouble(0.5))).Upper);
+    }
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void ASizeStepCarriesSurfaceWithoutMultiplyingBodyStandoff(bool field, bool born) {
+        var definition = GrowingDocument(field, carved: false);
+        var initial = born ? FixedQ4816.Zero : FixedQ4816.FromDouble(0.01);
+        var floor = CreationCanonicalizer.Canonicalize(definition.Creations[0].Document with { SizeBy = null }, "floor");
+        definition = definition with {
+            StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot("growth", initial.Value)]),
+            // The floor supports the body before a zero-sized solid is born.
+            CreationsRaw = [definition.Creations[0], new WorldPrototype("floor", floor.Document, floor.Hash)],
+            PlacementRowsRaw = [definition.Placements[0], new WorldPlacement("floor", "floor", new Vector3(20, -2, 0), 0, 1, Solid: new WorldSolid(0))],
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        var body = fixture.JoinSeat(0);
+        body.Pose(20.02f, (float)(initial * FixedQ4816.FromInteger(2)) + 0.04f, 0, 0, 0, 0);
+        for (var tick = 0; tick < 20; tick++) { fixture.Step(); }
+        var before = body.FixedPosition;
+        Assert.True(body.Grounded, $"before={before}");
+        Assert.InRange((double)before.Y, -0.01, 0.1);
+        fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "growth", WorldStateRow.SlotKey.Value,
+            FixedQ4816.One.Value, WorldDocumentWriteKind.Set));
+        fixture.Step();
+        Assert.InRange((double)body.FixedPosition.Y, 2, 2.1);
+        Assert.InRange((double)(body.FixedPosition.X - before.X), -3, 3);
+    }
     [Fact]
     public void StationaryYawedSupportHasNoDriftOver600Ticks() {
         var definition = GrowingDocument(field: false, carved: false);

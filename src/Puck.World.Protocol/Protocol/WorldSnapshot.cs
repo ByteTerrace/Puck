@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Maths;
 using System.Numerics;
 using Puck.Physics.Motion;
 
@@ -145,8 +144,6 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<WorldInputPublication> Inputs = default,
     ReadOnlyMemory<WorldSolidScale> SolidScales = default
 );
-/// <summary>The uniform root-size fraction contact sampled for a solid placement this tick.</summary>
-public readonly record struct WorldSolidScale(string Placement, FixedQ4816 Scale);
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
 /// <param name="Field">The field's index within its named region.</param>

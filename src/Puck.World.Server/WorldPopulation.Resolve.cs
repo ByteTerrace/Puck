@@ -129,6 +129,7 @@ public sealed partial class WorldPopulation {
     // is compiled here), the line-of-sight field and the navigation runtime over them. A whole rebuild and a response
     // swap that moves a solid row (TryInstallResponseSolids) both compile them through here.
     private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
+        var previousMoving = MovingSolids;
         m_contactCensus = null;
         m_censusDefinition = definition;
         var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
@@ -153,6 +154,10 @@ public sealed partial class WorldPopulation {
             definition: definition,
             solids: derivedSolids
         );
+        MovingSolids?.CarrySamplesFrom(previousMoving);
+        if (derivedSolids is not null && m_baseContactField is WorldColliderSet analytic) {
+            derivedSolids = derivedSolids.WithMovingSolids(analytic, tuning);
+        }
         m_adjacencyDefinition = definition;
         ComposeContactField();
         m_targetField = (WorldTargetSelection.RequiresLineOfSight(definition: definition)

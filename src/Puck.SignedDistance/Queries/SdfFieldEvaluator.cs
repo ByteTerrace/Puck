@@ -824,7 +824,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // radius, which the tick floor deliberately does not lift, so it may report a bounded answer having travelled
     // nothing at all. Across both, an exhausted answer has exactly three causes: that vanished radius clearance, this
     // budget running out, and a marched point the program's frame cannot express.
-    private static int MarchIterationsFor(FixedQ4816 stepScale) {
+    internal static int MarchIterationsFor(FixedQ4816 stepScale) {
         var reach = (SdfFieldMarch.HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
         var floor = FixedQ4816.Max(
             x: SdfFieldMarch.ScaleDistanceDown(
