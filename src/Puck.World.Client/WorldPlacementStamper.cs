@@ -15,7 +15,7 @@ namespace Puck.World.Client;
 /// (<see cref="WorldPrototype.Mesh"/>) becomes one <see cref="SdfMeshDraw"/> per static placement instance.
 /// </summary>
 /// <remarks>Text runs share the same instance and transform as their creation and resolve through the world's packed
-/// font catalog. They count against <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
+/// font catalog. They count in <see cref="CreationDocument.StampShapeCount"/> like every other emitted shape.</remarks>
 public static partial class WorldPlacementStamper {
     /// <summary>Retains the static placements the contact evaluator can read. An unsupported placement excludes only
     /// itself, so a render-only fold cannot disable surface probes throughout the world.</summary>
