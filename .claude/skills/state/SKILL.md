@@ -122,6 +122,12 @@ and [the behavior examples](../../../docs/reference/state/rules.md#rule-fault-ex
 [remaining work](../../../docs/plans/rule-faults.md) includes body-target generations, proposal-owned host scratch
 and the source-read timing choice; these are not guarantees the current implementation makes.
 
+Action and shaping gates use the same `GateToken` programs, `RuleCompiler.CompileGate` Boolean
+lowering and `RuleEvaluation.Decide` as rules. `ActionGateOperand` reads the typed `IActionGateFacts`
+facet; `WorldBody.Gates.cs` supplies the current body, lane clocks and intent. The body vocabulary
+in `WorldBodyGate.cs` admits only its registered leaves (`RuleVocabulary.CorePredicates = false`);
+its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate reads arena rows.
+
 ## Contracts that bite
 
 - **Determinism.** Values are integers and Q48.16 (`maths-usage`); no wall
@@ -203,12 +209,6 @@ and the source-read timing choice; these are not guarantees the current implemen
   `WorldStateDisclosure` statics and `WorldStateReadView` remain until the
   plan's step 6; bodies are disclosed spatially by `WorldObserverDisclosure`
   beside both ([disclosure plan](../../../docs/plans/disclosure.md)).
-- **Body action gates are a second gate interpreter.** `WorldBody.GateOpen`
-  folds `CompiledPredicate[]` with its own loop beside `RuleEvaluation.Decide`,
-  sharing only `GateProgramEvaluator`. Merging them is a design step for the
-  physics and body lane ("Puck code over engine code": body facts are operands
-  a rule gate could read).
-  The remaining lowering work is in the [refactoring packet](../../../docs/plans/open-items.md#refactoring-campaign).
 - Rule-fault follow-ups are in [the rule-faults plan](../../../docs/plans/rule-faults.md),
   evaluation cost in [the job-system memo](../../../docs/plans/engine-job-system.md#rule-evaluation-stays-serial).
 

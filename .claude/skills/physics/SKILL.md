@@ -52,7 +52,7 @@ same change.
 | Routes, shared goal searches, off-grid checks | `NavigationRuntime` over `NavigationDomainInput`; medium fields through `INavigationMediumField`; host `WorldPopulation.Navigation.cs` | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | Evolving scalar fields (water, heat, snow) and their solids | `FieldLattice` (reactions, `IFieldLatticeHost`), `FieldLatticeSolid`, `UnionField`, ordering by `ReadWriteHazard.Conflicts` | [field lattice](../../../docs/reference/physics.md#field-lattice-fields) |
 | Steering samples and flocks | `FixedSpatialNeighborhood` (bounded, never a broadphase), `FixedFlockSteering` | [perception](../../../docs/reference/physics.md#bounded-local-perception) |
-| How a body moves under its kit: drive, shaping, holds, actions | `CompiledBodyMotionProgram`, `BodyMotionOp`, `FixedMotionTuning` (Physics `Motion/`), executed by `WorldBody` phases | [motion core](../../../docs/reference/physics.md#the-motion-program-core-motion) |
+| How a body moves under its kit: drive, shaping, holds, actions | `CompiledBodyMotionProgram`, `BodyMotionOp`, `FixedMotionTuning` (Schema; gate-bearing host records), executed by `WorldBody` phases | [motion core](../../../docs/reference/physics.md#the-motion-program-core-motion) |
 | Sleep, wake on a moved carrier or lattice, rest | `WorldBody.Sleep.cs`, `WorldPopulation.ObserveContactFieldChange`, `WorldPopulation.ContactFieldVersion` | [server README](../../../src/Puck.World.Server/README.md#the-entity-table-worldpopulationcs-worldbodycs) |
 
 ## The body step and the seam door
@@ -134,9 +134,6 @@ same change.
 
 ## Open gaps
 
-- **Body action gates are a second gate interpreter.** `WorldBody.GateOpen`
-  folds `CompiledPredicate[]` beside `RuleEvaluation.Decide` (`state`); the
-  merge, with body facts as rule operands, is a design step.
 - **The adjacency sweep's remote side reads a neighbour's unscaled collider**:
   the delivered snapshot carries no per-entity `Scale` yet.
 - **Approximations the reference names.** Rounded or chamfered circular rims

@@ -1,9 +1,9 @@
 using System.Runtime.CompilerServices;
 
-namespace Puck.State;
+namespace Puck.State.Rules;
 
 /// <summary>
-/// Allocation-free Boolean stack program operations shared across rule gates and physics body action gates.
+/// Allocation-free Boolean stack program operations used by the rule gate interpreter.
 /// </summary>
 public static class GateProgramEvaluator {
     /// <summary>

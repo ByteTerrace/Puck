@@ -561,54 +561,6 @@ public sealed partial class WorldBody {
         }
         return -1;
     }
-    // The one postfix evaluator every body gate takes: an action trigger's gate reads its lane's recency clocks, a
-    // shaping row's the motion clocks. The validator decides which predicates each gate may name.
-    private bool GateOpen(CompiledPredicate[] gate, ReadOnlySpan<ulong> recency, in PlayerIntent intent) {
-        if (gate.Length == 0) {
-            return true;
-        }
-
-        Span<bool> stack = stackalloc bool[CompiledPredicateCapacity.MaxTokens];
-        var top = 0;
-
-        foreach (var predicate in gate) {
-            if (predicate.Kind == CompiledPredicateKind.Not) {
-                GateProgramEvaluator.Invert(
-                    stack: stack,
-                    top: top
-                );
-                continue;
-            }
-            if (predicate.Kind is CompiledPredicateKind.All or CompiledPredicateKind.Any) {
-                GateProgramEvaluator.FoldGroup(
-                    arity: predicate.Arity,
-                    isAll: (predicate.Kind == CompiledPredicateKind.All),
-                    stack: stack,
-                    top: ref top
-                );
-                continue;
-            }
-
-            var holds = predicate.Kind switch {
-                CompiledPredicateKind.Now => FactHolds(fact: predicate.Fact),
-                CompiledPredicateKind.Recently => (recency[predicate.RecencySlot] > 0),
-                CompiledPredicateKind.CompareState => predicate.Comparison.Holds(
-                value: StateCounter(slot: predicate.StateSlot),
-                expected: predicate.Value
-            ),
-                CompiledPredicateKind.TimerElapsed => (StateTimer(slot: predicate.StateSlot) == 0),
-                CompiledPredicateKind.Held => (intent[predicate.ChannelOrdinal] >= m_channelThresholds[predicate.ChannelOrdinal]),
-                _ => false,
-            };
-
-            stack[top++] = holds;
-        }
-
-        return (
-            (top == 1) &&
-            stack[0]
-        );
-    }
     private static long InitialRaw(in CompiledActionStateSlot definition) => WorldActionStateLane.InitialRaw(definition: in definition);
     private FixedQ4816 StateCounter(int slot) => ((m_stateLane is { } lane)
         ? lane.Counter(
@@ -700,7 +652,7 @@ public sealed partial class WorldBody {
             if (GateOpen(
                 gate: shaping[index].When,
                 intent: in intent,
-                recency: m_motionRecency
+                recencyLane: -1
             )) {
                 return index;
             }
@@ -762,7 +714,7 @@ public sealed partial class WorldBody {
                     GateOpen(
                     gate: press.Gate,
                     intent: in scratch.Intent,
-                    recency: LaneRecency(lane: ordinal)
+                    recencyLane: ordinal
                 )
                 ) {
                     if (ApplyEffects(
@@ -782,7 +734,7 @@ public sealed partial class WorldBody {
                 GateOpen(
                 gate: release.Gate,
                 intent: in scratch.Intent,
-                recency: LaneRecency(lane: ordinal)
+                recencyLane: ordinal
             )
             ) {
                 ApplyEffects(
@@ -798,7 +750,7 @@ public sealed partial class WorldBody {
                 var holds = (FactHolds(fact: trigger.Fact) && GateOpen(
                     gate: trigger.Gate,
                     intent: in scratch.Intent,
-                    recency: LaneRecency(lane: ordinal)
+                    recencyLane: ordinal
                 ));
                 var wasHeld = ((Action.LaneFactHeld[ordinal] & (1UL << rule)) != 0UL);
 

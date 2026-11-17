@@ -2,7 +2,6 @@ using AddressUse = Puck.State.Rules.AddressUse;
 using OperandAddress = Puck.State.Rules.OperandAddress;
 using CompiledCellRef = Puck.State.Rules.CompiledCellRef;
 using IRuleKey = Puck.State.Rules.IRuleKey;
-using IRuleOperand = Puck.State.Rules.IRuleOperand;
 using RuleReads = Puck.State.Rules.RuleReads;
 using WriteKey = Puck.State.Rules.WriteKey;
 
@@ -19,7 +18,7 @@ namespace Puck.World;
 public readonly record struct WorldBodyRef(CompiledBodyRefKind Kind, int Index, int RowOrdinal = -1, CellKey Key = default, IReadOnlyList<int>? PlacementOrdinals = null);
 /// <summary>The operand facts only a world answers. The facet is the type argument, so the read receives
 /// <see cref="IWorldFacts"/> as an argument and a fact cannot reach a capability it did not declare.</summary>
-public abstract class WorldFactOperand : OperandFact<IWorldFacts>, IRuleOperand {
+public abstract class WorldFactOperand : Puck.State.Rules.FacetRuleOperand<IWorldFacts> {
     private protected WorldFactOperand(CellKind valueKind) : base(valueKind: valueKind) { }
 
     /// <summary>Returns the population capacity the context's document declares — the per-tick cost of a read that
@@ -28,30 +27,7 @@ public abstract class WorldFactOperand : OperandFact<IWorldFacts>, IRuleOperand 
     /// <returns>The capacity.</returns>
     protected static long PopulationCapacity(IRuleCostContext context) => ((WorldFactsCompileContext)context).Definition.Population.Capacity;
 
-    /// <inheritdoc/>
-    public virtual ReadOnlySpan<OperandAddress> Addresses => default;
 
-    /// <summary>Reads the fact once the addresses it declares are resolved. An operand with no addresses answers
-    /// through <see cref="OperandFact{TFacet}.Read"/>.</summary>
-    /// <param name="reader">The evaluation in flight.</param>
-    /// <param name="facet">The facet the evaluator resolved from the host.</param>
-    /// <param name="keys">What each of <see cref="Addresses"/> named.</param>
-    /// <returns>The fact.</returns>
-    public virtual Fact Read(IStateReader reader, IWorldFacts facet, ReadOnlySpan<ResolvedKey> keys) => Read(
-        facet: facet,
-        reader: reader
-    );
-
-    Fact IRuleOperand.Read(IStateReader reader, ReadOnlySpan<ResolvedKey> keys) {
-        ArgumentNullException.ThrowIfNull(argument: reader);
-
-        // Admission proved the host serves the facet before any rule naming it ran.
-        return Read(
-            facet: ((IWorldFacts)reader),
-            keys: keys,
-            reader: reader
-        );
-    }
 }
 /// <summary>The active body count (<see cref="WorldRuleFacts.Population"/>).</summary>
 public sealed class WorldPopulationOperand : WorldFactOperand {

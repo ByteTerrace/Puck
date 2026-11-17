@@ -2829,13 +2829,19 @@ validation that makes the skill suites believable.
 
 ### Refactoring campaign
 
-Owner: the lead, one implementer lane per group · high · Next: the body
-gate-program merge and the groups below, largest payoff first; the two snapshot
+Owner: the lead, one implementer lane per group · high · Next: the groups below, largest payoff first; the two snapshot
 mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
+  which can re-resolve unrelated transitive packages after a project-reference change.
+  The verb's promise to keep every other pinned version needs an enforcing mechanism:
+  an rf2 reference experiment rewrote 52 lock files and advanced System.IO.Hashing
+  and FSharp.Core without `--update`. The experiment was backed up and reverted;
+  rf2's final project graph needs no lock changes. Fix the non-update path in
+  `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events
@@ -2844,12 +2850,6 @@ proves itself with `puck compile` lowering to the same document.
   the walk to a `puck` verb attached over the diagnostics port, and drop the
   reference. The verb also blocks the World for the walk (671 to 926 ms on a
   headless debug world), since commands have no asynchronous form.
-- [medium] `WorldBody.GateOpen` interprets a postfix `CompiledPredicate[]`
-  beside `RuleEvaluation.Decide`: both share `GateProgramEvaluator`'s Boolean
-  stack, but body predicates keep a separate dispatch over recency clocks,
-  counters, timers and held input. One home: operands and gate programs in
-  `Puck.State.Rules`, body facts served by the World host, moved with their
-  validation and checked through the authored body-action scenarios.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers

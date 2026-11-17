@@ -127,7 +127,7 @@ public static class BodyMotionProgramRoles {
 }
 /// <summary>The document intake for <see cref="CompiledActionSpec"/> — the one place an authored
 /// <see cref="ActionSpec"/> becomes the engine's compiled trigger form.</summary>
-public static class BodyActionSpecFactory {
+public static partial class BodyActionSpecFactory {
     private static CompiledBodyInstruction CompileEffect(ActionEffect effect, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
         var instruction = effect switch {
             WorldEffect.SetVerticalVelocity or WorldEffect.ScaleVerticalVelocity or WorldEffect.PlanarImpulse or WorldEffect.Designate => CompileBodyMotion(
@@ -262,11 +262,8 @@ public static class BodyActionSpecFactory {
             return null;
         }
 
-        var gate = new List<CompiledPredicate>();
-
-        FlattenPredicate(
+        var gate = CompileGate(
             predicate: trigger.Gate,
-            gate: gate,
             recencyFacts: recencyFacts,
             recencyWindows: recencyWindows,
             stateSlots: stateSlots
@@ -284,198 +281,13 @@ public static class BodyActionSpecFactory {
         }
 
         return new CompiledTrigger(
-            Gate: gate.ToArray(),
+            Gate: gate,
             LatchTicks: DurationTicks(seconds: trigger.LatchSeconds),
             Effects: effects
         );
     }
     // Authored seconds → engine ticks, rounded up from the decimal the float field was authored as.
     private static ulong DurationTicks(float seconds) => FixedTickConversion.DurationEngineTicks(seconds: ((decimal)seconds));
-    private static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots, WorldChannelTable? channels, int depth) {
-        if (depth >= CompiledPredicateCapacity.MaxTokens) {
-            throw new InvalidOperationException(message: $"An action gate is nested past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
-        }
-
-        switch (predicate) {
-            case null:
-                break;
-            case ActionPredicate.All all:
-                ArgumentNullException.ThrowIfNull(argument: all.Predicates);
-                foreach (var inner in all.Predicates) {
-                    if (inner is null) {
-                        throw new InvalidOperationException(message: "An 'all' action gate contains a null predicate.");
-                    }
-                    FlattenPredicate(
-                        channels: channels,
-                        depth: (depth + 1),
-                        gate: gate,
-                        predicate: inner,
-                        recencyFacts: recencyFacts,
-                        recencyWindows: recencyWindows,
-                        stateSlots: stateSlots
-                    );
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.All,
-                    Arity: all.Predicates.Count
-                ));
-
-                break;
-            case ActionPredicate.Any any:
-                if (any.Predicates is not { Count: > 0 }) {
-                    throw new InvalidOperationException(message: "An 'any' action gate must contain at least one predicate.");
-                }
-                foreach (var inner in any.Predicates) {
-                    if (inner is null) {
-                        throw new InvalidOperationException(message: "An 'any' action gate contains a null predicate.");
-                    }
-                    FlattenPredicate(
-                        channels: channels,
-                        depth: (depth + 1),
-                        gate: gate,
-                        predicate: inner,
-                        recencyFacts: recencyFacts,
-                        recencyWindows: recencyWindows,
-                        stateSlots: stateSlots
-                    );
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Any,
-                    Arity: any.Predicates.Count
-                ));
-
-                break;
-            case ActionPredicate.Not not:
-                ArgumentNullException.ThrowIfNull(argument: not.Predicate);
-                FlattenPredicate(
-                    gate: gate,
-                    predicate: not.Predicate,
-                    recencyFacts: recencyFacts,
-                    recencyWindows: recencyWindows,
-                    stateSlots: stateSlots,
-                    channels: channels,
-                    depth: (depth + 1)
-                );
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Not,
-                    Arity: 1
-                ));
-
-                break;
-            case WorldPredicate.Held held:
-                if (
-                    (channels is not { } table) ||
-                    !table.TryGetOrdinal(
-                    name: held.Channel,
-                    ordinal: out var heldOrdinal
-                )
-                ) {
-                    throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Held,
-                    ChannelOrdinal: heldOrdinal
-                ));
-
-                break;
-            case WorldPredicate.Now now:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: now.Fact,
-                    RecencySlot: 0,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Now
-                ));
-
-                break;
-            case WorldPredicate.Recently recently:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: recently.Fact,
-                    RecencySlot: recencyFacts.Count,
-                    StateSlot: -1,
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.Recently
-                ));
-                recencyFacts.Add(item: recently.Fact);
-                recencyWindows.Add(item: DurationTicks(seconds: recently.WindowSeconds));
-
-                break;
-            case ActionPredicate.CompareState compare:
-                // A per-body action-state slot is not keyed — a `key` here would be parsed and discarded, which is
-                // exactly the shape this campaign refuses. It is legitimate at WORLD scope alone (WorldFactsCompiler).
-                if (compare.Key is not null) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'key' — a per-body action-state slot is not keyed; 'key' addresses a world state row's cell and is legitimate only in a world rule.");
-                }
-                // A comparand ROW reference addresses a world state row (or a reserved channel a world evaluates
-                // per tick) — a per-body action-state slot has neither, so the second spelling is legitimate only in
-                // a world rule (WorldFactsCompiler), never here.
-                if (
-                    (compare.ComparandState is not null) ||
-                    (compare.ComparandKey is not null)
-                ) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries a 'comparandState'/'comparandKey' — a per-body action-state slot has no world state row to reference; a comparand row is legitimate only in a world rule.");
-                }
-
-                if (compare.Value is not { } constant) {
-                    throw new InvalidOperationException(message: $"Predicate 'compareState' on action state '{compare.State}' carries no 'value' — a per-body predicate names the authored constant to compare against.");
-                }
-
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: ResolveState(
-                        name: compare.State.Spelling,
-                        stateSlots: stateSlots
-                    ),
-                    Value: NumericLiteral.ToFixed(value: constant),
-                    Comparison: compare.Comparison,
-                    Kind: CompiledPredicateKind.CompareState
-                ));
-                break;
-            case WorldPredicate.TimerElapsed elapsed:
-                gate.Add(item: new CompiledPredicate(
-                    Fact: default,
-                    RecencySlot: 0,
-                    StateSlot: ResolveState(
-                        name: elapsed.State,
-                        stateSlots: stateSlots
-                    ),
-                    Value: default,
-                    Comparison: default,
-                    Kind: CompiledPredicateKind.TimerElapsed
-                ));
-                break;
-        }
-
-        if (gate.Count > CompiledPredicateCapacity.MaxTokens) {
-            throw new InvalidOperationException(message: $"An action gate compiles past the {CompiledPredicateCapacity.MaxTokens}-token ceiling.");
-        }
-    }
     // A per-body action-state slot has no world state row to copy from — setState/addState's live 'fromState'/
     // 'fromKey' spelling is legitimate only in a world rule (WorldFactsCompiler); a body-scope effect always writes an
     // authored constant, so 'value' is required here on the same terms compareState's own body-scope 'value' is.
@@ -547,11 +359,8 @@ public static class BodyActionSpecFactory {
         // A fact trigger's own gate allocates recency slots from the SAME two lists both channel triggers use — one
         // recency clock table per lane binding, never a third parallel table for the fact channel.
         var onFact = (spec.OnFact ?? []).Select(selector: rule => {
-            var factGate = new List<CompiledPredicate>();
-
-            FlattenPredicate(
+            var factGate = CompileGate(
                 predicate: rule.Gate,
-                gate: factGate,
                 recencyFacts: recencyFacts,
                 recencyWindows: recencyWindows,
                 stateSlots: stateSlots
@@ -559,7 +368,7 @@ public static class BodyActionSpecFactory {
 
             return new CompiledFactTrigger(
                 Fact: rule.Fact,
-                Gate: factGate.ToArray(),
+                Gate: factGate,
                 Mode: rule.Mode,
                 Effects: rule.Effects.Select(selector: effect => CompileEffect(
                     actionName: actionName,
@@ -578,28 +387,7 @@ public static class BodyActionSpecFactory {
             RecencyWindows: recencyWindows.ToArray()
         );
     }
-    /// <summary>Flattens a predicate tree into a bounded postfix Boolean gate, allocating one shared recency slot per
-    /// <see cref="WorldPredicate.Recently"/> instance.</summary>
-    /// <param name="predicate">The authored predicate, or <see langword="null"/> for an open gate.</param>
-    /// <param name="gate">Receives the flattened postfix program.</param>
-    /// <param name="recencyFacts">The shared recency-clock fact table this gate appends to.</param>
-    /// <param name="recencyWindows">The shared recency-clock window table, parallel to <paramref name="recencyFacts"/>.</param>
-    /// <param name="stateSlots">The kit-wide named action-state lookup, or <see langword="null"/> when no slot may be
-    /// referenced.</param>
-    /// <param name="channels">The world's compiled channel table, required to resolve a <see cref="WorldPredicate.Held"/>
-    /// predicate's channel — legitimate only in a kit's <c>shaping</c>-row gate. <see langword="null"/> everywhere
-    /// else; a <c>held</c> predicate reaching a flatten with no table throws, since validation has already refused
-    /// authoring one outside a shaping gate.</param>
-    public static void FlattenPredicate(ActionPredicate? predicate, List<CompiledPredicate> gate, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int>? stateSlots = null, WorldChannelTable? channels = null) =>
-        FlattenPredicate(
-            channels: channels,
-            depth: 0,
-            gate: gate,
-            predicate: predicate,
-            recencyFacts: recencyFacts,
-            recencyWindows: recencyWindows,
-            stateSlots: stateSlots
-        );
+
 }
 /// <summary>One producer program and a kit's fixed-point arguments for it, resolved to
 /// <see cref="BodyProducerParameter"/> ordinals once at kit-compile time — the tick path indexes

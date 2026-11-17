@@ -3,27 +3,6 @@ using Puck.State;
 
 namespace Puck.Physics.Motion;
 
-/// <summary>The compiled predicate dispatch tag.</summary>
-public enum CompiledPredicateKind : byte {
-    Now,
-    Recently,
-    CompareState,
-    TimerElapsed,
-    All,
-    Any,
-    Not,
-    Held,
-}
-/// <summary>The flattened, fixed-point form of one predicate. <see cref="ChannelOrdinal"/> carries a
-/// <see cref="CompiledPredicateKind.Held"/> predicate's resolved composition-channel ordinal (<c>-1</c> for every
-/// other kind) — legitimate only inside a kit's <c>shaping</c>-row gate, where the world's channel table is
-/// available to resolve it at kit-compile time.</summary>
-public readonly record struct CompiledPredicate(ActionFact Fact, int RecencySlot, int StateSlot, FixedQ4816 Value, ExpressionOp Comparison, CompiledPredicateKind Kind, int Arity = 0, int ChannelOrdinal = -1);
-/// <summary>Representation bound for one compiled body predicate program.</summary>
-public static class CompiledPredicateCapacity {
-    /// <summary>The most postfix tokens one body gate may execute.</summary>
-    public const int MaxTokens = 256;
-}
 /// <summary>One compiled instruction shared by program phases and action triggers.</summary>
 /// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s draw site — the one row a generate names,
 /// since a site's source and cursor are its own — and is <see langword="null"/> for every other operation. Nothing
@@ -66,16 +45,3 @@ public readonly record struct CompiledActionStateSlot(
     bool PlayerWritable,
     CompiledActionStateEnvelope? Envelope
 );
-/// <summary>One compiled trigger channel: the flattened conjunction gate, the press latch in engine ticks, and the
-/// fixed-point effects in authored order.</summary>
-public sealed record CompiledTrigger(CompiledPredicate[] Gate, ulong LatchTicks, CompiledBodyInstruction[] Effects);
-/// <summary>One compiled fact trigger: the engine fact, the flattened additional gate, the edge/level mode, and the
-/// effects a fire applies in order.</summary>
-/// <param name="Fact">The engine fact.</param>
-/// <param name="Gate">The flattened additional conjunction, empty when none is authored.</param>
-/// <param name="Mode">Whether the trigger is level- or edge-fired (see <see cref="ActionTriggerMode"/>).</param>
-/// <param name="Effects">The compiled effects, in authored order.</param>
-public readonly record struct CompiledFactTrigger(ActionFact Fact, CompiledPredicate[] Gate, ActionTriggerMode Mode, CompiledBodyInstruction[] Effects);
-/// <summary>A lane binding compiled once before simulation: both trigger channels plus the recency-clock table (one
-/// slot per authored <c>recently</c> instance across both gates — the per-tick clock updater walks it).</summary>
-public sealed record CompiledActionSpec(CompiledTrigger? OnPress, CompiledTrigger? OnRelease, CompiledFactTrigger[] OnFact, ActionFact[] RecencyFacts, ulong[] RecencyWindows);
