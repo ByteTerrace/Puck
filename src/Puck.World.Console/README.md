@@ -130,9 +130,9 @@ because `build/Architecture.props` denies that project a reference to
 `System.Console`.
 
 Project references: `Puck.World.Server`, `Puck.World.Protocol`,
-`Puck.World.Schema`, `Puck.Commands`, and `Puck.Launcher`. `Puck.Hosting` and
+`Puck.World.Schema`, and `Puck.Commands`. `Puck.Hosting` and
 `Puck.Networking` are reached only transitively, through
-`Puck.Launcher`/`Puck.World.Server`; no `ProjectReference` here names either
+`Puck.World.Server`; no `ProjectReference` here names either
 directly.
 
 `world.wait` holds only its issuing `TextCommandSession`. A row's

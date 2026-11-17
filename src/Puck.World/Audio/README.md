@@ -172,11 +172,13 @@ integer pitch/rate interpolation inside the existing character intervals.
 Run the game and read `audio.state`, `audio.emitters`, `speaker.state`,
 `voice.state`, `music.state`, and `instrument.state` over stdin; the mixer
 core's own proofs, if any, live beside it in `Puck.Audio`, not here.
-`tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` proves
+The quarantined scripts under `experimental/tests/Puck.World.Canaries/`
+describe these checks but are not selected by `puck canary`:
+`experimental/tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` checks
 the embellishment and unconditional-layer lanes through the real windowed
-composition root; `tests/Puck.World.Canaries/instrument-clock-source` proves
+composition root; `experimental/tests/Puck.World.Canaries/instrument-clock-source` checks
 the diegetic-instrument engage → `WorldServer.InstrumentClockBoundary` → clock-fold path
-the same way; `tests/Puck.World.Canaries/voice-babble` proves the babble
+the same way; `experimental/tests/Puck.World.Canaries/voice-babble` checks the babble
 playback lane fires four distinct syllable triggers (never one sustained
 tone) and that the mix measurably produces signal.
 
