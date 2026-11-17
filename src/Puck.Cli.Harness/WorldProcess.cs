@@ -25,11 +25,12 @@ public sealed class WorldProcess : IDisposable {
     private readonly Process m_process;
     private readonly StreamWriter m_stderr;
     private readonly StreamWriter m_stdout;
-
     private readonly WorldReadiness m_readiness;
 
     private IDisposable? m_gpu;
+
     private Task[] m_pumps = [];
+
     private Task? m_drained;
 
     private WorldProcess(Process process, StreamWriter stdout, StreamWriter stderr, IDisposable? gpu, WorldReadiness readiness) {
@@ -84,6 +85,7 @@ public sealed class WorldProcess : IDisposable {
         world.m_pumps = [world.PumpAsync(reader: output, stream: CliProcessOutputStream.Stdout), world.PumpAsync(reader: errors, stream: CliProcessOutputStream.Stderr)];
         return world;
     }
+
     /// <summary>Kills a process's whole tree and waits for it to exit; a process that already exited is left as it is.</summary>
     /// <param name="process">The process.</param>
     public static void KillTree(Process process) {
@@ -161,9 +163,11 @@ public sealed class WorldProcess : IDisposable {
     }
     /// <summary>Waits for the World to exit, killing exactly this process tree when it does not within the timeout.</summary>
     /// <param name="timeout">How long to wait.</param>
+    /// <param name="cancellation">Cancels the wait; the process owner disposes the World.</param>
     /// <returns>The exit code, or <see langword="null"/> when the World was killed.</returns>
-    public int? WaitForExit(TimeSpan timeout) {
-        if (m_process.WaitForExit(timeout: timeout)) {
+    public int? WaitForExit(TimeSpan timeout, CancellationToken cancellation = default) {
+        try {
+            m_process.WaitForExitAsync(cancellationToken: cancellation).WaitAsync(cancellationToken: cancellation, timeout: timeout).GetAwaiter().GetResult();
             try {
                 m_process.WaitForExit();
                 JoinPumps();
@@ -172,11 +176,10 @@ public sealed class WorldProcess : IDisposable {
             }
 
             return m_process.ExitCode;
+        } catch (TimeoutException) {
+            Kill();
+            return null;
         }
-
-        Kill();
-
-        return null;
     }
     /// <summary>Stops this process tree, settles both output pumps and releases its GPU lease. The pumps settle on every
     /// path, a failed termination included (the drain's release ends their reads whether or not the World still runs),
@@ -195,7 +198,7 @@ public sealed class WorldProcess : IDisposable {
         }
         try {
             JoinPumps();
-        } catch (Exception exception) when (termination is not null) {
+        } catch (Exception exception) when ((termination is not null)) {
             throw new AggregateException(termination, exception);
         } finally {
             if (Exited()) { ReleaseGpu(); }
@@ -220,11 +223,10 @@ public sealed class WorldProcess : IDisposable {
     private bool Exited() {
         try {
             return m_process.HasExited;
-        } catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException) {
+        } catch (Exception exception) when ((exception is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)) {
             return false;
         }
     }
-
     private void ReleaseGpu() => Interlocked.Exchange(location1: ref m_gpu, value: null)?.Dispose();
     private async Task PumpAsync(StreamReader reader, CliProcessOutputStream stream) {
         using var source = reader;

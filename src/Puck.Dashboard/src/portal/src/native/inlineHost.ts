@@ -319,6 +319,18 @@ export const dynamicImport: (specifier: string) => Promise<unknown> = new Functi
   "return import(specifier);",
 ) as (specifier: string) => Promise<unknown>;
 
+/**
+ * Node-only: the `file:` URL of a filesystem path, through Node's own `url.pathToFileURL`, loaded by
+ * `dynamicImport` so this file needs no `@types/node` and the studio's bundle never resolves it. The one
+ * place a Node path becomes an import specifier (workerBoot.ts's temp-file materialization and
+ * engineBoot.ts's local AppBundle).
+ */
+export async function nodeFileUrl(file: string): Promise<string> {
+  const { pathToFileURL } = (await dynamicImport("node:url")) as { pathToFileURL: (path: string) => { href: string } };
+
+  return pathToFileURL(file).href;
+}
+
 /** Boots `options.engineEntryUrl` (a `main.mjs`) in the calling thread and returns its decoded calls. */
 export async function createInlineWorldEngine(options: EngineHostOptions): Promise<EngineCore> {
   const module = (await dynamicImport(options.engineEntryUrl)) as { createEngine: CreateRawEngine };

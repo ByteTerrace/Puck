@@ -37,6 +37,7 @@ public sealed class WorldArtifactBuildClaim : IDisposable {
 
     /// <summary>Releases the build lock; an unpublished build directory the holder left is then abandoned.</summary>
     public void Dispose() => m_lock.Dispose();
+
     internal void ThrowUnlessHeldIn(string root) {
         ObjectDisposedException.ThrowIf(condition: m_lock.SafeFileHandle.IsClosed, instance: this);
         if (!Puck.Abstractions.PuckPaths.Comparer.Equals(x: Root, y: root)) {
@@ -96,20 +97,23 @@ public sealed class WorldArtifactStore(string root) {
     // build directory, and of any other directory a store run once left.
     internal static string KeyOf(string name) =>
         PortablePath.StemOf(name: name);
+
     private string Sibling(string key, string suffix) =>
         Path.Combine(
             path1: Root,
             path2: $"{key}{suffix}"
         );
     // Waits for an exclusive handle until the deadline; null when the deadline passed first.
-    private static FileStream? Acquire(string path, Stopwatch clock, TimeSpan budget, Action? waiting = null) =>
+    private static FileStream? Acquire(string path, Stopwatch clock, TimeSpan budget, Action? waiting = null, CancellationToken cancellationToken = default) =>
         FileLock.Acquire(
+            cancellationToken: cancellationToken,
             expired: () => (clock.Elapsed >= budget),
             path: path,
             waiting: waiting
         );
-    private FileStream? AcquireStore(Stopwatch clock, TimeSpan budget) =>
+    private FileStream? AcquireStore(Stopwatch clock, TimeSpan budget, CancellationToken cancellationToken = default) =>
         Acquire(
+            cancellationToken: cancellationToken,
             budget: budget,
             clock: clock,
             path: Path.Combine(
@@ -150,13 +154,15 @@ public sealed class WorldArtifactStore(string root) {
     /// <param name="waited">Whether another run held the right when this one first asked.</param>
     /// <param name="waiting">Called synchronously on the acquiring thread once its first attempt finds another
     /// holder, before waiting.</param>
+    /// <param name="cancellationToken">Cancels the lock wait.</param>
     /// <returns>The held claim, which the caller disposes once the build is published or abandoned; or
     /// <see langword="null"/> when the budget ran out first.</returns>
-    public WorldArtifactBuildClaim? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited, Action? waiting = null) {
+    public WorldArtifactBuildClaim? AcquireBuild(string key, Stopwatch clock, TimeSpan budget, out bool waited, Action? waiting = null, CancellationToken cancellationToken = default) {
         _ = Directory.CreateDirectory(path: Root);
 
         var contended = false;
         var held = Acquire(
+            cancellationToken: cancellationToken,
             budget: budget,
             clock: clock,
             path: Sibling(
@@ -212,12 +218,13 @@ public sealed class WorldArtifactStore(string root) {
     /// <param name="reused">The value the returned artifact reports as <see cref="WorldArtifact.Reused"/>.</param>
     /// <param name="clock">The run's clock.</param>
     /// <param name="budget">How long the run may wait for the store lock, measured on <paramref name="clock"/>.</param>
+    /// <param name="cancellationToken">Cancels the store lock wait.</param>
     /// <returns>The leased artifact, or <see langword="null"/> when no finished build exists or the store lock could
     /// not be taken in time.</returns>
-    public WorldArtifact? TryTake(string key, string artifactName, bool reused, Stopwatch clock, TimeSpan budget) {
+    public WorldArtifact? TryTake(string key, string artifactName, bool reused, Stopwatch clock, TimeSpan budget, CancellationToken cancellationToken = default) {
         _ = Directory.CreateDirectory(path: Root);
 
-        using var store = AcquireStore(budget: budget, clock: clock);
+        using var store = AcquireStore(budget: budget, cancellationToken: cancellationToken, clock: clock);
 
         if (store is null) {
             return null;
@@ -236,11 +243,12 @@ public sealed class WorldArtifactStore(string root) {
     /// <param name="artifactName">The artifact's file name inside a build.</param>
     /// <param name="clock">The run's clock.</param>
     /// <param name="budget">How long the run may wait for the store lock, measured on <paramref name="clock"/>.</param>
+    /// <param name="cancellationToken">Cancels the store lock wait.</param>
     /// <returns>The leased artifact, or <see langword="null"/> when the store lock could not be taken in time.</returns>
     /// <exception cref="ObjectDisposedException"><paramref name="claim"/> was released.</exception>
     /// <exception cref="ArgumentException"><paramref name="claim"/> was taken in another store, or
     /// <paramref name="staging"/> is not one of its key's build directories.</exception>
-    public WorldArtifact? Publish(WorldArtifactBuildClaim claim, string staging, string artifactName, Stopwatch clock, TimeSpan budget) {
+    public WorldArtifact? Publish(WorldArtifactBuildClaim claim, string staging, string artifactName, Stopwatch clock, TimeSpan budget, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: claim);
         claim.ThrowUnlessHeldIn(root: Root);
 
@@ -253,7 +261,7 @@ public sealed class WorldArtifactStore(string root) {
             throw new ArgumentException(message: $"{staging} is not a build directory of {key} in {Root}.");
         }
 
-        using var store = AcquireStore(budget: budget, clock: clock);
+        using var store = AcquireStore(budget: budget, cancellationToken: cancellationToken, clock: clock);
 
         if (store is null) {
             return null;

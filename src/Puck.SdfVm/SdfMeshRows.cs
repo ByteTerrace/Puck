@@ -164,7 +164,11 @@ public sealed class SdfMeshRows {
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.RowsOwnedChanged, owned);
             m_table.m_ownedChanges.Clear();
             if (m_table.m_everything || (m_table.m_pending.Count > 0)) { m_table.Revision = checked((m_table.Revision + 1)); }
-            m_table.m_changes.Begin(rows: m_table.Count, everything: m_table.m_everything);
+            // A publication that owes nothing and leaves the extent alone is the endpoint already published, so a consumer
+            // current through it is still current and a frame that carries it stands.
+            if (m_table.m_everything || (m_table.m_pending.Count > 0) || (m_table.m_changes.Serial == 0L) || (m_table.m_changes.RowCount != m_table.Count)) {
+                m_table.m_changes.Begin(rows: m_table.Count, everything: m_table.m_everything);
+            }
             for (var run = 0; (run < m_table.m_pending.Count); run++) {
                 var start = m_table.m_pending.Start(index: run);
                 var length = Math.Min(val1: (m_table.Count - start), val2: m_table.m_pending.Length(index: run));

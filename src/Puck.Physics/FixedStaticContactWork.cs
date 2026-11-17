@@ -4,7 +4,8 @@ namespace Puck.Physics;
 
 /// <summary>
 /// The deterministic work <see cref="FixedStaticContactSolver"/> spends resolving bodies against analytic colliders,
-/// counted in a <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
+/// counted in a <see cref="ShardedWorkCounterSet"/> (each thread counts into a shard of its own) and read through
+/// <see cref="IWorkCounterSource"/> under the source name
 /// <see cref="SourceName"/>: the resolves it runs, the exact collider queries the bounds culls leave, how many of those
 /// take the iterative convex query (GJK and EPA over a support map) and the support-map evaluations they spend, and the
 /// pushes they return.
@@ -17,7 +18,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.contact";
 
-    private readonly WorkCounterSet m_counts = new(
+    private readonly ShardedWorkCounterSet m_counts = new(
         kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed],
         name: SourceName
     );
@@ -69,33 +70,39 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <summary>Counts one exact collider query.</summary>
     /// <param name="pushed">Whether it returned a push.</param>
     public void CountQuery(bool pushed) {
-        m_counts.Count(kind: Queries);
+        var shard = m_counts.ThreadShard;
+
+        shard.Count(kind: Queries);
 
         if (pushed) {
-            m_counts.Count(kind: Pushes);
+            shard.Count(kind: Pushes);
         }
     }
     /// <summary>Counts one iterative convex query and the support-map evaluations it spent.</summary>
     /// <param name="supports">The support-map evaluations.</param>
     public void CountConvex(int supports) {
-        m_counts.Count(kind: ConvexQueries);
-        m_counts.Add(amount: supports, kind: Supports);
+        var shard = m_counts.ThreadShard;
+
+        shard.Count(kind: ConvexQueries);
+        shard.Add(amount: supports, kind: Supports);
     }
     /// <summary>Counts one query against a field collider and the evaluations it spent.</summary>
     /// <param name="bounds">The envelope evaluations.</param>
     /// <param name="samples">The field evaluations.</param>
     /// <param name="unproved">Whether the query ended unproved.</param>
     public void CountField(int bounds, int samples, bool unproved) {
-        m_counts.Count(kind: FieldQueries);
-        m_counts.Add(amount: bounds, kind: FieldBounds);
-        m_counts.Add(amount: samples, kind: FieldSamples);
+        var shard = m_counts.ThreadShard;
+
+        shard.Count(kind: FieldQueries);
+        shard.Add(amount: bounds, kind: FieldBounds);
+        shard.Add(amount: samples, kind: FieldSamples);
 
         if (samples > 0) {
-            m_counts.Count(kind: FieldReads);
+            shard.Count(kind: FieldReads);
         }
 
         if (unproved) {
-            m_counts.Count(kind: FieldUnproved);
+            shard.Count(kind: FieldUnproved);
         }
     }
     /// <summary>Counts one field-collider query its partition narrowed (<see cref="FieldNarrowed"/>).</summary>

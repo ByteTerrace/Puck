@@ -110,8 +110,10 @@ public static partial class CliProjectBuild {
     /// <param name="artifactName">The required artifact inside the output directory, or null to check only the build.</param>
     /// <param name="runner">A captured process runner, or null to launch dotnet.</param>
     /// <param name="properties">Extra MSBuild switches (<c>-p:Name=value</c>) added to the shared arguments, or null.</param>
+    /// <param name="cancellationToken">Cancels the build process.</param>
     /// <returns><see langword="true"/> when the build exited 0 inside its budget.</returns>
-    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null) {
+    public static bool TryBuild(string repositoryRoot, string project, string outputDirectory, string logDirectory, TimeSpan timeout, out CliProcessResult? build, out string error, string? artifactName = null, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? runner = null, IReadOnlyList<string>? properties = null, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
         build = null;
 
         var name = Path.GetFileNameWithoutExtension(path: project);
@@ -126,6 +128,7 @@ public static partial class CliProjectBuild {
                 timeout: timeout,
                 build: remaining => ((runner is { }) ? runner(arguments, remaining) : CliProcess.RunCaptured(
                     arguments: arguments,
+                    cancellationToken: cancellationToken,
                     fileName: "dotnet",
                     input: string.Empty,
                     timeout: remaining,

@@ -1,4 +1,5 @@
 using Puck.Cli.Sweep;
+using Puck.Cli.Motion;
 using Puck.Confinement;
 using System.Text.Json;
 
@@ -126,7 +127,7 @@ public sealed class SweepWorldLawTests : IDisposable {
             Assert.Equal(expected: SweepStatus.Red, actual: Assert.Single(collection: tour.Stills).Status);
             Assert.Contains(collection: tour.Stills[0].Reasons, filter: static reason => reason.StartsWith(comparisonType: StringComparison.Ordinal, value: "capture refused"));
             // A stop's long tick wait runs as several short calls and none is refused.
-            Assert.DoesNotContain(collection: tour.Stills[0].Reasons, filter: static reason => reason.Contains(value: "world.wait 30", comparisonType: StringComparison.Ordinal) || reason.Contains(value: "world.wait 10", comparisonType: StringComparison.Ordinal));
+            Assert.DoesNotContain(collection: tour.Stills[0].Reasons, filter: static reason => (reason.Contains(comparisonType: StringComparison.Ordinal, value: "world.wait 30") || reason.Contains(comparisonType: StringComparison.Ordinal, value: "world.wait 10")));
             Assert.Equal(expected: ["watchdog.after-tour"], actual: run.Recheck().Select(selector: static signal => signal.Name));
 
             cancel.Cancel();
@@ -190,6 +191,27 @@ public sealed class SweepWorldLawTests : IDisposable {
         Assert.Throws<UnauthorizedAccessException>(testCode: () => SweepWorld.TryBoot(Request(state: "bad-log"), folder,
             TimeSpan.FromMinutes(minutes: 1), budget, out _, out _));
         using var reopened = new FileStream(Path.Combine(path1: folder, path2: "stdout.log"), FileMode.Open, FileAccess.Write, FileShare.None);
+    }
+    [Fact]
+    public void ACancelledMotionScriptStopsItsReadBackAndDisposesItsWorld() {
+        int pid;
+
+        using (var process = WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken,
+            request: Request(state: "cancel-motion")).Start(logDirectory: Path.Combine(path1: m_directory, path2: "cancel-motion"))) {
+            pid = process.ProcessId;
+            using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
+
+            cancellation.CancelAfter(delay: TimeSpan.FromMilliseconds(milliseconds: 100));
+            Assert.ThrowsAny<OperationCanceledException>(testCode: () => process.RunScript(
+                ["world.wait 1000000"], TimeSpan.FromMinutes(minutes: 5), cancellation.Token));
+        }
+        try {
+            using var exited = System.Diagnostics.Process.GetProcessById(processId: pid);
+
+            Assert.True(condition: exited.HasExited);
+        } catch (ArgumentException) {
+            // Reaped: the process id no longer exists.
+        }
     }
     [Fact]
     public void ThePublicationWaitCancelsAndItsOwnedProcessStops() {

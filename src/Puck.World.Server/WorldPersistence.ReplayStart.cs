@@ -49,12 +49,32 @@ public sealed partial class WorldPersistence {
                 ConfigurationShape(json: checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
+
+                ValidatedCheckpoint validated;
+
+                // Everything the checkpoint can refuse is checked against the host the reconfiguration will leave,
+                // before the machines or the definition move.
+                try {
+                    validated = ValidateCheckpointRestore(
+                        admission: admission,
+                        checkpoint: checkpoint,
+                        machinePlan: machines,
+                        population: new WorldPopulation(definition: definition)
+                    );
+                } catch {
+                    machines?.Dispose();
+                    throw;
+                }
+
                 var authority = Host.GrantTable.PrepareDocument(Principal.World, Host.Definition, definition);
 
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
                 Host.Document.Install(
                     authority: authority, definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
+                RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
+                    restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan, validated: validated);
+                return;
             }
             RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
                 restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);

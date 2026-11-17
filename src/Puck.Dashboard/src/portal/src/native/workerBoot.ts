@@ -15,7 +15,7 @@
 // tests/engineBoot.test.cjs's own worker-mode-under-Node case).
 import { createByteStore, readThroughVerified, type ByteStore } from "../official/byteStore";
 import { OfficialRefusal, verifyBytes } from "../official/verify";
-import { wrapRawExports, dynamicImport, type RawBrowserExports } from "./inlineHost";
+import { wrapRawExports, dynamicImport, nodeFileUrl, type RawBrowserExports } from "./inlineHost";
 import type { EngineCore } from "./engineTypes";
 
 export type FetchLike = typeof fetch;
@@ -126,13 +126,12 @@ async function materializeToFileUrl(basename: string, bytes: Uint8Array): Promis
   const fs: any = await dynamicImport("node:fs/promises");
   const os: any = await dynamicImport("node:os");
   const path: any = await dynamicImport("node:path");
-  const { pathToFileURL }: any = await dynamicImport("node:url");
 
   nodeBootDir ??= fs.mkdtemp(path.join(os.tmpdir(), "puck-engine-boot-"));
   const dir = await nodeBootDir;
   const file = path.join(dir, basename);
   await fs.writeFile(file, bytes);
-  return pathToFileURL(file).href as string;
+  return nodeFileUrl(file);
 }
 
 /**
