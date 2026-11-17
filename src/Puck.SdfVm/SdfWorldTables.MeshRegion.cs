@@ -905,14 +905,20 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
+        ReplacedMeshRegion(newBytes: fitted, oldBytes: held, replaced: replaced);
+    }
+    // The region's buffer was replaced by one of another size: the next upload carries what the old one held, the old one
+    // is retired behind that upload and leaves the grant's reservation when it is released, and every binding of the
+    // region is written again.
+    private void ReplacedMeshRegion(IDisposable replaced, long oldBytes, ulong newBytes) {
         RequireMeshUpload();
-        Retire(replaced: new ReplacedRegion(bytes: held, grant: m_meshGrant, replaced: replaced));
-        m_meshGrant.Grown(newBytes: ((long)fitted), oldBytes: held);
+        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced));
+        m_meshGrant.Grown(newBytes: ((long)newBytes), oldBytes: oldBytes);
         m_seedMeshHistory = true;
         m_bindingRevision++;
         Volatile.Write(
             location: ref m_meshRegionBytes,
-            value: fitted
+            value: newBytes
         );
     }
     // The growth is reserved before the plan that asks for it (PrepareMeshRegionLimit), so the ledger admits the new
@@ -944,14 +950,6 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        RequireMeshUpload();
-        Retire(replaced: new ReplacedRegion(bytes: ((long)current), grant: m_meshGrant, replaced: replaced));
-        m_meshGrant.Grown(newBytes: ((long)grown), oldBytes: ((long)current));
-        m_seedMeshHistory = true;
-        m_bindingRevision++;
-        Volatile.Write(
-            location: ref m_meshRegionBytes,
-            value: grown
-        );
+        ReplacedMeshRegion(newBytes: grown, oldBytes: ((long)current), replaced: replaced);
     }
 }
