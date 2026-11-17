@@ -534,9 +534,12 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   lane polices nothing by hand: `puck lease heavy`, `puck lease gpu`,
   `puck_world_start` (windowed as a device step, headless as an ordinary one),
   `gate` and `affected` each wait, after they hold their lease, until the commit
-  charge is under its share of the limit (`HostLoadThresholds.CommitCapacityPercent`)
-  and the headroom covers the start's expected peak plus what the Worlds and heavy
-  suites already running have left to grow (`HostStartTracker`), beside free memory and disk, and name what holds them
+  headroom covers the start's expected private bytes plus what the Worlds and heavy
+  suites already running have left to grow and still holds the commit reserve
+  (`HostLoadThresholds.DefaultCommitReservePercent` of the limit; `HostStartTracker`),
+  free physical memory covers the start's expected working set (a separate, smaller
+  measurement than private bytes) plus the running starts' working-set growth and
+  still sits at the pressure floor, and free disk is above its pressure floor, and name what holds them
   ([admission](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).
   Every verb that boots a World process (`puck test`, `canary`, `sweep`, `motion`,
   `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup`) waits
@@ -558,8 +561,9 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   until the tracker observes a plateaued or finished process; measured peaks
   persist per machine under the lease root and replace that fallback in either
   direction. Unused growth tapers away during a plateau and returns when growth
-  resumes. `puck host load` prints each kind's peak, growth and total demand,
-  beside the live starts' private bytes, so a refusal can be explained numerically.
+  resumes. `puck host load` prints each kind's peak, growth and total demand in both
+  private bytes and working set, beside the live starts' private bytes and working
+  sets, so a refusal can be explained numerically.
   The lead cannot stop another lane's process; it asks the lane. On the lead
   machine, more than about three lanes that
   boot Worlds or heavy suites at once kept commit charge between 80% and 94%
@@ -944,9 +948,11 @@ watcher, `puck host load --watch` prints one line per transition (`CAPACITY`,
   resource. The lead keeps it to a minute or two and discounts any lane timing
   it overlapped.
 - On pressure, admit nothing. `puck gate` and `puck affected` admit each heavy
-  step only with more free memory than the capacity threshold and more free
-  disk than the pressure threshold, so a running agent waits rather than being
-  killed.
+  step only while free memory and free disk are above their pressure thresholds
+  and the step's own expected working set fits in free memory above that floor, so a
+  running agent waits rather than being killed. No fixed amount of free memory
+  gates a start: a small start is admitted beside a windowed World that leaves
+  5 to 7 GB free, a second windowed World is not.
 - On GPU idle, start the next GPU leg. A device test host counts as GPU work.
 - The thresholds scale with the machine; the code is their source of truth
   (`HostLoadThresholds.For`, [CLI reference](../../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)).

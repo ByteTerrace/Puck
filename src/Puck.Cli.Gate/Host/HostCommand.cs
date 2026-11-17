@@ -27,10 +27,10 @@ public static class HostCommand {
                 }
                 if (lines.Count > 0) {
                     foreach (var demand in demands) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.Covered}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"admission {demand.Kind}: headroom={demand.HeadroomGb:0.0}GB peak={demand.OwnGb:0.0}GB growth={demand.GrowthGb:0.0}GB need={demand.NeedGb:0.0}GB commit-covered={demand.CommitCovered} freeRAM={demand.FreeRamGb:0.0}GB workingSet={demand.ResidentOwnGb:0.0}GB workingSetGrowth={demand.ResidentGrowthGb:0.0}GB workingSetNeed={demand.ResidentNeedGb:0.0}GB ram-covered={demand.PhysicalCovered} admitted={demand.Covered}"));
                     }
                     foreach (var start in sample.Starts ?? []) {
-                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB ready={start.Ready}"));
+                        Console.Out.WriteLine(FormattableString.Invariant($"start {start.Kind} {start.Id}: private={start.PrivateGb:0.0}GB workingSet={start.ResidentGb:0.0}GB ready={start.Ready}"));
                     }
                 }
             } else if (lines.Count > 0) {
@@ -70,37 +70,41 @@ public static class HostCommand {
         var watchOption = new Option<bool>(name: "--watch") { Description = "Keep reading every --interval seconds and print a line on each transition, until cancelled." };
         var intervalOption = CliOptions.Count(defaultValue: 10, description: "Seconds between readings with --watch.", minimum: 1, name: "--interval");
         var windowOption = CliOptions.Count(defaultValue: 6, description: "Readings the CPU mean covers with --watch; CAPACITY waits until that many exist.", minimum: 1, name: "--window");
-        var capacityCpuOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCpuPercent, description: "CAPACITY needs the CPU mean below this percentage (with --capacity-ram).", maximum: 100, minimum: 0, name: "--capacity-cpu");
-        var capacityRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityRamGb, description: "CAPACITY needs free memory above this many gigabytes (with --capacity-cpu).", minimum: 0, name: "--capacity-ram");
-        var capacityCommitOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCommitPercent, description: "CAPACITY needs the commit charge below this percentage of the commit limit, when the platform reports one.", maximum: 100, minimum: 0, name: "--capacity-commit");
-        var pressureRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureRamGb, description: "PRESSURE when free memory is below this many gigabytes.", minimum: 0, name: "--pressure-ram");
+        var capacityCpuOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CapacityCpuPercent, description: "CAPACITY needs the CPU mean below this percentage (with --commit-reserve).", maximum: 100, minimum: 0, name: "--capacity-cpu");
+        var commitReserveOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.CommitReservePercent, description: "The percentage of the commit limit that must stay unclaimed after a start's commit need, when the platform reports a limit; CAPACITY needs the headroom to hold it.", maximum: 100, minimum: 0, name: "--commit-reserve");
+        var pressureRamOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureRamGb, description: "PRESSURE when free memory is below this many gigabytes; a start must also leave this much free once its expected working set is taken.", minimum: 0, name: "--pressure-ram");
         var pressureDiskOption = CliOptions.Amount(defaultValue: HostLoadThresholds.ThisMachine.PressureDiskGb, description: "PRESSURE when free disk on the working directory's drive is below this many gigabytes.", minimum: 0, name: "--pressure-disk");
 
 
         var command = new Command(
             description: "Report CPU, memory, disk and GPU busyness as admission lines: GPU busy|idle, PRESSURE, CAPACITY, LOADED.",
             name: "load"
-        ) { watchOption, intervalOption, windowOption, capacityCpuOption, capacityRamOption, capacityCommitOption, pressureRamOption, pressureDiskOption, jsonOption };
+        ) { watchOption, intervalOption, windowOption, capacityCpuOption, commitReserveOption, pressureRamOption, pressureDiskOption, jsonOption };
 
         command.Detail(detail: $"""
               Lines (each carries cpu=, freeRAM=, freeDisk=, commit= where the platform reports a commit limit, and reuseNodes=):
                 GPU busy (<process> <id>) | GPU idle   at the first reading and on every change after
                 PRESSURE <why>                         free memory or disk falls under its pressure
                                                        threshold, and again when the reasons change
-                CAPACITY                               otherwise, the CPU mean under --capacity-cpu and free
-                                                       memory over --capacity-ram and commit charge under
-                                                       --capacity-commit of the commit limit, once --window
-                                                       readings exist
+                CAPACITY                               otherwise, the CPU mean under --capacity-cpu and the
+                                                       commit headroom at or above --commit-reserve of the
+                                                       commit limit, once --window readings exist
                 LOADED                                 otherwise, once --window readings exist: capacity ended
               One line per transition: a state that holds prints nothing more.
-              Each transition also reports per-kind commit demand (expected peak plus remaining growth), and each
-              live start's kind, PID, private bytes and readiness. Peaks are measured per machine in the lease root;
-              unused growth tapers away over HostStartTracker.Plateau and returns on renewed allocation.
-              PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs free
-              RAM above 5/16 of the installed memory (rounded up to whole gigabytes) and three logical processors
-              idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM below 1/8 of the
-              installed memory or free disk below {HostLoadThresholds.DiskPressureGb}GB. Here: CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, free RAM above
-              {HostLoadThresholds.ThisMachine.CapacityRamGb:0.##}GB, commit under {HostLoadThresholds.ThisMachine.CapacityCommitPercent:0.##}% of the commit limit (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
+              Each transition also reports, per start kind, what a start of that kind needs in two quantities: its
+              private bytes (expected peak plus the growth running starts have left) against the commit headroom less
+              the reserve (commit-covered), and its working set (the same sum in resident memory) against free RAM
+              above the pressure floor (ram-covered). Private bytes are commit and overstate residency, so each is
+              judged against its own quantity. admitted= is both, the decision gate, lease and the MCP World start
+              make for that kind. Each live start's kind, PID, private bytes, working set and readiness follow.
+              Peaks are measured per machine in the lease root; unused growth tapers away over
+              HostStartTracker.Plateau and returns on renewed allocation.
+              PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs three
+              logical processors idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM
+              below 1/8 of the installed memory (rounded up to whole gigabytes) or free disk below
+              {HostLoadThresholds.DiskPressureGb}GB. No fixed amount of free RAM or commit gates a start: it needs its own working
+              set free above the pressure floor and its own private bytes plus the reserve in the commit headroom. Here:
+              CPU below {HostLoadThresholds.ThisMachine.CapacityCpuPercent:0.#}%, {HostLoadThresholds.ThisMachine.CommitReservePercent:0.##}% of the commit limit kept unclaimed (allocation fails at the limit with RAM still free); pressure below {HostLoadThresholds.ThisMachine.PressureRamGb:0.##}GB RAM. Options override these defaults; gate, lease and the MCP World start admit by them unchanged.
 
               GPU work is a World that opens a device (Puck.World or Puck.World.dll), or a test host for {string.Join(separator: ", ", values: HostProcesses.DeviceTestAssemblies)}
               whose arguments can select a Gpu-trait test: a run carrying --filter-not-trait Category=Gpu is not. Builds,
@@ -112,7 +116,7 @@ public static class HostCommand {
               The readings are cheap operating-system queries: the verb starts no process and is never
               itself heavy or GPU work. Without --watch it takes one reading over one second and exits.
 
-              Thresholds must be finite and nonnegative; --capacity-cpu and --capacity-commit must be at most 100.
+              Thresholds must be finite and nonnegative; --capacity-cpu and --commit-reserve must be at most 100.
               Exit codes: 0 done; 2 refused (invalid thresholds or an interval or window below 1); 130 cancelled.
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Load(
@@ -121,8 +125,7 @@ public static class HostCommand {
             json: parseResult.GetValue(option: jsonOption),
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
-                CapacityCommitPercent: parseResult.GetValue(option: capacityCommitOption),
-                CapacityRamGb: parseResult.GetValue(option: capacityRamOption),
+                CommitReservePercent: parseResult.GetValue(option: commitReserveOption),
                 PressureDiskGb: parseResult.GetValue(option: pressureDiskOption),
                 PressureRamGb: parseResult.GetValue(option: pressureRamOption)
             ),

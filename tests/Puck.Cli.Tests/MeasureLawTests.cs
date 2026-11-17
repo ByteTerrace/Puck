@@ -56,7 +56,7 @@ public sealed class MeasureLawTests {
         var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 100, 16, 100, null, 0);
         var settle = TimeSpan.FromSeconds(30);
         var run = Puck.Cli.Host.HostQuiet.SettleAsync(settle, settle, output, clock, TestContext.Current.CancellationToken,
-            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 5, 2, 10));
+            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 2, 10));
         for (var index = 0; index < 2; index++) {
             await clock.WhenArmedAsync(count: 1, ct: TestContext.Current.CancellationToken, dueTime: TimeSpan.FromSeconds(2));
             clock.Advance(TimeSpan.FromSeconds(2));
@@ -72,7 +72,7 @@ public sealed class MeasureLawTests {
         var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 0, 16, 100, null, 0);
         var settle = TimeSpan.FromSeconds(30);
         var run = Puck.Cli.Host.HostQuiet.SettleAsync(settle, settle, output, clock, TestContext.Current.CancellationToken,
-            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 5, 2, 10));
+            () => Task.FromResult(sample), new Puck.Cli.Host.HostLoadThresholds(60, 2, 10));
         for (var index = 0; index < 17; index++) {
             await clock.WhenArmedAsync(count: 1, ct: TestContext.Current.CancellationToken, dueTime: TimeSpan.FromSeconds(2));
             clock.Advance(TimeSpan.FromSeconds(2));
@@ -233,7 +233,7 @@ public sealed class MeasureLawTests {
 
     [Fact]
     public void AColdIdleSamplerNeverClaimsThatTheMachineIsLoaded() {
-        var thresholds = new Puck.Cli.Host.HostLoadThresholds(60, 10, 4, 10, 75);
+        var thresholds = new Puck.Cli.Host.HostLoadThresholds(60, 4, 10, 10);
         var sample = new Puck.Cli.Host.HostSample(DateTimeOffset.UnixEpoch, 4, 20, 100, null, 0, CommitChargeGb: 20, CommitLimitGb: 100);
         var monitor = new Puck.Cli.Host.HostLoadMonitor(thresholds, 3);
         monitor.Observe(sample);
