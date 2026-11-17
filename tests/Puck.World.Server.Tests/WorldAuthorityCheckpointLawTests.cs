@@ -8,6 +8,31 @@ namespace Puck.World.Server.Tests;
 
 public sealed class WorldAuthorityCheckpointLawTests {
     [Fact]
+    public void AHostWithoutDurableCheckpointsNamesOnlyItsSteppedMachine() {
+        using var fixture = Fixtures.FreshServer();
+        var machines = System.Reflection.DispatchProxy.Create<IWorldMachineHost, NonDurableMachines>();
+        var proxy = (NonDurableMachines)machines;
+        proxy.Inner = fixture.Server.Machines;
+        var server = new WorldServer(fixture.Server.Definition, new WorldPopulation(fixture.Server.Definition),
+            fixture.Server.Profiles, new WorldRenderEnvelope(), machines);
+        Assert.True(server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out var reason), reason);
+        machines.Advance(Fixtures.StepTicks, ReadOnlyMemory<ScreenPadSnapshot>.Empty);
+        Assert.False(server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out _, out reason));
+        Assert.Equal("a checkpoint cannot capture a stepped machine without durable checkpoint support", reason);
+    }
+
+    // Exposes the real fixture host through its non-durable interface; Advance latches the unsupported step.
+    public class NonDurableMachines : System.Reflection.DispatchProxy {
+        public IWorldMachineHost Inner { get; set; } = null!;
+        private bool m_stepped;
+        protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments) {
+            if (method!.Name == "get_AnyEverPumped") { return m_stepped; }
+            if (method.Name == nameof(IWorldMachineHost.Advance)) { m_stepped = true; }
+            return method.Invoke(Inner, arguments);
+        }
+    }
+
+    [Fact]
     public void MalformedJournalBaseRefusesBeforeReplacingTheLiveDefinition() {
         using var fixture = Fixtures.FreshServer();
 

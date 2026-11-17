@@ -28,7 +28,7 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
         var next = WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(target));
         var patch = WorldDocumentBasis.Diff(basis, next);
         if (!WorldDocumentBasis.TryMerge(basis, patch, out var merged, out var reason) ||
-            !System.Text.Json.Nodes.JsonNode.DeepEquals(merged, next)) {
+            !OrderedJson.Equals(merged, next)) {
             throw new InvalidDataException($"world.reload.delta-unrepresentable: {reason}");
         }
         return new(version, WorldDefinitionFingerprint.Compute(current), WorldDefinitionFingerprint.Compute(target),

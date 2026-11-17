@@ -19,7 +19,8 @@ namespace Puck.World;
 /// <item><description>Objects merge member-wise, recursively: a member the derived tree authors replaces or refines
 /// the basis's; a member it omits inherits; an authored <c>null</c> removes the inherited member (how a derived
 /// world clears an optional section its basis authors — e.g. <c>"gravity": null</c> derives a zero-gravity world
-/// from a gravity-carrying basis).</description></item>
+/// from a gravity-carrying basis). An object carrying <c>"$replace": true</c> replaces wholesale, keeping its
+/// member order and literal null values; the marker itself is consumed.</description></item>
 /// <item><description>A <c>$type</c>-discriminated object whose derived discriminator differs from the basis's
 /// replaces wholesale — the arms of a union share no members, so merging across them could only compose a row the
 /// strict parse refuses.</description></item>
@@ -38,13 +39,13 @@ namespace Puck.World;
 /// <c>$replace</c>.</description></item>
 /// </list>
 /// <para><c>$drop</c>/<c>$replace</c>/<c>$before</c> are compose-time vocabulary only: <see cref="TryMerge"/> consumes them, so
-/// they never reach the parser, and one appearing anywhere a keyed list is not being merged refuses by name rather
+/// they never reach the parser; <c>$drop</c> and <c>$before</c> outside a keyed list refuse by name rather
 /// than flowing through to an unmapped-member parse failure.</para>
 /// <para><c>basis</c> here is the document a delta layers over — unrelated to the coordinate basis the validator's
 /// <c>TryCardinalBasis</c>/<c>WorldFaceCatalog</c> geometry speaks of.</para>
 /// <para><see cref="Diff"/> is the inverse: given a basis tree and a target tree it computes the delta whose
 /// <see cref="TryMerge"/> over the basis reproduces the target — the derivation-preserving <c>world.save</c> path.
-/// Callers must verify the round trip (<see cref="TryMerge"/> + <see cref="JsonNode.DeepEquals"/>) before trusting a
+/// Callers must verify the round trip (<see cref="TryMerge"/> + <see cref="Puck.Abstractions.Documents.OrderedJson.Equals"/>) before trusting a
 /// computed delta, and fall back to a flat save when it fails.</para>
 /// <para><c>imports</c> is the fan-in half of composition beside <c>basis</c>'s single-parent chain: an ordered list
 /// of <see cref="WorldImport"/> entries (each document resolved against the importing file's own directory, exactly
@@ -78,8 +79,8 @@ public static class WorldDocumentBasis {
     /// chain this deep is unreadable long before it is unloadable. Shared by the import graph: any path through
     /// basis and import edges together is capped at this many documents.</summary>
     public const int MaxChainDepth = 8;
-    /// <summary>The wholesale-replacement marker: a keyed list whose FIRST element is exactly
-    /// <c>{"$replace": true}</c> replaces the basis list outright instead of merging by key.</summary>
+    /// <summary>The wholesale-replacement marker: an object carrying <c>"$replace": true</c> replaces the basis
+    /// object; a keyed list whose FIRST element is exactly that marker replaces the basis list instead of merging.</summary>
     public const string ReplaceMemberName = "$replace";
 
     // The settled row-identity vocabulary, in precedence order (see the type remarks and documents.md's "Identity
@@ -238,9 +239,9 @@ public static class WorldDocumentBasis {
 
             var basisObject = ((JsonObject)basis[index: basisIndex]!);
 
-            if (JsonNode.DeepEquals(
-                node1: basisObject,
-                node2: targetObject
+            if (Puck.Abstractions.Documents.OrderedJson.Equals(
+                left: basisObject,
+                right: targetObject
             )) {
                 continue;
             }
@@ -291,6 +292,15 @@ public static class WorldDocumentBasis {
         return delta;
     }
     private static JsonObject DiffObject(JsonObject basis, JsonObject target) {
+        // Member-wise merging keeps surviving basis keys and appends new ones. Replace just this object when that
+        // sequence cannot express the target, including a pure key reorder inside an otherwise unchanged row.
+        var mergedOrder = basis.Select(member => member.Key).Where(target.ContainsKey)
+            .Concat(target.Select(member => member.Key).Where(name => !basis.ContainsKey(name)));
+        if (!mergedOrder.SequenceEqual(target.Select(member => member.Key), StringComparer.Ordinal)) {
+            var replacement = new JsonObject { [ReplaceMemberName] = true };
+            foreach (var (name, value) in target) { replacement.Add(name, value?.DeepClone()); }
+            return replacement;
+        }
         var delta = new JsonObject();
 
         foreach (var (name, value) in target) {
@@ -305,9 +315,9 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            if (JsonNode.DeepEquals(
-                node1: basisValue,
-                node2: value
+            if (Puck.Abstractions.Documents.OrderedJson.Equals(
+                left: basisValue,
+                right: value
             )) {
                 continue;
             }
@@ -590,6 +600,13 @@ public static class WorldDocumentBasis {
         return rows;
     }
     private static void MergeObject(JsonObject target, JsonObject overlay, string path, WorldDocumentOrigins? origins) {
+        if (IsTrue(overlay[ReplaceMemberName])) {
+            target.Clear();
+            foreach (var (name, value) in overlay) {
+                if (name != ReplaceMemberName) { target.Add(name, WorldDocumentOrigins.Clone(node: value, origins: origins)); }
+            }
+            return;
+        }
         foreach (var (name, value) in overlay) {
             if (
                 string.Equals(
@@ -604,7 +621,7 @@ public static class WorldDocumentBasis {
                 comparisonType: StringComparison.Ordinal
             )
             ) {
-                throw new JsonException(message: $"{path} carries '{name}' — it is compose-time row vocabulary, meaningful only on a row inside a keyed list ('$drop') or as a list's leading marker ('$replace').");
+                throw new JsonException(message: $"{path} carries '{name}' — '$drop' and '$before' belong to keyed rows; '$replace' must be true on an object or a list's leading marker.");
             }
 
             if (value is null) {
@@ -1011,7 +1028,8 @@ public static class WorldDocumentBasis {
     /// <summary>Computes the minimal delta tree whose <see cref="TryMerge"/> over <paramref name="basis"/> reproduces
     /// <paramref name="target"/> — member-wise for objects, by identity key (tombstones and appends) for keyed lists,
     /// an explicit <c>null</c> for a removed member, and a <c>$replace</c>-marked wholesale list where a keyed
-    /// reconstruction cannot express the target's row order. Pure and refusal-free: an inexpressible shape degrades
+    /// reconstruction cannot express the target's row order. An object whose member order cannot be merged carries
+    /// <c>$replace</c> itself. Pure and refusal-free: an inexpressible shape degrades
     /// to a wholesale form, never an error. The caller owns the round-trip proof (see the type remarks).</summary>
     /// <param name="basis">The basis document's tree.</param>
     /// <param name="target">The tree the delta must reproduce over <paramref name="basis"/>.</param>

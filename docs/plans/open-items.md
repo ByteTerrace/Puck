@@ -1948,9 +1948,6 @@ State and server:
   `PeerAdmitted` and so no default peer control grant (`SelectCensus`'s
   `reports` flag in `WorldPopulation.Reconcile.cs`). Decide whether a moved
   census body keeps its grant.
-- [low] `WorldDisclosureImages` reads `m_windowVersions[row]` unchecked; it
-  would throw if an arena grew rows mid-window. `StateArena.TryRelayout` has
-  no caller, so it is latent: guard it.
 - Findings read from the code and not reproduced; confirm each with a failing
   case before fixing: `WorldServer.WriteStateCell` throws on a stale `CellKey`
   instead of returning `StaleAddress`; `ResolveDevelopmentRequest` and
@@ -2160,17 +2157,9 @@ lane's.
   machines its stopped-machines import does not stop, and each root tick
   advances four authorities. Remove the avoidable companion workload, keeping
   the scenarios' claims.
-- [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
-  cannot capture pumped addon guests or a stepped machine without durable
-  checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
-  stepped machine: the message names a condition that no longer refuses.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.
-- [low] `Fixtures.FreshServer` deserializes without
-  `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document
-  with a seeded responsive placement can show one prototype and collide as
-  another. Settle in the fixture as the loader does.
 - [low] `--cache-dir` redirects only the `puck test` workers: the process
   itself still persists compiles to the per-user directory (`WorldsRoot`).
   Make it cover the compile cache, or narrow its wording.
@@ -2455,13 +2444,6 @@ The edit loop:
   Zig's incremental compiler as the design
   ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
   per-declaration units, recorded dependencies, early cutoff.
-- [medium] Reload deltas cannot express key order: the sender proves its delta
-  with `JsonNode.DeepEquals`, which ignores key order, and the diff and merge
-  keep old order and append new keys, so fields that serialize in key order
-  (kit `actions`, `pad`, `producers`; machine, probe and view configurations)
-  rebuild differently on the server, which refuses
-  `world.reload.target-mismatch` on every retry. Sort keys canonically in the
-  serializer, or let a delta replace an object whole.
 - A shading edit still runs the whole validator over its candidate and
   canonicalizes and digests the edited creation twice; reload's sender
   serializes and diffs whole trees and the server validates the whole

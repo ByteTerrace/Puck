@@ -259,6 +259,9 @@ imported module can author its own grants) merges BY KEY in basis order — new 
 append, `{"<key>": …, "$drop": true}` tombstones remove (a stale tombstone refuses by name), a leading
 `{"$replace": true}` row replaces wholesale. Any other list replaces wholesale too — notably an overlay's `chords`
 (unkeyed rows, no settled identity field of their own): adding one chord means restating that row's whole list.
+An object can also carry `"$replace": true`: it replaces the inherited object, preserving member order and literal
+nulls while consuming the marker. `WorldDocumentBasis.Diff` uses that form when member-wise merging cannot
+reproduce the target's key order, including inside a keyed row; reload proves the merge with `OrderedJson.Equals`.
 A present list is what replaces, empty included: `.puck` lowers a list only where its source writes one, so
 `placements { policy { … } }` leaves `rows` absent and keeps the rows beneath it, and `rows []` clears them.
 A rule's `effects` whose effects all carry `key` is such a keyed list too, so a document that restates a basis rule
