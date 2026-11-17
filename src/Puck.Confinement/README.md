@@ -57,6 +57,8 @@ for an install root. From a held directory:
 
 - `Child`, `OpenFile` and `Entries` open and list relative to the handle.
 - `TryAcquireLock` and `AcquireLock` take a persistent lock file's exclusive lock.
+  `AcquireLock` and `Puck.Abstractions.FileLock`'s synchronous and asynchronous waits share
+  `FileLockWait`'s retry policy; each opener defines contention and each caller defines its deadline.
 - `TryHoldShared` registers the handle as a holder of its directory, and
   `TryOpenChildForRemoval` opens a child for removal, which fails while any other
   process holds it.

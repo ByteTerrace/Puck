@@ -122,7 +122,8 @@ which it shows only as digests.
 A canary launches the real `Puck.World` executable, drives it through its
 console, and checks what it prints. Every canary has two legs: a positive leg
 that must show the behavior and a discriminating leg that must not, which proves
-the check can fail. These canaries exercise state directly:
+the check can fail. These state scripts are quarantined under
+`experimental/tests/Puck.World.Canaries/` and are not selected by `puck canary`:
 
 | Canary | What it covers |
 |---|---|
@@ -132,20 +133,20 @@ the check can fail. These canaries exercise state directly:
 | `push-ray` | A pool-token push along a ray from a live origin. |
 | `edit-state-backed-row` | A live row edit whose position names a state cell, with the world still running after the edit. |
 
-Many canaries also record a replay and verify that it plays back exactly.
+The scripts also describe recording a replay and verifying that it plays back exactly.
+Run `puck canary --list` to see the active proofs; currently only `self-update`
+remains in `tests/Puck.World.Canaries/`.
 
 ```bash
 puck canary --list
-puck canary records-pools tabletop-state
+puck canary self-update
 puck canary
 puck canary --merge
 ```
 
-With no selection, `puck canary` runs the automatic set, the canaries that run
-headless with no special hardware. That is not every proof a merge needs: the
-offscreen GPU canaries require the `gpu` capability and never run in it. Before
-you merge, run `puck canary --merge`, which runs the automatic set and every
-canary requiring `gpu` together, rather than a hand-picked few.
+With no selection, `puck canary` runs the automatic set, the active canaries that run
+headless with no special hardware. `puck canary --merge` selects the automatic set
+and every active canary requiring `gpu` together. Neither selects quarantined scripts.
 See the [`puck canary` reference](../cli.md#puck-canaryreal-world-behavioral-proofs) for selection options and exit
 codes.
 

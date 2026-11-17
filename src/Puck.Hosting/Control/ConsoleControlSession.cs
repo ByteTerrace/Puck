@@ -187,7 +187,7 @@ public sealed class ConsoleControlSession : IControlSession {
     }
     private static void Clean(string directory) {
         try {
-            Directory.Delete(path: directory, recursive: true);
+            Puck.Confinement.ConfinedDirectory.RemoveTree(path: directory);
         } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }
     private static async Task CleanAfterCaptureAsync(FrameCaptureRequest capture, string directory) {
