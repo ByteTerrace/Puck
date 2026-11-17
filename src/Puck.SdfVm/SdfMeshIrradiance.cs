@@ -205,16 +205,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
     public static readonly WorkKind GpuRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-    /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, meter, commit.</summary>
+    /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, meter.</summary>
     public static readonly WorkKind[] GpuJobs = DeclareJobKinds(measure: "jobs", unit: "jobs");
-    /// <summary>Counts the units the answered probe jobs of each kind held (a relight's predicted rays, a commit's
-    /// destinations, a selection's tests, any other kind's origins), indexed as <see cref="GpuJobs"/>.</summary>
+    /// <summary>Counts the units the answered probe jobs of each kind held (a relight's predicted rays,
+    /// a selection's tests, any other kind's origins), indexed as <see cref="GpuJobs"/>.</summary>
     public static readonly WorkKind[] GpuJobUnits = DeclareJobKinds(measure: "job-units", unit: "units");
     /// <summary>Counts the wall time, in nanoseconds, from a worker's submission of each answered probe job to its
     /// answer, indexed as <see cref="GpuJobs"/>.</summary>
     public static readonly WorkKind[] GpuJobWaitNanoseconds = DeclareJobKinds(measure: "job-wait-nanoseconds", unit: "nanoseconds");
     private static WorkKind[] DeclareJobKinds(string measure, string unit) =>
-        [.. ((string[])["trace", "relight", "select", "meter", "commit"]).Select(kind => Registry.Declare(name: $"sdf.mesh-gi.gpu-{measure}.{kind}", unit: unit, workClass: WorkClass.Pacing))];
+        [.. ((string[])["trace", "relight", "select", "meter"]).Select(kind => Registry.Declare(name: $"sdf.mesh-gi.gpu-{measure}.{kind}", unit: unit, workClass: WorkClass.Pacing))];
     /// <summary>Measured GPU time spent selecting probes owing work.</summary>
     public static readonly WorkKind GpuSelectNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
@@ -375,14 +375,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly float[] m_listAgeMax = new float[SdfMeshIrradianceProbe.Levels];
     private readonly int[] m_listAgeCount = new int[SdfMeshIrradianceProbe.Levels];
 
-    // Where the worker stands in its list, and the geometry, windows and layout the list was made for; the worker's
-    // alone, as the list is.
+    // The geometry, windows, layout, sweep and lighting the worker's list was made for; where its traces end and the
+    // overdue or lighting-stale relights after them end; where the worker stands in its traces and in its relights; and
+    // the time it spent on each since listing (Work). The worker's alone, as the list is.
     private bool m_listed;
-    private int m_listCursor;
     private int m_listGeometry;
     private int m_listWindow;
     private Layout m_listLayout;
     private int m_listSweep;
+    private int m_listLighting;
+    private int m_listTraces;
+    private int m_listUrgent;
+    private int m_listTraceCursor;
+    private int m_listRelightCursor;
+    private long m_listTraceTicks;
+    private long m_listRelightTicks;
 
     // The worker's store of a batch's landed probes (StoreLanded): the cells that landed, the window cells they restore,
     // and the slot words composed for those.
@@ -1847,14 +1854,17 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // not disposed: the one test a drain's every batch and its record of what it drained pass.
     private bool DrainStands(in Snapshot snapshot) => (!m_disposed && Stands(snapshot: in snapshot) && (snapshot.Lighting.Version == m_lightingVersion));
     // The background worker. Stable lighting takes whole-window bounce sweeps; changing lighting interleaves coarse
-    // phases, with overdue probes forced. Work takes trace demand first, then relative age, view/change weight and
-    // spatial bands, each probe reading the volume about its hits as it stands; another sweep starts while any
-    // probe of it moved past the convergence bound or was relit under a lighting since replaced, so a change anywhere in
-    // what a probe reads wakes it through the next sweep, and the iteration stops only when a whole sweep under
-    // unchanged inputs moved nothing (or after MaxSweeps). The worker works through its list a batch at a time while the
-    // frames' budget grants it, taking the latest lighting for each batch; it returns once the budget is spent (a probe
-    // whose trace the budget cannot fund waits for the next grant), when a lighting-converged frame asks it to yield, or once
-    // nothing is left to do.
+    // phases, with overdue probes forced. Its list holds trace demand, then the relights in order of overdue, lighting
+    // stale, relative age, view/change weight and spatial bands, each probe reading the volume about its hits as it
+    // stands. The worker shares its time evenly between the traces and the relights that are overdue or lighting-stale
+    // (Next), so a lighting change is relit while a window's first fill still traces, and takes the other relights once
+    // the traces are done; another sweep starts while any probe of it moved past the convergence bound or was relit under
+    // a lighting since replaced, so a change anywhere in what a probe reads wakes it through the next sweep, and the
+    // iteration stops only when a whole sweep under unchanged inputs moved nothing (or after MaxSweeps). The worker works
+    // through its list a batch at a time while the frames' budget grants it, taking the latest lighting for each batch,
+    // and lists again once the lighting changes; it returns once the budget is spent (a probe whose trace the budget
+    // cannot fund waits for the next grant), when a lighting-converged frame asks it to yield, or once nothing is left to
+    // do.
     private void Work() {
         var parallel = new ParallelOptions { MaxDegreeOfParallelism = BackgroundWorkers };
 
@@ -1866,10 +1876,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             using var sceneBorrow = snapshot.Scene;
             var candidates = m_candidates;
 
-            // A list the budget interrupted resumes where it stopped while its geometry, windows and sweep stand:
-            // listing and ordering a window's probes is itself work a frame's grant should not repeat.
+            // A list the budget interrupted resumes where it stopped while its geometry, windows, sweep and lighting
+            // stand: listing and ordering a window's probes is itself work a frame's grant should not repeat, but a list
+            // made under replaced lighting holds none of the probes it left stale.
             if (!m_listed || (m_listGeometry != snapshot.Geometry) || (m_listWindow != snapshot.WindowVersion) || (m_listLayout != snapshot.Layout) ||
-                (m_listSweep != snapshot.Sweep) || (m_listCursor >= candidates.Count)) {
+                (m_listSweep != snapshot.Sweep) || (m_listLighting != snapshot.Lighting.Version)) {
                 var now = Stopwatch.GetTimestamp();
                 var stale = List(ages: m_ages, all: false, candidates: candidates, snapshot: snapshot);
 
@@ -1903,15 +1914,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_listWindow = snapshot.WindowVersion;
                 m_listLayout = snapshot.Layout;
                 m_listSweep = snapshot.Sweep;
-                m_listCursor = 0;
+                m_listLighting = snapshot.Lighting.Version;
+                m_listTraces = 0;
+                while ((m_listTraces < candidates.Count) && candidates[m_listTraces].Trace) { m_listTraces++; }
+                m_listUrgent = m_listTraces;
+                while ((m_listUrgent < candidates.Count) && (candidates[m_listUrgent].Overdue || candidates[m_listUrgent].Stale)) { m_listUrgent++; }
+                m_listTraceCursor = 0;
+                m_listRelightCursor = m_listTraces;
+                m_listTraceTicks = 0L;
+                m_listRelightTicks = 0L;
             }
 
-            var index = m_listCursor;
-            var starved = false;
-
-            while (index < candidates.Count) {
+            while (true) {
                 Lighting lighting;
+                int index;
                 int take;
+                bool trace;
 
                 lock (m_gate) {
                     if (m_disposed || !Stands(snapshot: in snapshot)) { break; }
@@ -1921,34 +1939,46 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     }
                     lighting = m_lighting!;
 
-                    var trace = candidates[index].Trace;
-                    var credits = (trace ? ((m_budget.Trace > 0) ? m_traceCredits : long.MaxValue) : ((m_budget.Relight > 0) ? m_relightCredits : long.MaxValue));
+                    var traceCredits = ((m_budget.Trace > 0) ? m_traceCredits : long.MaxValue);
+                    var relightCredits = ((m_budget.Relight > 0) ? m_relightCredits : long.MaxValue);
+                    var traces = ((m_listTraceCursor < m_listTraces) && (traceCredits > 0));
+                    var relights = ((m_listRelightCursor < candidates.Count) && (relightCredits > 0));
 
-                    if (credits <= 0) {
-                        if (!trace) {
-                            m_listCursor = index;
-                            if (starved) { m_listed = false; }
-                            return;
-                        }
-                        starved = true;
-                        while ((index < candidates.Count) && candidates[index].Trace) { index++; }
-                        continue;
+                    if (!traces && !relights) {
+                        // Both parts are done, or what is left waits for the next grant, where the list resumes.
+                        if ((m_listTraceCursor >= m_listTraces) && (m_listRelightCursor >= candidates.Count)) { break; }
+                        return;
                     }
+                    // A relight the share does not take yet waits behind the traces: one overdue or lighting-stale takes
+                    // half the worker's time while traces are owed, and any other follows them.
+                    trace = traces && (!relights || ((m_listRelightCursor >= m_listUrgent) ? true : (m_listTraceTicks <= m_listRelightTicks)));
+                    if (!trace && (m_listRelightCursor >= m_listUrgent) && (m_listTraceCursor < m_listTraces)) { return; }
+                    index = (trace ? m_listTraceCursor : m_listRelightCursor);
+
+                    var end = (trace ? m_listTraces : candidates.Count);
+                    var credits = (trace ? traceCredits : relightCredits);
+
                     take = 0;
-                    while (((index + take) < candidates.Count) && (take < BatchProbes) && (take < credits) && (candidates[(index + take)].Trace == trace)) { take++; }
+                    while (((index + take) < end) && (take < BatchProbes) && (take < credits)) { take++; }
                     if (trace) {
                         if (m_budget.Trace > 0) { m_traceCredits -= take; }
                     } else if (m_budget.Relight > 0) {
                         m_relightCredits -= take;
                     }
                 }
+
+                var began = Stopwatch.GetTimestamp();
+
                 Batch(candidates: candidates, count: take, first: index, lighting: lighting, parallel: parallel, pass: -1, snapshot: in snapshot);
-                index += take;
+                if (trace) {
+                    m_listTraceCursor += take;
+                    m_listTraceTicks += (Stopwatch.GetTimestamp() - began);
+                } else {
+                    m_listRelightCursor += take;
+                    m_listRelightTicks += (Stopwatch.GetTimestamp() - began);
+                }
             }
             m_listed = false;
-            // Probes whose traces the budget could not fund wait for the next grant; listing again now would find them
-            // unfunded and spin.
-            if (starved) { return; }
         }
     }
     // A lighting-converged frame's work: every probe of the windows traced against the current geometry where it is not already,
@@ -2019,6 +2049,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_interleaving = (m_selectionLighting != snapshot.Lighting.Version);
             m_selectionLighting = snapshot.Lighting.Version;
             m_selectionSweep = snapshot.Sweep;
+        } else if (m_selectionLighting != snapshot.Lighting.Version) {
+            // Lighting replaced within a sweep makes its stale probes due at once, the coarse levels by phase; the sweep
+            // keeps the lighting it started under, so the next one interleaves too.
+            m_interleaving = true;
         }
         var interleave = m_interleaving;
 
@@ -2055,8 +2089,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                         if (present) {
                             RecordAge(age: age, ages: ages, level: level);
                         }
-                        if (!all && !trace && !rebase && (probe.Sweep == snapshot.Sweep) && !((bound > 0) && (age >= bound))) {
-                            stale |= !current;
+                        // KEEP IN SYNC with sdf-probe-select's due: a probe relit in this sweep under the current lighting
+                        // waits for the next sweep; one relit under replaced lighting is due now, subject to its phase.
+                        if (!all && !trace && !rebase && (probe.Sweep == snapshot.Sweep) && current && !((bound > 0) && (age >= bound))) {
                             continue;
                         }
                         if (interleave && !trace && !rebase && !SdfMeshProbeRelight.RelightDue(m_selectionSweep, ProbePhase(x: x, y: y, z: z), SdfMeshProbeRelight.InterleaveOf(level: level), age, bound)) {
@@ -2064,7 +2099,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                             continue;
                         }
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace,
-                            Overdue: ((bound > 0) && (age >= bound)), Urgency: AgePriority(age, bound, InAnyView(center: center, snapshot: in snapshot), probe.Moved)));
+                            Overdue: ((bound > 0) && (age >= bound)), Stale: (present && !current), Urgency: AgePriority(age, bound, InAnyView(center: center, snapshot: in snapshot), probe.Moved)));
                     }
                 }
             }
@@ -2081,9 +2116,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             ((a.Trace != b.Trace) ? (a.Trace ? -1 : 1) :
             (a.Trace ? ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) : CompareSpatial(a: a, b: b)) :
             ((a.Overdue != b.Overdue) ? (a.Overdue ? -1 : 1) :
+            ((a.Stale != b.Stale) ? (a.Stale ? -1 : 1) :
             ((a.Urgency != b.Urgency) ? b.Urgency.CompareTo(value: a.Urgency) :
             ((a.Level != b.Level) ? a.Level.CompareTo(value: b.Level) :
-            ((a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) : CompareSpatial(a: a, b: b))))))));
+            ((a.LitAt != b.LitAt) ? a.LitAt.CompareTo(value: b.LitAt) : CompareSpatial(a: a, b: b)))))))));
     }
     private static int AgePriority(float age, float bound, bool inView, bool changed) {
         var relative = ((bound > 0) ? (age / bound) : age);
@@ -2934,7 +2970,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture
     // time of the lighting it was last relit under (zero for none), the relights it holds under the current lighting,
     // and its radial priority band and Morton cell order within that band.
-    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, int Urgency);
+    private readonly record struct Candidate(int Level, (int X, int Y, int Z) Cell, bool Trace, long LitAt, int Band, uint Morton, bool Overdue, bool Stale, int Urgency);
     // One probe: its geometry (where it stands relative to its cell's centre, the share of its rays that met back faces,
     // whether it lies inside geometry, the geometry it was traced against, and its hit buffer, sky shares and surface map
     // in a trace batch's ProbeBlock), and its light (its radiance and sky-light cubes and traced-light visibility in a relight batch's
