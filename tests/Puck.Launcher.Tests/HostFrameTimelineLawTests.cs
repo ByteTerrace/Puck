@@ -47,6 +47,39 @@ public sealed class HostFrameTimelineLawTests {
         Assert.True(condition: registry.Submit(line: "host.frames 10 16.7 1 2").IsError);
     }
 
+    [Fact]
+    public void ARecordingsStatisticsAgreeWithValuesComputedByHandOnFixedIntervals() {
+        var clock = new StepClock();
+        var timeline = new HostFrameTimeline(time: clock);
+        var recording = new HostFrameRecording(capacity: 64);
+
+        // Ten iterations whose work is 1 ms, 2 ms ... 10 ms and which wait for nothing, so each interval is its work.
+        timeline.StartRecording(recording: recording);
+        for (var milliseconds = 1; (milliseconds <= 10); milliseconds++) {
+            Iteration(clock: clock, late: 0L, produce: (milliseconds * 1_000L), steps: 1, timeline: timeline, wait: 0L);
+        }
+        timeline.BeginIteration();
+
+        var statistics = recording.Statistics(from: 0, to: recording.Count, budgetMilliseconds: 5.0);
+
+        Assert.Equal(expected: 10, actual: statistics.Frames);
+        Assert.Equal(expected: 0.055, actual: statistics.Seconds, precision: 9);
+        Assert.Equal(expected: 5.5, actual: statistics.Interval.Mean, precision: 9);
+        Assert.Equal(expected: 5.5, actual: statistics.Interval.P50, precision: 9);
+        Assert.Equal(expected: 9.55, actual: statistics.Interval.P95, precision: 9);
+        Assert.Equal(expected: 9.91, actual: statistics.Interval.P99, precision: 9);
+        Assert.Equal(expected: 9.991, actual: statistics.Interval.P999, precision: 9);
+        Assert.Equal(expected: 10.0, actual: statistics.Interval.Max, precision: 9);
+        Assert.Equal(expected: statistics.Interval.P99, actual: statistics.Work.P99, precision: 9);
+        Assert.Equal(expected: 5, actual: statistics.Over);
+        Assert.Equal(expected: 0, actual: statistics.OverTwice);
+        Assert.Equal(expected: 9, actual: statistics.WorstIndex);
+        Assert.Equal(expected: 1.0, actual: statistics.PacingStep, precision: 9);
+        Assert.Equal(expected: Math.Sqrt(d: 8.25), actual: statistics.PacingDeviation, precision: 9);
+        Assert.Null(@object: statistics.Low1);
+        Assert.Equal(expected: 10L, actual: statistics.Steps);
+    }
+
     private static void Iteration(StepClock clock, HostFrameTimeline timeline, long produce, long wait, long late, int steps) {
         timeline.BeginIteration();
         timeline.Mark(phase: HostFramePhase.Input);

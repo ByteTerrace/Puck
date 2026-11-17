@@ -1,9 +1,9 @@
 using System.Globalization;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Abstractions;
+using Puck.Assets;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.World.Protocol;
@@ -345,10 +345,10 @@ internal sealed partial class WorldBenchmarkCommandModule(WorldTickScript script
             _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"gate {gate}\n");
         }
 
-        return Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: text.ToString()))).Substring(startIndex: 0, length: 16);
+        return AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: text.ToString())).Hex;
     }
 
-    private static string IdentityOf(IEnumerable<string> identities) => Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(s: string.Join(separator: '\n', values: identities)))).Substring(startIndex: 0, length: 16);
+    private static string IdentityOf(IEnumerable<string> identities) => AssetContentHash.Compute(content: Encoding.UTF8.GetBytes(s: string.Join(separator: '\n', values: identities))).Hex;
 
     private CommandResult Mark(int index, bool begin) {
         if (!m_running || (index < 0) || (index >= m_chapters.Count)) {
