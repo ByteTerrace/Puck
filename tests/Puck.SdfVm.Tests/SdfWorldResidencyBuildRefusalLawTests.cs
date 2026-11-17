@@ -232,11 +232,11 @@ public sealed class SdfWorldResidencyBuildRefusalLawTests {
         rig.ProduceUnchanged(frames: Frames);
         Assert.True(condition: rig.Node.IsReady);
         Assert.Null(@object: rig.Node.NotReadyReason);
-        // Nothing is left: the engine reserved every region's copy sets in one pool beside its own, the mesh region's
-        // before any frame drew a mesh, so the other owner's pool and the engine's two are all that was created.
+        // Nothing is left: the engine created exactly the pools its admission declared, every region's copy sets and the
+        // mesh region's before any frame drew a mesh, so the other owner's pool and those are all that was created.
         Assert.Equal(
             actual: (rig.Gpu.Admissions, rig.Gpu.PoolsCreated.Count, heap.FreeViewDescriptors),
-            expected: (2, 3, 0U)
+            expected: (2, (1 + SdfWorldTables.DescriptorPools.Length), 0U)
         );
     }
     [Fact]
