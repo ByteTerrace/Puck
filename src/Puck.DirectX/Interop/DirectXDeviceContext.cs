@@ -518,6 +518,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
     // descriptor heaps, the budget reading and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
+        m_submitter.ReleaseTimeline();
         ReleaseVideoMemory();
 
         if (0 != m_idleFence) {
@@ -817,6 +818,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         ReportRemoval();
         m_disposed = true;
+        m_submitter.ReleaseTimeline();
 
         if (0 != m_idleFence) {
             _ = ((IUnknown*)m_idleFence)->Release();

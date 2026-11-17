@@ -13,6 +13,8 @@ namespace Puck.Vulkan;
 /// open a submission joins the device's batch (<see cref="VulkanSubmissionBatch"/>) instead of reaching the queue.
 /// </summary>
 public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, VulkanQueueSubmitter queueSubmitter, IVulkanFrameSynchronizationApi frameSynchronizationApi) : IGpuQueueSubmitter {
+    /// <inheritdoc/>
+    public GpuQueueTimeline Timeline => deviceContext.LogicalDevice.Timeline;
     private int m_waitCount;
     private nint[] m_waitSemaphores = [];
     private ulong[] m_waitValues = [];

@@ -7,7 +7,7 @@ namespace Puck.SdfVm;
 // region, and records the fillers' first transitions and the regions' copies, each handing what it wrote to every shader stage that reads it in a later submission. The graph's
 // environment producer runs afterward, once its panorama images have been acquired.
 public sealed partial class SdfWorldTables {
-    // Device objects the tables replaced without waiting for the device, each with the upload after which it is disposed.
+    // Device objects retained through pending carries and then the device queue's completed prefix.
     private readonly GpuRetirementQueue<IDisposable> m_retired = new();
     // One-based submitted uploads known complete through the existing previous-upload wait. A required geometry
     // upload older than this prefix never consults a fence whose ring slot may since have been reused for poses/GI.
@@ -37,7 +37,6 @@ public sealed partial class SdfWorldTables {
         if (m_uploads > 0UL) {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
             m_completedUploads = m_uploads;
-            DisposeRetired(completed: (m_uploads - 1UL));
         }
 
         var previousSlot = m_currentSlot;
@@ -86,15 +85,21 @@ public sealed partial class SdfWorldTables {
         ReleaseUploadNeeds();
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
+        ServiceRetirements();
     }
 
-    // Hands a device object the tables replaced to the upload that follows: GPU work recorded before it may still read
-    // the object, and that upload may read it once more (a grown region's carry), so it is disposed once that upload's
-    // fence signals, which one queue signals only after every earlier submission, every view that bound it among them.
-    private void Retire(IDisposable replaced) => m_retired.Retire(after: m_uploads, item: replaced);
+    // Poll only at submission boundaries: all recorded uses have been submitted, except an explicitly retained carry.
+    private void Retire(IDisposable replaced, GpuRegion? carryingRegion = null) =>
+        m_retired.Hold(item: replaced, pendingUse: carryingRegion?.PendingCarry);
+    private void ServiceRetirements() {
+        if (m_retired.Count > 0) {
+            m_retired.Poll(timeline: m_gpu.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose());
+        }
+    }
     // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
-    internal void RetireBackgroundResource(IDisposable replaced) => Retire(replaced);
-    // Disposes every replaced object whose following upload has completed.
+    internal void RetireBackgroundResource(IDisposable replaced) => m_retired.Hold(item: replaced,
+        pendingUse: () => ReferenceEquals(m_meshIrradianceSource, replaced) && m_meshIrradianceSlots.Count > 0);
+    // Device teardown after drain/loss releases even unsubmitted carries.
     private void DisposeRetired(ulong completed) => m_retired.Release(completed: completed, release: static replaced => replaced.Dispose());
     // Waits until every upload in flight has retired: what a rewrite of the only table no view reads, a bake request,
     // pays.

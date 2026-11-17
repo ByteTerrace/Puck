@@ -393,10 +393,6 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_SKIN_FLAG", value: SdfMeshRecord.SkinFlag);
         declarations.Bits(name: "SDF_MESH_WORLD_MATERIAL_FLAG", value: SdfMeshRecord.WorldMaterialFlag);
         declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
-        declarations.Section(title: "The mesh words' slab read (SdfMeshSlabs, frame/sdf-mesh-words.hlsli): whether mesh words are read through the slab views, a slab's words as a shift, and the views.");
-        declarations.Count(name: "SDF_MESH_SLAB_INDEX", value: (SdfMeshSlabs.IndexedRead ? 1 : 0));
-        declarations.Count(name: "SDF_MESH_SLAB_WORD_SHIFT", value: SdfMeshSlabs.WordShift);
-        declarations.Count(name: "SDF_MESH_SLABS", value: SdfMeshSlabs.Count);
         declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");
         declarations.Bits(name: "SDF_FRAME_SAMPLED_NONE", value: SdfFrameSampled.None);
         declarations.Count(name: "SDF_FRAME_SAMPLED_HEADER_WORDS", value: SdfFrameSampled.HeaderWords);

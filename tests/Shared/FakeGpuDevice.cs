@@ -491,6 +491,14 @@ internal sealed class FakeGpuDevice :
 
         return LastCreatedFence;
     }
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline;
+    private readonly ImmediateTimeline m_timeline = new();
+    private sealed class ImmediateTimeline : GpuQueueTimeline {
+        private ulong m_completed;
+        protected override void Signal(ulong value) => m_completed = value;
+        protected override ulong ReadCompleted() => m_completed;
+        protected override void DisposeNative() { }
+    }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         Hit(key: "IGpuQueueSubmitter.Submit");
         Submissions++;

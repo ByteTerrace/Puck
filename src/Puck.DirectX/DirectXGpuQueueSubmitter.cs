@@ -27,6 +27,16 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     private readonly Batch m_batch;
     // The drain a fence whose signal was refused runs behind the lists already executed (DirectXGpuSubmissionFence.Arm).
     private readonly Action m_drainQueue;
+    private DirectXQueueTimeline? m_timeline;
+
+    /// <inheritdoc/>
+    public GpuQueueTimeline Timeline => (m_timeline ??= new DirectXQueueTimeline(m_deviceContext));
+
+    // A recreated context must never reuse its previous device's completion values.
+    internal void ReleaseTimeline() {
+        m_timeline?.Dispose();
+        m_timeline = null;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="DirectXGpuQueueSubmitter"/> class, submitting to the
     /// context's direct command queue.</summary>

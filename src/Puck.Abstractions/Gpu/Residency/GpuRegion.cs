@@ -726,6 +726,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets whether the region has grown since its last copy recording, so its next one clears the new
     /// destination and carries the old one's bytes into it (<see cref="RecordCarry"/>).</summary>
     public bool OwesCarry => (m_carrySource is not null);
+    /// <summary>Gets the pending-use predicate a retirement queue keeps for this region's replaced destinations.
+    /// It stays true until a carry is recorded or cancelled. Poll retirement only after recording is submitted.</summary>
+    public Func<bool> PendingCarry => (m_pendingCarry ??= () => OwesCarry);
+    private Func<bool>? m_pendingCarry;
     /// <summary>Gets the retained CPU upload-header scratch payload bytes, excluding managed array overhead.</summary>
     public ulong CpuScratchBytes => (((ulong)m_header.LongLength) * sizeof(uint));
     /// <summary>Gets the handle of the pipeline <see cref="RecordCopy"/> dispatches, or zero for a region that copies

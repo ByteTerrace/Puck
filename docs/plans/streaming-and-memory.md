@@ -957,7 +957,8 @@ answer differs for each.
 
 - **Transport is already paged.** Landing uploads a mesh in bounded pieces
   under the upload budget and publishes it once every piece stands. Nothing
-  changes.
+  changes in its budget or whole-mesh unit. Every slice additionally retains
+  its destination-issued writable-page lease through completion.
 - **Publication stays whole.** What a frame draws is always a complete mesh of
   one tier, which holds by construction
   ([what publishes](bake-demand-tiers.md#what-publishes-and-what-the-frame-draws)).
@@ -995,6 +996,11 @@ Compaction, where a store is fragmented, takes its room from the workspace
 class reserved in advance, never from the pool it is trying to relieve. The
 backend pool's kept empty block (`GpuMemoryPool`) is released by the same
 pressure, through that pool, not through a second trimming allocator.
+Rows remain published during physical compaction: queue order excludes reads
+between copy-out and copy-back. Page generations guard writes and publication;
+a device-wide timeline guards reuse and release, even for a hidden residency.
+The region reserves page coverage; the pool owns the block's remaining slack
+once. Virtual holes alone never justify a sparse arena relocation.
 
 | Option | Gives | Costs |
 |---|---|---|
@@ -1662,6 +1668,11 @@ hole in a buffer, a returned page and actual physical release.
 
 #### The prototype as built
 
+This section records the prototype at `e9c1d485c9`. Its slab views and switch
+were removed by the continuation's fallback piece; any remaining paired
+prototype measurement uses that frozen revision, not the current interface.
+The capability read remains live.
+
 **The capability read.** Each backend reads, at device creation, how the
 device can back a large buffer and give memory back, into the record that
 already holds its binding limits (`GpuDeviceCapabilities.Backing`, flags
@@ -1808,8 +1819,9 @@ and the switch stay, so the comparison can be read again.
 
 #### Sparse backing design for review
 
-**Status and scope.** Brief sm7b stops at this design for review. No sparse
-backend is built by this change. The prototype's capabilities are support
+**Status and scope.** The sm7b continuation answers the review below and lands
+the first, contiguous-fallback piece. No sparse backend is enabled yet. The
+capabilities are support
 readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
 reads sparse features, but `FeatureIndicesOf` does not enable them and
 `BuildQueues` requests only the graphics/present families. The native mapping
@@ -1889,7 +1901,7 @@ and defers elastic growth; it does not create an uncounted allocation.
 
 ##### Backend resource and queue contract
 
-**Direct3D 12.** Require tiled-resource tier 1 or greater and successful
+**Direct3D 12.** Require tiled-resource tier 2 or greater and successful
 validation of the buffer description. Create a row-major buffer with the
 ordinary region's storage and copy usages through
 [CreateReservedResource](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createreservedresource).
@@ -1935,29 +1947,30 @@ must join the lifetime and ownership-transfer contract before using pages.
 
 Use [vkQueueBindSparse](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueBindSparse.html)
 with buffer binds, not `vkBindBufferMemory`. Order it explicitly even on the
-graphics queue. The initial implementation uses binary semaphore edges and
-a fence per bounded mapping batch, requiring no new timeline-feature floor:
-an ordered graphics submission signals readers-finished; the sparse batch
-waits it, changes mappings, signals binding-ready and its fence; the next
-graphics submission waits binding-ready at all commands before touching
-the ranges. An initial map can omit the readers-finished edge only for
-never-used ranges. Rebinds are serialized through the same transaction owner.
-Each binary signal has one wait; recycle its semaphore only after the waiting
-submission completes. A successful bind call is not a completed bind.
+graphics queue. Use one device timeline, through the existing
+`VulkanQueueSubmitter.Signal` door and `VkTimelineSemaphoreSubmitInfo` on
+the sparse bind. The graphics checkpoint flushes deferred readers and signals
+value N; the binding batch waits N and signals N+1; the first graphics
+submission touching the range waits N+1 at its first accessing stage (transfer
+or compute). Every signal of this shared timeline is ordered after its prior
+signal, including when queues differ: numeric value order alone is not an
+execution dependency. A successful bind call is not a completed bind. Puck
+already enables timeline semaphores on its Vulkan 1.3 device; this adds no
+feature floor. A never-used range has no reader dependency, but still joins
+the device timeline's signal order.
 
 Binding synchronization supplies execution ordering, not the availability
 and visibility of copied contents. Keep transfer-write to shader-read/write
 dependencies in the graphics submissions and memory dependencies across
 compaction copies, as required by the [Vulkan synchronization
 chapter](https://docs.vulkan.org/spec/latest/chapters/synchronization.html).
-An unbind uses a null memory handle. Only its fence permits returning the
+An unbind uses a null memory handle. Only its completed timeline value permits returning the
 physical range. Device loss is teardown, never a successful retirement.
 
 As an independent implementation check, vkd3d-proton's
 [sparse queue submission](https://raw.githubusercontent.com/HansKristian-Work/vkd3d-proton/master/libs/vkd3d/command.c)
 also orders sparse binds with semaphore edges and retains resources through
-completion. It uses timeline semaphores; Puck's binary edges are a deliberate
-baseline choice, not a claim that timeline semaphores are unavailable. No API
+completion. It uses timeline semaphores too. No API
 disagreement was found on the required ordering. This is corroboration, not
 a translation layer to copy or evidence of Puck running on the hardware.
 
@@ -1965,10 +1978,19 @@ a translation layer to copy or evidence of Puck running on the hardware.
 
 The destination owns each page's state: absent, reserved for mapping, mapping
 submitted, writable, published, retiring, unbinding, then absent again.
-Every state carries the device generation and the placement ticket. Only the
-destination can make the readiness/retirement tokens; callers cannot return a
-raw pool placement or mark a mapping complete. Coalescing adjacent pages
-changes call count only. Cancellation follows the same retirement path.
+Every state carries the device generation, page generation and placement
+ticket. Only the destination issues a writable-page lease, covering an exact
+byte range and its pages' generations, once its mapping dependency can be
+ordered before writes. `Write`, `WriteRuns`, `OweSourced`, carry and landing
+recording pass through that lease door. An unleased page cannot acquire owed
+words. `GpuRegion` clips joined and paired copy runs at unleased pages; if the
+run table fills it emits another bounded copy, never merges across a hole.
+`CompleteLanding` checks the recorded lease before crediting each slice, and
+`MeshStands` requires all credited ranges' generations still match. Retiring
+invalidates the page generation immediately; a later mapping cannot revive an
+old completion. A refused or stale slice is requeued, with its rows absent.
+Callers cannot return a raw pool placement or mark a mapping complete.
+Cancellation follows the same retirement path.
 
 1. The arena proposes ranges, without publishing them or relinquishing the
    old complete tier. The backing computes newly needed pages, excluding
@@ -1978,8 +2000,11 @@ changes call count only. Cancellation follows the same retirement path.
    stale plan redoes admission, never silently allocates a larger block.
 2. Extend `SdfResidencyGrant.ReserveGrowth` to reserve that physical plan,
    through `MemoryAccount`, before making the ranges usable. Sparse growth
-   reserves existing backing plus retiring backing plus the actual new block
-   charge, rather than the virtual extent plus a full replacement. The
+   reserves existing and retiring page coverage plus the newly required
+   pages, never the new block's full size. The pool separately admits the
+   block's net slack under a reclaimable pool owner. `payerBytes` is the
+   plan's new page coverage, so a 64 KiB demand in a new 64 MiB block reserves
+   64 KiB for the region and counts the remainder once as pool slack. The
    fallback still reserves old and new buffers together. Keep pool-to-account
    lock order as in today's native allocation callback; do not call the pool
    while holding the selector/account lock.
@@ -1990,21 +2015,25 @@ changes call count only. Cancellation follows the same retirement path.
    second device-byte charge. The pool owns block slack once; the residency
    owns its committed page coverage once. A pool block shared by residencies
    cannot be charged in full to every residency.
-4. Queue mapping, then initialize only new pages and upload their needed
-   words through the existing landing budget. Reused pages are initialized
-   too. Do not run `GpuRegion.RecordCarry`'s full-destination clear over sparse
+4. Queue mapping, acquire its writable-page leases, then upload only needed
+   words through the existing landing budget. Buffers need no blanket clear:
+   no reader, including `world.rows check`, may inspect holes or padding.
+   Do not run `GpuRegion.RecordCarry`'s full-destination clear over sparse
    holes, clear live neighbouring words, or carry the old region on growth.
    A new range within a live page writes its own bytes only. The stable
    resource and offsets mean existing descriptors and landed bytes stay put.
 5. Publish through the existing whole-mesh landing door only when every
-   required page is ready and every upload has been submitted with the
+   required page lease still has its recorded generation and every upload has been submitted with the
    dependency that precedes its readers. Keep the old tier, or the existing
    absent record, until then. An admission/allocation refusal returns only
    unused promises and leaves prior publication intact. An unsubmitted map
    can be cancelled immediately; submitted work keeps its storage through
    completion. Failed submissions leave affected ranges unpublished and
    retained until their actual completion or device teardown, never freed
-   based on a reusable fence's initial signaled state.
+   based on a reusable fence's initial signaled state. A grown draw prefix
+   can move a mesh with no prior complete tier; `StageMeshDraw` stages it
+   absent until its destination is leased and its words land. It cannot use
+   the old synchronous moved-mesh write to bypass admission.
 
 The selector must stop subtracting the largest sparse virtual capacity as
 replacement headroom (`SdfResidencySelector.UsableOf`). Retain that allowance
@@ -2038,18 +2067,22 @@ Unpublishing changes live range counts, not backing held.
 
 Seal the removed ranges against new readers and writers. Account for landing,
 the draw-prefix copy, views, shadows, GI/trace and all recorded-but-not-yet-
-submitted work. All present readers use the frame queue; the existing
-upload-prefix retirement in `SdfWorldTables.Retire` can supply the proof only
-after the batch containing those last readers is flushed and a following
-submission is known complete. Waiting merely for the most recent upload
-does not cover draws submitted after it. A transaction pins the region and
+submitted work. All present readers use the frame queue. A device-wide queue
+checkpoint flushes the batch containing the last readers and signals a
+monotonic value on one `ID3D12Fence` or Vulkan timeline. Retirement reads that
+device value, never the residency's upload count, and `ServiceMemoryTrim`
+polls it even when the residency is not rendered. A pending contiguous carry
+remains a reader until submitted or cancelled; a checkpoint cannot retire
+its source beforehand. Waiting merely for the most recent upload does not
+cover draws submitted after it. A transaction pins the region and
 its pages while that proof is pending; an abandoned submission is not proof
 that some earlier successful reader finished.
 
-After that fence, remove the page's last reference and queue its unmap. Wait
-for the unmap's own completion, then return the physical range through the
-pool's ticketed return. No reuse, heap destruction or memory freeing precedes
-that second fence. A logical shrink releases empty tail pages in this way
+Queue unmapping behind that reader checkpoint on the GPU, without first
+waiting on the host. Return the physical range through the pool's ticketed
+return only once the host observes the unmap timeline complete. No reuse by
+another resource, heap destruction or memory freeing precedes that proof.
+A logical shrink releases empty tail pages in this way
 without resizing the virtual resource; eviction can release empty interior
 pages too. A page still intersecting a live range stays mapped, even if most
 of its bytes are empty. A renewed request during retirement takes a new
@@ -2065,8 +2098,11 @@ Vulkan likewise requires freeing the actual memory allocation. Therefore
 free-page counts alone never satisfy step 7's relief check.
 
 **Fragmentation has two levels.** Partly live virtual pages retain their
-tails; packing mesh ranges is the arena's existing relocation/whole-landing
-operation and pays its upload and workspace costs. Empty physical pages
+tails. On sparse backing, unused virtual words alone never trigger the
+arena's density-based pack: holes cost no backing. Logical relocation runs
+only when no free run holds a demanded mesh or the virtual extent is exhausted,
+and pays its upload and workspace costs. Page-aligning meshes of at least one
+page is an optional measured placement choice, not another arena. Empty physical pages
 scattered among blocks need a different operation: packing physical backing
 without changing a mesh address. Extend the generic pool's placement
 mechanism with a victim-excluding relocation plan, not a second range
@@ -2084,6 +2120,10 @@ both unmap and copy-back complete successfully, so an unsubmitted or refused
 replacement bind can retain/restore it. An unknown submission outcome pins
 both placements until resolved or the device generation is torn down.
 Scratch is reusable only after copy-back completes.
+Here **seal** means no reader is ordered between copy-out and copy-back,
+not that live mesh rows are unpublished. Rows and addresses remain live;
+the queue dependency delays their next reads until copy-back and its reader
+barrier. Compaction never blanks geometry to move physical backing.
 There is no simultaneous sparse alias, no mesh-row change and no whole-region
 copy. The copied bytes include every live neighbour on the page. All steps
 are ordered through the frame/binding queues above and charged to background
@@ -2117,12 +2157,11 @@ bar-device baseline without pretending it has sparse relief. Sparse mode
 does not solve the single-region address ceiling or geometry duplicated
 across worlds; those remain explicit costs of the chosen shader path.
 
-After the remaining prototype readings, remove its unconditional slab-array
-bindings and Vulkan indexing-feature requirement from the production direct
-path. The prototype's `VulkanLogicalDeviceFactory.ComposeExtensionsAndFeatures`
-currently refuses devices without nonuniform storage-buffer indexing even
-with the switch off. Sparse and contiguous direct reads need no such feature;
-its removal belongs to the implementation, with callers and shaders together.
+The first implementation piece removes the prototype's unconditional
+slab-array bindings and Vulkan storage-buffer indexing requirements, with
+callers and generated shader interfaces together. Sparse and contiguous
+direct reads need no such feature. The remaining prototype readings use
+the frozen prototype revision.
 
 ##### Invariants and their enforcement
 
@@ -2133,10 +2172,10 @@ that [the hazards](../development/hazards.md#silent-invariants) requires.
 
 | Invariant | One enforcing place | Where the guarantee stops |
 |---|---|---|
-| No mesh reader sees an absent, uninitialized or half-landed page | Region-issued page readiness tokens required by the whole-mesh publication door | Native shader address bugs still require device validation and readback witnesses; strict non-residency is not a repair |
+| No write touches an unleased page and no mesh reader sees stale or partial contents | Destination-issued writable-page leases on every write, run clipping at unleased pages, and generation checks at both `CompleteLanding` and `MeshStands` | Native shader address bugs still require device validation and readback witnesses; strict non-residency is not a repair |
 | Growth maps new pages without moving existing words | Range-backed destination's stable resource and page table; its grow path has no carry | Logical arena relocation remains an explicit, counted operation |
 | A page is held for the union of live, landing and retiring ranges | Destination-owned coverage and generation records; pool placements stay private | A future queue or reader must join the lease contract, not borrow the handle |
-| No physical reuse precedes last use and unmap completion | Mapping transaction alone produces a release token consumed by `GpuRetirementQueue` and the pool's ticketed return | Device loss tears down the generation; it never manufactures completion |
+| No physical reuse precedes last use and unmap completion | Device-wide queue checkpoint and mapping transaction alone produce the release proof consumed by `GpuRetirementQueue` and the pool's ticketed return; trim polls independently of uploads | Device loss tears down the generation; it never manufactures completion |
 | Every physical byte is admitted once and released once | `GpuMemoryGrant`, `GpuDeviceMemoryWork`, pool allocation/free callbacks and one-use placement plans | Driver-private overhead is read from API usage, not inferred from mappings |
 | Reservations price physical backing and cannot spend another region's credit | Region-specific account owner plus `SdfResidencyGrant` consuming the backing plan | Budget changes may leave old allocations over limit; the counted floor exception remains |
 | Binding never passes queued readers or hidden frame batches | Existing backend queue door extended with the mapping transaction and explicit Vulkan semaphore edges | Merely possessing a native queue handle cannot be an alternate submission API |
@@ -2144,6 +2183,67 @@ that [the hazards](../development/hazards.md#silent-invariants) requires.
 | Sparse and contiguous paths have one mesh store and publication rule | `GpuRegion` destination selection under `SdfMeshRegionArena` | Sharing mesh identities across residencies is outside this step |
 
 ##### Implementation sequence and open readings
+
+**Piece 1: contiguous fallback and retirement foundation.** The store, arena,
+growth/carry and shader word door remain single. The unused 64-view slab
+array is gone from each World/mesh/probe set and from the generated interfaces.
+Vulkan no longer requires or enables storage-buffer array indexing for those
+reads. `GpuQueueTimeline` has one native completion object per device
+generation: `DirectXQueueTimeline` signals an `ID3D12Fence` after the queue
+door flushes its batch, and `VulkanQueueTimeline` uses the existing timeline
+submit door. Vulkan explicitly enables the feature already required by its
+[graphics API floor](https://docs.vulkan.org/spec/latest/chapters/features.html#features-requirements).
+
+`GpuRetirementQueue.Hold` keeps pending carries and the irradiance feedback
+copy source; `Poll` checkpoints eligible objects together, then releases only
+the completed prefix. `SdfWorldTables.ServiceMemoryTrim` polls even without
+a trim request or render, and `SubmitUpload` polls after submission. A pending
+carry genuinely still needs its source and is not promised immediate relief.
+Failed signals retain all objects and burn their values; a retirement queue
+refuses a different timeline instance. `GpuQueueTimelineLawTests` exercises
+hidden-owner retirement, a carry beside an independently releasable object,
+signal failure and device-generation replacement. Native ordering and the
+actual debug-world release remain windowed verification requests.
+
+**Pieces still to build, in dependency order.** H1 is a design closure, not an
+implemented page guarantee: the contiguous fallback has no holes and sparse
+must not be selected before destination-issued page leases, exact clipped copy
+runs and both landing/publication generation checks land with their laws.
+Then add native reserved/sparse resources and mapping queues, page-only
+residency admission with pool-owned slack, sparse arena placement policy, and
+unmap/empty-block trim plus physical compaction. These remain step 7 work;
+this piece claims neither a sparse path chosen nor a budget-drop physical
+release. Both backends must stay bootable at each piece, and the final hardware
+check below still gates any claim that sparse relief works.
+
+**Design review disposition (sm7b, e9c1d485c9).** These are design closures;
+the implementation status below distinguishes them from enforced code.
+
+| Finding | Answer and enforcement to build |
+|---|---|
+| H1 | Accepted. Destination-only writable-page leases carry device/page generations through every write, clipping, slice completion and `MeshStands`. Retirement invalidates the generation before any address can be reused. The whole-mesh publication door alone was insufficient. |
+| M1 | Accepted. One device queue timeline replaces residency upload counts as retirement proof; trim polls it for hidden residencies too. A carry not yet submitted remains an explicit pending use. |
+| M2 | Accepted. Region promises cover pages only; native block admission consumes that page credit and admits net pool slack separately. Two regions sharing one block cannot each reserve its slack. |
+| M3 | Accepted. A moved mesh without writable pages is owed and staged absent. No synchronous moved-mesh upload bypasses the lease. |
+| M4 | Accepted. Vulkan uses its enabled timeline facility and existing submit door, with ordered signals across graphics and binding queues. Binary semaphore recycling is removed from the design. |
+| M5 | Accepted. Sparse placement packs only for an unsatisfied contiguous range or address exhaustion, never free-word density. Page alignment for large meshes is a measured optional choice. |
+| M6 | Accepted. Sealing forbids a reader between copy-out and copy-back; it does not unpublish rows. Copy-back and its barrier precede resumed readers. |
+| L1 | Accepted. D3D12 requires tier 2; tier 1 NULL-mapping behavior is unsuitable. |
+| L2 | Accepted as a qualification requirement, not a guessed constant. The hardware lane reads API usage for N empty and N fully mapped regions at several N and extents, subtracts tracked blocks, and derives a conservative per-virtual-page overhead reservation in the workspace class before qualifying sparse. Driver overhead remains observed, not a claimed exact admission bound; changing budget readings can still refuse a map. Until measured, no hardware row claims this coverage. |
+| L3 | Accepted. The first accessing submission waits at transfer or compute, as appropriate, instead of a global all-commands wait for every map. The quiet window measures binding latency and queue stalls. |
+| L4 | Accepted. No page clear without a named reader. Upload covers every byte a published mesh reads; diagnostics follow the same leased ranges. |
+| L5 | Accepted. GPU execution dependencies order readers before unbind. The host observes completion only for ticket return, cross-resource reuse or native free; it does not wait before queuing unbind. |
+
+**Unverified source claims have owners.** The backend implementer checks
+`UpdateTileMappings` ordering against execute and enhanced barriers with a
+recording-driver witness and native validation, not inference from a raw queue
+call. The reserved-resource tiling query verifies the 64 KiB page on hardware.
+Vulkan's device-wide sparse-address allowance is tracked across resources;
+a separate binding queue never accesses buffer contents, so graphics remains
+their access family. The separate-family witness and validation check that
+assumption. No remap relies on data inheritance: physical packing explicitly
+copies bytes back. The lead's Linux window measures RADV bind host cost.
+vkd3d-proton remains independent corroboration, never the specification.
 
 The sm7b follow-on implementation lane owns the first five rows after review;
 the lead owns assigning and running the hardware windows. None ran in this

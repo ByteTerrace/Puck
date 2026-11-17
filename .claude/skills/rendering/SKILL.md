@@ -829,9 +829,8 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
-  `SdfMeshSlabs.IndexedRead` (`SDF_MESH_SLAB_INDEX`) switches `sdfMeshWord` to the slab views the streaming plan's
-  step 7 prices ([the prototype](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built)); the switch
-  changes no counted work and no stored mesh.
+  Both reads use the one region binding. The retired slab-index prototype is recorded with its revision in
+  [step 7](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built).
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal

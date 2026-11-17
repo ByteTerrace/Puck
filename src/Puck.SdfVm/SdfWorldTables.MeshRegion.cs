@@ -51,6 +51,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Releases, on the frame thread, the placement claims of meshes the latest draws no longer name when the
     /// process account has asked its caches to trim since the last call; otherwise does nothing.</summary>
     internal void ServiceMemoryTrim() {
+        ServiceRetirements();
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
@@ -914,7 +915,7 @@ public sealed partial class SdfWorldTables {
     // region is written again.
     private void ReplacedMeshRegion(IDisposable replaced, long oldBytes, ulong newBytes) {
         RequireMeshUpload();
-        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced));
+        Retire(replaced: new ReplacedRegion(bytes: oldBytes, grant: m_meshGrant, replaced: replaced), carryingRegion: m_meshRegion);
         m_meshGrant.Grown(newBytes: ((long)newBytes), oldBytes: oldBytes);
         m_seedMeshHistory = true;
         m_bindingRevision++;

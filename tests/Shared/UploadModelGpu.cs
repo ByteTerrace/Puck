@@ -410,6 +410,7 @@ internal sealed class UploadModelGpu :
     );
 
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_inner.Services.QueueSubmitter.Timeline;
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => m_inner.Services.QueueSubmitter.CreateSubmissionFence();
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);
