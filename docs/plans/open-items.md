@@ -2315,10 +2315,13 @@ the wire, then the float duration fields' schema migration.
   `BoundedRandomSampling.TrySampleWide`), which breaks the fixed two-advance
   cost that `GeneratorEngine`'s draw cursor (`TryDrawNumeric`, `TryFireMarkov`
   add `WeightedSampler.AdvancesPerDraw`), `WorldDecision`'s documented two
-  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Settle first
-  whether the weighted draws keep a fixed cost with the bias, or report their
-  consumed advances (`DrawEntry` and the cursor carry the count) and the
-  constant goes.
+  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Ruled (the
+  lead): the draws become exact and report their consumed advances
+  (`DrawEntry` and the cursor carry the count), and `AdvancesPerDraw` goes. A
+  fixed cost is an implementation convenience, not a contract worth a wrong
+  distribution (AGENTS.md rule 4, "Do things right"); the common path still
+  takes two advances, so cost moves only on the 2^-32 case. Re-record the
+  replay hashes it moves.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
