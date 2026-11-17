@@ -153,7 +153,7 @@ let lakeFlowLayer = {
   scale: 0.8
   stretch: 1.5
   cycle: 3
-  tilt: 0.12
+  tilt: 0.25
   coverage: 0
   softness: 0.1
   frame: World
@@ -162,7 +162,7 @@ let lakeFlowLayer = {
 }
 // A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
 // the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
-let lakeGlass = waterGlass with { scatter: "#2CB0B4", scattering: 0.12, contact { reach: 0.3, coverage: 0.7 } }
+let lakeGlass = waterGlass with { scatter: "#2CB0B4", scattering: 0.12, contact { reach: 0.5, coverage: 0.9 } }
 // Glacier ice creeps: a slow world-space drift whose pattern is the weathered, matt surface of old ice against the blue
 // beneath, broad and not stretched so it follows no face's slope.
 let iceFlowLayer = {
@@ -171,18 +171,18 @@ let iceFlowLayer = {
   scale: 0.13
   stretch: 1.2
   cycle: 4
-  tilt: 0.12
-  coverage: 0.3
+  tilt: 0.25
+  coverage: 0.28
   softness: 0.5
-  surface { color: "#E6F1F7", roughness: 0.6, metal: 0 }
+  surface { color: "#C9DDEA", roughness: 0.6, metal: 0 }
   seed: 31
 }
 // Glacier ice: a blue body and a paler weathered face, each broken by the creep's pattern, and the cobalt of a crevasse's or
 // a channel's walls.
 let icePalette = [
-  flowed({ color: "#6FA8D0", roughness: 0.25, specular: 0.5, wrap: 0.1 }, iceFlowLayer)
-  flowed({ color: "#AFD0E4", roughness: 0.4, specular: 0.3, wrap: 0.12 }, iceFlowLayer)
-  { color: "#1B5A9C", roughness: 0.2, specular: 0.5, wrap: 0.1 }
+  flowed({ color: "#4F8DBB", roughness: 0.3, specular: 0.2, wrap: 0.05 }, iceFlowLayer)
+  flowed({ color: "#8DB6D1", roughness: 0.45, specular: 0.15, wrap: 0.05 }, iceFlowLayer)
+  { color: "#16477F", roughness: 0.25, specular: 0.3, wrap: 0.05 }
 ]
 // Stone for a bridge and its banks.
 let stonePalette = [
@@ -306,17 +306,19 @@ function onSlope(c, yaw) = [
   halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
 ]
 
-// A glacier is a body of ice lying in a trough: chamfered blocks laid in steps (`blocks`), wedge cuts that widen at the surface
-// and split it into masses (`wedges`), melt channels (`cuts`) and a scalloped toe (`scallops`), all subtractions of one group,
-// so the ice is one carved mass. It melts by retreat: each `retreat` is a cutter that rides the gauge `state.<gauge>` (the
-// linear fraction of the melt left, one to zero) along its own `axis` by `amplitude` over the whole range, so a cutter that
-// starts beyond the toe walks up the ice toe first and one over the back sinks, thinning it. A block is { position, half,
-// cosine, yaw, chamfer, material }, a cut or retreat { position, half, cosine, yaw, material } (a retreat adds { axis,
-// amplitude }), a wedge { position, half, taper, rotation, material } (a trapezoidal prism extruded across the ice; `rotation`
-// a quaternion that stands its wide side at the surface) and a scallop { position, radius, height, cosine, material } (a
-// cylinder along the slope's normal). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads them, and a cut's
-// `material` is its cut face's. The ice never scales, so it never reads as an object shrinking.
-template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
+// A glacier is a body of ice lying in a trough, in steps of chamfered `plates`, each its own group with the `blocks` that
+// stand on it, the wedge cuts that split it into masses (`wedges`), the melt channels (`cuts`) and the scalloped toe
+// (`scallops`) that carve it; every one names its plate (`plate`, an index) and rides it as its parent, so a plate and what
+// carves it move as one body and no seam stretches. The ice melts by plates sinking into the trough's floor: a plate sinks
+// `sink` metres along `axis` as the gauge `state.<gauge>` falls from one to zero, so with the toe's plates sinking furthest
+// the toe goes first and what remains thins, and the ice never scales (it never reads as an object shrinking). A slide
+// reaches at most four creation units, so a plate rides four. A plate is { position, half, cosine, yaw, chamfer, material,
+// axis, sink }, a block { plate, position, half, cosine, yaw, chamfer, material }, a cut { plate, position, half, cosine,
+// yaw, material }, a wedge { plate, position, half, taper, rotation, material } (a trapezoidal prism extruded across the ice;
+// `rotation` a quaternion that stands its wide side at the surface) and a scallop { plate, position, radius, height, cosine,
+// material } (a cylinder along the slope's normal). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads
+// them, and a cut's `material` is its cut face's.
+template glacierMass(id, plates, blocks, cuts, wedges, scallops, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -325,8 +327,29 @@ template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glac
       drivers [
         { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
-      for (block, i) in blocks {
+      for (plate, i) in plates {
         shape Box $"ice-{i}" {
+          material: plate.material
+          chamfer: plate.chamfer
+          position [
+            plate.position[0] - origin[0],
+            plate.position[1] - origin[1],
+            plate.position[2] - origin[2]
+          ]
+          scale: plate.half
+          rotation: onSlope(plate.cosine, plate.yaw)
+          group: i + 1
+          slides: map(range(0, 4), j => {
+            driver: "melt"
+            axis: plate.axis
+            amplitude: plate.sink / 4
+            phase: -1
+            wave: "linear"
+          })
+        }
+      }
+      for (block, i) in blocks {
+        shape Box $"block-{i}" {
           material: block.material
           chamfer: block.chamfer
           position [
@@ -336,7 +359,8 @@ template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glac
           ]
           scale: block.half
           rotation: onSlope(block.cosine, block.yaw)
-          group: 1
+          group: block.plate + 1
+          parent: $"ice-{block.plate}"
         }
       }
       for (cut, i) in cuts {
@@ -350,7 +374,8 @@ template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glac
           ]
           scale: cut.half
           rotation: onSlope(cut.cosine, cut.yaw)
-          group: 1
+          group: cut.plate + 1
+          parent: $"ice-{cut.plate}"
         }
       }
       for (wedge, i) in wedges {
@@ -365,7 +390,8 @@ template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glac
           ]
           scale: wedge.half
           rotation: wedge.rotation
-          group: 1
+          group: wedge.plate + 1
+          parent: $"ice-{wedge.plate}"
         }
       }
       for (scallop, i) in scallops {
@@ -379,57 +405,8 @@ template glacierMass(id, blocks, cuts, wedges, scallops, retreats, gauge = "glac
           ]
           scale [scallop.radius, scallop.height, scallop.radius]
           rotation: onSlope(scallop.cosine, 0)
-          group: 1
-        }
-      }
-      for (retreat, i) in retreats {
-        shape Sphere $"retreat-{i}-carrier-0" {
-          material: 0
-          scale [0.05, 0.05, 0.05]
-          position [
-            retreat.position[0] - origin[0],
-            retreat.position[1] - origin[1] - 40,
-            retreat.position[2] - origin[2]
-          ]
-          slides: map(range(0, 4), j => {
-            driver: "melt"
-            axis: retreat.axis
-            amplitude: retreat.amplitude / (4 * (floor(retreat.amplitude / 15.6) + 1))
-            phase: -1
-            wave: "linear"
-          })
-        }
-        for k in range(1, floor(retreat.amplitude / 15.6) + 1) {
-          shape Sphere $"retreat-{i}-carrier-{k}" {
-            material: 0
-            scale [0.05, 0.05, 0.05]
-            parent: $"retreat-{i}-carrier-{k - 1}"
-            position [
-              retreat.position[0] - origin[0],
-              retreat.position[1] - origin[1] - 40,
-              retreat.position[2] - origin[2]
-            ]
-            slides: map(range(0, 4), j => {
-              driver: "melt"
-              axis: retreat.axis
-              amplitude: retreat.amplitude / (4 * (floor(retreat.amplitude / 15.6) + 1))
-              phase: -1
-              wave: "linear"
-            })
-          }
-        }
-        shape Box $"retreat-{i}" {
-          blend: Subtraction
-          material: retreat.material
-          position [
-            retreat.position[0] - origin[0],
-            retreat.position[1] - origin[1],
-            retreat.position[2] - origin[2]
-          ]
-          scale: retreat.half
-          rotation: onSlope(retreat.cosine, retreat.yaw)
-          group: 1
-          parent: $"retreat-{i}-carrier-{floor(retreat.amplitude / 15.6)}"
+          group: scallop.plate + 1
+          parent: $"ice-{scallop.plate}"
         }
       }
     }

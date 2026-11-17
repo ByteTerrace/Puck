@@ -174,7 +174,7 @@ prototypes {
             rotation: mound.rotation
           }
         }
-        terrainFloorCut(top: (sector.peak + 10))
+        terrainFloorCut(top: (maximum(sector.peak, sector.name == "north-west" ? glacierRidge.peak : 0) + 30))
       }
     }
   }

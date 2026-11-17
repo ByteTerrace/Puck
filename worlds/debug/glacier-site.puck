@@ -28,7 +28,15 @@ function wedgeTurn(yaw) = [
 
 // The ridge behind the lake: a mass the wall's terrain adds beyond the lake's bowl, rising from the rim's height at the bowl's back
 // shore to a crest the glacier's head lies below. Its ellipsoid is the terrain library's own (`terrainMass`).
-let glacierRidge = { sector: "north-west", label: "glacier-ridge", foot: 306.8, peak: 389, radial: 300, across: 150, offset: 0 }
+let glacierRidge = {
+  sector: "north-west"
+  label: "glacier-ridge"
+  foot: 306.8
+  peak: 389
+  radial: 300
+  across: 150
+  offset: 0
+}
 let ridgeHalf = glacierRidge.peak / (1 - valleySink)
 let ridgeCentre = glacierRidge.foot + glacierRidge.radial * squareRoot(1 - valleySink * valleySink)
 // The height of the ridge's top at `r` out from the ring's centre and `x` along the ring.
@@ -41,7 +49,7 @@ let valleyRidges = [glacierRidge]
 
 // The wall's rock palette after its own: the trough's polished floor, and the moraine's grey and dark debris.
 let wallPalette = [
-  { color: "#A7A39A", roughness: 0.3, specular: 0.35 }
+  { color: "#6F6C66", roughness: 0.35, specular: 0.15 }
   { color: "#8C8376", roughness: 0.95, specular: 0.02 }
   { color: "#5A5249", roughness: 0.95, specular: 0.02 }
 ]
@@ -66,7 +74,7 @@ let valleyCuts = concat(
   map(range(0, 3), g => {
     sector: "north-west"
     label: $"glacier-groove-{g}"
-    position: rampPoint(46, (g - 1) * 3.6, 0.3)
+    position: rampPoint(46, (g - 1) * 6, 0.3)
     half [0.8, 1.1, 46]
     rotation: onSlope(rampCos, 0)
     rounding: 0.4
@@ -88,16 +96,15 @@ let valleyMounds = flatMap(
     ]
     radii [3.4 + 1.6 * siteScatter(k + side * 7, 0.618034), 2.4, 8.5 + 3 * siteScatter(k + side * 7, 0.754878)]
     rotation: onSlope(
-      1 /
-        squareRoot(
-          1 +
+      1 / squareRoot(
+        1 +
+          ((ridgeGround(485 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) -
+            ridgeGround(483 + 11 * k, (side * 2 - 1) * (troughHalf + 5))) /
+            2) *
             ((ridgeGround(485 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) -
               ridgeGround(483 + 11 * k, (side * 2 - 1) * (troughHalf + 5))) /
-              2) *
-              ((ridgeGround(485 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) -
-                ridgeGround(483 + 11 * k, (side * 2 - 1) * (troughHalf + 5))) /
-                2)
-        ),
+              2)
+      ),
       8 * (siteScatter(k + side * 7, 0.430159) - 0.5)
     )
     material: (k + side) % 2 + 2
@@ -106,43 +113,49 @@ let valleyMounds = flatMap(
 
 // The ice: steps of chamfered plates down the trough, each a little tilted and turned off its neighbours so it catches the
 // light at its own angle. `iceStep` is the ramp distance between plates; `iceThick` each plate's half thickness and `iceHalf`
-// its half width.
+// its half width. A plate sinks into the trough's floor as the gauge falls, and plate i is buried when the gauge reaches
+// `iceBuried[i]` (the toe's first): it sinks `iceSink[i]` metres in all (its thickness and four metres more, so what stands on it is buried too), within the four units its slides reach.
 let iceStep = 13
 let iceThick = [2.2, 3.2, 3.8, 4.2, 4.0, 3.2, 2.2]
 let iceHalf = [13, 15, 16, 16, 16, 15, 12]
-// The height over the ramp of the ice's top at ramp distance s.
-function iceTop(s) = 2 * iceThick[minimum(6, maximum(0, floor((s - 1.5) / iceStep)))] - 0.6
+let iceBuried = [0.45, 0.34, 0.24, 0.14, 0.07, 0.02, 0]
+let iceSink = map(range(0, 7), i => (2 * iceThick[i] + 4) / (1 - iceBuried[i]))
+// The plate under ramp distance s, and the height over the ramp of the ice's top there.
+function icePlate(s) = minimum(6, maximum(0, floor((s - 1.5) / iceStep)))
+function iceTop(s) = 2 * iceThick[icePlate(s)] - 0.6
 let glacierOrigin = rampPoint(0, 0, 0)
 
-let glacierBlocks = concat(
-  map(range(0, 7), i => {
-    position: rampPoint(8 + iceStep * i, 0.8 * (siteScatter(i, 0.618034) - 0.5), iceThick[i] - 0.6)
-    half [iceHalf[i], iceThick[i], 8.8]
-    cosine: rampCos + 0.08 * (siteScatter(i, 0.754878) - 0.5)
-    yaw: 7 * (siteScatter(i, 0.569840) - 0.5)
-    chamfer: 0.9
-    material: i % 2
-  }),
-  map(range(0, 7), k => {
-    position: rampPoint(
-      18 + 9 * k,
-      (k % 2 * 2 - 1) * (3 + 6 * siteScatter(k, 0.381966)),
-      iceTop(18 + 9 * k) + 1.2
-    )
-    half [
-      1.8 + 1.4 * siteScatter(k, 0.569840)
-      2.6 + 1.6 * siteScatter(k, 0.754878)
-      1.8 + 1.2 * siteScatter(k, 0.896491)
-    ]
-    cosine: rampCos + 0.3 * (siteScatter(k, 0.430159) - 0.5)
-    yaw: 360 * siteScatter(k, 0.618034)
-    chamfer: 0.6
-    material: 1
-  })
-)
-
+let glacierPlates = map(range(0, 7), i => {
+  position: rampPoint(8 + iceStep * i, 0.8 * (siteScatter(i, 0.618034) - 0.5), iceThick[i] - 0.6)
+  half [iceHalf[i], iceThick[i], 8.8]
+  cosine: rampCos + 0.08 * (siteScatter(i, 0.754878) - 0.5)
+  yaw: 7 * (siteScatter(i, 0.569840) - 0.5)
+  chamfer: 0.9
+  material: i % 2
+  axis [0, rampCos, 0 - rampSin]
+  sink: iceSink[i]
+})
+// Seracs: tilted blocks standing on the plates' backs.
+let glacierBlocks = map(range(0, 4), k => {
+  plate: icePlate(22 + 15 * k)
+  position: rampPoint(
+    22 + 15 * k,
+    (k % 2 * 2 - 1) * (3 + 6 * siteScatter(k, 0.381966)),
+    iceTop(22 + 15 * k) + 0.3
+  )
+  half [
+    1.8 + 1.4 * siteScatter(k, 0.569840)
+    1.3 + 0.7 * siteScatter(k, 0.754878)
+    1.8 + 1.2 * siteScatter(k, 0.896491)
+  ]
+  cosine: rampCos + 0.3 * (siteScatter(k, 0.430159) - 0.5)
+  yaw: 360 * siteScatter(k, 0.618034)
+  chamfer: 0.6
+  material: 1
+})
 // Crevasses: wedges that open at the surface and close toward the floor, across the ice between its steps.
 let glacierWedges = map(range(0, 7), k => {
+  plate: icePlate(14 + 10 * k)
   position: rampPoint(14 + 10 * k, 0.8 * (siteScatter(k, 0.381966) - 0.5), iceTop(14 + 10 * k) - 2.2)
   half [1.5, 3.2, 12]
   taper: 0.18
@@ -153,6 +166,7 @@ let glacierWedges = map(range(0, 7), k => {
 let glacierCuts = flatMap(
   range(0, 2),
   c => map(range(0, 7), i => {
+    plate: i
     position: rampPoint(8 + iceStep * i, (c * 2 - 1) * 5.5 + (i % 2), 2 * iceThick[i] - 0.75)
     half [0.5, 0.8, 7.6]
     cosine: rampCos
@@ -160,32 +174,12 @@ let glacierCuts = flatMap(
     material: 2
   })
 )
-// A scalloped toe: cylinders cut into the ice's lower edge.
+// A scalloped toe: cylinders cut into the lowest plate's edge.
 let glacierScallops = map(range(0, 5), j => {
+  plate: 0
   position: rampPoint(-0.5 + (j % 2) * 1.2, (j - 2) * 6, 3)
   radius: 2.6 + 0.6 * (j % 2)
   height: 9
   cosine: rampCos
   material: 2
 })
-// The melt: a cutter over the toe walks up the ice with the gauge, and one over the back sinks, thinning it.
-let glacierRetreats = [
-  {
-    position: rampPoint(-60.8, 0, 8)
-    half [24, 20, 60]
-    cosine: rampCos
-    yaw: 0
-    material: 1
-    axis [0, 0 - rampSin, 0 - rampCos]
-    amplitude: 98
-  }
-  {
-    position: rampPoint(45, 0, 22.4)
-    half [24, 14, 60]
-    cosine: rampCos
-    yaw: 0
-    material: 1
-    axis [0, rampCos, 0 - rampSin]
-    amplitude: 6
-  }
-]

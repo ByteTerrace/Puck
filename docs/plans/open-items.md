@@ -1637,20 +1637,26 @@ does not.
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
-- [medium] A creation that shrinks cannot carry relief: `sizeBy` makes it
-  animated and the `noise` facet is refused on an animated creation ("a
-  static-stamp facet"), so the glacier's ice cannot take the fBm relief that
-  breaks a smooth tongue into hummocks and cracked planes; its look rests on a
-  flow layer's pattern. Admit noise on a creation whose only motion is
-  `sizeBy`, or shrink another way.
-- [medium] A glacier's bare cradle at T has no scoured region: the moraine is
-  stones on the wall's own rock, so melted ice leaves two rows of stones on
-  unchanged rock. The wall needs a material region (a paint or weathering on its
-  one rock slot, placed by the glacier's course) the ice's cradle shows.
-- [medium] Small stones in a wall sector bake at the sector's coarse cell
-  (the lake's bank boulders read as flat wedges, a stone under a metre is
-  lost): `valleyStones` (`worlds/debug/valley.puck`) rides the sector's relief
-  for free but not its detail.
+- [medium] A cutter that moves against its group's baked mesh does not
+  re-carve it: the glacier's retreat as one cutter walking up the ice (the
+  moving half-space the stage table describes) showed no change at any pose, so
+  the ice melts by plates sinking into the trough's floor. The settle rebake
+  (`SdfMeshPathBake.Settle`) is the mechanism the moving-blends plan owns; a
+  moving subtraction would give a true retreating front and thinning. A slide is
+  also capped at four creation units, so a long travel rides four slides a plate
+  or a chain of carriers.
+- [medium] The ice carries no relief noise: a `noise` facet is refused on an
+  animated creation, and the glacier is animated. It is authored from chamfered
+  plates and wedge cuts instead; relief would break their planes into
+  hummocks.
+- [medium] Small stones in a wall sector bake at the sector's coarse cell, so the
+  trough's moraine and grooves read as flat-shaded polygons; the lake's
+  stones are creations of their own for that reason, at a preview cost of
+  about 650 000 triangles for the cobbles and boulders.
+- [medium] The falls ribbon beside the trough (`fallsRibbon`, lane A3) is a flat
+  rectangle with a segment seam that rises into the sky at its top and tilts
+  clear of the ground when the falls ebb. It needs to be a channel cut into the
+  ground with conforming water.
 - [low] `world.reload` of the debug world refuses once a lane's edit passes 16 MiB
   as a whole rebuild ("Rebuild payload is 19239407 bytes; cap is 16777216");
   the delta path reloads an edit of a few rows but a wall-sector edit that

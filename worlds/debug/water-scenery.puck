@@ -95,11 +95,12 @@ prototypes {
   )
   glacierMass(
     id: "glacier",
+    plates: glacierPlates,
     blocks: glacierBlocks,
     cuts: glacierCuts,
     wedges: glacierWedges,
     scallops: glacierScallops,
-    retreats: glacierRetreats,
+    gauge: "glacier",
     origin: glacierOrigin
   )
   lakeStones(id: "lake-stones", stones: lakeBedStones, palette: lakeStonePalette)
@@ -107,7 +108,8 @@ prototypes {
     id: "lake",
     radius: lakeSite.radius,
     depth: lakeSite.depth,
-    cuts: [{ position [0, -10, 0 - (lakeSite.radial - 406.1) - 15], half [50, 20, 15] }]
+    cuts: [{ position [0, -10, 0 - (lakeSite.radial - 406.1) - 15], half [50, 20, 15] }],
+    flow: lakeFlowLayer with { velocity [0.5, 0, -0.5] }
   )
   riverChannel(
     id: "river-channel",
