@@ -205,6 +205,16 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
     public static readonly WorkKind GpuRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, meter, commit.</summary>
+    public static readonly WorkKind[] GpuJobs = DeclareJobKinds(measure: "jobs", unit: "jobs");
+    /// <summary>Counts the units the answered probe jobs of each kind held (a relight's predicted rays, a commit's
+    /// destinations, a selection's tests, any other kind's origins), indexed as <see cref="GpuJobs"/>.</summary>
+    public static readonly WorkKind[] GpuJobUnits = DeclareJobKinds(measure: "job-units", unit: "units");
+    /// <summary>Counts the wall time, in nanoseconds, from a worker's submission of each answered probe job to its
+    /// answer, indexed as <see cref="GpuJobs"/>.</summary>
+    public static readonly WorkKind[] GpuJobWaitNanoseconds = DeclareJobKinds(measure: "job-wait-nanoseconds", unit: "nanoseconds");
+    private static WorkKind[] DeclareJobKinds(string measure, string unit) =>
+        [.. ((string[])["trace", "relight", "select", "meter", "commit"]).Select(kind => Registry.Declare(name: $"sdf.mesh-gi.gpu-{measure}.{kind}", unit: unit, workClass: WorkClass.Pacing))];
     /// <summary>Measured GPU time spent selecting probes owing work.</summary>
     public static readonly WorkKind GpuSelectNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>

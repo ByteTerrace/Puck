@@ -570,29 +570,26 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.TrySetCanceled();
     }
     public GpuQueueCategory Category => GpuQueueCategory.Probe;
-    // The answered jobs of each kind, their units (UnitsOf) and the wall time from their submission by a worker to their
-    // answer, in Stopwatch ticks: what DescribeMemory prints, so a reader sees whether the volume's work is bound by its
-    // jobs' count and round trips or by their GPU time. Written on the recording thread, read by a describer.
-    private readonly long[] m_kindJobs = new long[5];
-    private readonly long[] m_kindUnits = new long[5];
-    private readonly long[] m_kindTicks = new long[5];
+    // Counts an answered job in its volume's counters (SdfMeshIrradiance.GpuJobs, GpuJobUnits, GpuJobWaitNanoseconds), so
+    // a reader sees whether the volume's work is bound by its jobs' count and round trips or by their GPU time.
     private void CountAnswered(Job query) {
         var kind = (int)KindOf(query);
 
-        _ = Interlocked.Increment(location: ref m_kindJobs[kind]);
-        _ = Interlocked.Add(location1: ref m_kindUnits[kind], value: UnitsOf(query));
-        if (query.SubmittedAt != 0L) { _ = Interlocked.Add(location1: ref m_kindTicks[kind], value: (Stopwatch.GetTimestamp() - query.SubmittedAt)); }
+        m_volume.Counters.Add(SdfMeshIrradiance.GpuJobs[kind], 1);
+        m_volume.Counters.Add(SdfMeshIrradiance.GpuJobUnits[kind], UnitsOf(query));
+        if (query.SubmittedAt != 0L) { m_volume.Counters.Add(SdfMeshIrradiance.GpuJobWaitNanoseconds[kind], (long)Stopwatch.GetElapsedTime(startingTimestamp: query.SubmittedAt).TotalNanoseconds); }
     }
+    // Each kind's answered jobs, units and mean wait from submission to answer, from the volume's counters.
     private string DescribeJobs() {
         var text = new System.Text.StringBuilder(capacity: 160);
 
         _ = text.Append(value: "trace-jobs=[");
-        for (var kind = 0; (kind < m_kindJobs.Length); kind++) {
-            var jobs = Interlocked.Read(location: ref m_kindJobs[kind]);
-            var milliseconds = ((jobs == 0L) ? 0.0 : ((Interlocked.Read(location: ref m_kindTicks[kind]) * 1000.0) / (Stopwatch.Frequency * (double)jobs)));
+        for (var kind = 0; (kind < SdfMeshIrradiance.GpuJobs.Length); kind++) {
+            var jobs = m_volume.Counters.Read(kind: SdfMeshIrradiance.GpuJobs[kind]);
+            var milliseconds = ((jobs == 0L) ? 0.0 : (m_volume.Counters.Read(kind: SdfMeshIrradiance.GpuJobWaitNanoseconds[kind]) / (1e6 * jobs)));
 
             _ = text.Append(provider: System.Globalization.CultureInfo.InvariantCulture,
-                handler: $"{((kind == 0) ? string.Empty : ",")}{((JobKind)kind).ToString().ToLowerInvariant()}:{jobs}/{Interlocked.Read(location: ref m_kindUnits[kind])}u/{milliseconds:0.0}ms");
+                handler: $"{((kind == 0) ? string.Empty : ",")}{((JobKind)kind).ToString().ToLowerInvariant()}:{jobs}/{m_volume.Counters.Read(kind: SdfMeshIrradiance.GpuJobUnits[kind])}u/{milliseconds:0.0}ms");
         }
         return text.Append(value: ']').ToString();
     }
