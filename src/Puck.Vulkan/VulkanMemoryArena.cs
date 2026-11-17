@@ -42,6 +42,7 @@ public sealed unsafe class VulkanMemoryArena {
     public VulkanMemoryArena(VulkanDeviceCommands device) {
         m_device = device;
         m_pool = new(allocate: Allocate, blockBytes: BlockBytes, free: Free);
+        if (m_device.Memory is not null) { m_device.Memory.TrimRequested += Trim; }
     }
 
     /// <summary>Gets the blocks the arena holds now.</summary>
@@ -128,7 +129,13 @@ public sealed unsafe class VulkanMemoryArena {
     public void FreeAll() {
         lock (m_gate) {
             if (m_pool.FreeAll()) { m_slices.Clear(); }
+            if (m_device.Memory is not null) { m_device.Memory.TrimRequested -= Trim; }
         }
+    }
+    /// <summary>Releases empty blocks and marks held blocks for release after their last fenced placement returns.</summary>
+    public void Trim() {
+        // Pool callbacks mutate m_blocks, so pressure uses the same outer lock as Bind and Release.
+        lock (m_gate) { m_pool.Trim(); }
     }
 
     // Asks the ledger for a block at its size, allocates it, counts it, and maps it for its life when its memory is

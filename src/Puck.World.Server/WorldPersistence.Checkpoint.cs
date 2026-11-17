@@ -809,23 +809,28 @@ public sealed partial class WorldPersistence {
             )),
         });
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null) {
-        var server = checkpoint.Server;
+    // What a checkpoint restore adopts that its validation already built: the arena, the journal base and where the
+    // base was loaded from.
+    private sealed record ValidatedCheckpoint(StateArena Arena, WorldDefinition Base, WorldBaseOrigin Origin);
 
-        Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
+    // Every refusal the checkpoint's own contents can raise against the definition it carries, raised before any host
+    // state moves: a malformed cached route, base bytes, key ledger or machine image refuses the whole restore
+    // atomically instead of failing after the definition, clocks or journal were replaced. The population and the
+    // machine plan are the live ones for a restore in place; a restore that first moves the configuration passes the
+    // population its definition would build and the plan that moves the machines, so the validation reads the host the
+    // restore will run against, never the one it is about to replace.
+    private ValidatedCheckpoint ValidateCheckpointRestore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, WorldPopulation population, IWorldMachinePreparedPlan? machinePlan = null) {
+        var server = checkpoint.Server;
+        var restoredDefinition = admission.Definition;
+
+        population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
 
         var restoredOrigin = ResolveBaseOrigin(
-            directory: admission.Definition.DocumentDirectory,
+            directory: restoredDefinition.DocumentDirectory,
             origin: server.BaseOrigin
         );
-        // Population validation is deliberately before any server field changes below. A malformed cached route
-        // must refuse the entire restore atomically, not fail after the definition, clocks, or journal were replaced.
-        Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
-        var restoredDefinition = admission.Definition;
-        var restoredAuthorityTransition = Host.GrantTable.PrepareRestore(checkpoint.Grants, restoredDefinition, Principal.World, resetSessionEpochs);
-        var restoredInput = WorldInputRuntime.PrepareRestore(Host, restoredDefinition, (server.Input ?? WorldInputRuntimeCheckpoint.Empty));
-
+        population.ValidateCheckpoint(checkpoint: checkpoint.Population);
         WorldTick.ValidateFederatedInputs(server.FederatedInputs, restoredDefinition.Population.Capacity);
         foreach (var input in server.FederatedInputs) {
             if (!checkpoint.Population.Entries.Any(predicate: entry => ((entry.Index == input.Index) && (entry.Admission.Generation == input.Principal.Generation) && entry.Admission.IsRemoteHuman))) {
@@ -833,11 +838,10 @@ public sealed partial class WorldPersistence {
             }
         }
         // Equal canonical images are the same operation-owned document. A distinct journal base still needs its
-        // own validation; do it before adopting any restored state so malformed base bytes refuse atomically.
+        // own validation.
         var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
             ? restoredDefinition
             : WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson));
-
         var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
@@ -850,6 +854,39 @@ public sealed partial class WorldPersistence {
             definition: restoredDefinition,
             entries: server.MachineBindings
         );
+        if (
+            (machinePlan is not null) &&
+            (Host.Machines is IWorldMachineCheckpointHost machineHost) &&
+            (checkpoint.Machines is { } machineCheckpoint)
+        ) {
+            machineHost.ValidateCheckpoint(
+                checkpoint: machineCheckpoint,
+                plan: machinePlan
+            );
+        }
+        return new ValidatedCheckpoint(
+            Arena: restoredArena,
+            Base: restoredBase,
+            Origin: restoredOrigin
+        );
+    }
+    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
+        var server = checkpoint.Server;
+        var restoredDefinition = admission.Definition;
+        var (restoredArena, restoredBase, restoredOrigin) = (validated ?? ValidateCheckpointRestore(
+            admission: admission,
+            checkpoint: checkpoint,
+            population: Host.Population
+        ));
+
+        if (validated is not null) {
+            // The validation ahead read the population the definition builds; this restore runs on the live one.
+            Host.Population.ValidateFieldRegions(checkpoints: checkpoint.Fields);
+            Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
+        }
+
+        var restoredAuthorityTransition = Host.GrantTable.PrepareRestore(checkpoint.Grants, restoredDefinition, Principal.World, resetSessionEpochs);
+        var restoredInput = WorldInputRuntime.PrepareRestore(Host, restoredDefinition, (server.Input ?? WorldInputRuntimeCheckpoint.Empty));
 
         // Stage guest decoding and execution before adopting any authority state.
         using var addonPlan = (preparedAddons ?? ((Host.Addons is { } attachedAddons)

@@ -15,7 +15,26 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     private bool m_disposed;
     private VulkanQueueTimeline? m_timeline;
 
-    internal GpuQueueTimeline Timeline => (m_timeline ??= new VulkanQueueTimeline(this));
+    internal GpuQueueTimeline Timeline => (m_timeline ??= new VulkanQueueTimeline(device: this));
+    // Assigned only by the factory after enabling both sparse buffer features and requesting this queue family.
+    internal VkQueue? SparseQueue { get; }
+
+    /// <summary>Gets whether this generation enabled sparse buffers and owns their binding queue.</summary>
+    public bool SparseBuffersEnabled => SparseQueue.HasValue;
+
+    /// <summary>Orders buffer mappings after deferred graphics work and before subsequent graphics submissions.
+    /// Called on the submission thread, like every graphics queue operation. Physical backing remains owned until
+    /// the returned timeline value completes; a failed operation retains backing until device teardown.</summary>
+    /// <param name="buffer">The sparse buffer, created on this device.</param>
+    /// <param name="bindings">Aligned, nonoverlapping ranges; null memory unbinds a range.</param>
+    /// <returns>The device timeline value for the binding operation.</returns>
+    public ulong BindSparse(nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings) {
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (!SparseBuffersEnabled) { throw new InvalidOperationException(message: "This device did not enable sparse buffers."); }
+        ArgumentOutOfRangeException.ThrowIfZero(buffer);
+        if (bindings.IsEmpty) { throw new ArgumentException(message: "A sparse binding batch must contain a range.", paramName: nameof(bindings)); }
+        return (m_timeline ??= new VulkanQueueTimeline(device: this)).BindSparse(buffer, bindings.ToArray());
+    }
 
     /// <summary>Gets the graphics queue of the device, first handing the open batch's deferred submissions to it
     /// (<see cref="GpuSubmissionBatch.Split"/>), so a submit, signal, present or wait a caller puts on the returned
@@ -56,9 +75,11 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <summary>Gets whether the device was created with <see cref="MemoryBudgetExtension"/>, so its physical device
     /// reports a budget and usage per heap.</summary>
     public bool MemoryBudgetEnabled { get; init; }
+
     /// <summary>The extension that reports a budget and usage per heap
     /// (<c>VkPhysicalDeviceMemoryBudgetPropertiesEXT</c>), enabled when the device lists it.</summary>
     public const string MemoryBudgetExtension = "VK_EXT_memory_budget";
+
     /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
     public VulkanDeviceCommands Commands { get; }
     /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is
@@ -89,13 +110,15 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <param name="graphicsQueue">The graphics queue.</param>
     /// <param name="presentQueue">The present queue.</param>
     /// <param name="logicalDeviceApi">The API used to destroy the device and wait for it to idle.</param>
+    /// <param name="sparseQueue">The requested sparse queue, only when both sparse buffer features were enabled.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="logicalDeviceApi"/> is <see langword="null"/>.</exception>
     public VulkanLogicalDevice(
         VulkanDeviceCommands device,
         VkPhysicalDevice physicalDevice,
         VkQueue graphicsQueue,
         VkQueue presentQueue,
-        IVulkanLogicalDeviceApi logicalDeviceApi
+        IVulkanLogicalDeviceApi logicalDeviceApi,
+        VkQueue? sparseQueue = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: device);
         ArgumentNullException.ThrowIfNull(argument: logicalDeviceApi);
@@ -104,6 +127,7 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
         PhysicalDevice = physicalDevice;
         m_graphicsQueue = graphicsQueue;
         m_presentQueue = presentQueue;
+        SparseQueue = sparseQueue;
         Batch = new VulkanSubmissionBatch(device: device, queue: graphicsQueue);
         m_logicalDeviceApi = logicalDeviceApi;
         device.Checkpoints.Watch(queue: graphicsQueue.Handle);

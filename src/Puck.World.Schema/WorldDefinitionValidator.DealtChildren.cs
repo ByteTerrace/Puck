@@ -1,3 +1,5 @@
+using Puck.World.Authoring;
+
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
@@ -52,6 +54,18 @@ public static partial class WorldDefinitionValidator {
             if (!WorldPlacementStamp.TryValidateSurface(definition: definition, placement: child, reason: out var surfaceReason)) {
                 errors.Add(item: $"{path}: {surfaceReason}");
             }
+            if (child.Solid is not null) {
+                foreach (var variantId in SolidVariantIds(placement: child)) {
+                    if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: variantId) is { } variantCreation) {
+                        _ = RefuseSolidVariantShapes(
+                            creation: variantCreation,
+                            errors: errors,
+                            path: path,
+                            variantId: variantId
+                        );
+                    }
+                }
+            }
             if (errors.Count > 0) {
                 break;
             }
@@ -60,5 +74,50 @@ public static partial class WorldDefinitionValidator {
             ? string.Empty
             : errors[0]);
         return (errors.Count == 0);
+    }
+    // The creations a solid row can show: its own prototype, then each response entry's target. Contact geometry is
+    // owed for every one of them, since a response swap shows any of them at runtime.
+    private static List<string> SolidVariantIds(WorldPlacement placement) {
+        var ids = new List<string> { placement.PrototypeId };
+
+        if (placement.Respond is { Count: > 0 } responses) {
+            foreach (var response in responses) {
+                if (response?.PrototypeId is { } responsePrototypeId) {
+                    ids.Add(item: responsePrototypeId);
+                }
+            }
+        }
+        return ids;
+    }
+    // The shape-level laws a solid row owes one creation it can show: the clauses
+    // CreationShapeLaws.SolidRefusals names, and a fold the contact compilers cannot expand. A detail shape reaches no
+    // contact compiler, so it owes none and contributes no collider. Returns the collider count the creation costs
+    // (one per expanded copy), for the placement ceiling.
+    private static long RefuseSolidVariantShapes(WorldPrototype creation, string path, string variantId, List<string> errors) {
+        var colliders = 0L;
+
+        foreach (var solidShape in (creation.Document.Shapes ?? [])) {
+            if (solidShape.Detail == true) {
+                continue;
+            }
+
+            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(shape: solidShape)) {
+                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
+            }
+
+            if (!ShapeDomainOps.TryExpand(
+                domain: solidShape.Domain,
+                subject: solidShape.Position,
+                frames: out var solidFrames,
+                refusal: out var solidRefusal
+            )) {
+                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
+
+                continue;
+            }
+
+            colliders += solidFrames.Length;
+        }
+        return colliders;
     }
 }

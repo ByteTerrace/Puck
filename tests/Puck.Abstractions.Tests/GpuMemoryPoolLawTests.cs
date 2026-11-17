@@ -12,6 +12,32 @@ public sealed class GpuMemoryPoolLawTests {
     private const ulong Block = 1024UL;
 
     [Fact]
+    public void PressureReleasesEmptyBlocksAndRemembersLiveBlocksUntilTheirLastReturn() {
+        var (pool, log) = Pool();
+        var empty = Place(key: 0, pool: pool, size: 64);
+        var live = Place(key: 1, pool: pool, size: 64);
+        var neighbour = Place(key: 1, pool: pool, size: 64);
+
+        pool.Return(placement: empty);
+        pool.Trim();
+        pool.Trim();
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "free 1"]);
+        Assert.Equal(1, pool.Blocks);
+        pool.Return(placement: live);
+        Assert.Equal(1, pool.Blocks);
+        pool.Return(placement: neighbour); // The owner's fence can return this much later than the pressure request.
+        Assert.Equal(0, pool.Blocks);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "free 1", "free 2"]);
+        Assert.Throws<InvalidOperationException>(testCode: () => pool.Return(placement: neighbour));
+        var fresh = Place(key: 0, pool: pool, size: 64);
+
+        pool.Return(placement: fresh); // New blocks do not inherit an obsolete pressure request.
+        Assert.Equal(1, pool.Blocks);
+        pool.FreeAll();
+        pool.Trim();
+        Assert.Equal(0, pool.Blocks);
+    }
+    [Fact]
     public void AStaleReturnIsRefusedOnceItsOffsetHoldsAnotherResource() {
         var (pool, log) = Pool();
         var first = Place(key: 0, pool: pool, size: 64UL);

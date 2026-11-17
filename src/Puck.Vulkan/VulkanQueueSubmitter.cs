@@ -9,6 +9,36 @@ namespace Puck.Vulkan;
 public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
+    // Only VulkanLogicalDevice's timeline transaction calls this. It joins the graphics queue to the signal
+    // before returning, so no consumer can omit the graphics-side dependency.
+    internal void BindSparse(VulkanDeviceCommands device, VkQueue queue, nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings,
+        nint semaphore, ulong waitValue, ulong signalValue) {
+        if (device.QueueBindSparse == null) { throw new InvalidOperationException(message: "vkQueueBindSparse is unavailable on a sparse-enabled device."); }
+        fixed (VkSparseMemoryBind* ranges = bindings) {
+            var buffers = new VkSparseBufferMemoryBindInfo { BindCount = ((uint)bindings.Length), Buffer = buffer, PBinds = ((nint)ranges) };
+            var timeline = new VkTimelineSemaphoreSubmitInfo {
+                PSignalSemaphoreValues = ((nint)(&signalValue)),
+                PWaitSemaphoreValues = ((nint)(&waitValue)),
+                SType = VkTimelineSemaphoreSubmitInfo.StructureType,
+                SignalSemaphoreValueCount = 1,
+                WaitSemaphoreValueCount = 1,
+            };
+            var info = new VkBindSparseInfo {
+                BufferBindCount = 1,
+                PBufferBinds = ((nint)(&buffers)),
+                PNext = ((nint)(&timeline)),
+                PSignalSemaphores = ((nint)(&semaphore)),
+                PWaitSemaphores = ((nint)(&semaphore)),
+                SType = VkBindSparseInfo.StructureType,
+                SignalSemaphoreCount = 1,
+                WaitSemaphoreCount = 1,
+            };
+
+            device.QueueBindSparse(queue.Handle, 1, in info, 0).ThrowIfFailed(device: device, operation: "vkQueueBindSparse");
+            GpuQueueWork.Process.Signal();
+        }
+    }
+
     // Counts its vkQueueSubmit in GpuQueueWork: an execute when it carries command buffers, a signal when it carries a
     // fence or semaphore, under the calling thread's category.
     private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default, GpuQueueCause cause = GpuQueueCause.Unbatched) {
@@ -69,6 +99,7 @@ public sealed unsafe class VulkanQueueSubmitter {
             ).ThrowIfFailed(device: device, operation: "vkQueueSubmit");
         }
     }
+
     // Submits a batch's deferred submissions in one vkQueueSubmit, a submit info each with its own waits, arming one
     // fence for the whole batch (VulkanSubmissionBatch).
     internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, nint fenceHandle) {

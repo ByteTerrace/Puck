@@ -151,7 +151,7 @@ public sealed class GpuKernelCountersLawTests {
                     Buffer: readback,
                     DestinationAccess: GpuAccess.HostRead,
                     DestinationStages: GpuStage.Host,
-                    SourceAccess: GpuAccess.TransferWrite,
+                    SourceAccess: GpuAccess.CopyWrite,
                     SourceStages: GpuStage.Transfer
                 ),
             ]

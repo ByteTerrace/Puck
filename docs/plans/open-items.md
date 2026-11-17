@@ -974,8 +974,10 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
-contiguous fallback, shared retirement timeline and destination page proofs:
-native mappings on both backends, page admission and pressure release.
+contiguous fallback, shared retirement timeline, destination page proofs,
+native-pool pressure trim and Vulkan's ordered binding door: native sparse
+resource ownership, Direct3D 12 tile mappings, page admission and pressure
+unmapping/compaction. Mesh regions still use contiguous storage.
 The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
 current hardware qualification reads the 4070, 2060 and Deck, then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
@@ -983,6 +985,17 @@ owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
+
+- [medium] Before sparse external targets are used, retain the exact host-word
+  coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
+  an external region can also write beyond that prefix. Its consumed disjoint
+  words currently need its publication owner to re-owe them. Step 7 owns the
+  coverage implementation and a nonzero-target, disjoint-write remapping law.
+- [low] `GpuBufferPages.Lease.IsCurrent`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuBufferPages.cs:138`) scans a lease's
+  pages after an unrelated global revision on every later check. Step 7 owns
+  revision-aware retained-proof validation before sparse churn is enabled.
 
 - [medium] Background GPU work is serviced inside the host's timer wait and
   not inside the swap chain's own (`ISwapChainPacing.TryWaitForFrame`) or a
@@ -996,11 +1009,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
-- [low · inferred, not run on a device] The Vulkan fence watcher
-  (`VulkanFenceWatch`) waits fences in submission order on one thread, so a
-  completion is signaled only after every earlier watched submission's. One
-  queue retires in order, so that holds today; a second queue needs a wait on
-  any of several fences.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -1072,13 +1080,6 @@ Lifecycle lows, each argued from source and not run:
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
   in turn and the scene cannot rebuild while the bake is pending. Count the
   timeout as stale-scene evidence.
-- [low] `SdfMeshStore`'s documentation says a set a World is baking or loading
-  is never cut short by another's write, but a write protects only its own
-  set: two 4 GiB sets against the 8 GiB cap can evict a peer's live set.
-  Correct the documentation or give a recently stamped set a grace window.
-- [low · plausible] A cache set directory that vanishes mid-listing resets the
-  retention tally to an undercount (`CacheRetention.EnforceSetsCore` catches
-  the whole walk's `IOException`). Catch per child directory.
 
 #### Memory on the Deck tier
 
@@ -1571,18 +1572,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `physics.contact` still counts through the shared atomic
-  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
-  a surviving convex query adds three or four `WorkCount.AddShared` CAS
-  updates, even without a reader. The cause is shared counter storage, not
-  the physics wrapper. Add single-writer shards in the common counting home
-  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
-  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
-  handling rather than making physics carry a second aggregator. Preserve
-  totals when a writer thread exits, and bound retained shard state under
-  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
-  Check concurrent writers, reads and retirement for exact monotonic totals,
-  then physics ordering/friction laws and `world.counters physics.contact`.
+- [medium] The SDF field counters still count through the shared atomic
+  `WorkCounterSet` on per-query paths: `SdfFieldEvaluator.PointWork`
+  (`PointEvaluations` and `PointInstructions` per point walk,
+  `SdfFieldEvaluator.PointWalk.cs`), `SdfQueryWork.ProcessWork`
+  (`GradientTaps` per tap, `SdfFieldEvaluator.cs`) and
+  `SdfBoundsCache.ProcessWork` (`PrepassBounds`,
+  `SdfFieldEvaluator.Bounds.cs`). Each is two or three `AddShared` CAS
+  updates per evaluation, which `ShardedWorkCounterSet` replaces with a
+  plain store per thread. Move them onto it:
+  `SdfFieldEvaluator.CountArrayPayload` and `CreateReachScratch` take a
+  `WorkCounterSet` and need a counting parameter both types satisfy, and
+  `puck bench world` (`WorldBenchmarks`) lists the sets as sources.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -1941,11 +1942,6 @@ Companions, beside the protocol's steps:
 Player state, beside [the hub plan](hub-and-saves.md#build-order)'s durable
 images (H7), battery saves (H8) and minimal identities:
 
-- [high] The deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`)
-  admits a solid variant whose shape the load validator refuses
-  (`CreationShapeLaws.SolidRefusals` runs only on the template's base
-  prototype), so the sweep can install a document that load rejects. The gate
-  should be the load validator's own child laws.
 - [medium] `world.save` refuses on the debug world: it names the
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
@@ -2136,8 +2132,6 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   and counts a failure (`ReadFlockAffinity`), and a binding whose local is
   absent is dropped at its sweep's end, re-arming an Edge rule
   (`RuleEvaluator`'s `HoldOnFault`). Decide what each absence means.
-- [low] A routed `body.where` appends ` anchor=body:N` to a refusal as well as
-  to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
   rows if the grant vocabulary allows. The `contribution:` subject of
@@ -2163,13 +2157,13 @@ lane's.
   hearth companions the debug world's `references` name, beside the boot
   authority. Hall's scenarios cross none of them; a fixture that overrides
   `references` and `destinations` to none runs one authority.
-- [medium] The authority-level replay start commits before it validates: with
-  geometry or machine configuration edited after the checkpoint,
-  `WorldPersistence.ReplayStart.cs` installs the machine reconfiguration and
-  the definition, and only then does `RestoreCheckpointCore` validate, so a
-  refused checkpoint leaves both moved. The debugger's machine-snapshot
-  restore has the same shape (`WorldAddonRuntime.Debugger.cs`). Validate first
-  with `TryValidateCheckpoint` (`IMachineCheckpointRuntime`).
+- [low] The replay start validates a changed configuration's checkpoint against a
+  `WorldPopulation` its definition builds and the machine plan, before anything
+  moves (`WorldPersistence.ValidateCheckpointRestore`). The attached-solid
+  rows (`MovingSolids.ValidateAttached`) read the contact field an install
+  gives the population, which the scratch population lacks (unverified), so
+  they are checked only after the install, and a refusal there still leaves the
+  reconfiguration installed.
 - [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
@@ -2470,8 +2464,8 @@ The edit loop:
   `TryValidateTouchedStateRows` narrows a state write.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
-  reload a same-catalog arena in place (`StateCatalog.HasSameShape` is
-  unused).
+  reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers
+  whether the catalog survives).
 - A state-section edit builds five arenas on the debug world
   (`world.boot.arena-builds`), one not yet attributed, and an undisturbed run
   grows the counter with no edit at all.
@@ -2669,9 +2663,8 @@ Launch and process lifecycles, each a [low]:
 - `WorldProcess` has no state between running and drained: `WaitFor` treats
   exit as drained after one rescan, so a final line arriving later reads as no
   answer. Count end-of-stream per stream and end on drained.
-- `WorldReadiness.Observe` sets its marked flag before the mark write, so a
-  failed write is never retried; and a windowed World nobody asks to wait
-  counts as still growing for its whole life, since only the `world.wait`
+- A windowed World nobody asks to wait counts as still growing for its whole
+  life, since only the `world.wait`
   forms print the readiness line. Have the World print it once ready.
 - Canary's concurrent leg budget (`CanaryCommand.CanaryBudget`) still counts
   external lease queueing, so a later leg can read `BudgetExpired`.
@@ -2683,15 +2676,12 @@ CLI maturity remainders, each a [low]:
   shared line. A lease refusal and the child's own failure can both exit 2.
 - The test batch watchdog writes its cause only to the batch's `.stderr.log`;
   `sweep` regex-scrapes `puck test`'s output for verdict counts.
-- Synchronous actions get no cancellation token (`MotionCommand`,
-  `CountersCommand`), so an interrupt skips cleanup and exit 130.
 - `puck counters` has no `--world-artifact`, so it cannot compare counters
   across builds; `puck compile --watch` watches only the source's own
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck official build --channel` goes
-  unvalidated into `Path.Combine`.
+  line on the same output.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,
@@ -3016,8 +3006,8 @@ proves itself with `puck compile` lowering to the same document.
   (`RetiredGraph.ReleasePublication`) and one awaiting consumers
   (`RetiredGraph.ArmAfterConsumers`) their own completion.
 - [low] Small merges, one lane together:
-  - the work ledgers that wrap a `WorkCounterSet` repeat its forwarding
-    members (`WorldBodyWork`, `FixedContactSweepWork`,
+  - the work ledgers that wrap a `WorkCounterSet` or `ShardedWorkCounterSet`
+    repeat its forwarding members (`WorldBodyWork`, `FixedContactSweepWork`,
     `FixedStaticContactWork`, `WorldBootWork`); a ledger with no behaviour of
     its own is the set;
   - `SdfGpuWork.CopyToReadback` and `GpuKernelCounters`' handle-based copy

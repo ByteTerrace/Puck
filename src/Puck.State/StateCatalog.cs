@@ -1125,65 +1125,6 @@ public sealed class StateCatalog {
             pools: [.. pools]
         );
     }
-    /// <summary>Determines whether another catalog carries the same declaration shape, ignoring instance branding.</summary>
-    /// <param name="other">The catalog to compare with.</param>
-    /// <returns><see langword="true"/> when every descriptor and every family agrees.</returns>
-    public bool HasSameShape(StateCatalog other) {
-        ArgumentNullException.ThrowIfNull(argument: other);
-
-        if (
-            (m_descriptors.Length != other.m_descriptors.Length) ||
-            (m_readOnlyFamilies.Count != other.m_readOnlyFamilies.Count) ||
-            (m_pools.Count != other.m_pools.Count)
-        ) {
-            return false;
-        }
-
-        for (var index = 0; (index < m_descriptors.Length); index++) {
-            var left = m_descriptors[index];
-            var right = other.m_descriptors[index];
-
-            if (
-                !string.Equals(
-                a: left.Name,
-                b: right.Name,
-                comparisonType: StringComparison.Ordinal
-            ) ||
-                (left.Lane != right.Lane) ||
-                (left.Shape != right.Shape) ||
-                (left.Kind != right.Kind) ||
-                (left.Role != right.Role) ||
-                (left.Generated != right.Generated) ||
-                (left.HostOwned != right.HostOwned) ||
-                (left.LaneOrdinal != right.LaneOrdinal) ||
-                ((left.Lane == StateLane.Document) && ((ArenaLayout.ColumnsOf(row: m_rows[left.LaneOrdinal]) != ArenaLayout.ColumnsOf(row: other.m_rows[right.LaneOrdinal])) || !MatchesBehaviors(rowOrdinal: left.LaneOrdinal, row: other.m_rows[right.LaneOrdinal])))
-            ) {
-                return false;
-            }
-        }
-
-        for (var index = 0; (index < m_readOnlyFamilies.Count); index++) {
-            if (m_readOnlyFamilies[index] != other.m_readOnlyFamilies[index]) {
-                return false;
-            }
-        }
-
-        for (var index = 0; (index < m_pools.Count); index++) {
-            var left = m_pools[index];
-            var right = other.m_pools[index];
-
-            if ((left.Name != right.Name) || (left.Record != right.Record) || (left.Capacity != right.Capacity) || (left.Fields.Count != right.Fields.Count) || (left.IsPair != right.IsPair) || (left.LeftPoolOrdinal != right.LeftPoolOrdinal) || (left.RightPoolOrdinal != right.RightPoolOrdinal) || (left.MaxLive != right.MaxLive) || (left.Directed != right.Directed) || (left.AllowSelf != right.AllowSelf)) {
-                return false;
-            }
-            for (var field = 0; (field < left.Fields.Count); field++) {
-                if (left.Fields[field].Declaration != right.Fields[field].Declaration) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
     /// <summary>Gets the descriptor extent of one ownership lane.</summary>
     /// <param name="lane">The lane to describe.</param>
     /// <returns>The lane's descriptor range.</returns>
