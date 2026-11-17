@@ -23,14 +23,15 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// <summary>The longest gap between accruals whose GPU time is banked whole when a service waited on the budget: a
     /// tenth of a second, the slowest pump the budget holds its rate across.</summary>
     public const double MostBankSeconds = 0.1;
+
     // The host payload bytes the budget banks at most: a full slot ring of the largest jobs.
-    private const double MostUploadCreditBytes = (SdfGpuWork.SlotCount * (double)SdfGpuWork.MostUploadJobBytes);
+    private const double MostUploadCreditBytes = (SdfGpuWork.SlotCount * ((double)SdfGpuWork.MostUploadJobBytes));
 
     private readonly Lock m_gate = new();
     private readonly Func<long> m_clock = (clock ?? Stopwatch.GetTimestamp);
-
     private double m_credit = SdfGpuWork.FrameShareSeconds;
     private double m_uploadCredit = MostUploadCreditBytes;
+
     private long m_at;
     private bool m_wanted;
     private double m_charged;
@@ -48,7 +49,7 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     /// <see cref="SdfGpuWork.MostUploadJobBytes"/>.</summary>
     public int UploadAllowance {
         get {
-            lock (m_gate) { return ((int)Math.Clamp(value: m_uploadCredit, min: SdfGpuWork.UploadChunkBytes, max: SdfGpuWork.MostUploadJobBytes)); }
+            lock (m_gate) { return ((int)Math.Clamp(max: SdfGpuWork.MostUploadJobBytes, min: SdfGpuWork.UploadChunkBytes, value: m_uploadCredit)); }
         }
     }
 

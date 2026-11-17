@@ -14,7 +14,6 @@ namespace Puck.Abstractions.Gpu;
 /// <param name="Bytes">The segment's size, in bytes, as its API reports it: a Vulkan heap's size, or zero where the API
 /// reports none (a DXGI segment group).</param>
 public readonly record struct GpuMemorySegment(int Index, string Name, PhysicalMemory Pool, ulong Bytes);
-
 /// <summary>
 /// The segments one device budgets, each with the pool it lies in, as its backend reported them when the device was
 /// created. This is the one place a segment's pool is decided: on unified memory every segment lies in
@@ -58,13 +57,13 @@ public sealed class GpuMemorySegments {
     /// <param name="index">The segment's index, as its API numbers it.</param>
     /// <returns>The segment.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The device has no segment at <paramref name="index"/>.</exception>
-    public GpuMemorySegment this[int index] => ((((uint)index) < MaxSegments) && (m_byIndex[index] is { } segment))
+    public GpuMemorySegment this[int index] => (((((uint)index) < MaxSegments) && (m_byIndex[index] is { } segment))
         ? segment
         : throw new ArgumentOutOfRangeException(
             actualValue: index,
             message: $"The device has no memory segment {index}; it has {string.Join(separator: ", ", values: Segments.Select(selector: static segment => $"{segment.Index} ({segment.Name})"))}.",
             paramName: nameof(index)
-        );
+        ));
 
     /// <summary>Returns the index of the segment a Vulkan memory type allocates from: the heap its
     /// <c>VkMemoryType.heapIndex</c> names.</summary>
@@ -72,14 +71,13 @@ public sealed class GpuMemorySegments {
     /// <returns>The segment's index.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The device has no memory type at <paramref name="memoryTypeIndex"/>,
     /// or these segments were not read from Vulkan.</exception>
-    public int OfMemoryType(uint memoryTypeIndex) => (memoryTypeIndex < ((uint)m_memoryTypeSegments.Length))
+    public int OfMemoryType(uint memoryTypeIndex) => ((memoryTypeIndex < ((uint)m_memoryTypeSegments.Length))
         ? m_memoryTypeSegments[memoryTypeIndex]
         : throw new ArgumentOutOfRangeException(
             actualValue: memoryTypeIndex,
             message: $"The device reports {m_memoryTypeSegments.Length} memory types.",
             paramName: nameof(memoryTypeIndex)
-        );
-
+        ));
     /// <summary>Returns the pool an allocation of a role is expected in: host memory on unified memory and for
     /// <see cref="GpuMemoryRole.HostVisible"/>, the adapter's own memory for the device-local roles on a discrete
     /// adapter (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>). The placement decides the pool an allocation is charged
@@ -96,7 +94,6 @@ public sealed class GpuMemorySegments {
     public static PhysicalMemory ExpectedPool(bool unifiedMemory, GpuMemoryRole role) => ((!unifiedMemory && GpuDeviceMemoryWork.IsDeviceLocal(role: role))
         ? PhysicalMemory.Device
         : PhysicalMemory.Host);
-
     /// <summary>Returns Direct3D 12's segments for a device: the local segment group, and on a discrete adapter the
     /// non-local one. A unified adapter's non-local group names no memory of its own (its system pool and its local
     /// group are one memory), so it is not a segment.</summary>

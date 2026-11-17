@@ -30,6 +30,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms PipelineWaitForms = CommandForms.Of(verb: "pipeline.wait", "<name> compiled|installed|captured [seconds]", "<name> submitted|counted <frames> [seconds]", "<name> resized <width> <height> [seconds]");
     private static readonly CommandForms PipelineInspectForms = CommandForms.Of(verb: "pipeline.inspect", "<name>");
     private static readonly CommandForms PipelineBudgetForms = CommandForms.Of(verb: "pipeline.budget", "<name> [<bytes>|device]");
+
     // Long enough for a cold cross-backend compile of a small pipeline; a script names a longer bound explicitly.
     private const int DefaultWaitSeconds = 30;
 
@@ -57,7 +58,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
         $"paused={entry.ClockPaused.ToString().ToLowerInvariant()} seconds={entry.ClockSeconds:0.###} scale={entry.ClockScale:0.###}"
     );
     private WorldViewGraphHost.Entry? FindEntry(CommandContext context, string name) {
-        if (WorldDefinitionRows.FindGraph(server.ReadView(context).Definition.Views.Graphs, name) is null) { return null; }
+        if (WorldDefinitionRows.FindGraph(graphs: server.ReadView(context: context).Definition.Views.Graphs, name: name) is null) { return null; }
         return (((pipelines is not null) && pipelines.TryGet(
             entry: out var entry,
             name: name
@@ -472,7 +473,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
 
                 if (
                     (WorldDefinitionRows.FindGraph(
-                        graphs: server.ReadView(context).Definition.Views.Graphs,
+                        graphs: server.ReadView(context: context).Definition.Views.Graphs,
                         name: name
                     ) is not { } row) ||
                     (row.Source is null)
@@ -714,7 +715,7 @@ internal sealed class WorldPipelineCommandModule(WorldServer server, IServerLink
                 if (CommandResult.RequireNoArguments(args: in args, verb: "pipeline.status") is { } refusal) {
                     return refusal;
                 }
-                var rows = (server.ReadView(context).Definition.Views.Graphs ?? []);
+                var rows = (server.ReadView(context: context).Definition.Views.Graphs ?? []);
                 var result = new StringBuilder(value: $"[pipeline.status: {rows.Count} row(s)");
 
                 foreach (var row in rows) {

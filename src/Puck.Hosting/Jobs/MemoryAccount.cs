@@ -66,30 +66,32 @@ public sealed class MemoryAccount {
     // The device blocks the ledgers' segment observers charge, by pool: the physical rows of device memory.
     private readonly long[] m_deviceBlocks = new long[Pools];
     // What admitted owners and device families name, by pool and row (pool * Backings + backing).
-    private readonly long[] m_named = new long[Pools * Backings];
+    private readonly long[] m_named = new long[(Pools * Backings)];
     // The admitted host owners' bytes and promises by class, and the reserving device families' by pool and class.
     private readonly long[] m_ownerHeld = new long[MemoryClasses.Count];
     private readonly long[] m_ownerPromised = new long[MemoryClasses.Count];
-    private readonly long[] m_familyHeld = new long[Pools * MemoryClasses.Count];
-    private readonly long[] m_familyPromised = new long[Pools * MemoryClasses.Count];
+    private readonly long[] m_familyHeld = new long[(Pools * MemoryClasses.Count)];
+    private readonly long[] m_familyPromised = new long[(Pools * MemoryClasses.Count)];
     private readonly HashSet<Owner> m_owners = [];
     // The device memory each owner's families hold and are promised, by pool and owner (GpuObjectName.MemoryOwnerOf).
     private readonly Dictionary<(PhysicalMemory Pool, string Owner), FamilyEntry> m_families = [];
     private readonly Dictionary<(string Backend, int Index, PhysicalMemory Pool), SegmentState> m_segments = [];
     private readonly PoolState[] m_pools = [new(), new()];
-    // Serializes Measure and Sample, so each sampled owner's delta is taken from the value it last recorded.
+    // Serializes Measure, so each sampled owner's delta is taken from the value it last recorded.
     private readonly Lock m_sampleGate = new();
     private readonly List<SampledOwner> m_sampled = [];
+
     private readonly Func<long?> m_readAvailable;
 
     private long m_reserved;
     private long? m_budget;
     private long m_negativeResiduals;
+
     private GpuMemoryReading m_device = GpuMemoryReading.Absent;
     private MemorySegmentLimit[] m_segmentLimits = [];
+
     private HostMemorySample? m_sample;
     private long m_sampledAt;
-    private long m_ownersSampledAt;
     // The machine's free physical memory as last read, and when; null where the host reports none.
     private long? m_available;
     private long m_availableAt;
@@ -110,11 +112,11 @@ public sealed class MemoryAccount {
     /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes, which the budget and the
     /// headroom derive from; <see langword="null"/> reads the host's.</param>
     public MemoryAccount(Func<long?>? availablePhysicalBytes = null, long? installedPhysicalBytes = null) {
-        var installed = (installedPhysicalBytes ?? HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
+        var installed = (installedPhysicalBytes ?? (HostMemory.InstalledPhysicalBytes() ?? GC.GetGCMemoryInfo().TotalAvailableMemoryBytes));
 
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AvailablePhysicalBytes);
         DefaultBudget = Math.Max(val1: 0, val2: ((installed * 3) / 4));
-        Headroom = Math.Clamp((installed / 32), (16L << 20), (512L << 20));
+        Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
     }
 
     /// <summary>Gets how long a reading of the machine's free physical memory stands before an admission reads it
@@ -147,7 +149,6 @@ public sealed class MemoryAccount {
     public long DefaultBudget { get; }
     /// <summary>Gets the unspendable failure and allocator reserve.</summary>
     public long Headroom { get; }
-
     /// <summary>Gets the default cache allowance, governed by the same authority as job admission.</summary>
     public long CacheBudget => Math.Clamp((DefaultBudget / 12), (16L << 20), (512L << 20));
 
@@ -210,9 +211,9 @@ public sealed class MemoryAccount {
     /// <returns>The owner.</returns>
     public Owner CreateOwner(string name, MemoryCategory category = MemoryCategory.Live, MemoryClass memoryClass = MemoryClass.Fixed) => new(account: this, category: category, family: null, kind: OwnerKind.Admitted, memoryClass: memoryClass, name: name, pool: PhysicalMemory.Host);
     /// <summary>Creates a sampled owner: an owner whose bytes are a figure its subsystem derives, such as the payload of
-    /// a structure that never reports its growth, read each time the account is measured (<see cref="Measure"/>) or
-    /// samples its owners (<see cref="Sample"/>) and charged in <paramref name="backing"/> from then until the next
-    /// read.</summary>
+    /// a structure that never reports its growth, read each time the account is measured (<see cref="Measure"/>) and
+    /// charged in <paramref name="backing"/> from then until the next measure: admission counts it as of that
+    /// reading.</summary>
     /// <param name="name">The owner's name, for diagnostics.</param>
     /// <param name="backing">The host row its bytes lie in; not <see cref="MemoryBacking.DeviceBlocks"/>.</param>
     /// <param name="read">Returns the bytes the subsystem holds now, at least zero; called outside the account's lock on
@@ -289,7 +290,7 @@ public sealed class MemoryAccount {
 
             for (var index = 0; (index < limits.Length); index++) {
                 var segment = reading.Segments[index];
-                var budget = ((long)Math.Min(val1: segment.Budget, val2: (ulong)long.MaxValue));
+                var budget = ((long)Math.Min(val1: segment.Budget, val2: ((ulong)long.MaxValue)));
 
                 limits[index] = new(Segment: segment.Segment, Budget: budget, SpendLimit: SpendLimitOf(budget: budget));
             }
@@ -333,20 +334,7 @@ public sealed class MemoryAccount {
             lock (m_gate) {
                 m_sample = sample;
                 m_sampledAt = Stopwatch.GetTimestamp();
-                m_ownersSampledAt = m_sampledAt;
             }
-        }
-    }
-    /// <summary>Reads every sampled owner (<see cref="CreateSampledOwner"/>) when the last read is a second old, so the
-    /// bytes they charge follow what their subsystems hold. The host calls it on its frame thread, at the top of a
-    /// frame.</summary>
-    public void Sample() {
-        var now = Stopwatch.GetTimestamp();
-
-        if ((Volatile.Read(location: ref m_ownersSampledAt) is var last) && (last != 0) && ((now - last) < Stopwatch.Frequency)) { return; }
-        lock (m_sampleGate) {
-            foreach (var sampled in m_sampled) { sampled.Sample(); }
-            Volatile.Write(location: ref m_ownersSampledAt, value: now);
         }
     }
     /// <summary>Records the bytes of one class a presentation's selector holds its demand to in a pool, which the
@@ -402,7 +390,7 @@ public sealed class MemoryAccount {
             var deviceLimits = m_segmentLimits.Where(predicate: static limit => (limit.Segment.Pool == PhysicalMemory.Device)).ToArray();
             var sample = m_sample;
             var age = ((sample is null) ? (TimeSpan?)null : Stopwatch.GetElapsedTime(startingTimestamp: m_sampledAt));
-            var direct = Named(pool: PhysicalMemory.Host, backing: MemoryBacking.NativeDirect);
+            var direct = Named(backing: MemoryBacking.NativeDirect, pool: PhysicalMemory.Host);
             var hostRows = new List<MemoryRowReading> {
                 Row(backing: MemoryBacking.DeviceBlocks, bytes: m_deviceBlocks[((int)PhysicalMemory.Host)], measured: false, name: "device-blocks", pool: PhysicalMemory.Host),
                 Row(backing: MemoryBacking.NativeAllocator, bytes: sample?.AllocatorCommitted, measured: true, name: "native-allocator", pool: PhysicalMemory.Host),
@@ -412,9 +400,9 @@ public sealed class MemoryAccount {
             // What the walk's private bytes hold beyond the rows that lie in them: the runtime's code and loader heaps,
             // stacks and the driver's private memory. Device blocks are left in it: whether a driver maps them into the
             // process's private bytes is the driver's, which the walk cannot tell.
-            long? runtime = ((sample?.Walk is { } walk) && (sample.AllocatorCommitted is { } allocator))
+            long? runtime = (((sample?.Walk is { } walk) && (sample.AllocatorCommitted is { } allocator))
                 ? (walk.PrivateBytes - ((allocator + direct) + sample.ManagedCommitted))
-                : null;
+                : null);
 
             if (runtime is < 0) { m_negativeResiduals++; runtime = 0; }
             hostRows.Add(item: new MemoryRowReading(Backing: null, Bytes: runtime, Measured: true, Name: "runtime-and-driver", Named: 0, Pool: PhysicalMemory.Host));
@@ -472,7 +460,7 @@ public sealed class MemoryAccount {
     private static int ClassIndex(PhysicalMemory pool, MemoryClass memoryClass) => ((((int)pool) * MemoryClasses.Count) + ((int)memoryClass));
     // Under m_gate: a row and what its owners name in it; a residual skew makes negative is counted.
     private MemoryRowReading Row(string name, PhysicalMemory pool, MemoryBacking backing, long? bytes, bool measured) {
-        var named = Named(pool: pool, backing: backing);
+        var named = Named(backing: backing, pool: pool);
 
         if ((bytes is { } held) && (held < named)) { m_negativeResiduals++; }
 
@@ -531,7 +519,7 @@ public sealed class MemoryAccount {
     private long? EffectiveLimit(SegmentState state) {
         long? limit = ((RecordedLimit(segment: state.Segment) is { } recorded)
             ? recorded.SpendLimit
-            : ((state.Segment.Bytes != 0UL) ? SpendLimitOf(budget: ((long)Math.Min(val1: state.Segment.Bytes, val2: (ulong)long.MaxValue))) : null));
+            : ((state.Segment.Bytes != 0UL) ? SpendLimitOf(budget: ((long)Math.Min(val1: state.Segment.Bytes, val2: ((ulong)long.MaxValue)))) : null));
 
         return ((state.RefusedLimit is { } refused) ? Math.Min(val1: (limit ?? long.MaxValue), val2: refused) : limit);
     }
@@ -626,7 +614,7 @@ public sealed class MemoryAccount {
             var fits = Fits(extra: net, pool: pool);
 
             if (fits && (segmentState is not null) && (EffectiveLimit(state: segmentState) is { } limit)) {
-                fits = ((bytes <= 0L) || ((segmentState.Owner.HeldLocked + segmentState.Granted + bytes) <= limit));
+                fits = ((bytes <= 0L) || (((segmentState.Owner.HeldLocked + segmentState.Granted) + bytes) <= limit));
             }
 
             var verdict = GpuMemoryVerdict.Granted;
@@ -693,22 +681,30 @@ public sealed class MemoryAccount {
     // left with the budget it was refused under.
     private sealed class SegmentState(GpuMemorySegment segment, Owner owner) {
         public long Granted;
+
         public Owner Owner { get; } = owner;
+
         public long RefusedBudget;
         public long? RefusedLimit;
+
         public GpuMemorySegment Segment { get; } = segment;
     }
+
     // One owner's device memory in one pool, across its families, segments and backends: what its resources hold, the
     // peak its reservations promise together, and its class once a reservation states one.
     internal sealed class FamilyEntry(PhysicalMemory pool, string family) {
         public MemoryClass Class;
         public bool Classified;
+
         public string Family { get; } = family;
+
         // The bytes its reservations state it cannot run without, together.
         public long Floor;
         public long Held;
         public long Peak;
+
         public PhysicalMemory Pool { get; } = pool;
+
         public long Promise => Math.Max(val1: 0L, val2: (Peak - Held));
     }
 
@@ -899,11 +895,13 @@ public sealed class MemoryAccount {
                 m_account.m_ownerPromised[((int)EffectiveClass)] += promise;
             }
         }
+
         // A device family names part of a row and a segment is a row: neither reserves; a family's reservations are
         // DeviceReservation's.
         private void ThrowIfNotAdmitted() {
             if (m_kind != OwnerKind.Admitted) { throw new InvalidOperationException(message: $"Memory owner {Name} names device blocks; device memory is reserved through MemoryAccount.ReserveDevice."); }
         }
+
         /// <inheritdoc/>
         public void Dispose() {
             lock (m_account.m_gate) {
@@ -913,7 +911,6 @@ public sealed class MemoryAccount {
             }
         }
     }
-
     /// <summary>
     /// One holder's reservation of device memory for the resources an owner creates in a pool
     /// (<see cref="ReserveDevice"/>): the most bytes those resources hold at once. The owner's promise is what its
@@ -1039,7 +1036,6 @@ public sealed class MemoryAccount {
             }
         }
     }
-
     // What a backend's ledger asks and reports to: the admission door, a segment owner per segment and a family owner
     // per family and segment.
     private sealed class LedgerOwners(MemoryAccount account, string backend) : IGpuMemoryOwners {

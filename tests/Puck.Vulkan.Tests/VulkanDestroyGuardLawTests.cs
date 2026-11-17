@@ -22,6 +22,7 @@ namespace Puck.Vulkan.Tests;
 public sealed unsafe class VulkanDestroyGuardLawTests {
     // One device-local heap with two memory types, as a law device registers its segments.
     private static readonly GpuMemorySegments OneHeap = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [0x7U, 0U, 0x7U, 0U], profile: default);
+
     private const nint DeviceHandle = 0x0D00;
     private const nint FirstHandle = 0x1000;
     private const nint InstanceHandle = 0x0100;
@@ -492,6 +493,7 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         public void Free(void* ptr) => throw new NotSupportedException();
         public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => throw new NotSupportedException();
     }
+
     // Counts a memory handle the law made up as an allocation the device's ledger admitted.
     private static void Count(VulkanDeviceCommands device, nint memoryHandle, ulong allocationSize, uint memoryTypeIndex, GpuMemoryRole role) {
         var memory = device.Memory!;

@@ -26,6 +26,7 @@ namespace Puck.DirectX.Interop;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDeviceContext, IGpuDeviceRemoval, IGpuPipelineCache, IDisposable {
     private DirectXHeapArena? m_heapArena;
+
     private readonly long m_adapterLuid;
     private readonly IDirectXDeviceApi m_deviceApi;
     private readonly Func<long>? m_adapterLuidProvider;
@@ -34,6 +35,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     private readonly DirectXGpuBindings m_bindings;
     // Owns the deferred submissions every other queue operation must follow (CommandQueueHandle).
     private readonly DirectXGpuQueueSubmitter m_submitter;
+
     private readonly Lock m_dispatchSignatureLock = new();
 
     private nint m_commandQueue;
@@ -141,6 +143,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
                     NumArgumentDescs = 1,
                     pArgumentDescs = &argumentDesc,
                 };
+
                 device->CreateCommandSignature(
                     pDesc: in signatureDesc,
                     pRootSignature: null,
@@ -191,6 +194,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
     // The ledger's device refusals as the last refresh read them; a count that moved makes the reading stale.
     private long m_seenRefusals;
+
     /// <inheritdoc />
     /// <remarks>Reading it first hands the open batch's deferred submissions to the queue
     /// (<see cref="DirectXGpuQueueSubmitter.Split"/>), so an execute, signal or drain a caller puts on the returned queue
@@ -208,6 +212,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return m_commandQueue;
         }
     }
+
     /// <summary>Gets the native queue without handing the batch's deferred submissions to it, for the submitter's own
     /// executes and signals, which are those submissions.</summary>
     internal nint SubmissionQueueHandle {
@@ -217,6 +222,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             return m_commandQueue;
         }
     }
+
     /// <summary>Gets the current device's two shader-visible descriptor heaps, which every descriptor pool is a range of
     /// and every recorded command list binds, creating the device first when it does not exist yet. They are created
     /// with the device and released with it, so a recreated device has a fresh pair.</summary>
@@ -248,6 +254,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// messages and a GPU capture. The presenter registration sets it from <c>GpuDeviceOptions.NameObjects</c>; the
     /// objects are named whenever <see cref="RecordRemoval"/> is on as well.</summary>
     public bool NameObjects { get; init; }
+
     /// <summary>Gets whether the device records device removed extended data (DRED): the auto-breadcrumb trail of every
     /// command list, with the PIX-event label each operation ran under, and the page fault that removed a device, with
     /// the allocations at its address. On by default, and it names the device's objects
@@ -255,6 +262,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// name; a removed device's record is written as <c>[d3d12-dred]</c> lines (<see cref="DirectXRemovalReport"/>)
     /// before the device is recreated or released.</summary>
     public bool RecordRemoval { get; init; } = true;
+
     /// <inheritdoc />
     public DirectXFeatureLevel FeatureLevel { get; }
     /// <summary>Gets whether the created device reports through the debug layer's info queue, so its messages and its
@@ -355,10 +363,11 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         m_capabilities = m_deviceApi.GetDeviceCapabilities(deviceHandle: m_device.Handle);
         EnsureShaderModelFloor(deviceHandle: m_device.Handle);
         var barriers = default(D3D12_FEATURE_DATA_D3D12_OPTIONS12);
+
         ((ID3D12Device*)m_device.Handle)->CheckFeatureSupport(
-            D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12, &barriers, (uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12));
+            Feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS12, FeatureSupportDataSize: ((uint)sizeof(D3D12_FEATURE_DATA_D3D12_OPTIONS12)), pFeatureSupportData: &barriers);
         if (!barriers.EnhancedBarriersSupported) {
-            throw new InvalidOperationException("Direct3D 12 buffer synchronization requires enhanced barriers; update the runtime and GPU driver.");
+            throw new InvalidOperationException(message: "Direct3D 12 buffer synchronization requires enhanced barriers; update the runtime and GPU driver.");
         }
         m_bindings.CreateDeviceHeaps(
             capabilities: m_capabilities,
@@ -478,6 +487,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             output.WriteLine(value: line);
         }
     }
+
     /// <summary>Removes the current device on purpose (<c>ID3D12Device5::RemoveDevice</c>), as a hang or a fault would,
     /// without a timeout detection and recovery: every later call on it reports <c>DXGI_ERROR_DEVICE_REMOVED</c>, which
     /// the host's device-loss recovery handles as a real removal, writing the device's removal record before it
@@ -504,6 +514,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         return true;
     }
+
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
     // descriptor heaps, the budget reading and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
@@ -595,6 +606,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     /// <summary>Gets the heaps this device places its buffers and images in (<see cref="DirectXHeapArena"/>), released with
     /// the device.</summary>
     public DirectXHeapArena HeapArena => (m_heapArena ??= new DirectXHeapArena(calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)Device.Handle)), device: Device.Handle, memory: Memory));
+
     /// <inheritdoc/>
     public void WaitIdle() {
         ObjectDisposedException.ThrowIf(
@@ -608,6 +620,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
         }
 
         using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Drain);
+
         DirectXCommandCalls.SignalAndWait(
             calls: new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device.Handle)),
             fence: ((ID3D12Fence*)m_idleFence),

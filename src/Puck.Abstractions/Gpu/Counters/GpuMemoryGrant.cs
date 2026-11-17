@@ -27,7 +27,6 @@ public enum GpuMemorySettlement {
 /// <param name="Net">The bytes the pool is promised until the grant settles: <paramref name="Bytes"/> less the part a
 /// reservation already promised.</param>
 public readonly record struct GpuMemoryAdmission(GpuMemoryVerdict Verdict, long Bytes, long Net);
-
 /// <summary>
 /// The account's leave to make one device allocation, which only <see cref="GpuDeviceMemoryWork.TryAdmit"/> makes and
 /// <see cref="GpuDeviceMemoryWork.CountAllocated"/> takes: the device, the size the device is asked for, the role, the
@@ -88,7 +87,6 @@ public sealed class GpuMemoryGrant {
         }
     }
 }
-
 /// <summary>
 /// A device allocation that was not made for want of memory: the account refused it before the device was asked, or the
 /// device refused it. Nothing was allocated and nothing is counted; the caller keeps what it had. An owner whose storage

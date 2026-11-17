@@ -2381,10 +2381,12 @@ held to the same budget and refused the same way. The installed
 pipeline rebuilt after a device loss is not a replacement and is never refused:
 nothing else is owned then, and the graph it restores already fit.
 
-The budget comes from `ShaderPipelineMemoryBudget.For`, over the device's
-[memory profile](../rendering/vulkan.md#memory-profile). It is a quarter of the
-device-local memory the profile reports, so it scales with the device, or 512
-MiB when the profile reports none. `pipeline.budget <name> <bytes>` sets a cap
+The budget comes from the process's memory account
+(`ShaderPipelineRenderNode.DeviceBudgetBytes`): what the instance owns or has
+reserved, and the room its pool has left, which `host.memory` prints. A
+replacement is admitted by reserving its peak there, so two instances are never
+promised the same room, and a pool no device reading bounds has no budget.
+`pipeline.budget <name> <bytes>` sets a cap
 that can only lower it for one instance, which lets a test refuse a small
 candidate without a large allocation. `pipeline.budget <name> device` clears
 the cap. Lowering the cap never frees the installed graph; it refuses the next

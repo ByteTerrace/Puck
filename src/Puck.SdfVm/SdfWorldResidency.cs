@@ -152,7 +152,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         Name = name;
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
         MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
-        m_meshDresser = new SdfMeshDresser(MeshPathBake);
+        m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
@@ -239,6 +239,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public SdfFrame? Frame => m_frame;
     /// <summary>Gets the screens the residency binds, or <see langword="null"/> for none.</summary>
     public ISdfScreenSources? ScreenSources => m_screenSources;
+
     // Marks the screen indices this residency declares, which alone may bind a source, clearing every other.
     internal void DeclareScreens(Span<bool> declared) {
         declared.Clear();
@@ -246,6 +247,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             foreach (var screen in sources.Screens) { declared[screen] = true; }
         }
     }
+
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of the
     /// <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
     public int LiveProgramWords { get; private set; }
@@ -403,6 +405,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     // The library the residency made for itself when its host shared none, which it disposes on its last release.
     private readonly SdfMeshLibrary? m_ownedLibrary;
+
     /// <summary>Gives back the creator's hold (<see cref="Release"/>).</summary>
     public void Dispose() => Release();
     /// <summary>Returns a task that completes once the residency is ready (<see cref="IsReady"/>), for a build on the thread
@@ -603,13 +606,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
         tables.AdvanceHitBound();
 
         // The shading selection follows the frame the passes record (the one the tables hold), never a pending one.
-        PrepareShade(frame: m_frame!, device: device);
+        PrepareShade(device: device, frame: m_frame!);
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
         MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         // Latch readiness for this whole frame. A worker finishing after preparation cannot make an image whose
         // exposure was held stand for converged lighting. The next preparation publishes and meters that result.
-        LightingPending = m_frame!.ConvergesLighting && MeshIrradiance.Settling;
+        LightingPending = (m_frame!.ConvergesLighting && MeshIrradiance.Settling);
         // A locked tick adapts once its complete geometry supplies the meter, not over partial mesh arrivals.
         if ((!m_frame.TickLocked || !MeshPathBake.Pending) && !LightingPending) {
             Exposures.Stage(frame: m_frame, irradiance: MeshIrradiance, seconds: ExposureSeconds(context: in context, frame: m_frame));
@@ -697,9 +700,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return m_tables!;
     }
+
     /// <summary>Gets the frames a pass's recording staged because the frame's preparation had not
     /// (<see cref="Staged"/>); zero while every recording finds the frame's shared work done before it begins.</summary>
     public long LateStagings { get; private set; }
+
     /// <summary>Pumps the tables' background GPU work (<see cref="SdfGpuWork.Pump"/>): answers the jobs that completed and
     /// submits the next while the budget allows, among them the bake's sampling. Called on the frame thread at the top of
     /// each frame, before any residency prepares, and after each upload; a residency with no tables pumps nothing.</summary>
@@ -824,6 +829,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the bake of the residency's program into the meshes its views draw.</summary>
     public SdfMeshPathBake MeshPathBake { get; }
+
     private readonly SdfMeshDresser m_meshDresser;
 
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
@@ -835,7 +841,6 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the irradiance volume the latest prepared frame's views read; disabled with indirect light
     /// off.</summary>
     public SdfMeshIrradianceParameters MeshIrradianceParameters { get; private set; }
-
     /// <summary>Gets whether this prepared frame still awaits its requested lighting and exposure convergence.
     /// Background GPU work continues while the graph marks this frame's image as waiting.</summary>
     public bool LightingPending { get; private set; }
@@ -983,8 +988,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime.
         tables.Grant.Name = MeshPathBake.Residency;
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
-        var probeWork = new SdfMeshProbeGpuWork(tables, MeshIrradiance);
-        tables.GpuWork.Add(probeWork);
+        var probeWork = new SdfMeshProbeGpuWork(tables: tables, volume: MeshIrradiance);
+
+        tables.GpuWork.Add(client: probeWork);
         MeshIrradiance.GpuTrace = probeWork;
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // The construction uploaded the frame's program; the frame is packed afresh.

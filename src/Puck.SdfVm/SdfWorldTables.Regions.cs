@@ -37,8 +37,8 @@ public sealed partial class SdfWorldTables {
     private readonly GpuRegionCopyPool m_regionCopyPool;
     // The upload's owed copies, recorded through the tables' counted recorder into the upload's command buffer.
     private readonly GpuRegionCopyRecording m_regionCopies;
-
     private readonly GpuRegion m_programRegion;
+
     // Whether the dynamic-transform region has been packed whole once: its first frame packs every slot.
     private bool m_dynamicTransformsPacked;
     // One more when packed transform contents or the active row count changes. Replacing a source collection with
@@ -52,6 +52,7 @@ public sealed partial class SdfWorldTables {
     private SdfMovedTransforms? m_movedTransformsSource;
     private long m_movedTransformsSerial;
     private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
+
     // Names the regions' host copies, native storage outside the allocator, in the process account; each region reports
     // its own changes, and the owner outlives them (DisposeRegions).
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(name: "sdf.world.region-host-copies");
@@ -59,6 +60,7 @@ public sealed partial class SdfWorldTables {
     // The mesh region's slots: the upload ring's, then one per background GPU work slot, which lands meshes
     // (MeshLandingSlot).
     private const int MeshRegionSlotCount = (FrameRingSize + SdfGpuWork.SlotCount);
+
     // The pool of the mesh region's own copy sets, which the region creates with itself at construction.
     private static GpuDescriptorPoolSizes MeshRegionCopyPoolSizes =>
         GpuRegionCopyPool.SizesOf(
@@ -71,6 +73,7 @@ public sealed partial class SdfWorldTables {
             regionCount: RegionCount,
             slotCount: FrameRingSize
         );
+
     // Region index's region of byteCount bytes under the policy the device's profile selects, its ring in the memory the
     // profile selects, named by its table's role and writing the copy sets reserved for it. The mesh region is always
     // staged: it holds every drawn mesh's vertices and is rewritten only when the draws change, so it belongs in
@@ -105,6 +108,7 @@ public sealed partial class SdfWorldTables {
             recorder: m_gpu.Recorder,
             slotCount: FrameRingSize
         ));
+
     // The mesh region's buffers are named under an owner of their own, apart from the tables' other objects, so the
     // account reserves and classes them as the elastic storage they are (SdfResidencySelector.RegionOwner).
     private static GpuObjectName MeshRegionName => new(owner: SdfResidencySelector.RegionOwner, part: "mesh-region");
@@ -163,6 +167,7 @@ public sealed partial class SdfWorldTables {
     public GpuMemoryBytes TableBytes {
         get {
             var bytes = (new GpuMemoryBytes(DeviceLocal: (((m_previousDynamicTransforms.SizeBytes + m_previousMeshTransforms.SizeBytes) + m_shadowHandoffBuffer.SizeBytes) + ScreenEmission.SizeBytes), HostVisible: 0));
+
             bytes += m_meshHistoryCopies.OwnedBytes;
             bytes += MeshIrradianceBufferBytes;
 

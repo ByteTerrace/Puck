@@ -123,7 +123,7 @@ public readonly record struct MemoryPoolReading(PhysicalMemory Pool, bool Presen
     /// nothing.</summary>
     public long Physical => Rows.Sum(selector: static row => (row.Bytes ?? 0L));
     /// <summary>Gets whether every row holds a figure, so <see cref="Physical"/> is the whole pool.</summary>
-    public bool Complete => Rows.All(predicate: static row => row.Bytes is not null);
+    public bool Complete => Rows.All(predicate: static row => (row.Bytes is not null));
 }
 /// <summary>One segment's recorded budget and spend limit, in bytes.</summary>
 /// <param name="Segment">The segment, with its pool.</param>
@@ -162,7 +162,7 @@ public sealed record HostMemorySample(long? AllocatorCommitted, long ManagedComm
     /// <returns>The sample.</returns>
     public static HostMemorySample Take(IAllocator? allocator, bool walk) {
         var info = GC.GetGCMemoryInfo(kind: GCKind.Any);
-        long? committed = ((allocator as IAllocatorStatistics)?.ReadStatistics() is { } statistics) ? statistics.Committed : null;
+        long? committed = (((allocator as IAllocatorStatistics)?.ReadStatistics() is { } statistics) ? statistics.Committed : null);
 
         return new(AllocatorCommitted: committed, ManagedCollection: info.Index, ManagedCommitted: info.TotalCommittedBytes, Walk: (walk ? HostMemory.WalkProcess() : null));
     }

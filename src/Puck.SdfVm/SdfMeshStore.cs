@@ -40,6 +40,7 @@ public sealed class SdfMeshStore {
     private const ulong Magic = SdfMeshStoreCodec.Magic;
     // The most sets a store keeps, past any machine's builds many times over: its bytes bound it first.
     private const int MaxSets = 4_096;
+
     private readonly IAllocator? m_allocator;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshStore"/> class. Nothing is created until an entry is
@@ -120,6 +121,7 @@ public sealed class SdfMeshStore {
     /// <returns><see langword="true"/> when the store held a sound entry.</returns>
     public bool TryRead(UInt128 identity, SdfMeshGeometry geometry, out SdfMesh? mesh, out int[] materials, out string? refusal) =>
         TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: new SdfMeshManagedStorage(), taking: null);
+
     // Reads a geometry's entry into a storage as TryRead does: the entry is stamped when it is sound, and deleted when its
     // bytes are refused. `taking` is the taking group's ids, which the decode writes the triangle materials in when the mesh
     // can be renumbered back by place (SdfMeshStoreCodec.TryDecode); `declined` is set for a sound entry the storage did not take.
@@ -132,6 +134,7 @@ public sealed class SdfMeshStore {
 
         return read;
     }
+
     /// <summary>Reads a geometry's mesh under a bake's identity as <see cref="TryRead"/> does, leaving the store as it
     /// is: an entry it refuses stays, and a read stamps nothing, so a tool may read a store a running World owns.</summary>
     /// <param name="identity">The bake's identity.</param>
@@ -170,6 +173,7 @@ public sealed class SdfMeshStore {
 
     // The leases this process holds on the sets it publishes from, open until it ends.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<UInt128, FileStream?> m_holds = new();
+
     /// <summary>Reads an entry's file under whatever key it names, leaving the store as it is: a tool that compares the
     /// meshes several builds stored for one geometry reads them this way, since no key reaches another build's
     /// entries.</summary>
@@ -198,13 +202,14 @@ public sealed class SdfMeshStore {
 
         return ((bytes.Length >= (HeaderBytes + ChecksumBytes)) && TryDecode(bytes: bytes, declined: out _, key: BinaryPrimitives.ReadUInt128LittleEndian(source: bytes[8..]), materials: out materials, mesh: out mesh, refusal: out _, storage: new SdfMeshManagedStorage(), taking: null));
     }
+
     // Reads a file's bytes into a buffer sized to it.
     private static void ReadEntryBytes(OwnedBuffer<byte> entry, string path) {
         using var handle = File.OpenHandle(path: path, mode: FileMode.Open, access: FileAccess.Read, share: FileShare.Read, options: FileOptions.SequentialScan);
         var length = RandomAccess.GetLength(handle: handle);
 
         if (length > int.MaxValue) { throw new IOException(message: "The entry is larger than an array."); }
-        entry.Resize(length: ((int)length), clear: false, preserve: false);
+        entry.Resize(clear: false, length: ((int)length), preserve: false);
 
         var bytes = entry.GetSpan();
         var read = 0;
@@ -215,7 +220,7 @@ public sealed class SdfMeshStore {
             if (count == 0) { break; }
             read += count;
         }
-        entry.Resize(length: read, clear: false, preserve: true);
+        entry.Resize(clear: false, length: read, preserve: true);
     }
 
     // The entries this store read, their file bytes, and the time its readers spent reading and decoding them, summed over
@@ -467,7 +472,7 @@ public sealed class SdfMeshStore {
     }
     private string PathOf(UInt128 identity, UInt128 key) => Path.Combine(path1: SetDirectoryOf(identity: identity), path2: (key.ToString(format: "x32", provider: null) + Extension));
     private static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) => SdfMeshStoreCodec.Encode(key: key, materials: materials, mesh: mesh);
-    private static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(bytes: bytes, key: key, storage: storage, taking: taking, mesh: out mesh, materials: out materials, refusal: out refusal, declined: out declined, allocator: allocator);
+    private static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, IAllocator? allocator = null) => SdfMeshStoreCodec.TryDecode(allocator: allocator, bytes: bytes, declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking);
     // Deletes a file the store owns, leaving one another World holds open for a later trim or refusal to remove.
     private static void Delete(string path) => _ = Quietly(action: () => File.Delete(path: path));
     // Runs a file-system action, answering whether the file system allowed it.

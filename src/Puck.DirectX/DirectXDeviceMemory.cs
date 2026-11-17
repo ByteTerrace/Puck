@@ -84,6 +84,7 @@ public static unsafe class DirectXDeviceMemory {
                 : GpuMemorySegments.DirectXNonLocal),
         };
     }
+
     /// <summary>The <c>HRESULT</c> a creation answers when the device has no memory for it (<c>E_OUTOFMEMORY</c>).</summary>
     public const int OutOfMemory = unchecked((int)0x8007000E);
 
@@ -180,7 +181,7 @@ public static unsafe class DirectXDeviceMemory {
         var heap = default(D3D12_HEAP_PROPERTIES);
         var flags = default(D3D12_HEAP_FLAGS);
 
-        resource->GetHeapProperties(&heap, &flags);
+        resource->GetHeapProperties(pHeapFlags: &flags, pHeapProperties: &heap);
         memory.CountAllocated(
             allocation: ((nint)resource),
             grant: memory.Admit(

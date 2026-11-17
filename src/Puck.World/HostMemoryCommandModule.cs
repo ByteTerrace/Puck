@@ -57,6 +57,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
     private static string PoolName(PhysicalMemory pool) => ((pool == PhysicalMemory.Device) ? "device" : "host");
     private static string Bytes(long? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
     private static string Bytes(ulong? bytes) => ((bytes is { } value) ? value.ToString(provider: CultureInfo.InvariantCulture) : "none");
+
     // The most family rows a reading prints; the rest are summed on one line.
     private const int FamilyRows = 16;
 
@@ -64,13 +65,13 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
     private static void AppendPool(StringBuilder text, MemoryPoolReading pool, string note) {
         var admission = pool.Admission;
 
-        text.Append(CultureInfo.InvariantCulture, $" | pool {PoolName(pool: pool.Pool)} physical={pool.Physical} complete={(pool.Complete ? "yes" : "no")} budget={Bytes(pool.Budget)} spend-limit={Bytes(pool.SpendLimit)} held={admission.Held} peak={admission.Peak} retired={admission.Retired} promised={admission.Promised} room={Bytes(admission.Room)} over-limit={admission.OverLimit} forced={admission.Forced} forced-jobs={admission.ForcedJobs} over-limit-grants={admission.OverLimitGrants} over-limit-granted-bytes={admission.OverLimitBytes} refusals={admission.Refusals} device-refusals={admission.DeviceRefusals} pressure-trims={admission.PressureTrims} floors={admission.Floor} admitted={pool.Admitted} reserved={pool.Reserved}{note}");
+        text.Append(CultureInfo.InvariantCulture, $" | pool {PoolName(pool: pool.Pool)} physical={pool.Physical} complete={(pool.Complete ? "yes" : "no")} budget={Bytes(bytes: pool.Budget)} spend-limit={Bytes(bytes: pool.SpendLimit)} held={admission.Held} peak={admission.Peak} retired={admission.Retired} promised={admission.Promised} room={Bytes(bytes: admission.Room)} over-limit={admission.OverLimit} forced={admission.Forced} forced-jobs={admission.ForcedJobs} over-limit-grants={admission.OverLimitGrants} over-limit-granted-bytes={admission.OverLimitBytes} refusals={admission.Refusals} device-refusals={admission.DeviceRefusals} pressure-trims={admission.PressureTrims} floors={admission.Floor} admitted={pool.Admitted} reserved={pool.Reserved}{note}");
         text.Append(CultureInfo.InvariantCulture, $" | classes {PoolName(pool: pool.Pool)}");
         for (var index = 0; (index < MemoryClasses.Count); index++) {
             text.Append(CultureInfo.InvariantCulture, $" {MemoryClasses.NameOf(memoryClass: ((MemoryClass)index))}={admission.ClassHeld[index]}+{admission.ClassPromised[index]}");
         }
         foreach (var row in pool.Rows) {
-            text.Append(CultureInfo.InvariantCulture, $" | row {PoolName(pool: row.Pool)}.{row.Name} bytes={Bytes(row.Bytes)} named={row.Named} residual={Bytes(row.Residual)} ({ResidualName(row: row)})");
+            text.Append(CultureInfo.InvariantCulture, $" | row {PoolName(pool: row.Pool)}.{row.Name} bytes={Bytes(bytes: row.Bytes)} named={row.Named} residual={Bytes(bytes: row.Residual)} ({ResidualName(row: row)})");
         }
     }
     // What a row's residual is.
@@ -102,7 +103,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         } else {
             text.Append(CultureInfo.InvariantCulture, $" | pool device absent ({(unified ? "unified memory: one pool" : $"device reading {reading.State.ToString().ToLowerInvariant()}")})");
         }
-        text.Append(CultureInfo.InvariantCulture, $" | sample age={((long?)pools.SampleAge?.TotalMilliseconds)?.ToString(provider: CultureInfo.InvariantCulture) ?? "none"}ms managed-collection={(sample?.ManagedCollection.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} negative-residuals={pools.NegativeResiduals}");
+        text.Append(CultureInfo.InvariantCulture, $" | sample age={(((long?)pools.SampleAge?.TotalMilliseconds)?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}ms managed-collection={(sample?.ManagedCollection.ToString(provider: CultureInfo.InvariantCulture) ?? "none")} negative-residuals={pools.NegativeResiduals}");
         if (sample?.Walk is { } walk) {
             text.Append(CultureInfo.InvariantCulture, $" | walk private={walk.PrivateBytes} ({(walk.PrivateCommitted ? "committed" : "resident anonymous and swap")}) mapped={walk.MappedBytes} image={walk.ImageBytes} regions={walk.Regions}; host rows in it: native-allocator, native-direct, managed and runtime-and-driver; the driver may also map device blocks into it");
         } else {
@@ -115,10 +116,10 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
             var ledger = ledgers.Where(predicate: entry => (entry.Row.Segment == segment.Segment)).Select(selector: static entry => entry.Row).FirstOrDefault();
             var beyond = ((segment.Usage is { } usage) ? (long?)(((long)usage) - ledger.Held) : null);
 
-            text.Append(CultureInfo.InvariantCulture, $" | segment {segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} budget={segment.Budget} spend-limit={Bytes(limit)} usage={Bytes(segment.Usage)} available-for-reservation={Bytes(segment.AvailableForReservation)} reservation={Bytes(segment.CurrentReservation)} ledger-held={ledger.Held} usage-beyond-ledger={Bytes(beyond)}");
+            text.Append(CultureInfo.InvariantCulture, $" | segment {segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} budget={segment.Budget} spend-limit={Bytes(bytes: limit)} usage={Bytes(bytes: segment.Usage)} available-for-reservation={Bytes(bytes: segment.AvailableForReservation)} reservation={Bytes(bytes: segment.CurrentReservation)} ledger-held={ledger.Held} usage-beyond-ledger={Bytes(bytes: beyond)}");
         }
         foreach (var segment in pools.SegmentAdmissions) {
-            text.Append(CultureInfo.InvariantCulture, $" | admission {segment.Backend}.{segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} limit={Bytes(segment.Limit)} refused-limit={Bytes(segment.RefusedLimit)} held={segment.Held} peak={segment.Peak} promised={segment.Granted}");
+            text.Append(CultureInfo.InvariantCulture, $" | admission {segment.Backend}.{segment.Segment.Name} pool={PoolName(pool: segment.Segment.Pool)} limit={Bytes(bytes: segment.Limit)} refused-limit={Bytes(bytes: segment.RefusedLimit)} held={segment.Held} peak={segment.Peak} promised={segment.Granted}");
         }
         foreach (var (backend, row) in ledgers) {
             text.Append(CultureInfo.InvariantCulture, $" | ledger {backend}.{row.Segment.Name} pool={PoolName(pool: row.Segment.Pool)} held={row.Held} named={row.Named} residual={row.Residual} peak={row.Peak} allocated={row.Allocated} released={row.Released} placement-disagreements={row.Disagreements}");
@@ -179,6 +180,7 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
     }
 
     private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "heap [min-mib]", "collect", "budget [host|device] <bytes|auto>");
+
     // The size, in MiB, past which a large-object-heap tenant is named when host.memory heap is not given one.
     private const int HeapTenantMebibytes = 4;
 

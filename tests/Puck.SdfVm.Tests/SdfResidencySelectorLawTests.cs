@@ -69,7 +69,7 @@ public sealed class SdfResidencySelectorLawTests {
             // The grants also leave the fixed storage its bytes.
             Assert.True(condition: ((granted.Sum() + (700L * Mebibyte)) <= Math.Max(val1: limit.Value, val2: (700L * Mebibyte))), userMessage: $"the grants take the views' bytes at {budget} GiB");
             // A residency over the budget is over it with every other: each is granted less than it names, or none is.
-            var over = budgets.Zip(second: named, resultSelector: static (budget, bytes) => ((bytes > 0L) && (budget < bytes))).ToArray();
+            var over = budgets.Zip(resultSelector: static (budget, bytes) => ((bytes > 0L) && (budget < bytes)), second: named).ToArray();
 
             Assert.True(condition: (over.Count(predicate: static pressed => pressed) is 0 or 3), userMessage: $"the residencies press unevenly at {budget} GiB");
         }
@@ -187,7 +187,7 @@ public sealed class SdfResidencySelectorLawTests {
 
         var share = (charged / 5.0);
 
-        Assert.InRange(actual: share, low: (SdfGpuWork.GpuShare * 0.9), high: (SdfGpuWork.GpuShare * 1.1));
+        Assert.InRange(actual: share, high: (SdfGpuWork.GpuShare * 1.1), low: (SdfGpuWork.GpuShare * 0.9));
 
         // With nobody waiting on it, a gap banks one frame's share and no more.
         var idle = new SdfGpuWorkBudget(clock: () => now);
@@ -203,6 +203,6 @@ public sealed class SdfResidencySelectorLawTests {
             idle.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
             jobs++;
         }
-        Assert.Equal(expected: 1, actual: jobs);
+        Assert.Equal(actual: jobs, expected: 1);
     }
 }

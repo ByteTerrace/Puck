@@ -236,7 +236,7 @@ internal static unsafe class SdfMeshStoreCodec {
         RequireVectorPlanes(width: width, x: x, y: y, z: z);
         var vertices = x.Count;
 
-        if ((storage is not null) && storage.Positions(piece: piece, destination: out var positions)) { DecodeVectors(destination: positions, high: high, low: low, width: width, x: x, y: y, z: z); }
+        if ((storage is not null) && storage.Positions(destination: out var positions, piece: piece)) { DecodeVectors(destination: positions, high: high, low: low, width: width, x: x, y: y, z: z); }
         var normals = 0;
 
         if (cursor.ReadBoolean()) {
@@ -244,48 +244,48 @@ internal static unsafe class SdfMeshStoreCodec {
 
             if (words.Width != 4) { throw new InvalidDataException(message: "Invalid octahedral width."); }
             normals = words.Count;
-            if ((storage is not null) && storage.Normals(piece: piece, destination: out var octahedral)) { DecodeOctahedral(destination: octahedral, plane: words); }
+            if ((storage is not null) && storage.Normals(destination: out var octahedral, piece: piece)) { DecodeOctahedral(destination: octahedral, plane: words); }
         } else {
             x = ReadPlaneBytes(cursor: ref cursor);
             y = ReadPlaneBytes(cursor: ref cursor);
             z = ReadPlaneBytes(cursor: ref cursor);
             RequireVectorPlanes(width: 4, x: x, y: y, z: z);
             normals = x.Count;
-            if ((storage is not null) && storage.Normals(piece: piece, destination: out var components)) { DecodeVectors(destination: components, high: default, low: default, width: 4, x: x, y: y, z: z); }
+            if ((storage is not null) && storage.Normals(destination: out var components, piece: piece)) { DecodeVectors(destination: components, high: default, low: default, width: 4, x: x, y: y, z: z); }
         }
         var indices = ReadPlaneBytes(cursor: ref cursor);
 
-        if ((storage is not null) && storage.Indices(piece: piece, destination: out var indexWords)) { DecodePlane(destination: indexWords, plane: indices); }
+        if ((storage is not null) && storage.Indices(destination: out var indexWords, piece: piece)) { DecodePlane(destination: indexWords, plane: indices); }
         var materials = ReadPlaneBytes(cursor: ref cursor);
 
-        if ((storage is not null) && storage.Materials(piece: piece, destination: out var materialWords)) {
+        if ((storage is not null) && storage.Materials(destination: out var materialWords, piece: piece)) {
             DecodePlane(destination: materialWords, plane: materials);
             remap?.Apply(ids: materialWords);
         }
         var members = cursor.Count(itemBytes: 32);
         var memberBytes = cursor.Take(length: (members * 32));
 
-        if ((storage is not null) && storage.Members(piece: piece, destination: out var memberWords)) { DecodeMembers(bytes: memberBytes, destination: memberWords); }
+        if ((storage is not null) && storage.Members(destination: out var memberWords, piece: piece)) { DecodeMembers(bytes: memberBytes, destination: memberWords); }
         var vertexMembers = cursor.Count(itemBytes: 1);
         var vertexMemberBytes = cursor.Take(length: vertexMembers);
 
-        if ((storage is not null) && storage.VertexMembers(piece: piece, destination: out var vertexMemberBytesOut)) { vertexMemberBytes.CopyTo(destination: vertexMemberBytesOut); }
+        if ((storage is not null) && storage.VertexMembers(destination: out var vertexMemberBytesOut, piece: piece)) { vertexMemberBytes.CopyTo(destination: vertexMemberBytesOut); }
         var blends = ReadPlaneBytes(cursor: ref cursor);
         var xy = ReadPlaneBytes(cursor: ref cursor);
         var gradientZ = ReadPlaneBytes(cursor: ref cursor);
 
         if ((blends.Count != xy.Count) || (blends.Count != gradientZ.Count)) { throw new InvalidDataException(message: "Invalid influence planes."); }
-        if ((storage is not null) && storage.Influences(piece: piece, destination: out var influences)) { DecodeInfluences(blends: blends, destination: influences, gradientXY: xy, gradientZ: gradientZ); }
+        if ((storage is not null) && storage.Influences(destination: out var influences, piece: piece)) { DecodeInfluences(blends: blends, destination: influences, gradientXY: xy, gradientZ: gradientZ); }
         var levels = new SdfMeshLevelShape[cursor.Count(itemBytes: 14)];
 
         for (var level = 0; (level < levels.Length); level++) {
             var error = cursor.ReadSingle();
             var levelIndices = ReadPlaneBytes(cursor: ref cursor);
 
-            if ((storage is not null) && storage.LevelIndices(piece: piece, level: level, destination: out var levelIndexWords)) { DecodePlane(destination: levelIndexWords, plane: levelIndices); }
+            if ((storage is not null) && storage.LevelIndices(destination: out var levelIndexWords, level: level, piece: piece)) { DecodePlane(destination: levelIndexWords, plane: levelIndices); }
             var levelMaterials = ReadPlaneBytes(cursor: ref cursor);
 
-            if ((storage is not null) && storage.LevelMaterials(piece: piece, level: level, destination: out var levelMaterialWords)) {
+            if ((storage is not null) && storage.LevelMaterials(destination: out var levelMaterialWords, level: level, piece: piece)) {
                 DecodePlane(destination: levelMaterialWords, plane: levelMaterials);
                 remap?.Apply(ids: levelMaterialWords);
             }
@@ -374,8 +374,8 @@ internal static unsafe class SdfMeshStoreCodec {
 
             destination[index] = new SdfMeshMember(
                 BinaryPrimitives.ReadInt32LittleEndian(source: member),
-                new Vector3(x: ReadSingle(bytes: member, at: 4), y: ReadSingle(bytes: member, at: 8), z: ReadSingle(bytes: member, at: 12)),
-                new Quaternion(x: ReadSingle(bytes: member, at: 16), y: ReadSingle(bytes: member, at: 20), z: ReadSingle(bytes: member, at: 24), w: ReadSingle(bytes: member, at: 28)));
+                new Vector3(x: ReadSingle(at: 4, bytes: member), y: ReadSingle(at: 8, bytes: member), z: ReadSingle(at: 12, bytes: member)),
+                new Quaternion(x: ReadSingle(at: 16, bytes: member), y: ReadSingle(at: 20, bytes: member), z: ReadSingle(at: 24, bytes: member), w: ReadSingle(at: 28, bytes: member)));
         }
     }
     private static float ReadSingle(ReadOnlySpan<byte> bytes, int at) => BitConverter.Int32BitsToSingle(value: BinaryPrimitives.ReadInt32LittleEndian(source: bytes[at..]));
@@ -386,9 +386,9 @@ internal static unsafe class SdfMeshStoreCodec {
         uint blend = 0, xy = 0, z = 0;
 
         for (var index = 0; (index < destination.Length); index++) {
-            blend = Add(plane: blends, index: index, previous: blend);
-            xy = Add(plane: gradientXY, index: index, previous: xy);
-            z = Add(plane: gradientZ, index: index, previous: z);
+            blend = Add(index: index, plane: blends, previous: blend);
+            xy = Add(index: index, plane: gradientXY, previous: xy);
+            z = Add(index: index, plane: gradientZ, previous: z);
             destination[index] = new SdfMeshInfluence(blend: blend, gradientXY: xy, gradientZ: z);
         }
     }
@@ -398,11 +398,13 @@ internal static unsafe class SdfMeshStoreCodec {
         3 => Add3(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous),
         _ => Add4(bytes: plane.Bytes, count: plane.Count, index: index, previous: previous),
     };
+
     // A read position over an entry's inflated bytes. A read past the end is an invalid entry.
     private ref struct Cursor(ReadOnlySpan<byte> data) {
         private readonly ReadOnlySpan<byte> m_data = data;
 
         public int Position;
+
         public readonly int Length => m_data.Length;
 
         public byte ReadByte() {
@@ -443,6 +445,7 @@ internal static unsafe class SdfMeshStoreCodec {
 
             return count;
         }
+
         private readonly void Require(int bytes) {
             if ((bytes < 0) || (bytes > (m_data.Length - Position))) { throw new InvalidDataException(message: "The entry ends inside a plane."); }
         }

@@ -147,7 +147,6 @@ public readonly struct GpuObjectName : IEquatable<GpuObjectName> {
             )
         );
     }
-
     /// <summary>Returns the owner family the object's device memory is attributed to (<see cref="GpuDeviceMemoryWork"/>):
     /// the owner without its instance suffixes (the text from its first <c>$</c>, so every session view's graph instance
     /// shares one family), then <c>/</c> and the part, or <see cref="UnnamedFamily"/> for the default value. A family has
@@ -166,7 +165,6 @@ public readonly struct GpuObjectName : IEquatable<GpuObjectName> {
             str2: Part
         );
     }
-
     /// <summary>Returns the owner a family's device memory is reserved under: the family's text before its part, which
     /// is the object's owner without its instance suffixes. Every part of one owner, and every instance of it, shares
     /// one reservation key, so a holder that creates many kinds of object reserves once for all of them.</summary>

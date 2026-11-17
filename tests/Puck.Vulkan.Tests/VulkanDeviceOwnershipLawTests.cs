@@ -18,6 +18,7 @@ namespace Puck.Vulkan.Tests;
 /// the device API records each table whose device it destroys.</summary>
 public sealed unsafe class VulkanDeviceOwnershipLawTests {
     private static readonly GpuMemorySegments OneHeap = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [0x1U, 0U], profile: default);
+
     private const nint FirstDeviceHandle = 0x0D00;
     private const nint SecondDeviceHandle = 0x0E00;
 

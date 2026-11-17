@@ -217,6 +217,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         // Another ledger's grant is refused.
         _ = Assert.Throws<ArgumentException>(testCode: () => new GpuDeviceMemoryWork(backend: "directx").CountAllocated(allocation: 0x12, grant: counted));
     }
+
     // An account that answers every admission with one verdict and logs what it was asked and told.
     private sealed class RefusingOwners : IGpuMemoryOwners {
         public List<(string Call, long Bytes, long PayerBytes)> Log { get; } = [];
@@ -235,6 +236,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
             public void Change(long bytes, Puck.Abstractions.Memory.MemoryBacking backing) { }
         }
     }
+
     [Fact]
     public void TheLegendMakesEveryCountPacing() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");

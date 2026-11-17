@@ -45,8 +45,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
-   grant; then step 3.
+   window, steps 1, 2 and 3's windowed readings, and step 7's prototype with a
+   GPU grant; then what step 3 left, background work serviced off the frame
+   pump.
 3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -952,13 +953,31 @@ the tour's remaining reds and the Moth's shin groups share, then
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
-`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
-and 2's windowed readings and step 7's prototype under a GPU grant, then step
-3. The plan owns the decisions, the build order
+`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
+2 and 3's windowed readings and step 7's prototype under a GPU grant, then
+[what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
+owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [high] Step 3 admits every device allocation and left background GPU work
+  taken only at frame pumps: servicing it during the host's present wait or on
+  a queue of its own, the bake's backlog admission as a rate of wall time, jobs
+  that lease the generations they read and reserve what they hold. The plan's
+  step 3 names the measurement that chooses between the two.
+- [medium] On unified memory a mesh region's staging lies in the pool its
+  buffers do and is elastic storage there: the grant covers
+  `SdfResidencyGrant.StagingAllowanceBytes` of it, and a flush that stages
+  more with the pool at its limit is refused as a region's growth is, where it
+  throws from the upload. Reserve the staging with the flush that sizes it.
+- [low] A mesh region whose device refuses a growth after the account admitted
+  it, while its draw records alone pass the buffer it holds, still throws
+  (`SdfWorldTables.EnsureMeshRegionCapacity`): the draw records are the floor
+  and have no smaller form.
+- [low] A shader pipeline's reservation is lowered when its replaced objects
+  are released; a build discarded before it installs keeps its peak promised
+  until the instance's next build or release.
 - [low] A test schedule admits no authored command (`WorldScheduleCommands`,
   `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
   (`world.state.cell.set liftCall`) where a player presses the car's buttons.

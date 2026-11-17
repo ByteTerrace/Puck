@@ -29,7 +29,6 @@ public sealed partial class ShaderPipelineRenderNode {
     // The capture readback's staging buffer, counted like every other resource at its logical size: the published RGBA8
     // surface's width times its height times four. Zero until the first capture creates it.
     private ulong m_readbackBytes;
-
     // The instance's reservation in the process's memory account, made for the owner its resources are named under.
     // Fixed storage: a replacement that finds no room is refused here, before anything is allocated, and the installed
     // graph's own allocations are never refused.
@@ -388,10 +387,11 @@ public sealed partial class ShaderPipelineRenderNode {
     // a planned access draws into it: a graphics pass's output or a package's color-attachment port.
     public static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
-            ? (GpuImageUsage.DepthAttachment | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.ShaderReadOnly) ? GpuImageUsage.Sampled : GpuImageUsage.None))
-            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.RenderTarget)
+            ? GpuImageUsage.DepthAttachment | (Accessed(layout: GpuImageLayout.ShaderReadOnly, plan: plan, storage: storage) ? GpuImageUsage.Sampled : GpuImageUsage.None)
+            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(layout: GpuImageLayout.RenderTarget, plan: plan, storage: storage)
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+
     // Whether a planned access takes a storage in a layout.
     private static bool Accessed(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuImageLayout layout) =>
         plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == storage.Index) && (access.Use.Layout == layout))));

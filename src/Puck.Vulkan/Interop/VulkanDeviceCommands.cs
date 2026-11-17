@@ -14,7 +14,9 @@ namespace Puck.Vulkan.Interop;
 public sealed unsafe class VulkanDeviceCommands {
     /// <summary>Gets the memory this device sub-allocates its buffers and offscreen images from.</summary>
     public VulkanMemoryArena Arena => (m_arena ??= new VulkanMemoryArena(device: this));
+
     private VulkanMemoryArena? m_arena;
+
     /// <summary>The <c>vkAcquireNextImageKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
     /// <summary>The <c>vkAllocateCommandBuffers</c> entry point.</summary>
@@ -61,12 +63,16 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
     /// <summary>The <c>vkCmdDrawIndirect</c> entry point, used by the fixed-record fallback.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void> CmdDrawIndirect;
+
     /// <summary>Gets whether the device enabled several indirect records in one native call.</summary>
     public bool MultiDrawIndirectEnabled { get; }
+
     /// <summary>The <c>vkCmdDrawIndexed</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void> CmdDrawIndexed;
+
     /// <summary>The device extension counted indirect draws need, <c>VK_KHR_draw_indirect_count</c>.</summary>
     public const string DrawIndirectCountExtension = "VK_KHR_draw_indirect_count";
+
     /// <summary>The <c>vkCmdDrawIndirectCountKHR</c> entry point; <see langword="null"/> unless
     /// <c>VK_KHR_draw_indirect_count</c> is enabled beside <c>multiDrawIndirect</c>.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void> CmdDrawIndirectCountKhr;
@@ -627,7 +633,6 @@ public sealed unsafe class VulkanDeviceCommands {
 
     /// <summary>Records that <c>vkDestroyDevice</c> destroyed the device.</summary>
     public void MarkDestroyed() => IsDestroyed = true;
-
     /// <summary>Destroys or frees one object this device owns through the object type's entry point, skipping a zero
     /// handle. Every <c>vkDestroy*</c> child-object entry point and <c>vkFreeMemory</c> share this shape, and this is
     /// the only zero-handle guard on them: every device-level destroy path calls it without checking first.</summary>

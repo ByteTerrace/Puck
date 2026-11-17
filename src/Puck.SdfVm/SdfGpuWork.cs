@@ -60,6 +60,7 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// <param name="job">The taken job.</param>
     /// <returns>The description; by default the job's type name.</returns>
     string Describe(object job) => job.GetType().Name;
+
     /// <summary>Gets the bytes of the client's own buffers for its jobs, by the memory they live in.</summary>
     GpuMemoryBytes OwnedBytes { get; }
     /// <summary>Gets the category the client's jobs count under in <see cref="GpuQueueWork"/>.</summary>
@@ -71,6 +72,7 @@ public interface ISdfGpuWorkClient : IDisposable {
 public sealed class SdfGpuWorkReadback {
     private readonly object m_gate = new();
     private readonly SdfGpuWork m_owner;
+
     private bool m_released;
     private IGpuReadbackBuffer? m_buffer;
 
@@ -89,6 +91,7 @@ public sealed class SdfGpuWorkReadback {
     public int Length { get; }
     /// <summary>The submission's GPU timestamp duration in seconds, or null on a queue without timestamps.</summary>
     public double? GpuSeconds { get; }
+
     internal bool Released { get { lock (m_gate) { return m_released; } } }
 
     /// <summary>Copies the bytes the job copied back into <paramref name="destination"/>; valid until
@@ -115,12 +118,12 @@ public sealed class SdfGpuWorkReadback {
         lock (m_gate) {
             m_buffer = null;
             m_released = true;
-            Monitor.PulseAll(m_gate);
+            Monitor.PulseAll(obj: m_gate);
         }
         m_owner.Wake();
     }
     // There is no disposable event for a late release to race. The condition and the buffer share one gate.
-    internal void WaitReleased() { lock (m_gate) { while (!m_released) { Monitor.Wait(m_gate); } } }
+    internal void WaitReleased() { lock (m_gate) { while (!m_released) { Monitor.Wait(obj: m_gate); } } }
 }
 /// <summary>A slot of the background GPU work a client records one job into (<see cref="ISdfGpuWorkClient.Record"/>),
 /// valid only during that call: its index, which a client's own per-slot resources follow, and its open command
@@ -202,15 +205,15 @@ public sealed class SdfGpuWork : IDisposable {
     public const double IdleSeconds = 2.0;
     /// <summary>The fewest host payload bytes an upload job is allowed to stage, which the budget may overdraw once: one
     /// MiB.</summary>
-    public const int UploadChunkBytes = 1 << 20;
+    public const int UploadChunkBytes = (1 << 20);
     /// <summary>The most host payload bytes one upload job stages: eight MiB, within a staged region slot's staging floor
     /// (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
-    public const int MostUploadJobBytes = 8 << 20;
+    public const int MostUploadJobBytes = (8 << 20);
     /// <summary>The host payload, in bytes a second, a presentation's background uploads stage at most: a chunk in every
     /// slot of one service each frame at the 60 Hz frame bar. It accrues by wall time between pumps, so a presentation
     /// whose frames come slower (a heavy frame, or one the compositor throttles) stages more a pump and lands its words
     /// in the same seconds.</summary>
-    public const double UploadBytesPerSecond = (SlotCount * UploadChunkBytes) * 60.0;
+    public const double UploadBytesPerSecond = ((SlotCount * UploadChunkBytes) * 60.0);
     /// <summary>The share of wall time, between pumps, one pump spends recording jobs at most: two milliseconds of a
     /// 60 Hz frame. A pump spends at least <see cref="HostBudget"/> and at most <see cref="MostHostBudget"/>.</summary>
     public const double HostShare = 0.12;
@@ -228,32 +231,36 @@ public sealed class SdfGpuWork : IDisposable {
 
     /// <summary>The wall time one <see cref="Drive"/> takes at most: one frame at the 60 Hz frame bar, so the host's
     /// loop comes round to its console and window as often for each residency a held frame drives.</summary>
-    public static readonly TimeSpan DriveSlice = TimeSpan.FromSeconds(1.0 / 60.0);
+    public static readonly TimeSpan DriveSlice = TimeSpan.FromSeconds(value: (1.0 / 60.0));
 
     /// <summary>Returns the GPU time, in seconds, an upload job of <paramref name="bytes"/> host payload bytes is
     /// estimated to take (<see cref="UploadCopyBytesPerSecond"/>).</summary>
     /// <param name="bytes">The job's host payload bytes.</param>
     /// <returns>The estimate, in seconds.</returns>
     public static double UploadSecondsOf(long bytes) => (bytes / UploadCopyBytesPerSecond);
+
     /// <summary>The recording time one pump spends at least, whatever the wall time since the last.</summary>
-    public static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(2);
+    public static readonly TimeSpan HostBudget = TimeSpan.FromMilliseconds(milliseconds: 2);
     /// <summary>The recording time one pump spends at most, however long since the last.</summary>
-    public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(16);
+    public static readonly TimeSpan MostHostBudget = TimeSpan.FromMilliseconds(milliseconds: 16);
+
     private readonly GpuDeviceServices m_gpu;
     private readonly SdfGpuWorkBudget m_budget;
+
     private readonly Slot[] m_slots = new Slot[SlotCount];
     private readonly List<ISdfGpuWorkClient> m_clients = [];
+
     private readonly IGpuTimestampPool? m_timestamps;
     private readonly string m_name;
+
     // What a Drive waits on while no job is in flight: pulsed when a client has a job to take or gives a slot back.
     private readonly object m_wakeGate = new();
+
     private bool m_woken;
     private int m_nextClient;
     private bool m_disposed;
     private bool m_faulted;
-
     private long m_pumpedAt;
-
     // Since the first job: jobs submitted and answered, the GPU seconds they measured, the wall time some job was in
     // flight, the most in flight at once, the pumps, and the pumps the tables' World set could not be bound in.
     private long m_submitted;
@@ -274,6 +281,7 @@ public sealed class SdfGpuWork : IDisposable {
     // Since the first job: the jobs measured past FrameShareSeconds, and the longest measured job with what it was.
     private long m_overFrameShare;
     private double m_mostJobSeconds;
+
     private string m_mostJob = "none";
 
     /// <summary>Initializes a new instance of the <see cref="SdfGpuWork"/> class: a slot's command buffer, fence and
@@ -320,7 +328,6 @@ public sealed class SdfGpuWork : IDisposable {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         m_clients.Add(item: client);
     }
-
     /// <summary>Answers every job whose submission completed, then fills every free slot with the clients' next jobs while
     /// the budget allows and the tables' World set may be bound outside a frame
     /// (<see cref="SdfWorldTables.BindsBackgroundWork"/>). Runs on the device's recording thread, between the tables'
@@ -330,7 +337,7 @@ public sealed class SdfGpuWork : IDisposable {
     public void Pump(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        if (m_faulted) { throw new InvalidOperationException("A failed background GPU service must be disposed before it can be replaced."); }
+        if (m_faulted) { throw new InvalidOperationException(message: "A failed background GPU service must be disposed before it can be replaced."); }
         try { Step(budgeted: true, tables: tables); } catch (Exception exception) {
             m_faulted = true;
             if (exception is DeviceLostException) { ReportInFlight(); }
@@ -349,7 +356,7 @@ public sealed class SdfGpuWork : IDisposable {
     public void Drive(SdfWorldTables tables) {
         ArgumentNullException.ThrowIfNull(argument: tables);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        if (m_faulted) { throw new InvalidOperationException("A failed background GPU service must be disposed before it can be replaced."); }
+        if (m_faulted) { throw new InvalidOperationException(message: "A failed background GPU service must be disposed before it can be replaced."); }
         try {
             var began = Stopwatch.GetTimestamp();
 
@@ -367,7 +374,7 @@ public sealed class SdfGpuWork : IDisposable {
                 m_driveStepTicks += (waiting - stepped);
                 if ((m_clients.Count == 0) || !tables.BindsBackgroundWork) { return; }
 
-                var remaining = (DriveSlice - Stopwatch.GetElapsedTime(startingTimestamp: began, endingTimestamp: waiting));
+                var remaining = (DriveSlice - Stopwatch.GetElapsedTime(endingTimestamp: waiting, startingTimestamp: began));
 
                 if (remaining <= TimeSpan.Zero) { return; }
                 if (FirstInFlight() is { } fence) {
@@ -397,6 +404,7 @@ public sealed class SdfGpuWork : IDisposable {
             Monitor.Pulse(obj: m_wakeGate);
         }
     }
+
     private IGpuSubmissionFence? FirstInFlight() {
         foreach (var slot in m_slots) {
             if (slot.Job is not null) { return slot.Fence; }
@@ -425,9 +433,9 @@ public sealed class SdfGpuWork : IDisposable {
     /// and stepping, the pumps the World set could not be bound in and those the budget held.</summary>
     /// <returns>One space-led field.</returns>
     public string Describe() {
-        var busy = (m_busyTicks + ((m_inFlight > 0) ? (Stopwatch.GetTimestamp() - m_busySince) : 0L)) / ((double)Stopwatch.Frequency);
+        var busy = ((m_busyTicks + ((m_inFlight > 0) ? (Stopwatch.GetTimestamp() - m_busySince) : 0L)) / ((double)Stopwatch.Frequency));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},over-frame-share:{m_overFrameShare},timestamps:{(m_timestamps is not null ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},over-frame-share:{m_overFrameShare},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
     }
 
     private static double Seconds(long ticks) => (ticks / ((double)Stopwatch.Frequency));
@@ -438,14 +446,13 @@ public sealed class SdfGpuWork : IDisposable {
     public string DescribeBytes() {
         var readbacks = 0UL;
 
-        foreach (var slot in m_slots) { readbacks += (slot.Readback?.SizeBytes ?? 0UL) + slot.Times.SizeBytes; }
+        foreach (var slot in m_slots) { readbacks += ((slot.Readback?.SizeBytes ?? 0UL) + slot.Times.SizeBytes); }
 
         var clients = default(GpuMemoryBytes);
 
         foreach (var client in m_clients) { clients += client.OwnedBytes; }
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"gpu-work slots={SlotCount} in-flight={m_inFlight} readback-bytes={readbacks} client-device-bytes={clients.DeviceLocal} client-host-bytes={clients.HostVisible}");
     }
-
     /// <inheritdoc/>
     /// <remarks>Waits every job in flight, a host wait on its fence, then hands it back to its client unanswered; waits,
     /// on the host's monitor, for every client still reading a readback to release it; and disposes the clients and the
@@ -461,7 +468,7 @@ public sealed class SdfGpuWork : IDisposable {
         // be queued. So each wait below is a proof or reports why none exists.
         foreach (var slot in m_slots) {
             if (slot.Job is not { } job) { continue; }
-            try { slot.Fence.Wait(); } catch (Exception failure) when (failure is DeviceLostException or GpuSubmissionAbandonedException) { }
+            try { slot.Fence.Wait(); } catch (Exception failure) when ((failure is DeviceLostException or GpuSubmissionAbandonedException)) { }
             slot.Client!.Abandon(job: job);
             slot.Job = null;
             slot.Client = null;
@@ -502,7 +509,8 @@ public sealed class SdfGpuWork : IDisposable {
                     Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.gpu-work] slow {m_name} slot={index} {client.Category} {client.Describe(job: job)} gpu={(seconds * 1000.0):0.0}ms estimate={(slot.Estimate * 1000.0):0.0}ms"));
                 }
             }
-            var readback = new SdfGpuWorkReadback(buffer: slot.Readback, gpuSeconds: m_timestamps is null ? null : seconds, length: (int)slot.ReadbackBytes, owner: this, slot: index);
+            var readback = new SdfGpuWorkReadback(buffer: slot.Readback, gpuSeconds: ((m_timestamps is null) ? null : seconds), length: ((int)slot.ReadbackBytes), owner: this, slot: index);
+
             slot.Lease = readback;
             slot.Job = null;
             slot.Client = null;
@@ -522,7 +530,7 @@ public sealed class SdfGpuWork : IDisposable {
     // and its last readback released (Slot.IsFree), so no job and no client reads what goes.
     private void ReleaseIdle() {
         var now = Stopwatch.GetTimestamp();
-        var window = (long)(IdleSeconds * Stopwatch.Frequency);
+        var window = ((long)(IdleSeconds * Stopwatch.Frequency));
 
         for (var index = 0; (index < SlotCount); index++) {
             var slot = m_slots[index];
@@ -548,7 +556,7 @@ public sealed class SdfGpuWork : IDisposable {
             slot.Times.Read(destination: times);
 
             var mask = ((timestamps.ValidBits >= 64) ? ulong.MaxValue : ((1UL << ((int)timestamps.ValidBits)) - 1UL));
-            var ticks = ((BitConverter.ToUInt64(value: times[sizeof(ulong)..]) - BitConverter.ToUInt64(value: times)) & mask);
+            var ticks = (BitConverter.ToUInt64(value: times[sizeof(ulong)..]) - BitConverter.ToUInt64(value: times)) & mask;
 
             seconds = ((ticks * timestamps.NanosecondsPerTick) * 1e-9);
             if (slot.Charged) { m_budget.SettleGpu(estimate: slot.Estimate, measured: seconds); }
@@ -571,8 +579,9 @@ public sealed class SdfGpuWork : IDisposable {
     // fall with the frame rate. A refill outside the budgets (Drive) takes every free slot's job and charges none.
     private void Refill(SdfWorldTables tables, bool budgeted) {
         var seconds = Accrue();
-        var hostBudget = TimeSpan.FromSeconds(Math.Clamp(value: (seconds * HostShare), min: HostBudget.TotalSeconds, max: MostHostBudget.TotalSeconds));
+        var hostBudget = TimeSpan.FromSeconds(value: Math.Clamp(value: (seconds * HostShare), min: HostBudget.TotalSeconds, max: MostHostBudget.TotalSeconds));
         var began = Stopwatch.GetTimestamp();
+
         for (var index = 0; (index < SlotCount); index++) {
             var slot = m_slots[index];
 
@@ -583,12 +592,12 @@ public sealed class SdfGpuWork : IDisposable {
                 m_budgetHolds++;
                 return;
             }
-            if (budgeted && (Stopwatch.GetElapsedTime(began) >= hostBudget)) { m_budgetHolds++; return; }
+            if (budgeted && (Stopwatch.GetElapsedTime(startingTimestamp: began) >= hostBudget)) { m_budgetHolds++; return; }
 
             var allowance = (budgeted ? m_budget.UploadAllowance : MostUploadJobBytes);
 
-            if (!TryTake(tables: tables, uploadBytes: allowance, client: out var client, estimate: out var estimate, job: out var job)) { return; }
-            if (budgeted) { m_budget.ChargeUpload(bytes: client.UploadBytes(job)); }
+            if (!TryTake(client: out var client, estimate: out var estimate, job: out var job, tables: tables, uploadBytes: allowance)) { return; }
+            if (budgeted) { m_budget.ChargeUpload(bytes: client.UploadBytes(job: job)); }
             Submit(charged: budgeted, client: client, estimate: estimate, index: index, job: job, slot: slot);
         }
     }
@@ -597,7 +606,7 @@ public sealed class SdfGpuWork : IDisposable {
             var candidate = m_clients[((m_nextClient + turn) % m_clients.Count)];
 
             if (candidate.TryTake(estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
-                m_nextClient = ((m_nextClient + turn + 1) % m_clients.Count);
+                m_nextClient = (((m_nextClient + turn) + 1) % m_clients.Count);
                 client = candidate;
                 return true;
             }
@@ -611,7 +620,7 @@ public sealed class SdfGpuWork : IDisposable {
     private void Submit(ISdfGpuWorkClient client, object job, double estimate, int index, Slot slot, bool charged) {
         var recorder = m_gpu.Recorder;
         var commandBuffer = slot.Commands.CommandBufferHandle;
-        var first = (uint)(2 * index);
+        var first = ((uint)(2 * index));
 
         slot.ReadbackBytes = 0;
         slot.Copied = false;
@@ -647,6 +656,7 @@ public sealed class SdfGpuWork : IDisposable {
         if (m_inFlight++ == 0) { m_busySince = Stopwatch.GetTimestamp(); }
         m_mostInFlight = Math.Max(val1: m_mostInFlight, val2: m_inFlight);
     }
+
     // Records a job's copy into its slot's readback, growing the readback, which no job in flight reads, when it is short.
     internal void CopyToReadback(int slot, nint commandBuffer, IGpuBuffer source, ulong bytes) {
         var target = m_slots[slot];
@@ -673,7 +683,6 @@ public sealed class SdfGpuWork : IDisposable {
         target.WindowBytes = Math.Max(val1: target.WindowBytes, val2: bytes);
         target.Copied = true;
     }
-
     /// <summary>Returns the bytes a slot's buffer of at least <paramref name="bytes"/> bytes is allocated at: whole
     /// granules of 4 MiB, so a client whose jobs grow toward a bound replaces a slot's buffers a few times, never once a
     /// job, and holds at most a granule more than its largest job.</summary>
@@ -684,6 +693,7 @@ public sealed class SdfGpuWork : IDisposable {
 
         return (((Math.Max(val1: bytes, val2: 1UL) + (Bytes - 1UL)) / Bytes) * Bytes);
     }
+
     // One slot: its command buffer, fence and timestamp readback, the job in it and its client, the readback its job
     // copied into and how many bytes, the GPU seconds the job was charged, and the window its readback's size is judged
     // over: when it began and the most bytes a copy needed since.
@@ -691,6 +701,7 @@ public sealed class SdfGpuWork : IDisposable {
         public IGpuCommandPool Commands { get; } = Commands;
         public IGpuSubmissionFence Fence { get; } = Fence;
         public IGpuReadbackBuffer Times { get; } = Times;
+
         public SdfGpuWorkReadback? Lease { get; set; }
         public IGpuReadbackBuffer? Readback { get; set; }
         public ulong ReadbackBytes { get; set; }
@@ -698,11 +709,11 @@ public sealed class SdfGpuWork : IDisposable {
         // Whether no job is in flight in the slot and its last readback was released: the one condition under which
         // Refill reuses the slot and ReleaseIdle releases its buffers.
         public bool IsFree => ((Job is null) && (Lease is null or { Released: true }));
-        public ulong WindowBytes { get; set; }
-        public bool Copied { get; set; }
-        public object? Job { get; set; }
         public ISdfGpuWorkClient? Client { get; set; }
+        public bool Copied { get; set; }
         public double Estimate { get; set; }
+        public object? Job { get; set; }
+        public ulong WindowBytes { get; set; }
         // Whether the job's estimate was charged to the GPU budget, which its measured time then settles.
         public bool Charged { get; set; }
     }

@@ -29,6 +29,7 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
 
     private readonly Lock m_gate = new();
     private readonly Dictionary<TKey, List<GpuMemoryBlock<TBlock>>> m_pools = [];
+
     private bool m_retired;
 
     /// <summary>Initializes a new instance of the <see cref="GpuMemoryPool{TKey, TBlock}"/> class, holding no
@@ -229,6 +230,7 @@ public readonly struct GpuMemoryPlacement<TBlock> {
     // The ticket of the range in its block, which tells this placement from a later one at the same offset.
     internal ulong Ticket { get; }
 }
+
 /// <summary>One block of a <see cref="GpuMemoryPool{TKey, TBlock}"/>: its native memory, its ranges, whether it is one
 /// resource's own, and the key's blocks it belongs to.</summary>
 /// <typeparam name="TBlock">A block's native memory.</typeparam>

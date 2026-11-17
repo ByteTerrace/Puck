@@ -63,6 +63,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private readonly Dictionary<(string Family, int Index, PhysicalMemory Pool), FamilyRow> m_families = [];
     // Every placement a family names inside a shared allocation, by the token CountPlaced handed out.
     private readonly Dictionary<long, Placement> m_placements = [];
+
     private readonly IGpuMemoryOwners? m_owners;
 
     private long m_tokens;
@@ -103,7 +104,6 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the allocations whose role and placement disagree on a discrete adapter: a
     /// device-local role placed in a segment of host memory, or a host-visible role placed in the adapter's own.</summary>
     public static WorkKind PlacementDisagreements { get; } = new(name: "gpu.memory.placement-disagreements", unit: "count", workClass: WorkClass.Pacing);
-
     /// <summary>Gets the kind counting the allocations the account refused before the device was asked
     /// (<see cref="TryAdmit"/>).</summary>
     public static WorkKind AdmissionRefusals { get; } = new(name: "gpu.memory.admission-refusals", unit: "count", workClass: WorkClass.Pacing);
@@ -248,6 +248,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
                 ))];
         }
     }
+
     /// <summary>Gets how many admitted allocations the device refused over the process's life. A backend reads it when it
     /// refreshes its memory reading: a count that moved marks the reading stale. Safe to read from any thread.</summary>
     public long DeviceRefusals => Volatile.Read(location: ref m_deviceRefusals);
@@ -643,7 +644,6 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private static class Counts {
         internal static readonly WorkKind[] Kinds = [Allocated, Released, Peak, ApertureAllocated, ApertureReleased, AperturePeak, HostVisibleAllocated, HostVisibleReleased, HostVisiblePeak, Allocations, PlacementDisagreements, AdmissionRefusals, OverLimitGrants, DeviceRefusalCount];
     }
-
     // One counted allocation: its size, role and segment row, the family that names it whole, or else the bytes its
     // placements name. Written only under the ledger's lock.
     private sealed class Allocation(long bytes, GpuMemoryRole role, SegmentRow row, FamilyRow? family) {
@@ -656,7 +656,6 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     }
     // One resource's placement in a shared block, named to its family.
     private readonly record struct Placement(Allocation Allocation, long Bytes, FamilyRow Family);
-
     // One row's device bytes: held now, the most held at once, and allocated and released over the process's life,
     // written only under the ledger's lock, which is also where its observer is called. A row named inside another
     // (a family's inside its segment's) adds what it holds to that row's Named.
@@ -690,10 +689,10 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
     private sealed class FamilyRow(string family, SegmentRow segment, IAllocationObserver? observer) : HeldRow(namedIn: segment, observer: observer) {
         public string Family { get; } = family;
         public SegmentRow Parent { get; } = segment;
+
         public GpuMemorySegment Segment => Parent.Segment;
     }
 }
-
 /// <summary>One segment's row of a backend's device memory ledger, in bytes.</summary>
 /// <param name="Segment">The segment, with the pool its bytes are charged to.</param>
 /// <param name="Held">The bytes counted allocations placed in the segment hold now.</param>

@@ -8,6 +8,7 @@ public sealed partial class SdfMeshPathBake {
     // The replacements in flight, each with the index it was placed at: a settle rebake (Rebake) or a finer tier (Retier).
     // The replaced group draws until the replacement lands and its words stand in the mesh region (FinishReplacements).
     private readonly List<(Group Group, int Index)> m_replacing = [];
+
     // The groups whose demanded tier is finer than the one they draw, as of the latest frame, the worst owed error among
     // them in display pixels and the longest owed interval in frames; the worst of each since the bake started; and the
     // finer tiers that landed, those the library already held among them.
@@ -18,7 +19,9 @@ public sealed partial class SdfMeshPathBake {
     private int m_worstOwedFrames;
     private int m_retiers;
     private int m_retiersReused;
+
     private readonly List<(float Pixel, int Index, int Tier)> m_retierCandidates = [];
+
     // The measure of every group's demand, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands): the group
     // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
     // measured, which a frame's share is taken of.
@@ -46,6 +49,7 @@ public sealed partial class SdfMeshPathBake {
     // the budget its meshes fill and the bias its demand is coarsened by. Null for a bake no residency observes, which
     // has no budget.
     private SdfResidencyGrant? m_detail;
+
     private readonly List<(long Saving, int Index, int Tier)> m_spareCandidates = [];
 
     /// <summary>Gets whether the bake's meshes stand at the detail its demand asks and its mesh region's budget
@@ -61,9 +65,9 @@ public sealed partial class SdfMeshPathBake {
     // The bytes the bake's meshes may fill, as its grant last answered (Retier); no budget for a bake no residency
     // observes.
     private long m_regionBudgetBytes = long.MaxValue;
+
     // The tier a pixel demands under the bias the budget holds.
     private int TierOf(float pixel) => SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel));
-
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
     /// a dynamic group's box carried into world space by its slot's transform among <paramref name="transforms"/> and
@@ -152,6 +156,7 @@ public sealed partial class SdfMeshPathBake {
         point = -1;
         foreach (var index in copies) {
             var matrix = m_demandCopies[index].Matrix;
+
             var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
             var units = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
             var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / units);

@@ -89,15 +89,15 @@ public sealed class VulkanRenderer(
     // Published by RefreshMemoryReading on the frame thread; any thread may read it.
     GpuMemoryReading IGpuDeviceContext.MemoryReading => ((m_device is not null)
         ? Volatile.Read(location: ref m_memoryReading)
-        : (m_memoryRefresh.Serial == 0UL)
+        : ((m_memoryRefresh.Serial == 0UL)
             ? GpuMemoryReading.Absent
-            : GpuMemoryReading.Lost(serial: m_memoryRefresh.Serial));
+            : GpuMemoryReading.Lost(serial: m_memoryRefresh.Serial)));
 
     // Vulkan's budget has no change signal, so the frame thread reads it at the backends' fixed interval; one rule across
     // devices, so a recreated device's serial keeps moving forward.
     private readonly GpuMemoryReadingRefresh m_memoryRefresh = new(serial: 0UL);
-
     private GpuMemoryReading m_memoryReading = GpuMemoryReading.Absent;
+
     private VulkanLogicalDevice? m_memoryReadDevice;
     // The ledger's device refusals as the last refresh read them; a count that moved makes the reading stale.
     private long m_memoryRefusals;
@@ -131,6 +131,7 @@ public sealed class VulkanRenderer(
             physicalDeviceHandle: m_physicalDevice.Handle,
             segments: segments
         );
+
         m_memoryReadDevice = device;
         Volatile.Write(location: ref m_memoryReading, value: m_memoryRefresh.Publish(
             estimated: estimated,
@@ -499,12 +500,12 @@ public sealed class VulkanRenderer(
     /// swapchain exists, it does not present FIFO, present wait is unsupported, fewer than two presents reached it,
     /// nothing was presented since the last wait, or the bounded wait did not succeed.</returns>
     public bool TryWaitForPresentQueue() =>
-        (m_device is not null) &&
+        ((m_device is not null) &&
         (m_swapchain is { PresentMode: VulkanPresentMode.Fifo }) &&
         framePresenter.TryWaitForPresentQueue(
             logicalDevice: m_device,
             swapchain: m_swapchain
-        );
+        ));
     /// <summary>The frame-ring gate: blocks until the CURRENT presentation slot's in-flight fence signals — the fence
     /// armed by the present <see cref="PresentFrameRingSize"/> frames ago, whose blit was queued AFTER that whole
     /// frame's compute submits, so its signal proves that frame's GPU work fully retired. This is the pipelined

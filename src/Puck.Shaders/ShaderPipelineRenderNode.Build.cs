@@ -177,7 +177,7 @@ public sealed partial class ShaderPipelineRenderNode {
             !key.Matches(other: desired)
         ) {
             if (m_buildResizes) {
-                m_resizeBackoff = Math.Clamp(value: (2 * m_resizeBackoff), min: 1, max: MaxResizeBackoff);
+                m_resizeBackoff = Math.Clamp(max: MaxResizeBackoff, min: 1, value: (2 * m_resizeBackoff));
             }
 
             built?.Discard(later: DisposeLater);
@@ -286,6 +286,7 @@ public sealed partial class ShaderPipelineRenderNode {
         m_lastSwapError = null;
         ForgetRefusal();
     }
+
     // The most advances a resize waits after a discarded one before it builds again.
     private const int MaxResizeBackoff = 32;
 
@@ -571,7 +572,6 @@ public sealed partial class ShaderPipelineRenderNode {
             ).Acquire(device: request.Device);
             CopyPipeline = (await RegionCopy.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).Compute;
         }
-
         // Creates every owned image storage's images at the build's extent, so the install takes them rather than
         // creating them on the frame thread, where creating a view's targets cost a frame 10 to 40 ms. Object creation is
         // free-threaded on both backends, and the node's wrapped services count it interlocked.
@@ -728,6 +728,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 }
             }
         }
+
         // Takes a frame slot's fence the build made, or null when it made none.
         public IGpuSubmissionFence? TakeFence(int slot) {
             if (slot >= m_slotFences.Length) {
@@ -755,6 +756,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         private IGpuSubmissionFence?[] m_slotFences = [];
         private IGpuCommandPool?[] m_slotCommands = [];
+
         // Takes the frame block ring, or null when the build made none.
         public GpuRegion? TakeFrameRegion() {
             var region = m_frameRegion;
@@ -789,8 +791,10 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         private GpuRegion? m_frameRegion;
+
         private GpuRegion?[] m_rowRegions = [];
         private Dictionary<string, GpuRegion> m_portRegions = new(comparer: StringComparer.Ordinal);
+
         private GpuKernelCounters? m_kernelCounters;
 
         // Takes a pass's ring of pass blocks, or null when the build made none for it.
@@ -821,7 +825,6 @@ public sealed partial class ShaderPipelineRenderNode {
 
             return buffers;
         }
-
         // Takes a storage's images, or null when the build made none for it.
         public IGpuImage[]? TakeImages(int storage) {
             if (storage >= m_images.Length) {

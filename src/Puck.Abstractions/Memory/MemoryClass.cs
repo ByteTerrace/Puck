@@ -21,7 +21,6 @@ public enum MemoryClass {
     /// <summary>Storage only a reclaimable cache claim holds, trimmed first.</summary>
     Cached,
 }
-
 /// <summary>The one statement of which classes give way under a limit.</summary>
 public static class MemoryClasses {
     /// <summary>The count of classes.</summary>

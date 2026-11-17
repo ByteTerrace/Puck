@@ -120,7 +120,7 @@ public sealed partial record SdfMesh {
         if (m_payload is not null) { return Acquire(); }
         if ((Chunks.Count != 0) && !JoinsChunks()) { throw new InvalidOperationException(message: "A chunked mesh's chunks view its attributes."); }
 
-        var storage = Native(allocator: allocator, account: account, restore: restore);
+        var storage = Native(account: account, allocator: allocator, restore: restore);
 
         try {
             var shape = SdfMeshShape.Of(mesh: this);
@@ -129,25 +129,24 @@ public sealed partial record SdfMesh {
             for (var piece = 0; (piece < shape.Pieces.Length); piece++) {
                 var source = Piece(index: piece);
 
-                if (storage.Positions(piece: piece, destination: out var positions)) { source.Positions.Span.CopyTo(destination: positions); }
-                if (storage.Normals(piece: piece, destination: out var normals)) { source.Normals.Span.CopyTo(destination: normals); }
-                if (storage.Indices(piece: piece, destination: out var indices)) { source.Indices.Span.CopyTo(destination: indices); }
-                if (storage.Materials(piece: piece, destination: out var materials)) { source.TriangleMaterials.Span.CopyTo(destination: materials); }
+                if (storage.Positions(destination: out var positions, piece: piece)) { source.Positions.Span.CopyTo(destination: positions); }
+                if (storage.Normals(destination: out var normals, piece: piece)) { source.Normals.Span.CopyTo(destination: normals); }
+                if (storage.Indices(destination: out var indices, piece: piece)) { source.Indices.Span.CopyTo(destination: indices); }
+                if (storage.Materials(destination: out var materials, piece: piece)) { source.TriangleMaterials.Span.CopyTo(destination: materials); }
                 if (!shape.Chunked) {
-                    if (storage.Members(piece: piece, destination: out var members)) { source.Members.Span.CopyTo(destination: members); }
-                    if (storage.VertexMembers(piece: piece, destination: out var vertexMembers)) { source.VertexMembers.Span.CopyTo(destination: vertexMembers); }
-                    if (storage.Influences(piece: piece, destination: out var influences)) { source.Influences.Span.CopyTo(destination: influences); }
+                    if (storage.Members(destination: out var members, piece: piece)) { source.Members.Span.CopyTo(destination: members); }
+                    if (storage.VertexMembers(destination: out var vertexMembers, piece: piece)) { source.VertexMembers.Span.CopyTo(destination: vertexMembers); }
+                    if (storage.Influences(destination: out var influences, piece: piece)) { source.Influences.Span.CopyTo(destination: influences); }
                 }
                 for (var level = 0; (level < source.Levels.Count); level++) {
-                    if (storage.LevelIndices(piece: piece, level: level, destination: out var levelIndices)) { source.Levels[level].Indices.Span.CopyTo(destination: levelIndices); }
-                    if (storage.LevelMaterials(piece: piece, level: level, destination: out var levelMaterials)) { source.Levels[level].TriangleMaterials.Span.CopyTo(destination: levelMaterials); }
+                    if (storage.LevelIndices(destination: out var levelIndices, level: level, piece: piece)) { source.Levels[level].Indices.Span.CopyTo(destination: levelIndices); }
+                    if (storage.LevelMaterials(destination: out var levelMaterials, level: level, piece: piece)) { source.Levels[level].TriangleMaterials.Span.CopyTo(destination: levelMaterials); }
                 }
             }
 
             return storage.Finish()!;
         } catch { storage.Abandon(); throw; }
     }
-
     /// <summary>Returns the storage a decode of a store entry, or a copy of a managed mesh, writes the mesh's planes into:
     /// blocks of one payload under the process account, held by the mesh the storage finishes.</summary>
     /// <param name="allocator">The host allocator.</param>
@@ -156,7 +155,7 @@ public sealed partial record SdfMesh {
     /// coarser levels' indices once no region needs them (<see cref="Need"/>), or <see langword="null"/> for a mesh that
     /// keeps them for its lifetime.</param>
     /// <returns>The storage.</returns>
-    internal static SdfMeshStorage Native(IAllocator allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry)? restore = null) => new NativeStorage(allocator: allocator, account: account, restore: restore);
+    internal static SdfMeshStorage Native(IAllocator allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry)? restore = null) => new NativeStorage(account: account, allocator: allocator, restore: restore);
 
     // The planes of a mesh in the payload's blocks. A single mesh holds every plane in one payload. A chunked mesh holds the
     // vertex and triangle attributes once, in a part its chunks borrow, and each chunk its own indices and levels in a part
@@ -242,6 +241,7 @@ public sealed partial record SdfMesh {
 
             return true;
         }
+
         // A block of a payload, or nothing for a plane the mesh does not have.
         private Memory<T> Take<T>(Payload owner, int length, out OwnedBuffer<T>? block) where T : unmanaged {
             block = ((length == 0) ? null : owner.Block<T>(allocator: allocator, length: length));
@@ -267,7 +267,6 @@ public sealed partial record SdfMesh {
         public override bool Influences(int piece, out Span<SdfMeshInfluence> destination) { destination = m_parts[piece].Influences.Span; return true; }
         public override bool LevelIndices(int piece, int level, out Span<uint> destination) { destination = m_parts[piece].LevelIndices[level].Span; return true; }
         public override bool LevelMaterials(int piece, int level, out Span<uint> destination) { destination = m_parts[piece].LevelMaterials[level].Span; return true; }
-
         public override SdfMesh? Finish() {
             var payload = m_payload;
             var shape = m_shape;
@@ -303,21 +302,22 @@ public sealed partial record SdfMesh {
                     var part = m_parts[0];
 
                     mesh = new SdfMesh(
-                        positions: part.Positions, indices: part.Indices,
-                        normals: part.Normals, triangleMaterials: part.Materials,
-                        members: part.Members, vertexMembers: part.VertexMembers, influences: part.Influences) {
+                        indices: part.Indices, influences: part.Influences,
+                        members: part.Members, normals: part.Normals,
+                        positions: part.Positions, triangleMaterials: part.Materials, vertexMembers: part.VertexMembers) {
                         BakeCell = shape.Pieces[0].BakeCell,
                         Encloses = shape.Encloses,
                         Levels = LevelsOf(part: part, shape: shape.Pieces[0]),
                         m_payload = payload.Seal(),
                     };
                 }
-                mesh = Restorable.Attach(restorable: m_restorable, mesh: mesh);
+                mesh = Restorable.Attach(mesh: mesh, restorable: m_restorable);
                 Forget();
 
                 return mesh;
             } catch { Abandon(); throw; }
         }
+
         private static SdfMeshLevel[] LevelsOf(Part part, SdfMeshPieceShape shape) {
             var levels = new SdfMeshLevel[shape.Levels.Length];
 
@@ -327,12 +327,14 @@ public sealed partial record SdfMesh {
 
             return levels;
         }
+
         public override void Abandon() {
             var payload = m_payload;
 
             Forget();
             payload?.Release(cached: false);
         }
+
         // Forgets the blocks without releasing them: a finished mesh owns them.
         private void Forget() {
             m_payload = null;

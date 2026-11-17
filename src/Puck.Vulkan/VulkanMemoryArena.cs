@@ -26,7 +26,9 @@ public sealed unsafe class VulkanMemoryArena {
     // Guards the slices and the blocks' handles, and every call into the pool: the pool's allocate and free run under its
     // own lock and write m_blocks, so a pool call made outside this gate would race Owns.
     private readonly Lock m_gate = new();
+
     private readonly GpuMemoryPool<(uint Type, GpuMemoryRole Role, bool Image), (nint Memory, nint Mapped)> m_pool;
+
     // Each bound resource's placement and the name its family holds in the device's counts, by its handle and whether it
     // is an image: a buffer and an image may share a handle value, as a layer that wraps handles (RenderDoc) hands them
     // out.

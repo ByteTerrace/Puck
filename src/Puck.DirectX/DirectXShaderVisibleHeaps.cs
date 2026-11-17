@@ -29,14 +29,17 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
     /// <summary>The clear views one device holds at once, one for each view a clear has asked of a live resource: four
     /// pipeline nodes each clearing <c>ShaderPipelineLimits.MaxResources</c> storages, with room.</summary>
     public const uint ClearDescriptors = 4096U;
+
     /// <summary>The private-data key a cleared resource carries its clear tag under.</summary>
     public static readonly Guid ClearKey = new(g: "b3e1a7c4-5d92-4f08-8c6e-1a4f9d2b7e35");
+
     /// <summary>The name the device's clear range is admitted under.</summary>
     public const string ClearOwner = "storage clears";
 
     // Each cleared resource's clear views, by the tag it carries under ClearKey, never by its address, which a later
     // resource may reuse.
     private static readonly ConcurrentDictionary<long, List<(DirectXShaderVisibleHeaps Heaps, D3D12_UNORDERED_ACCESS_VIEW_DESC View, DirectXClearDescriptor Descriptor)>> Cleared = [];
+
     private static long ClearTags;
 
     private readonly GpuDescriptorHeapBudget m_budget;

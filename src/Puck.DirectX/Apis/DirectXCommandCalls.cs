@@ -509,10 +509,11 @@ public static unsafe partial class DirectXCommandCalls {
 
         return true;
     }
+
     /// <summary>The longest <see cref="WaitForFenceEvent"/> blocks before it reports a removed or hung device. Windows'
     /// own timeout detection resets a device whose work has not retired within two seconds, so a wait that outlasts many
     /// times that has no GPU work behind it, and a submission that long would already have missed the frame bar.</summary>
-    public static readonly TimeSpan FenceWaitTimeout = TimeSpan.FromSeconds(30);
+    public static readonly TimeSpan FenceWaitTimeout = TimeSpan.FromSeconds(seconds: 30);
 
     /// <summary>Sleeps on an operating-system event a fence was armed to set (<c>SetEventOnCompletion</c>), bounded by
     /// <see cref="FenceWaitTimeout"/>, and says what stopped it when it was not set. The one wait every Direct3D 12 fence
@@ -537,6 +538,7 @@ public static unsafe partial class DirectXCommandCalls {
 
         return (reason.Failed ? reason.Value : HResultExtensions.DxgiErrorDeviceHung);
     }
+
     private static string StalledMessage(int reason) =>
         ((HResultExtensions.DxgiErrorDeviceHung == reason)
             ? $"a fence did not reach its value within {FenceWaitTimeout.TotalSeconds:0} seconds (graphics device hung)."

@@ -17,7 +17,6 @@ namespace Puck.SdfVm;
 /// nothing owed, in flight or landing.</param>
 /// <param name="Elapsed">The frames since the residency's last decision.</param>
 public readonly record struct SdfDetailReport(bool Over, bool AnySpare, bool CanLower, int Elapsed);
-
 /// <summary>
 /// A presentation's selector: the one place the residencies of a device share its memory and its background GPU time,
 /// in place of a share each. It holds the one detail bias every residency's bake coarsens its demand by
@@ -48,13 +47,12 @@ public sealed class SdfResidencySelector {
     public const string RegionOwner = "sdf.mesh-region";
 
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
-
     // How long a residency's report counts toward the bias after it was made; a residency no frame prepares stops
     // steering it.
     private static readonly long FreshTicks = (2L * Stopwatch.Frequency);
-
     private readonly Lock m_gate = new();
     private readonly List<SdfResidencyGrant> m_grants = [];
+
     private readonly MemoryAccount m_account;
 
     private int m_bias;
@@ -62,8 +60,10 @@ public sealed class SdfResidencySelector {
     private int m_biasLowered;
     private int m_biasPressed;
     private int m_biasQuiet;
+
     private int m_biasWait = SdfMeshTier.BiasQuietFrames;
     private int m_biasSinceLowered = int.MaxValue;
+
     private long m_growthRefusals;
 
     /// <summary>Initializes a new instance of the <see cref="SdfResidencySelector"/> class.</summary>
@@ -82,6 +82,7 @@ public sealed class SdfResidencySelector {
     public int Bias => Volatile.Read(location: ref m_bias);
     /// <summary>Gets the pool the mesh regions lie in.</summary>
     public PhysicalMemory Pool { get; }
+
     /// <summary>Gets the one budget of GPU time and upload bytes the presentation's background GPU work draws on.</summary>
     public SdfGpuWorkBudget Work { get; } = new();
 
@@ -98,7 +99,6 @@ public sealed class SdfResidencySelector {
             pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: device.MemoryProfile.UnifiedMemory)
         ));
     }
-
     /// <summary>Registers a residency: its grant, which reserves its mesh region and budgets its detail.</summary>
     /// <param name="name">The residency's name, for the selector's line.</param>
     /// <returns>The grant; disposing it releases its reservation and takes it out of the sum.</returns>
@@ -112,7 +112,6 @@ public sealed class SdfResidencySelector {
 
         return grant;
     }
-
     /// <summary>Describes the sum the selector holds: the pool, its limit, held and promised bytes, each class's bytes,
     /// the elastic budget, the one bias with its steps, the growths the account refused, and each residency's grant
     /// beside what it names, holds and has reserved. The floors and the support class are named and hold nothing until
@@ -191,6 +190,7 @@ public sealed class SdfResidencySelector {
         lock (m_gate) { floors = FloorsOf(); }
         m_account.RecordFloor(bytes: floors, pool: Pool);
     }
+
     // Under m_gate.
     private long FloorsOf() {
         var floors = 0L;
@@ -199,6 +199,7 @@ public sealed class SdfResidencySelector {
 
         return floors;
     }
+
     // The bytes a bake may fill, for a residency that names and expects the given bytes.
     internal long Budget(SdfResidencyGrant grant, long named, long filled) {
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
@@ -210,6 +211,7 @@ public sealed class SdfResidencySelector {
             return BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null));
         }
     }
+
     // Under m_gate: what the limit leaves every mesh region together, less room for the largest one's replacement;
     // null where nothing bounds the pool. What the regions have reserved is theirs already, so it is taken back out of
     // what the pool holds and has promised.
@@ -243,6 +245,7 @@ public sealed class SdfResidencySelector {
 
         return Math.Max(val1: 0L, val2: (grant.Filled + ((long)((((double)room) * grant.Filled) / Math.Max(val1: 1L, val2: filled)))));
     }
+
     // Moves the one bias on the report of the residency that names the most among those reporting: it presses when any
     // residency is over its budget, rises half a rung once the budget has pressed for the hold with no residency holding
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
@@ -301,6 +304,7 @@ public sealed class SdfResidencySelector {
             return m_bias;
         }
     }
+
     /// <summary>Gets the bias's steps up and down since the selector was made.</summary>
     public (int Raised, int Lowered) BiasSteps {
         get {
@@ -308,7 +312,6 @@ public sealed class SdfResidencySelector {
         }
     }
 }
-
 /// <summary>
 /// One residency's part of its presentation's selector (<see cref="SdfResidencySelector.Register"/>): the reservation
 /// its mesh region grows under, and the budget and bias its bake holds its detail to.
@@ -353,8 +356,9 @@ public sealed class SdfResidencyGrant : IDisposable {
     // reserved for both and the staging. Read by the selector under its gate.
     internal long Capacity => Volatile.Read(location: ref m_capacity);
     internal long FloorBytes => Volatile.Read(location: ref m_floor);
-    internal long Retiring => Volatile.Read(location: ref m_retiring);
     internal long Reserved => Volatile.Read(location: ref m_reserved);
+    internal long Retiring => Volatile.Read(location: ref m_retiring);
+
     // What the residency's draws name and what they are expected to name once its finer tiers land; written under the
     // selector's gate.
     internal long Named;
@@ -453,6 +457,7 @@ public sealed class SdfResidencyGrant : IDisposable {
 
         return true;
     }
+
     /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) { return; }

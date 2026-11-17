@@ -26,7 +26,9 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
     private nint m_adapter;
     private uint m_cookie;
     private HANDLE m_event;
+
     private readonly GpuMemoryReadingRefresh m_refresh;
+
     private GpuMemoryReading m_reading = GpuMemoryReading.Absent;
     // The reservation last passed to the adapter, after clamping, and whether the adapter took it; null before the first.
     private ulong? m_reserved;
@@ -91,7 +93,7 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
         }
 
         // The wait resets the auto-reset event, so it is tested whether or not the interval has passed.
-        var signalled = (!m_event.IsNull && (PInvoke.WaitForSingleObject(hHandle: m_event, dwMilliseconds: 0U) == WAIT_EVENT.WAIT_OBJECT_0));
+        var signalled = (!m_event.IsNull && (PInvoke.WaitForSingleObject(dwMilliseconds: 0U, hHandle: m_event) == WAIT_EVENT.WAIT_OBJECT_0));
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
 
         if (!m_refresh.Due(signalled: (signalled || stale || m_stale), timestamp: now)) {
@@ -155,7 +157,7 @@ public sealed unsafe class DirectXVideoMemory : IDisposable {
         m_reserved = clamped;
         m_stale = true;
         try {
-            ((IDXGIAdapter3*)m_adapter)->SetVideoMemoryReservation(NodeIndex: 0U, MemorySegmentGroup: DXGI_MEMORY_SEGMENT_GROUP.DXGI_MEMORY_SEGMENT_GROUP_LOCAL, Reservation: clamped);
+            ((IDXGIAdapter3*)m_adapter)->SetVideoMemoryReservation(MemorySegmentGroup: DXGI_MEMORY_SEGMENT_GROUP.DXGI_MEMORY_SEGMENT_GROUP_LOCAL, NodeIndex: 0U, Reservation: clamped);
             m_reservationRefused = false;
         } catch (COMException) {
             m_reservationRefused = true;

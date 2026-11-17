@@ -217,7 +217,7 @@ public sealed class MemoryAdmissionLawTests {
     }
     [Fact]
     public void TheHostPoolIsHeldToTheFreeMemoryTheAccountReads() {
-        var free = (long?)(8L * Gibibyte);
+        var free = ((long?)(8L * Gibibyte));
         var account = new MemoryAccount(availablePhysicalBytes: () => free, installedPhysicalBytes: (64L * Gibibyte));
         using var owner = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "job");
 

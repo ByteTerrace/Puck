@@ -866,13 +866,15 @@ laws exercise that boundary.
   until it does. `world.residency` counts the products that took their
   draws (`handed`, with `handed-refused` for the last case) and those
   waiting (`ahead`).
-- **One region holds every resident mesh, up to a share of the device's
-  memory.** Its limit (`SdfWorldTables.MeshRegionLimitOf`) is one part in
-  `MeshRegionDeviceLocalShare` of the device-local memory the profile
-  reports, never past `SdfWorldTables.MostMeshRegionBytes`
-  (`GpuRegion.MaxByteCount`, just under 4 GiB), so the region, the copy a
-  growth holds until its upload completes and everything else the device
-  holds fit together. It grows to its need plus an eighth, rounded up to a
+- **One region holds every resident mesh, up to what its grant reserves.**
+  Before a plan the tables reserve the standing buffer and a replacement
+  together in the process account (`SdfResidencyGrant.ReserveGrowth`,
+  `SdfWorldTables.MeshRegionLimitBytes`), never past
+  `SdfWorldTables.MostMeshRegionBytes` (`GpuRegion.MaxByteCount`, just under
+  4 GiB), and the arena places nothing past it (`SdfMeshRegionArena.SetLimit`),
+  so the region, the copy a growth holds until its upload completes and
+  everything else the device holds fit together. A growth the account or the
+  device refuses leaves the region as it is (`SdfMeshRegionArena.Clip`). It grows to its need plus an eighth, rounded up to a
   16 MiB granule and capped at the limit
   (`SdfWorldTables.MeshRegionGrownBytes`, a pure function), so it reads
   fuller than a doubling would; `world.budget` prints the bytes the staged
