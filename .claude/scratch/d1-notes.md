@@ -114,3 +114,20 @@ including windowed-only Host classifications; this is unfinished WIP.
 Disclosure probe has not run. No green runtime or D1-law claim is made.
 `puck docs links` passed after the initial documentation updates; final rerun
 is recorded below. No background watcher or GPU leg was started.
+
+Final evidence: the final Puck.World Release build passed with 0 warnings and
+0 errors. Final docs-links run passed. The exact requested command
+`puck scan --only duplicates --against lead/authoring --head HEAD` (with a
+lane-owned output directory) passed at source commit bbea92f6a1: 23 changed
+declarations, the same 25 neighbours read above, 0 helper flags. No source
+changes followed that scan. `git diff --check` passed. `puck lease list`
+showed no D1 hold or ticket; process inspection showed no remaining D1 dotnet
+process. All known exec sessions exited; no World or watcher remains.
+
+The blocked hand-back asks for continuation of the remaining atomic D1 work,
+not approval of the preparatory subset as D1. Required follow-up verification:
+focused Host/authored-command and WorldBootComposition laws, all new D1 laws,
+catalog regeneration (headless plus the lead's windowed-only Host entries),
+disclosure probe and headless debug World. Runtime admission failures do not
+explain or excuse the unfinished implementation; the main admission mechanism
+was not built in this run.
