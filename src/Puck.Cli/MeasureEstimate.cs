@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
-using Puck.Cli.Bench;
+using Puck.Maths;
 
 namespace Puck.Cli;
 
@@ -90,6 +90,6 @@ public static class MeasureEstimate {
     private static double Median(IReadOnlyList<double> values) {
         var ordered = values.Order().ToArray();
 
-        return BenchMetric.Quantile(fraction: .5, ordered: ordered);
+        return OrderStatistics.Quantile(ascending: ordered, fraction: .5);
     }
 }

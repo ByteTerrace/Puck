@@ -78,6 +78,7 @@ public static class PuckRootCommand {
             .. CliExtensions.Installed.Contributions<WorldReleaseHost>().Select(entry => entry.Value.CreateCommand(clock: clock)),
             BaselinesCommand.Create(),
             BenchRunner.Create(clock: clock, sampleHost: BenchHost()),
+            BenchmarkCommand.Create(sampleHost: BenchHost()),
             BrandingCommand.Create(),
             BundleCommand.Create(),
             CanaryCommand.Create(),

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
+using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
 
@@ -122,6 +123,27 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
             }
         }
         return text.Append(value: ']').ToString();
+    }
+
+    /// <summary>Reads each pass whose completed window the nodes hold, by the name the readout prints (the node's name, a
+    /// slash, the pass). Nodes that refuse timing or hold no completed window have none.</summary>
+    /// <returns>The passes; empty while no consumer asks for timestamps.</returns>
+    public List<GpuPassTiming> Readings() {
+        var readings = new List<GpuPassTiming>();
+
+        if (!(m_operator || m_recording) || (probe?.Root?.Runtime is not { } runtime)) { return readings; }
+        for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
+            if (runtime.Producer(instance: index) is not null) { continue; }
+            var node = runtime.Node(instance: index);
+            var name = runtime.Instances.Instances[index].Name;
+
+            if (node.TimingRefusal is not null) { continue; }
+            foreach (var timing in node.Timings) {
+                readings.Add(item: timing with { Pass = $"{name}/{timing.Pass}" });
+            }
+        }
+
+        return readings;
     }
 
     /// <summary>Describes each pass's rolling timestamp window.</summary>

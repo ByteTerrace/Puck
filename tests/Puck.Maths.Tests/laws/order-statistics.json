@@ -1,0 +1,45 @@
+[
+  {
+    "Id": "order-statistics.quantile-hand-computed",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.OrderStatistics",
+        "Name": "Quantile"
+      },
+      {
+        "Type": "Puck.Maths.OrderStatistics",
+        "Name": "NearestRank"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.Quantile over fixed ascending samples: the integers 1 to 10, the integers 1 to 1000, a single sample and a pair, at the minimum, the median, the 95th, 99th and 99.9th percentiles and the maximum",
+        "Against": "values written out by hand from the definition (linear interpolation at position (count - 1) times the fraction, between the neighbouring samples): 1 to 10 gives 5.5 at 0.5, 9.55 at 0.95 and 9.91 at 0.99; 1 to 1000 gives 500.5 at 0.5, 990.01 at 0.99 and 999.001 at 0.999; a pair of 2 and 4 gives 2.5 at 0.25; a single sample gives itself at every fraction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.NearestRank over the integers 1 to 10, 1 to 5, 1 to 3 and a single sample at fractions of 4/5, 1/2, 1/1 and 0/1, and the single-precision Quantile over 1 to 4 and 2, 4, 6",
+        "Against": "the rank written out by hand from the definition (the sample at rank ceil(numerator over denominator times count), counting from one): 8 for 1 to 10 at 4/5, 5 at 1/2, 10 at 1/1, 1 at 0/1; 3 for 1 to 3 at 4/5 (rank ceil(2.4)); 4 for 1 to 5 at 4/5; the single sample itself; 2.5 and 5 for the single-precision medians",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.Quantile and NearestRank refusals: an empty sample, a quantile fraction below 0, above 1 and NaN, and a rank fraction with a negative numerator, a numerator past its denominator and a denominator below one",
+        "Against": "the documented exceptions: ArgumentException for an empty sample and ArgumentOutOfRangeException for a fraction outside 0 to 1, NaN included",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

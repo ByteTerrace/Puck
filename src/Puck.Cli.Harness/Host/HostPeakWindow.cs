@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Maths;
 
 namespace Puck.Cli.Host;
 
@@ -18,9 +19,8 @@ namespace Puck.Cli.Host;
 internal sealed class HostPeakWindow {
     /// <summary>How many recent observations the window keeps.</summary>
     public const int Capacity = 10;
-    // The nearest-rank percentile is ceil(Numerator / Denominator * count): 8 of 10 (the fourth fifth), so a single
-    // outlier is ignored from five observations on and three of ten are enough to be learned. Integer arithmetic: a
-    // product of floats can land a rounding step over an exact rank.
+    // The nearest-rank percentile (OrderStatistics.NearestRank) at Numerator / Denominator: 8 of 10 (the fourth fifth), so a
+    // single outlier is ignored from five observations on and three of ten are enough to be learned.
     private const int Numerator = 4;
     private const int Denominator = 5;
 
@@ -37,10 +37,7 @@ internal sealed class HostPeakWindow {
     private double Percentile(bool resident) {
         if (m_entries.Count == 0) { return double.NaN; }
 
-        var sorted = m_entries.Select(selector: entry => (resident ? entry.ResidentGb : entry.PrivateGb)).Order().ToArray();
-        var rank = ((((Numerator * sorted.Length) + Denominator) - 1) / Denominator);
-
-        return sorted[rank - 1];
+        return OrderStatistics.NearestRank(ascending: m_entries.Select(selector: entry => (resident ? entry.ResidentGb : entry.PrivateGb)).Order().ToArray(), numerator: Numerator, denominator: Denominator);
     }
     private static void Truncate(List<(int Id, long StartTicks, double PrivateGb, double ResidentGb)> entries) {
         if (entries.Count > Capacity) { entries.RemoveRange(index: 0, count: (entries.Count - Capacity)); }

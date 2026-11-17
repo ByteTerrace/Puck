@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Puck.Abstractions;
 using Puck.Cli.Bench;
 using Puck.Confinement;
+using Puck.Maths;
 
 namespace Puck.Cli;
 
@@ -18,9 +19,9 @@ public static class MeasureCommand {
         var afterCommit = new Option<string?>("--after-commit") { Description = "Commit to export and freeze instead of --after-world-artifact." };
         var beforeTree = new Option<string?>("--before-input-tree") { Description = "Input tree paired with --before-world-artifact: worlds and plan inputs at their repository-relative paths. Copied when filed." };
         var afterTree = new Option<string?>("--after-input-tree") { Description = "Input tree paired with --after-world-artifact. Required for an artifact side; commit sides use their own whole tree." };
-        var metrics = new Option<string[]>("--metric") { Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup (/metrics/cold-bake/median with --bake); /metrics/boot.frames.p99/median for bench frames; /signals/0/metrics/<key> for sweep.", Required = true };
+        var metrics = new Option<string[]>("--metric") { Description = "Numeric JSON pointer in the command's report, repeatable: /metrics/idle-tick/median for bench world; /metrics/startup/median for bench startup (/metrics/cold-bake/median with --bake); /metrics/boot.frames.p99/median for bench frames; /metrics/<backend>.<cold|warm|steady>.<chapter-slug>.frames.interval.p99/median for benchmark; /signals/0/metrics/<key> for sweep.", Required = true };
         var decides = new Option<string>("--decides") { Description = "What result decides the question, including units and tolerance. Kept with the answer for the lead's judgement.", Required = true };
-        var command = CliOptions.ForwardedCommand(description: "A puck bench world, bench startup, bench frames or sweep command after -- (omit puck). Output and World artifact are supplied by the runner.");
+        var command = CliOptions.ForwardedCommand(description: "A puck bench world, bench startup, bench frames, benchmark or sweep command after -- (omit puck). Output and World artifact are supplied by the runner.");
         var request = new Command(description: "Freeze before and after builds and queue a timing question in the main checkout's ignored scratch.", name: "request") { name, before, after, beforeCommit, afterCommit, beforeTree, afterTree, metrics, decides, command };
 
         request.SetAction(async (parse, token) => {
@@ -310,7 +311,7 @@ public static class MeasureCommand {
     /// <returns>One total per round that has both sides.</returns>
     public static double[] PairWalls(IReadOnlyList<MeasurementSample> samples) => samples.GroupBy(keySelector: sample => sample.Round).Where(predicate: pair => (pair.Count() == 2)).OrderBy(keySelector: pair => pair.Key).Select(selector: pair => pair.Sum(selector: sample => sample.WallSeconds)).ToArray();
     private static void ValidateCommand(string[] arguments) {
-        if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["bench", "frames", ..] or ["sweep", ..])) { throw new ArgumentException(message: "Measurement commands are bench world, bench startup, bench frames or sweep (including headless frame-signal plans)."); }
+        if (!(arguments is ["bench", "world", ..] or ["bench", "startup", ..] or ["bench", "frames", ..] or ["benchmark", ..] or ["sweep", ..])) { throw new ArgumentException(message: "Measurement commands are bench world, bench startup, bench frames, benchmark or sweep (including headless frame-signal plans)."); }
         _ = PinInnerSamples(arguments: arguments);
         if (arguments.Any(predicate: static value => ((value is "--world-artifact" or "--output") || value.StartsWith(comparisonType: StringComparison.Ordinal, value: "--world-artifact=") || value.StartsWith(comparisonType: StringComparison.Ordinal, value: "--output=")))) {
             throw new ArgumentException(message: "The measurement runner supplies --world-artifact and --output.");
@@ -396,6 +397,10 @@ public static class MeasureCommand {
                 ((command[1] != "startup") || (parts[2] == startupMetric)) && available.Contains(canonical, StringComparer.Ordinal)) { return; }
             throw new InvalidDataException(message: $"Metric {pointer} is not numeric data in report schema {BenchReport.SchemaName}; available pointers: {string.Join(", ", available)}.");
         }
+        // A benchmark's metric names hold the chapter's slug, known only from the route's source, so the shape is judged here
+        // and the name when the report is read, which names every pointer the report holds.
+        if ((command[0] == "benchmark") && (parts is ["", "metrics", { Length: > 0 }, "median" or "p10" or "p90"])) { return; }
+        if ((command[0] == "benchmark")) { throw new InvalidDataException(message: $"Metric {pointer} is not a benchmark metric: use /metrics/<backend>.<cold|warm|steady>.<chapter-slug>.<name>/median, such as /metrics/directx.cold.my-chapter.frames.interval.p99/median."); }
         if ((parts is ["", "signals", var index, "metrics", var key]) && int.TryParse(index, NumberStyles.None, CultureInfo.InvariantCulture, out _) && (key.Length > 0)) { return; }
         throw new InvalidDataException(message: $"Metric {pointer} is not a signal metric in report schema {Puck.Cli.Sweep.SweepReport.SchemaName}; available pointers: /signals/<index>/metrics/<name> (numeric readings from the plan).");
     }
@@ -407,7 +412,7 @@ public static class MeasureCommand {
     private static MeasurementDistribution Distribution(double[] samples) {
         var ordered = samples.Order().ToArray();
 
-        double Quantile(double fraction) => Puck.Cli.Bench.BenchMetric.Quantile(fraction: fraction, ordered: ordered);
+        double Quantile(double fraction) => OrderStatistics.Quantile(ascending: ordered, fraction: fraction);
         return new(Quantile(fraction: .5), (Quantile(fraction: .75) - Quantile(fraction: .25)));
     }
     private static void Write<T>(string path, T item, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> type) {

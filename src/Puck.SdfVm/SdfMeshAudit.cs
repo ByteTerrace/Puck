@@ -779,7 +779,7 @@ public static class SdfMeshAudit {
         }
         Array.Sort(array: lengths);
 
-        return lengths[((lengths.Length - 1) / 2)];
+        return OrderStatistics.Quantile(ascending: lengths, fraction: 0.5);
     }
 
     internal static SdfMeshAuditStatistic Statistic(float[] values, float over) {
@@ -792,8 +792,8 @@ public static class SdfMeshAudit {
             Count: finite.Length,
             Max: finite[^1],
             Over: finite.Count(predicate: value => (value > over)),
-            P50: finite[((int)((finite.Length - 1) * 0.5))],
-            P99: finite[((int)((finite.Length - 1) * 0.99))]
+            P50: OrderStatistics.Quantile(ascending: finite, fraction: 0.5),
+            P99: OrderStatistics.Quantile(ascending: finite, fraction: 0.99)
         );
     }
 
