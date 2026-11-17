@@ -147,7 +147,11 @@ public sealed partial class WorldAddonRuntime {
                             addon.MachineSnapshot = snapshot; addon.SnapshotMachine = snapshotMachine; addon.SnapshotGeneration = machineState.Generation;
                             a = snapshot.Length; verdict = AddonVerdict.Applied;
                         } else if ((snapshotMachine == addon.SnapshotMachine) && (machineState.Generation == addon.SnapshotGeneration) && (addon.MachineSnapshot is { } saved)) {
-                            checkpoint.RestoreCheckpoint(checkpoint: saved); a = saved.Length; verdict = AddonVerdict.Applied;
+                            // The saved image is checked with the runtime before any of it applies, so a refused image
+                            // leaves the machine as it was and answers like any other refused request.
+                            if (checkpoint.TryValidateCheckpoint(checkpoint: saved, reason: out _)) {
+                                checkpoint.RestoreCheckpoint(checkpoint: saved); a = saved.Length; verdict = AddonVerdict.Applied;
+                            }
                         }
                     }
                     break;

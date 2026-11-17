@@ -1067,13 +1067,6 @@ Lifecycle lows, each argued from source and not run:
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
   in turn and the scene cannot rebuild while the bake is pending. Count the
   timeout as stale-scene evidence.
-- [low] `SdfMeshStore`'s documentation says a set a World is baking or loading
-  is never cut short by another's write, but a write protects only its own
-  set: two 4 GiB sets against the 8 GiB cap can evict a peer's live set.
-  Correct the documentation or give a recently stamped set a grace window.
-- [low · plausible] A cache set directory that vanishes mid-listing resets the
-  retention tally to an undercount (`CacheRetention.EnforceSetsCore` catches
-  the whole walk's `IOException`). Catch per child directory.
 
 #### Memory on the Deck tier
 
@@ -1950,11 +1943,6 @@ Companions, beside the protocol's steps:
 Player state, beside [the hub plan](hub-and-saves.md#build-order)'s durable
 images (H7), battery saves (H8) and minimal identities:
 
-- [high] The deal gate (`WorldDefinitionValidator.TryValidateDealtChildren`)
-  admits a solid variant whose shape the load validator refuses
-  (`CreationShapeLaws.SolidRefusals` runs only on the template's base
-  prototype), so the sweep can install a document that load rejects. The gate
-  should be the load validator's own child laws.
 - [medium] `world.save` refuses on the debug world: it names the
   loop-generated `sheddingRack1` as a parent, which `shedding.puck` does not
   export. It writes the world's source when it succeeds, so it is never run as
@@ -2145,8 +2133,6 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   and counts a failure (`ReadFlockAffinity`), and a binding whose local is
   absent is dropped at its sweep's end, re-arming an Edge rule
   (`RuleEvaluator`'s `HoldOnFault`). Decide what each absence means.
-- [low] A routed `body.where` appends ` anchor=body:N` to a refusal as well as
-  to an answer (`PlayerCommandModule.Movement`, the routed arm).
 - [low] `worlds/hosting/granaries.extensions.json` grants its `console` client
   `mutate` over `section:state` to write six feed rows; scope it to those
   rows if the grant vocabulary allows. The `contribution:` subject of
@@ -2172,13 +2158,13 @@ lane's.
   hearth companions the debug world's `references` name, beside the boot
   authority. Hall's scenarios cross none of them; a fixture that overrides
   `references` and `destinations` to none runs one authority.
-- [medium] The authority-level replay start commits before it validates: with
-  geometry or machine configuration edited after the checkpoint,
-  `WorldPersistence.ReplayStart.cs` installs the machine reconfiguration and
-  the definition, and only then does `RestoreCheckpointCore` validate, so a
-  refused checkpoint leaves both moved. The debugger's machine-snapshot
-  restore has the same shape (`WorldAddonRuntime.Debugger.cs`). Validate first
-  with `TryValidateCheckpoint` (`IMachineCheckpointRuntime`).
+- [low] The replay start validates a changed configuration's checkpoint against a
+  `WorldPopulation` its definition builds and the machine plan, before anything
+  moves (`WorldPersistence.ValidateCheckpointRestore`). The attached-solid
+  rows (`MovingSolids.ValidateAttached`) read the contact field an install
+  gives the population, which the scratch population lacks (unverified), so
+  they are checked only after the install, and a refusal there still leaves the
+  reconfiguration installed.
 - [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
@@ -2479,8 +2465,8 @@ The edit loop:
   `TryValidateTouchedStateRows` narrows a state write.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
-  reload a same-catalog arena in place (`StateCatalog.HasSameShape` is
-  unused).
+  reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers
+  whether the catalog survives).
 - A state-section edit builds five arenas on the debug world
   (`world.boot.arena-builds`), one not yet attributed, and an undisturbed run
   grows the counter with no edit at all.
@@ -2678,9 +2664,8 @@ Launch and process lifecycles, each a [low]:
 - `WorldProcess` has no state between running and drained: `WaitFor` treats
   exit as drained after one rescan, so a final line arriving later reads as no
   answer. Count end-of-stream per stream and end on drained.
-- `WorldReadiness.Observe` sets its marked flag before the mark write, so a
-  failed write is never retried; and a windowed World nobody asks to wait
-  counts as still growing for its whole life, since only the `world.wait`
+- A windowed World nobody asks to wait counts as still growing for its whole
+  life, since only the `world.wait`
   forms print the readiness line. Have the World print it once ready.
 - Canary's concurrent leg budget (`CanaryCommand.CanaryBudget`) still counts
   external lease queueing, so a later leg can read `BudgetExpired`.
@@ -2692,15 +2677,12 @@ CLI maturity remainders, each a [low]:
   shared line. A lease refusal and the child's own failure can both exit 2.
 - The test batch watchdog writes its cause only to the batch's `.stderr.log`;
   `sweep` regex-scrapes `puck test`'s output for verdict counts.
-- Synchronous actions get no cancellation token (`MotionCommand`,
-  `CountersCommand`), so an interrupt skips cleanup and exit 130.
 - `puck counters` has no `--world-artifact`, so it cannot compare counters
   across builds; `puck compile --watch` watches only the source's own
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck official build --channel` goes
-  unvalidated into `Path.Combine`.
+  line on the same output.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,

@@ -77,4 +77,14 @@ public interface IWorldMachineCheckpointHost {
     /// <exception cref="InvalidDataException">The checkpoint's inventory, kinds, runtime images, slots or links do not
     /// fit this host's declared machines and screens; nothing was applied.</exception>
     void RestoreCheckpoint(WorldMachineHostCheckpoint checkpoint);
+    /// <summary>Checks a checkpoint against the machines and screens a prepared, not yet committed, plan would leave
+    /// the host with, through the checks <see cref="RestoreCheckpoint"/> runs before it applies anything. A caller that
+    /// must move a configuration before restoring over it validates here first, so a checkpoint the restored host
+    /// would refuse leaves the live host unmoved.</summary>
+    /// <param name="checkpoint">The captured host and runtime state.</param>
+    /// <param name="plan">The plan this host prepared for the configuration the restore will run under.</param>
+    /// <exception cref="InvalidDataException">The checkpoint does not fit the plan's machines and screens.</exception>
+    /// <exception cref="InvalidOperationException">The host holds a link that couples its members live.</exception>
+    /// <exception cref="ArgumentException"><paramref name="plan"/> is not a plan this host prepared.</exception>
+    void ValidateCheckpoint(WorldMachineHostCheckpoint checkpoint, IWorldMachinePreparedPlan plan);
 }
