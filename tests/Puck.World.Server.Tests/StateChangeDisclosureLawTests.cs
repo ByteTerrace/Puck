@@ -5,6 +5,27 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed class StateChangeDisclosureLawTests(ITestOutputHelper output) {
+    [Fact]
+    public void ARowBornInsideAnOpenWindowRecomposesAfterItsNextWrite() {
+        var document = Document();
+        Assert.True(StateArena.TryCreate(document.StateCatalog, document.StateRaw, null, ArenaTime.Origin, out var arena, out var reason), reason);
+        var images = new WorldDisclosureImages();
+        var view = new WorldRecipientView(() => document, () => arena!, Principal.Seat(1), WorldDisclosureTier.Replica,
+            () => true, images, "test", () => ArenaTime.Origin);
+        _ = view.Image(0);
+        images.BeginTick(arena!.ChangedKeys);
+        document = document.WithWorldState([.. document.AuthoredState, new WorldStateRow(Name: CellName.Parse("newRow"),
+            Kind: CellKind.Int, Cells: [new StateCell(CellName.Parse("value"), CellValue.Int(1))])]);
+        Assert.True(arena.TryRelayout(document.StateCatalog, document.StateRaw, ArenaTime.Origin, out reason), reason);
+        Assert.True(arena.Catalog.TryResolve(StateLane.Document, "newRow", out var row));
+        var first = view.Image(row.Ordinal);
+        Assert.True(arena.Keys.TryResolve(CellName.Parse("value"), out var key));
+        Assert.True(arena.TryWrite(row.Ordinal, key, CellValue.Int(2), out reason), reason);
+        var second = view.Image(row.Ordinal);
+        Assert.NotSame(first, second);
+        Assert.Equal(2, Assert.Single(second.Cells).Value.Raw);
+    }
+
     private static WorldDefinition Document(int vectors = 1) => Fixtures.BuildDocument() with {
         StateRaw = new WorldStateSection(
             Spaces: [new StateSpace(dimensions: 8, model: "test-model", name: CellName.Parse("lore"), revision: "1")],

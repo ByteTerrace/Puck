@@ -767,7 +767,9 @@ single-parent basis chain. Composition order is the basis chain first, then each
 resolved and folded left to right in list order, then the file's own body last.
 Within either step, authored members override, omitted members inherit, an
 authored `null` clears, `$type`-changed union objects replace wholesale, and
-identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
+an object carrying `"$replace": true` replaces wholesale with its member order and literal nulls preserved
+(the marker is consumed). The inverse diff uses this when merging cannot reproduce an object's key order.
+Identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
 both sides—`key` covers a state row's own `cells`—or a grant row's
 `grantee`+`capability`+`subject` triple) merge by key with
 `{"…", "$drop": true}` tombstones and a leading `{"$replace": true}` marker for

@@ -142,15 +142,17 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     };
     // A host choice, never world-authored: how many threads may run the engine's parallel partitions on this machine.
     var workersOption = new Option<int?>(name: "--workers") {
+        CustomParser = static result => {
+            if ((result.Tokens.Count == 1) && int.TryParse(s: result.Tokens[0].Value, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var workers) && (workers >= 0)) {
+                return workers;
+            }
+            result.AddError(errorMessage: "--workers must be 0 (the machine's logical processor count) or a positive thread count.");
+            return null;
+        },
         DefaultValueFactory = static _ => null,
         Description = "The threads that run the engine's parallel partitions, the frame thread included: 1 runs every partition on the frame thread, and 0 (the default) uses the machine's logical processor count. State is identical at every count; puck test --workers compares counts.",
     };
 
-    workersOption.Validators.Add(item: static result => {
-        if (result.GetValueOrDefault<int?>() is < 0) {
-            result.AddError(errorMessage: "--workers must be 0 (the machine's logical processor count) or a positive thread count.");
-        }
-    });
     // A DEVELOPER REFLECTION of the document's host.presentation field, not a separate product (the unification
     // contract): absent lets the document decide; a bare --headless (or --headless true) forces host.presentation=none
     // for this run only (no window, no GPU device, no swapchain, no audio device); --headless false forces windowed.

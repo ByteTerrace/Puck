@@ -39,6 +39,7 @@ public readonly record struct RigidContactPolicy(
         PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed)
     );
 }
+
 /// <summary>One static surface a rigid body's contact generation found this step: its unit normal toward the body, the
 /// gap of the body's deepest support point to it at the step's start, and a source id stable while the surface stays.</summary>
 /// <param name="SourceId">The surface's source id: its collider for a per-surface query, the walkable or non-walkable
@@ -53,6 +54,7 @@ internal readonly record struct RigidSurface(int SourceId, FixedVector3 Normal, 
 /// <param name="Count">The number of surfaces found, at most <see cref="WorldBody.MaximumRigidSurfaces"/>.</param>
 /// <param name="ResolvedRoot">The predicted root, resolved by the probe sweep when one ran.</param>
 internal readonly record struct RigidSurfaceProbe(bool Refused, int Count, FixedVector3 ResolvedRoot);
+
 public sealed partial class WorldBody {
     // The persistent solver view TwoBodyHandle() maintains — allocated once, mutated in place every call, so steady-state
     // rigid contact allocates nothing.
@@ -79,8 +81,10 @@ public sealed partial class WorldBody {
     /// <summary>Gets the elapsed engine ticks this body has spent under the rest thresholds so far — zero the
     /// instant it wakes, latched at <see cref="Resting"/>'s own hold window once it closes.</summary>
     public ulong RigidRestingHoldTicks => m_restingHoldTicks;
+
     /// <summary>Gets whether a rigid step is prepared for this tick and not yet finished.</summary>
     internal bool RigidStepPrepared => (m_rigidStepTicks != 0UL);
+
     /// <summary>Gets the rigid facet's mass at this body's live <see cref="Scale"/> — the authored mass at scale 1,
     /// scaled by <c>Scale³</c> (see <see cref="ScaleRigid"/>). Zero for a locomotion kit.</summary>
     public FixedQ4816 RigidMass => ((m_rigid is { } rigid)
@@ -483,7 +487,6 @@ public sealed partial class WorldBody {
         Root: m_position,
         Volume: RigidWitnessVolume()
     );
-
     /// <summary>Applies a positional-only correction to a rigid body and wakes it: the carry path's tangibility push,
     /// where a carried body (posed by its carrier, outside the rigid solve) shoves the body it overlaps. A no-op for zero
     /// correction, and for a body whose sweep was refused this tick, which is immovable until the tick ends.</summary>
@@ -499,9 +502,9 @@ public sealed partial class WorldBody {
         m_position += correction;
         InvalidateRigidRest();
     }
+
     private static FixedQ4816 StepSeconds(ulong stepTicks) =>
         (FixedQ4816.FromInteger(value: unchecked((long)stepTicks)) / FixedQ4816.FromInteger(value: EngineTicksPerSecond));
-
     private void InvalidateRigidRest() {
         NotifyPopulationWake();
         m_resting = false;
@@ -619,8 +622,10 @@ public sealed partial class WorldBody {
             right: seconds
         );
     }
+
     /// <summary>The most static surfaces one body's contact generation reports a step.</summary>
     internal const int MaximumRigidSurfaces = 3;
+
     // Two surfaces whose normals agree past this cosine are one face: a support built of flush tiles is one floor.
     private static readonly FixedQ4816 RigidSurfaceAgreement = FixedQ4816.FromDouble(value: 0.999d);
 
@@ -868,7 +873,12 @@ public sealed partial class WorldBody {
         }
 
         if (RigidUnderRestSpeed(boundingRadius: rigid.BoundingRadius, policy: policy)) {
-            m_restingHoldTicks += stepTicks;
+            // Saturate before adding: the elapsed hold is continuation state, and a supported body can
+            // remain here indefinitely (including a step larger than the remaining hold window).
+            m_restingHoldTicks = (((policy.RestHoldTicks - Math.Min(
+                val1: policy.RestHoldTicks, val2: m_restingHoldTicks)) <= stepTicks)
+                ? policy.RestHoldTicks
+                : (m_restingHoldTicks + stepTicks));
 
             if (m_restingHoldTicks >= policy.RestHoldTicks) {
                 m_resting = true;
