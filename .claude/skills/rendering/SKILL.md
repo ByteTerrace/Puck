@@ -566,7 +566,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   from the
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
-  `CanDrawIndirectCount` is false, the recorder issues those same initialized
+  `VulkanGpuRecorder.CanDrawIndirectCount` is false, the recorder issues those same initialized
   slots in one fixed `vkCmdDrawIndirect` when multi-draw is available; otherwise
   it advances the word base for each individual slot, including empty rejected slots;
   no raster CPU cull or level path remains. Keep command-to-vertex read barriers and

@@ -48,6 +48,9 @@ internal sealed class UploadModelGpu :
     // orders the same way in one command buffer; a copy recorded under neither is refused.
     private readonly HashSet<nint> m_readsOrdered = [];
     private readonly HashSet<(nint CommandBuffer, nint Buffer)> m_bufferReadsOrdered = [];
+    // The predicate that drops a reset command buffer's reads is made once, so recording allocates none.
+    private Predicate<(nint CommandBuffer, nint Buffer)>? m_ofResetCommandBuffer;
+    private nint m_resetCommandBuffer;
     private readonly nint[] m_boundSets = new nint[8];
 
     private nint m_boundPipeline;
@@ -281,8 +284,8 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) {
         _ = m_readsOrdered.Remove(item: commandBufferHandle);
-        _ = m_bufferReadsOrdered.RemoveWhere(match: entry => (entry.CommandBuffer == commandBufferHandle));
-
+        m_resetCommandBuffer = commandBufferHandle;
+        _ = m_bufferReadsOrdered.RemoveWhere(match: (m_ofResetCommandBuffer ??= (entry => (entry.CommandBuffer == m_resetCommandBuffer))));
     }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
@@ -296,10 +299,7 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
 
-    // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does; every raster pass records one
-    // (SdfMeshOcclusion.RecordDraws) whatever the device counts natively.
-    bool IGpuRecorder.CanDrawIndirectCount => false;
-
+    // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does.
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {

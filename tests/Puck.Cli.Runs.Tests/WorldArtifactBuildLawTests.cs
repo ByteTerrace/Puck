@@ -135,6 +135,7 @@ public sealed class WorldArtifactBuildLawTests {
     private static WorldArtifact Resolve(Checkout checkout, WorldArtifactStore store, CountingBuilder builder, Action? waiting = null) {
         Assert.True(
             condition: WorldArtifactBuild.TryResolve(
+            cancellationToken: TestContext.Current.CancellationToken,
             artifact: out var artifact,
             builder: builder.Build,
             error: out var error,
@@ -152,23 +153,46 @@ public sealed class WorldArtifactBuildLawTests {
     }
 
     [Fact]
+    public void CancellingAResolutionWhileAnotherBuilderOwnsItsKeyStopsBeforeBuilding() {
+        using var checkout = new Checkout();
+        var store = checkout.Store;
+
+        var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: checkout.Root);
+        Assert.True(condition: WorldArtifactKey.TryCompute(
+            buildArguments: CliProjectBuild.Arguments(project: WorldArtifactClosure.WorldProject),
+            key: out var key, reason: out var reason, repositoryRoot: checkout.Root, roots: roots), userMessage: reason);
+        using var claim = store.AcquireBuild(key: key, clock: Stopwatch.StartNew(), budget: TestLiveness.Bound,
+            waited: out _, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.NotNull(@object: claim);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
+        var builder = new CountingBuilder();
+
+        Assert.ThrowsAny<OperationCanceledException>(testCode: () => WorldArtifactBuild.TryResolve(
+            verb: "law", repositoryRoot: checkout.Root, store: store, builder: builder.Build,
+            logDirectory: checkout.LogDirectory, timeout: TestLiveness.Bound, artifact: out _, error: out _,
+            waiting: cancellation.Cancel, cancellationToken: cancellation.Token));
+        Assert.Equal(expected: 0, actual: builder.Builds);
+    }
+    [Fact]
     public void BuildGeneratedDeclarationsDoNotDiscardTheBuildOrChangeItsKey() {
         using var checkout = new Checkout();
-        var generated = Puck.SdfVm.ShaderDeclarations.Of([], Puck.Shaders.RenderGraphPackageCatalog.Engine, []);
-        checkout.Write("src/Puck.SdfVm/Puck.SdfVm.csproj", "<Project />");
-        checkout.Write(WorldArtifactClosure.WorldProject, "<Project><ItemGroup><ProjectReference Include=\"../Puck.SdfVm/Puck.SdfVm.csproj\" /></ItemGroup></Project>");
-        foreach (var declaration in generated) { checkout.Write(declaration.Path, "old generated text"); }
+        var generated = Puck.SdfVm.ShaderDeclarations.Of(files: [], packages: Puck.Shaders.RenderGraphPackageCatalog.Engine, problems: []);
+
+        checkout.Write(name: "src/Puck.SdfVm/Puck.SdfVm.csproj", text: "<Project />");
+        checkout.Write(name: WorldArtifactClosure.WorldProject, text: "<Project><ItemGroup><ProjectReference Include=\"../Puck.SdfVm/Puck.SdfVm.csproj\" /></ItemGroup></Project>");
+        foreach (var declaration in generated) { checkout.Write(name: declaration.Path, text: "old generated text"); }
         checkout.Git("add", "--all");
-        checkout.Commit("generated outputs");
+        checkout.Commit(message: "generated outputs");
         var key = checkout.Key();
-        var builder = new CountingBuilder(() => {
-            foreach (var declaration in generated) { checkout.Write(declaration.Path, "regenerated text"); }
+        var builder = new CountingBuilder(entered: () => {
+            foreach (var declaration in generated) { checkout.Write(name: declaration.Path, text: "regenerated text"); }
         });
         using var build = Resolve(checkout, checkout.Store, builder);
+
         Assert.Equal(key, checkout.Key());
         Assert.Equal(1, builder.Builds);
     }
-
     [Fact]
     public void TwoResolutionsOfAnUnchangedTreeProduceOneBuild() {
         using var checkout = new Checkout();
@@ -215,6 +239,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         try {
             Assert.False(condition: WorldArtifactBuild.TryResolve(
+                cancellationToken: TestContext.Current.CancellationToken,
                 artifact: out artifact,
                 builder: builder.Build,
                 error: out var error,
@@ -251,6 +276,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         Assert.True(
             condition: WorldArtifactBuild.TryResolve(
+                cancellationToken: TestContext.Current.CancellationToken,
                 artifact: out var artifact,
                 builder: (arguments, timeout) => {
                     given = timeout;
@@ -271,7 +297,7 @@ public sealed class WorldArtifactBuildLawTests {
         );
         await release;
         artifact.Dispose();
-        Assert.Equal(expected: buildTimeout, actual: given);
+        Assert.Equal(actual: given, expected: buildTimeout);
     }
     [InlineData("world")]
     [InlineData("stub")]
@@ -286,6 +312,7 @@ public sealed class WorldArtifactBuildLawTests {
         try {
             Assert.False(condition: Directory.Exists(path: builtLogDirectory));
             Assert.True(condition: WorldArtifactBuild.TryResolve(
+                cancellationToken: TestContext.Current.CancellationToken,
                 artifact: out var built,
                 builder: builder.Build,
                 error: out var error,
@@ -300,6 +327,7 @@ public sealed class WorldArtifactBuildLawTests {
             Assert.True(condition: File.Exists(path: Path.Combine(path1: builtLogDirectory, path2: "Puck.World.build.log")));
 
             Assert.True(condition: WorldArtifactBuild.TryResolve(
+                cancellationToken: TestContext.Current.CancellationToken,
                 artifact: out var reused,
                 builder: builder.Build,
                 error: out error,
@@ -315,6 +343,7 @@ public sealed class WorldArtifactBuildLawTests {
             Assert.False(condition: Directory.Exists(path: reusedLogDirectory));
 
             Assert.True(condition: WorldArtifactBuild.TryResolveNamed(
+                cancellationToken: TestContext.Current.CancellationToken,
                 error: out error,
                 lease: out var namedLease,
                 logDirectory: namedLogDirectory,
@@ -433,6 +462,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         string KeyOf(string tree) {
             var root = Path.Combine(path1: checkout.Root, path2: tree);
+
             var (roots, _) = WorldArtifactClosure.Walk(repositoryRoot: root);
 
             Assert.True(
@@ -520,6 +550,7 @@ public sealed class WorldArtifactBuildLawTests {
         WorldArtifact Resolve(bool spirv) {
             Assert.True(
                 condition: WorldArtifactBuild.TryResolve(
+                cancellationToken: TestContext.Current.CancellationToken,
                 artifact: out var artifact,
                 builder: Build,
                 error: out var error,
@@ -568,6 +599,7 @@ public sealed class WorldArtifactBuildLawTests {
         var store = checkout.Store;
         var clock = Stopwatch.StartNew();
         var key = checkout.Key();
+
         (WorldArtifact? Artifact, string Staging) Build(string contents) {
             using var claim = store.AcquireBuild(budget: TimeSpan.FromSeconds(value: 30), clock: clock, key: key, waited: out _);
             var staging = store.CreateStaging(claim: claim!);
@@ -595,6 +627,7 @@ public sealed class WorldArtifactBuildLawTests {
 
         using var firstLease = first;
         using var secondLease = second;
+
         Assert.True(condition: Directory.Exists(path: kept));
         Assert.False(condition: Directory.Exists(path: discarded));
 
@@ -737,13 +770,13 @@ public sealed class WorldArtifactBuildLawTests {
 
         File.WriteAllText(contents: string.Empty, path: orphan);
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddHours(value: -7), path: orphan);
-        File.SetAttributes(path: orphan, fileAttributes: FileAttributes.ReadOnly);
+        File.SetAttributes(fileAttributes: FileAttributes.ReadOnly, path: orphan);
         try {
             using var again = Resolve(builder: builder, checkout: checkout, store: store);
 
             Assert.Equal(actual: builder.Builds, expected: 1);
         } finally {
-            File.SetAttributes(path: orphan, fileAttributes: FileAttributes.Normal);
+            File.SetAttributes(fileAttributes: FileAttributes.Normal, path: orphan);
         }
     }
     [Fact]
@@ -795,6 +828,7 @@ public sealed class WorldArtifactBuildLawTests {
         var stdout = $"  Determining projects to restore...\n  3>{Error}\n\nBuild FAILED.\n\n    {Error}\n    0 Warning(s)\n    1 Error(s)\n";
 
         Assert.False(condition: WorldArtifactBuild.TryResolve(
+            cancellationToken: TestContext.Current.CancellationToken,
             artifact: out _,
             builder: (arguments, timeout) => new CliProcessResult(
                     ExitCode: 1,
@@ -872,6 +906,7 @@ public sealed class WorldArtifactBuildLawTests {
         const string Stderr = "error MSB9999: This seventh error is kept only in the log.\r\n";
 
         Assert.False(condition: WorldArtifactBuild.TryResolve(
+            cancellationToken: TestContext.Current.CancellationToken,
             artifact: out _,
             builder: (arguments, timeout) => new CliProcessResult(
                     ExitCode: 1,

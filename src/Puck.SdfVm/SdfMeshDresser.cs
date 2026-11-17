@@ -48,6 +48,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private bool m_disposed;
     private bool m_faultThisDress;
     private SdfDressedPickMap? m_map;
+    private (SdfFrame Input, SdfFrame Result)? m_dressedFrame;
     private long m_skipHostThrough;
 
     /// <summary>Creates a dresser and its private write capability.</summary>
@@ -106,7 +107,9 @@ public sealed class SdfMeshDresser : IDisposable {
             }
         }
         foreach (var state in m_groups.Values) { state.Seen = false; }
-        foreach (var group in access.Groups) {
+        for (var g = 0; (g < access.GroupCount); g++) {
+            var group = access.GroupAt(index: g);
+
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
             if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
             state.Seen = true;
@@ -181,14 +184,24 @@ public sealed class SdfMeshDresser : IDisposable {
         if (SdfRowChecks.Enabled) { CheckDress(access: access, frame: frame); }
         m_writer.Publish();
         if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.PickMap)) { m_map = ((frame.PickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
-        var result = frame with {
-            MeshRows = m_rows,
-            PickMap = m_map,
-            MeshDrawsRevision = m_rows.Revision,
-            MeshDrawChanges = m_rows.Changes,
-            MeshDrawChangesSerial = m_rows.Serial,
-            MeshDrawChangesCause = (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null)),
-        };
+        SdfMeshStagingCause? cause = (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null));
+        // An input frame that stands, dressed to the same rows, is answered by the frame it was answered with: the copy
+        // is made only when the rows, their journal or the pick map moved, and its identity lets the tables see a stand.
+        var result = (((m_dressedFrame is { } held) && ReferenceEquals(objA: held.Input, objB: frame) && ReferenceEquals(objA: held.Result.MeshRows, objB: m_rows) &&
+            ReferenceEquals(objA: held.Result.PickMap, objB: m_map) && (held.Result.MeshDrawsRevision == m_rows.Revision) &&
+            ReferenceEquals(objA: held.Result.MeshDrawChanges, objB: m_rows.Changes) && (held.Result.MeshDrawChangesSerial == m_rows.Serial) &&
+            (held.Result.MeshDrawChangesCause == cause))
+            ? held.Result
+            : (frame with {
+                MeshRows = m_rows,
+                PickMap = m_map,
+                MeshDrawsRevision = m_rows.Revision,
+                MeshDrawChanges = m_rows.Changes,
+                MeshDrawChangesSerial = m_rows.Serial,
+                MeshDrawChangesCause = cause,
+            }));
+
+        m_dressedFrame = (frame, result);
 
         if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; }
         for (var i = 0; (i < m_copies.Length); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
@@ -215,7 +228,9 @@ public sealed class SdfMeshDresser : IDisposable {
         if (m_host.Count != frame.MeshDraws.Count) { return true; }
         var finished = 0;
 
-        foreach (var group in access.Groups) {
+        for (var g = 0; (g < access.GroupCount); g++) {
+            var group = access.GroupAt(index: g);
+
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
             finished++;
             if (!m_groups.TryGetValue(key: group, value: out var state) || (state.Run.Count != (mesh.PieceCount * (access.CopiesOf(group: group)?.Count ?? 1)))) { return true; }
@@ -229,7 +244,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void StartOver() {
         m_writer.StartOver();
         m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
-        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear();
+        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear(); m_dressedFrame = null;
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
         for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
@@ -289,7 +304,9 @@ public sealed class SdfMeshDresser : IDisposable {
         var expected = new List<SdfMeshDraw>(collection: frame.MeshDraws);
         var matrices = 0;
 
-        foreach (var group in access.Groups) {
+        for (var g = 0; (g < access.GroupCount); g++) {
+            var group = access.GroupAt(index: g);
+
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
             var copies = access.CopiesOf(group: group);
 

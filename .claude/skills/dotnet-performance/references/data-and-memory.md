@@ -171,9 +171,9 @@ nothing.
   array, `preserve: false` growth, an uninitialized array, a `[SkipLocalsInit]`
   local, a native block) holds an earlier owner's bytes; on a value path that is
   a determinism defect. Name the call that writes every element a reader
-  reaches: `WorldTick.PaintLatticeDraw` rents a buffer that
-  `GeneratorEngine.TryRunBatch` fills to its length
-  ([`GeneratorEngine`](../../../../src/Puck.State.Generators/GeneratorEngine.cs)).
+  reaches, or clear the buffer first: `FieldLattice.TryFillFromDraw` hands a
+  draw its own scratch cleared, so the paint never reads a stale element
+  ([`FieldLattice`](../../../../src/Puck.Physics/Fields/FieldLattice.cs)).
 
 Sources: `stackalloc` memory limits, the threshold-and-fallback pattern and
 avoiding it in loops ([MS-STACKALLOC], analyzer [CA2014]); a large array's
