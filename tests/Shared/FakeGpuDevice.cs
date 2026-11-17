@@ -235,11 +235,15 @@ internal sealed class FakeGpuDevice :
         if (deviceLocal) {
             Memory.CountAllocated(
                 allocation: creation.Handle,
-                bytes: ((long)deviceLocalBytes),
-                device: DeviceHandle,
-                family: GpuObjectName.UnnamedFamily,
-                role: GpuMemoryRole.DeviceLocal,
-                segment: GpuMemorySegments.DirectXLocal
+                grant: Memory.Admit(
+                    bytes: ((long)deviceLocalBytes),
+                    device: DeviceHandle,
+                    family: GpuObjectName.UnnamedFamily,
+                    payer: GpuObjectName.UnnamedFamily,
+                    payerBytes: ((long)deviceLocalBytes),
+                    role: GpuMemoryRole.DeviceLocal,
+                    segment: GpuMemorySegments.DirectXLocal
+                )
             );
         }
 

@@ -201,21 +201,22 @@ public sealed class SdfResidencySelector {
     }
     // The bytes a bake may fill, for a residency that names and expects the given bytes.
     internal long Budget(SdfResidencyGrant grant, long named, long filled) {
-        var admission = m_account.ReadAdmission(pool: Pool);
+        var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
         lock (m_gate) {
             grant.Named = named;
             grant.Filled = Math.Max(val1: named, val2: filled);
 
-            return BudgetOf(grant: grant, usable: UsableOf(admission: admission));
+            return BudgetOf(grant: grant, usable: (bounded ? UsableOf(held: held, limit: limit, promised: promised) : null));
         }
     }
     // Under m_gate: what the limit leaves every mesh region together, less room for the largest one's replacement;
     // null where nothing bounds the pool. What the regions have reserved is theirs already, so it is taken back out of
     // what the pool holds and has promised.
-    private long? UsableOf(MemoryAdmissionReading admission) {
-        if (admission.Limit is not { } limit) { return null; }
-
+    private long? UsableOf(MemoryAdmissionReading admission) => ((admission.Limit is { } limit)
+        ? UsableOf(held: admission.Held, limit: limit, promised: admission.Promised)
+        : null);
+    private long UsableOf(long limit, long held, long promised) {
         var reserved = 0L;
         var largest = 0L;
 
@@ -224,7 +225,7 @@ public sealed class SdfResidencySelector {
             largest = Math.Max(val1: largest, val2: grant.Capacity);
         }
 
-        return Math.Max(val1: 0L, val2: ((limit - Math.Max(val1: 0L, val2: ((admission.Held + admission.Promised) - reserved))) - largest));
+        return Math.Max(val1: 0L, val2: ((limit - Math.Max(val1: 0L, val2: ((held + promised) - reserved))) - largest));
     }
     // Under m_gate: one residency's budget: what it fills, and an equal part of the room the budget has left or its
     // part of the excess.
@@ -315,15 +316,15 @@ public sealed class SdfResidencySelector {
 /// Invariant: the region's buffers are allocated only under the grant's reservation. A growth reserves the buffer that
 /// stands and the one that replaces it together before the replacement is created (<see cref="ReserveGrowth"/>,
 /// <see cref="Grown"/>), and the reservation falls to the standing buffer once the replaced one's readers finish
-/// (<see cref="Released"/>). The reservation also covers the region's staging, at
-/// <see cref="StagingAllowanceBytes"/>.
+/// (<see cref="Released"/>). Where the region's staging lies in the pool its buffers do, on unified memory, the
+/// reservation covers it too, at <see cref="StagingAllowanceBytes"/>; on a discrete adapter the staging is host
+/// memory, which the region's class does not govern.
 /// </para>
 /// Called on the frame thread, apart from the reads the selector's line makes.
 /// </summary>
 public sealed class SdfResidencyGrant : IDisposable {
-    /// <summary>The bytes of staging a region's reservation covers beside its buffers: twice the floor a staged slot's
-    /// staging buffer shrinks to (<see cref="GpuRegion.StagingFloorBytes"/>), for each of the mesh region's slots that
-    /// stages at once.</summary>
+    /// <summary>The bytes of staging a region's reservation covers beside its buffers on unified memory: twice the floor
+    /// a staged slot's staging buffer shrinks to (<see cref="GpuRegion.StagingFloorBytes"/>).</summary>
     public const long StagingAllowanceBytes = (2L * ((long)GpuRegion.StagingFloorBytes));
 
     private readonly MemoryAccount.DeviceReservation m_reservation;
@@ -343,8 +344,8 @@ public sealed class SdfResidencyGrant : IDisposable {
 
     /// <summary>Gets the half rungs the residency's bake coarsens its demand by: the selector's one bias.</summary>
     public int Bias => m_selector.Bias;
-    /// <summary>Gets the residency's name.</summary>
-    public string Name { get; }
+    /// <summary>Gets or sets the residency's name, which the selector's line prints.</summary>
+    public string Name { get; set; }
     /// <summary>Gets the selector the grant belongs to.</summary>
     public SdfResidencySelector Selector => m_selector;
 
@@ -442,7 +443,7 @@ public sealed class SdfResidencyGrant : IDisposable {
 
     // What the region holds whatever the pool says: its standing buffer, the replaced ones waiting on their readers
     // and its staging. Reserved as the reservation's floor, so a full pool reads over its limit and the residency draws.
-    private long Standing => ((Capacity + Retiring) + StagingAllowanceBytes);
+    private long Standing => ((Capacity + Retiring) + ((m_selector.Pool == PhysicalMemory.Host) ? StagingAllowanceBytes : 0L));
 
     private void ReserveStanding() => _ = Reserve(floor: Standing, peak: Standing);
     // Sets the reservation's peak; a raise past the floor that the pool has no room for changes nothing.

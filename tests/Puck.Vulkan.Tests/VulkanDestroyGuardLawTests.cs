@@ -287,16 +287,16 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         );
 
         memory.BeginDevice(device: device.Handle, segments: OneHeap);
-        device.CountAllocated(
+        Count(
             allocationSize: 65536UL,
-            family: null,
+            device: device,
             memoryHandle: DeviceLocalMemory,
             memoryTypeIndex: 0U,
             role: GpuMemoryRole.DeviceLocal
         );
-        device.CountAllocated(
+        Count(
             allocationSize: 4096UL,
-            family: null,
+            device: device,
             memoryHandle: HostMemory,
             memoryTypeIndex: 1U,
             role: GpuMemoryRole.HostVisible
@@ -342,9 +342,9 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
             );
 
             Assert.Equal(expected: DeviceLocalBit, actual: unified.MemoryTypePropertyFlags(memoryTypeIndex: ((int)index)) & DeviceLocalBit);
-            device.CountAllocated(
+            Count(
                 allocationSize: 1024UL,
-                family: null,
+                device: device,
                 memoryHandle: handle,
                 memoryTypeIndex: index,
                 role: role
@@ -491,5 +491,19 @@ public sealed unsafe class VulkanDestroyGuardLawTests {
         public void* Allocate(nuint size, nuint alignment = 0) => throw new NotSupportedException();
         public void Free(void* ptr) => throw new NotSupportedException();
         public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => throw new NotSupportedException();
+    }
+    // Counts a memory handle the law made up as an allocation the device's ledger admitted.
+    private static void Count(VulkanDeviceCommands device, nint memoryHandle, ulong allocationSize, uint memoryTypeIndex, GpuMemoryRole role) {
+        var memory = device.Memory!;
+
+        memory.CountAllocated(allocation: memoryHandle, grant: memory.Admit(
+            bytes: checked((long)allocationSize),
+            device: device.Handle,
+            family: null,
+            payer: null,
+            payerBytes: 0L,
+            role: role,
+            segment: memory.SegmentsOf(device: device.Handle).OfMemoryType(memoryTypeIndex: memoryTypeIndex)
+        ));
     }
 }

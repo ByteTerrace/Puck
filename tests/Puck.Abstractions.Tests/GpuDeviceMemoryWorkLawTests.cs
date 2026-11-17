@@ -33,11 +33,15 @@ public sealed class GpuDeviceMemoryWorkLawTests {
 
         work.CountAllocated(
             allocation: allocation,
-            bytes: bytes,
-            device: device,
-            family: null,
-            role: role,
-            segment: (GpuDeviceMemoryWork.IsDeviceLocal(role: role) ? GpuMemorySegments.DirectXLocal : GpuMemorySegments.DirectXNonLocal)
+            grant: work.Admit(
+                bytes: bytes,
+                device: device,
+                family: null,
+                payer: null,
+                payerBytes: 0L,
+                role: role,
+                segment: (GpuDeviceMemoryWork.IsDeviceLocal(role: role) ? GpuMemorySegments.DirectXLocal : GpuMemorySegments.DirectXNonLocal)
+            )
         );
     }
 
@@ -159,7 +163,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x10, bytes: 200L, device: Device, family: "view/targets"));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x99, bytes: 1L, device: Device, family: "view/targets"));
-        work.CountAllocated(allocation: 0x20, bytes: 500L, device: Device, family: "backend/descriptor-heaps", role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal);
+        work.CountAllocated(allocation: 0x20, grant: work.Admit(bytes: 500L, device: Device, family: "backend/descriptor-heaps", payer: "backend/descriptor-heaps", payerBytes: 500L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountPlaced(allocation: 0x20, bytes: 1L, device: Device, family: "view/targets"));
 
         var local = work.ReadSegments().Single(predicate: static row => (row.Segment.Index == GpuMemorySegments.DirectXLocal));
@@ -178,6 +182,60 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         Assert.Equal(expected: 500L, actual: families["backend/descriptor-heaps"].Held);
     }
     [Fact]
+    public void AnAllocationIsCountedOnlyUnderAGrantAndAGrantSettlesOnce() {
+        var owners = new RefusingOwners();
+        var work = new GpuDeviceMemoryWork(backend: "vulkan", owners: owners);
+
+        work.BeginDevice(device: Device, segments: GpuMemorySegments.FromDirectX(profile: default));
+        // The account's refusal is the door's: nothing is granted, so nothing can be counted.
+        owners.Verdict = GpuMemoryVerdict.Refused;
+        Assert.False(condition: work.TryAdmit(bytes: 4096L, device: Device, family: null, grant: out var refused, payer: "sdf.mesh-region/mesh-region", payerBytes: 1024L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        Assert.Null(@object: refused);
+        _ = Assert.Throws<GpuMemoryRefusedException>(testCode: () => work.Admit(bytes: 4096L, device: Device, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        Assert.Equal(expected: 2L, actual: Read(kind: GpuDeviceMemoryWork.AdmissionRefusals, work: work));
+        // A grant carries what is counted and settles once: counted, returned or refused by the device.
+        owners.Verdict = GpuMemoryVerdict.Granted;
+
+        var counted = work.Admit(bytes: 4096L, device: Device, family: null, payer: "sdf.mesh-region/mesh-region", payerBytes: 1024L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal);
+
+        work.CountAllocated(allocation: 0x10, grant: counted);
+        _ = Assert.Throws<InvalidOperationException>(testCode: () => work.CountAllocated(allocation: 0x11, grant: counted));
+        _ = Assert.Throws<InvalidOperationException>(testCode: counted.Return);
+
+        var returned = work.Admit(bytes: 100L, device: Device, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal);
+
+        returned.Return();
+
+        var device = work.Admit(bytes: 200L, device: Device, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal);
+
+        Assert.True(condition: device.Refuse().ByDevice);
+        Assert.Equal(expected: (4096L, 1L, 1L), actual: (work.Held, work.DeviceRefusals, Read(kind: GpuDeviceMemoryWork.DeviceRefusalCount, work: work)));
+        Assert.Equal(
+            expected: [("admit", 4096L, 1024L), ("admit", 4096L, 0L), ("admit", 4096L, 1024L), ("Counted", 4096L, 0L), ("admit", 100L, 0L), ("Returned", 100L, 0L), ("admit", 200L, 0L), ("DeviceRefused", 200L, 0L)],
+            actual: owners.Log
+        );
+        // Another ledger's grant is refused.
+        _ = Assert.Throws<ArgumentException>(testCode: () => new GpuDeviceMemoryWork(backend: "directx").CountAllocated(allocation: 0x12, grant: counted));
+    }
+    // An account that answers every admission with one verdict and logs what it was asked and told.
+    private sealed class RefusingOwners : IGpuMemoryOwners {
+        public List<(string Call, long Bytes, long PayerBytes)> Log { get; } = [];
+        public GpuMemoryVerdict Verdict { get; set; } = GpuMemoryVerdict.Granted;
+
+        public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes) {
+            Log.Add(item: ("admit", bytes, payerBytes));
+
+            return new(Bytes: bytes, Net: bytes, Verdict: Verdict);
+        }
+        public void Settle(GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) => Log.Add(item: (settlement.ToString(), admission.Bytes, 0L));
+        public Puck.Abstractions.Memory.IAllocationObserver OfSegment(GpuMemorySegment segment) => new Observer();
+        public Puck.Abstractions.Memory.IAllocationObserver OfFamily(GpuMemorySegment segment, string family) => new Observer();
+
+        private sealed class Observer : Puck.Abstractions.Memory.IAllocationObserver {
+            public void Change(long bytes, Puck.Abstractions.Memory.MemoryBacking backing) { }
+        }
+    }
+    [Fact]
     public void TheLegendMakesEveryCountPacing() {
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
 
@@ -194,6 +252,9 @@ public sealed class GpuDeviceMemoryWorkLawTests {
                 ("gpu.memory.host-visible.peak", "bytes", WorkClass.Pacing),
                 ("gpu.memory.allocations", "count", WorkClass.Pacing),
                 ("gpu.memory.placement-disagreements", "count", WorkClass.Pacing),
+                ("gpu.memory.admission-refusals", "count", WorkClass.Pacing),
+                ("gpu.memory.over-limit-grants", "count", WorkClass.Pacing),
+                ("gpu.memory.device-refusals", "count", WorkClass.Pacing),
             ],
             actual: [.. work.WorkKinds.ToArray().Select(selector: static kind => (kind.Name, kind.Unit, kind.Class))]
         );

@@ -35,7 +35,10 @@ public sealed partial class ShaderPipelineRenderNode {
     // graph's own allocations are never refused.
     private MemoryAccount.DeviceReservation? m_reservation;
 
-    private MemoryAccount.DeviceReservation Reservation => (m_reservation ??= MemoryAccount.Shared.ReserveDevice(
+    /// <summary>Gets the account the instance reserves its replacements in: the process's.</summary>
+    public MemoryAccount MemoryAccount { get; init; } = MemoryAccount.Shared;
+
+    private MemoryAccount.DeviceReservation Reservation => (m_reservation ??= MemoryAccount.ReserveDevice(
         memoryClass: MemoryClass.Fixed,
         owner: new GpuObjectName(owner: m_name, part: "graph").MemoryOwner(),
         pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: m_device.MemoryProfile.UnifiedMemory)

@@ -74,8 +74,8 @@ public sealed class GpuMemoryPoolLawTests {
         var log = new List<string>();
         var next = 0;
         var pool = new GpuMemoryPool<int, int>(
-            allocate: (_, bytes) => {
-                log.Add(item: $"alloc {++next} {bytes}");
+            allocate: request => {
+                log.Add(item: $"alloc {++next} {request.Bytes}");
                 return next;
             },
             blockBytes: Block,

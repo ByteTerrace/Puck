@@ -365,6 +365,23 @@ public sealed class MemoryAccount {
     public long FloorOf(PhysicalMemory pool) {
         lock (m_gate) { return m_pools[((int)pool)].Floor; }
     }
+    /// <summary>Reads what one pool's admission holds it to, without allocating: its limit and the bytes it holds and
+    /// has promised.</summary>
+    /// <param name="pool">The pool.</param>
+    /// <param name="limit">The pool's limit, in bytes.</param>
+    /// <param name="held">The bytes the pool holds.</param>
+    /// <param name="promised">The bytes the pool has promised.</param>
+    /// <returns><see langword="false"/> where nothing bounds the pool, and <paramref name="limit"/> reads zero.</returns>
+    public bool TryReadTotals(PhysicalMemory pool, out long limit, out long held, out long promised) {
+        RefreshAvailable();
+        lock (m_gate) {
+            held = HeldOf(pool: pool);
+            promised = PromisedOf(pool: pool);
+            limit = (LimitOf(pool: pool) ?? 0L);
+
+            return (LimitOf(pool: pool) is not null);
+        }
+    }
     /// <summary>Reads one pool's admission figures under the account's lock: its limit, what it holds and has promised,
     /// and both by class.</summary>
     /// <param name="pool">The pool.</param>
@@ -615,7 +632,9 @@ public sealed class MemoryAccount {
             var verdict = GpuMemoryVerdict.Granted;
 
             if (!fits) {
-                if (MemoryClasses.GivesWay(memoryClass: (((entry is { Classified: true }) ? entry.Class : MemoryClass.Fixed)))) {
+                // An owner's storage gives way only past the floor its reservations state: what it cannot run without is
+                // admitted like fixed storage.
+                if ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + bytes) > entry.Floor)) {
                     Refused(pool: pool);
 
                     return new(Bytes: bytes, Net: net, Verdict: GpuMemoryVerdict.Refused);
@@ -685,6 +704,8 @@ public sealed class MemoryAccount {
         public MemoryClass Class;
         public bool Classified;
         public string Family { get; } = family;
+        // The bytes its reservations state it cannot run without, together.
+        public long Floor;
         public long Held;
         public long Peak;
         public PhysicalMemory Pool { get; } = pool;
@@ -907,6 +928,7 @@ public sealed class MemoryAccount {
         private readonly FamilyEntry m_entry;
 
         private long m_peak;
+        private long m_floor;
         private long m_retiring;
         private bool m_closed;
 
@@ -936,8 +958,9 @@ public sealed class MemoryAccount {
         /// <summary>Reserves the peak the holder's resources hold at once, or lowers a reservation already held. A raise
         /// past <paramref name="floor"/> that the pool has no room for is refused and changes nothing, whatever the
         /// class. A peak within the floor is reserved whatever the pool holds: the floor is what the holder cannot run
-        /// without, and a pool with no room for it reads over its limit
-        /// (<see cref="MemoryAdmissionReading.OverLimit"/>) instead of ending the holder.</summary>
+        /// without, a pool with no room for it reads over its limit (<see cref="MemoryAdmissionReading.OverLimit"/>)
+        /// instead of ending the holder, and the owner's allocations within its floors are admitted as fixed storage
+        /// is.</summary>
         /// <param name="peak">The most bytes the holder's resources hold at once.</param>
         /// <param name="floor">The part of <paramref name="peak"/> the holder cannot run without, in bytes; zero for
         /// none.</param>
@@ -960,6 +983,8 @@ public sealed class MemoryAccount {
                 }
                 if ((extra > 0L) && !m_account.Fits(extra: extra, pool: m_entry.Pool)) { m_account.m_pressure = 1; }
                 m_account.ChangeFamily(entry: m_entry, held: 0L, peak: (peak - m_peak));
+                m_entry.Floor += (Math.Min(val1: floor, val2: peak) - m_floor);
+                m_floor = Math.Min(val1: floor, val2: peak);
                 m_peak = peak;
                 return true;
             }
@@ -982,6 +1007,8 @@ public sealed class MemoryAccount {
                 if (m_closed) { return; }
                 m_account.ChangeFamily(entry: m_entry, held: 0L, peak: -m_peak);
                 m_account.m_pools[((int)m_entry.Pool)].Retiring -= m_retiring;
+                m_entry.Floor -= m_floor;
+                m_floor = 0;
                 m_peak = 0;
                 m_retiring = 0;
                 m_closed = true;

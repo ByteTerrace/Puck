@@ -90,9 +90,11 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         var again = Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: upload, role: GpuMemoryRole.HostVisible);
         Assert.Equal(expected: ["place 0 heap 1 at 0", $"place {again - 1} heap 1 at 0", $"release resource {again - 1}", $"place {again} heap 1 at 0"], actual: calls.Log);
 
-        // A heap the device refuses surfaces as the call's failure.
+        // A heap the device has no memory for hands its grant back as the device's refusal: nothing is counted, and the
+        // ledger marks the reading stale.
         calls.FailHeap = true;
-        _ = Assert.Throws<DirectXException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal));
+        Assert.True(condition: Assert.Throws<GpuMemoryRefusedException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal)).ByDevice);
+        Assert.Equal(expected: 1L, actual: work.DeviceRefusals);
         calls.FailHeap = false;
 
         // The device's release frees every heap and forgets every token, so no later release finds one.
