@@ -2983,6 +2983,16 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [medium] Two Free Cam compositions: `PlayerCommandModule.ActivateCameraApplication`
+  (`src/Puck.World/PlayerCommandModule.Mode.cs`, client side: finds the camera body through
+  the client's inhabitant table, checks `CheckEngage`, then submits a Console Drive grant and a
+  `ComposeControl` as two submissions) and `WorldInputRuntime.TrySetCameraRoute`
+  (`src/Puck.World.Server/WorldInputRuntime.Camera.cs`, authority side: one activation scope,
+  `CheckEngagePolicy`, `Compose`, then the grant). `ApplyMode` takes the authority path only when
+  the routed document's `inputModes` declare a `SeatState` family of that name, and the debug
+  world's do not, so the debug world's Free Cam runs the client path. Route every camera-target
+  seat-mode edge through the authority (a `SeatState` selection need not require an `inputModes`
+  family) and delete the client composition with its separate grant.
 - [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
   (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
   (`Puck.Abstractions`, path-based) each try, test a timeout and sleep on the
