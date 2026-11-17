@@ -48,8 +48,8 @@ public sealed partial class SdfWorldTables {
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 1) == 0) { Puck.Hosting.Jobs.MemoryAccount.Shared.DeferTrim(); }
     }
 
-    /// <summary>Releases, on the frame thread, the placement claims of meshes the latest draws no longer name when the
-    /// process account has asked its caches to trim since the last call; otherwise does nothing.</summary>
+    /// <summary>Polls retired device objects on the frame thread, including for hidden residencies. If the process
+    /// account has asked for a trim, also releases placement claims the latest draws no longer name.</summary>
     internal void ServiceMemoryTrim() {
         ServiceRetirements();
         if (Interlocked.Exchange(location1: ref m_meshTrimRequested, value: 0) == 0) { return; }

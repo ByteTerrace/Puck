@@ -1712,15 +1712,11 @@ allocating on every device.
 **The indexed read.** Every kernel reads the mesh region through one door,
 `frame/sdf-mesh-words.hlsli`: a draw's record through `sdfMeshRecordWord`, a
 mesh's own words (vertices, triangle materials, indices, level table,
-members) through `sdfMeshWord`. Its C# twin is `SdfMeshSlabs`: a word's slab
-is its index over `SdfMeshSlabs.Words` (64 MiB), its place the remainder, and
-`SdfMeshSlabs.TryView` gives each slab's view of the region. The region is
-bound a second time as `SdfMeshSlabs.Count` views (64, enough for
-`GpuRegion.MaxByteCount`; `SdfWorldPackage.MeshSlabs`, an arrayed read-only
-buffer member, which the shader interface now supports), written by
-`SdfWorldTables.WriteMeshSlabs` into the World sets, the mesh pass sets and the
-probe sets, a slab past the region's end binding the unused-member buffer.
-`SdfMeshSlabs.IndexedRead` is the switch, generated as `SDF_MESH_SLAB_INDEX`:
+members) through `sdfMeshWord`. The prototype divided a word index by a
+64 MiB slab's word count and used the remainder as its place. It bound the
+region a second time as 64 views, enough for `GpuRegion.MaxByteCount`, in
+the World, mesh and probe sets. A slab past the region's end bound the
+unused-member buffer. Its generated switch was `SDF_MESH_SLAB_INDEX`:
 off, `sdfMeshWord` reads the one binding directly, as before; on, it indexes
 the views with `NonUniformResourceIndex`, which is the read real slabs would
 put in every kernel (records stay one direct table, as they would beside
@@ -1745,10 +1741,10 @@ kernels' reads.
   --against` the base build reads the same identity on both backends (code 0
   members differ, both bake kernels the same), so a comparison's two builds
   share one mesh store.
-- *What it costs every device:* Vulkan devices now require
+- *What it cost every device:* the prototype required
   `shaderStorageBufferArrayDynamicIndexing` and
   `shaderStorageBufferArrayNonUniformIndexing` (`VulkanLogicalDeviceFactory`),
-  which every bar device reports; the device chain now enables a feature flag
+  which every bar device reports; its device chain enabled a feature flag
   past a structure's first (`VulkanFeatureFlag`).
 
 **The measurement.** Two builds of one commit, `SdfMeshSlabs.IndexedRead`
