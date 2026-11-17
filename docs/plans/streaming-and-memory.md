@@ -961,7 +961,7 @@ answer differs for each.
 - **Publication stays whole.** What a frame draws is always a complete mesh of
   one tier, which holds by construction
   ([what publishes](bake-demand-tiers.md#what-publishes-and-what-the-frame-draws)).
-  Fixed-size pages below the mesh would put a page-table read in every vertex
+  Shader-visible pages below the mesh would put a page-table read in every vertex
   fetch and buy nothing for publication, because Puck's units are complete
   surfaces already. Where a group is too large to have one tier, the unit
   shrinks in the source, not in the mesh
@@ -983,10 +983,11 @@ this order, and each step is honest about which amount it moves:
 1. Growth stops. No new promise is granted and the bias rises. This needs no
    memory and moves nothing held.
 2. Names are evicted. Ranges in use fall; backing does not.
-3. Backing is released. With slabs an emptied slab goes back to the device
-   with no replacement. With one buffer it cannot, short of releasing the
-   region whole and landing its floors again, which is counted and is the last
-   resort.
+3. Backing is released. Sparse pages lose their mappings after their last
+   readers, then return to the backend pool. Only an emptied physical block
+   returned to the device reduces held bytes. With the contiguous fallback,
+   release without a replacement requires releasing the region whole and
+   landing its floors again, which is counted and is the last resort.
 4. After the fence, the row falls. Relief is claimed here and nowhere earlier:
    a sum of grants and named bytes cannot show it.
 
@@ -1000,20 +1001,22 @@ pressure, through that pool, not through a second trimming allocator.
 | Sparse backing of the one buffer | No shader change; memory committed as the region fills and decommitted as it empties | Reserved resources and sparse binding are capabilities, not guarantees **[external: Microsoft residency]**; the addressing ceiling stays |
 | Slabs: fixed-size buffers, each mesh inside one, a draw naming its slab | No capability question; growth adds a slab and an emptied slab returns to the device; no single-buffer addressing ceiling; one store for every residency, so a mesh several worlds draw is resident once | Every kernel that reads mesh words indexes an array of buffers; a mesh larger than a slab takes its own; slab count is bounded by descriptors; fragmentation inside slabs |
 
-**Favoured.** Slabs shared by the presentation are the direction, because they
-also make decision 3's option C true and returning a whole buffer is the
-reliable way to give memory back **[external: Microsoft residency]**. The
-choice between slabs and sparse backing is not made here: it rests on a
-capability reading on the three bar devices and on the indexed read's cost in
-every kernel that reads mesh words (views, glass, the cascades, the lighting's
-trace and picking), which a design page cannot measure. It is
-[step 7](#the-build-order): a prototype of the indexed read with a GPU grant,
-measured before the region's allocator changes, pricing fragmentation, the
-largest payload, the descriptor count and what the backend pool keeps. Because
-physical relief depends on it, the backing lands before
-[step 5](#the-build-order) claims any; until then growth reserves its peak
-(decision 3), so the copy is admitted, not hidden, and step 3 claims only that
-growth stops.
+**Direction after the prototype.** Slabs were favoured for sharing geometry
+across residencies and returning complete buffers. [The first
+reading](#the-prototype-as-built) found material indexed-read cost on Direct3D
+12, so sparse backing of the one region buffer is now the direction wherever
+the device allows it. It preserves the direct shader read, the region per
+residency and its addressing ceiling; it does not deliver decision 3's shared
+mesh store. A device without sparse support uses today's admitted growth by
+copy behind the same region, never a second store. The remaining paired
+readings and hardware qualifications have owners in [step 7's
+design](#sparse-backing-design-for-review).
+
+Because physical relief depends on it, the backing lands before
+[step 5](#the-build-order) claims any. Until then growth reserves its
+replacement peak (decision 3), so the copy is admitted, not hidden, and step
+3 claims only that growth stops. The sparse design below is proposed, not
+implemented or hardware-qualified.
 
 ### The source tile and its seam rule
 
@@ -1208,7 +1211,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [0. The walk's instrument](#step-0-the-walks-instrument) | The seam walk as a run, and today's seams as the baseline | Nothing |
 | [1. Device readings and pools](#step-1-as-a-brief) | Budgets per segment, placement in the ledger, pools on the account as ledgers | Nothing |
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
-| [7. The backing prototype](#step-7-the-backing) | Slabs or sparse backing, chosen by measurement | Beside 1 and 2, with a GPU grant |
+| [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; review before implementation, contiguous fallback retained | Step 3's admission stands; remaining prototype and qualification readings need a GPU grant |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit. Built, apart from background work serviced off the frame pump | 1, 2 |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
@@ -1637,23 +1640,25 @@ falls by the hidden renders.
 
 ### Step 7: the backing
 
-**Builds.** First the prototype: a capability read on the three bar devices
-(sparse binding, reserved resources, memory priority, pageable device-local
-memory) and the indexed slab read in every kernel that reads mesh words. Then
-the backing the measurement chooses, with [the pressure
+**Builds.** The prototype below supplies the capability read and the indexed
+read's first result. Next is [the sparse design for
+review](#sparse-backing-design-for-review), before backend implementation:
+reserved resources on Direct3D 12, sparse buffers on Vulkan, and the existing
+contiguous backing where either is unavailable. Both use [the pressure
 transaction](#decision-8-pages-are-three-things-and-only-one-changes) and the
 backend pool's release of its kept empty blocks under pressure.
 
-**Replaces.** Growth by copy; shrinking by replacement; a region per
-residency, if slabs win.
+**Replaces.** Growth by copy and shrinking by replacement on the sparse path.
+The fallback retains both. One region per residency remains on both paths.
 
 **Check.** The capability table. The cost of the views, glass, cascade,
 lighting-trace and picking kernels with and without the index, on both
 backends (`world.gpu-timing`), with the fragmentation, the largest payload,
 the descriptor count and the kept blocks priced. Then: allocated bytes per
-landed byte fall toward one; under a forced budget drop the ledger's held
-bytes fall after the fences with no allocation made to free them; and, with
-slabs, no mesh is placed in more than one store.
+landed byte fall toward one, with page tails and physical-block slack reported
+separately; under a forced budget drop the ledger's held bytes fall after the
+fences with no allocation made to free them. The checks below distinguish a
+hole in a buffer, a returned page and actual physical release.
 
 #### The prototype as built
 
@@ -1796,6 +1801,376 @@ near one percent. By the rule above, sparse backing of the one buffer is the
 direction on devices that allow it, and slabs do not land their kernel path.
 The Vulkan pair and the meadow stop are still owed before step 7's backing is
 built; the door and the switch stay, so the comparison can be read again.
+
+#### Sparse backing design for review
+
+**Status and scope.** Brief sm7b stops at this design for review. No sparse
+backend is built by this change. The prototype's capabilities are support
+readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
+reads sparse features, but `FeatureIndicesOf` does not enable them and
+`BuildQueues` requests only the graphics/present families. The native mapping
+entry points are absent. The 4070 readings support this direction; the Deck
+column is driver-source evidence, and the 2060 is unverified. Absence of
+pageable device-local memory does not disqualify sparse buffers: Puck must
+unbind and free its allocations, rather than rely on overcommit.
+
+**The choice.** Preserve `SdfMeshRegionArena` as the one mesh placement store,
+`GpuRegion` as its staging/copy owner, and the direct word read. Add an optional
+range-backed destination to the region's existing owned-buffer mechanism.
+Backends supply resource creation and mapping operations; page coverage,
+transaction states and retirement belong in `Puck.Abstractions`, with mesh
+range demand supplied by `SdfWorldTables`. Ordinary regions keep their current
+policy. No SDF vocabulary belongs in the backend contract.
+
+The alternative, shader-visible slabs, remains rejected by the first reading.
+A native allocation per hardware page would give immediate physical release
+but multiply handles and hit Vulkan's allocation-count limit. Keeping all
+physical memory behind one giant allocation would preserve that problem in
+another form: unmapping could never release part of it. Use native pages
+suballocated from the existing backend pool instead, and expose its slack.
+This keeps the direct read while making physical-block release possible.
+
+##### Page size, address space and physical blocks
+
+There are two relevant granularities below a mesh, neither a publication unit:
+
+| Quantity | Direct3D 12 | Vulkan |
+|---|---|---|
+| Native mapping page | 64 KiB; query the reserved buffer's tiling to verify its coverage | The created buffer's `VkMemoryRequirements.alignment`; never infer it from storage-buffer descriptor alignment |
+| Physical allocation block | Initially the existing `DirectXHeapArena.HeapBytes` | Initially the existing `VulkanMemoryArena.BlockBytes`, rounded up if the native page requires more |
+| Mapping | Reserved buffer tile to heap tile | Buffer byte range to device-memory byte range |
+
+Microsoft documents [64 KiB reserved-resource
+tiles](https://learn.microsoft.com/en-us/windows/win32/direct3d12/uploading-resources).
+The Vulkan specification defines [sparse buffer page
+size](https://docs.vulkan.org/spec/latest/chapters/sparsemem.html)
+through memory requirements; [sparse
+binds](https://docs.vulkan.org/refpages/latest/refpages/source/VkSparseMemoryBind.html)
+require aligned resource offsets, memory offsets and sizes. A mesh may cross
+any number of pages. Several meshes may occupy one page, counted once; an
+empty range is not a free page while a neighbour, a landing or a retired
+reader still needs any byte of it.
+
+Create one virtual resource for the region's lifetime, with its usable extent
+bounded by `GpuRegion.MaxByteCount` and the backend's actual buffer/view
+limits, rounded down to whole native pages. Check the native resource size,
+descriptor range and address arithmetic together; do not bind a four-GiB
+descriptor merely because virtual address bits allow a four-GiB resource.
+Track virtual reservations across the device, including scratch: Vulkan's
+`sparseAddressSpaceSize` is a device-wide capacity, not a per-world allowance.
+Creation validates that capacity before selecting sparse backing. A virtual
+reservation is reported separately and is never charged as committed VRAM.
+Driver bookkeeping still appears in the API usage reading.
+
+Logical extent, mapped pages and physical allocation bytes become separate
+readings. `GpuRegion.ByteCount` remains a logical bound; it can no longer mean
+the sparse destination's held bytes. Reserve space once, then map only the
+union of the draw-record prefix, placed mesh ranges and admitted in-flight
+landing ranges. Do not map all holes below the highest address, nor allocate
+a host shadow of the virtual extent. Keep `GpuRegion.Shadow` and bounded
+landing. Growing the draw prefix uses the arena's existing relocation path,
+with old pages retained until its readers finish.
+
+Extend `GpuMemoryPool` to lend page-aligned physical ranges as well as placed
+resources, using its existing `GpuRangeAllocator` tickets. Add sparse backing
+to the pool key so nonmovable ordinary resources cannot pin a sparse block.
+Do not add an allocator beside `DirectXHeapArena` or `VulkanMemoryArena`.
+Physical blocks may serve several regions; this shares free physical space,
+not mesh identities or payloads between residencies. Initially keep the
+existing block size to avoid an unmeasured tuning choice. New allocation
+counts must respect the device-wide Vulkan limit as well as byte admission;
+the [device limits](https://docs.vulkan.org/refpages/latest/refpages/source/VkPhysicalDeviceLimits.html)
+are distinct constraints. Allocation-count pressure requests the same trim
+and defers elastic growth; it does not create an uncounted allocation.
+
+##### Backend resource and queue contract
+
+**Direct3D 12.** Require tiled-resource tier 1 or greater and successful
+validation of the buffer description. Create a row-major buffer with the
+ordinary region's storage and copy usages through
+[CreateReservedResource](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device-createreservedresource).
+It starts with virtual memory only. Physical pages come from admitted DEFAULT
+buffer heaps. Map ranges through
+[UpdateTileMappings](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-updatetilemappings),
+one call per supplying heap as needed; unmap with the NULL range flag. Use
+mapping flags NONE: Microsoft's [mapping-flags
+reference](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_tile_mapping_flags)
+says NO_HAZARD is unsupported.
+
+The binding queue is the existing direct/frame queue. Flush its pending
+`GpuSubmissionBatch` through `DirectXDeviceContext.CommandQueueHandle` before
+mapping; never retain a raw queue that skips that door. Queue the map before
+initialization/upload, and signal a monotonically identified submission fence
+after the mapping batch. Unmapping is queued only after the retirement proof
+below. Keep the heap alive through the fence after unmapping, including if
+its reserved resource has already stopped being published. Use the backend's
+ordinary transfer/UAV-to-reader barriers for contents, plus the appropriate
+aliasing synchronization on physical-page reuse; mapping alone neither
+initializes data nor replaces [resource
+barriers](https://learn.microsoft.com/en-us/windows/win32/direct3d12/using-resource-barriers-to-synchronize-resource-states-in-direct3d-12).
+The implementation must express that synchronization in the backend's
+enhanced-barrier path, rather than relying on implicit decay.
+
+**Vulkan.** Enable both `sparseBinding` and `sparseResidencyBuffer`, and create
+the buffer with both corresponding sparse creation flags, storage usage and
+transfer source/destination usage. Sparse binding alone requires the whole
+buffer to be bound and cannot implement holes. Choose a compatible
+device-local memory type from the buffer's memory-type bits through the
+existing memory selection and segment attribution. Neither sparse aliasing,
+strict non-residency, memory priority nor pageable device-local memory is a
+prerequisite; never intentionally read an unbound byte.
+
+Prefer the graphics queue when its family advertises sparse binding;
+otherwise request one queue from a sparse-capable family during logical
+device creation. Retrieve it once in the device's queue owner. Native calls
+go through the queue submission door, which flushes deferred graphics work
+and serializes host access, including when the sparse and graphics handles
+are the same. No copy, draw or dispatch moves to the binding-only queue, so
+buffer access stays in the graphics family. Any future data-access queue
+must join the lifetime and ownership-transfer contract before using pages.
+
+Use [vkQueueBindSparse](https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueBindSparse.html)
+with buffer binds, not `vkBindBufferMemory`. Order it explicitly even on the
+graphics queue. The initial implementation uses binary semaphore edges and
+a fence per bounded mapping batch, requiring no new timeline-feature floor:
+an ordered graphics submission signals readers-finished; the sparse batch
+waits it, changes mappings, signals binding-ready and its fence; the next
+graphics submission waits binding-ready at all commands before touching
+the ranges. An initial map can omit the readers-finished edge only for
+never-used ranges. Rebinds are serialized through the same transaction owner.
+Each binary signal has one wait; recycle its semaphore only after the waiting
+submission completes. A successful bind call is not a completed bind.
+
+Binding synchronization supplies execution ordering, not the availability
+and visibility of copied contents. Keep transfer-write to shader-read/write
+dependencies in the graphics submissions and memory dependencies across
+compaction copies, as required by the [Vulkan synchronization
+chapter](https://docs.vulkan.org/spec/latest/chapters/synchronization.html).
+An unbind uses a null memory handle. Only its fence permits returning the
+physical range. Device loss is teardown, never a successful retirement.
+
+As an independent implementation check, vkd3d-proton's
+[sparse queue submission](https://raw.githubusercontent.com/HansKristian-Work/vkd3d-proton/master/libs/vkd3d/command.c)
+also orders sparse binds with semaphore edges and retains resources through
+completion. It uses timeline semaphores; Puck's binary edges are a deliberate
+baseline choice, not a claim that timeline semaphores are unavailable. No API
+disagreement was found on the required ordering. This is corroboration, not
+a translation layer to copy or evidence of Puck running on the hardware.
+
+##### One transaction from admission to publication
+
+The destination owns each page's state: absent, reserved for mapping, mapping
+submitted, writable, published, retiring, unbinding, then absent again.
+Every state carries the device generation and the placement ticket. Only the
+destination can make the readiness/retirement tokens; callers cannot return a
+raw pool placement or mark a mapping complete. Coalescing adjacent pages
+changes call count only. Cancellation follows the same retirement path.
+
+1. The arena proposes ranges, without publishing them or relinquishing the
+   old complete tier. The backing computes newly needed pages, excluding
+   already held pages and counting a shared boundary page once. Physical
+   placement is planned under the pool's lock; its one-use plan identifies
+   both reusable space and the exact new block bytes it needs. Consuming a
+   stale plan redoes admission, never silently allocates a larger block.
+2. Extend `SdfResidencyGrant.ReserveGrowth` to reserve that physical plan,
+   through `MemoryAccount`, before making the ranges usable. Sparse growth
+   reserves existing backing plus retiring backing plus the actual new block
+   charge, rather than the virtual extent plus a full replacement. The
+   fallback still reserves old and new buffers together. Keep pool-to-account
+   lock order as in today's native allocation callback; do not call the pool
+   while holding the selector/account lock.
+3. Each native block allocation still passes `GpuDeviceMemoryWork.TryAdmit`
+   at its full size and `CountAllocated` with its grant and actual segment.
+   Reuse of an already allocated page transfers attribution without a new
+   allocation count. Page mappings are placements (`CountPlaced`), never a
+   second device-byte charge. The pool owns block slack once; the residency
+   owns its committed page coverage once. A pool block shared by residencies
+   cannot be charged in full to every residency.
+4. Queue mapping, then initialize only new pages and upload their needed
+   words through the existing landing budget. Reused pages are initialized
+   too. Do not run `GpuRegion.RecordCarry`'s full-destination clear over sparse
+   holes, clear live neighbouring words, or carry the old region on growth.
+   A new range within a live page writes its own bytes only. The stable
+   resource and offsets mean existing descriptors and landed bytes stay put.
+5. Publish through the existing whole-mesh landing door only when every
+   required page is ready and every upload has been submitted with the
+   dependency that precedes its readers. Keep the old tier, or the existing
+   absent record, until then. An admission/allocation refusal returns only
+   unused promises and leaves prior publication intact. An unsubmitted map
+   can be cancelled immediately; submitted work keeps its storage through
+   completion. Failed submissions leave affected ranges unpublished and
+   retained until their actual completion or device teardown, never freed
+   based on a reusable fence's initial signaled state.
+
+The selector must stop subtracting the largest sparse virtual capacity as
+replacement headroom (`SdfResidencySelector.UsableOf`). Retain that allowance
+for contiguous replacements, and reserve bounded mapping/compaction work in
+the workspace class. Extend the grant's created/grown/released bookkeeping to
+consume backing results, rather than reconstructing them from `ByteCount`.
+`SdfMeshRegionArena.SetLimit` still bounds addresses; sparse byte admission
+also checks each placement's physical plan, because a high address with
+holes is not its committed cost. Draw-prefix floors are page-rounded, with
+pages shared with elastic ranges counted once. Step 5 adds tier floors to
+that same coverage; step 7 does not invent a second eviction policy.
+
+Reservations must identify the particular region's payer, not just the
+shared `SdfResidencySelector.RegionOwner` aggregate. Extend the existing owner
+registration/naming to give each region a child owner and aggregate its
+report, so one region cannot spend another's pending page credit. Staging
+retains `RegionStagingOwner` and its separate admission, including on UMA.
+Held physical blocks, mapped coverage, live ranges, promised additions,
+retired coverage and pool slack are reported separately. Retired is a subset
+of held, not another sum. `SdfResidencyGrant.Released` reduces a reservation
+only after the backing transaction's release; the ledger falls only when
+`ReleaseHeap` or `vkFreeMemory` actually releases a block. OS usage may lag.
+
+##### Shrink, eviction and physical relief
+
+On pressure, `MemoryAccount.ServicePressure` still requests trim and
+`SdfWorldTables.ServiceMemoryTrim` services it on the frame thread. Stop
+elastic growth, cancel unsubmitted additions and let the selector raise its
+bias. Remove unwanted names through the arena and step 5's tier policy.
+Unpublishing changes live range counts, not backing held.
+
+Seal the removed ranges against new readers and writers. Account for landing,
+the draw-prefix copy, views, shadows, GI/trace and all recorded-but-not-yet-
+submitted work. All present readers use the frame queue; the existing
+upload-prefix retirement in `SdfWorldTables.Retire` can supply the proof only
+after the batch containing those last readers is flushed and a following
+submission is known complete. Waiting merely for the most recent upload
+does not cover draws submitted after it. A transaction pins the region and
+its pages while that proof is pending; an abandoned submission is not proof
+that some earlier successful reader finished.
+
+After that fence, remove the page's last reference and queue its unmap. Wait
+for the unmap's own completion, then return the physical range through the
+pool's ticketed return. No reuse, heap destruction or memory freeing precedes
+that second fence. A logical shrink releases empty tail pages in this way
+without resizing the virtual resource; eviction can release empty interior
+pages too. A page still intersecting a live range stays mapped, even if most
+of its bytes are empty. A renewed request during retirement takes a new
+generation after the unmap completes; it cannot resurrect the old ticket.
+
+Add pressure trimming to `GpuMemoryPool` itself. Under pressure its normally
+kept empty block is released, and a block that empties when a pending unmap
+finishes is released too: the trim request persists through the pending
+retirements. No live placement is freed by this trim. Microsoft explicitly
+distinguishes unmapping from [destroying heaps to reclaim
+residency](https://learn.microsoft.com/en-us/windows/win32/direct3d12/residency).
+Vulkan likewise requires freeing the actual memory allocation. Therefore
+free-page counts alone never satisfy step 7's relief check.
+
+**Fragmentation has two levels.** Partly live virtual pages retain their
+tails; packing mesh ranges is the arena's existing relocation/whole-landing
+operation and pays its upload and workspace costs. Empty physical pages
+scattered among blocks need a different operation: packing physical backing
+without changing a mesh address. Extend the generic pool's placement
+mechanism with a victim-excluding relocation plan, not a second range
+allocator. It reserves holes in other existing sparse blocks before moving
+anything. Never mix these movable blocks with ordinary resources.
+
+For physical packing, pre-admit and allocate one device-local scratch buffer
+large enough for one native page per active page size, plus its command and
+binding workspace, while there is room. Reuse `IGpuRecorder.CopyBuffer` and
+the same mapping transaction: seal readers; copy a source page to scratch;
+complete the copy; unmap it and bind its unchanged virtual address to the
+reserved destination page; wait binding-ready; copy scratch back; establish
+the reader barrier and reopen readers. Keep the old physical source until
+both unmap and copy-back complete successfully, so an unsubmitted or refused
+replacement bind can retain/restore it. An unknown submission outcome pins
+both placements until resolved or the device generation is torn down.
+Scratch is reusable only after copy-back completes.
+There is no simultaneous sparse alias, no mesh-row change and no whole-region
+copy. The copied bytes include every live neighbour on the page. All steps
+are ordered through the frame/binding queues above and charged to background
+work; bound each batch so ordinary rendering can run between transactions.
+
+Pack only when other blocks already have enough free pages to empty a victim.
+If workspace was not admitted before pressure, or live virtual-page tails
+leave too few holes, report that obstruction and continue eviction/trim; do
+not allocate memory to free memory. Step 5 can evict more optional tiers or
+use already reserved logical-relocation workspace. Its last resort remains
+whole-region release and counted floor restoration. Thus sparse backing
+guarantees release of empty blocks without replacement, not that arbitrary
+name eviction immediately releases the same number of physical bytes.
+
+##### Fallback and failure boundaries
+
+Select backing once when creating a region on a device generation. Missing
+sparse features, a usable binding queue or a valid virtual resource select
+today's contiguous destination automatically, with a diagnostic reason.
+Keep the same arena, shader read, staging, publication and admission. A native
+OOM during page commitment is pressure on the selected path; do not allocate
+a contiguous replacement as a retry. Device loss recreates the region on the
+new device and chooses again. Programming/validation errors are defects,
+not reasons to silently downgrade.
+
+On the fallback, `GpuRegion.Grow` and `Shrink` retain their admitted copy or
+relanding paths. A shrink needing a new buffer may be refused under pressure;
+retain the old one and report the remaining held bytes. Only a complete,
+fenced region release needs no replacement allocation. This preserves the
+bar-device baseline without pretending it has sparse relief. Sparse mode
+does not solve the single-region address ceiling or geometry duplicated
+across worlds; those remain explicit costs of the chosen shader path.
+
+After the remaining prototype readings, remove its unconditional slab-array
+bindings and Vulkan indexing-feature requirement from the production direct
+path. The prototype's `VulkanLogicalDeviceFactory.ComposeExtensionsAndFeatures`
+currently refuses devices without nonuniform storage-buffer indexing even
+with the switch off. Sparse and contiguous direct reads need no such feature;
+its removal belongs to the implementation, with callers and shaders together.
+
+##### Invariants and their enforcement
+
+Every new enforcement below is **proposed**; existing types alone do not yet
+prove sparse lifetime correctness. The reviewer checks the state machine
+before implementation, and the implementation gets the GPU-lifetime review
+that [the hazards](../development/hazards.md#silent-invariants) requires.
+
+| Invariant | One enforcing place | Where the guarantee stops |
+|---|---|---|
+| No mesh reader sees an absent, uninitialized or half-landed page | Region-issued page readiness tokens required by the whole-mesh publication door | Native shader address bugs still require device validation and readback witnesses; strict non-residency is not a repair |
+| Growth maps new pages without moving existing words | Range-backed destination's stable resource and page table; its grow path has no carry | Logical arena relocation remains an explicit, counted operation |
+| A page is held for the union of live, landing and retiring ranges | Destination-owned coverage and generation records; pool placements stay private | A future queue or reader must join the lease contract, not borrow the handle |
+| No physical reuse precedes last use and unmap completion | Mapping transaction alone produces a release token consumed by `GpuRetirementQueue` and the pool's ticketed return | Device loss tears down the generation; it never manufactures completion |
+| Every physical byte is admitted once and released once | `GpuMemoryGrant`, `GpuDeviceMemoryWork`, pool allocation/free callbacks and one-use placement plans | Driver-private overhead is read from API usage, not inferred from mappings |
+| Reservations price physical backing and cannot spend another region's credit | Region-specific account owner plus `SdfResidencyGrant` consuming the backing plan | Budget changes may leave old allocations over limit; the counted floor exception remains |
+| Binding never passes queued readers or hidden frame batches | Existing backend queue door extended with the mapping transaction and explicit Vulkan semaphore edges | Merely possessing a native queue handle cannot be an alternate submission API |
+| Pressure release makes no new device allocation | Pool trim and victim relocation use only existing holes and preallocated workspace | Insufficient holes/workspace is reported, not claimed as relief |
+| Sparse and contiguous paths have one mesh store and publication rule | `GpuRegion` destination selection under `SdfMeshRegionArena` | Sharing mesh identities across residencies is outside this step |
+
+##### Implementation sequence and open readings
+
+The sm7b follow-on implementation lane owns the first five rows after review;
+the lead owns assigning and running the hardware windows. None ran in this
+design lane. Each check reads actual work rather than a saved output baseline.
+
+| Step | Mechanical check and decision |
+|---|---|
+| Enable and select backing | Report supported versus enabled features, actual binding family/queue, native page size, virtual extent, buffer/view limits and allocation-count limit. Force capability absence and confirm the same region uses contiguous backing. Boot the debug world on both backends. |
+| Add physical plans and admission | Exercise two residencies sharing a block, overlapping page coverage, cancellation and a new-block boundary under a falling budget. Reconcile held plus promised with the account, mapped plus slack with blocks, and show no reservation credit is spent twice. Refusal preserves the prior complete tier. |
+| Map and grow | Land payloads crossing page boundaries with holes between them; read back known words on both sides after growth. Resource identity and old offsets stay fixed, carried bytes are zero, initialized/uploaded bytes cover only the admitted ranges/pages. Exercise a draw-prefix growth too. |
+| Retire and unmap | Delay a real reader, leave a frame batch deferred, cancel a landing, then evict/shrink and demand the same address again. Native call tracing must show last-reader completion before unmap and unmap completion before return/free/reuse. Include failed submission and device loss. Use device-free scheduling witnesses for interleavings a World cannot reliably force. |
+| Trim and compact | Force a budget drop with wholly empty pages, then fragmented physical blocks. Show page counts fall before or with block counts, held bytes fall only on native free, kept empty blocks reach zero under pressure, and no device allocation occurs during relief. Page copy/readback preserves words at stable virtual addresses; scratch and moved bytes are counted. Insufficient workspace and live-page tails must print their obstruction. |
+| Qualify on the debug world | Lead: hero spawn, meadow and the seam walk on Direct3D 12 and Vulkan, warm shared mesh store; read `host.memory`, `world.residency`, `world.counters gpu`, `world.gpu-timing`, and `world.rows check on`, then lower and restore the pool budget. Captures must retain complete floors without holes, and held bytes must fall after the fences. Quiet before/after timing prices mapping, initialization, physical packing and ordinary frame reads separately. |
+
+Open readings remain owned, rather than deferred to backend guesswork:
+
+- **Lead's prototype window:** finish the Vulkan indexed-read pair and meadow
+  stop, with the prototype's matching-work checks. They complete the evidence;
+  the Direct3D 12 result already selects the sparse direction.
+- **Step 7 hardware lanes:** read the 2060's two backends and boot the Deck
+  under SteamOS. Confirm page alignment, address/view limits, queues and
+  real budget-drop release. Driver-source support is not a device qualification.
+- **Step 7 allocator lane and lead's quiet window:** measure block slack,
+  partly live page bytes, allocation count, map batches and scratch-copy work
+  on the debug world with several residencies. Decide whether the existing
+  physical-block size needs changing, using the same pool implementation;
+  do not change the native page size or add shader indirection to tune it.
+- **Step 7 backend implementer and lifetime reviewer:** verify the enhanced
+  barrier spelling for physical-page reuse and exercise the separate sparse
+  queue case. Recording-driver witnesses cover the latter when the available
+  device has one combined queue; hardware validation remains labelled as such.
 
 ### Step 5: the floor and eviction
 
@@ -1963,8 +2338,9 @@ than the authored far distance.
 | The spend margin | Step 2 | The constant in decision 2 |
 | What happens over budget on an RTX card under Linux | A Linux boot of an RTX machine | How strictly Linux discrete must reserve before allocating |
 | The fixed cost of one residency, and of one character | Step 2, then step 5 | Whether a hub of many portals needs a session-scale design beyond this plan |
-| Sparse binding, reserved resources, memory priority and pageable device-local memory on the three bar devices; slab size and the store's decode blocks | Step 7: the read is built and the Deck's column is from its driver's source ([the prototype](#the-prototype-as-built)); the 4070's reading is taken and the 2060's is owed | Slabs or sparse backing; whether priority classes are passed to the driver |
-| The indexed read's cost in every kernel that reads mesh words | Step 7's paired window on both backends ([the measurement](#the-prototype-as-built)), then a reading on the Deck | Slabs or sparse backing |
+| Sparse binding, page alignment, actual binding queues, address/view limits and physical release on the three bar devices | Step 7 hardware lanes: the 4070 support reading is taken; qualify the implementation on both backends, read the 2060, and verify the Deck's driver-source column on hardware ([design](#sparse-backing-design-for-review)) | Sparse-path availability and its automatic contiguous fallback; priority remains optional |
+| The indexed read's remaining Vulkan and meadow pairs | Lead's quiet window ([the measurement](#the-prototype-as-built)) | Completes the prototype evidence; the material Direct3D 12 result already selects sparse backing |
+| Sparse block slack, partly live pages, map/compaction cost and enhanced-barrier reuse spelling | Step 7 allocator/backend implementers, lifetime reviewer and lead's quiet window ([design](#sparse-backing-design-for-review)) | Physical-block size and qualification of the pressure transaction, without changing the direct shader read |
 | The floor's bytes by class, and the groups whose floor is finer than their coarsest rung | Step 5's first reading | The floor class's size; whether the floor is affordable on each device |
 | Which tier the lighting traces, and what it must keep beyond recent hits | Step 9's first reading | Whether the floor and the trace tier are one product; what observation may evict |
 | How long detail may go unobserved before it is speculative, and the granularity of the mark | Step 8, with a turn's captures | The grace interval, the first owner question, and whether a mark per draw pays |
@@ -1987,6 +2363,14 @@ extends:
   account's feed and the grant's one door, not a parallel count.
 - **The backend pool.** `GpuMemoryPool` is where blocks are made, kept and
   freed; pressure release extends it.
+- **The region and retirement.** `GpuRegion`, `SdfMeshRegionArena`,
+  `SdfWorldTables.Retire` and `GpuRetirementQueue` own staging, placement and
+  completion. Step 7 adds range-backed destinations and binding completion to
+  those mechanisms; it does not fork the mesh store or the shader read.
+- **The queue door.** `GpuSubmissionBatch`,
+  `DirectXDeviceContext.CommandQueueHandle` and
+  `VulkanLogicalDevice.GraphicsQueue` own submission ordering. Sparse native
+  operations extend that door, with explicit bind dependencies.
 - **Demand.** `SdfMeshDemand` already unites every view of a residency, carries
   a window's shown height and frustum, and takes a placed eye
   (`SdfMeshDemand.Place`). The selector unites residencies; it does not write
@@ -2013,8 +2397,10 @@ extends:
 
 ## Sources
 
-Only what a decision rests on. Puck is independent work: each is a second
-opinion, none is the specification.
+Only what a decision rests on. API specifications define their native
+contracts; implementations and guidance supply independent second opinions,
+never Puck's design. Step 7's native API citations are beside the rules they
+support in [the sparse design](#sparse-backing-design-for-review).
 
 - D3D12 memory pool: [D3D12_MEMORY_POOL](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_memory_pool),
   which states that on a unified adapter the system pool and the local segment
