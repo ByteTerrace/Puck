@@ -120,6 +120,21 @@ DXIL bytes. An absolute include, or one whose join within that tree exceeds
 160 characters, is rewritten to its snapshot path. That choice depends on the closure's
 layout, so moving the checkout or cache does not change it.
 
+An include resolves beside the file that names it and then through the
+stage's include directories (`ShaderStageSource.IncludeDirectories`), in
+order, as DXC searches its `-I` directories; the snapshot mirrors each
+directory an include resolved through and passes it as `-I`. The headers every
+project shares (`Puck.Shaders/Assets/Shaders/Shared`) take one spelling,
+`#include "Shared/luma.hlsli"`, never a relative path that climbs out of a
+project. `ShaderIncludeDirectories.Of` names the directory holding `Shared`
+for an engine source: `src/Puck.Shaders/Assets/Shaders` in a checkout, and
+`Assets/Shaders` beside an application, where `Puck.Shaders` deploys its
+`Shared` headers as content next to the kernel trees that include them. The
+build, the deployed kernel tree's source reader (`SdfKernelSource`) and a
+`world.shaders.reload` ask it, so one spelling resolves in every layout; a
+tree in neither layout resolves through the running application's
+deployment.
+
 The cache lives in `shaders` under the per-user Puck directory
 (`ShaderCompiler.DefaultCacheDirectory`: `%LOCALAPPDATA%/Puck/shaders` on Windows,
 `$XDG_DATA_HOME/Puck/shaders` or `~/.local/share/Puck/shaders` on Linux), which the

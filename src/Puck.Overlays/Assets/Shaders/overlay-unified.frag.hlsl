@@ -37,7 +37,7 @@
 // binding, so every backend binds them alike.
 #include "overlay-common.hlsli"
 #include "overlay.interface.hlsli"
-#include "../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
+#include "Shared/luma.hlsli"
 
 // Dispatches to the slot's own scalar image, the switch that stands in for an array binding (see the note above).
 float2 frameSlotDimensions(uint slot) {

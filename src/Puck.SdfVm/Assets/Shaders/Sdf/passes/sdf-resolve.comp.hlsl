@@ -38,7 +38,7 @@
 #include "../frame/sdf-reprojection.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "../shade/sdf-transport.hlsli"
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli"
+#include "Shared/reconstruction.hlsli"
 
 // The history surface holds SDF_HISTORY_SURFACE_WORDS an output pixel (SdfWorldPackage.HistorySurfaceWords), in planes:
 // word w of every output pixel lies in plane w, extent.x * extent.y words long (sdfHistoryWord), so a wave's lanes read

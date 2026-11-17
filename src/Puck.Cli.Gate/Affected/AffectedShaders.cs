@@ -96,6 +96,7 @@ public sealed class AffectedShaders {
             foreach (var file in matched.Files.Select(selector: match => Path.GetFullPath(path: Path.Combine(path1: directory, path2: match.Path))).Order(comparer: StringComparer.Ordinal)) {
                 try {
                     var closure = ShaderSourceClosure.Collect(
+                        includeDirectories: ShaderIncludeDirectories.Of(sourcePath: file),
                         limits: ShaderSourceLimits.Default,
                         readInclude: ReadFull,
                         sources: [(file, (ReadFull(path: file) ?? string.Empty))]

@@ -878,6 +878,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   source, dead code included, so a lighting, screen or view module in the
   closure would move a stored mesh's key. Add to the bake's closure only what
   the bake reads, and check with `puck mesh identity --against`.
+- **A shared header is included as `Shared/<name>.hlsli`.** It resolves
+  through the include directory `ShaderIncludeDirectories.Of` names
+  (`src/Puck.Shaders/Assets/Shaders` in a checkout, `Assets/Shaders` beside the
+  application, where `Puck.Shaders` deploys `Shared` as content), which the
+  build, `SdfKernelSource.Read` and a reload all ask. Never climb out of a
+  project with `../`: the deployed tree (`Assets/Shaders/Sdf`) cannot reach it,
+  its sources are refused, and every specialization stays interpreted. A
+  source refused at load is named by `SdfKernelSet.SourceRefusalOf`, printed
+  as `[world.shaders: <kernel> source refused ...]` and carried into each
+  specialization refusal.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:

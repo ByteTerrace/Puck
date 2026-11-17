@@ -58,8 +58,8 @@ public sealed class SdfKernelSource {
         ArgumentNullException.ThrowIfNull(directory);
 
         var path = Path.GetFullPath(path: Path.Combine(path1: directory, path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.hlsl"));
-        var stage = new ShaderStageSource(EntryPoint: "CSMain", Path: path, Source: File.ReadAllText(path: path), Stage: ShaderStage.Compute);
-        var closure = ShaderSourceClosure.Collect(limits: ShaderSourceLimits.Default, sources: [(stage.Path, stage.Source)]);
+        var stage = new ShaderStageSource(EntryPoint: "CSMain", IncludeDirectories: ShaderIncludeDirectories.Of(sourcePath: path), Path: path, Source: File.ReadAllText(path: path), Stage: ShaderStage.Compute);
+        var closure = ShaderSourceClosure.Collect(includeDirectories: stage.IncludeDirectories, limits: ShaderSourceLimits.Default, sources: [(stage.Path, stage.Source)]);
 
         return new SdfKernelSource(includes: closure.Contents, stage: stage);
     }

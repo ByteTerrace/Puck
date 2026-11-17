@@ -208,6 +208,7 @@ public sealed partial class ShaderBuild {
                 plans.Add(item: (output, m_compiler.Plan(
                     stage: new ShaderStageSource(
                         EntryPoint: ShaderCompiler.BuildEntryPointOf(stage: output.Stage),
+                        IncludeDirectories: ShaderIncludeDirectories.Of(sourcePath: output.SourcePath),
                         Path: output.SourcePath,
                         Source: text,
                         Stage: output.Stage

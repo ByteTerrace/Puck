@@ -206,6 +206,7 @@ public sealed partial class ShaderCompiler {
         try {
             closure = ShaderSourceClosure.Collect(
                 generated: descriptor.GeneratedIncludes,
+                includeDirectories: [.. descriptor.Stages.SelectMany(selector: static stage => (stage.IncludeDirectories ?? []))],
                 limits: ShaderSourceLimits.Default,
                 sources: descriptor.Stages.Select(selector: static stage => (stage.Path, stage.Source)).ToArray()
             );
@@ -416,8 +417,13 @@ public sealed partial class ShaderCompiler {
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            // The stage's own directory, then the build root every snapshotted include directive names its include from.
-            string[] includeDirectories = [Path.GetDirectoryName(path: snapshotPath)!, buildRoot];
+            // The include directories the closure resolved through, in its search order, then the stage's own directory and
+            // the build root, which a directive renamed to its snapshot path names its include from.
+            string[] includeDirectories = [
+                .. work.Closure.IncludeDirectories.Select(selector: directory => Path.GetFullPath(path: Path.Combine(path1: buildRoot, path2: work.IncludeDirectories[directory]))),
+                Path.GetDirectoryName(path: snapshotPath)!,
+                buildRoot,
+            ];
             var diagnosticPaths = new Dictionary<string, string>(comparer: StringComparer.OrdinalIgnoreCase) { [snapshotPath] = Path.GetFullPath(path: stage.Path) };
 
             foreach (var dependency in work.Closure.Contents.Keys) {
@@ -512,11 +518,16 @@ public sealed partial class ShaderCompiler {
     private static StageWork Prepare(ShaderStageSource stage, QualityTier? tier, IReadOnlyDictionary<string, string>? generated, Func<string, string?>? readInclude) {
         var closure = ShaderSourceClosure.Collect(
             generated: generated,
+            includeDirectories: stage.IncludeDirectories,
             limits: ShaderSourceLimits.Default,
             readInclude: readInclude,
             sources: [(stage.Path, stage.Source)]
         );
-        var snapshotBase = SnapshotBase(paths: closure.Includes.Select(selector: static include => include.Path).Prepend(element: stage.Path));
+        // The snapshot holds every include directory a directive resolved through as well as every file, so each one is a
+        // directory of the snapshot that a -I names.
+        var snapshotBase = SnapshotBase(directories: closure.Includes.Select(selector: static include => include.Path).Prepend(element: stage.Path)
+            .Select(selector: static path => (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? string.Empty))
+            .Concat(second: closure.IncludeDirectories));
         var root = Path.GetFullPath(path: (Path.DirectorySeparatorChar + "snapshot"));
 
         string LayoutPath(string path) =>
@@ -538,6 +549,14 @@ public sealed partial class ShaderCompiler {
             layout.Append(value: "include|").Append(value: path).Append(value: '|').Append(value: hash).Append(value: '\n');
         }
 
+        var includeDirectories = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
+
+        // In search order, which decides what DXC finds.
+        foreach (var directory in closure.IncludeDirectories) {
+            includeDirectories[directory] = LayoutPath(path: directory);
+            layout.Append(value: "directory|").Append(value: includeDirectories[directory]).Append(value: '\n');
+        }
+
         // Where each file lies in a build's snapshot: at its layout path, so the snapshot is the closure's own tree and
         // every include directive resolves as written, as it does in place.
         var snapshot = closure.Includes.Select(selector: static include => include.Path).Prepend(element: stage.Path)
@@ -551,6 +570,7 @@ public sealed partial class ShaderCompiler {
 
         return new StageWork(
             Closure: closure,
+            IncludeDirectories: includeDirectories,
             Layout: layout.ToString(),
             Snapshot: snapshot,
             Stage: stage,
@@ -658,14 +678,12 @@ public sealed partial class ShaderCompiler {
         );
         }
     }
-    // The deepest directory holding every file a build snapshots, or null when the files span volumes. A snapshot
+    // The deepest directory holding every directory a build snapshots, or null when they span volumes. A snapshot
     // mirrors only the tree below it, so the paths handed to native tools stay short however deep the checkout sits.
-    private static string? SnapshotBase(IEnumerable<string> paths) {
+    private static string? SnapshotBase(IEnumerable<string> directories) {
         string? common = null;
 
-        foreach (var path in paths) {
-            var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? string.Empty);
-
+        foreach (var directory in directories) {
             if (common is null) {
                 common = directory;
                 continue;
@@ -685,18 +703,22 @@ public sealed partial class ShaderCompiler {
     // not only on what it reaches. DXC joins a relative include to the including file's directory before it normalizes
     // the result, so a directive whose join within the layout passes IncludeJoinBudget (a deep source including one that
     // climbs back out) could pass the Windows path limit and not be found; that directive alone names its include by its
-    // snapshot path instead, relative to the build root, which the compile's include directories resolve. The choice
-    // reads only the layout, never where the snapshot lies, so a snapshot compiles to the same bytes wherever it is taken.
-    // Lines do not move, and a diagnostic's path maps back through the snapshot.
+    // snapshot path instead, relative to the build root, which the compile's include directories resolve. A directive the
+    // closure resolved below an include directory joins that directory's layout path instead, as DXC's -I does. The
+    // choice reads only the layout, never where the snapshot lies, so a snapshot compiles to the same bytes wherever it is
+    // taken. Lines do not move, and a diagnostic's path maps back through the snapshot.
     private static string SnapshotText(string text, string path, StageWork work) {
         var directory = DirectoryOf(layoutPath: work.Snapshot[Path.GetFullPath(path: path)]);
 
-        return ShaderSourceClosure.WithIncludes(
-            map: (include, written) => (
-                ((Path.IsPathRooted(path: written) || (((directory.Length + 1) + written.Length) > IncludeJoinBudget)) && work.Snapshot.TryGetValue(key: include, value: out var snapshot))
+        return work.Closure.WithIncludes(
+            map: (include, written) => {
+                var joined = ((include.Directory is { } searched) ? work.IncludeDirectories[searched] : directory);
+
+                return (((Path.IsPathRooted(path: written) || (((joined.Length + 1) + written.Length) > IncludeJoinBudget)) && work.Snapshot.TryGetValue(key: include.Path, value: out var snapshot))
                     ? snapshot
                     : written
-            ),
+                );
+            },
             path: path,
             text: text
         );
@@ -836,12 +858,14 @@ public sealed partial class ShaderCompiler {
         return ((slash < 0) ? string.Empty : layoutPath[..slash]);
     }
 
-    // What compiling one stage reads: its closure, its layout (every file by its path relative to the others and its
-    // content hash, which the output's key hashes), where each file lies in a build's snapshot, by full path, and the
-    // steps StepsOf gives it.
+    // What compiling one stage reads: its closure, the layout path of each include directory it resolved through, by full
+    // path, its layout (every file by its path relative to the others and its content hash, and those
+    // directories, which the output's key hashes), where each file lies in a build's snapshot, by full path, and the steps
+    // StepsOf gives it.
     internal sealed record StageWork(
         ShaderStageSource Stage,
         ShaderSourceClosure Closure,
+        IReadOnlyDictionary<string, string> IncludeDirectories,
         string Layout,
         IReadOnlyDictionary<string, string> Snapshot,
         IReadOnlyList<ShaderCompileStep> Steps

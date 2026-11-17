@@ -57,6 +57,7 @@ public static class AffectedDocuments {
 
         try {
             var closure = ShaderSourceClosure.Collect(
+                includeDirectories: ShaderIncludeDirectories.Of(sourcePath: tree.Full(path: source)),
                 limits: ShaderSourceLimits.Default,
                 readInclude: full => ((tree.Relative(full: full) is { } include)
                     ? tree.ReadText(path: include)

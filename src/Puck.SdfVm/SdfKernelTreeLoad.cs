@@ -155,6 +155,7 @@ public sealed class SdfKernelTreeLoad : IDisposable {
                 plans.Add(item: (kernel, compiler.Plan(
                     stage: new ShaderStageSource(
                         EntryPoint: "CSMain",
+                        IncludeDirectories: ShaderIncludeDirectories.Of(sourcePath: path),
                         Path: path,
                         Source: await File.ReadAllTextAsync(path: path, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false),
                         Stage: ShaderStage.Compute
