@@ -1626,9 +1626,28 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: [the plan](water.md#the-lanes)'s lanes A2 to A5, then R3,
-with P1 last. The plan owns the feature end to end; these are the defects it
-does not.
+ordinary · Next: lane A2 changes approach (below), then A3 to A5, R3 and P1
+last. The plan owns the feature end to end; these are the defects it does not.
+
+- [high] Lane A2 (the lake and the glacier) failed two look-critic rounds on
+  every heading, so a third round on the same footing is not allowed
+  (AGENTS.md "Puck's purpose"). Its work is parked on `lane/wa2`, unmerged.
+  What failed: the lake is a flat-bottomed slab whose vertical side shows at
+  the near rim, with no depth grading from shallows to teal, stones that read
+  as discs and eggs, a busy ripple and no outlet sill; the glacier reads as
+  stacked bevelled tiles with an arcade toe and loose cubes, and it retreats
+  by dropping plates into fragments; the bare trough is a pale U-channel with
+  raised ladder-like blades and no moraine. The critic's direction: a lake
+  bounded by the bowl's own field (depth from zero at the bank), a calm flow
+  that speeds only at a rock sill carrying the falls' top, clustered sunk
+  stones; one smooth-blended tongue with a convex section, curved transverse
+  crevasses and a continuous gauge-bound retreat cut; a warm scoured floor
+  with cut grooves and moraine ridges. The changed approach, decided with the
+  owner: a written reference sheet for the lake, the glacier and the cradle
+  first (proportions, per-view silhouette targets, cited sources), then a
+  principal or Codex art lane against it. Open engine questions: a continuous
+  retreat cut inside a baked creation (a moving cutter does not re-carve the
+  group's mesh today), and caustics on submerged stones; both unverified.
 
 - [high] A swimmer cannot leave a walled channel: the swim hold (`swimHold`,
   `worlds/standard/kits.puck`) floats the body 1.25 m under the surface and
