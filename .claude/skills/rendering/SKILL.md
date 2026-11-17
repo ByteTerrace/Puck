@@ -413,6 +413,7 @@ add the row you found.
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
+| Read how a device can back a large buffer (sparse binding, reserved resources, memory priority, pageable device-local memory, storage-buffer array indexing) | `GpuDeviceCapabilities.Backing` (`GpuBackingSupport`) and its native figures, read at device creation and printed on `world.counters gpu`'s `capabilities` line | `src/Puck.Abstractions/Gpu/Device`; [streaming plan](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built) |
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
 | Name a backend's compiled-kernel extension, or its target from an extension or some bytecode | `ShaderBytecode.FileExtension` (the extension), `ShaderTargets` (`Of` a backend or bytecode, `FileExtension` and `DeployedPath` of a `ShaderTarget`); never a `.dxil`/`.spv` ternary or string compare. A kernel-loading API (`SdfKernelSet.Load`, `SdfWorldPipelineCatalog.LoadDeployed`, `GpuRegionCopyPass`, `SdfMeshRasterPass`) takes a `ShaderTarget`, never an extension string | `src/Puck.Abstractions/Gpu/Shaders`, `src/Puck.Shaders.Model/Compiler/ShaderTarget.cs` |
@@ -812,6 +813,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
   the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
   bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
+- **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
+  `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
+  `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
+  `SdfMeshSlabs.IndexedRead` (`SDF_MESH_SLAB_INDEX`) switches `sdfMeshWord` to the slab views the streaming plan's
+  step 7 prices ([the prototype](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built)); the switch
+  changes no counted work and no stored mesh.
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal

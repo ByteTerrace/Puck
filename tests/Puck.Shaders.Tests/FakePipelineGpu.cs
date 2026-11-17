@@ -736,7 +736,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         Record(text: "device drain");
         Complete(through: m_submitted);
     }
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement, ulong offsetBytes) {
         lock (m_gate) {
             m_storageBuffers[(descriptorSetHandle, binding)] = bufferHandle;
         }

@@ -452,14 +452,16 @@ file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults)
         inner.DestroyPool(poolHandle: poolHandle);
     public void DestroySampler(nint samplerHandle) =>
         inner.DestroySampler(samplerHandle: samplerHandle);
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) =>
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement, ulong offsetBytes) =>
         inner.WriteBuffer(
+            arrayElement: arrayElement,
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
             elementStride: elementStride,
-            kind: kind
+            kind: kind,
+            offsetBytes: offsetBytes
         );
     public void WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) =>
         inner.WriteConstantBuffer(

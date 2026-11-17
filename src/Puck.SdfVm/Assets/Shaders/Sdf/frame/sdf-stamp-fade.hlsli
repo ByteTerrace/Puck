@@ -3,7 +3,7 @@
 // call this; mirrors and portals construct their own view snapshots with no faded slot range.
 void sdfStampFade(uint draw, uint2 pixel) {
     float3 fade = passGroup.stampFade;
-    int slot = asint(sdfMeshRegion[(sdfMeshRecord(draw) + SDF_MESH_FRAME_SLOT_WORD)]);
+    int slot = asint(sdfMeshRecordWord(sdfMeshRecord(draw) + SDF_MESH_FRAME_SLOT_WORD));
     if ((fade.y <= 0.0) || (slot < int(fade.x)) || (slot >= int(fade.x + fade.y)) || (fade.z >= 1.0)) {
         return;
     }

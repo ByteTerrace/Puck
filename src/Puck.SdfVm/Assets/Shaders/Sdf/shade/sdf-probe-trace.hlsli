@@ -3,6 +3,7 @@
 #define SDF_PROBE_TRACE_HLSLI
 #include "../isa/sdf-render.hlsli"
 #include "../field/sdf-octahedral.hlsli"
+#include "../frame/sdf-mesh-words.hlsli"
 #ifndef SDF_PROBE_RESULT_STRIDE
 #error Probe traversal requires its entry point's generated result stride.
 #endif
@@ -23,7 +24,7 @@ float3 sdfProbeVector(uint word) {
     return asfloat(uint3(sdfProbeScene[word], sdfProbeScene[word + 1], sdfProbeScene[word + 2]));
 }
 float3 sdfProbeVertex(uint word) {
-    return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[word + 1], sdfMeshRegion[word + 2]));
+    return asfloat(sdfMeshWords3(word));
 }
 bool sdfProbeSlab(uint node, float3 origin, float3 inverse, float maximum, out float entry) {
     precise float3 a = (sdfProbeVector(node) - origin) * inverse;
@@ -54,9 +55,9 @@ float3 sdfProbeTransform(uint instance, float3 value, bool isPoint) {
 void sdfProbeTriangle(uint instance, uint primitive, out float3 v0, out float3 e1, out float3 e2) {
     uint index = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD] + 3 * primitive;
     uint vertex = sdfProbeScene[instance + SDF_PROBE_GEOMETRY_WORD + 1];
-    v0 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshRegion[index]);
-    e1 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshRegion[index + 1]) - v0;
-    e2 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshRegion[index + 2]) - v0;
+    v0 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index));
+    e1 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 1)) - v0;
+    e2 = sdfProbeVertex(vertex + SDF_MESH_VERTEX_WORDS * sdfMeshWord(index + 2)) - v0;
 }
 bool sdfProbeTriangleHit(float3 origin, float3 direction, float3 v0, float3 e1, float3 e2, float maximum, out float distance) {
     distance = 0;
@@ -151,7 +152,7 @@ bool sdfProbeWalk(float3 origin, float3 direction, float maximum, uint lane, boo
     precise float length = sqrt(dot(n, n));
     normal = length > 0 ? n / length : float3(0, 1, 0);
     uint materials = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 2];
-    material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshRegion[materials + hitTriangle]);
+    material = sdfProbeScene[hitInstance + SDF_PROBE_GEOMETRY_WORD + 3] + (materials == 0xffffffffu ? 0 : sdfMeshWord(materials + hitTriangle));
     return true;
 }
 bool sdfProbeIntersect(float3 origin, float3 direction, float maximum, uint lane, out float distance, out float3 normal, out uint material, out uint2 identity) {

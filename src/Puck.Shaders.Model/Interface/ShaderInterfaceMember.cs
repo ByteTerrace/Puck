@@ -15,8 +15,9 @@ namespace Puck.Shaders;
 /// buffer; <see langword="null"/> for a native record buffer, a raw buffer or a <see cref="ShaderInterfaceMemberKind.Sampler"/>.</param>
 /// <param name="Length">The element count of an <see cref="ShaderInterfaceMemberKind.Array"/> or of a block array (a
 /// <see cref="ShaderInterfaceMemberKind.Value"/> of four-component vectors), at least one, or the descriptor count of an
-/// arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/> or <see cref="ShaderInterfaceMemberKind.Sampler"/>, which
-/// a pass indexes; <see langword="null"/> for a single value, image or sampler and for every other kind.</param>
+/// arrayed <see cref="ShaderInterfaceMemberKind.SampledImage"/>, <see cref="ShaderInterfaceMemberKind.Sampler"/> or
+/// <see cref="ShaderInterfaceMemberKind.ReadOnlyBuffer"/>, which a pass indexes; <see langword="null"/> for a single
+/// value, image, sampler or buffer and for every other kind.</param>
 /// <param name="Format">The texel format of a <see cref="ShaderInterfaceMemberKind.StorageImage"/>;
 /// <see langword="null"/> for every other kind.</param>
 /// <param name="Structure">A structured buffer's native record description, instead of a primitive element type.</param>
@@ -105,16 +106,21 @@ public sealed record ShaderInterfaceMember(
             Type: type
         );
     /// <summary>Creates a buffer member a pass reads: a structured buffer of <paramref name="element"/>, or a raw buffer
-    /// read by byte address when there is no element.</summary>
+    /// read by byte address when there is no element; or an array of such buffers a pass indexes, which takes
+    /// <paramref name="length"/> consecutive descriptors, each written with its own range
+    /// (<c>IGpuBindings.WriteBuffer</c>'s array element and offset).</summary>
     /// <param name="name">The member's name.</param>
     /// <param name="group">The member's frequency group.</param>
     /// <param name="element">The element type, a scalar or a two- or four-component vector, or <see langword="null"/>
     /// for a raw buffer.</param>
+    /// <param name="length">The buffer count of an arrayed member, at least one, or <see langword="null"/> for a single
+    /// buffer.</param>
     /// <returns>The member.</returns>
-    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group, ShaderValueType? element = null) =>
+    public static ShaderInterfaceMember ReadOnlyBuffer(string name, ShaderInterfaceGroup group, ShaderValueType? element = null, uint? length = null) =>
         new(
             Group: group,
             Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer,
+            Length: length,
             Name: name,
             Type: element
         );
@@ -140,10 +146,10 @@ public sealed record ShaderInterfaceMember(
             Type: element
         );
 
-    /// <summary>Gets the number of descriptors the member binds: an arrayed sampled image's or sampler's
-    /// <see cref="Length"/>, and one for every other binding.</summary>
+    /// <summary>Gets the number of descriptors the member binds: an arrayed sampled image's, sampler's or read-only
+    /// buffer's <see cref="Length"/>, and one for every other binding.</summary>
     [JsonIgnore]
-    public uint DescriptorCount => ((Kind is ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler)
+    public uint DescriptorCount => ((Kind is ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler or ShaderInterfaceMemberKind.ReadOnlyBuffer)
         ? (Length ?? 1u)
         : 1u);
     /// <summary>Gets a value indicating whether the member lives in its group's constant block: a value does, and every

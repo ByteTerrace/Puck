@@ -17,6 +17,9 @@ namespace Puck.Vulkan.Messages;
 /// <param name="MemorySegments">The physical device's memory segments, one per heap, which the device registers with its
 /// memory counts before its first counted allocation, or <see langword="null"/> for a device whose allocations are not
 /// counted.</param>
+/// <param name="EnabledFeatureFlags">Flags past the first of chained feature structures to enable, each with its
+/// structure, which is chained with only the flags named for it (and its first flag when
+/// <paramref name="EnabledFeatureStructureTypes"/> names it too), or <see langword="null"/> for none.</param>
 public readonly record struct VulkanLogicalDeviceCreateRequest(
     VulkanInstanceCommands Instance,
     VkPhysicalDevice PhysicalDevice,
@@ -25,5 +28,11 @@ public readonly record struct VulkanLogicalDeviceCreateRequest(
     IReadOnlyList<uint> EnabledFeatureIndices,
     IReadOnlyList<uint> EnabledFeatureStructureTypes,
     VulkanDeviceAddressBindings? AddressBindings = null,
-    GpuMemorySegments? MemorySegments = null
+    GpuMemorySegments? MemorySegments = null,
+    IReadOnlyList<VulkanFeatureFlag>? EnabledFeatureFlags = null
 );
+/// <summary>One <c>VkBool32</c> of a chained <c>VkPhysicalDevice*Features</c> structure: its structure type and its
+/// zero-based index among the structure's flags, which follow <c>sType</c> and <c>pNext</c>.</summary>
+/// <param name="StructureType">The <c>VkStructureType</c> of the feature structure.</param>
+/// <param name="Flag">The flag's zero-based index among the structure's <c>VkBool32</c> members.</param>
+public readonly record struct VulkanFeatureFlag(uint StructureType, int Flag);

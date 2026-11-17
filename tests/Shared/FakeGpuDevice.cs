@@ -470,7 +470,7 @@ internal sealed class FakeGpuDevice :
         Hit(key: "IGpuBindings.DestroySampler");
         ReleaseHandle(handle: samplerHandle);
     }
-    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) => Hit(key: "IGpuBindings.WriteBuffer");
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement, ulong offsetBytes) => Hit(key: "IGpuBindings.WriteBuffer");
     void IGpuBindings.WriteConstantBuffer(nint descriptorSetHandle, uint binding, uint arrayElement, nint bufferHandle, ulong bufferSize) => Hit(key: "IGpuBindings.WriteConstantBuffer");
     void IGpuBindings.WriteSampledImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => Hit(key: "IGpuBindings.WriteSampledImage");
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => Hit(key: "IGpuBindings.WriteSampler");

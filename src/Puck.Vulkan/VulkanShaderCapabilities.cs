@@ -20,6 +20,10 @@ public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V storage-image formats beyond the core set, including R8 and R8G8 handoff visibility.
     /// Requires the device's <c>shaderStorageImageExtendedFormats</c> feature.</summary>
     public const uint StorageImageExtendedFormats = 49u;
+    /// <summary>The SPIR-V <c>StorageBufferArrayDynamicIndexing</c> capability, with which the mesh words' slab read
+    /// indexes an array of storage buffers. Requires the device's <c>shaderStorageBufferArrayDynamicIndexing</c>
+    /// feature.</summary>
+    public const uint StorageBufferArrayDynamicIndexing = 30u;
     /// <summary>The SPIR-V <c>ImageQuery</c> capability, for an image's size and levels.</summary>
     public const uint ImageQuery = 50u;
     /// <summary>The SPIR-V <c>GroupNonUniform</c> capability, for the subgroup's lanes.</summary>
@@ -34,6 +38,12 @@ public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V fragment demotion capability used by the view-local character fade. Requires
     /// <c>shaderDemoteToHelperInvocation</c>.</summary>
     public const uint DemoteToHelperInvocation = 5379u;
+    /// <summary>The SPIR-V <c>ShaderNonUniform</c> capability, for the <c>NonUniform</c> decoration
+    /// <c>NonUniformResourceIndex</c> compiles to. Vulkan 1.2 core.</summary>
+    public const uint ShaderNonUniform = 5301u;
+    /// <summary>The SPIR-V <c>StorageBufferArrayNonUniformIndexing</c> capability, with which the slab read indexes its
+    /// storage buffers by each lane's own value. Requires <c>shaderStorageBufferArrayNonUniformIndexing</c>.</summary>
+    public const uint StorageBufferArrayNonUniformIndexing = 5308u;
 
     // The SPIR-V module's magic number, its first word: the specification's, not a format Puck versions.
     private const uint SpirvMagic = 0x07230203u;
@@ -48,12 +58,15 @@ public static class VulkanShaderCapabilities {
         (Shader, "Shader", "Vulkan core"),
         (ClipDistance, "ClipDistance", "the shaderClipDistance feature every device is created with"),
         (StorageImageExtendedFormats, "StorageImageExtendedFormats", "the shaderStorageImageExtendedFormats feature every device is created with"),
+        (StorageBufferArrayDynamicIndexing, "StorageBufferArrayDynamicIndexing", "the shaderStorageBufferArrayDynamicIndexing feature every device is created with"),
         (ImageQuery, "ImageQuery", "Vulkan core"),
         (GroupNonUniform, "GroupNonUniform", "Vulkan 1.1 core"),
         (GroupNonUniformArithmetic, "GroupNonUniformArithmetic", "Vulkan 1.1 core"),
         (GroupNonUniformBallot, "GroupNonUniformBallot", "Vulkan 1.1 core"),
         (DrawParameters, "DrawParameters", "the shaderDrawParameters feature every device is created with"),
         (DemoteToHelperInvocation, "DemoteToHelperInvocation", "the shaderDemoteToHelperInvocation feature every device is created with"),
+        (ShaderNonUniform, "ShaderNonUniform", "Vulkan 1.2 core"),
+        (StorageBufferArrayNonUniformIndexing, "StorageBufferArrayNonUniformIndexing", "the shaderStorageBufferArrayNonUniformIndexing feature every device is created with"),
     ];
 
     /// <summary>Returns the capabilities a SPIR-V module declares, in declaration order.</summary>
