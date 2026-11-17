@@ -160,7 +160,10 @@ before mesh reads; zero placement words reject every triangle through the existi
 `GpuBufferPages` issues the mesh destination's writable lease. Landing completion and
 `MeshStands` require its generation unchanged; a moved mesh without one stays owed and
 its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and checks
-the proof again at recording. Native sparse mapping remains in the streaming plan.
+the proof again at recording, restaging stale requests and retaining unmapped debt.
+Mapping changes re-owe the host-known prefix and stale published meshes; a shrink
+re-lands survivors even without arena relocation. Destination replacements read
+the new buffer's authority. Native sparse mapping remains in the streaming plan.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
@@ -1034,7 +1037,12 @@ compares and fails naming the file that drifted, it writes nothing.
   `VulkanMemoryArena`) are one `GpuMemoryPool` each, which holds the policy:
   first fit across a key's shared blocks, a block of its own for a resource
   past half a block that no shared block holds, freed as it empties, and one
-  empty shared block kept spare per key. A backend supplies only the native
+  empty shared block kept spare per key outside pressure. `MemoryAccount.TrimRequested`
+  reaches both arenas through `IGpuMemoryOwners` and `GpuDeviceMemoryWork`.
+  `GpuMemoryPool.Trim` frees empty blocks and marks the existing live blocks
+  for release on their last return, including a delayed fenced return. It
+  never revokes a live placement; new blocks do not inherit an old request.
+  A backend supplies only the native
   allocate, free and bind calls and finds a resource's placement again (a
   private-data token on Direct3D 12, a handle map on Vulkan). The pool reuses a
   range only once its resource's release returns it and sees no fence: a range
@@ -1044,6 +1052,15 @@ compares and fails naming the file that drifted, it writes nothing.
   floor) once it holds four times more, and a relocated mesh region shrinks to
   its need (`GpuRegion.Shrink`). Upload heaps are system memory: a staging
   buffer kept at a whole region's size costs the process that much working set.
+- Vulkan enables `sparseBinding` and `sparseResidencyBuffer` together only
+  with a nonempty sparse queue family, preferring graphics. The device owns
+  a separate binding queue when needed. `VulkanLogicalDevice.BindSparse`
+  checkpoints graphics, binds waiting that value and signaling the next,
+  then submits a graphics wait before returning. Both signals share the
+  device's retirement timeline; a failed bind or join prevents further
+  retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
+  both queue arrangements and an open batch. This is the binding door only:
+  native sparse buffer ownership and mesh backing selection remain step 7.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`); a placed mesh's words are owed without a
   compare (`GpuRegion.OweSourced`) and the upload's flush writes them from the
