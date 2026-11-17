@@ -558,7 +558,10 @@ whose `target` is `"camera"` makes the seat possess its own authored
 door: the seat's own body intent diverts to Idle, and the camera body's pose
 becomes what the seat perceives, sees, and hears through. Its view resolves
 through `views.cameraRig` — the same compiler and evaluator every other program
-uses — and leaving the state disengages, restoring the seat's own body. A
+uses — anchored at the pose `WorldContinuum.TryResolvePresentedSeatPose` gives,
+which is the possessed body's (`WorldPerceptionAnchor.Possessed`) while the seat
+is routed to the boot authority; the seat's route still places its own avatar.
+Leaving the state disengages, restoring the seat's own body. A
 document authoring a camera-targeting state without a `views.cameraRig` or
 without an inhabited `camera-seat-` placement is refused by name. The camera
 body's intent source must be `Live`: an `Idle` body masks the submitted channels

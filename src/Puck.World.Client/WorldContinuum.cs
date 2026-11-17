@@ -9,8 +9,9 @@ namespace Puck.World.Client;
 /// presentation frame, whether the claimed entity is local, directly adjacent, or a compiler-derived corner peer.
 /// Every seat-facing consumer uses this one mapping instead of inventing local/remote presentation rules.
 /// </summary>
-public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter routes, IWorldAdjacencySource adjacencies) {
+public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter routes, IWorldAdjacencySource adjacencies, WorldPerceptionAnchor? perception = null) {
     private readonly WorldClient m_client = (client ?? throw new ArgumentNullException(paramName: nameof(client)));
+    private readonly WorldPerceptionAnchor? m_perception = perception;
 
     /// <summary>Gets the latest simulation tick the boot client has received.</summary>
     public ulong Tick => m_client.Tick;
@@ -386,9 +387,10 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
         return endpoint;
     }
 
-    /// <summary>Resolves a seat's pose in the frame it is presented in: the boot frame, or the frame of the world it is
-    /// presented in elsewhere (<see cref="PresentedElsewhere"/>), where its routed authority's own pose needs no
-    /// mapping.</summary>
+    /// <summary>Resolves the pose a seat perceives from, in the frame it is presented in: the boot frame, or the frame of
+    /// the world it is presented in elsewhere (<see cref="PresentedElsewhere"/>), where its routed authority's own pose
+    /// needs no mapping. A seat possessing another body of the boot world (<see cref="WorldPerceptionAnchor.Possessed"/>)
+    /// perceives from that body.</summary>
     /// <param name="slot">The seat's slot.</param>
     /// <param name="interpolationAlpha">The boot frame's interpolation fraction.</param>
     /// <param name="position">The pose's position, when this returns <see langword="true"/>.</param>
@@ -396,7 +398,11 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
     /// <returns><see langword="true"/> when the seat's entity has a pose in the frame it is presented in.</returns>
     public bool TryResolvePresentedSeatPose(int slot, float interpolationAlpha, out Vector3 position, out Quaternion orientation) {
         if (PresentedElsewhere(slot: slot) is not { } endpoint) {
-            return TryResolveSeatPose(
+            return TryResolvePossessedPose(
+                orientation: out orientation,
+                position: out position,
+                slot: slot
+            ) || TryResolveSeatPose(
                 interpolationAlpha: interpolationAlpha,
                 orientation: out orientation,
                 position: out position,
@@ -421,6 +427,34 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
             projectionName: null,
             seatSlot: slot
         );
+
+        return true;
+    }
+    // Possession means possession (WorldPerceptionAnchor): a seat whose control set omits its own body and names another
+    // body (Free Cam's camera body, a driven body) perceives from that body. The anchor's indices are the boot authority's,
+    // whose grant table it reads, so the swap holds while the seat is routed to the boot authority; the seat's own route
+    // still places its avatar (TryResolveSeatPose).
+    private bool TryResolvePossessedPose(int slot, out Vector3 position, out Quaternion orientation) {
+        var body = (m_perception?.Possessed(slot: slot) ?? -1);
+
+        if (
+            (body < 0) ||
+            (((uint)body) >= WorldClient.EntityCapacity) ||
+            !m_client.IsActive(index: body) ||
+            !string.Equals(
+                a: Route(slot: slot).Endpoint.Authority,
+                b: m_client.Authority,
+                comparisonType: StringComparison.Ordinal
+            )
+        ) {
+            position = default;
+            orientation = Quaternion.Identity;
+
+            return false;
+        }
+
+        position = m_client.Position(index: body);
+        orientation = m_client.Orientation(index: body);
 
         return true;
     }
