@@ -3288,6 +3288,13 @@ checks and the developer exhibits; the diagnostics (findings, pins, goto,
 annotate, the `probes` and `exposure` views) are
 [editor E6's](editor.md#open-items).
 
+- [medium, D2 live probe] Loading a saved debug-world snapshot through
+  `world.load` exceeds `WorldFrameCodec.MaxPayloadBytes`'s 16 MiB Rebuild cap
+  (`src/Puck.World.Protocol/Protocol/WorldFrameCodec.cs:50`): the camera probe's
+  canonical payload was 21,832,203 bytes and was refused before submission.
+  Make whole-world replacement scale through the existing content-addressed
+  document transport; do not raise an arbitrary cap or exempt local callers.
+  Direct boot of the same snapshot does not use the rebuild envelope.
 - Restore and inspect the remaining developer exhibits: the rate range, the
   traversal course's geometry and the kinematics scope. Clean bot verdicts do
   not show that they look or measure correctly.
@@ -3359,6 +3366,14 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
+- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
+  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
+  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
+  before reaching the repaired Drive grant. Wire the standard authored camera
+  mode, body and rig into the debug world, then verify its entry, movement and
+  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
+  the grant without making the seat an operator; a temporary authored snapshot
+  is only a runtime probe, not the missing standard-package design.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
