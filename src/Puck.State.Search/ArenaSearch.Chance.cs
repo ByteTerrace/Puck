@@ -41,7 +41,9 @@ public sealed partial class ArenaSearch {
     private static int SampleChanceOutcome(ArenaSearchChancePlan chance, ref Pcg32XshRr stream) {
         foreach (var weight in chance.Weights) {
             if (weight != 0UL) {
+                // A playout's stream carries no cursor, so the advances it consumed are not read back.
                 return WeightedSampler.SampleOnce(
+                    advances: out _,
                     generator: ref stream,
                     weights: chance.Weights
                 );

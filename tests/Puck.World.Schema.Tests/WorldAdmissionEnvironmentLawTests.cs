@@ -1,5 +1,4 @@
 using Puck.Commands;
-using Puck.Maths;
 using Puck.Testing;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -80,7 +79,7 @@ public sealed class WorldAdmissionEnvironmentLawTests {
             Assert.NotNull(@object: loaded.Gravity.Uniform);
             Assert.Equal(-2f, loaded.Gravity.Uniform.Value.Y);
             Assert.True(condition: WorldStateDocumentValues.HasReference(graph: loaded));
-            Assert.Equal((draw ? WeightedSampler.AdvancesPerDraw : 0L), loaded.AuthoredState[0].DrawCursor);
+            Assert.Equal((draw ? 2L : 0L), loaded.AuthoredState[0].DrawCursor);
         } finally {
             BindingVocabularyHook.VocabularyCheck = previous;
         }

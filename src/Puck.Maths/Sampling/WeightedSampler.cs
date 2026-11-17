@@ -8,8 +8,6 @@ namespace Puck.Maths;
 /// shares its partition.
 /// </summary>
 public static class WeightedSampler {
-    /// <summary>The generator advances one alias draw consumes: a masked column draw, then a threshold compare.</summary>
-    public const int AdvancesPerDraw = 2;
     internal const string CountError = "entry count must be within [1, 2^30]";
     internal const string EntriesParameterName = "entries";
     internal const int MaximumEntryCount = (1 << 30);
@@ -22,24 +20,29 @@ public static class WeightedSampler {
     // and two stack slots is about two kilobytes.
     private const int StackColumnLimit = 64;
 
-    /// <summary>One alias column: the UQ0.32 threshold below which the column keeps its own index, and the index it
-    /// hands the draw to otherwise.</summary>
-    /// <param name="Threshold">The UQ0.32 column fraction.</param>
+    /// <summary>One alias column. The column keeps its own index with probability exactly <c>scaled / denominator</c>,
+    /// written as the floored UQ0.32 threshold plus a remainder: a word below the threshold keeps the index, a word
+    /// above it hands the draw to the alias, and the one word equal to the threshold (probability 2⁻³²) keeps the index
+    /// with probability <c>Remainder / denominator</c>, decided by an exact wide draw.</summary>
+    /// <param name="Threshold">The floored UQ0.32 column fraction.</param>
     /// <param name="Alias">The aliased entry index.</param>
-    internal readonly record struct Column(uint Threshold, int Alias);
+    /// <param name="Remainder">The column fraction's remainder over the table's denominator, strictly below it; zero
+    /// where the fraction is a whole number of 2⁻³² steps (every always-self and never-self column).</param>
+    internal readonly record struct Column(uint Threshold, int Alias, UInt128 Remainder);
 
     // The padded column count: the entry count's next power of two, so a masked draw needs no rejection.
     internal static int ColumnCountOf(int count) => ((int)((uint)count).NextPowerOfTwo());
     /// <summary>Runs the Vose partition over exact integers: <c>scaled_i = weight_i · columnCount</c> against a column
     /// budget of the total weight, with the small and large worklists as two stacks in <paramref name="stackSlots"/>.
-    /// Entry order, pop order and the UQ0.32 threshold rounding are the table's identity, and the same for every
-    /// caller.</summary>
+    /// Entry order and pop order are the table's identity, and the same for every caller. Each column's keep
+    /// probability is held exactly: a floored UQ0.32 threshold and the remainder over the total weight.</summary>
     /// <param name="weights">The ordered weights; at least one must be non-zero.</param>
     /// <param name="scaled">Scratch of the padded column count.</param>
     /// <param name="stackSlots">Scratch of twice the padded column count.</param>
     /// <param name="columns">The columns to fill, of the padded column count.</param>
+    /// <param name="denominator">The total weight, the denominator every column's remainder is over.</param>
     /// <exception cref="ArgumentException">Every weight is zero.</exception>
-    internal static void BuildColumns(ReadOnlySpan<ulong> weights, Span<UInt128> scaled, Span<int> stackSlots, Span<Column> columns) {
+    internal static void BuildColumns(ReadOnlySpan<ulong> weights, Span<UInt128> scaled, Span<int> stackSlots, Span<Column> columns, out UInt128 denominator) {
         var count = weights.Length;
         var columnCount = columns.Length;
         var totalWeight = UInt128.Zero;
@@ -48,6 +51,7 @@ public static class WeightedSampler {
             totalWeight += weight;
         }
 
+        denominator = totalWeight;
         if (totalWeight == UInt128.Zero) {
             throw new ArgumentException(
                 message: WeightError,
@@ -82,20 +86,16 @@ public static class WeightedSampler {
         ) {
             var s = small[--smallCount];
             var l = large[--largeCount];
-            var threshold = ((ulong)(((scaled[s] << 32) + (totalWeight >> 1)) / totalWeight));
+            // scaled[s] < totalWeight, so the floored quotient is at most 2^32 - 1.
+            var (threshold, remainder) = UInt128.DivRem(
+                left: (scaled[s] << 32),
+                right: totalWeight
+            );
 
-            // Rounding can produce exactly 2^32 even though scaled[s] < totalWeight. Such a column always selects
-            // itself, so making the otherwise-dead alias self preserves every uint draw while keeping the packed
-            // threshold at uint.MaxValue.
-            columns[s] = ((threshold > uint.MaxValue)
-                ? new(
-                    Alias: s,
-                    Threshold: uint.MaxValue
-                )
-                : new(
-                    Alias: l,
-                    Threshold: ((uint)threshold)
-                )
+            columns[s] = new(
+                Alias: l,
+                Remainder: remainder,
+                Threshold: ((uint)threshold)
             );
             scaled[l] -= (totalWeight - scaled[s]);
 
@@ -111,6 +111,7 @@ public static class WeightedSampler {
 
             columns[l] = new(
                 Alias: l,
+                Remainder: UInt128.Zero,
                 Threshold: uint.MaxValue
             );
         }
@@ -120,16 +121,53 @@ public static class WeightedSampler {
 
             columns[s] = new(
                 Alias: s,
+                Remainder: UInt128.Zero,
                 Threshold: uint.MaxValue
             );
         }
     }
-    /// <summary>Draws one column index: a masked column draw, then a threshold compare — exactly two advances.</summary>
-    internal static int SampleColumn<TGenerator>(ReadOnlySpan<Column> columns, ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
+    /// <summary>Draws one column index exactly: a masked column draw and a threshold compare, two advances, plus
+    /// the raw words of one exact wide draw on the one word (probability 2⁻³²) that equals a column's floored
+    /// threshold where its remainder is non-zero.</summary>
+    /// <param name="columns">The padded columns.</param>
+    /// <param name="denominator">The total weight every column's remainder is over.</param>
+    /// <param name="generator">The generator to draw from.</param>
+    /// <param name="advances">The generator advances the draw consumed: at least two, and exactly two except on the rare
+    /// word.</param>
+    /// <returns>The column's own index or its alias.</returns>
+    internal static int SampleColumn<TGenerator>(ReadOnlySpan<Column> columns, UInt128 denominator, ref TGenerator generator, out int advances) where TGenerator : struct, IDrawGenerator {
         var column = ((int)(generator.NextUInt32() & ((uint)(columns.Length - 1))));
         var selection = columns[column];
+        var word = generator.NextUInt32();
 
-        return ((generator.NextUInt32() < selection.Threshold)
+        advances = 2;
+        if (word < selection.Threshold) { return column; }
+        if (
+            (word > selection.Threshold) ||
+            (selection.Remainder == UInt128.Zero)
+        ) { return selection.Alias; }
+
+        // The word equal to the threshold keeps the column with probability Remainder / denominator. The bound is
+        // exclusive and nonzero (the denominator is the total weight), and a generator word source never refuses, so
+        // the attempt budget is unbounded: a candidate is rejected with probability below one half.
+        var words = new DrawGeneratorWords<TGenerator>(generator: generator);
+        var drawn = BoundedRandomSampling.TrySampleWide(
+            exclusiveHigh: denominator,
+            maxAttempts: int.MaxValue,
+            reason: out var reason,
+            source: ref words,
+            value: out var ticket,
+            words: out var consumed
+        );
+
+        generator = words.Generator;
+        if (!drawn) {
+            throw new InvalidOperationException(message: reason);
+        }
+
+        advances += consumed;
+
+        return ((ticket < selection.Remainder)
             ? column
             : selection.Alias
         );
@@ -141,14 +179,16 @@ public static class WeightedSampler {
     /// <typeparam name="TGenerator">The draw generator's own type.</typeparam>
     /// <param name="weights">The ordered weights; at least one must be non-zero. Entry order is part of the pick's
     /// identity, exactly as it is of a table's.</param>
-    /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
+    /// <param name="generator">The generator to draw from.</param>
+    /// <param name="advances">The generator advances the pick consumed: two, plus the raw words of one exact wide draw
+    /// on the one word in 2³² that lands on a column's threshold.</param>
     /// <returns>The sampled entry's index in <paramref name="weights"/>.</returns>
     /// <exception cref="ArgumentException"><paramref name="weights"/> is empty, exceeds 2³⁰ entries, or every weight is zero.</exception>
-    /// <remarks>The same entry order, partition order, UQ0.32 rounding, power-of-two padding and two draws as
+    /// <remarks>The same entry order, partition order, exact thresholds, power-of-two padding and draws as
     /// <see cref="AliasTable{TElement}"/>: a table built from the same weights and sampled with the same generator
-    /// state returns the same index. Up to sixty-four padded columns partition on the stack; larger spans rent their
-    /// scratch from the shared array pool.</remarks>
-    public static int SampleOnce<TGenerator>(ReadOnlySpan<ulong> weights, ref TGenerator generator) where TGenerator : struct, IDrawGenerator {
+    /// state returns the same index and consumes the same advances. Up to sixty-four padded columns partition on the
+    /// stack; larger spans rent their scratch from the shared array pool.</remarks>
+    public static int SampleOnce<TGenerator>(ReadOnlySpan<ulong> weights, ref TGenerator generator, out int advances) where TGenerator : struct, IDrawGenerator {
         ValidateEntryCount(count: weights.Length);
 
         var columnCount = ColumnCountOf(count: weights.Length);
@@ -160,13 +200,16 @@ public static class WeightedSampler {
 
             BuildColumns(
                 columns: columns[..columnCount],
+                denominator: out var denominator,
                 scaled: scaled[..columnCount],
                 stackSlots: stackSlots[..(2 * columnCount)],
                 weights: weights
             );
 
             return SampleColumn(
+                advances: out advances,
                 columns: columns[..columnCount],
+                denominator: denominator,
                 generator: ref generator
             );
         }
@@ -178,13 +221,16 @@ public static class WeightedSampler {
         try {
             BuildColumns(
                 columns: rentedColumns.AsSpan(start: 0, length: columnCount),
+                denominator: out var denominator,
                 scaled: rentedScaled.AsSpan(start: 0, length: columnCount),
                 stackSlots: rentedSlots.AsSpan(start: 0, length: (2 * columnCount)),
                 weights: weights
             );
 
             return SampleColumn(
+                advances: out advances,
                 columns: rentedColumns.AsSpan(start: 0, length: columnCount),
+                denominator: denominator,
                 generator: ref generator
             );
         } finally {
@@ -311,25 +357,27 @@ public static class WeightedSampler {
 }
 /// <summary>
 /// An immutable weighted-choice table (the Walker/Vose alias method). Construction is O(n) exact integer
-/// arithmetic; sampling is O(1) — one masked column draw plus one threshold compare — and consumes exactly two
-/// generator advances per draw (the column count is padded to a power of two, so the index needs no rejection).
+/// arithmetic; sampling is O(1) — one masked column draw plus one threshold compare, two generator advances (the
+/// column count is padded to a power of two, so the index needs no rejection). Every draw reports the advances it
+/// consumed: two, plus an exact wide draw on the one word in 2³² that lands on a column's threshold.
 /// Identical entries produce bit-identical tables on every machine.
 /// </summary>
 /// <typeparam name="TElement">The element type sampled by the table.</typeparam>
 /// <remarks>
 /// Entry order is part of the table's identity: identical spans produce identical tables, and reordering entries
-/// produces a different (equally correct) one. Thresholds are UQ0.32 column fractions; each entry's sampled
-/// probability is within 2⁻³³ per column of weight/total. Zero-weight entries (and the power-of-two padding) are
-/// never sampled.
+/// produces a different (equally correct) one. Each entry's sampled probability is exactly weight/total. Zero-weight
+/// entries (and the power-of-two padding) are never sampled.
 /// </remarks>
 public sealed class AliasTable<TElement> {
     private readonly WeightedSampler.Column[] m_columns;
     private readonly int m_count;
+    private readonly UInt128 m_denominator;
     private readonly TElement[] m_elements;
 
-    private AliasTable(WeightedSampler.Column[] columns, int count, TElement[] elements) {
+    private AliasTable(WeightedSampler.Column[] columns, int count, UInt128 denominator, TElement[] elements) {
         m_columns = columns;
         m_count = count;
+        m_denominator = denominator;
         m_elements = elements;
     }
 
@@ -351,6 +399,7 @@ public sealed class AliasTable<TElement> {
 
         WeightedSampler.BuildColumns(
             columns: columns,
+            denominator: out var denominator,
             scaled: new UInt128[columnCount],
             stackSlots: new int[(2 * columnCount)],
             weights: weights
@@ -359,23 +408,33 @@ public sealed class AliasTable<TElement> {
         return new(
             columns: columns,
             count: count,
+            denominator: denominator,
             elements: elements
         );
     }
 
     /// <summary>Samples one element in proportion to the construction weights.</summary>
     /// <typeparam name="TGenerator">The draw generator's own type.</typeparam>
-    /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
+    /// <param name="generator">The generator to draw from.</param>
+    /// <param name="advances">The generator advances the draw consumed: two, plus the raw words of one exact wide draw
+    /// on the one word in 2³² that lands on a column's threshold.</param>
     /// <returns>The sampled element.</returns>
-    public TElement Sample<TGenerator>(ref TGenerator generator) where TGenerator : struct, IDrawGenerator =>
-        m_elements[SampleIndex(generator: ref generator)];
+    public TElement Sample<TGenerator>(ref TGenerator generator, out int advances) where TGenerator : struct, IDrawGenerator =>
+        m_elements[SampleIndex(
+            advances: out advances,
+            generator: ref generator
+        )];
     /// <summary>Samples one entry index in proportion to the construction weights.</summary>
     /// <typeparam name="TGenerator">The draw generator's own type.</typeparam>
-    /// <param name="generator">The generator to draw from; consumes exactly two advances.</param>
+    /// <param name="generator">The generator to draw from.</param>
+    /// <param name="advances">The generator advances the draw consumed: two, plus the raw words of one exact wide draw
+    /// on the one word in 2³² that lands on a column's threshold.</param>
     /// <returns>The sampled entry's index in the construction span, always below <see cref="Count"/>.</returns>
-    public int SampleIndex<TGenerator>(ref TGenerator generator) where TGenerator : struct, IDrawGenerator =>
+    public int SampleIndex<TGenerator>(ref TGenerator generator, out int advances) where TGenerator : struct, IDrawGenerator =>
         WeightedSampler.SampleColumn(
+            advances: out advances,
             columns: m_columns,
+            denominator: m_denominator,
             generator: ref generator
         );
 

@@ -143,7 +143,7 @@ public sealed class WorldGeneratorEngineLawTests {
         return generator.Source switch {
             GeneratorSource.StreamDraw => rng.NextUInt32(),
             GeneratorSource.UniformRange => (generator.RangeMin!.Value + ((long)rng.NextUInt32(0, ((uint)(generator.RangeMax!.Value - generator.RangeMin.Value))))),
-            GeneratorSource.WeightedNumeric => WeightedSampler.Create<long>(entries: generator.Weighted!.Select(selector: static row => (row.Value, row.Weight)).ToArray()).Sample(generator: ref rng),
+            GeneratorSource.WeightedNumeric => WeightedSampler.Create<long>(entries: generator.Weighted!.Select(selector: static row => (row.Value, row.Weight)).ToArray()).Sample(advances: out _, generator: ref rng),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(generator)),
         };
     }
@@ -205,8 +205,8 @@ public sealed class WorldGeneratorEngineLawTests {
 
         rng.Advance(count: ((ulong)cursor));
 
-        var first = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("red", 1UL), ("blue", 2UL)])).Sample(generator: ref rng);
-        var second = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("fox", 1UL), ("hare", 1UL)])).Sample(generator: ref rng);
+        var first = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("red", 1UL), ("blue", 2UL)])).Sample(advances: out _, generator: ref rng);
+        var second = WeightedSampler.Create<string>(entries: ((ReadOnlySpan<(string Value, ulong Weight)>)[("fox", 1UL), ("hare", 1UL)])).Sample(advances: out _, generator: ref rng);
 
         return $"{first} {second}";
     }
