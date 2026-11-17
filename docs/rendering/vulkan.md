@@ -348,9 +348,9 @@ the device type and the memory types and heaps of
 - An integrated or CPU device with such a type is coherent unified memory.
 
 The identity is recorded and never branched on. The profile is branched on in
-two places. `ShaderPipelineMemoryBudget.For` bounds a shader pipeline instance's
-device memory by a share of the device-local bytes (see
-[the memory budget](../reference/shaders.md#memory-budget)).
+two places. `GpuMemorySegments.ExpectedPool` names the pool a reservation of
+device memory is made in, the adapter's own or the host's on unified memory
+(see [the memory budget](../reference/shaders.md#memory-budget)).
 `GpuResidency.Select` chooses where a region the host writes every
 frame lives from the profile and the region's size. A region within
 one-sixteenth (`GpuResidency.HostVisibleShare`) of the host-visible

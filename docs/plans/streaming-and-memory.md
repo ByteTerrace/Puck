@@ -178,73 +178,66 @@ a research report disagrees with the code, the code wins.
 
 | The decision asks for | State |
 |---|---|
-| A measure | Partial. `world.residency` reads time until near groups land, resident triangles by tier, the region's held, named and limit bytes, the probe cache's bytes and the trace scene's CPU arrays. No device budget is read: `IGpuDeviceContext.MemoryProfile` is a size fixed when the device is created, and nothing in `src/` calls DXGI's `QueryVideoMemoryInfo` or enables `VK_EXT_memory_budget`. |
+| A measure | Built for memory. `world.residency` reads time until near groups land, resident triangles by tier, the region's held, named and limit bytes, the selector's line, the probe cache's bytes and the trace scene's CPU arrays; `host.memory` reads each pool's limit, held, promised and retired bytes and each segment's budget (`IGpuDeviceContext.MemoryReading`). |
 | Near-first ordering | Built: `SdfMeshDemand.Priority`, and detail bounded by what each view resolves (`SdfMeshTier`). A demand point is a view's eye with no lead along its velocity. |
-| A selector across residencies | Not built. Each residency owns its own `SdfWorldResidency.MeshDemand`, its own bake budget (`SdfMeshPathBake.Retier`), its own mesh region and its own background GPU budget. Nothing unites them. |
+| A selector across residencies | Built for bytes and background GPU time (`SdfResidencySelector`): one detail bias, a budget for each residency's bake, a reservation for each mesh region and one budget of background GPU work. Each residency still owns its `SdfWorldResidency.MeshDemand` and its mesh region, and the selector does not yet order work across residencies. |
 | Lighting on the same demand points | Partly built. Each level of the probe window already centres on the box of every view's camera when it fits (`SdfMeshIrradiance.WindowLow`), and probe urgency reads every view. What remains: the window is anchored on the first view (`SdfMeshIrradiance.WindowCamera`), the lighting derives its own view list (`SdfMeshIrradiance.CaptureViewCameras`), the trace scene is built from every static draw of the frame (`SdfMeshIrradiance.StaticKey`), and `SdfMeshIrradiance.ProbeCache` is bounded by window cells, not bytes. |
 | Demand mapped through portal faces | The mapping is built; its use is not. A fitted window's view is the viewer's eye taken through the glass, measured in the display pixels the glass spans and held to its frustum (`SdfViewSnapshot.DemandHeight`, `SdfViewSnapshot.DemandWithinView`), and every attached window's view is a demand point whether or not it renders (`SdfMeshDemand.Observe` leaves out only a view that is elsewhere, has no region or no valid camera). What is missing is arrival without a render: a residency's upload is submitted only for a scheduled render (`SdfWorldPasses.PrepareRender`), so an unseen window still renders at the least share (`WorldViewGraphHost.ReserveArrivals`, `WorldPortalVisibility.ArrivalShare`). |
-| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole. A growth the device refuses still ends the World (`GpuRegion.Grow` from `SdfWorldTables.EnsureMeshRegionCapacity`). |
+| Eviction under a byte budget | Not built. Under pressure a group is planned again at a coarser tier or every demand is coarsened half a rung (`SdfMeshTier.Biased`); no group ever leaves. A mesh the arena cannot place is refused and its draws leave the frame (`SdfMeshRegionArena.Refused`), which shows as a hole. A growth the account or the device refuses leaves the region as it is, and the placements it could not hold are refused the same way (`SdfMeshRegionArena.Clip`). |
 | Authored areas | Not built. |
 | Terrain tiles, then the moons | Not built: a bake group is an instance, a slot or a union, so one large instance has one tier and one demand box. |
 
 What the memory side holds today:
 
-- **The account is a host-memory admission promise.** `MemoryAccount.DefaultBudget`
-  is three quarters of installed memory. Its owners are mesh payloads, bake
-  workspaces and the store's transient decode and entry scratch. Only the bake
-  reserves (`MemoryAccount.Owner.TryReserve`); a payload's charge never refuses
-  (`MemoryAccount.Owner.Change`). It does not see device memory, the managed
-  heap, `GpuRegion`'s host copies or staging, and at a settled stop it accounts
-  for under a tenth of the process's private bytes **[reading]**.
-- **Progress is forced once per bake.** A bake with nothing admitted admits
-  its next group whatever the budget holds (`MemoryAccount.Owner.Reserve`,
-  reported by `SdfMeshBakeReport.AdmittedAlone`), and every residency has its
-  own bake, so several residencies each force a job at once.
-- **Device bytes are counted by role, after the fact, and unbudgeted.**
-  `GpuDeviceMemoryWork` counts every allocation both backends make at the
-  driver's size, by the role the caller asked for and never by where the
-  driver placed it: a preferred device-local request that fell back to another
-  memory type still counts as device-local (`VulkanBufferMemory.PreferDeviceLocal`,
-  `VulkanMemoryTypes.FindIndex`). Each door counts after the native allocation
-  succeeded (`VulkanMemoryArena`, `DirectXHeapArena`), so nothing can refuse
-  one. Resources share blocks of `GpuMemoryPool.BlockBytes`, a resource past
-  half a block takes its own, and a key keeps one emptied block.
-- **Two holders each take a quarter of the device, per instance.**
-  `SdfWorldTables.MeshRegionLimitOf` gives every residency's mesh region a
-  quarter of `GpuMemoryProfile.DeviceLocalBytes`, and
-  `ShaderPipelineMemoryBudget.For` gives every pipeline instance another. On a
-  Direct3D 12 unified-memory adapter that figure is dedicated plus shared system
-  memory (`GpuMemoryProfile.FromDirectX`): the same memory the account takes
-  three quarters of. With four residencies the limits sum past the device.
-- **Background GPU work multiplies the same way, and is paced by
-  presentation.** Each residency's tables own an `SdfGpuWork` with its own
-  `SdfGpuWork.GpuShare` of GPU time and its own
-  `SdfGpuWork.UploadBytesPerSecond`. Its jobs run on the presenting queue and
-  take work only at frame pumps, so a slow present paces the bake and the
-  lighting, and a boot that withholds frames progresses only by staging them.
-  The credit cap (`SdfGpuWork.MostCreditSeconds`, one frame's share) turns the
-  budget into a fixed amount per pump once pumps fall under the display rate,
-  against the class's own contract that budgets are rates of wall time, and
-  the bake's admission reads its backlog at the take right after a burst of
-  answers (`SdfMeshPathBake.Backlogged`), which leaves workers idle on slow
+- **The account admits every pool.** `MemoryAccount` holds what each pool holds
+  and has promised under its limit, at three doors: a host owner's
+  `MemoryAccount.Owner.TryReserve`, a device reservation's
+  `MemoryAccount.DeviceReservation.TryReserve`, and the ledger's grant before
+  each native device allocation (`GpuDeviceMemoryWork.TryAdmit`). Its host
+  owners are mesh payloads, bake workspaces, the store's transient scratch,
+  the regions' host copies, the trace scene and the probe cache; a payload's
+  charge never refuses (`MemoryAccount.Owner.Change`). The managed heap beyond
+  those owners, the allocator's slack and the runtime are measured rows, not
+  admitted ones.
+- **Progress is forced once in the process.** A bake with nothing admitted
+  admits its next group whatever the pool holds only while no other owner
+  holds the allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
+  `SdfMeshBakeReport.AdmittedAlone`).
+- **Device bytes are admitted before they exist.** `GpuDeviceMemoryWork`
+  counts an allocation only under a grant, at the driver's size, in the
+  segment the device placed it in. Resources share blocks of
+  `GpuMemoryPool.BlockBytes`, a resource past half a block takes its own, and
+  a key keeps one emptied block.
+- **Background GPU work has one budget, and is still paced by presentation.**
+  Every residency's `SdfGpuWork` draws on its presentation's
+  `SdfGpuWorkBudget`: `SdfGpuWork.GpuShare` of GPU time and
+  `SdfGpuWork.UploadBytesPerSecond` for all of them together, banked by wall
+  time. Its jobs still run on the presenting queue and take work only at frame
+  pumps, so a present slower than the budget's bank
+  (`SdfGpuWorkBudget.MostBankSeconds`) paces the bake and the lighting, and
+  the bake's admission still reads its backlog at the take right after a burst
+  of answers (`SdfMeshPathBake.Backlogged`), which leaves workers idle on slow
   frames.
 - **The region gives memory back only by replacing itself.** It grows by
   allocating a larger buffer and copying (`GpuRegion.Grow`), and shrinks the
   same way (`GpuRegion.Shrink` from `SdfWorldTables.FitMeshRegion`), so both
-  need the new buffer while the old one stands.
-- **Nothing reacts to pressure it reads.** `MemoryAccount.TrimCaches` runs only
-  when `host.memory budget` lowers the budget or `host.memory collect` asks.
+  need the new buffer while the old one stands, and both reserve the two
+  together.
+- **Pressure fires a trim.** A limit that falls under what its pool holds, a
+  device refusal or storage admitted past a limit fires
+  `MemoryAccount.TrimCaches` on the frame thread, at most once a second
+  (`MemoryAccount.ServicePressure`).
 
 The duplicates this campaign removes, each one mechanism where the code has
 several:
 
 | One job | Today |
 |---|---|
-| A share of device memory | The mesh region's quarter and the shader pipeline's quarter, both through `GpuMemoryProfile.DeviceLocalShare`, neither a reservation |
+| A share of device memory | One: a reservation in the account (`MemoryAccount.ReserveDevice`), which the mesh regions and the shader pipelines hold |
 | Demand points | `SdfMeshDemand.Observe` and the lighting's own `SdfMeshIrradiance.CaptureViewCameras`, with different filters |
-| A byte ledger | `MemoryAccount` owners, `GpuDeviceMemoryWork`, the mesh library's own weight (`SdfMeshLibrary.ByteBudget`) and the region's named bytes copied into the bake (`SdfMeshPathBake.ObserveResidency`) |
+| A byte ledger | `MemoryAccount` owners fed by `GpuDeviceMemoryWork`; the mesh library's own weight (`SdfMeshLibrary.ByteBudget`) and the region's named bytes copied into the bake (`SdfMeshPathBake.ObserveResidency`) remain |
 | Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound (`SdfMeshStore.DefaultCapacityBytes`) is a fifth, and stays, because disk is its own resource |
-| Scheduling residency work | The bake's own static pool, the lighting's and the restore's thread-pool work, `JobPool`, and a budget per `SdfGpuWork` |
+| Scheduling residency work | The bake's own static pool, the lighting's and the restore's thread-pool work and `JobPool`; the GPU budget is one (`SdfGpuWorkBudget`) |
 
 ## How the research was weighed
 
@@ -292,8 +285,7 @@ printed and counted, never hidden, and no simulation is unloaded to make room.
 The campaign moves bytes from the envelope into the admitted classes, and its
 reading is how much of each pool is still only measured.
 
-What enforces the first, once [step 3](#the-build-order) lands, at one door
-each:
+What enforces the first, at one door each:
 
 - **Device memory.** A backend allocates a block only with a grant from the
   admission door, and `GpuDeviceMemoryWork.CountAllocated` takes that grant, so
@@ -306,13 +298,18 @@ each:
   `MemoryAccount.Owner.TryReserve`.
 - **Forced progress.** One job in the process, not one per bake, may be
   admitted past the budget so work always settles
-  ([decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)).
+  (`MemoryAccount.Owner.TryReserveForced`,
+  [decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)).
 
 Where it stops: an allocation a door makes without counting is invisible to
 the account, and the reading that shows one is the API's usage against the
 ledger; swapchain images and driver memory never reach a door; the envelope is
-measured. Until step 3 lands the account reports all of this and holds none of
-it, and no step may claim otherwise.
+measured, and until it is sampled at a rate (it is sampled when `host.memory`
+asks) the host pool's limit is its budget and the machine's free memory, not
+the budget less the envelope. Admission stops growth and gives nothing back: a
+limit that falls under what a pool holds leaves it standing and read as over
+the limit until [step 7](#step-7-the-backing) and
+[step 5](#step-5-the-floor-and-eviction).
 
 The second invariant is the residency decision's and is unchanged: only
 presentation follows the observer, so nothing here reaches a rule, a door or a
@@ -617,10 +614,10 @@ An allocation with no reservation behind it draws on unreserved room or is
 refused. Two callers can no longer spend the same spare bytes, because the
 promise is taken under the account's lock before either allocates.
 
-**Forced progress.** `MemoryAccount.Owner.Reserve` admits a job whatever the
-budget holds so that work always settles. It becomes one allowance for the
-process: one forced job at a time across every bake, drawn from the workspace
-class, in place of one per bake. A job whose peak passes the whole class is
+**Forced progress.** A job admitted whatever the budget holds is what makes
+work always settle. It is one allowance for the process
+(`MemoryAccount.Owner.TryReserveForced`): one forced job at a time across every
+bake, drawn from the workspace class, in place of one per bake. A job whose peak passes the whole class is
 split where it can be (a lattice baked in parts) and failed by name where it
 cannot (`SdfMeshBakeReport.Failed`).
 
@@ -1212,7 +1209,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [1. Device readings and pools](#step-1-as-a-brief) | Budgets per segment, placement in the ledger, pools on the account as ledgers | Nothing |
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. The backing prototype](#step-7-the-backing) | Slabs or sparse backing, chosen by measurement | Beside 1 and 2, with a GPU grant |
-| [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit | 1, 2 |
+| [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit. Built, apart from background work serviced off the frame pump | 1, 2 |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
 | [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device | 3; 7 before it claims relief |
@@ -1273,9 +1270,8 @@ where today's seams are.
 unified memory or without a device), the device reading the account last
 recorded, each segment's API budget, usage and reservation figures beside the
 bytes the ledger placed in it (`usage-beyond-ledger`), and each ledger segment
-row. Nothing admits against the pools: `MemoryAccount.Owner.TryReserve`
-answers as it did, both quarter shares stay, and no reading trims a cache.
-Step 3 switches admission.
+row. Step 1 landed these as ledgers; [step 3](#step-3-one-reservation) admits
+against them.
 
 - **The reading.** `GpuMemoryReading` holds, per segment, a
   `GpuSegmentReading`: budget, usage, and where the API has them the bytes
@@ -1314,16 +1310,13 @@ Step 3 switches admission.
   `GpuDeviceMemoryWork.IsDeviceLocal` chooses only the role row.
 - **The account.** `MemoryAccount.ReadPools` reads the pools
   (`MemoryPoolReading`: budget, spend limit, admitted and reserved bytes, and
-  from step 2 the physical rows). An admitted owner charges host memory and is
-  what `TryReserve` subtracts. An observed owner
-  (`MemoryAccount.CreateObservedOwner`) stays outside that sum, on a discrete
-  card and on unified memory alike, and reserves nothing. Each ledger segment
-  row reports to the account (`MemoryAccount.DeviceOwners`), which the
+  from step 2 the physical rows). A host owner charges host memory. Each ledger
+  segment row reports to the account (`MemoryAccount.DeviceOwners`), which the
   presenter registrations hand the ledger, so the backends hold no reference to
-  the account. `MemoryAccount.Record` takes a reading and records each segment's
+  the account, and a family's row names part of its segment's row and adds
+  nothing. `MemoryAccount.Record` takes a reading and records each segment's
   budget and spend limit (the budget less the larger of a tenth of it and the
-  headroom); it fires no trim and changes no admission. Step 3 deletes the
-  observed form.
+  headroom).
 
 **Invariant.** A byte the ledger counts is charged to exactly one pool, chosen
 by where it was placed. `GpuDeviceMemoryWork.CountAllocated` is the one door,
@@ -1358,7 +1351,7 @@ lane's ([open questions](#open-questions-and-their-owners)).
 
 **Built.** `host.memory` measures the account and prints each pool as its
 physical rows, which alone add, each with the part its owners name and its
-residual; nothing admits against them, and `TryReserve` answers as it did.
+residual.
 
 - **A charge names its row.** `IAllocationObserver.Change` takes the
   `MemoryBacking` the storage lies in, stated by the storage that makes the
@@ -1440,43 +1433,138 @@ machine, and a unified-memory device's reading to the Deck lane.
 
 ### Step 3: one reservation
 
-**Builds.** The selector, one per presentation, holding the classes of
-[decision 3](#decision-3-one-reservation-across-residencies-with-floors-and-classes)
-and the one detail bias; region limits granted from it; the admission door and
-its grant at every counted allocation door, view targets, pipelines and
-background work included; a growth reserving old and new; a device refusal
-lowering the segment's limit and returning the grant; the pipeline's peak as a
-reservation; one background budget of GPU time and upload bytes, taken up on
-completion and decoupled from presentation (serviced during the host's present
-wait or submitted on a queue of its own, whichever the step measures better),
-with the credit cap and the bake's backlog admission made rates of wall time;
-background jobs in bounded pieces that lease the generations they
-read until their fence and readers retire and reserve everything they hold to
-completion; the process's one forced job; the device bytes of the floors passed to
-`SetVideoMemoryReservation`; a pressure reading firing
-`MemoryAccount.TrimCaches`. Admission switches for every owner in this one
-change, and step 1's shadow is deleted.
+**Built.** Admission is the account's for every pool, at one arithmetic, and
+the fixed shares are gone.
 
-**Replaces.** `SdfWorldTables.MeshRegionDeviceLocalShare`,
-`ShaderPipelineMemoryBudget.DeviceLocalShare`, `GpuMemoryProfile.DeviceLocalShare`;
-a bias per bake; a budget per `SdfGpuWork`; a forced job per bake; the bake's
-own free-memory pacing on unified memory; background work taking jobs only at
-frame pumps; the throw from `SdfWorldTables.EnsureMeshRegionCapacity`.
+- **The door.** A backend asks before every native device allocation, at the
+  size the device will be asked for (`GpuDeviceMemoryWork.TryAdmit`, from
+  `DirectXHeapArena`, `DirectXDeviceMemory.Admit`, the descriptor heaps and
+  `VulkanDeviceCommands.AllocateCounted`), and
+  `GpuDeviceMemoryWork.CountAllocated` takes only the `GpuMemoryGrant` that
+  answer made. The account answers for the segment's pool and the segment's
+  own limit (`IGpuMemoryOwners.Admit`). A grant stands as a promise until it
+  is counted, returned or refused.
+- **Classes.** Every owner states a `MemoryClass`. A class that gives way
+  (`MemoryClasses.GivesWay`: workspace, support, elastic, caches) is refused
+  when its pool or segment has no room, and the creation door throws
+  `GpuMemoryRefusedException`, which a region's growth and shrink catch.
+  Fixed and floor storage is admitted past the limit and counted
+  (`MemoryAdmissionReading.OverLimitGrants`), which is the presentation whose
+  least does not fit; a holder states its floor with its reservation, and a
+  mesh region's draw records are one (`SdfResidencyGrant.ReserveFloorGrowth`).
+- **Reservations.** A holder reserves the peak its resources hold before it
+  allocates (`MemoryAccount.ReserveDevice`, `MemoryAccount.DeviceReservation`),
+  under the owner its objects are named for (`GpuObjectName.MemoryOwnerOf`).
+  An allocation the reservation covers adds nothing to what the pool has
+  promised. A mesh region reserves the standing buffer and its replacement
+  together before the plan that asks for the growth
+  (`SdfResidencyGrant.ReserveGrowth`) and lowers the reservation when the old
+  buffer's readers finish (`SdfResidencyGrant.Released`). A shader pipeline
+  reserves its replacement peak, and a refused reservation is
+  `ShaderPipelineMemoryAccount.RefusalCode`, with the installed graph still
+  running.
+- **The device's own refusal.** A native allocation that fails for want of
+  memory hands its grant back (`GpuMemoryGrant.Refuse`): the segment's limit
+  falls to what it holds until its budget is read differently, the reading is
+  refreshed at once (`GpuDeviceMemoryWork.DeviceRefusals`), and the caller
+  keeps what it had.
+- **The selector.** `SdfResidencySelector`, one for a device's residencies,
+  holds the one detail bias, grants each bake its budget
+  (`SdfResidencyGrant.Budget`: what the residency fills and an equal part of
+  the room the elastic budget has left, or its part of the excess), and
+  reserves each mesh region. The elastic budget is what the pool's limit
+  leaves the regions, less room for the largest one's replacement. The bias
+  rises when the budget has pressed with no residency holding detail it can
+  give up and falls once every residency fits half a rung finer
+  (`SdfResidencyGrant.Decide`).
+- **Forced progress.** One owner in the process holds the forced allowance at a
+  time (`MemoryAccount.Owner.TryReserveForced`); a bake that finds it taken
+  waits as it waits for room.
+- **The host pool.** Its limit is the budget, or the machine's free memory with
+  what the pool holds when that is smaller, less the headroom; the account
+  reads the free memory itself (`MemoryAccount.AvailableInterval`), and the
+  bake's own reading is gone.
+- **Pressure.** A limit that falls under what its pool holds, a device refusal
+  or storage admitted past a limit fires one trim on the frame thread
+  (`MemoryAccount.ServicePressure`, from `DeviceMemoryReadings.Refresh`).
+- **The OS reservation.** The draw records of every residency are the floors
+  the selector records (`MemoryAccount.RecordFloor`), and the host passes
+  them to `IGpuDeviceContext.ReserveMemory`, which on Direct3D 12 is
+  `SetVideoMemoryReservation` on the local group, clamped to what the reading
+  says may be reserved.
+- **One background budget.** Every residency's `SdfGpuWork` draws on its
+  selector's `SdfGpuWorkBudget`; a service that found it empty makes the next
+  accrual bank its whole gap, up to `SdfGpuWorkBudget.MostBankSeconds`.
+- **Readings.** `host.memory` prints each pool's limit, held, peak, retired
+  and promised bytes, its room, what stands past the limit, the forced job and
+  the counted exceptions, the bytes by class, and each ledger segment's limit,
+  held, peak and promised bytes; `host.memory budget [host|device]
+  <bytes|auto>` lowers a pool's budget by hand. `world.residency` prints the
+  selector's line: the pool, each class's bytes, the elastic budget, the bias
+  and each residency's grant.
 
-**Check.** Exists: `region-limit`, `region-named`, `detail-bias`, `refusals`.
-Adds: the selector's line (grant per residency, the shared bias, each class's
-bytes), held, peak, retired and promised bytes per pool and segment, and a
-pool argument to `host.memory budget`. With four residencies the grants sum
-under the device's limit. Lowering the device budget in steps along a fixed
-path: held plus promised never passes the limit apart from the one forced job,
-which is counted; the one bias rises; `refusals` stays at nothing; nothing
-throws. No more than one forced job is admitted at once across every bake.
-`SHADERPIPE_BUDGET` still refuses. With the display held at a slow present,
-the bake's and the lighting's GPU time a second stays at the budget's rate and
-the bake's workers do not idle behind a pump. This step claims that growth
-stops at the limit. It does not claim that held bytes fall when the limit drops below them:
-that is step 7's and step 5's, and the reading says which bytes are held over
-the limit meanwhile.
+**Invariants, and what enforces each.**
+
+- *A device byte is admitted before it is counted.* The type: only
+  `GpuDeviceMemoryWork.TryAdmit` makes a `GpuMemoryGrant`, and
+  `GpuDeviceMemoryWork.CountAllocated` takes nothing else. It stops where a
+  backend allocates without counting, which the API's usage against the
+  ledger shows.
+- *What a pool holds and has promised stays under its limit through every
+  admission, apart from the forced job and storage that cannot give way, both
+  counted.* One private arithmetic in the account, which its three doors call
+  and nothing else adds a promise past. A limit that falls leaves what is held
+  standing, read as `MemoryAdmissionReading.OverLimit`.
+- *A grant is settled once.* `GpuMemoryGrant` refuses a second settlement.
+- *One forced job at a time.* One field in the account, taken and released
+  under its lock.
+- *A region's buffers are allocated only under its reservation.* The tables
+  reserve before they plan (`SdfResidencyGrant.ReserveGrowth`) and the arena
+  places nothing past what was reserved (`SdfMeshRegionArena.SetLimit`). It
+  stops at the owner: every residency's region shares one account entry, so a
+  region holding more than its own peak hides as much of another's promise.
+- *The budgets are one sum.* The selector computes every residency's budget
+  from one reading under one lock; the residencies' budgets add up to the
+  elastic budget.
+
+**Replaced.** The mesh region's and the shader pipeline's quarter of the
+device and the helper they shared; a bias per bake; a budget per `SdfGpuWork`;
+a forced job per bake; the bake's own free-memory pacing; the throw from the
+mesh region's growth; the observed owner that stood outside admission.
+
+**What remains of the step.**
+
+- *Servicing decoupled from presentation.* Background jobs are still taken
+  only at frame pumps. Serviced during the host's present wait, it needs a wait
+  on a fence or the frame's deadline, whichever comes first: a completion
+  handle from each backend's fence, and a precision wait that such a handle
+  ends. On Vulkan a present that blocks inside the swapchain call has no wait
+  to service in, so a queue and recording thread of its own is the other
+  candidate, and the measurement decides: with the display held at a slow
+  present, the bake's and the lighting's GPU time a second against the
+  budget's rate, on both backends. With it go the bake's backlog admission
+  (`SdfMeshPathBake.Backlogged`) as a rate of wall time, background jobs that
+  lease the generations they read until their fence, and a reservation for
+  what a job holds on the device.
+- *The workspace class's size.* Bake workspaces reserve against the host pool,
+  and no job is split or failed by name for passing a class of its own.
+- *The lighting's device memory and the background work's buffers* are fixed
+  storage until they reserve: never refused, and outside the elastic budget.
+- *Retired bytes by segment.* A holder states them and names a pool.
+- *Priority across residencies.* The budgets and the background budget are
+  shared equally and first come.
+
+**Check.** The laws: `MemoryAdmissionLawTests` (held plus promised along a
+falling budget, a covered allocation, the floor, the device's refusal, the one
+forced job, the host's free memory, the pressure trim),
+`SdfResidencySelectorLawTests` (four residencies' grants under the limit at
+every step of a falling budget, the one bias, a region's growth under its
+reservation, the work budget's rate), the tables' law that a region with no
+room keeps its buffer and refuses the meshes past it without throwing, and
+the pipeline's refusal by the account. The windowed readings are verification requests to the lead: the
+lowered-budget path (`host.memory budget device` in steps at the meadow, on
+both backends: `over-limit`, `detail-bias`, `refusals` and `growth-refusals`
+at each step, with captures), and the slow-present reading above.
 
 ### Step 4: staged by demand
 
@@ -1838,9 +1926,10 @@ extends:
 
 - **The account and its doors.** `MemoryAccount`, its categories, owners,
   `TryReserve` and the trim event are the authority; no second budget type. An
-  owner's promise is already the handoff's arithmetic.
-- **The ledger.** `GpuDeviceMemoryWork` is the device's measured truth and
-  becomes the account's feed and the grant's last door, not a parallel count.
+  owner's promise is the handoff's arithmetic, and a device reservation is the
+  same arithmetic over the bytes the ledger names.
+- **The ledger.** `GpuDeviceMemoryWork` is the device's measured truth, the
+  account's feed and the grant's one door, not a parallel count.
 - **The backend pool.** `GpuMemoryPool` is where blocks are made, kept and
   freed; pressure release extends it.
 - **Demand.** `SdfMeshDemand` already unites every view of a residency, carries

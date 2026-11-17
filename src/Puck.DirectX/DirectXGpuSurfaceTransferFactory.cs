@@ -113,7 +113,7 @@ file sealed unsafe class DirectXGpuSurfaceImport(IDirectXDeviceContext deviceCon
             riid: &resourceIid,
             ppvObj: &resource
         );
-        DirectXDeviceMemory.CountAllocated(
+        DirectXDeviceMemory.CountOpened(
             device: device,
             family: GpuDeviceMemoryWork.ImportedFamily,
             memory: deviceContext.Memory,

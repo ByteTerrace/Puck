@@ -13,7 +13,7 @@ data costs.
 | Question | Tool | Reads |
 |---|---|---|
 | Did a frame collect, and how long did it pause? | `host.frames [frames] [budget-ms] [worst]` on a windowed World ([`HostFrameCommandModule`](../../../../src/Puck.Launcher/Commands/HostFrameCommandModule.cs)) | Collections by generation and GC pause time inside each worst iteration, beside produce and simulate. |
-| Where does the heap sit? | `host.memory`, `host.memory collect`, `host.memory budget <bytes\|auto>` ([`HostMemoryCommandModule`](../../../../src/Puck.World/HostMemoryCommandModule.cs)) | Process and managed readings beside the process account's live, reserved, cached, retirement and metadata bytes, and mimalloc committed/reserved bytes, then each pool's physical rows (`MemoryAccount.ReadPools`: device blocks, native allocator, native direct, managed, runtime and driver from a page walk), each with what its owners name and its residual, the device's budget reading per segment beside the ledger's bytes placed there, the ledger's segment rows and the device families holding most. `collect` trims cache claims, compacts the LOH and asks mimalloc to collect. `budget` lowers admission without revoking live storage. |
+| Where does the heap sit? | `host.memory`, `host.memory collect`, `host.memory budget [host\|device] <bytes\|auto>` ([`HostMemoryCommandModule`](../../../../src/Puck.World/HostMemoryCommandModule.cs)) | Process and managed readings beside the process account's live, reserved, cached, retirement and metadata bytes, and mimalloc committed/reserved bytes, then each pool's physical rows (`MemoryAccount.ReadPools`: device blocks, native allocator, native direct, managed, runtime and driver from a page walk), each with what its owners name and its residual, the device's budget reading per segment beside the ledger's bytes placed there, the ledger's segment rows and the device families holding most. `collect` trims cache claims, compacts the LOH and asks mimalloc to collect. `budget` lowers admission without revoking live storage. |
 | Who holds the large object heap? | `host.memory heap [min-mib]` ([`ManagedHeapWalk`](../../../../src/Puck.World/ManagedHeapWalk.cs)) | The runtime's own heap dump over an EventPipe session on the process itself (one suspended full collection): large-object totals and each tenant past the size by type and first holder. A managed tenant worth bounding becomes an owner: a storage owner reports through `IAllocationObserver` naming its `MemoryBacking`, a derived figure through `MemoryAccount.CreateSampledOwner`. |
 | Does the server tick allocate? | `puck bench world` ([CLI reference](../../../../docs/reference/cli.md#puck-bench-world)) | Median and mean bytes a tick, standing and over three gallery walks. |
 | Does this body allocate? | `AllocationWindow.Least`, `.Measure`, `.Total` ([`AllocationWindow`](../../../../src/Puck.Abstractions/Counting/AllocationWindow.cs)) | Least bytes over up to 16 windows, naming the sampled types when every window allocated. |
@@ -221,15 +221,25 @@ Sources: bandwidth and the cost of streaming past the last-level cache
 
 ## Owned storage and byte admission
 
-`Puck.Hosting.Jobs.MemoryAccount.Shared` is the process's byte authority.
-An owner reserves its simultaneous peak before admission; unused promises are
-`reserved`, not allocated memory. Admission paces, it never refuses: a bake
-group whose reservation does not fit while others of its bake are admitted
-waits (`[sdf.mesh-bake] deferred`), holding its place so no group behind it is
-admitted first, and a group that does not fit when nothing of its bake is
-admitted is admitted anyway (`[sdf.mesh-bake] admitted alone`). So a bake under
-`host.memory budget 1`, or on a machine with little free memory, still settles,
-one group at a time, and a lockstep World never holds its frame forever. A
+`Puck.Hosting.Jobs.MemoryAccount.Shared` is the process's byte authority, for
+host memory and device memory alike: what a pool holds and has promised stays
+under its limit through every admission (`MemoryAccount.Owner.TryReserve`,
+`MemoryAccount.DeviceReservation.TryReserve`, and the device ledger's grant
+before each native allocation, `GpuDeviceMemoryWork.TryAdmit`). An owner
+reserves its simultaneous peak before admission; unused promises are
+`reserved`, not allocated memory. A bake group whose reservation does not fit
+while others of its bake are admitted waits (`[sdf.mesh-bake] deferred`),
+holding its place so no group behind it is admitted first, and a group that
+does not fit when nothing of its bake is admitted is admitted anyway as the
+process's one forced job (`MemoryAccount.Owner.TryReserveForced`,
+`[sdf.mesh-bake] admitted alone`), or waits while another bake holds that
+allowance. So a bake under `host.memory budget 1`, or on a machine with little
+free memory, which the account reads itself, still settles, one group at a
+time in the whole process, and a lockstep World never holds its frame
+forever. Device storage states a class (`MemoryClass`): elastic and workspace
+storage is refused when its pool is full, and fixed storage is admitted past
+the limit and counted, so a full device coarsens detail before it ends a
+World. A
 group also waits while the bake pool's queue holds a round of every worker's
 stages (`Backlogged`): admitted beyond that, it would only hold its lattice in
 the queue. A group's peak comes from its own final lattice and the most fine samples its

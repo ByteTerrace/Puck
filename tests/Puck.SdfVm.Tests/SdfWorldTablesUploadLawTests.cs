@@ -732,8 +732,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             for (var word = 0; (word < rows.Length); word++) {
                 if (word != 11) { expected[(at + word)] = BitConverter.SingleToUInt32Bits(value: rows[word]); }
             }
-            expected[(at + 3)] = ((boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u));
-            expected[(at + 15)] = (uint)draw.Mesh.Levels.Count;
+            expected[(at + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (draw.EnclosesSolid ? 4u : 0u);
+            expected[(at + 15)] = ((uint)draw.Mesh.Levels.Count);
         }
         void Record(Matrix4x4 matrix, uint material, uint indexWord, uint indexCount, uint vertexWord, uint flags, uint materialWord, uint levelWord) {
             float[] rows = [
@@ -761,7 +761,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             expected.Add(item: SdfFrameSampled.None);
         }
         // A level table of one row: the mesh's own triangles from its first, three vertices a triangle, error zero.
-        void Levels(SdfMesh mesh) => expected.AddRange(collection: [0u, (uint)(3 * mesh.TriangleCount), 0u]);
+        void Levels(SdfMesh mesh) => expected.AddRange(collection: [0u, ((uint)(3 * mesh.TriangleCount)), 0u]);
         // A vertex: its position and its normal, zeros for a normal its mesh lacks.
         void Vertices(SdfMesh mesh) {
             for (var vertex = 0; (vertex < mesh.Positions.Length); vertex++) {
@@ -802,6 +802,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         // Every staged cell has a nonzero generation; different cells may use the same token.
         var generationWords = MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(part: "mesh-region", sizeBytes: rig.Engine.MeshRegionBytes).AsSpan(length: ((int)bytes), start: 0)).ToArray();
+
         uint GenerationOf(int record) => generationWords[(((record * SdfMeshRecord.DrawWords) + SdfMeshRecord.SelectionWord) + 11)];
 
         for (var draw = 0; (draw < draws.Length); draw++) {
@@ -868,6 +869,43 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     }
     // A relocation that leaves the mesh region holding more than half again what its draws need shrinks it to the need
     // plus an eighth, and the shrunk region holds the words of a region that never grew.
+    [Fact]
+    public void ARegionWhosePoolHasNoRoomKeepsItsBufferAndRefusesTheMeshesPastItWithoutThrowing() {
+        const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
+        var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
+        var selector = new SdfResidencySelector(account: account, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        var quad = new SdfMesh(
+            indices: new uint[] { 0, 1, 2, 0, 2, 3 },
+            positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
+        );
+        var big = new SdfMesh(
+            indices: new uint[] { 0, 1, 2 },
+            positions: Enumerable.Range(count: BigVertices, start: 0).Select(selector: static index => new Vector3(x: index, y: index & 1, z: 0f)).ToArray()
+        );
+        var small = new SdfMeshDraw(Identity: "quad", Material: 1, Mesh: quad, ObjectToWorld: Matrix4x4.Identity);
+        var large = new SdfMeshDraw(Identity: "big", Material: 1, Mesh: big, ObjectToWorld: Matrix4x4.CreateTranslation(xPosition: 4f, yPosition: 0f, zPosition: 0f));
+        using var rig = new Rig(selector: selector, slots: 1);
+
+        rig.Warm();
+        rig.Land(meshDraws: [small], time: 0f);
+
+        var held = rig.Engine.MeshRegionBytes;
+
+        // The pool has no room for a replacement beside the standing buffer: the region keeps the buffer it holds, the
+        // mesh that does not fit under it is refused, its draw waits, and nothing throws.
+        account.SetBudget(bytes: 1L, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        rig.Render(meshDraws: [small, large], time: 0f);
+        rig.Render(meshDraws: [small, large], time: 0f);
+        Assert.Equal(expected: (held, held, 1), actual: (rig.Engine.MeshRegionBytes, rig.Engine.MeshRegionLimitBytes, rig.Engine.MeshRegionRefused));
+        Assert.Equal(expected: 1U, actual: rig.Engine.MeshDrawCount);
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).OverLimitGrants);
+        // With room again the next list places the refused mesh and the region grows under its reservation.
+        account.SetBudget(bytes: null, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        rig.Land(meshDraws: [small, large], time: 0f);
+        Assert.Equal(expected: (0, 2U), actual: (rig.Engine.MeshRegionRefused, rig.Engine.MeshDrawCount));
+        Assert.True(condition: (rig.Engine.MeshRegionBytes > (40UL << 20)));
+        Assert.Contains(expectedSubstring: "residencies=1", actualString: selector.Describe());
+    }
     [Fact]
     public void ARelocationShrinksAnOversizedMeshRegionToItsNeed() {
         const int BigVertices = ((40 << 20) / (SdfMeshRecord.VertexWords * sizeof(uint)));
@@ -976,6 +1014,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     ) {
         DynamicTransforms = transforms,
     };
+
     // The transforms packed as the device-local table holds them: position and material scale, quaternion, lanes.
     private static byte[] Packed(DynamicTransform[] transforms) {
         var packed = new float[(transforms.Length * (DynamicTransformBytes / sizeof(float)))];
@@ -1120,6 +1159,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         return builder.Build();
     }
+
     // Distinct, nonzero poses: slot i sits at (i, 0, 0) under the identity rotation.
     internal static DynamicTransform[] Transforms(int slots) {
         var transforms = new DynamicTransform[slots];
@@ -1151,11 +1191,14 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         private GpuPassPipeline m_meshRaster = null!;
         private GpuPassPipeline m_regionCopy = null!;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null) {
+        private readonly SdfResidencySelector? m_selector;
+
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, SdfResidencySelector? selector = null) {
             Gpu = new UploadModelGpu() {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
             };
+            m_selector = selector;
             m_programWordReserve = programWordReserve;
             m_program = Program(albedo: Vector3.One);
             m_transforms = Transforms(slots: slots);
@@ -1262,8 +1305,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             Render(meshDraws: meshDraws, time: time);
             // The upload budget is a rate of wall time (SdfGpuWork.UploadBytesPerSecond), so the bound is in seconds.
             var deadline = System.Diagnostics.Stopwatch.StartNew();
+
             while (Engine.MeshesLanding || Engine.DrawsAwaitMeshes) {
-                Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(10)), userMessage: "The mesh region never landed its meshes.");
+                Assert.True(condition: (deadline.Elapsed < TimeSpan.FromSeconds(seconds: 10)), userMessage: "The mesh region never landed its meshes.");
                 Render(meshDraws: meshDraws, time: time);
             }
         }
@@ -1313,6 +1357,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
                     DynamicTransformCapacity: m_transforms.Length,
                     Program: m_program,
                     ProgramWordCapacity: m_programWordReserve,
+                    Selector: m_selector,
                     WorkLedger: ledger
                 ),
                 pipelines: m_pipelines,

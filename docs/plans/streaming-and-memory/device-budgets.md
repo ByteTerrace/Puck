@@ -446,8 +446,8 @@ on the Deck that VK_EXT_memory_budget's usage can be checked against.
   `value: profile.DeviceLocalShare(divisor: MeshRegionDeviceLocalShare, unreportedBytes: MostMeshRegionBytes)`
   and fixed at construction (`src/Puck.SdfVm/SdfWorldTables.cs:205`
   `m_meshArena = new SdfMeshRegionArena(limitBytes: MeshRegionLimitOf(profile: device.MemoryProfile));`).
-  The shader pipeline: `src/Puck.Shaders/Pipeline/ShaderPipelineMemoryBudget.cs:14`
-  `public const ulong DeviceLocalShare = 4UL;`, read at
+  The shader pipeline's budget file held `public const ulong DeviceLocalShare = 4UL;`
+  (since replaced by a reservation in the account), read at
   `src/Puck.Shaders/ShaderPipelineRenderNode.Budget.cs:67`
   `public ulong DeviceBudgetBytes => ShaderPipelineMemoryBudget.For(profile: m_device.MemoryProfile);`.
   Neither knows of the other, of view targets, of the lighting scene or of other
@@ -665,7 +665,7 @@ are measured, never admitted.
    (fixed by views, transfer, elastic presentation, caches, measured managed
    heap) in place of every fixed share: delete `MeshRegionDeviceLocalShare`,
    `ShaderPipelineMemoryBudget.DeviceLocalShare` and the
-   `GpuMemoryProfile.DeviceLocalShare` helper they share, and pass the floor sum
+   device-local share helper on `GpuMemoryProfile` they share, and pass the floor sum
    to `SetVideoMemoryReservation`.
 5. **The reaction.** Recommend: on Windows the budget event on a host wait
    thread; on Vulkan a low-rate host-timer refresh plus a refresh on refusal; a

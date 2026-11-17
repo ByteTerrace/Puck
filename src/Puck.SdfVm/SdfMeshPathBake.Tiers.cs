@@ -8,6 +8,7 @@ public sealed partial class SdfMeshPathBake {
     // The replacements in flight, each with the index it was placed at: a settle rebake (Rebake) or a finer tier (Retier).
     // The replaced group draws until the replacement lands and its words stand in the mesh region (FinishReplacements).
     private readonly List<(Group Group, int Index)> m_replacing = [];
+
     // The groups whose demanded tier is finer than the one they draw, as of the latest frame, the worst owed error among
     // them in display pixels and the longest owed interval in frames; the worst of each since the bake started; and the
     // finer tiers that landed, those the library already held among them.
@@ -18,7 +19,9 @@ public sealed partial class SdfMeshPathBake {
     private int m_worstOwedFrames;
     private int m_retiers;
     private int m_retiersReused;
+
     private readonly List<(float Pixel, int Index, int Tier)> m_retierCandidates = [];
+
     // The measure of every group's demand, spread over SdfMeshTier.MeasureFrames frames (MeasureDemands): the group
     // the next frame's share starts at, the boxes the sweep under way has measured, and those the last whole sweep
     // measured, which a frame's share is taken of.
@@ -36,19 +39,17 @@ public sealed partial class SdfMeshPathBake {
     private long m_regionNamedBytes;
     private int m_regionRefused;
     // The groups drawing a finer tier than their demand asks and the finer tiers the budget held back, as of the
-    // latest frame; the coarser tiers landed; the half rungs every demand is coarsened by (SdfMeshTier.Biased), the
-    // steps up and down, the frames the budget has pressed with nothing spare, the frames a step down has had room,
-    // the frames a step down waits, and the frames since the latest step down.
+    // latest frame; the coarser tiers landed; and the half rungs every demand is coarsened by (SdfMeshTier.Biased):
+    // the presentation's one bias as the bake last read it from its grant, zero for a bake no residency observes.
     private int m_tiersSpare;
     private int m_tiersHeldBack;
     private int m_coarsened;
     private int m_bias;
-    private int m_biasRaised;
-    private int m_biasLowered;
-    private int m_biasPressed;
-    private int m_biasQuiet;
-    private int m_biasWait = SdfMeshTier.BiasQuietFrames;
-    private int m_biasSinceLowered = int.MaxValue;
+    // The residency's part of its presentation's selector, from the tables that observe the bake (ObserveResidency):
+    // the budget its meshes fill and the bias its demand is coarsened by. Null for a bake no residency observes, which
+    // has no budget.
+    private SdfResidencyGrant? m_detail;
+
     private readonly List<(long Saving, int Index, int Tier)> m_spareCandidates = [];
 
     /// <summary>Gets whether the bake's meshes stand at the detail its demand asks and its mesh region's budget
@@ -61,11 +62,12 @@ public sealed partial class SdfMeshPathBake {
     /// moved to. Read from any thread.</summary>
     public bool DetailSettled => (Volatile.Read(location: ref m_detailQuiet) >= SdfMeshTier.SettleFrames);
 
-    // The bytes of mesh region the bake budgets its meshes to; no budget before the region's limit is read.
-    private long RegionBudgetBytes => ((m_regionLimitBytes == 0L) ? long.MaxValue : ((m_regionLimitBytes / 8L) * SdfMeshTier.BudgetEighths));
+    // The bytes the bake's meshes may fill, as its grant last answered (Retier); no budget for a bake no residency
+    // observes.
+    private long m_regionBudgetBytes = long.MaxValue;
+
     // The tier a pixel demands under the bias the budget holds.
     private int TierOf(float pixel) => SdfMeshTier.Of(pixel: SdfMeshTier.Biased(halfRungs: Volatile.Read(location: ref m_bias), pixel: pixel));
-
     /// <summary>Returns the tier a plan bakes each group at: the coarsest whose cell stays under half a display pixel at
     /// the group's planned box from the nearest demand point (<see cref="SdfMeshTier.Of"/>, <see cref="SdfMeshDemand.PixelAt(SdfMeshBakeGroup, IReadOnlyList{DynamicTransform})"/>),
     /// a dynamic group's box carried into world space by its slot's transform among <paramref name="transforms"/> and
@@ -154,6 +156,7 @@ public sealed partial class SdfMeshPathBake {
         point = -1;
         foreach (var index in copies) {
             var matrix = m_demandCopies[index].Matrix;
+
             var (boxCenter, boxHalf) = TransformBox(center: center, half: half, matrix: matrix);
             var units = MathF.Max(x: 1.0e-6f, y: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length());
             var pixel = (Demand.PixelAt(center: boxCenter, half: boxHalf, point: out var seen) / units);
@@ -215,7 +218,9 @@ public sealed partial class SdfMeshPathBake {
     // against the one it draws, counts the debt, and plans again at the demanded tier each
     // landed group that has owed a finer one for SdfMeshTier.HoldFrames frames, the finest demand first, at most
     // SdfMeshTier.MaxInFlight at once: the replacement bakes (or lands from the library) while the coarser mesh draws.
-    // Detail is budgeted by demand inside the mesh region's budget (RegionBudgetBytes). A finer tier starts only while
+    // Detail is budgeted by demand inside the budget the presentation's selector grants this residency
+    // (SdfResidencyGrant.Budget): what its draws name, what its finer tiers in flight are expected to add, and its part
+    // of the room every residency shares. A finer tier starts only while
     // the bytes the frame's draws name, with those the finer replacements in flight are expected to add, leave it room.
     // What a replacement adds is known once it lands, so the expectation is the surface's scaling
     // (SdfMeshTier.BytesAt) held to one part in SdfMeshTier.ReplacementShare of the budget, and the pressure below is
@@ -223,10 +228,11 @@ public sealed partial class SdfMeshPathBake {
     // it holds, or a finer tier waits and they name within one replacement of it: the groups drawing a finer tier than
     // their demand asks (spare) are then planned again at the demanded one, the largest saving first, until the draws
     // are expected two replacements under the budget. When it has pressed for SdfMeshTier.HoldFrames frames with no
-    // spare group left, landing or waiting its hold, the demand itself is past the budget and every demand is coarsened
-    // half a rung (m_bias), which makes the groups farthest past their rung spare. The bias is taken back half a rung
-    // once the bytes the draws would name with every demand half a rung finer and every spare group coarsened have
-    // stayed under that same mark, with nothing owed or in flight, for the quiet wait. With room to spare a coarser tier
+    // spare group left, landing or waiting its hold, in this residency or any other, the demand itself is past the
+    // budget and the selector coarsens every demand half a rung (SdfResidencySelector, read into m_bias), which makes
+    // the groups farthest past their rung spare. It takes the bias back half a rung once the bytes every residency's
+    // draws would name with every demand half a rung finer and every spare group coarsened have stayed under that same
+    // mark, with nothing owed or in flight, for the quiet wait. With room to spare a coarser tier
     // demanded changes nothing: the finer mesh stays, so a viewer who comes back finds it. Under the gate, on the
     // frame's thread.
     private void Retier(SdfFrame frame) {
@@ -237,9 +243,6 @@ public sealed partial class SdfMeshPathBake {
 
         m_decideFrames = 0;
 
-        var budget = RegionBudgetBytes;
-        var replacement = (budget / SdfMeshTier.ReplacementShare);
-        var target = (budget - (2L * replacement));
         var named = m_regionNamedBytes;
         var bias = m_bias;
         var inFlight = 0;
@@ -262,6 +265,12 @@ public sealed partial class SdfMeshPathBake {
                 freed -= group.RetierDeltaBytes;
             }
         }
+
+        var budget = (m_detail?.Budget(filled: filled, named: named) ?? long.MaxValue);
+        var replacement = (budget / SdfMeshTier.ReplacementShare);
+        var target = (budget - (2L * replacement));
+
+        m_regionBudgetBytes = budget;
 
         var candidates = m_retierCandidates;
         var spare = m_spareCandidates;
@@ -362,10 +371,13 @@ public sealed partial class SdfMeshPathBake {
             replaced = true;
         }
         m_tiersHeldBack = heldBack;
-        if ((named > budget) || ((heldBack > 0) && (named > (budget - replacement)))) {
+
+        var over = ((named > budget) || ((heldBack > 0) && (named > (budget - replacement))));
+        var anySpare = false;
+
+        if (over) {
             var expected = (named - freed);
 
-            m_biasQuiet = 0;
             spare.Sort(comparison: static (left, right) => ((right.Saving.CompareTo(value: left.Saving) is var order and not 0) ? order : left.Index.CompareTo(value: right.Index)));
             foreach (var (saving, index, tier) in spare) {
                 if ((inFlight >= SdfMeshTier.MaxInFlight) || (expected <= target)) { break; }
@@ -375,31 +387,18 @@ public sealed partial class SdfMeshPathBake {
                 expected -= saving;
                 replaced = true;
             }
-            pressing = ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0) || (bias < SdfMeshTier.MaxBias));
-            if ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0)) {
-                m_biasPressed = 0;
-            } else if (((m_biasPressed += elapsed) >= SdfMeshTier.HoldFrames) && (bias < SdfMeshTier.MaxBias)) {
-                Volatile.Write(location: ref m_bias, value: (bias + 1));
-                m_biasRaised++;
-                m_biasPressed = 0;
-                // A step up soon after a step down is a bounce: the next step down waits twice as long.
-                if (m_biasSinceLowered < m_biasWait) { m_biasWait = ((int)Math.Min(val1: (2L * m_biasWait), val2: (1L << 20))); }
-                m_biasSinceLowered = int.MaxValue;
-            }
-        } else {
-            m_biasPressed = 0;
-            if ((bias > 0) && (owed == 0) && (inFlight == 0) && (landing == 0) && (finer <= target)) {
-                if ((m_biasQuiet += elapsed) >= m_biasWait) {
-                    Volatile.Write(location: ref m_bias, value: (bias - 1));
-                    m_biasLowered++;
-                    m_biasQuiet = 0;
-                    m_biasSinceLowered = 0;
-                }
-            } else {
-                m_biasQuiet = 0;
-            }
+            anySpare = ((spare.Count > 0) || (sparesWaiting > 0) || (coarsening > 0));
+            pressing = (anySpare || (bias < SdfMeshTier.MaxBias));
         }
-        if (m_biasSinceLowered < int.MaxValue) { m_biasSinceLowered = ((int)Math.Min(val1: (((long)m_biasSinceLowered) + elapsed), val2: (int.MaxValue - 1L))); }
+        // The selector moves the one bias on every residency's report; this bake coarsens its demand by what it answers.
+        if (m_detail is { } detail) {
+            Volatile.Write(location: ref m_bias, value: detail.Decide(report: new SdfDetailReport(
+                AnySpare: anySpare,
+                CanLower: (!over && (owed == 0) && (inFlight == 0) && (landing == 0) && (finer <= target)),
+                Elapsed: elapsed,
+                Over: over
+            )));
+        }
         if (replaced) { m_productRevision++; }
         Volatile.Write(
             location: ref m_detailQuiet,

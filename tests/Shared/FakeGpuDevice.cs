@@ -142,6 +142,7 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>The native device handle the fake's tracked memory is counted under.</summary>
     public const nint DeviceHandle = 1;
+
     // The fake device registers one discrete adapter's segments, so its device-local creations count in the local one.
     private static GpuDeviceMemoryWork RegisteredMemory() {
         var memory = new GpuDeviceMemoryWork(backend: "fake");
@@ -166,7 +167,9 @@ internal sealed class FakeGpuDevice :
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+
     public void RefreshMemoryReading() { }
+
     /// <summary>Gets this device as every one of its own services.</summary>
     public GpuDeviceServices Services { get; }
 
@@ -235,11 +238,15 @@ internal sealed class FakeGpuDevice :
         if (deviceLocal) {
             Memory.CountAllocated(
                 allocation: creation.Handle,
-                bytes: ((long)deviceLocalBytes),
-                device: DeviceHandle,
-                family: GpuObjectName.UnnamedFamily,
-                role: GpuMemoryRole.DeviceLocal,
-                segment: GpuMemorySegments.DirectXLocal
+                grant: Memory.Admit(
+                    bytes: ((long)deviceLocalBytes),
+                    device: DeviceHandle,
+                    family: GpuObjectName.UnnamedFamily,
+                    payer: GpuObjectName.UnnamedFamily,
+                    payerBytes: ((long)deviceLocalBytes),
+                    role: GpuMemoryRole.DeviceLocal,
+                    segment: GpuMemorySegments.DirectXLocal
+                )
             );
         }
 

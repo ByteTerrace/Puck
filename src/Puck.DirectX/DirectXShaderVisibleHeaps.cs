@@ -29,14 +29,17 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
     /// <summary>The clear views one device holds at once, one for each view a clear has asked of a live resource: four
     /// pipeline nodes each clearing <c>ShaderPipelineLimits.MaxResources</c> storages, with room.</summary>
     public const uint ClearDescriptors = 4096U;
+
     /// <summary>The private-data key a cleared resource carries its clear tag under.</summary>
     public static readonly Guid ClearKey = new(g: "b3e1a7c4-5d92-4f08-8c6e-1a4f9d2b7e35");
+
     /// <summary>The name the device's clear range is admitted under.</summary>
     public const string ClearOwner = "storage clears";
 
     // Each cleared resource's clear views, by the tag it carries under ClearKey, never by its address, which a later
     // resource may reuse.
     private static readonly ConcurrentDictionary<long, List<(DirectXShaderVisibleHeaps Heaps, D3D12_UNORDERED_ACCESS_VIEW_DESC View, DirectXClearDescriptor Descriptor)>> Cleared = [];
+
     private static long ClearTags;
 
     private readonly GpuDescriptorHeapBudget m_budget;
@@ -162,14 +165,20 @@ public sealed unsafe class DirectXShaderVisibleHeaps : IDisposable {
 
     // A descriptor heap is no resource heap, and Direct3D 12 names no memory pool for one; it is counted in the local
     // segment group, where its device-local role places it on a discrete adapter and the only group on a unified one.
+    // The heaps are the device's own, created with it and fixed by the binding budget, so they are admitted as they are
+    // counted: descriptor heaps name no class, and storage that names none is admitted past a limit and counted.
     private void Count(nint heap, ulong bytes) =>
         m_memory?.CountAllocated(
             allocation: heap,
-            bytes: checked((long)bytes),
-            device: m_device,
-            family: GpuDeviceMemoryWork.DescriptorHeapFamily,
-            role: GpuMemoryRole.DeviceLocal,
-            segment: GpuMemorySegments.DirectXLocal
+            grant: m_memory.Admit(
+                bytes: checked((long)bytes),
+                device: m_device,
+                family: GpuDeviceMemoryWork.DescriptorHeapFamily,
+                payer: GpuDeviceMemoryWork.DescriptorHeapFamily,
+                payerBytes: checked((long)bytes),
+                role: GpuMemoryRole.DeviceLocal,
+                segment: GpuMemorySegments.DirectXLocal
+            )
         );
 
     /// <summary>Binds both heaps to a command list, once per recording: a reset clears a command list's heaps.</summary>

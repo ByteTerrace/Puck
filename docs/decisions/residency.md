@@ -137,9 +137,9 @@ demand and priority rather than creating executors.
   byte is admitted before it is allocated, in the pool of the physical memory
   it occupies. Eviction goes by priority, never wholesale and never refused on
   a miss ([machine budgets are bytes](rendering.md)), and a device that
-  refuses a growth lowers the budget instead of ending the World. The mesh
-  region's own limit (`SdfWorldTables.MeshRegionLimitOf`) already keeps it
-  under `GpuRegion.MaxByteCount`.
+  refuses a growth lowers the budget instead of ending the World. A mesh
+  region's limit is what its grant reserved for it
+  (`SdfResidencyGrant.ReserveGrowth`), never past `GpuRegion.MaxByteCount`.
 - **The unit that leaves is a bake tier.** Each group's coarsest tier that
   still covers it stays as its floor, and the tier a view demands is detail
   above it, so evicting hands the draws back to the floor and bakes nothing.

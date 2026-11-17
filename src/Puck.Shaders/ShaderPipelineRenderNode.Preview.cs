@@ -89,7 +89,7 @@ public sealed partial class ShaderPipelineRenderNode {
             SteadyBytes: checked((m_allocationBytes + previewBytes))
         );
 
-        if (!account.Fits) {
+        if (!account.Fits || !TryReservePeak(peakBytes: account.PeakBytes)) {
             var refusal = account.Refusal();
 
             throw new InvalidOperationException(
