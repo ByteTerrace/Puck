@@ -1392,20 +1392,6 @@ step 2 legs on the RTX 2060 and the Deck, then step 5, the work bound
 calibrated and the device-loss quarantine, then step 6, the engine's layers
 migrated to standard programs.
 
-- [high] The deployed kernel tree cannot read its own sources.
-  `SdfKernelSource.Read` of the specialized kernels (views, glass and the shade
-  views) from `Assets/Shaders/Sdf` beside the application is refused with
-  `SHADERSRC_INCLUDE_MISSING`: `field/sdf-shapes.hlsli`, `shade/sdf-light.hlsli`
-  and other kernel sources include
-  `../../../../../Puck.Shaders/Assets/Shaders/Shared/*.hlsli`, a path that
-  exists only in a source checkout. `SdfKernelSet.Load` swallows the refusal, so
-  a running World keeps no kernel source and every shade specialization is
-  refused by name; a copied kernel tree fails a shader reload the same way
-  (`SdfShadeKernelsSourceLawTests.TheDeployedKernelsCarryTheSourcesASpecializationPlansFrom`
-  and `SdfWorldResidencyShaderReloadLawTests.AReloadOfKernelsRetunedByATuningConstantApplies`
-  are red for this cause). An include resolves beside the file that names it, so
-  either the deployed layout carries the shared headers where each includer
-  reaches them or the includes take one spelling that resolves in both layouts.
 - [medium · unconfirmed] One authored program edit compiles two sets:
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
   and glass make 2, likely a requested set overtaken while the active and

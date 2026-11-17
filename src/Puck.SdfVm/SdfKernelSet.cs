@@ -16,6 +16,7 @@ public sealed class SdfKernelSet {
 
     private readonly ReadOnlyMemory<byte>[] m_bytecode;
     private readonly SdfKernelSource?[] m_sources;
+    private readonly string?[] m_sourceRefusals;
     private readonly string m_contentKey;
 
     /// <summary>Initializes a new instance of the <see cref="SdfKernelSet"/> class from each kernel's bytecode and, where
@@ -24,24 +25,29 @@ public sealed class SdfKernelSet {
     /// <param name="sources">The source each kernel's bytecode was compiled from in <see cref="Kernels"/> order, an entry
     /// <see langword="null"/> where it is unknown, or <see langword="null"/> when none is known. Only the sources a
     /// specialization recompiles are kept (<see cref="SourceOf"/>).</param>
+    /// <param name="sourceRefusals">Why each kernel's source is unknown in <see cref="Kernels"/> order, an entry
+    /// <see langword="null"/> where no reason is known, or <see langword="null"/> when none is; kept only for a kernel
+    /// whose source is unknown (<see cref="SourceRefusalOf"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="bytecode"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="bytecode"/> or <paramref name="sources"/> does not hold one
-    /// entry per kernel.</exception>
-    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode, IReadOnlyList<SdfKernelSource?>? sources = null) {
+    /// <exception cref="ArgumentException"><paramref name="bytecode"/>, <paramref name="sources"/> or
+    /// <paramref name="sourceRefusals"/> does not hold one entry per kernel.</exception>
+    public SdfKernelSet(IReadOnlyList<ReadOnlyMemory<byte>> bytecode, IReadOnlyList<SdfKernelSource?>? sources = null, IReadOnlyList<string?>? sourceRefusals = null) {
         ArgumentNullException.ThrowIfNull(argument: bytecode);
 
-        if ((bytecode.Count != Kernels.Count) || ((sources is not null) && (sources.Count != Kernels.Count))) {
+        if ((bytecode.Count != Kernels.Count) || ((sources is not null) && (sources.Count != Kernels.Count)) || ((sourceRefusals is not null) && (sourceRefusals.Count != Kernels.Count))) {
             throw new ArgumentException(
-                message: $"A kernel set holds one bytecode and one source per kernel, {Kernels.Count}; {bytecode.Count} and {sources?.Count} were given.",
+                message: $"A kernel set holds one bytecode, one source and one source refusal per kernel, {Kernels.Count}; {bytecode.Count}, {sources?.Count} and {sourceRefusals?.Count} were given.",
                 paramName: nameof(bytecode)
             );
         }
 
         m_bytecode = [.. bytecode];
         m_sources = new SdfKernelSource?[Kernels.Count];
+        m_sourceRefusals = new string?[Kernels.Count];
 
         foreach (var kernel in SdfShadeKernels.Specialized) {
             m_sources[(int)kernel] = sources?[(int)kernel];
+            m_sourceRefusals[(int)kernel] = ((m_sources[(int)kernel] is null) ? sourceRefusals?[(int)kernel] : null);
         }
 
         m_contentKey = Puck.Abstractions.Gpu.GpuPipelineCacheStore.ContentKeyOf(parts: m_bytecode);
@@ -89,6 +95,11 @@ public sealed class SdfKernelSet {
     /// <returns>The source, or <see langword="null"/> when it is unknown: the bytecode arrived without its source, or the
     /// kernel keeps none.</returns>
     public SdfKernelSource? SourceOf(SdfKernel kernel) => m_sources[((int)kernel)];
+    /// <summary>Returns why a kernel's source is unknown: the refusal its load met reading the source beside the bytecode
+    /// (<see cref="Load(ShaderTarget, string, WorkCounterSet)"/>), which a specialization's refusal names.</summary>
+    /// <param name="kernel">The kernel.</param>
+    /// <returns>The reason, or <see langword="null"/> when the source is known or no reason is.</returns>
+    public string? SourceRefusalOf(SdfKernel kernel) => m_sourceRefusals[((int)kernel)];
 
     /// <summary>Returns the file stem a kernel's bytecode ships under, completed by the backend's extension: the one
     /// spelling of each kernel's name, which its pipeline carries too.</summary>
@@ -224,17 +235,20 @@ public sealed class SdfKernelSet {
         }
 
         // The build publishes each kernel's source beside its bytecode; read together, the source describes the bytecode.
+        // A source that cannot be read leaves the kernel interpreted, and its refusal travels with the set, so every
+        // specialization refused for it names why.
         var sources = new SdfKernelSource?[Kernels.Count];
+        var refusals = new string?[Kernels.Count];
 
         foreach (var kernel in SdfShadeKernels.Specialized) {
             try {
                 sources[((int)kernel)] = SdfKernelSource.Read(directory: directory, kernel: kernel);
             } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ShaderClosureRefusedException) {
-                // A tree that ships bytecode alone runs the interpreter; its specializations are refused by name.
+                refusals[((int)kernel)] = exception.Message;
             }
         }
 
-        return new SdfKernelSet(bytecode: bytecode, sources: sources);
+        return new SdfKernelSet(bytecode: bytecode, sourceRefusals: refusals, sources: sources);
     }
     /// <summary>Returns the kernel set's content key: a hash over every kernel's bytecode, in <see cref="Kernels"/> order.
     /// A host keys its persistent pipeline cache by it (<see cref="Puck.Abstractions.Gpu.GpuPipelineCacheStore"/>), so a
@@ -250,11 +264,13 @@ public sealed class SdfKernelSet {
     public SdfKernelSet With(SdfKernel kernel, ReadOnlyMemory<byte> bytecode, SdfKernelSource? source = null) {
         var copy = m_bytecode.ToArray();
         var sources = m_sources.ToArray();
+        var refusals = m_sourceRefusals.ToArray();
 
         copy[((int)kernel)] = bytecode;
         sources[((int)kernel)] = source;
+        refusals[((int)kernel)] = null;
 
-        return new SdfKernelSet(bytecode: copy, sources: sources);
+        return new SdfKernelSet(bytecode: copy, sourceRefusals: refusals, sources: sources);
     }
 
     // A nested holder initializes after every kind above, whatever order the members are declared in.

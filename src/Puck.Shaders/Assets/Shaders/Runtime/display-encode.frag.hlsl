@@ -5,8 +5,8 @@
 //
 // Its one group is the pass group, set 3, each register equal to its binding (DisplayEncodeLayout): the source image,
 // its sampler and the encode block, which DisplayEncodeLayout.WriteBlock writes.
-#include "../Shared/low-discrepancy.hlsli"
-#include "../Shared/transfer.hlsli"
+#include "Shared/low-discrepancy.hlsli"
+#include "Shared/transfer.hlsli"
 
 [[vk::binding(0, 3)]] Texture2D<float4> sourceTexture : register(t0, space3);
 [[vk::binding(1, 3)]] SamplerState sourceSampler : register(s1, space3);

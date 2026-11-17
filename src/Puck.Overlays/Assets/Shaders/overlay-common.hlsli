@@ -17,7 +17,7 @@
 #ifndef PUCK_OVERLAY_COMMON_HLSLI
 #define PUCK_OVERLAY_COMMON_HLSLI
 
-#include "../../../Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli"
+#include "Shared/msdf.hlsli"
 
 // KEEP IN SYNC with OverlayTokenBlock.RoleCount.
 #define OVERLAY_TOKEN_ROLE_COUNT 20u

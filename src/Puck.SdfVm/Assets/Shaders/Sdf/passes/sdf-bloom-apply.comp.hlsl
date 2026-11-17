@@ -1,5 +1,5 @@
 #include "../isa/sdf-bloom.interface.hlsli"
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/bloom-filter.hlsli"
+#include "Shared/bloom-filter.hlsli"
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {
     uint2 extent, sourceExtent;

@@ -15,7 +15,7 @@
 // destination, each image input with a sampler it never reads. rect is the destination rect as fractions of the
 // destination's extent and crop the shown part as fractions of the source's: left, top, width, height.
 #include "place.interface.hlsli"
-#include "../Shared/bloom-filter.hlsli"
+#include "Shared/bloom-filter.hlsli"
 
 // The filmic curve, Uchimura's Gran Turismo fit, and only the curve: the stylized shading is already display-referred,
 // so no gamma encode follows it, and the display encode writes its result as it is. A toe near linear (its power 1.1)
@@ -42,7 +42,7 @@ float3 filmicTonemap(float3 color) {
     return saturate(((toe * toeWeight) + (middle * linearWeight)) + (shoulder * shoulderWeight));
 }
 
-#include "../Shared/reconstruction.hlsli"
+#include "Shared/reconstruction.hlsli"
 
 // The contrast-adaptive sharpen of a source at its rect's own extent (AMD FidelityFX CAS over the pixel's four edge
 // neighbours): each neighbour weighs -0.2 * sharpness times the pixel's headroom below its neighbourhood's peak, so flat
