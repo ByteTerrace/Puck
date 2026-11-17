@@ -764,10 +764,6 @@ says how one is reproduced and profiled.
   its first minute, and its allocation is a frame cost too (hundreds of
   collections while it bakes). Splitting the bake into its stages needs a cold
   bake that stays under the machine's memory.
-- [medium] `SdfMeshLibrary.Store` publishes a baked mesh by decoding its store
-  entry back (`TryLoad`), which more than doubled the cold bake's store stage.
-  Publish the encoded mesh's own native form without the round trip, keeping
-  the one publication door.
 - [medium] Every view renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` answers false on `MeshPathBake.Pending`),
   which the frame-paced bake needed and the background GPU work does not. Let
@@ -920,10 +916,6 @@ the tour's remaining reds and the Moth's shin groups share, then
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
   it.
-- [high] The material cut's lists are outside the memory account:
-  `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
-  that does not end takes the process. Give the lists a bound the account
-  enforces, and fail the group by name (`SdfMeshBakeReport.Failed`).
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
   lanes across a blended seam, then retiring the settle rebake for dynamic
   groups that are not rest skins, with the quiet-window cost of a skinned
@@ -2323,10 +2315,13 @@ the wire, then the float duration fields' schema migration.
   `BoundedRandomSampling.TrySampleWide`), which breaks the fixed two-advance
   cost that `GeneratorEngine`'s draw cursor (`TryDrawNumeric`, `TryFireMarkov`
   add `WeightedSampler.AdvancesPerDraw`), `WorldDecision`'s documented two
-  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Settle first
-  whether the weighted draws keep a fixed cost with the bias, or report their
-  consumed advances (`DrawEntry` and the cursor carry the count) and the
-  constant goes.
+  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Ruled (the
+  lead): the draws become exact and report their consumed advances
+  (`DrawEntry` and the cursor carry the count), and `AdvancesPerDraw` goes. A
+  fixed cost is an implementation convenience, not a contract worth a wrong
+  distribution (AGENTS.md rule 4, "Do things right"); the common path still
+  takes two advances, so cost moves only on the 2^-32 case. Re-record the
+  replay hashes it moves.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
@@ -2838,9 +2833,13 @@ runs.
   completes only as two attached runs. Find what the crossing holds twice, and
   stop the store's cap from evicting the live identity's meshes
   ([memory](#memory-on-the-deck-tier)).
-- [medium] `world.debug-view report colliders --json` throws
-  `DivideByZeroException` on the debug world, headless and windowed, so the
-  sweep's colliders signal is red on a refusal.
+- [low] A windowed `world.debug-view report colliders --json` on the debug
+  world has not been read since the report moved to a deferred worker: a
+  headless reading completes with no exception (463664 witnesses tested,
+  complete coverage), but the earlier `DivideByZeroException` was seen on a
+  windowed World, which adds the rendered-mesh comparisons. Read it once in a
+  windowed window; if it still throws, the answer's text carries no stack, so
+  catch it in `WorldDiagnostics` with the exception's `ToString()`.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
@@ -2850,11 +2849,6 @@ runs.
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
   comparison cannot separate a change from lighting history. The paired tour
   on one attached World confirms whether the remainder is the probe cache's.
-- [medium] Baseline status comparisons can perpetuate a prior comparison
-  failure after its metrics match: `SweepBaseline.Changes` compares the
-  stored, comparison-adjusted status with the current intrinsic one, and
-  `SweepRun` makes each such change red again. Keep the intrinsic verdict
-  apart from comparison failures.
 - [medium] A windowed sweep's convergence is unproven under load: the case
   that once starved it (frames held for minutes, the attachment dropping) has
   not been retried beside a build or a test run.
@@ -3348,8 +3342,6 @@ reversal brake, then a sitting.
 - [low] `dashPose`, `airPose`, `airWings` and `bootBoost` are each one cell
   keyed `"0"`, so only body 0's dash drives the lean and flare. Key them per
   body together.
-- [low] `player.binding-bar model <value>` stores any text, and every value
-  but `single` stacks. Refuse an unknown model by name.
 - [low] A requested boom distance replaces the orbit op's distance outright
   (`SdfCameraProgram`'s `Evaluate`), and `WorldSeatViewState.AuthoredDistance`
   reads the first orbit op's literal, so a scalar-bound orbit distance stops
@@ -3361,14 +3353,13 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
-- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
-  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
-  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
-  before reaching the repaired Drive grant. Wire the standard authored camera
-  mode, body and rig into the debug world, then verify its entry, movement and
-  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
-  the grant without making the seat an operator; a temporary authored snapshot
-  is only a runtime probe, not the missing standard-package design.
+- [medium] Free Cam has no entry handoff: the camera body rests where it was left
+  (`worlds/standard/free-camera.puck`'s `rest`, 40 m over the debug stage at first),
+  because a rule's `pose` effect takes a literal position and nothing copies the
+  seat's eye to the camera body on entry. Add a pose-from-body effect or let the
+  camera application start the body at the perceiving pose. The play wheel's four
+  rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
+  ring or a page entry.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged

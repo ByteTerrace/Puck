@@ -1033,7 +1033,7 @@ public sealed partial class WorldBindingCommandModule(PlayerRoster roster, World
             bindability: CommandBindability.Bindable,
             name: "player.binding-bar",
             forms: PlayerBindingBarForms,
-            description: "Sets one seat's binding bar preference: " + PlayerBindingBarForms.Spelling + ". Layout names an authored layout, model selects single or a stacked model, scale is a positive multiplier; auto clears that preference. Unsaved until identity.bindings.save.",
+            description: "Sets one seat's binding bar preference: " + PlayerBindingBarForms.Spelling + ". Layout names an authored layout, model is single or stacked (any other name is refused), scale is a positive multiplier; auto clears that preference. Unsaved until identity.bindings.save.",
             handler: BarPreferenceHandler,
             routing: CommandRouting.Simulation
         );
