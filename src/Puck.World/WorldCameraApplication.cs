@@ -7,10 +7,8 @@ namespace Puck.World;
 /// The camera control application's dissolve, in one place: dissolves the seat's possession through the
 /// ordinary door <c>body.disengage</c> uses, so the avatar resumes driving itself and the perceived body/camera
 /// eye/audio listener fall back to it as a side effect of the SAME application set WorldEngagement already tracks —
-/// never a second mechanism. <c>player.mode</c> leaving a <see cref="WorldSeatModeState.CameraTarget"/> state runs this, and
-/// so does the composition root when a mode reseed drops that state under a live application
-/// (<see cref="WorldSeatBindings.CameraApplicationDropped"/>). Composing the application is
-/// <c>PlayerCommandModule.Mode.cs</c>'s alone — it is the only path holding the authority check that gates entry.
+/// never a second mechanism. The composition root runs this when a mode reseed drops that state under a live application
+/// (<see cref="WorldSeatBindings.CameraApplicationDropped"/>). Mode changes compose and dissolve through the authority's input runtime.
 /// </summary>
 internal static class WorldCameraApplication {
     /// <summary>Dissolves seat <paramref name="slot"/>'s camera control application. A no-op-shaped call on a seat

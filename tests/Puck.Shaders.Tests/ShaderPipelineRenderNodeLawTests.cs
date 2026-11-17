@@ -510,11 +510,12 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
             actual: installed.Count(predicate: static created => (created.Kind == "fence"))
         );
 
-        // While the queue has finished nothing, the replaced graph is still what earlier submissions read: nothing of it
-        // retires, however many frames the replacement renders.
+        // While the latest submission is unfinished, a paused replacement cannot reuse a slot and wait it complete:
+        // the old graph stays live, however many presentation turns pass without a submission.
+        node.Paused = true;
         gpu.QueueHeld = true;
 
-        var replaced = SwapAndProduce(
+        _ = SwapAndProduce(
             gpu: gpu,
             node: node,
             pipeline: Feedback(historyFormat: "R32G32B32A32Float")
@@ -540,12 +541,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
         // replacement, whose shaders are the same, leased from the same pass-pipeline cache entries, so the replaced
         // graph's retirement released its leases and disposed none of them.
         gpu.QueueHeld = false;
+        node.Paused = false;
 
         var kept = installed.Where(predicate: static created => (created.Kind is "fence")).ToArray();
         var usesBefore = kept.Select(selector: static created => created.UseCount).ToArray();
+        var replacement = Produce(node: node);
 
         Produce(
-            frames: ((int)InFlight),
+            frames: WarmFrames,
             node: node
         );
         Assert.All(
@@ -580,7 +583,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
         // The frames since the install come from the replacement's own images.
         Assert.DoesNotContain(
             collection: installed,
-            filter: created => (created.Handle == replaced.ImageHandle)
+            filter: created => (created.Handle == replacement.ImageHandle)
         );
     }
     [Fact]
