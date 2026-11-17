@@ -306,7 +306,10 @@ public sealed class WorldSeatViewState {
 
         lock (m_gate) {
             if (!enabled) {
-                m_clearance.Reset();
+                m_clearance.Pass(
+                    desiredEye: eye,
+                    target: target
+                );
                 m_viewTransition.Reset();
 
                 return 0f;
