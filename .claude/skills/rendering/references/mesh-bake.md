@@ -1190,11 +1190,10 @@ laws exercise that boundary.
   (8 GiB), shared by every World and worktree on the machine, a set at a
   time (`CacheRetention.EnforceSetsOnWrite`): a set's last use is its most
   recently read or written entry's, and a write removes whole sets, least
-  recently used first, never its own. A set a World is baking or loading is
-  never cut short by another lane's writes, so concurrent lanes on different
-  identities keep each other's complete sets until newer sets fill the capacity,
-  and a set larger than the cap alone keeps its most recently used
-  entries. An entry left directly in the directory is a set of its own and ages
+  recently used first, keeping its own. A peer's write may evict a set being
+  baked or loaded unless it is pinned (`SdfMeshStore.Hold`). An unpinned writer's
+  set larger than the cap alone keeps its most recently used entries, including
+  the entry being written. An entry left directly in the directory is a set of its own and ages
   out first. A boot that bakes nothing shows `done … loaded=N` with
   `dispatches=0`. A program that arrives while groups are pending and takes
   every group from the library reports the started bake `done` at once

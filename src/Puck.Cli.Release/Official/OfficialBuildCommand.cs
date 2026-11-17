@@ -24,7 +24,7 @@ public static class OfficialBuildCommand {
     public static bool ReadFilesDiffer(string checkoutRoot, string porcelainStdout, IReadOnlyCollection<string> readFiles) {
         var read = readFiles.Select(selector: static file => PuckPaths.Normalize(path: file)).ToHashSet(comparer: PuckPaths.Comparer);
 
-        foreach (var entry in porcelainStdout.Split(separator: '\0', options: StringSplitOptions.RemoveEmptyEntries)) {
+        foreach (var entry in porcelainStdout.Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0')) {
             if (entry.Length < 4) {
                 continue;
             }
@@ -51,6 +51,9 @@ public static class OfficialBuildCommand {
         why: why
     );
     private static int Run(bool allowDirty, string channel, string engineDirectory, string treeRoot, string worlds) {
+        if (!Puck.Confinement.PortablePath.IsRelative(allowDirectories: false, path: channel)) {
+            return CliExit.Refuse(verb: "official build", what: "--channel", why: $"'{channel}' must be a single portable directory name.");
+        }
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
@@ -301,7 +304,7 @@ public static class OfficialBuildCommand {
     }
     public static Command Create() {
         var allowDirtyOption = new Option<bool>(name: "--allow-dirty") { Description = "Proceed even though a file the build reads differs from its commit, or no commit holds the worlds directory." };
-        var channelOption = new Option<string>(name: "--channel") { Description = "The channel this build belongs to (e.g. dev, stable, next).", Required = true };
+        var channelOption = new Option<string>(name: "--channel") { Description = "The channel this build belongs to: one portable directory name (e.g. dev, stable, next).", Required = true };
         var engineOption = new Option<string>(name: "--engine") { Description = "A browser-wasm AppBundle directory (main.mjs + _framework/).", Required = true };
         var treeOption = new Option<string>(name: "--tree") { Description = "The official tree's root, created if missing.", Required = true };
         var worldsOption = new Option<string>(name: "--worlds") { Description = "The asset package whose worlds the tree publishes (the hosted one is worlds/debug).", Required = true };

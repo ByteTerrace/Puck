@@ -1072,13 +1072,6 @@ Lifecycle lows, each argued from source and not run:
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
   in turn and the scene cannot rebuild while the bake is pending. Count the
   timeout as stale-scene evidence.
-- [low] `SdfMeshStore`'s documentation says a set a World is baking or loading
-  is never cut short by another's write, but a write protects only its own
-  set: two 4 GiB sets against the 8 GiB cap can evict a peer's live set.
-  Correct the documentation or give a recently stamped set a grace window.
-- [low · plausible] A cache set directory that vanishes mid-listing resets the
-  retention tally to an undercount (`CacheRetention.EnforceSetsCore` catches
-  the whole walk's `IOException`). Catch per child directory.
 
 #### Memory on the Deck tier
 
@@ -2683,9 +2676,8 @@ Launch and process lifecycles, each a [low]:
 - `WorldProcess` has no state between running and drained: `WaitFor` treats
   exit as drained after one rescan, so a final line arriving later reads as no
   answer. Count end-of-stream per stream and end on drained.
-- `WorldReadiness.Observe` sets its marked flag before the mark write, so a
-  failed write is never retried; and a windowed World nobody asks to wait
-  counts as still growing for its whole life, since only the `world.wait`
+- A windowed World nobody asks to wait counts as still growing for its whole
+  life, since only the `world.wait`
   forms print the readiness line. Have the World print it once ready.
 - Canary's concurrent leg budget (`CanaryCommand.CanaryBudget`) still counts
   external lease queueing, so a later leg can read `BudgetExpired`.
@@ -2697,15 +2689,12 @@ CLI maturity remainders, each a [low]:
   shared line. A lease refusal and the child's own failure can both exit 2.
 - The test batch watchdog writes its cause only to the batch's `.stderr.log`;
   `sweep` regex-scrapes `puck test`'s output for verdict counts.
-- Synchronous actions get no cancellation token (`MotionCommand`,
-  `CountersCommand`), so an interrupt skips cleanup and exit 130.
 - `puck counters` has no `--world-artifact`, so it cannot compare counters
   across builds; `puck compile --watch` watches only the source's own
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck official build --channel` goes
-  unvalidated into `Path.Combine`.
+  line on the same output.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,

@@ -20,10 +20,12 @@ public static class MotionRun {
     /// <summary>Runs the scenarios in a fresh World and removes the World's state directory afterwards.</summary>
     /// <param name="request">What to run and where to write it.</param>
     /// <param name="progress">Where one-line progress reports go.</param>
+    /// <param name="cancellationToken">Cancels admission and the World waits.</param>
     /// <returns>The outcome.</returns>
-    public static MotionRunResult Execute(MotionRunRequest request, TextWriter progress) {
+    public static MotionRunResult Execute(MotionRunRequest request, TextWriter progress, CancellationToken cancellationToken = default) {
         try {
-            return Run(progress: progress, request: request);
+            cancellationToken.ThrowIfCancellationRequested();
+            return Run(cancellationToken: cancellationToken, progress: progress, request: request);
         } finally {
             try {
                 ConfinedDirectory.RemoveTree(path: request.StateDirectory);
@@ -33,7 +35,7 @@ public static class MotionRun {
         }
     }
 
-    private static MotionRunResult Run(MotionRunRequest request, TextWriter progress) {
+    private static MotionRunResult Run(MotionRunRequest request, TextWriter progress, CancellationToken cancellationToken = default) {
         var clock = Stopwatch.StartNew();
         var notes = new List<string>();
         var world = Fail(clock: clock, error: string.Empty, notes: notes, request: request);
@@ -49,7 +51,7 @@ public static class MotionRun {
         WorldProcess process;
 
         try {
-            using var launch = WorldLaunch.Admit(request: new WorldLaunchRequest(Artifact: request.Artifact, Step: "motion") {
+            using var launch = WorldLaunch.Admit(cancellationToken: cancellationToken, request: new WorldLaunchRequest(Artifact: request.Artifact, Step: "motion") {
                 // Keep a long capture run inspectable through the same local Operator door as sweep and routes.
                 Arguments = ["--control", .. ((request.CacheDirectory is { } cacheDirectory) ? new[] { "--cache-dir", cacheDirectory } : [])],
                 Backend = request.Backend,
@@ -74,10 +76,11 @@ public static class MotionRun {
         var mark = process.LineCount;
 
         ulong bootTick;
+
         try {
             bootTick = process.RunScript(["world.lockstep on", $"world.wait bakes {((int)BakeDeadline.TotalSeconds).ToString(provider: CultureInfo.InvariantCulture)}"],
-                BakeDeadline + TimeSpan.FromSeconds(60)).Tick;
-        } catch (Exception exception) when (exception is IOException or TimeoutException) {
+                (BakeDeadline + TimeSpan.FromSeconds(seconds: 60)), cancellationToken).Tick;
+        } catch (Exception exception) when ((exception is IOException or TimeoutException)) {
             return Abort(clock: clock, error: $"the World never answered after its bake wait: {exception.Message}{Tail(process: process)}", notes: notes, process: process, request: request);
         }
 
@@ -89,7 +92,7 @@ public static class MotionRun {
 
         if (start < (bootTick + ((ulong)ArmingMargin))) {
             _ = process.Send(line: "quit");
-            _ = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60));
+            _ = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60), cancellation: cancellationToken);
 
             return world with { BootTick = bootTick, Error = $"the World had reached tick {bootTick.ToString(provider: CultureInfo.InvariantCulture)} when it was ready, past the start tick {start.ToString(provider: CultureInfo.InvariantCulture)} the run was asked to pin to", TooLateStart = StartFor(bootTick: bootTick), Seconds = clock.Elapsed.TotalSeconds };
         }
@@ -110,29 +113,32 @@ public static class MotionRun {
                 return Abort(clock: clock, error: "the World closed its input while the run was being armed", notes: notes, process: process, request: request);
             }
 
-            var answer = process.WaitFor(accept: static line => ((line.Stream is CliProcessOutputStream.Stdout or CliProcessOutputStream.Stderr) && line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.at: ")), from: mark, timeout: TimeSpan.FromSeconds(value: 60));
+            var answer = process.WaitFor(accept: static line => ((line.Stream is CliProcessOutputStream.Stdout or CliProcessOutputStream.Stderr) && line.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.at: ")), from: mark, timeout: TimeSpan.FromSeconds(value: 60), cancellation: cancellationToken);
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             if ((answer is null) || !answer.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[world.at: armed")) {
                 var late = ((answer?.Text.Contains(comparisonType: StringComparison.Ordinal, value: "already completed")) == true);
 
                 _ = process.Send(line: "quit");
-                _ = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60));
+                _ = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60), cancellation: cancellationToken);
 
                 return world with { BootTick = bootTick, Error = $"the World refused to arm the run: {(answer?.Text ?? "no answer")}", Seconds = clock.Elapsed.TotalSeconds, StartTick = start, TooLateStart = (late ? (start + 600UL) : null) };
             }
         }
 
         var remaining = (request.Deadline - clock.Elapsed);
+
         try {
             _ = process.RunScript([$"world.wait until {(plan.LastTick + 1UL).ToString(provider: CultureInfo.InvariantCulture)}"],
-                remaining > TimeSpan.Zero ? remaining : TimeSpan.FromSeconds(1));
-        } catch (Exception exception) when (exception is IOException or TimeoutException) {
+                ((remaining > TimeSpan.Zero) ? remaining : TimeSpan.FromSeconds(seconds: 1)), cancellationToken);
+        } catch (Exception exception) when ((exception is IOException or TimeoutException)) {
             return Abort(clock: clock, error: $"the run did not reach tick {plan.LastTick.ToString(provider: CultureInfo.InvariantCulture)}: {exception.Message}{Tail(process: process)}", notes: notes, process: process, request: request);
         }
 
         _ = process.Send(line: "quit");
 
-        var exit = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60));
+        var exit = process.WaitForExit(timeout: TimeSpan.FromSeconds(value: 60), cancellation: cancellationToken);
 
         if (exit is not 0) {
             notes.Add(item: $"the World exited with {((exit is null) ? "no code (it had to be killed)" : exit.Value.ToString(provider: CultureInfo.InvariantCulture))}");
