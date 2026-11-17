@@ -155,15 +155,28 @@ public sealed partial class AddonInstance : IDisposable {
         m_initAction = null;
         m_memory = null;
         m_onTick = null;
+        m_hostFuel = null;
 
         if (m_store is not null) {
             m_store.Dispose();
             m_store = null;
         }
     }
+    // The store's remaining fuel while host charges spend it between guest calls: read from the store once, then kept
+    // here, so a batch of host charges makes no native call each. Every write of the store's fuel goes through SetFuel,
+    // which drops it, and every read goes through RemainingFuel, so the store's own count is never read while stale.
+    // The guest runs only after SetFuel's per-call budget, so it never sees the stale count either.
+    private ulong? m_hostFuel;
+
+    private ulong RemainingFuel => (m_hostFuel ?? m_store!.Fuel);
+
+    private void SetFuel(Store store, ulong fuel) {
+        m_hostFuel = null;
+        store.Fuel = fuel;
+    }
     private ulong FuelConsumed() {
         var budget = ((ulong)m_fuelPerTick);
-        var remaining = (m_store?.Fuel ?? budget);
+        var remaining = ((m_store is null) ? budget : RemainingFuel);
 
         return ((budget >= remaining)
             ? (budget - remaining)
@@ -220,7 +233,7 @@ public sealed partial class AddonInstance : IDisposable {
             store.SetLimits(instances: 1,
                 memories: AddonModuleLimits.Memories, memorySize: AddonModuleLimits.MemoryBytes,
                 tableElements: AddonModuleLimits.TableElements, tables: AddonModuleLimits.Tables);
-            store.Fuel = ((ulong)m_fuelPerTick);
+            SetFuel(fuel: ((ulong)m_fuelPerTick), store: store);
             store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
             var instance = new Instance(
@@ -541,7 +554,7 @@ public sealed partial class AddonInstance : IDisposable {
 
         var store = m_store!;
 
-        store.Fuel = ((ulong)m_fuelPerTick);
+        SetFuel(fuel: ((ulong)m_fuelPerTick), store: store);
         store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         try {
@@ -645,7 +658,7 @@ public sealed partial class AddonInstance : IDisposable {
             address: m_outPtr,
             length: (m_outCap * AddonAbi.OutCellBytes)
         ).Clear();
-        store.Fuel = ((ulong)m_fuelPerTick);
+        SetFuel(fuel: ((ulong)m_fuelPerTick), store: store);
         store.SetEpochDeadline(ticksBeyondCurrent: ScriptingEngine.CallDeadlineEpochs);
 
         int count;
@@ -724,10 +737,10 @@ public sealed partial class AddonInstance : IDisposable {
     /// <param name="spent">Fuel charged, including the remaining fuel on exhaustion.</param>
     /// <returns>Whether the operation may execute.</returns>
     public bool TryChargeHostFuel(ulong cost, out ulong spent) {
-        var remaining = m_store!.Fuel;
+        var remaining = RemainingFuel;
 
         spent = Math.Min(val1: remaining, val2: cost);
-        m_store.Fuel = (remaining - spent);
+        m_hostFuel = (remaining - spent);
         if (remaining < cost) {
             SetFault(kind: AddonFaultKind.OutOfFuel, reason: "OutOfFuel during host query");
             return false;
