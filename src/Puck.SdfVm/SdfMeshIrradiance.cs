@@ -205,7 +205,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public static readonly WorkKind GpuTraceNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-trace-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Measured GPU time of completed relight submissions and feedback updates.</summary>
     public static readonly WorkKind GpuRelightNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-relight-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
-    /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, meter, commit.</summary>
+    /// <summary>Counts the answered probe jobs of each kind, indexed trace, relight, select, camera sample, commit.</summary>
     public static readonly WorkKind[] GpuJobs = DeclareJobKinds(measure: "jobs", unit: "jobs");
     /// <summary>Counts the units the answered probe jobs of each kind held (a relight's predicted rays, a commit's
     /// destinations, a selection's tests, any other kind's origins), indexed as <see cref="GpuJobs"/>.</summary>
@@ -214,7 +214,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// answer, indexed as <see cref="GpuJobs"/>.</summary>
     public static readonly WorkKind[] GpuJobWaitNanoseconds = DeclareJobKinds(measure: "job-wait-nanoseconds", unit: "nanoseconds");
     private static WorkKind[] DeclareJobKinds(string measure, string unit) =>
-        [.. ((string[])["trace", "relight", "select", "meter", "commit"]).Select(kind => Registry.Declare(name: $"sdf.mesh-gi.gpu-{measure}.{kind}", unit: unit, workClass: WorkClass.Pacing))];
+        [.. ((string[])["trace", "relight", "select", "camera-sample", "commit"]).Select(kind => Registry.Declare(name: $"sdf.mesh-gi.gpu-{measure}.{kind}", unit: unit, workClass: WorkClass.Pacing))];
     /// <summary>Measured GPU time spent selecting probes owing work.</summary>
     public static readonly WorkKind GpuSelectNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-select-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Queued trace jobs cancelled because their scene was replaced before admission.</summary>
@@ -232,7 +232,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>Counts each camera sample asked of the volume (<see cref="TrySampleCamera"/>).</summary>
     public static readonly WorkKind CameraSamples = Registry.Declare(name: "sdf.mesh-gi.camera-samples", unit: "samples", workClass: WorkClass.Pacing);
     /// <summary>Device time spent gathering or tracing exposure meter samples.</summary>
-    public static readonly WorkKind GpuMeterNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-meter-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
+    public static readonly WorkKind GpuCameraSampleNanoseconds = Registry.Declare(name: "sdf.mesh-gi.gpu-camera-sample-nanoseconds", unit: "nanoseconds", workClass: WorkClass.Pacing);
     /// <summary>Counts the static draws scene builds took into their trace scenes.</summary>
     public static readonly WorkKind StaticDraws = Registry.Declare(name: "sdf.mesh-gi.static-draws", unit: "draws", workClass: WorkClass.Pacing);
     /// <summary>Counts the top-level entries scene builds made: one a braid of a static draw.</summary>
@@ -576,8 +576,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public bool Settling {
         get {
             lock (m_gate) {
-                // A faulted worker, meter or scene build settles nothing: the next Stage reports it.
-                return ((m_gpuMeterTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                // A faulted worker, camera sample or scene build settles nothing: the next Stage reports it.
+                return ((m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
             }
         }
     }
@@ -652,7 +652,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             if (m_gpuReattach) {
                 // A replaced device stops its jobs first. Let their coordinator unwind before resetting its allocations.
-                if ((m_worker is { IsCompleted: false }) || (m_gpuMeterTask is { IsCompleted: false })) { return default; }
+                if ((m_worker is { IsCompleted: false }) || (m_gpuCameraSampleTask is { IsCompleted: false })) { return default; }
                 m_gpuTrace = m_nextGpuTrace;
                 m_gpuReattach = false;
                 foreach (var owner in m_hitOwners.Values.OrderByDescending(keySelector: owner => owner.Slot)) { m_hitSlots.Free(start: owner.Slot); }
@@ -661,10 +661,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_gpuDirty.Clear();
                 m_listed = false;
                 m_drained = default;
-                // The old device's meter is complete; a fault it left belonged to that device.
-                m_gpuMeterTask = null;
-                m_gpuMeter = null;
-                m_gpuMeterAskedOf = null;
+                // The old device's camera sample is complete; a fault it left belonged to that device.
+                m_gpuCameraSampleTask = null;
+                m_gpuCameraSample = null;
+                m_gpuCameraSampleAskedOf = null;
                 m_changedSlots.Clear();
                 foreach (var level in m_levels) { level.Published = default; level.Changed.Clear(); }
                 m_published = default;
@@ -761,9 +761,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 m_worker = null;
                 throw new InvalidOperationException(message: "The irradiance volume's trace failed.", innerException: faulted.Exception);
             }
-            if (m_gpuMeterTask is { IsFaulted: true } meterFault) {
-                m_gpuMeterTask = null;
-                throw new InvalidOperationException(message: "The GPU exposure meter failed.", innerException: meterFault.Exception);
+            if (m_gpuCameraSampleTask is { IsFaulted: true } cameraSampleFault) {
+                m_gpuCameraSampleTask = null;
+                throw new InvalidOperationException(message: "The GPU exposure meter failed.", innerException: cameraSampleFault.Exception);
             }
             // A converging frame still waiting for its refill or the yield starts no worker: the drain takes over the
             // background trace's work, and starts only from the windows it renders.
@@ -785,7 +785,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (drain && (stage == SdfMeshConvergenceStage.None) && (m_owed || (m_drained != DrainKey()))) { stage = SdfMeshConvergenceStage.Drain; }
             Publish(layout: layout, write: write);
         }
-        ScheduleGpuMeters(frame: frame);
+        ScheduleGpuCameraSamples(frame: frame);
         // A frame that does not converge lighting ends any convergence one left behind.
         return Converging(stage: stage);
     }
@@ -1158,7 +1158,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// of their six axes, as last relit, the light the surfaces about it reflect and emit under every traced light and the
     /// sky through the openings it sees, blended by the camera's place among the visible probes. When no visible lattice
     /// probe answers, reads a camera sample's hits, traced once per cell and geometry and relit when the lighting changes.
-    /// Reuse within a cell requires visibility from the sample's origin. On a device the sample is its meter's latest
+    /// Reuse within a cell requires visibility from the sample's origin. On a device the sample is its camera sample's latest
     /// answer, and until the device first answers, the camera's own trace on the built scene. An anchored light and the
     /// screens are no part of the sample. The views read it for a surface no probe answers and for the sky the air about the camera sees; the
     /// exposure meters the view's image, never this sample.</summary>
@@ -1182,11 +1182,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         lock (m_gate) {
             if (GpuTrace is { } gpu) {
                 if (TryGpuCameraSample(fresh: fresh, light: light, position: position, skyVisibility: out skyVisibility, source: out source)) { return true; }
-                // The device meters only once it holds the volume's scene, which it uploads after the scene is built and
+                // The device samples the camera only once it holds the volume's scene, which it uploads after the scene is built and
                 // beside the residency's mesh landing, seconds into a boot. Until its first answer the camera traces its
                 // own hits on the built scene, so a view's open sky and surroundings are known from the build on; after
-                // it, a view holds its last sample for the frames a meter takes.
-                if ((m_gpuMeter is { } answered) && ReferenceEquals(objA: answered.Client, objB: gpu)) { return false; }
+                // it, a view holds its last sample for the frames a camera sample takes.
+                if ((m_gpuCameraSample is { } answered) && ReferenceEquals(objA: answered.Client, objB: gpu)) { return false; }
                 if ((m_lighting is not { } early) || !m_windowValid) { return false; }
                 return TryTraceCamera(fresh: fresh, light: light, lighting: early, position: position, skyVisibility: out skyVisibility, source: out source);
             }
@@ -1215,7 +1215,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 var toward = (probePoint - position);
                 var distance = toward.Length();
 
-                if ((distance > SdfMeshIrradianceProbe.MeterCoincident) && (m_scene is { } scene) && !scene.Unblocked(direction: (toward / distance), maximum: distance, origin: position)) { continue; }
+                if ((distance > SdfMeshIrradianceProbe.CameraSampleCoincident) && (m_scene is { } scene) && !scene.Unblocked(direction: (toward / distance), maximum: distance, origin: position)) { continue; }
 
                 var weight = ((((offset.X > 0f) ? fraction.X : (1f - fraction.X)) * ((offset.Y > 0f) ? fraction.Y : (1f - fraction.Y))) * ((offset.Z > 0f) ? fraction.Z : (1f - fraction.Z)));
 

@@ -911,18 +911,18 @@ public sealed class SdfGpuWork : IDisposable {
         if (bytes > int.MaxValue) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: "A background GPU job copies back at most 2 GiB."); }
 
         var readback = ReserveReadback(bytes: bytes, slot: slot);
-        var recorder = m_gpu.Recorder;
 
         target.Consumed = true;
 
-        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: source.BufferHandle,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
-            sourceStageMask: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
-        recorder.CopyBuffer(commandBufferHandle: commandBuffer, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes, sourceBufferHandle: source.BufferHandle);
-        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: readback.BufferHandle,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
-            destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host);
+        GpuReadbackCopy.Record(
+            commandBuffer: commandBuffer,
+            destination: readback,
+            recorder: m_gpu.Recorder,
+            sizeBytes: bytes,
+            source: source,
+            sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite),
+            sourceStage: (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer)
+        );
         target.Readback = readback;
         target.ReadbackBytes = bytes;
         target.Copied = true;

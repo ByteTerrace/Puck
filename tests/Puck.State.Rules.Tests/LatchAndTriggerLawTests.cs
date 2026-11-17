@@ -10,21 +10,21 @@ namespace Puck.State.Rules.Tests;
 public sealed class LatchAndTriggerLawTests {
     [Fact]
     public void LatchHashDistinguishesEitherInstanceGenerationAndIgnoresInsertionOrder() {
-        var (_, _, rules, _, _) = EvaluatorFixture.Arrange([Counting(mode: ActionTriggerMode.Edge, name: "edge")]);
+        var (host, _, rules, _, _) = EvaluatorFixture.Arrange([Counting(mode: ActionTriggerMode.Edge, name: "edge")]);
         var original = new RuleLatch();
 
-        original.Rule(name: "edge").Held.Add(key: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), value: true);
-        original.Rule(name: "edge").Held.Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
+        original.Restore(name: "edge", binding: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), held: true, journal: host.Arena.Journal);
+        original.Restore(name: "edge", binding: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), held: false, journal: host.Arena.Journal);
         var reversed = new RuleLatch();
 
-        reversed.Rule(name: "edge").Held.Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
-        reversed.Rule(name: "edge").Held.Add(key: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), value: true);
+        reversed.Restore(name: "edge", binding: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), held: false, journal: host.Arena.Journal);
+        reversed.Restore(name: "edge", binding: new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 9), held: true, journal: host.Arena.Journal);
         Assert.Equal(Hash(latch: original, rules: rules), Hash(latch: reversed, rules: rules));
         foreach (var key in new[] { new LatchKey(Left: 1, LeftGeneration: 8, Right: 2, RightGeneration: 9), new LatchKey(Left: 1, LeftGeneration: 7, Right: 2, RightGeneration: 10) }) {
             var changed = new RuleLatch();
 
-            changed.Rule(name: "edge").Held.Add(key: key, value: true);
-            changed.Rule(name: "edge").Held.Add(key: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), value: false);
+            changed.Restore(name: "edge", binding: key, held: true, journal: host.Arena.Journal);
+            changed.Restore(name: "edge", binding: new LatchKey(Left: 3, LeftGeneration: 0, Right: 4, RightGeneration: 0), held: false, journal: host.Arena.Journal);
             Assert.NotEqual(Hash(latch: original, rules: rules), Hash(latch: changed, rules: rules));
         }
     }
@@ -160,7 +160,7 @@ public sealed class LatchAndTriggerLawTests {
         var state = latch.Rule(name: "cross");
         var binding = new LatchKey(Left: -1, Right: -1);
 
-        state.Held[binding] = true;
+        latch.Restore(name: "cross", binding: binding, held: true, journal: journal);
 
         var mark = host.Arena.BeginScope();
 
@@ -179,12 +179,12 @@ public sealed class LatchAndTriggerLawTests {
         _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.Clear(journal: journal));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.ClearRule(journal: journal, name: "cross"));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => latch.Prune(compiled: [], journal: journal));
-        Assert.False(condition: state.Held[binding]);
+        Assert.False(condition: state.IsHeld(binding));
 
         host.Arena.Rewind(mark: mark);
 
         Assert.Equal(expected: 0, actual: host.Arena.Journal.Scopes);
-        Assert.True(condition: latch.Rule(name: "cross").Held[binding]);
+        Assert.True(condition: latch.Rule(name: "cross").IsHeld(binding));
     }
     // A pruned rule gives its ordinal back, so adding and dropping rules between ticks holds no state that nothing names.
     [Fact]

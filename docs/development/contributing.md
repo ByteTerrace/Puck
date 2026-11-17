@@ -792,7 +792,10 @@ Vulkan,
 `procedures.vulkan`. An owner whose counts need nothing more than a named set
 of kinds holds a `WorkCounterSet` rather than writing its own source; a count
 taken per query on a hot path holds a `ShardedWorkCounterSet`, whose per-thread
-shards cost a plain store instead of an interlocked update.
+shards cost a plain store instead of an interlocked update. An owner whose counting
+calls carry behaviour of their own (a count that adds two kinds, a static ledger a
+flow attributes) derives from `WorkLedger<TCounters>`, which forwards the name, the
+kinds, the reads and the peak clearing to its set once.
 `world.budget` distinguishes live program size from
 reserved capacity. For a repeatable reading, run
 [`puck counters`](../reference/cli.md#puck-counterswork-counter-collector): it

@@ -40,7 +40,7 @@ public sealed partial class WorldInputRuntime {
                 if (reason.Length == 0) { reason = "input.mode: camera application or resulting tuple refused"; }
                 return false;
             }
-            // Same local-seat admission grant as player.camera, with the same lifetime. Its inhabited placement
+            // The local-seat admission grant follows the successful composition. Its inhabited placement
             // has no fixed body index a document could grant. Refused compositions never install this grant.
             m_host.Grant(new(owner.Principal, WorldCapability.Drive, target, false, Budget: ushort.MaxValue), Principal.Console);
             reason = string.Empty;

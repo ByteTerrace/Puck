@@ -10,12 +10,6 @@ internal static partial class Subjects {
             X: Raw(value: x),
             Y: Raw(value: y)
         );
-    private static FixedVector3 Space(long x, long y, long z) =>
-        new(
-            X: Raw(value: x),
-            Y: Raw(value: y),
-            Z: Raw(value: z)
-        );
 
     // The narrow lane's operand fold. The sampled space is sixty-four bits wide and the fused kernels' narrow branch
     // opens only below 2³⁰ (2³¹ for the two-term kernels), so an unfolded full-range draw reaches it once in 2³² draws
@@ -146,12 +140,12 @@ internal static partial class Subjects {
     /// <param name="right">The second vector's raws.</param>
     /// <param name="result">The three dot products' raws.</param>
     public static void SpaceDotLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -195,12 +189,12 @@ internal static partial class Subjects {
     /// <param name="result">The cross product's three raws.</param>
     public static void SpaceCrossLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
         var product = FixedVector3.Cross(
-            left: Space(
+            left: RawVectors.Of(
                 x: left[0],
                 y: left[1],
                 z: left[2]
             ),
-            right: Space(
+            right: RawVectors.Of(
                 x: right[0],
                 y: right[1],
                 z: right[2]
@@ -291,12 +285,12 @@ internal static partial class Subjects {
             right: planeRight
         ).Value;
         result[2] = FixedVector3.Dot(
-            left: Space(
+            left: RawVectors.Of(
                 x: foldedLeft[0],
                 y: foldedLeft[1],
                 z: foldedLeft[2]
             ),
-            right: Space(
+            right: RawVectors.Of(
                 x: foldedRight[0],
                 y: foldedRight[1],
                 z: foldedRight[2]
@@ -354,7 +348,7 @@ internal static partial class Subjects {
             source: right
         );
 
-        result[0] = Space(
+        result[0] = RawVectors.Of(
             x: foldedLeft[0],
             y: foldedLeft[1],
             z: foldedLeft[2]
@@ -363,7 +357,7 @@ internal static partial class Subjects {
             x: foldedLeft[0],
             y: foldedLeft[1]
         ).LengthSquared.Value;
-        result[2] = Space(
+        result[2] = RawVectors.Of(
             x: foldedRight[0],
             y: foldedRight[1],
             z: foldedRight[2]
@@ -419,12 +413,12 @@ internal static partial class Subjects {
     /// <param name="right">The second vector's two raws.</param>
     /// <param name="result">The cross Z raw and the dot raw.</param>
     public static void SpaceEmbeddedWedgeAndDotLanes(ReadOnlySpan<long> left, ReadOnlySpan<long> right, Span<long> result) {
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: 0L
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: 0L
@@ -465,12 +459,12 @@ internal static partial class Subjects {
     /// <param name="right">The second operand's four lanes: the second vector and the divisor.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorComponentwiseMatchesOracle(long[] left, long[] right) {
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -632,7 +626,7 @@ internal static partial class Subjects {
                 ? NarrowRaw(raw: left[2])
                 : left[2]
             );
-            var space = Space(
+            var space = RawVectors.Of(
                 x: x,
                 y: y,
                 z: z
@@ -706,12 +700,12 @@ internal static partial class Subjects {
             if ((-space).Length != space.Length) { return $"the space norm is not even at ({Lanes(raws: spaceRaws)})"; }
             if ((-plane).LengthSquared != plane.LengthSquared) { return $"the plane squared norm is not even at ({Lanes(raws: planeRaws)})"; }
             if ((-plane).Length != plane.Length) { return $"the plane norm is not even at ({Lanes(raws: planeRaws)})"; }
-            if (Space(
+            if (RawVectors.Of(
                 x: z,
                 y: x,
                 z: y
             ).Length != space.Length) { return $"the space norm is not lane-symmetric at ({Lanes(raws: spaceRaws)})"; }
-            if (Space(
+            if (RawVectors.Of(
                 x: z,
                 y: x,
                 z: y
@@ -790,7 +784,7 @@ internal static partial class Subjects {
                 x: raws[0],
                 y: raws[1]
             );
-            var space = Space(
+            var space = RawVectors.Of(
                 x: raws[0],
                 y: raws[1],
                 z: 0L
@@ -816,17 +810,17 @@ internal static partial class Subjects {
     /// <param name="right">The second operand's six lanes: a third space vector and the scalar.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorExactAlgebra(long[] left, long[] right) {
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: left[3],
             y: left[4],
             z: left[5]
         );
-        var c = Space(
+        var c = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -1008,12 +1002,12 @@ internal static partial class Subjects {
         if ((FixedVector2.Zero.X.Value | FixedVector2.Zero.Y.Value) != 0L) { return "the plane's zero carries a non-zero component"; }
         if ((FixedVector3.Zero.X.Value | FixedVector3.Zero.Y.Value | FixedVector3.Zero.Z.Value) != 0L) { return "the space's zero carries a non-zero component"; }
 
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -1259,7 +1253,7 @@ internal static partial class Subjects {
             x: long.MinValue,
             y: long.MaxValue
         );
-        var spaceDividend = Space(
+        var spaceDividend = RawVectors.Of(
             x: long.MinValue,
             y: 1L,
             z: long.MaxValue
@@ -1302,7 +1296,7 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorNormalizeMatchesOracles(long[] left, long[] right) {
         foreach (var raws in ((ReadOnlySpan<long[]>)[left, right])) {
-            var vector = Space(
+            var vector = RawVectors.Of(
                 x: raws[0],
                 y: raws[1],
                 z: raws[2]
@@ -1358,14 +1352,14 @@ internal static partial class Subjects {
         var foldedX = DirectionRaw(raw: left[0]);
         var foldedY = DirectionRaw(raw: left[1]);
         var foldedZ = DirectionRaw(raw: left[2]);
-        var baseline = Space(
+        var baseline = RawVectors.Of(
             x: foldedX,
             y: foldedY,
             z: foldedZ
         ).Normalize();
 
         foreach (var shift in ((ReadOnlySpan<int>)[1, 8, 17])) {
-            var rescaled = Space(
+            var rescaled = RawVectors.Of(
                 x: (foldedX << shift),
                 y: (foldedY << shift),
                 z: (foldedZ << shift)
@@ -1387,7 +1381,7 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorOrthonormalBasisIsOrthogonalAndDeterministic(long[] left, long[] right) {
         foreach (var raws in ((ReadOnlySpan<long[]>)[left, right])) {
-            var normal = Space(
+            var normal = RawVectors.Of(
                 x: raws[0],
                 y: raws[1],
                 z: raws[2]
@@ -1514,17 +1508,17 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorPresentationMatchesLadder() {
         foreach (var (raw, bits) in PresentationBinary32Ladder) {
-            var atX = Space(
+            var atX = RawVectors.Of(
                 x: raw,
                 y: VectorPresentationSentinelA,
                 z: VectorPresentationSentinelB
             ).ToVector3();
-            var atY = Space(
+            var atY = RawVectors.Of(
                 x: VectorPresentationSentinelA,
                 y: raw,
                 z: VectorPresentationSentinelB
             ).ToVector3();
-            var atZ = Space(
+            var atZ = RawVectors.Of(
                 x: VectorPresentationSentinelA,
                 y: VectorPresentationSentinelB,
                 z: raw
@@ -1592,7 +1586,7 @@ internal static partial class Subjects {
 
         // The all-extreme corners, where every Try norm refuses: the rendering must still be componentwise, with no
         // Length or LengthSquared token and no saturation sentinel beyond the components' own values.
-        var saturated3 = Space(
+        var saturated3 = RawVectors.Of(
             x: FixedQ4816.MaxValue.Value,
             y: FixedQ4816.MaxValue.Value,
             z: FixedQ4816.MaxValue.Value
@@ -1618,7 +1612,7 @@ internal static partial class Subjects {
 
         if (ExpectedMixed2 != actualMixed2) { return $"the mixed-extreme FixedVector2 printed \"{actualMixed2}\""; }
 
-        var actualInterior3 = Space(
+        var actualInterior3 = RawVectors.Of(
             x: 98304L,
             y: -16384L,
             z: 0L
@@ -1660,7 +1654,7 @@ internal static partial class Subjects {
     ];
 
     private static FixedVector3 BasisDirection(int axis, long sign) =>
-        Space(
+        RawVectors.Of(
             x: ((0 == axis)
             ? (sign * VectorOneRaw)
             : 0L),

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Numerics;
+using Puck.Abstractions;
 using Puck.Input.Hid;
 using Puck.Input.Output;
 
@@ -162,9 +163,9 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         m_device = device;
         m_isBluetooth = (device.Transport == HidTransport.Bluetooth);
         m_time = (timeProvider ?? TimeProvider.System);
-        m_outputSpacingTicks = (((m_isBluetooth
+        m_outputSpacingTicks = m_time.TimestampTicks(milliseconds: (m_isBluetooth
             ? OutputSpacingBluetoothMilliseconds
-            : OutputSpacingUsbMilliseconds) * m_time.TimestampFrequency) / 1000L);
+            : OutputSpacingUsbMilliseconds));
         // Output reports are 64 bytes on USB and 49 over Bluetooth; Windows requires the declared length, which is
         // floored to the documented one because composition writes at protocol offsets.
         m_outputBuffer = new byte[Math.Max(
@@ -999,7 +1000,7 @@ public sealed class NintendoSwitchController : IGamepadParser, IRumbleParser, IL
         }
 
         var now = m_time.GetTimestamp();
-        var keepAliveTicks = ((UsbKeepAliveMilliseconds * m_time.TimestampFrequency) / 1000L);
+        var keepAliveTicks = m_time.TimestampTicks(milliseconds: UsbKeepAliveMilliseconds);
 
         if (
             ((now - m_lastReportTimestamp) < keepAliveTicks) ||

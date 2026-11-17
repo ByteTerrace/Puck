@@ -1,3 +1,4 @@
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Input.Hid;
 using Puck.Input.Output;
@@ -108,7 +109,7 @@ public sealed class GamepadDevice : IGamepadConnection {
             accepting: !activateOnStream
         );
         m_parser = parser;
-        m_receiverSilenceTimeoutTicks = ((receiverSilenceTimeoutMilliseconds * time.TimestampFrequency) / 1000L);
+        m_receiverSilenceTimeoutTicks = time.TimestampTicks(milliseconds: receiverSilenceTimeoutMilliseconds);
 
         m_streamSilenceTicks = ((parser is IStreamingParser streaming)
             ? ToTicks(
@@ -206,7 +207,7 @@ public sealed class GamepadDevice : IGamepadConnection {
         m_rumblePending = true;
         m_rumbleActive = ((0f < m_rumbleLeft.PeakAmplitude) || (0f < m_rumbleRight.PeakAmplitude));
         m_rumbleExpiry = (m_rumbleActive
-            ? (m_time.GetTimestamp() + ((long)(durationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
+            ? m_time.TimestampAfter(milliseconds: durationMilliseconds)
             : long.MaxValue
         );
     }

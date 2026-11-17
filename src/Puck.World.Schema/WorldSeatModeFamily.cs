@@ -5,8 +5,8 @@ namespace Puck.World;
 /// value <c>WorldContextFamilies</c> context rows key on.</param>
 /// <param name="Target">The control application this state drives, or <see langword="null"/> for an ordinary state
 /// (the seat drives its own body normally). <c>"camera"</c> is the only admitted value: entering the state possesses
-/// the seat's declared camera body (see <see cref="CameraPlacementIdPrefix"/>) through the ordinary Engage door
-/// (<c>PlayerCommandModule.Mode.cs</c>), diverting the seat's own body intent to
+/// the seat's declared camera body (see <see cref="CameraPlacementIdPrefix"/>) through the authority's input runtime
+/// and ordinary Engage door, diverting the seat's own body intent to
 /// <see cref="Puck.World.Protocol.IntentSource.Idle"/> and resolving its view through <c>views.cameraRig</c>
 /// instead.</param>
 public sealed record WorldSeatModeState(string Name, string? Target = null) {

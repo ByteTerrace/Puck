@@ -187,9 +187,7 @@ public sealed partial class ShaderPipelineRenderNode {
             pass = end;
         }
         if (resolved) {
-            m_gpu.Recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: target.Readback!.BufferHandle,
-                sourceStageMask: GpuStage.Transfer, sourceAccessMask: GpuAccess.CopyWrite,
-                destinationStageMask: GpuStage.Host, destinationAccessMask: GpuAccess.HostRead);
+            GpuReadbackCopy.MakeHostVisible(recorder: m_gpu.Recorder, commandBuffer: command, destinationBufferHandle: target.Readback!.BufferHandle);
         }
     }
     private void SubmitTiming(int slot, IGpuSubmissionFence fence) {

@@ -373,6 +373,11 @@
           "Azure.Core": "1.61.0"
         }
       },
+      "Microsoft.Extensions.Configuration": {
+        "type": "Transitive",
+        "resolved": "10.0.11",
+        "contentHash": "wlhRqZW8LcJPa+vk2oLAc/REXDItHtkFQdf/QcXYGZbZOO13izcsKY1pCvuFQYwUiZD+hwSZwsKASjqT+BNaVg=="
+      },
       "Microsoft.Extensions.Configuration.AzureAppConfiguration": {
         "type": "Transitive",
         "resolved": "8.6.1",

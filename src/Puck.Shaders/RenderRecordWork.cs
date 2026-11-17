@@ -13,7 +13,7 @@ namespace Puck.Shaders;
 /// package preparation that precedes every job (an SDF residency's upload and background pump), which no job pays.
 /// Wall-clock readings: pacing counts, never compared between runs.
 /// </summary>
-public sealed class RenderRecordWork : IWorkCounterSource {
+public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Frames = Kind(name: "render.record.frames", unit: "count");
     private static readonly WorkKind Jobs = Kind(name: "render.record.jobs", unit: "count");
     private static readonly WorkKind Failed = Kind(name: "render.record.failed", unit: "count");
@@ -23,40 +23,33 @@ public sealed class RenderRecordWork : IWorkCounterSource {
     private static readonly WorkKind Longest = Kind(name: "render.record.longest-microseconds", unit: "microseconds");
     private static readonly WorkKind PackagePreparation = Kind(name: "render.record.packages-microseconds", unit: "microseconds");
     private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation];
-    private readonly WorkCounterSet m_counts = new(name: "render.record", kinds: Kinds);
 
-    private RenderRecordWork() { }
+    private RenderRecordWork() : base(counters: new(name: "render.record", kinds: Kinds)) { }
 
     /// <summary>Gets the process's record work.</summary>
     public static RenderRecordWork Process { get; } = new();
-    /// <inheritdoc/>
-    public string Name => m_counts.Name;
-    /// <inheritdoc/>
-    public ReadOnlySpan<WorkKind> WorkKinds => Kinds;
-    /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind, out value);
 
     /// <summary>Counts one committed job's phases.</summary>
     /// <param name="prepareTicks">The preparation's duration, in <see cref="Stopwatch"/> ticks.</param>
     /// <param name="recordTicks">The recording's duration, in <see cref="Stopwatch"/> ticks.</param>
     /// <param name="commitTicks">The commit's duration, in <see cref="Stopwatch"/> ticks.</param>
     internal void Job(long prepareTicks, long recordTicks, long commitTicks) {
-        m_counts.Count(Jobs);
-        m_counts.Add(Prepare, Microseconds(ticks: prepareTicks));
-        m_counts.Add(Record, Microseconds(ticks: recordTicks));
-        m_counts.Add(Commit, Microseconds(ticks: commitTicks));
+        Counters.Count(Jobs);
+        Counters.Add(Prepare, Microseconds(ticks: prepareTicks));
+        Counters.Add(Record, Microseconds(ticks: recordTicks));
+        Counters.Add(Commit, Microseconds(ticks: commitTicks));
     }
     /// <summary>Counts a frame's package preparation, the packages' shared frame work done before any job records
     /// (<see cref="IRenderGraphPackageFactory.PrepareRender"/>).</summary>
     /// <param name="ticks">The preparation's duration, in <see cref="Stopwatch"/> ticks.</param>
-    internal void PreparedPackages(long ticks) => m_counts.Add(PackagePreparation, Microseconds(ticks: ticks));
+    internal void PreparedPackages(long ticks) => Counters.Add(PackagePreparation, Microseconds(ticks: ticks));
     /// <summary>Counts one job whose recording failed and was abandoned.</summary>
-    internal void Abandoned() => m_counts.Count(Failed);
+    internal void Abandoned() => Counters.Count(Failed);
     /// <summary>Counts one render-graph frame that recorded jobs, with its longest single recording.</summary>
     /// <param name="longestRecordTicks">The frame's longest recording, in <see cref="Stopwatch"/> ticks.</param>
     internal void Frame(long longestRecordTicks) {
-        m_counts.Count(Frames);
-        m_counts.Add(Longest, Microseconds(ticks: longestRecordTicks));
+        Counters.Count(Frames);
+        Counters.Add(Longest, Microseconds(ticks: longestRecordTicks));
     }
 
     private static long Microseconds(long ticks) => ((ticks * 1_000_000L) / Stopwatch.Frequency);

@@ -5,6 +5,7 @@ namespace Puck.Cli.Host;
 /// <summary><c>puck host</c> — the verbs about the machine an agent runs on: <c>load</c> reports CPU, memory, disk and
 /// GPU busyness as admission lines (see <see cref="HostLoadMonitor"/>).</summary>
 public static class HostCommand {
+    private const string HeapVerb = "host heap";
     private const string LoadVerb = "host load";
 
     private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, bool json, CancellationToken cancellationToken) {
@@ -138,11 +139,59 @@ public static class HostCommand {
         return command;
     }
 
+    private static int Heap(int processId, int minimumMebibytes) {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        HeapWalk walk;
+
+        try {
+            walk = ManagedHeapWalk.Run(minimumBytes: (((long)minimumMebibytes) << 20), processId: processId);
+        } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
+            return CliExit.Refuse(verb: HeapVerb, what: $"--pid {processId}", why: exception.Message);
+        }
+
+        var named = walk.Tenants.Sum(selector: static tenant => tenant.Bytes);
+
+        Console.Out.WriteLine(value: FormattableString.Invariant($"[host heap: pid={processId} collection={walk.Collection} live-objects={walk.Nodes} | large objects (at least {ManagedHeapWalk.LargeObjectBytes} bytes) objects={walk.Objects} bytes={walk.Bytes} | tenants of at least {minimumMebibytes} MiB: {walk.Tenants.Count} holding {named} bytes | walk-ms={clock.ElapsedMilliseconds}"));
+        foreach (var tenant in walk.Tenants) {
+            Console.Out.WriteLine(value: FormattableString.Invariant($"tenant {System.Text.Json.JsonSerializer.Serialize(tenant.Type)} held-by={System.Text.Json.JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes}"));
+        }
+        Console.Out.WriteLine(value: "The runtime wrote the heap during one blocking full collection with every managed thread suspended; the holder is the type of the first referrer found, or the kind of root.]");
+
+        return CliExit.Success;
+    }
+    private static Command CreateHeap() {
+        var pidOption = new Option<int>(name: "--pid") { Description = "The .NET process to walk, such as a World's process id from puck_world_start.", Required = true };
+        var minimumOption = CliOptions.Count(defaultValue: 4, description: "The smallest large-object-heap tenant to name, in MiB; smaller large objects count only in the totals.", minimum: 0, name: "--min-mib");
+        var command = new Command(
+            description: "Name the large object heap's tenants of another .NET process from the runtime's own heap dump.",
+            name: "heap"
+        ) { pidOption, minimumOption };
+
+        command.Detail(detail: """
+            Opens an EventPipe session on the process's diagnostics port with the runtime provider's heap-collect and
+            heap-dump keywords. The runtime runs one blocking full collection with every managed thread suspended and
+            writes each live object and root to the stream, which this process reads: the target pays the collection's
+            pause and nothing else, and no engine process carries the trace-parsing package. The report gives the
+            large object heap's totals (objects of at least 85,000 bytes) and each tenant of at least --min-mib MiB by
+            type and first holder (the type of an object referring to it, or the kind of root that keeps it).
+            Reading the stream takes seconds on a heap of a few gigabytes. Never attach during a frame-time reading:
+            the pause is one long frame in the target's host.frames.
+
+            Exit codes: 0 done; 2 refused (the process exposes no diagnostics port, or the runtime wrote no dump).
+            """);
+        command.SetAction(action: (parseResult, cancellationToken) => Task.Run(function: () => Heap(
+            minimumMebibytes: parseResult.GetValue(option: minimumOption),
+            processId: parseResult.GetValue(option: pidOption)
+        ), cancellationToken: cancellationToken));
+
+        return command;
+    }
+
     /// <summary>Creates <c>puck host</c>.</summary>
     /// <returns>The command.</returns>
     public static Command Create() =>
         new(
             description: "Verbs about the machine an agent runs on.",
             name: "host"
-        ) { CreateLoad() };
+        ) { CreateLoad(), CreateHeap() };
 }

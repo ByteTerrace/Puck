@@ -1,0 +1,38 @@
+// Seat-owned F9 presses exercise the debug world's camera family without an inputModes selector. The read-backs
+// name the published mode at entry and exit; the movement after exit proves ordinary input
+// returns to the avatar. Play the same program live with world.benchmark run free-camera-tests.puck.
+schema: "puck.world.definition.v1"
+basis: "debug"
+documentId: "free-camera-tests"
+import "stopped-machines"
+
+test "F9 enters and leaves the camera body through the seat authority" {
+  when {
+    seat1: body.pose 0 0.05 0 0 0 0 0
+    ticks 30
+    seat1: player.signal keyboard.f9 press
+    ticks 2
+    seat1: player.signal keyboard.f9 release
+    ticks 3
+    seat1: player.mode camera
+    // Flying the camera must leave the avatar at its origin.
+    seat1: player.signal keyboard.w press
+    ticks 12
+    seat1: player.signal keyboard.w release
+    ticks 3
+    seat1: player.signal keyboard.f9 press
+    ticks 2
+    seat1: player.signal keyboard.f9 release
+    ticks 3
+    seat1: player.mode camera
+    seat1: player.signal keyboard.w press
+    ticks 18
+    seat1: player.signal keyboard.w release
+    ticks 3
+  }
+  expect {
+    bodyPosition(body, 0, z) < -0.5
+    bodyPosition(body, 0, x) > -0.2
+    bodyPosition(body, 0, x) < 0.2
+  }
+}

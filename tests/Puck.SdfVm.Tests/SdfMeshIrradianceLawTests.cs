@@ -931,7 +931,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.Equal(expected: 0u, actual: unlitUpper[SdfMeshIrradianceProbe.LightsWord]);
     }
     [Fact]
-    public void ASpaceBetweenLatticeCentresMetersItsOwnLightingWithoutOpeningTheWalls() {
+    public void ASpaceBetweenLatticeCentresSamplesItsOwnLightingWithoutOpeningTheWalls() {
         var frame = Frame();
         var lights = new SdfLights();
 
@@ -1111,7 +1111,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
     /// builds no scene, since an empty one would measure open sky where walls have yet to land; a lockstep frame builds
     /// none while its bake is pending.</summary>
     [Fact]
-    public void TheMeterAnswersWhileTheBakeStillLands() {
+    public void TheCameraSampleAnswersWhileTheBakeStillLands() {
         var lit = Frame();
         // In the upper room, under its point light.
         var frame = lit with {

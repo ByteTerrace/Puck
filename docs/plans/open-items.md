@@ -2901,6 +2901,12 @@ runs.
 
 ### The benchmark
 
+- [low] A headless benchmark reports `rendered: true` because
+  `WorldBenchmarkCommandModule.Finish` tests whether pacing exists, rather than
+  whether a renderer exists. The headless Free Cam seat program observed this
+  alongside `gpu.state: absent`. Derive the report's rendered flag from the
+  presentation host, keeping host-iteration timing available headless.
+
 Owner: one benchmark lane per stage · high · Next: the lead's windowed reading
 of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
@@ -3054,98 +3060,12 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
-- [medium] Two Free Cam compositions: `PlayerCommandModule.ActivateCameraApplication`
-  (`src/Puck.World/PlayerCommandModule.Mode.cs`, client side: finds the camera body through
-  the client's inhabitant table, checks `CheckEngage`, then submits a Console Drive grant and a
-  `ComposeControl` as two submissions) and `WorldInputRuntime.TrySetCameraRoute`
-  (`src/Puck.World.Server/WorldInputRuntime.Camera.cs`, authority side: one activation scope,
-  `CheckEngagePolicy`, `Compose`, then the grant). `ApplyMode` takes the authority path only when
-  the routed document's `inputModes` declare a `SeatState` family of that name, and the debug
-  world's do not, so the debug world's Free Cam runs the client path. Route every camera-target
-  seat-mode edge through the authority (a `SeatState` selection need not require an `inputModes`
-  family) and delete the client composition with its separate grant.
-- [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
-  (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
-  (`Puck.Abstractions`, path-based) each try, test a timeout and sleep on the
-  token's wait handle. One loop over an opener delegate belongs in
-  `Puck.Confinement`, beneath both; `WAIT001` already treats
-  `ConfinedDirectory.AcquireLock` as a blocking member, so the merged loop is
-  answered at its callers.
-- [low] `Puck.World.Console` references `Puck.Launcher` and no code in it uses
-  the reference; drop it, re-record the lock files (`puck locks`, minding the item below) and narrow its
-  profile in `build/Architecture.props`.
-- [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
-  which can re-resolve unrelated transitive packages after a project-reference change.
-  The verb's promise to keep every other pinned version needs an enforcing mechanism:
-  an rf2 reference experiment rewrote 52 lock files and advanced System.IO.Hashing
-  and FSharp.Core without `--update`. The experiment was backed up and reverted;
-  rf2's final project graph needs no lock changes. Fix the non-update path in
-  `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
-  Removing Console's launcher reference also left orphan project entries when
-  `puck locks` reported no changes; `--force-evaluate` pruned them but upgraded
-  unrelated packages. Regeneration must derive the current project closure
-  while retaining pinned package versions. A local feed containing only the
-  prior closure's pinned packages allowed that reference removal to regenerate
-  without upgrades.
-- [medium] `host.memory heap` (`ManagedHeapWalk`) brings
-  `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
-  players run, for one diagnostic verb. Read the runtime's heap-dump events
-  in process without the package (an `EventListener` on the runtime provider
-  with the GC heap-dump keyword is the lead to check, unverified), or move
-  the walk to a `puck` verb attached over the diagnostics port, and drop the
-  reference. The verb also blocks the World for the walk (671 to 926 ms on a
-  headless debug world), since commands have no asynchronous form.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-- [low] The rule VM's latch keeps a binding in two dictionaries,
-  `RuleLatch.RuleState.Held` and `RuleLatch.RuleState.Scheduling`, both walked
-  by `RuleLatch.EndSweep`. One binding entry holding the edge bit and the
-  schedule, with the hashed bit kept apart from the unhashed schedule cache
-  (`RuleLatch.AppendStateHash`); the body door's D10 takes it. The host's
-  interaction path also resolves its `RuleState` by name per tick
-  (`IRuleOwner.TryEvaluateOwn`).
-- [low] The render node's retirement polls fences beside the slot proof its
-  packages use: `RetiredGraph` disposes on `Fence.IsSignaled`
-  (`ShaderPipelineRenderNode.RetireCompleted`). Key it on the node's
-  submission count through `GpuRetirementQueue`, completed by `WaitSlot`,
-  after giving a re-keyed borrowed publication
-  (`RetiredGraph.ReleasePublication`) and one awaiting consumers
-  (`RetiredGraph.ArmAfterConsumers`) their own completion.
-- [low] Small merges, one lane together:
-  - the work ledgers that wrap a `WorkCounterSet` or `ShardedWorkCounterSet`
-    repeat its forwarding members (`WorldBodyWork`, `FixedContactSweepWork`,
-    `FixedStaticContactWork`, `WorldBootWork`); a ledger with no behaviour of
-    its own is the set;
-  - `SdfGpuWork.CopyToReadback` and `GpuKernelCounters`' handle-based copy
-    repeat `GpuReadbackCopy`; the camera-sample kernel and its fields still
-    say "meter" (`sdf-probe-meter.comp.hlsl`, `ScheduleGpuMeters`) now that
-    the image meter owns the word;
-  - the HLSL tap set (`SdfBakeTaps`) is a hand pair with `SdfMeshBakeTaps`,
-    which a generated declaration would close;
-  - the test-batch worker's in-process boot spells its own argument vector
-    (`WorldTestBatch`) beside `WorldLaunchRequest.CommandLine`; a shared
-    request type would live below both;
-  - separator spelling beside `PuckPaths.Slashed` in projects that cannot
-    reference `Puck.Abstractions` (`build/ProjectArchitecture.cs`,
-    `Puck.Launcher.Stub`, `AnalyzerAllowlistPath`, the shaders generator);
-    `Puck.Confinement` is the leaf both could take a helper from;
-  - `ObjectBlobAddressPath` keeps its own walk and takes the device-name rule
-    from `PortablePath.IsDeviceName`;
-  - the probe shaders copy `AccumulateScale` and `MaxAccumulateScale` into
-    each of `average.hlsl`, `faerie.hlsl`, `ir-blob.hlsl` and `ir-marker.hlsl`;
-    `PuckCompileDirect3D11Kernels` rejects `#include`, so the compile needs an
-    include handler first;
-  - rumble duration expiry in `GamepadDevice` (`NextRumbleDeadline`) beside
-    `XInputGamepadConnection`'s own, unconfirmed;
-  - test helpers whose copies differ per file: the raw-bit `FixedVector3`
-    builders in `tests/Puck.Maths.Tests`, the `Position` overloads in
-    `BakedWorldQueryTests.cs` and `SdfFieldEvaluatorCullBoundaryLawTests.cs`,
-    and five copies of a `NativeMemory`-backed test `IAllocator` named
-    `HeapAllocator` (`VulkanIndirectCountLawTests.cs` and four more).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -3441,6 +3361,14 @@ reversal brake, then a sitting.
   responding after the first scroll.
 
 ### Input channels
+
+- [medium · unconfirmed] Reconcile camera mode lifecycle reseeding with its
+  authority state: `WorldSeatBindings.SyncSeatModes` resets client defaults and
+  raises `CameraApplicationDropped`, whose composition-root handler sends a
+  dissolve, while `WorldInputRuntime.PrepareOwner` retains a valid seat state.
+  Check a changed document or route while Free Cam is active for a retained
+  `free` state beside a dissolved application. Ordinary F9 entry and exit take
+  the authority path; reload and route teardown still need this focused check.
 
 Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns

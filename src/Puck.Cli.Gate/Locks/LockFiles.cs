@@ -43,14 +43,14 @@ public static partial class LockFiles {
         return ((advice > 0) ? message[..advice] : message).Trim();
     }
 
-    /// <summary>The restore <see cref="Record"/> runs: unlocked, so a lock file that no longer matches its project is
-    /// re-resolved and rewritten. Force restore past NuGet's no-op cache so changed reference/runtime graphs are read;
-    /// with <paramref name="update"/>, every floating version is re-evaluated as well.</summary>
-    /// <param name="update">Whether to take the newest packages every floating range admits.</param>
-    /// <returns>The <c>dotnet</c> arguments.</returns>
-    public static IReadOnlyList<string> RecordArguments(bool update) => [
-        "restore", Solution, "-p:RestoreLockedMode=false", .. (update ? (string[])["--force-evaluate"] : ["--force"]), CliOptions.NoNodeReuse, "-nologo", "-v", "q",
-    ];
+    /// <summary>The restore <see cref="Record"/> runs: unlocked, and evaluating the whole graph afresh
+    /// (<c>--force-evaluate</c>), so every lock file lists exactly the current project closure, including a project
+    /// entry a removed reference left behind in a lock file NuGet would otherwise judge current. The fresh evaluation also
+    /// resolves every floating version to the newest package its range admits; <see cref="Record"/> takes the versions a
+    /// lock file already pinned back unless it is asked to update. Warnings stay warnings in this restore (a newest
+    /// package can break another's constraint, NU1608), since the pins restore the versions that satisfy them and the
+    /// locked restore that judges the result keeps warnings as errors.</summary>
+    public static IReadOnlyList<string> RecordArguments { get; } = ["restore", Solution, "-p:RestoreLockedMode=false", "-p:TreatWarningsAsErrors=false", "--force-evaluate", CliOptions.NoNodeReuse, "-nologo", "-v", "q"];
     /// <summary>Every project <see cref="Solution"/> lists, as full paths.</summary>
     /// <param name="repositoryRoot">The checkout.</param>
     /// <returns>The projects, in the solution's order.</returns>
@@ -97,21 +97,75 @@ public static partial class LockFiles {
         return new LockCheck(ExitCode: ((report.Count == 0) ? CliExit.Success : CliExit.Failed), Report: report, RestoreOutput: result.Output);
     }
     /// <summary>Restores unlocked and reports, by repository-relative path, every lock file the restore rewrote or
-    /// created: after a reference change, only the projects whose references changed; with <paramref name="update"/>,
-    /// every project a newer package reaches.</summary>
+    /// created: every lock file lists the current project closure, and without <paramref name="update"/> each keeps the
+    /// package versions it pinned (<see cref="LockPins.Hold"/>), so a reference change moves only the entries it
+    /// touches; with <paramref name="update"/>, every project a newer package reaches. The pinned lock files are
+    /// checked by a locked restore (<see cref="CheckArguments"/>), the one judge of whether a lock file is consistent.
+    /// When it refuses them (a new reference needs a newer package than a pin), the restore's own lock files stand and
+    /// <paramref name="advanced"/> names each package that advanced.</summary>
     /// <param name="repositoryRoot">The checkout.</param>
-    /// <param name="update">Whether to re-evaluate every floating version.</param>
+    /// <param name="update">Whether to take the newest package every floating version admits.</param>
     /// <param name="restore">Runs <c>dotnet</c> with the given arguments in the checkout.</param>
     /// <param name="changed">The lock files the restore rewrote or created, when it succeeded.</param>
+    /// <param name="advanced">The packages whose pinned version the references forced forward, empty unless the locked
+    /// restore refused the pinned lock files.</param>
     /// <returns>The restore's result.</returns>
-    public static GateStepResult Record(string repositoryRoot, bool update, Func<IReadOnlyList<string>, GateStepResult> restore, out IReadOnlyList<string> changed) {
+    public static GateStepResult Record(string repositoryRoot, bool update, Func<IReadOnlyList<string>, GateStepResult> restore, out IReadOnlyList<string> changed, out IReadOnlyList<string> advanced) {
         var locks = Projects(repositoryRoot: repositoryRoot).Select(selector: LockPath).ToArray();
         var before = locks.ToDictionary(elementSelector: static path => (File.Exists(path: path) ? File.ReadAllBytes(path: path) : null), keySelector: static path => path, comparer: StringComparer.Ordinal);
-        var result = restore(arg: RecordArguments(update: update));
+        var result = restore(arg: RecordArguments);
 
+        advanced = [];
+        if (result.ExitCode != 0) {
+            // A failed restore can have rewritten some lock files and not others; none is known to be current.
+            foreach (var (path, bytes) in before) {
+                if (bytes is not null) { Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path); }
+                else if (File.Exists(path: path)) { File.Delete(path: path); }
+            }
+        } else {
+            if (!update) { advanced = HoldPins(before: before, restore: restore); }
+            // The restore spells line endings its own way; a lock file that differs from before only there is unchanged.
+            foreach (var (path, bytes) in before) {
+                if ((bytes is not null) && File.Exists(path: path) && !Puck.Confinement.FileContent.Equals(expected: bytes, path: path)
+                    && string.Equals(a: File.ReadAllText(path: path).ReplaceLineEndings(replacementText: "\n"), b: System.Text.Encoding.UTF8.GetString(bytes: bytes).ReplaceLineEndings(replacementText: "\n"), comparisonType: StringComparison.Ordinal)) {
+                    Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path);
+                }
+            }
+        }
         changed = [.. locks
             .Where(predicate: path => (File.Exists(path: path) && ((before[path] is not { } previous) || !Puck.Confinement.FileContent.Equals(expected: previous, path: path))))
             .Select(selector: path => CliPaths.ToDisplay(fullPath: path, relativeTo: repositoryRoot))];
         return result;
+    }
+
+    // Writes each rewritten lock file back at the versions its previous text pinned, and a package it did not list at the
+    // lowest version any lock file pins (a project's compile-time reference never outruns the assembly a dependent
+    // deploys), then has the locked restore judge the set. A refusal puts every lock file back as the restore wrote it and
+    // holds only the versions each file's own previous text pinned; a second refusal puts them back again and returns the
+    // packages that advanced.
+    private static List<string> HoldPins(Dictionary<string, byte[]?> before, Func<IReadOnlyList<string>, GateStepResult> restore) {
+        var solution = LockPins.Collect(texts: before.Values.OfType<byte[]>().Select(selector: static bytes => System.Text.Encoding.UTF8.GetString(bytes: bytes)));
+        var advanced = new List<string>();
+
+        foreach (var pins in ((IReadOnlyDictionary<string, System.Text.Json.Nodes.JsonObject>?[])[solution, null])) {
+            var restored = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+
+            advanced = [];
+            foreach (var (path, bytes) in before) {
+                if ((bytes is null) || !File.Exists(path: path)) { continue; }
+
+                var current = File.ReadAllText(path: path);
+                var previous = System.Text.Encoding.UTF8.GetString(bytes: bytes);
+
+                if (LockPins.Hold(current: current, packages: advanced, previous: previous, solution: pins) is not { } held) { continue; }
+                restored[path] = current;
+                if (held == previous) { Puck.Confinement.AtomicFile.WriteAllBytes(bytes: bytes, path: path); }
+                else { Puck.Confinement.AtomicFile.WriteAllText(contents: held, path: path); }
+            }
+            if ((restored.Count == 0) || (restore(arg: CheckArguments).ExitCode == 0)) { return []; }
+            foreach (var (path, text) in restored) { Puck.Confinement.AtomicFile.WriteAllText(contents: text, path: path); }
+        }
+
+        return advanced;
     }
 }
