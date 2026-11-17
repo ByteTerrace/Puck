@@ -12,6 +12,37 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Size is sampled once by authority; contact, carrier motion and snapshot agree on that sample.</summary>
 public sealed class SolidSizeLawTests {
+    [Fact]
+    public void ASessionCannotDistinguishHiddenSizeSamples() {
+        WorldDisclosureTranscript Run(long size) {
+            var definition = GrowingDocument(false);
+            definition = definition with {
+                StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot("growth", size) with { Visibility = new StateVisibility(Readers: ["seat1"]) }]),
+                Admission = [new WorldAdmissionEntry(Disclosure: WorldDisclosureTier.Replica, Domain: "viewer", Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                    Grants: [new WorldAdmissionGrant(Budget: 64, Capability: WorldCapability.Observe, Subject: GrantSubject.All)])],
+            };
+            using var fixture = Fixtures.FreshServer(definition);
+            var transcript = new WorldDisclosureTranscript(() => fixture.Server.CompletedTick);
+            using var session = WorldDisclosureSession.Observe(fixture.Server, "viewer", transcript, 5);
+            fixture.Step(); fixture.Step();
+            Assert.Empty(transcript.Invalid);
+            return transcript;
+        }
+        Assert.Empty(WorldDisclosureComparison.Compare(Run(FixedQ4816.One.Value / 2), Run(FixedQ4816.One.Value / 4)));
+    }
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ContactMarginScalesWithTheRootOnBothProviders(bool field) {
+        var definition = GrowingDocument(field, carved: false);
+        definition = definition with { PlacementRowsRaw = [definition.Placements[0] with { Solid = new WorldSolid(0.2f) }] };
+        using var fixture = Fixtures.FreshServer(definition);
+        fixture.Step();
+        var collider = Assert.Single(Assert.Single(fixture.Server.Population.DiagnosticAttached()).Colliders).Collider;
+        var probe = FixedVector3.FromVector3(new Vector3(20, 2, 0));
+        Assert.True(FixedSurfaceQuery.TryNearest([collider], [], probe, FixedQ4816.FromInteger(3), out var surface));
+        Assert.InRange((double)surface.Point.Y, 1.099, 1.101);
+    }
     [Theory]
     [InlineData(false, 0f)]
     [InlineData(true, 0f)]
