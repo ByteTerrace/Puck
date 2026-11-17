@@ -112,8 +112,8 @@ public sealed class WorldReplayProbe : IDisposable {
                     Divergence = string.Join(separator: ", ", values: WorldStateHashComposition.DifferingComponents(left: m_components[tick],
                         right: WorldStateHashComposition.AuthoritativeComponents(server: m_server, tick: (m_server.NextInputTick - 1))));
                     if (tick == 0) {
-                        Console.Error.WriteLine("size2 expected input: " + System.Text.Json.JsonSerializer.Serialize(m_firstInput));
-                        Console.Error.WriteLine("size2 replayed input: " + System.Text.Json.JsonSerializer.Serialize(m_server.Input.Capture()));
+                        Divergence += "\nsize2 expected input: " + System.Text.Json.JsonSerializer.Serialize(m_firstInput);
+                        Divergence += "\nsize2 replayed input: " + System.Text.Json.JsonSerializer.Serialize(m_server.Input.Capture());
                     }
                     return tick;
                 }
