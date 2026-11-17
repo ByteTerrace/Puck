@@ -13,7 +13,8 @@ namespace Puck.Cli.Host;
 /// plus what the admitted starts still running have left to grow, since admitted Worlds grow into each other, and
 /// still hold the commit reserve afterwards (<see cref="HostLoadThresholds.CommitCovers"/>); free physical memory must
 /// cover the start's own working set plus the running starts' working-set growth and still sit at the pressure floor
-/// (<see cref="HostLoadThresholds.PhysicalCovers"/>). A busy CPU only slows a step, so the CPU is
+/// (<see cref="HostLoadThresholds.PhysicalCovers"/>). A start whose own need exceeds the machine's totals is refused by
+/// name at once (<see cref="HostLoadThresholds.NeverFits"/>). A busy CPU only slows a step, so the CPU is
 /// advisory: a step admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that
 /// opens a device also waits for an idle GPU; any other step never waits on a GPU holder. A heavy suite
 /// (<see cref="HostProcesses.IsHeavyTestAssembly"/>) also waits while another process runs one, machine-wide, since two
@@ -123,6 +124,14 @@ public static class HostAdmission {
             // The peak is judged last: only a start that nothing else holds back reserves its headroom.
             var held = ((gpu is not null) || (heavy is not null) || Shortfalls(reading: reading, thresholds: thresholds, demand: null).Any());
             var demand = starts.Judge(clock: clock, kind: peak, reading: reading, reserve: (reserve && !held), thresholds: thresholds);
+
+            // A start the idle machine could not hold is refused by name at once: no wait changes it.
+            if (thresholds.NeverFits(reading: reading, ownGb: demand.OwnGb, residentOwnGb: demand.ResidentOwnGb) is { } never) {
+                error.WriteLine(value: $"gate: refused {step}: a {KindName(kind: peak)} can never be admitted on this machine, {never}.");
+                error.Flush();
+
+                return false;
+            }
 
             if (!held && demand.Covered) {
                 if (peak != HostStartKind.Step && double.IsFinite(demand.HeadroomGb)) { error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gate: admitted {step}: commit headroom {demand.HeadroomGb:0.0}GB covers {demand.NeedGb:0.0}GB ({demand.OwnGb:0.0}GB expected peak plus {demand.GrowthGb:0.0}GB growth in {demand.Growing} start(s)).")); }
