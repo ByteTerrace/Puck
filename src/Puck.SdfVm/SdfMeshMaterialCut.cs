@@ -24,6 +24,12 @@ namespace Puck.SdfVm;
 internal sealed class SdfMeshMaterialCut {
     /// <summary>The bisection rounds after the first: each halves the interval a boundary lies in along its edge.</summary>
     public const int Rounds = 4;
+    /// <summary>The most triangles <see cref="Build"/> meshes one contour quad to: a cut quad takes at most six triangles to
+    /// each of its two halves, and a triangle holding quartered edges splits once at each of at most three.</summary>
+    public const int MaxTrianglesPerQuad = 48;
+    /// <summary>The most vertices <see cref="Build"/> adds beyond the contour's own for each contour quad: a cut half's seven
+    /// boundary and centre points, and the middles of the at most three edges each of its triangles splits at.</summary>
+    public const int MaxVerticesPerQuad = 64;
 
     // The cosine past which a boundary point's two edge ends face apart as a crease's two sides do (thirty-two degrees, the
     // turn SdfContour.SplitAtCreases splits a crease at).
@@ -164,6 +170,9 @@ internal sealed class SdfMeshMaterialCut {
     /// <summary>Builds the mesh once every round is answered: each quad by the quarter rule, or cut along its boundary
     /// where its vertices disagree.</summary>
     /// <returns>The mesh, in the frame the contour is in; <see langword="null"/> for a contour with no quad.</returns>
+    /// <exception cref="InvalidOperationException">The mesh grows past <see cref="MaxTrianglesPerQuad"/> triangles or
+    /// <see cref="MaxVerticesPerQuad"/> added vertices for each contour quad. The contour bounds the lists, so a cut that
+    /// does not end fails its group by name instead of taking the process.</exception>
     public SdfMesh? Build() {
         var contour = m_contour;
 
@@ -173,12 +182,21 @@ internal sealed class SdfMeshMaterialCut {
         var normals = new List<Vector3>(capacity: (contour.VertexCount + m_edges.Count));
         var indices = new List<uint>(capacity: (6 * contour.QuadCount));
         var triangleMaterials = new List<uint>(capacity: (2 * contour.QuadCount));
+        var triangleLimit = (((long)MaxTrianglesPerQuad) * contour.QuadCount);
+        var vertexLimit = (contour.VertexCount + (((long)MaxVerticesPerQuad) * contour.QuadCount));
 
+        // Every growth of the lists passes here: the bound is the one door, so no stage can outgrow it.
+        void Within() {
+            if ((positions.Count > vertexLimit) || ((indices.Count / 3L) > triangleLimit)) {
+                throw new InvalidOperationException(message: $"the material cut of {contour.QuadCount} quads passed its bound of {triangleLimit} triangles and {vertexLimit} vertices (holding {(indices.Count / 3)} and {positions.Count})");
+            }
+        }
         uint Add(Vector3 point, Vector3 normal) {
             var length = normal.Length();
 
             positions.Add(item: point);
             normals.Add(item: ((length > 0f) ? (normal / length) : normal));
+            Within();
 
             return ((uint)(positions.Count - 1));
         }
@@ -187,6 +205,7 @@ internal sealed class SdfMeshMaterialCut {
             if (Vector3.Cross(vector1: (positions[((int)b)] - positions[((int)a)]), vector2: (positions[((int)c)] - positions[((int)a)])).LengthSquared() <= 0f) { return; }
             indices.Add(item: a); indices.Add(item: b); indices.Add(item: c);
             triangleMaterials.Add(item: ((uint)Math.Max(val1: 0, val2: material)));
+            Within();
         }
         void Quad(uint a, uint b, uint c, uint d, int material) {
             Triangle(a: a, b: b, c: c, material: material);
@@ -346,6 +365,7 @@ internal sealed class SdfMeshMaterialCut {
                     indices[((3 * at) + 2)] = w;
                     indices.Add(item: middle); indices.Add(item: v); indices.Add(item: w);
                     triangleMaterials.Add(item: triangleMaterials[at]);
+                    Within();
                     pending.Push(item: at);
                     pending.Push(item: ((indices.Count / 3) - 1));
 

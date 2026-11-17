@@ -88,25 +88,28 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> or <paramref name="materials"/> is
     /// <see langword="null"/>.</exception>
     /// <returns>An owned mesh claim. The caller releases it after its last borrowed view ends.</returns>
-    /// <remarks>A library with a native allocator and a store publishes the mesh the store reads back, so a mesh baked
-    /// in this run draws what a later run loads, and its normals and coarser levels can be let go and restored from the
-    /// entry (<see cref="SdfMesh.DescribeRestores"/>); a write the store refuses publishes the baked mesh, which keeps
-    /// them.</remarks>
+    /// <remarks>A library with a native allocator and a store publishes the mesh the store's entry answers (positions on
+    /// the entry's grid, normals through its octahedral words), so a mesh baked in this run draws what a later run loads,
+    /// and its normals and coarser levels can be let go and restored from the entry (<see cref="SdfMesh.DescribeRestores"/>);
+    /// the answer is written from the baked mesh and the entry is not read back. A write the store refuses publishes the
+    /// baked mesh, which keeps them.</remarks>
     public SdfMesh Store(SdfMeshGeometry geometry, SdfMesh mesh, int[] materials, UInt128 identity = default, UInt128? form = null) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: materials);
 
-        if ((Allocator is not null) && (Disk is { } disk) && !HoldsAny(geometry: geometry, identity: identity) &&
-            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh) &&
-            TryLoad(form: form, geometry: geometry, identity: identity, materials: materials, mesh: out var stored, refusal: out _) &&
-            (stored is not null)) {
-            return stored;
-        }
+        var written = ((Allocator is not null) && (Disk is { } disk) && !HoldsAny(geometry: geometry, identity: identity) &&
+            disk.Write(geometry: geometry, identity: identity, materials: materials, mesh: mesh));
 
-        var owned = mesh.NativeCopy(Allocator, Account);
+        // A published mesh restores its parts from its identity's set, which this process pins (a lease the store could not
+        // open leaves a restore that misses to bake the group again).
+        if (written) { _ = Disk!.Hold(identity: identity); }
+
+        var owned = (written
+            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), asStored: true)
+            : mesh.NativeCopy(Allocator, Account));
 
         try {
-            if (Hold(form: form, geometry: geometry, identity: identity, materials: materials, mesh: owned)) {
+            if (Hold(form: form, geometry: geometry, identity: identity, materials: materials, mesh: owned) && !written) {
                 _ = Disk?.Write(geometry: geometry, identity: identity, materials: materials, mesh: owned);
             }
             return owned;

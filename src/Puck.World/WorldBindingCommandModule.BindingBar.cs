@@ -28,6 +28,9 @@ public sealed partial class WorldBindingCommandModule {
             }
             preferences = preferences with { Layout = (clear ? null : value) };
         } else if (args.Is(index: 0, value: "model")) {
+            if (!clear && !WorldBindingBarAuthoring.IsModel(name: value)) {
+                return CommandResult.Error(output: $"[{Verb}: unknown model '{value}'; use {WorldBindingBarAuthoring.SingleModel}, {WorldBindingBarAuthoring.StackedModel} or auto]");
+            }
             preferences = preferences with { Model = (clear ? null : value) };
         } else if (args.Is(index: 0, value: "scale")) {
             float? scale = null;

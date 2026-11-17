@@ -12,8 +12,8 @@ namespace Puck.World.Authoring;
 /// of a shape's OWN geometry, a trim colors the host's surface against a REFERENCE shape's geometry instead — a
 /// Subtraction cutter riding the host's own <see cref="ShapeDocument.Group"/> is the common case (the carve's own
 /// edge becomes the trim's guide), or a plain plane-like Box authored purely to mark a seam. Authored as one shape
-/// against the per-stamp shape budget, counting 2 (the host's own eroded copy plus the reference's own dilated
-/// copy) — see <see cref="CreationDocument.StampShapeCount"/> and the shape-field table in <c>documents.md</c>.
+/// that bakes two field operands (the host's own eroded copy plus the reference's own dilated copy); no budget
+/// admits or refuses them, <see cref="CreationDocument.StampShapeCount"/> only reports that bake work.
 /// </summary>
 /// <param name="Shape">The <see cref="ShapeDocument.Name"/> of another shape in the same creation, declared
 /// EARLIER in <c>shapes</c> (so a chain resolves in one pass and can never cycle — mirrors

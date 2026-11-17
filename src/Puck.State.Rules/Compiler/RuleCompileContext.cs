@@ -235,15 +235,30 @@ public class RuleCompileContext : IRuleCostContext {
         lattices: Lattices,
         name: name
     );
-    /// <summary>Returns whether a literal key names an authored or topology-defined cell.</summary>
+    /// <summary>Returns whether a literal key names an authored, topology-defined or token-domain cell: a row keyed
+    /// over another row's keys (a pile, a per-token attribute) can hold any key its domain row declares, whether or
+    /// not it holds a value yet.</summary>
     /// <param name="row">The declared row.</param>
     /// <param name="key">The literal cell key.</param>
     /// <returns>Whether the row declares that cell.</returns>
     public virtual bool DeclaresCell(StateRow row, string key) {
         ArgumentNullException.ThrowIfNull(row);
-        return (row.HasCell(key: key) || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
-            (FindTopology(name: domain.Topology) is { } topology) &&
-            long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) && (ordinal < topology.CellCount)));
+
+        // A token domain is itself a row and may be keyed over another; the step count bounds a cycle the validator
+        // refuses anyway.
+        for (var step = 0; (step < StateCapacity.MaxRows); step++) {
+            if (row.HasCell(key: key) || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
+                (FindTopology(name: domain.Topology) is { } topology) &&
+                long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) && (ordinal < topology.CellCount))) {
+                return true;
+            }
+            if ((row.EffectiveDomain is not StateDomain.KeysOf keysOf) || (FindRow(name: keysOf.Row) is not { } domainRow)) {
+                return false;
+            }
+            row = domainRow;
+        }
+
+        return false;
     }
     /// <summary>Creates a read of a declared row; a document context may select the facet that owns its cells.</summary>
     /// <param name="row">The declared row.</param>
