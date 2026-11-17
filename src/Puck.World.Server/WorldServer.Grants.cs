@@ -4,14 +4,26 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
+    /// <summary>Closes transports attached to a generation when its ordered disconnect applies.</summary>
+    public event Action<Principal>? PeerDisconnected;
+    internal void ClosePeerTransport(Principal principal) => PeerDisconnected?.Invoke(principal);
+    /// <summary>Whether a peer generation is still connected and may submit commands.</summary>
+    public bool IsLivePeer(Principal principal) => principal.Kind == PrincipalKind.Peer && Population.IsAdmittedPeer(principal.Index) &&
+        !Population.IsParked(principal.Index) && Population.PeerPrincipal(principal.Index) == principal;
+    /// <summary>Disconnects one live peer through the ordered lifecycle, including its transports.</summary>
+    public bool DisconnectPeer(Principal peer, Principal actor) {
+        if (!Grants.IsOperator(actor) || !IsLivePeer(peer) || !Population.TryCaptureTransferredPeer(peer.Index, out var entry)) { return false; }
+        DisconnectPeerConnection(entry);
+        return true;
+    }
+
     /// <summary>Gets the mounted Simulation-lane addon host, or <see langword="null"/> when none is attached.</summary>
     public IWorldAddonHost? Addons => m_addons;
     /// <summary>Gets the concrete grant facade — the capability table plus the grant-application, ownership-escrow
     /// and peer/session admission halves that run against it.</summary>
     /// <remarks><see cref="Grants"/> remains the narrow <see cref="IWorldGrantsView"/> every ordinary reader holds;
-    /// this property is the facade itself, whose <see cref="WorldGrants.TryGrant"/>/<see cref="WorldGrants.Revoke"/>
-    /// doors skip the actor check <see cref="Grant"/>/<see cref="Revoke(WorldGrant, Principal, int, long)"/>
-    /// run.</remarks>
+    /// this property is the facade itself. Its direct grant/revoke doors require the actor and pass through the
+    /// same authority transition admission as document installation.</remarks>
     public WorldGrants GrantTable => m_grants;
     /// <summary>Gets the per-tick dispatch tally behind the mutation admission budget gate.</summary>
     public WorldMutationBudgetMeter MutationBudget => m_mutationBudget;

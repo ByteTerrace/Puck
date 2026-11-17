@@ -163,32 +163,6 @@ public sealed partial class WorldGrants {
         return false;
     }
 
-    /// <summary>Resyncs the group+membership+ownership index wholesale from the live document's <c>groups</c>
-    /// section. The role projection is derived state rather than checkpoint payload: null and unknown roles create no
-    /// authority entry, direct principal ownership remains unrestricted, and group-owned reach uses the OWNER group's
-    /// current member role. WorldServer calls this at construction and every install; checkpoint restoration uses
-    /// <see cref="RestoreGroups"/> to retain the captured revision.</summary>
-    /// <param name="groups">The live document's group roster rows.</param>
-    /// <param name="kinds">The live document's declared group-kind catalog.</param>
-    /// <param name="ownership">The live document's ownership bindings.</param>
-    public void SyncGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership) =>
-        RebuildGroups(
-            groups,
-            kinds,
-            ownership,
-            advanceRevision: true
-        );
-
-    /// <summary>Rehydrates the restored document's derived group authority without changing the checkpoint's
-    /// revision. Restore has already discarded cached handle projections.</summary>
-    internal void RestoreGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership) =>
-        RebuildGroups(
-            groups,
-            kinds,
-            ownership,
-            advanceRevision: false
-        );
-
     private void RebuildGroups(IReadOnlyList<WorldGroup> groups, IReadOnlyList<WorldGroupKind> kinds, IReadOnlyList<WorldOwnership> ownership, bool advanceRevision) {
         m_groupRoleMembership.Clear();
 

@@ -47,6 +47,9 @@ public enum WorldCapability : byte {
     /// pair). An unmasked row keeps full reach over its subject, so a mask is opt-in narrowing beneath an already
     /// deny-by-default capability, never a new gate a seeded grant has to pass.</para></summary>
     Edit,
+
+    /// <summary>Full world authority, without host access. Valid only over all, without payloads.</summary>
+    Operate,
 }
 /// <summary>The world-document sections the <c>WorldMutation</c> vocabulary targets — the stable-id subject a
 /// <see cref="WorldCapability.Mutate"/> grant scopes to. A section names a coarse row set; a mutation is checked against

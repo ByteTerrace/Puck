@@ -1,3 +1,4 @@
+using Puck.Commands;
 using System.Text.Json;
 using System.Security.Cryptography;
 using System.Runtime.CompilerServices;
@@ -48,7 +49,8 @@ public sealed partial class WorldPersistence {
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
-                Host.Document.Install(definition, rebuildPopulation: true, compilation: admission.Compilation);
+                Host.Document.Install(
+                    authority: Host.GrantTable.PrepareDocument(Principal.World, Host.Definition, definition), definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
             }
             RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
                 restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);

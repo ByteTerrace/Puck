@@ -102,7 +102,7 @@ let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starte
 let alchemyTop = (((galleryPopulation + 2 + boardRoomBodies) - 1) - granaryBodies)
 grants: map(
   range(0, totalElements),
-  i => { capability: Drive, grantee: "seat1", subject: $"body:{alchemyTop - 1 - i}" }
+  i => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{alchemyTop - 1 - i}" }
 )
 
 looks: map(["alchemyToken", "alchemyCursor"], name => {

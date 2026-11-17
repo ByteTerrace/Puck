@@ -9,7 +9,8 @@ namespace Puck.World.Server;
 /// bound it to. Every moved command module reaches its target row through this seam instead of an injected
 /// <see cref="WorldServer"/> singleton, so the same module runs unchanged whether one row exists or many.
 /// </summary>
-public interface IWorldConsoleAuthority {
+public interface IWorldConsoleAuthority : ICommandAuthority {
+    bool ICommandAuthority.IsOperator(CommandContext context) => TryResolve(context, out var instance, out _) && instance.Server.Grants.IsOperator(context.Principal);
     /// <summary>Resolves the row this invocation addresses.</summary>
     /// <param name="context">The invocation's context — carries the acting session's identity.</param>
     /// <param name="instance">The resolved row, on success.</param>

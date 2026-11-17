@@ -149,6 +149,7 @@ public sealed partial class WorldPopulation {
             IdentityDomain: entry.IdentityDomain,
             IdentitySubject: entry.IdentitySubject,
             AdmissionTrust: entry.AdmissionTrust,
+            Tier: entry.AdmissionTier,
             AuthorityTransferred: entry.IsAuthorityTransferred,
             PlacementId: entry.PlacementId,
             CatalogRig: entry.CatalogRig,
@@ -340,6 +341,7 @@ public sealed partial class WorldPopulation {
         entry.IdentityDomain = peer.IdentityDomain;
         entry.IdentitySubject = peer.IdentitySubject;
         entry.AdmissionTrust = peer.AdmissionTrust;
+        entry.AdmissionTier = peer.Tier;
         m_simulatedCount = CountActiveCensus();
     }
     /// <summary>Re-applies one recorded disconnect through the population door. Park-with-grace: on the same terms as
@@ -548,6 +550,8 @@ public sealed partial class WorldPopulation {
     /// provenance with <see cref="WorldAdmissionDoor.TryMatchEntry"/> instead of selecting a different trust row
     /// with the same domain and subject.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>
+    public WorldDisclosureTier PeerAdmissionTier(int bodyIndex) => m_entries[bodyIndex].AdmissionTier;
+    /// <summary>The authentication provenance of the admitted generation.</summary>
     public WorldAdmissionTrustIdentity? PeerAdmissionTrust(int bodyIndex) => m_entries[bodyIndex].AdmissionTrust;
     /// <summary>Gets the admitted identity names, or two empty strings for a slot without a remote identity.</summary>
     /// <param name="bodyIndex">The 0-based body index.</param>

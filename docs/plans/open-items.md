@@ -45,8 +45,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
-   grant; then step 3.
+   window, steps 1 and 2's windowed readings, and step 7's readings (the
+   prototype is built: the capability read on this machine and the indexed
+   read's paired cost window on both backends,
+   [the measurement](streaming-and-memory.md#the-prototype-as-built)); then
+   step 3.
 3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -967,8 +970,9 @@ Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
-and 2's windowed readings and step 7's prototype under a GPU grant, then step
-3. The plan owns the decisions, the build order
+and 2's windowed readings and step 7's readings on the built prototype (the
+4070's capability line, the paired `SdfMeshSlabs.IndexedRead` window on both
+backends, then the 2060's and the Deck's readings), then step 3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
@@ -1981,29 +1985,17 @@ enforces it today.
 
 ### Security review
 
-Owner: disclosure build lanes · high · Next: implement revised D1 with its
-escalation laws, then the single disclosure build table; the rd2-review
+Owner: disclosure build lanes · high · Next: D0b1's acquisition wall, then
+the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high] No principal but the host's console can declare a state row, moderate
-  a hosted world or operate a world it owns: the write door refuses every
-  recipient declaration, and the operator is a principal kind.
-  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
-  is the revised design: operator grant and Host audience; writable scopes
-  with private contributor policies, structural membership and runtime row/key/
-  byte partitions; declarations-only preparation; a static declaration security
-  closure whose checks recorded reads cannot remove; and validity maintained
-  by each authority commit. It answers H1–H6, M1–M8 and L1–L7 of rd2-review.
-  D1 remains unimplemented: the operator predicate must replace all kind-keyed
-  trust checks together with group and grants-section escalation admission,
-  single-subject admission templates, field-split peer reporting and silo
-  admission. Its law set is in the one [build table](disclosure.md#the-build-order).
+- [high] Ordinary recipient declarations still require the closed-scope and
+  acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
   host preparation and authority maintenance land separately as D0b2–D0b4.
   D4/D5/D7 build closed scopes, D6 opens and migrates private/default-tier input,
-  then D0c switches the remaining general routes. No partial Operate capability
-  is introduced by the memo. Implementation still needs the specified checks
+  then D0c switches the remaining general routes. Those steps need their specified checks
   and trust-boundary review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit

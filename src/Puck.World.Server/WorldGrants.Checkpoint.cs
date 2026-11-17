@@ -19,6 +19,7 @@ public sealed partial class WorldGrants {
                 Control: [.. (grants.For(capability: WorldCapability.Control) ?? [])],
                 Mutate: [.. (grants.For(capability: WorldCapability.Mutate) ?? [])],
                 Edit: [.. (grants.For(capability: WorldCapability.Edit) ?? [])],
+                Operate: [.. (grants.For(capability: WorldCapability.Operate) ?? [])],
                 Applications: [.. ((grantee.TryGetPrincipal(principal: out var principal)
                     ? m_applications.GetValueOrDefault(key: principal)
                     : null) ?? [])]
@@ -34,6 +35,7 @@ public sealed partial class WorldGrants {
                     Control: [],
                     Drive: [],
                     Edit: [],
+                    Operate: [],
                     Grantee: principal,
                     Mutate: [],
                     Observe: []
@@ -64,7 +66,7 @@ public sealed partial class WorldGrants {
     /// also replaces the epoch allocator after discarding its observers and timeline.</summary>
     /// <param name="checkpoint">The grants and sessions to restore.</param>
     /// <param name="resetSessionEpochs">Whether the caller restores a replay start, discarding the entire timeline.</param>
-    public void Restore(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
+    private void RestoreRaw(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         m_applications.Clear();
@@ -112,6 +114,7 @@ public sealed partial class WorldGrants {
                     subject: subject
                 );
             }
+            foreach (var subject in row.Operate) { grants.Add(WorldCapability.Operate, subject); }
             foreach (var subject in row.Edit) {
                 grants.Add(
                     capability: WorldCapability.Edit,

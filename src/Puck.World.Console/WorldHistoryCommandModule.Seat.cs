@@ -21,7 +21,7 @@ public sealed partial class WorldHistoryCommandModule {
     // holds control over history, and no other form.
     private CommandResult? Admission(WireArgs args, Principal principal) {
         if (
-            (principal.Kind == PrincipalKind.Console) ||
+            (m_instances.Boot?.Server.Grants.IsOperator(principal) == true) ||
             ((args.Count == 1) && args.Is(index: 0, value: "row"))
         ) {
             return null;
@@ -50,7 +50,7 @@ public sealed partial class WorldHistoryCommandModule {
         }
 
         if (
-            (context.Principal.Kind != PrincipalKind.Console) &&
+            (m_instances.Boot?.Server.Grants.IsOperator(context.Principal) != true) &&
             !m_history.TryAuthorize(principal: context.Principal, refusal: out var denial)
         ) {
             return CommandResult.Error(output: $"[world.history: drag refused — {denial}]");

@@ -18,7 +18,7 @@ bodies {
 // The pieces are bodies 8 to 39, piece n body 39 - n, and the seat drives each of them: a seat's `body.pose <x> <y>
 // <z> 0 0 0 <body>` lifts a piece onto a square (chess.md).
 grants: concat(
-  map(range(8, 32), body => { capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
+  map(range(8, 32), body => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{body}" }),
   [{ capability: Edit, grantee: "seat1", subject: "state:chessInput" }]
 )
 

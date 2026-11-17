@@ -106,8 +106,12 @@ public interface IGpuBindings {
     /// <param name="kind">The binding's kind, <see cref="GpuBindingKind.ReadOnlyBuffer"/> or
     /// <see cref="GpuBindingKind.ReadWriteBuffer"/>, as its shader declaration reads or writes the buffer.</param>
     /// <param name="elementStride">The size in bytes of the element the shader declares, or zero for a raw view.</param>
+    /// <param name="arrayElement">The descriptor within an arrayed binding, zero for a single buffer.</param>
+    /// <param name="offsetBytes">The byte offset into the buffer the view starts at: a multiple of
+    /// <paramref name="elementStride"/> (four for a raw view) and, on Vulkan, of the device's
+    /// <c>minStorageBufferOffsetAlignment</c> (<see cref="GpuDeviceCapabilities.StorageBufferOffsetAlignment"/>).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is not a storage-buffer kind.</exception>
-    void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride);
+    void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement = 0, ulong offsetBytes = 0);
     /// <summary>Writes a constant buffer descriptor into a group's set: the buffer a <c>ConstantBuffer&lt;T&gt;</c>
     /// declaration of a <see cref="GpuBindingKind.ConstantBuffer"/> binding reads, from its first byte.</summary>
     /// <param name="descriptorSetHandle">The group's set to write into.</param>

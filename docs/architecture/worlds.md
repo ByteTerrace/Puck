@@ -726,6 +726,29 @@ copy, deadline or persistence arithmetic.
 
 ## Joining, authority, and admission
 
+An operator holds `Operate/all` in that world. Console and the world’s own
+program have it structurally; seats, live peers and live sessions acquire it
+through the grant table, including role-qualified groups and ownership.
+Remote holders must retain Replica entitlement. Addons cannot acquire it.
+
+`WorldGrants.IsOperator` is the live predicate at reads, writes and command
+dispatch. `WorldGrants` admits effective-authority transitions against the
+actor’s authority before the transaction and the whole proposed graph. Only
+an admitted transition can install grants or groups; batch prefixes are
+checked too. Operator group membership, roles, ownership and any referenced
+membership state are operator-owned. Ordinary seats keep explicitly budgeted
+controls and own-body consent. Operate grants full world authority, while
+Host commands still require the host console.
+
+Admission templates may mint Operate only for one exact subject at Replica:
+pinned SignsDirectly or exact OAuth. Vouches, either FederatedAuthority form,
+wildcard domains or subjects, and lower tiers refuse. Runtime grants cannot
+promote a lower-tier peer or launder an addon through a group.
+
+`world.peer.disconnect <peer>` closes the generation’s command admission and
+transport together. Revocation changes the recipient view immediately and
+reseeds its existing delivery cursor at the ordered delivery boundary.
+
 An unembodied joined session is the ordinary shape behind a portal display. The target chooses a full
 replica, redacted state projection or frames. A body-indexed principal cannot represent that
 participant, so a session has a principal of its own, written `session:<ordinal>:<epoch>`.
@@ -755,8 +778,7 @@ that names a session principal (`SessionPrincipalRemote`), so a remote or federa
 admitted.
 
 Crossing asks for embodiment. Successful target admission allocates a population entry and produces
-concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary is the
-settled five verbs.
+concrete `Drive/body:<allocated-id>` authority. Do not add `Enter`: the capability vocabulary already expresses body admission.
 
 A destination declaration grants nothing. Resolution is bilateral:
 

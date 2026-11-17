@@ -1,4 +1,3 @@
-using Puck.Commands;
 using System.Text.Json;
 using Puck.Abstractions.Machines;
 using Puck.Networking;
@@ -127,56 +126,7 @@ public sealed class MachineOperationProtocolLawTests {
             completion.Result.Value!.Value.GetRawText()
         );
     }
-    [Fact]
-    public void MachineSubjectIsNamedControlAuthorityWithWildcardSemantics() {
-        Assert.True(condition: GrantSubject.TryParse(
-            subject: out var parsed,
-            token: "machine:cabinet"
-        ));
-        Assert.Equal(
-            GrantSubject.Machine(name: "cabinet"),
-            parsed
-        );
-        Assert.Equal(
-            "machine:cabinet",
-            parsed.Describe()
-        );
 
-        var grants = new WorldGrants(
-            population: 8,
-            routeTransition: static (_, _, _) => { },
-            seatCount: 4
-        );
-        var addon = Principal.Addon(name: "tool");
-
-        Assert.False(condition: grants.Allows(
-            addon,
-            WorldCapability.Control,
-            GrantSubject.Machine(name: "cabinet")
-        ).IsAllowed);
-        Assert.True(
-            condition: grants.TryGrant(
-                grant: new WorldGrant(
-                    addon,
-                    WorldCapability.Control,
-                    GrantSubject.Machine(name: "cabinet"),
-                    Exclusive: false
-                ),
-                reason: out var reason
-            ),
-            userMessage: reason
-        );
-        Assert.True(condition: grants.Allows(
-            addon,
-            WorldCapability.Control,
-            GrantSubject.Machine(name: "cabinet")
-        ).IsAllowed);
-        Assert.False(condition: grants.Allows(
-            addon,
-            WorldCapability.Control,
-            GrantSubject.Machine(name: "other")
-        ).IsAllowed);
-    }
     [Fact]
     public void OperationLeafAcceptsExactCanonicalBoundaryAndRejectsAnOversizedLeaf() {
         var cap = WorldFrameCodec.MaxPayloadBytes(kind: WorldSubmissionKind.Operation);

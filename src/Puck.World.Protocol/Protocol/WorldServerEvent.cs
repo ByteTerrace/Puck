@@ -24,7 +24,8 @@ namespace Puck.World.Protocol;
 /// merely reads <see cref="IntentSource.Live"/> (the default peer source). Carried explicitly because
 /// <paramref name="Source"/> cannot tell the two apart, and every occupancy rule keys on it.</param>
 /// <param name="AdmissionTrust">The exact trust policy identity that authenticated the peer.</param>
-public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig, Puck.Maths.FixedQ4816 TravelTurn, bool RemoteHuman, WorldAdmissionTrustIdentity? AdmissionTrust = null);
+/// <param name="Tier">The disclosure entitlement admitted with this connection.</param>
+public readonly record struct WorldPeerEventEntry(int BodyIndex, int Generation, IntentSource Source, Principal Identity, string IdentityDomain, string IdentitySubject, bool AuthorityTransferred, string? PlacementId, byte CatalogRig, Puck.Maths.FixedQ4816 TravelTurn, bool RemoteHuman, WorldAdmissionTrustIdentity? AdmissionTrust = null, WorldDisclosureTier Tier = WorldDisclosureTier.Frames);
 /// <summary>Server-authored entries in the same ordered domain as submissions. They are not submission payloads and
 /// can never arrive from a client.</summary>
 public abstract record WorldServerEvent {
@@ -44,7 +45,8 @@ public abstract record WorldServerEvent {
     /// <param name="Templates">The verdict's whole template list: the rows with a subject are
     /// <paramref name="MintedGrants"/>, the body-relative rows wait for an embodiment.</param>
     /// <param name="MintedGrants">The grants minted through the ordinary grant door.</param>
-    public sealed record SessionAdmitted(Principal Session, IReadOnlyList<WorldAdmissionGrant> Templates, IReadOnlyList<WorldGrant> MintedGrants) : WorldServerEvent;
+    /// <param name="Tier">The independently admitted disclosure entitlement.</param>
+    public sealed record SessionAdmitted(Principal Session, IReadOnlyList<WorldAdmissionGrant> Templates, IReadOnlyList<WorldGrant> MintedGrants, WorldDisclosureTier Tier = WorldDisclosureTier.Frames) : WorldServerEvent;
     /// <summary>A session was embodied: its verdict's body-relative grants were minted over the body, beside the rows it
     /// already holds.</summary>
     /// <param name="Session">The session principal.</param>

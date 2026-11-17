@@ -237,6 +237,12 @@ This records the earlier audit, not proof of closure: decision 3a's W6–W8
 reopen the console writes, HUD templates and parked-body handler. Its D0a
 adds their missing argument and principal combinations to this same harness.
 
+D1 separates `Host` from `Operator`: resources, file-backed replay,
+pipeline loading, instance lifecycle and wire diagnostics use Host. Operator
+dispatch resolves the addressed world and asks its live Operate predicate;
+peer reporting exposes endpoints and verified identities only to the host.
+The table below records the earlier audit.
+
 | Verbs | Audience | Verdict | Fix |
 |---|---|---|---|
 | `replay.record`, `replay.stop`, `replay.cancel`, `replay.drive`, `replay.fork`, `replay.verify`, `replay.inspect`, `replay.list`, `replay.status` | Operator | A tape is the whole authority: its tail hash, authority entries and poses differ with withheld rows (baseline: `replay.stop`, `replay.inspect` and `replay.verify` differed between every pair), and `drive` and `fork` replace the live document through the load door | Operator verbs |
@@ -304,7 +310,7 @@ whole document: `world.save` is an operator verb (it writes the authority
 document, withheld cells included, to a host path and answers its byte
 count), and a recipient's `world.status` omits `session-drift` and `dirty`,
 whose journal length moves with an operator's hidden-only edit.
-`Principal.IsAuthority` is the one spelling of "the operator or the world".
+`WorldGrants.IsOperator` is the live operator predicate.
 
 **Puck builds:** `WorldRecipientView`, the one object every per-recipient
 answer is derived from: reads, write admission and refusal, placements and
@@ -718,10 +724,10 @@ operator is.
   world (`WorldOwnedWorlds`); `ChatCommandModule` declares rows on the acting
   player's own identity document, validated alone, under generated names
   (`WorldIdentityRows`).
-- **The operator is a principal kind.** `Principal.IsAuthority` is "console or
-  world", `CommandAudienceExtensions.Admits` gives `CommandAudience.Operator` to
-  `PrincipalKind.Console` alone, and the view's authority bypass reads the same
-  kind. On a silo the console is the machine's standard input.
+- **The operator was a principal kind in this audit.** D1 replaces that
+  console-or-world shortcut with `WorldGrants.IsOperator`, shared by command
+  admission and recipient views. On a silo the console remains the machine's
+  standard input; an admitted peer can separately hold Operate.
 - **Saved rows reach a changed source by declaration.** A durable image's rows
   load through `StateArena.TryValidateLoad`, which drops a row the current
   catalog does not declare
@@ -809,7 +815,7 @@ outside the guarantee; authored quotas and key exhaustion are inside it.
   and the world's own program hold it structurally. All other holders use
   the live grant table, including group membership and peer/session generation.
   Addons cannot hold it, directly or through a group. One `WorldGrants`
-  operator predicate replaces `Principal.IsAuthority`, `IsTrusted`, the
+  operator predicate replaces the retired kind-based authority shortcuts, the
   kind-based arm of `HoldsForAdministration`, and the program-section refusal.
   A Peer operator can administer grants and author programs; an ordinary seat
   retains its own-body consent operation but gains no administration power.
@@ -1014,12 +1020,10 @@ outside the guarantee; authored quotas and key exhaustion are inside it.
 **The fresh review's findings, one by one.** Each was checked against the
 source; none was reproduced by running.
 
-- **F1, nobody can moderate a hosted world remotely.** Confirmed:
-  `SiloControlSessionHost`'s remote list omits `world.peers`, and
-  `WorldNetworkCommandModule` registers it for `CommandAudience.Operator`, which
-  admits the console kind alone. Answered by the operator grant and the host
-  audience, step D1. A verb that disconnects a peer does not exist; D1 adds it
-  as an operator verb over the server's existing disconnect.
+- **F1, nobody could moderate a hosted world remotely.** Closed by D1:
+  `SiloControlAdmission` admits a live remote operator to `world.peers`, with
+  endpoints and verified identities withheld. `world.peer.disconnect` uses
+  the server's ordered disconnect, which closes transports and command admission.
 - **F2, a whole-document guard is refused for every recipient.** Confirmed in
   `WorldRecipientView.AdmitsDefinition`. The premise the finding left unconfirmed
   is half true: the policy-tier view's definition omits every withheld cell and
@@ -1040,8 +1044,8 @@ source; none was reproduced by running.
 - **F4, the refusal text misleads on a typo.** Confirmed:
   `WorldRecipientView.Refusal` answers "is not disclosed" for a name no row
   holds. Step D2.
-- **The rule keys on the principal's kind.** Confirmed: `Principal.IsAuthority`.
-  Step D1.
+- **The rule keyed on the principal's kind.** D1 replaces it with
+  `WorldGrants.IsOperator`.
 
 #### The structural write footprint
 
@@ -2032,7 +2036,7 @@ read adapter and disclosure implementation stay until step 6 replaces their call
 | 4. The layout — landed | `WorldStateDisclosure.DisclosedPlacements`, the one placement reading for every recipient door, re-deals a template whose dealt row can withhold: readable cells in the row's order take slots `0..n-1`, each child moved to its re-dealt slot with its own displacement (a child stores its displacement from its slot, and every frame is the slot's fixed-point offset plus it, `WorldPlacementFrameCompilation.LocalFrame`), re-dealt children following their template in slot order, and a placement authored under an unshown child absent with it; a template whose variant row alone withholds keeps its slots and masks each unreadable face, both rows recorded as placement reads; `$back$<slot>` children under `Placeholder`, picked as the template and refused by name on submission; the validator's allowlist (`WorldPlacementDeal.UndisclosingMembers`) over a restricted template, its children and every placement under them, which admits `preserve.transform` since a transform is a displacement; the sweep's child stamp shared as `WorldPlacementDeal.Child`; the tick delivers right after its response and deal sweeps, so an install is delivered on its own tick; a value-only delivery owes a replica or federation peer its document when the recipient's frame moved (`WorldDeliveryCursor.FrameMoved`), replacing the authority's placement-install flag | Harness: the probe and the card game compare equal at every door across every pair; `puck compile --validate` refuses the card game's rack with `solid` by name; `WorldDeckAndDisclosureLawTests` holds the re-dealt layout under all three policies, the facet refusals, the hidden variant under a public deal, the slot-independent rounding of a re-dealt position and a lifted card in a hidden hand shown at bit-identical frames whatever hides ahead of it; the card game's variants all lift its shown card; `PlacementDealLawTests` refuses a solid placement authored under a restricted child |
 | 0b. Remaining harness ingresses | Socket peer, mounted addon, traveller and Observe revoke/resume feed the existing transcript | Paired wire/ABI events and session lifetimes compare equal; no claim of full ingress coverage before this row |
 | D0a. Actual witnesses | Extend the existing typed payload/fuzzer vocabulary for W1–W8, H1–H3 and M5/M8; preserve positive controls | Record first difference or refutation for each. H1 varies only hidden `hand` membership while removing public `deck[x]`; include board/search conditional iteration. H2 interleaves an authority rule edit before an unrelated recipient edit. Vary private host/input/machine dependencies too. Reject unequal permitted images and all-refuse controls; retain RecipientOracleLawTests |
-| D1. Operator grant and every escalation closure | Operate and one live predicate replace IsAuthority, IsTrusted, HoldsForAdministration's kind trust and program refusal; effective-authority transition admission owns direct administration, groups and grants-section writes; Host audience, world.peers field split, peer disconnect and silo remote admission; single-subject admission restriction | Seat and Peer operators read hidden rows, declare, administer and author programs; revoke restores recipient restrictions and reseeds from that tick. Ordinary seats cannot join/form/edit an Operate group, change its membership source, self-grant via grants-section mutation, or escalate via either batch order. Own-body consent still works. Refuse addon/group laundering, Vouches, both FederatedAuthority forms, wildcard and below-Replica templates; accept pinned SignsDirectly and exact OAuth subjects. A silo operator sees peer/population/refusal data but no endpoint or verified identity and cannot invoke Host verbs. Disclosure observers holding Operate are INVALID. Build touched projects, focused laws, disclosure probe, verbs --headless-only and headless debug boot |
+| D1. Operator grant and every escalation closure — landed | WorldGrants admits the complete before/proposed authority graph and mints the transition consumed by private grant/group installation. Live Operate replaces kind-keyed administration; ordinary seats retain explicit budgets/masks and consent. Admission templates are single-subject Replica only. Host separation, peer report field split, disconnect, silo admission, cursor reseeding and observer invalidation are implemented | Seat and Peer operators read hidden rows, declare, administer and author programs; revoke restores recipient restrictions and reseeds from that tick. Ordinary seats cannot join/form/edit an Operate group, change its membership source, self-grant via grants-section mutation, or escalate via either batch order. Own-body consent still works. Refuse addon/group laundering, Vouches, both FederatedAuthority forms, wildcard and below-Replica templates; accept pinned SignsDirectly and exact OAuth subjects. A silo operator sees peer/population/refusal data but no endpoint or verified identity and cannot invoke Host verbs. Disclosure observers holding Operate are INVALID. Build touched projects, focused laws, disclosure probe, verbs --headless-only and headless debug boot |
 | D0b1. Declarations and acquisition wall | After D0a and D1, introduce the declarations-only carrier and restricted reader shared by existing kernels; remove full materialization from preparation. Move command and preparation consumers behind the same wall (former step 5), including operator-context minting | Build-negative fixtures reject raw definition/arena, seeds, lazy binders, IStateReader.Arena, constructor/callback/generic escapes and dropped faults. DISC001 and the public-surface law cover the moved consumers; touched projects build and existing doors retain conservative admission |
 | D0b2. Static closure and validation units | After D0b1, declaration-derived security universes, transitive reverse closure, partitioned binding/relation/input validators; actual reads may add checks only | H1 empty/nonempty hidden member and branch variants have equal verdicts. A new unlisted read faults. Negative lookup, new declaration and enumeration invalidate correctly. Count sparse/HUD-bound writes, document edits and 1/400-row, 1/1000-recipient workloads, including retained edges; existing recipient admission is not relaxed |
 | D0b3. Host preparation and reservations | After D0b2, envelope, face, population, solids, adjacency, spatial, machines and addons use declared reservations or transaction reads; no raw host store or late refusable install | Public placement edit succeeds in both restricted-deal variants at declared capacity. Private population, memory binding and input-selection pairs compare equal; prepared results install without revalidation. Count copies, scans and staged bytes |

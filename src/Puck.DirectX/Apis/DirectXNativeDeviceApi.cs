@@ -156,7 +156,18 @@ public sealed unsafe class DirectXNativeDeviceApi : IDirectXDeviceApi {
             );
         }
 
-        return DirectXFeatureReads.Capabilities(support: new DirectXDeviceFeatureSupport(device: ((ID3D12Device*)deviceHandle)));
+        var device = ((IUnknown*)deviceHandle);
+        var residencyPriority = device->QueryInterface(ppvObject: out ID3D12Device1* device1).Succeeded;
+        var enqueueMakeResident = device->QueryInterface(ppvObject: out ID3D12Device3* device3).Succeeded;
+
+        if (residencyPriority) { _ = ((IUnknown*)device1)->Release(); }
+        if (enqueueMakeResident) { _ = ((IUnknown*)device3)->Release(); }
+
+        return DirectXFeatureReads.Capabilities(
+            enqueueMakeResident: enqueueMakeResident,
+            residencyPriority: residencyPriority,
+            support: new DirectXDeviceFeatureSupport(device: ((ID3D12Device*)deviceHandle))
+        );
     }
     /// <inheritdoc/>
     public GpuMemoryProfile GetMemoryProfile(nint deviceHandle) =>

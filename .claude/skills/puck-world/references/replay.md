@@ -977,8 +977,7 @@ The contracts a change must keep:
   switch or a cleared window. `world.history row` echoes exactly that.
   `world.history.drag` reads `WorldHistory.Pointer`, the row a presented host
   attaches, which hit-tests the rectangle the overlay draws
-  (`HistoryRowWriter.Rect`). `HistoryScrubLawTests` drives all of it from a
-  seat's command session.
+  (`HistoryRowWriter.Rect`). `HistoryScrubLawTests` retains the branch-hash and saved-tape replay invariants.
 - **Shadows for what-ifs.** `diff` and `replay-edit` run on a
   `WorldHistoryShadow` (`FromCheckpoint`, its own machine host, a scratch
   owned-world catalog), never on the live server.

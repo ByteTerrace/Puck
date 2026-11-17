@@ -241,9 +241,9 @@ public sealed partial class ShaderInterface {
         }
         if (
             member.Length.HasValue &&
-            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler))
+            (member.Kind is not (ShaderInterfaceMemberKind.Array or ShaderInterfaceMemberKind.Value or ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler or ShaderInterfaceMemberKind.ReadOnlyBuffer))
         ) {
-            throw new InvalidDataException(message: $"{where}: only an array, a block value, a sampled image or a sampler takes a length.");
+            throw new InvalidDataException(message: $"{where}: only an array, a block value, a sampled image, a sampler or a read-only buffer takes a length.");
         }
         // A block array's element is a whole 16-byte row on both backends only when it is a four-component vector: a
         // shorter element pads to a row in a constant block, which a host writing element after element would miss.

@@ -43,6 +43,13 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const int LimitsMaxPushConstantsSizeOffset = (PhysicalDeviceLimitsOffset + 32);
     // maxUniformBufferRange follows the six image/texel-buffer dimension uints.
     private const int LimitsMaxUniformBufferRangeOffset = (PhysicalDeviceLimitsOffset + 24);
+    // The VkDeviceSize sparseAddressSpaceSize follows bufferImageGranularity at 48, and minStorageBufferOffsetAlignment
+    // follows the texel and uniform offset alignments at 312 and 320; VkPhysicalDeviceLimits is 504 bytes, so
+    // VkPhysicalDeviceSparseProperties's five VkBool32s follow at 800, residencyNonResidentStrict last (offsets computed
+    // from the Vulkan SDK 1.4.363 vulkan_core.h layout, which also places the limits above where this file reads them).
+    private const int LimitsSparseAddressSpaceSizeOffset = (PhysicalDeviceLimitsOffset + 56);
+    private const int LimitsMinStorageBufferOffsetAlignmentOffset = (PhysicalDeviceLimitsOffset + 328);
+    private const int SparseResidencyNonResidentStrictOffset = (PhysicalDeviceLimitsOffset + 504 + 16);
     private const uint StructureTypePhysicalDeviceDriverProperties = 1000196000;
     private const uint StructureTypePhysicalDeviceFeatures2 = 1000059000;
     private const uint StructureTypePhysicalDeviceIdProperties = 1000071004;
@@ -281,7 +288,10 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 MaxPerStageStorageImages: Read(offset: LimitsMaxPerStageStorageImagesOffset),
                 MaxPerStageUniformBuffers: Read(offset: LimitsMaxPerStageUniformBuffersOffset),
                 MaxPushConstantBytes: Read(offset: LimitsMaxPushConstantsSizeOffset),
-                MaxRootSignatureWords: 0U
+                MaxRootSignatureWords: 0U,
+                Backing: ((Read(offset: SparseResidencyNonResidentStrictOffset) != 0U) ? GpuBackingSupport.SparseNonResidentStrict : GpuBackingSupport.None),
+                SparseAddressSpaceBytes: unchecked((ulong)Marshal.ReadInt64(ofs: LimitsSparseAddressSpaceSizeOffset, ptr: propertiesBuffer)),
+                StorageBufferOffsetAlignment: checked((uint)Marshal.ReadInt64(ofs: LimitsMinStorageBufferOffsetAlignmentOffset, ptr: propertiesBuffer))
             );
         } finally {
             m_allocator.Free(ptr: propertiesBuffer);
@@ -804,7 +814,7 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
         return false;
     }
     /// <inheritdoc/>
-    public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) {
+    public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType, int flag = 0) {
         ValidatePhysicalDeviceInputs(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle
@@ -842,6 +852,9 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
             physicalDeviceHandle,
             ((nint)(&features2))
         );
-        return (0 != *((uint*)(featureBlock + FeatureFlagOffset)));
+        ArgumentOutOfRangeException.ThrowIfNegative(value: flag);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: (FeatureFlagOffset + ((flag + 1) * sizeof(uint))), other: FeatureBlockByteSize, paramName: nameof(flag));
+
+        return (0 != *((uint*)(featureBlock + FeatureFlagOffset + (flag * sizeof(uint)))));
     }
 }

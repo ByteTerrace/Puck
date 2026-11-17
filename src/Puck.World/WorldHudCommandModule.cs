@@ -309,7 +309,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "audio.render",
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             description: $"Renders one HUD Text element's resolved text and authored voice to a 48 kHz stereo PCM WAV, without a device: {AudioRenderForms.Spelling}. Ignores visibility so a headless World can export a hidden panel. Text, pitch, formants, cadence and rests use the live playback source; repeated exports of unchanged text and voice are byte-identical.",
             forms: AudioRenderForms,
             handler: (_, args) => RenderSpeech(args: args),

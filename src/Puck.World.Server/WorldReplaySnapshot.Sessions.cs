@@ -21,6 +21,7 @@ public sealed partial class WorldReplaySnapshot {
 
         WorldServerEvent serverEvent = kind switch {
             16 => new WorldServerEvent.SessionAdmitted(
+                Tier: (WorldDisclosureTier)reader.ReadByte(),
                 Session: session,
                 Templates: ReadTapeArray(
                     minimumBytesEach: 6,
@@ -70,6 +71,7 @@ public sealed partial class WorldReplaySnapshot {
                     principal: admitted.Session,
                     writer: writer
                 );
+                writer.WriteByte((byte)admitted.Tier);
                 writer.WriteArray(
                     items: admitted.Templates,
                     writeItem: WorldAuthorityCheckpointCodec.WriteAdmissionGrant

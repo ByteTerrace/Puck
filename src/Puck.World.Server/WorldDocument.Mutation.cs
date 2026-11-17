@@ -121,6 +121,7 @@ public sealed partial class WorldDocument {
         }
 
         if (!TryCompose(
+            authority: Host.GrantTable,
             current: current,
             mutation: mutation,
             tick: tick,
@@ -356,7 +357,10 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
+            if (!Host.GrantTable.TryPrepareDocument(mutation.Principal, current, candidate,
+                WorldMutationKindCatalog.SectionOf(mutation) == WorldSection.Grants, out var authority, out reason)) { return false; }
             prepared = new WorldPreparedMutation(
+                authority: authority!,
                 addonPlan: addonPlan,
                 arena: arena,
                 candidate: candidate,
@@ -419,13 +423,16 @@ public sealed partial class WorldDocument {
             // (InstallKindOf); a value install carries a prepared arena only for pool storage.
             switch (prepared.Kind) {
                 case WorldInstallKind.Value:
+                    prepared.Authority.Install();
                     InstallRuntimeStateValue(definition: candidate, mutation: mutation, arena: prepared.Arena);
                     break;
                 case WorldInstallKind.Presentation:
+                    prepared.Authority.Install();
                     InstallPresentation(definition: candidate);
                     break;
                 default:
                     Install(
+                        authority: prepared.Authority,
                         arena: prepared.Arena,
                         definition: candidate,
                         compilation: prepared.Compilation,

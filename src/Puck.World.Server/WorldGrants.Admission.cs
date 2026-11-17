@@ -91,6 +91,7 @@ public sealed partial class WorldGrants {
     /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
     internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
+        if (!Host.IsLivePeer(peer.Identity)) { return; }
         ApplyLifecycleEvents(
             admitted: [],
             disconnected: [peer],
@@ -200,7 +201,7 @@ public sealed partial class WorldGrants {
             admitted: out admitted
         )
         ) {
-            admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
+            admitted = admitted with { AdmissionTrust = decision.TrustIdentity, Tier = decision.Tier };
             ApplyLifecycleEvents(
                 admitted: [admitted],
                 disconnected: [],
@@ -243,7 +244,7 @@ public sealed partial class WorldGrants {
             return false;
         }
 
-        admitted = admitted with { AdmissionTrust = decision.TrustIdentity };
+        admitted = admitted with { AdmissionTrust = decision.TrustIdentity, Tier = decision.Tier };
         // A transfer commit's admission is its landing's consequence: the tape's arrival entry lands it again.
         ApplyLifecycleEvents(
             admitted: [admitted],
@@ -450,28 +451,10 @@ public sealed partial class WorldGrants {
                 continue;
             }
 
-            var installedTemplates = new List<WorldAdmissionGrant>();
-
-            foreach (var template in current.Templates) {
-                if (revokedKeys.Contains(item: (template.Capability, template.SubjectFor(bodyIndex: index)))) {
-                    continue;
-                }
-
-                if (TryApplyGrant(
-                    grant: new WorldGrant(
-                        Grantee: principal,
-                        Capability: template.Capability,
-                        Subject: template.SubjectFor(bodyIndex: index),
-                        Exclusive: template.Exclusive,
-                        Budget: template.Budget,
-                        EventBudget: template.EventBudget,
-                        KindMask: template.KindMask
-                    ),
-                    actor: Principal.Console
-                )) {
-                    installedTemplates.Add(item: template);
-                }
-            }
+            var templates = current.Templates.Where(template => !revokedKeys.Contains((template.Capability, template.SubjectFor(index)))).ToArray();
+            var rows = templates.Select(template => new WorldGrant(principal, template.Capability, template.SubjectFor(index), template.Exclusive,
+                Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask)).ToArray();
+            IReadOnlyList<WorldAdmissionGrant> installedTemplates = TryGrantSet(rows, Principal.World, out _) ? templates : [];
 
             // The next absence comparison may only contain rows that ACTUALLY reached the live table. An authored
             // row rejected by exclusivity or another grant-door rule was never present to revoke; recording it here

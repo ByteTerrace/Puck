@@ -83,6 +83,7 @@ public sealed partial class WorldGrants {
                 Input: entry.Input,
                 ObserverEnded: entry.ObserverEnded,
                 Session: entry.Principal,
+                Tier: entry.Tier,
                 Templates: entry.Templates
             ));
         }
@@ -104,6 +105,7 @@ public sealed partial class WorldGrants {
                     principal: session.Session,
                     templates: session.Templates
                 ) {
+                    Tier = session.Tier,
                     BodyGeneration = session.BodyGeneration,
                     BodyIndex = session.BodyIndex,
                     Input = session.Input,
@@ -215,6 +217,7 @@ public sealed partial class WorldGrants {
                     templates: verdict!.Templates
                 ),
                 Session: session,
+                Tier: verdict.Tier,
                 Templates: verdict.Templates
             )
         );
@@ -341,13 +344,10 @@ public sealed partial class WorldGrants {
         m_sessions[session.Index] = new SessionEntry(
             principal: session,
             templates: admitted.Templates
-        );
+        ) { Tier = admitted.Tier };
 
-        foreach (var grant in admitted.MintedGrants) {
-            _ = TryApplyGrant(
-                actor: Principal.Console,
-                grant: grant
-            );
+        if (!TryGrantSet(admitted.MintedGrants, Principal.World, out var reason)) {
+            Host.Document.DenyGrantTable("session grant set refused: " + reason, SubmissionEnvelope.LocalConnectionId, 0);
         }
     }
     /// <summary>Applies an embodiment: records the body and installs the body-relative rows.</summary>
@@ -392,6 +392,7 @@ public sealed partial class WorldGrants {
             events.Add(item: new WorldServerEvent.SessionAdmitted(
                 MintedGrants: [.. Rows(principal: entry.Principal)],
                 Session: entry.Principal,
+                Tier: entry.Tier,
                 Templates: entry.Templates
             ));
 
@@ -599,6 +600,7 @@ public sealed partial class WorldGrants {
         // The pointer ray the strongest press since the last settled step was made along.
         public SourceRay? PressedRay { get; set; }
 
+        public WorldDisclosureTier Tier { get; init; }
         public Principal Principal { get; } = principal;
         public IReadOnlyList<WorldAdmissionGrant> Templates { get; } = templates;
     }

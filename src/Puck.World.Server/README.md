@@ -2257,8 +2257,8 @@ membership expansion (`WorldGrants.TryRoleGroupExpansion` over
 role projection on every check, so a departed, null-role, or differently-roled
 member never retains authority through a stale group hold. The projection is
 derived from the document, not carried in a checkpoint: construction and every
-install re-sync it (`WorldGrants.SyncGroups`), and checkpoint restoration
-rebuilds it from the restored definition (`WorldGrants.RestoreGroups`) before
+install re-sync it through the admitted `WorldGrants.PreparedAuthorityTransition`, and checkpoint restoration
+rebuilds it from the restored definition through that same transition before
 any admission or read consults it, keeping the captured revision.
 
 ## Screen machines (`IWorldMachineHost.cs`)

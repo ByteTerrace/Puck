@@ -9348,7 +9348,8 @@
         "Observe",
         "Control",
         "Mutate",
-        "Edit"
+        "Edit",
+        "Operate"
       ],
       "title": "WorldCapability"
     },

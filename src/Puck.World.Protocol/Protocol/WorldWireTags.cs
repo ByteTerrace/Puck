@@ -20,6 +20,7 @@ public static class WorldWireTags {
             case 2: value = WorldCapability.Control; return true;
             case 3: value = WorldCapability.Mutate; return true;
             case 4: value = WorldCapability.Edit; return true;
+            case 5: value = WorldCapability.Operate; return true;
             default: value = default; return false;
         }
     }
@@ -112,6 +113,7 @@ public static class WorldWireTags {
             case WorldCapability.Control: wire = 2; return true;
             case WorldCapability.Mutate: wire = 3; return true;
             case WorldCapability.Edit: wire = 4; return true;
+            case WorldCapability.Operate: wire = 5; return true;
             default: wire = default; return false;
         }
     }

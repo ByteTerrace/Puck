@@ -2,7 +2,7 @@
 // SdfMeshDetail.WriteGpu. Draw metadata is the four rows at SdfMeshRecord.SelectionWord, written once per changed draw.
 uint4 sdfSelectionRow(uint record, uint row) {
     uint word = record + SDF_MESH_SELECTION_WORD + 4u * row;
-    return uint4(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u], sdfMeshRegion[word + 3u]);
+    return uint4(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u), sdfMeshRecordWord(word + 3u));
 }
 float sdfSelectionRadius(float3 axis, float3 x, float3 y, float3 z) {
     return (abs(dot(axis, x)) + abs(dot(axis, y))) + abs(dot(axis, z));
@@ -61,12 +61,12 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed) {
     float4 detail = asfloat(sdfMeshOcclusionCandidates[1]);
     if (unboxed || count == 0u || detail.x == 0.0) { return 0u; }
     if (detail.x == 3.0) { return min((uint)detail.y, count); }
-    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
+    uint table = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
     float scale = asfloat(x.w);
     uint chosen = 0u;
     if (detail.x == 2.0) {
         [loop]
-        while (chosen < count && asfloat(sdfMeshRegion[table + 3u * (chosen + 1u) + 2u]) * scale <= detail.w) { chosen++; }
+        while (chosen < count && asfloat(sdfMeshWord(table + 3u * (chosen + 1u) + 2u)) * scale <= detail.w) { chosen++; }
         return chosen;
     }
     float4 eye = asfloat(sdfMeshOcclusionCandidates[2]);
@@ -80,12 +80,12 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed) {
     chosen = (eye.w == 0.0 && previous.z == y.w) ? min(previous.y, count) : 0u;
     // Dynamic indices read device storage, never a dynamically indexed local array.
     [loop]
-    while (chosen < count && asfloat(sdfMeshRegion[table + 3u * (chosen + 1u) + 2u]) * scale <= 1.0) { chosen++; }
+    while (chosen < count && asfloat(sdfMeshWord(table + 3u * (chosen + 1u) + 2u)) * scale <= 1.0) { chosen++; }
     [loop]
-    while (chosen > 0u && asfloat(sdfMeshRegion[table + 3u * chosen + 2u]) * scale > direction.w) { chosen--; }
+    while (chosen > 0u && asfloat(sdfMeshWord(table + 3u * chosen + 2u)) * scale > direction.w) { chosen--; }
     return chosen;
 }
 uint sdfSelectionVertices(uint record, uint level) {
-    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
-    return sdfMeshRegion[table + 3u * level + 1u];
+    uint table = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
+    return sdfMeshWord(table + 3u * level + 1u);
 }

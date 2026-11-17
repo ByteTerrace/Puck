@@ -10,8 +10,8 @@ documentId: "garden-tests"
 
 // The crawl scenario drives a spider, and the rumour scenario stands a hound behind the hedge.
 grants [
-  { capability: Drive, grantee: "seat1", subject: "body:8" }
-  { capability: Drive, grantee: "seat1", subject: "body:17" }
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:8" }
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:17" }
 ]
 
 placements {

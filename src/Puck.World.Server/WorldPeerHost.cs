@@ -150,6 +150,7 @@ public sealed class WorldPeerHost : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: authenticator);
 
         m_server = server;
+        m_server.PeerDisconnected += ClosePeer;
         m_authenticator = authenticator;
         m_network = (network ?? new WorldPeerNetwork(
             timeProvider: m_timeProvider,
@@ -217,6 +218,11 @@ public sealed class WorldPeerHost : IDisposable {
         try { connection.Dispose(); } catch (Exception ex) when ((ex is SocketException or ObjectDisposedException or InvalidOperationException)) {
             // The lane is already gone; there is nothing left to end politely.
         }
+    }
+    private void ClosePeer(Principal principal) {
+        PeerStream[] clients;
+        lock (m_connectionsLock) { clients = m_connections.Where(row => row.Principal == principal).Select(row => row.Client).ToArray(); }
+        foreach (var client in clients) { CloseConnection(client); }
     }
     private void CloseConnections() {
         m_credentialTimer?.Dispose();
@@ -1980,6 +1986,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
 
         m_disposed = true;
+        m_server.PeerDisconnected -= ClosePeer;
 
         CloseConnections();
         if (m_ownsNetwork) { m_network.Dispose(); }
@@ -2102,6 +2109,7 @@ public sealed class WorldPeerHost : IDisposable {
         public void Dispose() {
             lock (m_lock) {
                 m_disposed = true;
+
                 m_lifetime.Dispose();
             }
         }
