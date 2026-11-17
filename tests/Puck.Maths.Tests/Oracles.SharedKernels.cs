@@ -122,15 +122,45 @@ internal static partial class Oracles {
         );
         var jitterX = (inset.IsZero
             ? BigInteger.Zero
-            : (((BigInteger)hash.X) % inset));
+            : ScatterJitterReference(blockX: blockX, blockZ: blockZ, bound: inset, laneZ: false, seed: seed, word: hash.X));
         var jitterZ = (inset.IsZero
             ? BigInteger.Zero
-            : (((BigInteger)hash.Y) % inset));
+            : ScatterJitterReference(blockX: blockX, blockZ: blockZ, bound: inset, laneZ: true, seed: seed, word: hash.Y));
 
         return (
             (((((BigInteger)blockX) * spacing) + radius) + jitterX),
             (((((BigInteger)blockZ) * spacing) + radius) + jitterZ)
         );
+    }
+    /// <summary>One scatter axis's offset in <c>[0, bound)</c>, by Lemire's rejection stated in arbitrary width: a word
+    /// <c>w</c> is kept when the low 32 bits of <c>w·bound</c> are at least <c>2³² mod bound</c>, and then maps to
+    /// <c>⌊w·bound / 2³²⌋</c>; a rejected word is replaced by the same lane of the block's hash under
+    /// <c>seed + attempt·0x9E3779B9</c>.</summary>
+    /// <param name="blockX">The block index along X.</param>
+    /// <param name="blockZ">The block index along Z.</param>
+    /// <param name="seed">The hash seed.</param>
+    /// <param name="bound">The positive exclusive bound.</param>
+    /// <param name="laneZ">Whether the axis reads the hash's Y lane, else its X lane.</param>
+    /// <param name="word">The first attempt's word.</param>
+    /// <returns>The accepted offset.</returns>
+    private static BigInteger ScatterJitterReference(int blockX, int blockZ, uint seed, BigInteger bound, bool laneZ, uint word) {
+        var window = (TwoTo32 % bound);
+
+        for (var attempt = 1U; ; ++attempt) {
+            var product = (((BigInteger)word) * bound);
+
+            if ((product % TwoTo32) >= window) {
+                return (product / TwoTo32);
+            }
+
+            var next = Pcg3dReference(
+                x: WrapToUInt32(value: blockX),
+                y: WrapToUInt32(value: blockZ),
+                z: WrapToUInt32(value: (((BigInteger)seed) + (((BigInteger)attempt) * 0x9E3779B9U)))
+            );
+
+            word = (laneZ ? next.Y : next.X);
+        }
     }
     /// <summary>Whether an offset lies in the closed cone about a forward with half-angle cosine <c>c/2¹⁶</c>, decided
     /// exactly: <c>(o·f)·2¹⁶ ≥ c·√(|o|²|f|²)</c> by squaring both sides in arbitrary width once their signs are

@@ -127,8 +127,10 @@ refers to.
 
 A read of a cell the row doesn't declare is refused at compile time with
 `RuleRefusal.StateCellUndeclared`, because an undeclared cell would read zero
-forever. A declared cell that the row doesn't currently hold reads zero at run
-time. How each dynamic key resolves during an evaluation is described in
+forever. A row declares its authored cells, every cell of its topology, and
+every key its token domain row declares, so a pile that starts empty still
+answers `hand["c"]` when the pile's domain row declares `c`. A declared cell
+that the row doesn't currently hold reads zero at run time. How each dynamic key resolves during an evaluation is described in
 [Resolve a cell key](rules.md#resolve-a-cell-key).
 
 ### Channel objects in world JSON

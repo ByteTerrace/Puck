@@ -26,8 +26,9 @@ public static partial class RuleCompiler {
         field = default;
         return false;
     }
-    /// <summary>Determines whether a row declares the cell a literal key names: an authored cell, or, on a board
-    /// row, any cell of its topology, which every board declares whether or not it holds a value.</summary>
+    /// <summary>Determines whether a row declares the cell a literal key names: an authored cell, on a board
+    /// row any cell of its topology, or on a row keyed over another row's keys any key that row declares; each is
+    /// declared whether or not it holds a value.</summary>
     /// <param name="row">The row read.</param>
     /// <param name="key">The literal cell key.</param>
     /// <param name="context">The compile context the board's topology resolves in.</param>
