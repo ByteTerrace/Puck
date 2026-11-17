@@ -393,10 +393,11 @@ public sealed record TextRunDocument(
     /// them from it.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool Engraves => string.Equals(a: Mode, b: ModeEngrave, comparisonType: StringComparison.Ordinal);
-    /// <summary>The number of glyph shapes this run expands to for the per-stamp shape budget — its non-whitespace
+    /// <summary>The number of glyph shapes this run expands to in <see cref="CreationDocument.StampShapeCount"/>'s bake-work
+    /// report — its non-whitespace
     /// Unicode scalar count, a conservative upper bound of the atlas's laid-out placements (which skip whitespace and
     /// unmapped code points). Counted in runes, matching the one-glyph-per-scalar expansion, so a supplementary-plane
-    /// scalar (a surrogate pair) charges the budget once, not twice. Whitespace-only / empty text contributes nothing.
+    /// scalar (a surrogate pair) counts once, not twice. Whitespace-only / empty text contributes nothing.
     /// Derived (recomputed from <see cref="Text"/>), so it is kept off the wire.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public int GlyphCount {
@@ -671,11 +672,11 @@ public sealed record CreationDocument(
 
         return false;
     }
-    /// <summary>The creation's total per-stamp shape budget: its authored shapes (a panelled shape counts as 2 — its
+    /// <summary>The creation's bake work in shape operands, a report and never an admission budget (nothing refuses a
+    /// creation for this count): its authored shapes (a panelled shape counts as 2 — its
     /// eroded copy is a second emitted primitive; each of a shape's trims counts 2 more — the host's own eroded copy
     /// plus the reference's own dilated copy) plus every text run's expanded glyph count (a run counts as its
-    /// letters — a world stamps text as real Glyph geometry, so it competes for the same per-stamp shape budget the
-    /// boxes do).</summary>
+    /// letters — a world stamps text as real Glyph geometry).</summary>
     /// <returns>The total shape count a placement of this creation emits.</returns>
     public int StampShapeCount() {
         var count = 0;

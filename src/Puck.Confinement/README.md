@@ -57,12 +57,16 @@ for an install root. From a held directory:
 
 - `Child`, `OpenFile` and `Entries` open and list relative to the handle.
 - `TryAcquireLock` and `AcquireLock` take a persistent lock file's exclusive lock.
+  `AcquireLock` and `Puck.Abstractions.FileLock`'s synchronous and asynchronous waits share
+  `FileLockWait`'s retry policy; each opener defines contention and each caller defines its deadline.
 - `TryHoldShared` registers the handle as a holder of its directory, and
   `TryOpenChildForRemoval` opens a child for removal, which fails while any other
   process holds it.
 - `MoveTo` moves a directory held for removal into another held directory, and
   `DeleteTree` and `DeleteChild` remove a tree step by step through handles; a
-  link anywhere refuses the removal there.
+  link anywhere refuses the removal there. `DeleteTree` and `RemoveTree` can opt into
+  `removeLinks` to unlink descendant links themselves, leaving their targets untouched;
+  run-directory cleanup uses this option. The root must still be a directory rather than a link.
 - `IsMapped` reports whether a file in the directory backs one of this process's
   memory mappings, which the launcher uses to confirm the version directory a
   process was loaded from.

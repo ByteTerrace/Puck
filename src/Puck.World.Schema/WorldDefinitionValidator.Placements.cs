@@ -444,8 +444,8 @@ public static partial class WorldDefinitionValidator {
     }
     // The creation ASSET rows: id presence/uniqueness, the document's own strict schema + structural invariants
     // through CreationCanonicalizer (the ONE pipeline — never a re-implementation), the hash pin (the carried
-    // hash must equal the canonical hash — a tampered/corrupt row rejects loudly), and the per-stamp shape budget
-    // (word-exact ceiling). Returns the resolved id set for the placement gate.
+    // hash must equal the canonical hash — a tampered/corrupt row rejects loudly). Returns the resolved id set for the
+    // placement gate.
     // The animation facets that reach outside the creation: a curve waveform names a row of this world's curves, a
     // state signal names a numeric row of its state — neither is knowable to the portable document alone.
     private static void ValidateCreationBindings(WorldDefinition definition, Puck.World.Authoring.CreationDocument document, List<string> errors, string path) {
@@ -719,10 +719,6 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path}.doc.palette[{slot}].color {WorldColor.Grammar}.");
                 }
             }
-
-            var stampShapes = creation.Document.StampShapeCount();
-
-
 
             // Relief spans one composed field. Root motion preserves it; independently posed shapes do not.
             if (

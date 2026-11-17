@@ -675,7 +675,10 @@ laws exercise that boundary.
   edges that the triangle across the edge splits at too (found by position, so a
   cut's boundary point that landed on an end counts), leaving no T-junction for
   the audit to count as an open edge, and one whose vertices disagree is cut along the
-  boundary its edges' bisection finds (`SdfMeshMaterialCut`). A material
+  boundary its edges' bisection finds (`SdfMeshMaterialCut`). `SdfMeshMaterialCut.Build` holds its lists to
+  `MaxTrianglesPerQuad` and `MaxVerticesPerQuad` for each contour quad, checked in one place (`Within`, after every
+  growth); a cut past them throws `InvalidOperationException`, which `SdfMeshPathBake.Build` reports as
+  `group <n> refused: the material cut of …` and lands the group as a refused mesh. A material
   boundary only lies on the surface within one group: two groups' shapes meet
   as crossing meshes, whatever their materials.
 - **Moving blends bake at authored rest.** The pooled emitter marks its delta-frame instances
@@ -1063,8 +1066,10 @@ laws exercise that boundary.
   mesh renumbered (`SdfMeshPathBake.Renumbers`), so the bodies after it bake
   nothing, though they stand off their baked pose (the renumber law in
   `SdfMeshPathBakeLawTests.Rebuild`).
-- **A published mesh is what the store reads back.** `SdfMeshLibrary.Store` writes the entry and publishes it
-  through `TryLoad`, so a cold bake draws the decoded mesh a warm boot loads, and every store-published mesh's normals
+- **A published mesh is what the store answers.** `SdfMeshLibrary.Store` writes the entry and publishes the baked
+  mesh in the form a decode of that entry gives (`SdfMeshStoreCodec.Conform`: positions on the entry's grid, unit
+  normals through their octahedral words, every other plane exact), without reading the entry back, so a cold bake
+  draws the mesh a warm boot loads (`AStoredMeshIsWhatItsEntryAnswersWithoutTheEntryBeingRead`), and every store-published mesh's normals
   and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
   region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
   `mesh-released-now` and `mesh-restore-misses`). Restores run on at most a quarter of the processors' pool
@@ -1089,9 +1094,10 @@ laws exercise that boundary.
   identity; one that changes it changes `SdfMeshStoreCodec.Magic`, which starts a
   new set, and `TryDecode` refuses any entry of another tag. The encoder stays in,
   because its quantization (`PositionWidth`, the octahedral normals) decides what
-  every later run draws: a cold bake publishes the mesh the store reads back. The
-  encoder's fit check and the decode share one expansion (`SdfMeshStoreCodec.Expand`),
-  so the encoder's budget holds for what the decode writes. The kernels' source
+  every later run draws: a cold bake publishes the mesh the store answers. The
+  encoder's fit check, the decode and `Conform` share one expansion (`SdfMeshStoreCodec.OnGrid`, `Expand`),
+  so the encoder's budget holds for what the decode writes and what a cold bake publishes. An edit to what a decode
+  answers for the two lossy planes changes `Conform` in the same change as the decode. The kernels' source
   closure is `passes/sdf-bake-world.hlsli`: their own interface
   (`isa/sdf-mesh-bake.interface.hlsli`, `SdfWorldInterfaces.MeshBakeParameters`:
   a pass block of `SdfWorldPackage.BakeValues` alone, the masks, samples and
