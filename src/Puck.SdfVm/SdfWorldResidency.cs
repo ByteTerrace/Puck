@@ -993,6 +993,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         tables.GpuWork.Add(client: probeWork);
         MeshIrradiance.GpuTrace = probeWork;
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
+        // A lattice a worker readies is taken when it is ready, not at the next frame.
+        MeshPathBake.Offered = tables.GpuWork.Wake;
         // The construction uploaded the frame's program; the frame is packed afresh.
         NoteProgram(program: frame.Program);
         m_packedFrame = null;

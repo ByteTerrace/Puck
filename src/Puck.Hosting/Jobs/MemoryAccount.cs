@@ -683,8 +683,10 @@ public sealed class MemoryAccount {
 
             if (!fits) {
                 // An owner's storage gives way only past the floor its reservations state: what it cannot run without is
-                // admitted like fixed storage.
-                if (givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + bytes) > entry.Floor))) {
+                // admitted like fixed storage. The floor is measured in the owner's own bytes, so it covers a resource
+                // within it whatever the block the device allocates to place it: a small resource's shared block is
+                // many times the resource, and judged by the block no floor would ever admit one.
+                if (givesWay || ((entry is { Classified: true }) && MemoryClasses.GivesWay(memoryClass: entry.Class) && ((entry.Held + Math.Min(val1: payerBytes, val2: bytes)) > entry.Floor))) {
                     Refused(pool: pool);
 
                     return new(Bytes: bytes, Net: net, Payer: null, Verdict: GpuMemoryVerdict.Refused);

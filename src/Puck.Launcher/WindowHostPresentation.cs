@@ -699,7 +699,8 @@ public sealed class WindowHostPresentation {
                             if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
                                 nextRenderDeadline = nowTimestamp;
                             } else {
-                                HostWaits.Until(
+                                // Serviced: background work that completes before the slot is taken up in this wait.
+                                HostWaits.Pace(
                                     deadlineTimestamp: nextRenderDeadline,
                                     precisionWaiter: precisionWaiter,
                                     time: m_time

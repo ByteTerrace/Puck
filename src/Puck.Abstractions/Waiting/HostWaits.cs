@@ -15,6 +15,13 @@ namespace Puck.Abstractions.Waiting;
 /// consumer, and a consumer's thread cannot become a pump.
 /// </para>
 /// <para>
+/// The pacer's wait is serviced (<see cref="Pace"/>): the pump thread sleeps on its deadline and on one wake event
+/// together and runs the work registered for it (<see cref="Serve"/>, a <see cref="WaitService"/>) each time the event
+/// is set, so work that completes between two iterations is taken up then rather than at the next one. Only that form
+/// services: a wait inside an iteration never re-enters a service, so a service runs only between a frame's present
+/// and the next control phase.
+/// </para>
+/// <para>
 /// The door keeps each thread's standing deadline wait and the latest expired ones (<see cref="Standing"/>,
 /// <see cref="Expired"/>). A wait whose object is already complete returns before any of that and allocates nothing.
 /// Waits read the host's monotonic clock (<see cref="Stopwatch"/>); none of this is simulation state.
@@ -32,6 +39,15 @@ public static class HostWaits {
 
     [ThreadStatic]
     private static ThreadSlot? CurrentSlot;
+
+    // Every served thread, kept for the life of the process so that its wake event is never finalized: a native
+    // completion registered on the event's handle (a Direct3D 12 fence's) may set it after its service is gone.
+    private static readonly List<ServedThread> ServedThreads = [];
+
+    /// <summary>The shortest delay a service may ask to run again by (<see cref="Serve"/>): half a millisecond, the
+    /// platform's high-resolution timer's own granularity. A service that asks for less is run again no sooner, so a
+    /// serviced wait sleeps between runs and never spins.</summary>
+    public static readonly TimeSpan LeastServiceDelay = TimeSpan.FromMilliseconds(value: 0.5);
 
     /// <summary>Gets the pump allowance the calling thread has left, or <see langword="null"/> when it is not the
     /// registered pump.</summary>
@@ -176,6 +192,92 @@ public static class HostWaits {
             ) {
                 Thread.Sleep(millisecondsTimeout: 1);
             }
+        }
+    }
+    /// <summary>Registers work the calling thread services while it sleeps in <see cref="Pace"/>. The thread need not be
+    /// the pump yet, and a thread that never paces serves nothing: the registration then only gives its owner the
+    /// thread's wake event.</summary>
+    /// <param name="reason">The subsystem served and what the service does.</param>
+    /// <param name="service">Runs on the calling thread inside its pacer wait, handed the time left before the pacer's
+    /// deadline, each time the thread's wake is set or the time a service asked for has come. It returns how long from
+    /// now it wants to run again whether or not it is woken (at least <see cref="LeastServiceDelay"/> is waited), or
+    /// <see langword="null"/> to run only when woken. It must not throw.</param>
+    /// <returns>The registration; disposing it ends it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="service"/> is <see langword="null"/>.</exception>
+    public static WaitService Serve(in WaitReason reason, Func<TimeSpan, TimeSpan?> service) {
+        ArgumentNullException.ThrowIfNull(argument: service);
+
+        var slot = Slot();
+
+        if (slot.Served is not { } served) {
+            slot.Served = served = new ServedThread();
+            lock (RegistryGate) { ServedThreads.Add(item: served); }
+        }
+
+        return served.Add(reason: in reason, service: service);
+    }
+    /// <summary>Sleeps until <paramref name="time"/> reads <paramref name="deadlineTimestamp"/>, servicing the calling
+    /// thread's registered work (<see cref="Serve"/>) meanwhile: the pacer's wait between two iterations. Each service
+    /// runs once as the wait begins, then again whenever the thread's wake is set (<see cref="WaitService.Wake"/>, a
+    /// fence's completion) or the time a service asked for comes, and the thread sleeps between runs on the deadline
+    /// and the wake together: on the precision waiter, or a millisecond at a time where the host offers none. With
+    /// nothing registered it is <see cref="Until"/>. It never spins, and like <see cref="Until"/> it is bounded by the
+    /// pacer's deadline rather than charged to the pump allowance.</summary>
+    /// <param name="deadlineTimestamp">The deadline, as a <paramref name="time"/> timestamp.</param>
+    /// <param name="time">The host loop's clock.</param>
+    /// <param name="precisionWaiter">The platform's high-resolution waiter, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="time"/> is <see langword="null"/>.</exception>
+    public static void Pace(long deadlineTimestamp, TimeProvider time, IPrecisionWaiter? precisionWaiter) {
+        ArgumentNullException.ThrowIfNull(argument: time);
+
+        if ((CurrentSlot?.Served is not { } served) || (served.Count == 0)) {
+            Until(deadlineTimestamp: deadlineTimestamp, precisionWaiter: precisionWaiter, time: time);
+
+            return;
+        }
+
+        var frequency = time.TimestampFrequency;
+        var wake = served.Wake;
+        // The Stopwatch timestamp a service asked to run again by, and whether the services are due: at once as the
+        // wait begins, since only a run tells when a service next wants one.
+        var due = long.MaxValue;
+        var serve = true;
+
+        while (true) {
+            var remaining = (deadlineTimestamp - time.GetTimestamp());
+
+            if (remaining <= 0L) {
+                return;
+            }
+
+            var left = TimeSpan.FromSeconds(value: (((double)remaining) / frequency));
+
+            if (serve) {
+                due = served.Run(remaining: left);
+                serve = false;
+
+                continue;
+            }
+
+            var sleep = left;
+
+            if (due != long.MaxValue) {
+                var until = Stopwatch.GetElapsedTime(startingTimestamp: Stopwatch.GetTimestamp(), endingTimestamp: due);
+
+                if (until <= TimeSpan.Zero) {
+                    serve = true;
+
+                    continue;
+                }
+                if (until < sleep) {
+                    sleep = until;
+                }
+            }
+            if ((precisionWaiter is null) || !precisionWaiter.TryWait(duration: sleep, wake: wake, woken: out var woken)) {
+                woken = wake.WaitOne(millisecondsTimeout: 1);
+            }
+
+            serve = (woken || ((due != long.MaxValue) && (Stopwatch.GetTimestamp() >= due)));
         }
     }
     /// <summary>Waits, with no deadline, for <paramref name="monitor"/> to be pulsed: a consumer idle on its own queue.
@@ -353,7 +455,49 @@ public static class HostWaits {
         public WaitConsumer? Consumer;
         public bool IsPump;
         public WaitRecord Record;
+        public ServedThread? Served;
         public bool Standing;
+    }
+
+    // What one thread services while it paces: its wake event and its registrations. A registration is added on the
+    // thread and may be removed from any, so the list is replaced whole and read without the lock.
+    internal sealed class ServedThread {
+        private readonly Lock m_gate = new();
+        private WaitService[] m_services = [];
+
+        public readonly AutoResetEvent Wake = new(initialState: false);
+
+        public int Count => Volatile.Read(location: ref m_services).Length;
+
+        public WaitService Add(in WaitReason reason, Func<TimeSpan, TimeSpan?> service) {
+            var added = new WaitService(reason: in reason, service: service, thread: this);
+
+            lock (m_gate) { Volatile.Write(location: ref m_services, value: [.. m_services, added]); }
+
+            return added;
+        }
+        public void Remove(WaitService service) {
+            lock (m_gate) { Volatile.Write(location: ref m_services, value: [.. m_services.Where(predicate: other => !ReferenceEquals(objA: other, objB: service))]); }
+        }
+        // Runs every service once and returns the Stopwatch timestamp the earliest asked to run again by, or
+        // long.MaxValue when none asked.
+        public long Run(TimeSpan remaining) {
+            var next = TimeSpan.MaxValue;
+
+            foreach (var service in Volatile.Read(location: ref m_services)) {
+                if ((service.Run(remaining: remaining) is { } delay) && (delay < next)) {
+                    next = delay;
+                }
+            }
+            if (next == TimeSpan.MaxValue) {
+                return long.MaxValue;
+            }
+            if (next < LeastServiceDelay) {
+                next = LeastServiceDelay;
+            }
+
+            return Stopwatch.GetTimestamp().AddSaturating(right: WaitDeadline.TicksOf(budget: next));
+        }
     }
 
     private interface IBlockingWait {

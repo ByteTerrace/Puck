@@ -16,6 +16,11 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the ring slot the latest upload wrote, whose region buffers the frame's passes bind, or -1 before the
     /// first upload.</summary>
     public int CurrentSlot => m_currentSlot;
+    /// <summary>Gets the generation a background job taken now reads: the uploads submitted so far. Such a job binds what
+    /// the latest of them sent, in <see cref="CurrentSlot"/>, so it may read any object the tables retire at or after
+    /// this generation and none retired before it; the job leases the generation until its fence
+    /// (<see cref="SdfGpuWork.OldestLease"/>).</summary>
+    public ulong BackgroundGeneration => m_uploads;
 
     /// <summary>Submits the frame's upload: waits the previous upload, flushes and copies what every region owes into
     /// the next ring slot, then submits it fenced. Nothing
@@ -39,6 +44,8 @@ public sealed partial class SdfWorldTables {
             m_completedUploads = m_uploads;
             DisposeRetired(completed: (m_uploads - 1UL));
         }
+        // The flush below rewrites the slot's buffers, which a background job that leased the slot may still read.
+        m_gpuWork.EndLeases(ringSlot: slot);
 
         var previousSlot = m_currentSlot;
 
@@ -92,10 +99,23 @@ public sealed partial class SdfWorldTables {
     // the object, and that upload may read it once more (a grown region's carry), so it is disposed once that upload's
     // fence signals, which one queue signals only after every earlier submission, every view that bound it among them.
     private void Retire(IDisposable replaced) => m_retired.Retire(after: m_uploads, item: replaced);
-    // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
-    internal void RetireBackgroundResource(IDisposable replaced) => Retire(replaced);
-    // Disposes every replaced object whose following upload has completed.
-    private void DisposeRetired(ulong completed) => m_retired.Release(completed: completed, release: static replaced => replaced.Dispose());
+    /// <summary>Retires a device object a background client replaced, through the tables' own retirement door: it is
+    /// disposed once the upload that follows has completed and no background job that could read it is in flight.</summary>
+    /// <param name="replaced">The replaced object, disposed by the tables.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="replaced"/> is <see langword="null"/>.</exception>
+    public void RetireBackgroundResource(IDisposable replaced) {
+        ArgumentNullException.ThrowIfNull(argument: replaced);
+        Retire(replaced: replaced);
+    }
+    // The one door a retired object is disposed through: every replaced object whose following upload has completed and
+    // that no background job in flight leased. A job taken at generation g may read whatever was retired at or after g
+    // (SdfGpuWork.OldestLease), so nothing from the oldest lease on is released; disposal of the tables themselves
+    // passes the largest point, after the service has drained its jobs.
+    private void DisposeRetired(ulong completed) {
+        var leased = m_gpuWork.OldestLease();
+
+        m_retired.Release(completed: ((leased == ulong.MaxValue) ? completed : Math.Min(val1: completed, val2: (leased - 1UL))), release: static replaced => replaced.Dispose());
+    }
     // Waits until every upload in flight has retired: what a rewrite of the only table no view reads, a bake request,
     // pays.
     private void WaitForUploads() {

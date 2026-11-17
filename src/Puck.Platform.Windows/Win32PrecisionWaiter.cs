@@ -35,4 +35,14 @@ public sealed class Win32PrecisionWaiter : IPrecisionWaiter, IDisposable {
             dueTime: duration
         );
     }
+    /// <inheritdoc/>
+    public bool TryWait(TimeSpan duration, WaitHandle wake, out bool woken) {
+        ArgumentNullException.ThrowIfNull(argument: wake);
+
+        woken = ((duration <= TimeSpan.Zero)
+            ? wake.WaitOne(millisecondsTimeout: 0)
+            : !m_timer.WaitOne(cancellationWaitHandle: wake, dueTime: duration));
+
+        return true;
+    }
 }
