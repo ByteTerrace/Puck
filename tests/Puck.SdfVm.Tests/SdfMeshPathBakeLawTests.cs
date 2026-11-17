@@ -36,7 +36,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
     private static (MeshBakeTestRun Run, SdfFrame Frame) BakeShared() {
         var (program, materials) = Program(shapes: Shapes);
-        var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "copies" });
+        var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "copies" });
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
@@ -88,7 +88,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var plates = new[] { 13.6f, 19.6f, 25.6f, 31.6f }.Select(selector: static z => new Shape(Center: new Vector3(x: 45f, y: 4.215f, z: z), Half: new Vector3(x: 24f, y: 0.035f, z: 0.2f), Rotation: Quaternion.Identity, Material: 0)).ToArray();
 
         var (program, materials) = Program(oneCopy: true, shapes: plates);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "plates" });
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "plates" });
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: program, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
@@ -379,7 +379,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var hinge = Quaternion.CreateFromAxisAngle(angle: 0.4f, axis: Vector3.UnitX);
 
         (SdfMeshBakeBatch Batch, MeshBakeTestRun Run) Take(Vector3 position, Quaternion orientation) {
-            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "pair" });
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "pair" });
             try {
                 var bake = bakeRun.Bake;
                 var dresser = bakeRun.Dresser;
@@ -450,7 +450,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var directory = scratch.PathOf(name: "meshes");
 
         MeshBakeTestRun Run(string name) {
-            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 7), Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name });
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = new SdfMeshBakeIdentity(value: 7), PlannedTier = MeshBakeTestRun.PlannedTier, Library = new SdfMeshLibrary(store: new SdfMeshStore(directory: directory)), Residency = name });
             try {
                 var bake = bakeRun.Bake;
                 var dresser = bakeRun.Dresser;
@@ -491,7 +491,8 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         Assert.Contains(collection: vertexMembers, filter: static member => (member == 0));
         Assert.Contains(collection: vertexMembers, filter: static member => (member == SdfMesh.NoMember));
 
-        // The region's record flags the members and names their words: the count, the member and a word a vertex.
+        // The region's record flags the members and names their words: the count, the member and the words of a vertex's
+        // influence, the first of which is its member (the root sentinel for a vertex that rides the draw).
         var placements = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var layout = SdfMeshRegion.Plan(draws: [draw], meshes: placements);
         var words = new uint[layout.Words];
@@ -505,7 +506,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         Assert.Equal(expected: 1u, actual: words[(skin + 1)]);
         Assert.Equal(expected: BitConverter.SingleToUInt32Bits(value: member.Orientation.W), actual: words[(skin + 8)]);
         for (var vertex = 0; (vertex < vertexMembers.Length); vertex++) {
-            Assert.Equal(expected: ((vertexMembers[vertex] == SdfMesh.NoMember) ? uint.MaxValue : vertexMembers[vertex]), actual: words[(((skin + 1) + SdfMeshRecord.MemberWords) + vertex)]);
+            Assert.Equal(expected: ((uint)vertexMembers[vertex]), actual: words[(((skin + 1) + SdfMeshRecord.MemberWords) + (SdfMeshRecord.SkinVertexWords * vertex))]);
         }
 
         // Another run loads the group from the store with its members.
@@ -539,7 +540,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
                 .Build();
         }
         (MeshBakeTestRun Run, SdfMeshBakeGroup Group, int Triangles) Bake(SdfProgram program) {
-            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "detailed" });
+            var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "detailed" });
             try {
                 var bake = bakeRun.Bake;
                 var dresser = bakeRun.Dresser;
