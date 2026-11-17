@@ -245,6 +245,17 @@ agent works in that mode by default, without asking:
     and transfers go. Reading the code finds as much: repeated work, needless
     copies and duplicated mechanisms are often visible on sight, and are fixed
     when found.
+  - Evidence is taken as a player takes it (the owner's ruling: "Pixel for
+    pixel matching isn't even desirable right now... so why do we keep
+    becoming OBSESSED with it?"). Look, feel and performance are judged in
+    real time and in motion: presented frames while moving, frame-time
+    statistics, counters and the artifacts a player meets (shimmer, pops,
+    holes, swimming shadows, hitches), on the benchmark route
+    ([the benchmark](docs/plans/benchmark.md)). Lockstep, settled stills and
+    equality with a previous build are a narrow tool for a change that claims
+    to change nothing (rule 4), never the default evidence and never the shape
+    of a new instrument. Evidence is not chosen because a machine can compare
+    it easily; an instrument that hides what a player sees is a defect.
   - Ergonomic is optimal (the owner's ruling). Cost depends on what a
     document means, never on how it is spelled: a `for`/`map`, a template, a
     fold or a `let` costs no more than the hand-unrolled, pasted or literal
