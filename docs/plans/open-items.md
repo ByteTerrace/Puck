@@ -317,12 +317,16 @@ and then its step C0.1, then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
-- [high] The rated screens' phase spread does not happen on a variable-rate
-  display: on the RTX 4070 at `debug.go desktop` (`world.rates`: `display=60hz
-  grid=none`), all eight 15 Hz screen sources render on one frame (`burst:
-  views=0 screens=8`), where the spread should hold about half. The schedule
-  laws prove only the fixed 60 Hz grid with a 30 Hz tick; `PresentationPhases`
-  and `PresentationRate.Holds` need a rule for a display with no grid.
+- [medium] A rated item's phase is held by its own cadence, so a long frame
+  that spans an interval for one item and not another (a hitch, a missed
+  frame on a fixed signal) can land two items that took a tier half a period
+  apart on one frame, and nothing moves them back: coalescing is absorbing.
+  A phase kept on the shared presentation clock (an item's position within
+  the period carried across its updates, or a lattice of period boundaries)
+  restores the spread but lets an interval pass the floor by up to a frame
+  where the greedy rule never does, so it changes what `PresentationRate.Holds`
+  promises; decide that before building it. `PresentationRateLawTests`
+  pins the cadence and the irregular frames.
 - [high] Gen-1 collections dominate the slow frames: at `debug.go desktop` on
   Direct3D 12, 600 iterations held 64 over 16.7 ms, the worst carrying 20 to
   28 ms pauses (47 collections pausing 674 ms), one iteration allocating

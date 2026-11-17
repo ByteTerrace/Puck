@@ -8,7 +8,10 @@ namespace Puck.Hosting;
 /// where waiting one more frame, estimated from the latest frame's span, would pass its period, so a slow or uneven frame
 /// (a variable-refresh display, a missed frame) never lowers the rate below N. On a display that shows frames on a fixed
 /// grid (<see cref="GridHertz"/>), the period is a whole number of grid steps rounded down, so the cadence stays even and
-/// never falls below N. A cap (<see cref="FramesAtMost"/>, "at most N Hz", an authored refresh or a source's own rate
+/// never falls below N. Off a grid, frames that land about one pacing step apart (<see cref="PacedFrameLow"/>,
+/// <see cref="PacedFrameHigh"/>), as a timer-paced variable-refresh display's do within the timer's jitter, count the same
+/// way in steps of <see cref="DisplayHertz"/>, which keeps each item's interval whole and the offset between two items
+/// fixed. A cap (<see cref="FramesAtMost"/>, "at most N Hz", an authored refresh or a source's own rate
 /// such as a machine's 59.7 Hz) counts presented frames, rounding the divisor up so the instance never renders faster
 /// than asked. Presentation only: nothing here reaches simulation state.
 /// <para>A floor also keeps rated work off the frames that run a simulation step, the frame thread's heaviest: on a
@@ -20,7 +23,7 @@ namespace Puck.Hosting;
 /// unbounded (offscreen), where a floor holds nothing and a cap renders every frame.</param>
 /// <param name="GridHertz">The rate presented frames land on a whole number of steps of: a fixed display signal's
 /// refresh rate, or the simulation's tick rate under lockstep; zero when frames land at any time, as on a
-/// variable-refresh display.</param>
+/// variable-refresh display, whose frames still count as steps of <paramref name="DisplayHertz"/> while they span about one.</param>
 /// <param name="Steps">Whether this frame's host iteration ran a simulation step (<see cref="FrameContext.Steps"/>).</param>
 /// <param name="StepsNext">Whether the host expects its next iteration to run a simulation step
 /// (<see cref="FrameContext.StepsNext"/>).</param>
@@ -29,6 +32,12 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
     /// a display presents a period apart read a few tenths of a millisecond either side of it, so without the slack a
     /// steady 60 Hz would update the 30 Hz tier on every frame. An interval may pass its period by this much.</summary>
     public const double ToleranceSeconds = 0.001;
+    /// <summary>The latest frame's span, in pacing steps (1 / <see cref="DisplayHertz"/>), above which a frame off a grid
+    /// lands on the pacing cadence: three quarters of a step.</summary>
+    public const double PacedFrameLow = 0.75;
+    /// <summary>The latest frame's span, in pacing steps, below which a frame off a grid lands on the pacing cadence: a
+    /// step and a half.</summary>
+    public const double PacedFrameHigh = 1.25;
 
     /// <summary>Gets whether the host paces presentation to a display, the only case a floor holds anything.</summary>
     public bool IsPaced => (DisplayHertz > 0);
@@ -45,11 +54,22 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
     // The frames a hold decided now must cover: this one, and the next too when this frame runs no step and the next
     // runs one, so an item held now never falls due on the step's frame.
     private int FramesHeld => ((!Steps && StepsNext) ? 2 : 1);
-    // The grid steps a floor's period spans on a fixed grid: the most whole steps that still update at least `hertz`
-    // times a second, and at least one.
-    private double GridSteps(int hertz) => Math.Max(
+    // The rate frames land on whole steps of for a decision: the fixed grid, or, off one, the pacing rate while the latest
+    // frame spans about one pacing step. A host that paces presentation with a timer lands its frames on that cadence to
+    // within the timer's jitter, so counting steps keeps every item's interval whole and an offset between two items
+    // fixed, where summing jittered spans at an integer ratio of the period (60 Hz frames, a 15 Hz tier) flips an
+    // interval between n and n - 1 frames and walks two items onto one frame. A frame far from the pacing step (a
+    // hitch, a display running off its target) is no step of it and is counted by its time.
+    private double LandingHertz(double frameSeconds) => ((GridHertz > 0d)
+        ? GridHertz
+        : (((DisplayHertz > 0) && (frameSeconds > (PacedFrameLow / DisplayHertz)) && (frameSeconds < (PacedFrameHigh / DisplayHertz)))
+            ? DisplayHertz
+            : 0d));
+    // The steps of a grid a floor's period spans: the most whole steps that still update at least `hertz` times a
+    // second, and at least one.
+    private static double GridSteps(double gridHertz, int hertz) => Math.Max(
         val1: 1d,
-        val2: Math.Floor(d: ((GridHertz / hertz) + 1e-9))
+        val2: Math.Floor(d: ((gridHertz / hertz) + 1e-9))
     );
     /// <summary>Decides a floor: whether an item that last updated <paramref name="elapsedSeconds"/> of presentation time
     /// ago holds its update through this frame and still updates at least <paramref name="hertz"/> times a second.</summary>
@@ -70,11 +90,11 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
         if (!(Steps && !StepsNext)) {
             elapsedSeconds += leadSeconds;
         }
-        if (GridHertz > 0d) {
-            var elapsed = Math.Round(value: (elapsedSeconds * GridHertz), mode: MidpointRounding.AwayFromZero);
-            var frame = Math.Max(val1: 1d, val2: Math.Round(value: (frameSeconds * GridHertz), mode: MidpointRounding.AwayFromZero));
+        if (LandingHertz(frameSeconds: frameSeconds) is (> 0d) and var landing) {
+            var elapsed = Math.Round(value: (elapsedSeconds * landing), mode: MidpointRounding.AwayFromZero);
+            var frame = Math.Max(val1: 1d, val2: Math.Round(value: (frameSeconds * landing), mode: MidpointRounding.AwayFromZero));
 
-            return ((elapsed + (frame * FramesHeld)) <= GridSteps(hertz: hertz));
+            return ((elapsed + (frame * FramesHeld)) <= GridSteps(gridHertz: landing, hertz: hertz));
         }
 
         return ((elapsedSeconds + (Math.Max(val1: 0d, val2: frameSeconds) * FramesHeld)) <= ((1d / hertz) + ToleranceSeconds));
@@ -88,7 +108,7 @@ public readonly record struct PresentationRate(int DisplayHertz, double GridHert
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: hertz);
 
         return ((GridHertz > 0d)
-            ? (GridSteps(hertz: hertz) / GridHertz)
+            ? (GridSteps(gridHertz: GridHertz, hertz: hertz) / GridHertz)
             : (1d / hertz));
     }
     /// <summary>Decides a cap: the fewest presented frames between renders that never render faster than

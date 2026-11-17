@@ -63,8 +63,9 @@ public sealed class PresentationRateLawTests {
 
         Assert.All(collection: intervals, action: static interval => Assert.Equal(expected: 2d, actual: Math.Round(a: (interval.Interval * 60d))));
     }
-    // Off a grid, frames at any steady pace update each tier within its period and no sooner than one frame before it:
-    // pacing at 141 Hz but rendering at 70 frames a second, the 30 Hz tier updates every second frame (35 Hz).
+    // Off a grid, frames at any steady pace away from the pacing cadence update each tier within its period and no sooner
+    // than one frame before it: pacing at 141 Hz but rendering at 70 frames a second, the 30 Hz tier updates every second
+    // frame (35 Hz).
     [Fact]
     public void SteadyFramesOffAGridUpdateWithinThePeriodAndHoldAsLongAsItAllows() {
         var rate = new PresentationRate(DisplayHertz: 141, GridHertz: 0d);
@@ -72,6 +73,11 @@ public sealed class PresentationRateLawTests {
         Assert.All(collection: Intervals(hertz: 30, rate: rate, spans: Steady(hertz: 70d, count: 140)), action: static interval => Assert.Equal(expected: (2d / 70d), actual: interval.Interval, tolerance: 1e-12));
 
         for (var fps = 31; (fps <= 240); fps++) {
+            // A frame about one pacing step long lands on the pacing cadence, which counts whole steps instead.
+            if (((fps / 141d) > (1d / PresentationRate.PacedFrameHigh)) && ((fps / 141d) < (1d / PresentationRate.PacedFrameLow))) {
+                continue;
+            }
+
             foreach (var hertz in (int[])[30, 15]) {
                 var period = rate.PeriodSeconds(hertz: hertz);
 
@@ -92,6 +98,20 @@ public sealed class PresentationRateLawTests {
         var spans = Enumerable.Range(start: 0, count: 240).Select(selector: static index => ((1d / 60d) + ((((index * 7) % 5) - 2) * 0.00015d))).ToArray();
 
         Assert.All(collection: Intervals(hertz: hertz, rate: rate, spans: spans), action: interval => Assert.Equal(expected: frames, actual: Math.Round(a: (interval.Interval * 60d))));
+    }
+    // Off a grid, frames that jitter about the pacing cadence by up to a fifth of a step either way are whole pacing steps:
+    // each tier updates every whole number of steps rounded down from its period, whatever the jitter, as a fixed signal's
+    // does, where summing the jittered spans would flip an interval between n and n - 1 frames.
+    [InlineData(60, 30, 2)]
+    [InlineData(60, 15, 4)]
+    [InlineData(144, 30, 4)]
+    [InlineData(144, 15, 9)]
+    [Theory]
+    public void FramesJitteringAboutThePacingCadenceOffAGridCountWholePacingSteps(int display, int hertz, int steps) {
+        var rate = new PresentationRate(DisplayHertz: display, GridHertz: 0d);
+        var spans = Enumerable.Range(start: 0, count: 480).Select(selector: index => ((1d / display) * (1d + ((((index * 7) % 11) - 5) * 0.04d)))).ToArray();
+
+        Assert.All(collection: Intervals(hertz: hertz, rate: rate, spans: spans), action: interval => Assert.Equal(expected: steps, actual: Math.Round(a: (interval.Interval * display))));
     }
     // Off a grid, irregular frames (a variable-refresh display, a hitch) keep each interval within the period but for
     // the amount the frame that closed it outran the frame before, or a single frame longer than the period itself.

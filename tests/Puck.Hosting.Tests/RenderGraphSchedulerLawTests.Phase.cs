@@ -9,12 +9,23 @@ namespace Puck.Hosting.Tests;
 public sealed partial class RenderGraphSchedulerLawTests {
     private const ulong SixtiethTicks = (FixedTickConversion.TicksPerSecond / 60UL);
 
-    // Schedules a 60 Hz display whose even frames run a 30 Hz step, with two views and four tick-cadence screens the
-    // display shows through 15 Hz floors. As the host does, each producer takes its lead from its lever's phases once
-    // (when spread) and keeps it until the render it asks for. Returns the frames each producer rendered on.
-    private static Dictionary<string, List<long>> RatedRenders(bool spread, long count) {
+    private const ulong SimulationStepTicks = (FixedTickConversion.TicksPerSecond / 30UL);
+
+    // The frame spans, in ticks, of a display that shows frames at any time: a steady rate with the jitter a timer-paced
+    // variable-refresh display's frames carry, cycling through offsets that sum to zero.
+    private static ulong[] IrregularSpans(ulong baseTicks, long scale = 1L) {
+        long[] offsets = [-20L, 55L, -5L, 38L, -42L, 12L, 70L, -63L, 25L, -35L, 8L, -43L];
+
+        return [.. offsets.Select(selector: offset => ((ulong)(((long)baseTicks) + ((offset * scale * ((long)baseTicks)) / 840L))))];
+    }
+    // Schedules a display whose frames last the cycle of spans (grid: the rate they land a whole number of steps of, or
+    // zero off a grid) and run a 30 Hz simulation step whenever the presented time passes one, with two views and a number of
+    // tick-cadence screens the display shows through 15 Hz floors. As the host does, each producer takes its lead from its
+    // lever's phases once (when spread) and keeps it until the render it asks for. Returns the frames each producer
+    // rendered on.
+    private static Dictionary<string, List<long>> RatedRenders(bool spread, long count, int displayHertz = 60, double gridHertz = 60d, ulong[]? spans = null, int screenCount = 4) {
         string[] views = ["view0", "view1"];
-        string[] screens = ["screen0", "screen1", "screen2", "screen3"];
+        string[] screens = [.. Enumerable.Range(start: 0, count: screenCount).Select(selector: static index => $"screen{index}")];
         var set = Set([
             Screens("main", [.. views, .. screens]),
             .. views.Select(selector: static name => Instance(name: name)),
@@ -25,13 +36,30 @@ public sealed partial class RenderGraphSchedulerLawTests {
         var leads = new Dictionary<string, double>();
         var history = RenderGraphHistory.Empty(set: set);
         var (viewPhases, screenPhases) = (new PresentationPhases(), new PresentationPhases());
-        var rate = new PresentationRate(DisplayHertz: 60, GridHertz: 60d);
+        var rate = new PresentationRate(DisplayHertz: displayHertz, GridHertz: gridHertz);
+        var cycle = (spans ?? [SixtiethTicks]);
+        var presented = 0UL;
+        var pending = (SimulationStepTicks - cycle[0]);
+        var tick = 0L;
 
         foreach (var name in views.Concat(second: screens)) {
             renders[name] = [];
         }
 
         for (var index = 0L; (index < count); index++) {
+            var span = cycle[(int)(index % cycle.Length)];
+            var next = cycle[(int)((index + 1L) % cycle.Length)];
+
+            pending += span;
+            presented += span;
+
+            var steps = (pending >= SimulationStepTicks);
+
+            if (steps) {
+                pending -= SimulationStepTicks;
+                tick++;
+            }
+
             var schedule = new RenderGraphSchedule(set: set);
 
             RenderGraphScheduler.Schedule(
@@ -39,15 +67,16 @@ public sealed partial class RenderGraphSchedulerLawTests {
                     footprints: [.. views.Concat(second: screens).Select(selector: name => (Shows(consumer: "main", producer: name) with {
                         Refresh = RenderGraphRefresh.AtLeast(hertz: 15, leadSeconds: leads.GetValueOrDefault(key: name)),
                     }))],
+                    hertz: displayHertz,
                     index: index,
                     sources: sources,
-                    tick: (index / 2L)
+                    tick: tick
                 ) with {
-                    FrameTicks = SixtiethTicks,
-                    GridHertz = 60d,
-                    PresentedTicks = (((ulong)index) * SixtiethTicks),
-                    Steps = ((index % 2L) == 0L),
-                    StepsNext = ((index % 2L) != 0L),
+                    FrameTicks = span,
+                    GridHertz = gridHertz,
+                    PresentedTicks = presented,
+                    Steps = steps,
+                    StepsNext = ((pending + next) >= SimulationStepTicks),
                 }),
                 history: history,
                 schedule: schedule,
@@ -75,11 +104,29 @@ public sealed partial class RenderGraphSchedulerLawTests {
         return renders;
     }
     // The most rated producers any one frame rendered once every lead has placed its producer.
-    private static int LargestBurst(Dictionary<string, List<long>> renders) => renders.Values
-        .SelectMany(selector: static frames => frames.Where(predicate: static frame => (frame > 4L)))
+    private static int LargestBurst(Dictionary<string, List<long>> renders, long after = 4L) => renders.Values
+        .SelectMany(selector: frames => frames.Where(predicate: frame => (frame > after)))
         .GroupBy(keySelector: static frame => frame)
         .Max(selector: static group => group.Count());
 
+    // On a display with no grid, frames jitter about the pacing cadence: a 15 Hz tier's lead must still split the views, and
+    // the screens, over its period for as long as the frames run, where each producer's interval counted in summed spans
+    // flips between n and n - 1 frames and walks the producers onto one frame.
+    [Theory]
+    [InlineData(60, 840UL)]
+    [InlineData(144, 350UL)]
+    public void RatedProducersSpreadOnADisplayWithNoGrid(int displayHertz, ulong baseTicks) {
+        var spans = IrregularSpans(baseTicks: baseTicks, scale: 2L);
+        var together = RatedRenders(count: 400L, displayHertz: displayHertz, gridHertz: 0d, screenCount: 8, spans: spans, spread: false);
+        var spread = RatedRenders(count: 400L, displayHertz: displayHertz, gridHertz: 0d, screenCount: 8, spans: spans, spread: true);
+
+        TestContext.Current.TestOutputHelper?.WriteLine(message: $"burst together {LargestBurst(renders: together, after: 40L)} spread {LargestBurst(renders: spread, after: 40L)}");
+
+        // Without a lead the two views and eight screens render together; with one, each lever splits evenly.
+        Assert.Equal(expected: 10, actual: LargestBurst(renders: together, after: 40L));
+        Assert.Equal(expected: 1, actual: LargestBurst(renders: spread.Where(predicate: static pair => pair.Key.StartsWith(value: "view", comparisonType: StringComparison.Ordinal)).ToDictionary(), after: 40L));
+        Assert.Equal(expected: 4, actual: LargestBurst(renders: spread.Where(predicate: static pair => pair.Key.StartsWith(value: "screen", comparisonType: StringComparison.Ordinal)).ToDictionary(), after: 40L));
+    }
     [Fact]
     public void RatedProducersThatTakeATierTogetherRenderOnAlternateHalvesOfItsPeriod() {
         var together = RatedRenders(count: 40L, spread: false);
