@@ -2364,11 +2364,34 @@ hidden-owner retirement, a carry beside an independently releasable object,
 signal failure and device-generation replacement. Native ordering and the
 actual debug-world release remain windowed verification requests.
 
-**Pieces still to build, in dependency order.** H1 is a design closure, not an
-implemented page guarantee: the contiguous fallback has no holes and sparse
-must not be selected before destination-issued page leases, exact clipped copy
-runs and both landing/publication generation checks land with their laws.
-Then add native reserved/sparse resources and mapping queues, page-only
+**Piece 2: destination write proof.** `GpuBufferPages` owns writable coverage
+and generation stamps. Only it issues `Lease` values; revocation makes existing
+leases stale before remapping can publish new coverage. `GpuRegion.StageOwed`
+intersects the coalesced upload runs with writable pages without joining the
+result again, sizes its request table to those exact runs, and validates their
+leases at recording. The region's address ceiling reserves room for the
+worst-case split table at the minimum supported mapping page, 4 KiB.
+An ordinary contiguous growth preserves proofs through its ordered carry;
+shrink and disposal revoke them. No native sparse destination is selected yet.
+
+Landing retains the whole mesh's lease from its first slice. A slice is counted
+only if it was recorded and that generation still stands at completion;
+`MeshStands` checks the same retained proof before a row can become live.
+A moved mesh's synchronous write requires a lease too; without one it is owed
+and its rows are staged absent until background landing completes. The
+device-free page laws cover holes inside joined and paired runs, request tables
+larger than the original run limit, revocation between staging and recording,
+and remapping without reviving a stale proof. The mesh-arrival laws cover
+generation changes across a job and the moved-mesh path.
+
+Background resource retirement uses the same device timeline as frame readers.
+`SdfGpuWork.Enter` requires the actual frame queue before admitting a job;
+counting wrappers do not define a second queue. A checkpoint after retirement
+covers all preceding jobs without an extra per-job retirement counter or signal.
+The job fences remain responsible for wakeups, readbacks and ring-slot rewrites.
+
+**Pieces still to build, in dependency order.** Add native reserved/sparse
+resources and mapping queues, page-only
 residency admission with pool-owned slack, sparse arena placement policy, and
 unmap/empty-block trim plus physical compaction. These remain step 7 work;
 this piece claims neither a sparse path chosen nor a budget-drop physical

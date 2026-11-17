@@ -96,6 +96,9 @@ public sealed unsafe class GpuRegion : IDisposable {
 
     // Where a staging buffer's block starts, in uints: past the header and the run-table reserve of two uints per run.
     private const int CopyBlockBase = (CopyHeaderWords + (MaxCopyRuns * 2));
+    // Clipping can split each coalesced run at every native page. Reserve that worst-case request size in the
+    // address ceiling, not in each staging allocation; StageOwed allocates only its actual request table.
+    private const long MaxCopyHeaderBytes = (CopyBlockBase * 4L) + (((uint.MaxValue / GpuBufferPages.MinimumPageBytes) + 1L) * 8L);
     // The most separate owed ranges a host-written buffer holds before neighbours pair up.
     private const int HostRunCapacity = 8;
 
@@ -106,7 +109,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// the whole region, binds as one storage view, and Vulkan states a storage view's range
     /// (<c>maxStorageBufferRange</c>) in a uint32, so it is the whole uints below 4 GiB less that reserve. Every word
     /// then fits the copy kernel's uint indices and the region's own int word counts.</summary>
-    public const long MaxByteCount = ((((long)(uint.MaxValue / sizeof(uint))) * sizeof(uint)) - (((long)CopyBlockBase) * sizeof(uint)));
+    public const long MaxByteCount = ((((long)(uint.MaxValue / sizeof(uint))) * sizeof(uint)) - MaxCopyHeaderBytes);
 
     // The most bytes one host write moves: a span's length is an int, so a longer run is written in pieces.
     private const int WriteChunkBytes = (1 << 30);
@@ -153,6 +156,17 @@ public sealed unsafe class GpuRegion : IDisposable {
 
     // The destination a staged region's copies write; replaced when the region grows.
     private IGpuBuffer? m_destination;
+    private GpuBufferPages? m_pages;
+    private readonly List<(int Start, int Length, GpuBufferPages.Lease Lease)> m_copyRuns = [];
+
+    /// <summary>Asks this destination for proof that an entire byte range can be written. The proof stays valid
+    /// across an ordered contiguous carry, but not page revocation, shrink or device replacement.</summary>
+    /// <param name="offset">The first destination byte.</param>
+    /// <param name="bytes">The positive byte count.</param>
+    /// <returns>A destination-issued lease, or null while any page is unavailable.</returns>
+    public GpuBufferPages.Lease? TryLease(long offset, long bytes) =>
+        (offset >= 0 && bytes > 0 && offset <= ByteCount && bytes <= ByteCount - offset) ? m_pages?.TryLease(offset, bytes) : null;
+
     // The destination a grown region's next copy recording carries its bytes from, and how many; null when none is owed.
     private IGpuBuffer? m_carrySource;
     private long m_carryBytes;
@@ -469,6 +483,8 @@ public sealed unsafe class GpuRegion : IDisposable {
                     );
                     m_ownedBuffers.Add(item: m_destination);
                 }
+
+                m_pages = (m_destination is IGpuPagedBuffer paged) ? paged.Pages : new GpuBufferPages((long)m_destination!.SizeBytes);
 
                 // No slot's copy set is written here: RecordCopy writes a slot's set the first time that slot records a
                 // copy, inside the pass that records it, so the writes are counted where the upload's work is.
@@ -792,6 +808,7 @@ public sealed unsafe class GpuRegion : IDisposable {
 
         m_disposed = true;
 
+        if (!m_external) { m_pages?.Revoke(); }
         m_copySets?.ForgetWriter(region: this);
         m_ownedCopyPool?.Dispose();
 
@@ -919,6 +936,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_hostBuffers = staging;
         m_ownedBuffers.AddRange(collection: staging);
         m_destination = destination;
+        m_pages = new GpuBufferPages(byteCount);
         m_ownedBuffers.Add(item: destination);
         m_ownedCopyPool = pool;
         m_copySets = (m_reservedCopySets ?? pool!.Region(index: 0));
@@ -1036,6 +1054,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         m_destination = replacement;
+        m_pages!.GrowCarried(byteCount);
         ByteCount = byteCount;
         m_copySets!.ForgetWriter(region: this);
 
@@ -1098,6 +1117,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_carrySource = null;
         m_carryBytes = 0;
         m_destination = replacement;
+        m_pages!.Revoke();
+        m_pages = new GpuBufferPages(byteCount);
         ByteCount = byteCount;
         // Every host-copy word is owed below, so the destination holds the host copy once the copy runs.
         m_knownWords = ((int)(shadow / sizeof(uint)));
@@ -1337,6 +1358,11 @@ public sealed unsafe class GpuRegion : IDisposable {
         if (m_stagedSlot != slot) {
             throw new InvalidOperationException(message: $"The region owes words slot {slot}'s staging buffer does not hold; flush the slot after the last write and before recording its copy.");
         }
+
+        foreach (var run in m_copyRuns) {
+            if (!run.Lease.IsCurrent) { throw new InvalidOperationException("Destination pages changed after staging; flush again before recording."); }
+        }
+        if (m_header[0] == 0) { owed.Clear(); m_stagedSlot = -1; return; }
 
         // The set is unwritten, or another region its owner's reserved sets serve wrote it since this one did; the
         // slot's last submission has retired, so the set is written before it is bound.
@@ -1769,54 +1795,34 @@ public sealed unsafe class GpuRegion : IDisposable {
     // thread, which is also where its words start in the block.
     private void StageOwed(int slot) {
         var owed = m_owed[0];
-
+        m_copyRuns.Clear();
         if (owed.Count == 0) {
-            _ = StagingFor(
-                bytes: (((ulong)CopyBlockBase) * sizeof(uint)),
-                slot: slot
-            );
+            _ = StagingFor(slot, (ulong)CopyBlockBase * sizeof(uint));
             m_stagedSlot = slot;
-
             return;
         }
-
+        for (var run = 0; run < owed.Count; run++) {
+            m_pages!.Clip(owed.Start(run), owed.Length(run), m_destinationWord, m_copyRuns);
+        }
+        var blockBase = Math.Max(CopyBlockBase, checked(CopyHeaderWords + m_copyRuns.Count * 2));
+        if (m_header.Length < blockBase) { Array.Resize(ref m_header, blockBase); }
         var words = 0L;
-
-        for (var run = 0; (run < owed.Count); run++) {
-            words += owed.Length(index: run);
-        }
-
-        var buffer = StagingFor(
-            bytes: checked(((((ulong)CopyBlockBase) + ((ulong)words)) * sizeof(uint))),
-            slot: slot
-        );
+        foreach (var run in m_copyRuns) { words += run.Length; }
+        var buffer = StagingFor(slot, checked((ulong)(blockBase + words) * sizeof(uint)));
         var prefix = 0;
-
-        for (var run = 0; (run < owed.Count); run++) {
-            var length = owed.Length(index: run);
-
-            WriteHostWords(
-                buffer: buffer,
-                destination: ((((ulong)CopyBlockBase) + ((ulong)prefix)) * sizeof(uint)),
-                length: length,
-                startWord: owed.Start(index: run)
-            );
-            m_header[(CopyHeaderWords + (run * 2))] = ((uint)owed.Start(index: run));
-            m_header[((CopyHeaderWords + (run * 2)) + 1)] = ((uint)prefix);
-            prefix += length;
+        for (var index = 0; index < m_copyRuns.Count; index++) {
+            var run = m_copyRuns[index];
+            WriteHostWords(buffer, run.Start, run.Length, (ulong)(blockBase + prefix) * sizeof(uint));
+            m_header[CopyHeaderWords + index * 2] = (uint)run.Start;
+            m_header[CopyHeaderWords + index * 2 + 1] = (uint)prefix;
+            prefix += run.Length;
         }
-
-        m_header[0] = ((uint)prefix);
-        m_header[1] = ((uint)owed.Count);
-        m_header[2] = CopyBlockBase;
-        m_header[3] = ((uint)m_destinationWord);
-        m_header[4] = 0;
-        m_header[5] = 0;
-        m_header[6] = 0;
-        buffer.Write<uint>(data: m_header.AsSpan(
-            length: (CopyHeaderWords + (owed.Count * 2)),
-            start: 0
-        ));
+        m_header[0] = (uint)prefix;
+        m_header[1] = (uint)m_copyRuns.Count;
+        m_header[2] = (uint)blockBase;
+        m_header[3] = (uint)m_destinationWord;
+        m_header[4] = 0; m_header[5] = 0; m_header[6] = 0;
+        buffer.Write<uint>(m_header.AsSpan(0, CopyHeaderWords + m_copyRuns.Count * 2));
         m_stagedSlot = slot;
     }
     // Returns the slot's staging buffer, replaced first when it holds fewer than the bytes asked, by one of at least them,
@@ -1825,7 +1831,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     // each slot's next copy.
     private IGpuStorageBuffer StagingFor(int slot, ulong bytes) {
         var buffer = m_hostBuffers[slot];
-        var reserve = ((((ulong)CopyBlockBase) * sizeof(uint)) + ((ulong)ByteCount));
+        var reserve = ((ulong)MaxCopyHeaderBytes + ((ulong)ByteCount));
         var grows = (bytes > buffer.SizeBytes);
 
         if (

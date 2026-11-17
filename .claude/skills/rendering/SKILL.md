@@ -157,6 +157,10 @@ The tables retain producer indices while meshes are owed: `StageMeshDraw` alone 
 retires its history and writes `SdfMeshRegion.WriteAbsent`. `SDF_MESH_ABSENT_FLAG` rejects selection
 before mesh reads; zero placement words reject every triangle through the existing hit door.
 `GpuRowIndex` supplies the mesh-to-row landing chains and the dresser's slot/copy chains.
+`GpuBufferPages` issues the mesh destination's writable lease. Landing completion and
+`MeshStands` require its generation unchanged; a moved mesh without one stays owed and
+its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and checks
+the proof again at recording. Native sparse mapping remains in the streaming plan.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.

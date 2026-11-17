@@ -15,6 +15,16 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     private const long Mebibyte = (1L << 20);
 
     [Fact]
+    public void AForeignQueueCannotAdmitAReaderOutsideTheTablesRetirementTimeline() {
+        using var rig = new Rig();
+        rig.Render();
+        var foreign = new FakeGpuDevice();
+        using var work = new SdfGpuWork(foreign, "foreign");
+        Assert.Throws<InvalidOperationException>(() => work.Pump(rig.Engine));
+        Assert.Equal(0, work.InFlight);
+    }
+
+    [Fact]
     public void ACompletedJobIsAnsweredAndTheNextTakenInsideTheHostsWaitWithNoPump() {
         using var rig = new Rig(holdFences: true);
         rig.Render();
@@ -92,9 +102,8 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             rig.Render();
             Assert.False(retired.Disposed);
             Assert.True(fence.Armed);
-            // The next upload rewrites the slot the job leased. The retired object's own upload has completed, which
-            // without the lease would release it; the lease holds it, and the upload waits the lease out before it
-            // rewrites the slot.
+            // The next upload rewrites the slot the job leased. Its ring wait ends the pinned reader, which also
+            // lets the device timeline pass the retirement checkpoint.
             rig.Render();
             Assert.True(retired.Disposed);
             Assert.False(fence.Armed);

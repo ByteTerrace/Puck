@@ -16,7 +16,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the ring slot the latest upload wrote, whose region buffers the frame's passes bind, or -1 before the
     /// first upload.</summary>
     public int CurrentSlot => m_currentSlot;
-    internal IGpuQueueSubmitter BackgroundQueue => m_gpu.QueueSubmitter;
+    internal IGpuQueueSubmitter BackgroundQueue => m_deviceContext.Services.QueueSubmitter;
 
     /// <summary>Submits the frame's upload: waits the previous upload, flushes and copies what every region owes into
     /// the next ring slot, then submits it fenced. Nothing
