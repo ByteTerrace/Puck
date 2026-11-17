@@ -640,11 +640,11 @@ section describes the mechanism.
 ## Verify world state behavior
 
 Verify a change to world state behavior by running the real `Puck.World`
-executable. Three kinds of committed evidence do that: the canaries under
-`tests/Puck.World.Canaries/`, which drive the executable through stdin and
-check its output; the shipped-world state baselines, which record each game's
-canonical state export after a fixed input sequence; and `.puck` `test` blocks,
-which `puck test` runs as scheduled worlds with verdict rows.
+executable. The state canary scripts under
+`experimental/tests/Puck.World.Canaries/` are quarantined and are not selected
+by `puck canary`. They describe stdin checks of the executable's output.
+State baselines record each game's canonical state export after a fixed input
+sequence. For `.puck` `test` blocks, `puck test` runs scheduled worlds with verdict rows.
 [Verify state changes](testing.md) explains when to use each one and how to
 run it.
 

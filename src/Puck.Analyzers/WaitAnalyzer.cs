@@ -20,7 +20,8 @@ namespace Puck.Analyzers;
 /// <c>ManualResetEventSlim.Wait</c>, <c>SemaphoreSlim.Wait</c>, <c>CountdownEvent.Wait</c>,
 /// <c>Barrier.SignalAndWait</c>, <c>Monitor.Wait</c>, <c>Thread.Join</c>, <c>Thread.Sleep</c>, <c>Thread.SpinWait</c>,
 /// <c>SpinWait.SpinUntil</c> and <c>SpinOnce</c>, <c>BlockingCollection&lt;T&gt;.Take</c> and its timed
-/// <c>TryTake</c>) and the engine members beneath the door that block (<c>ConfinedDirectory.AcquireLock</c>).
+/// <c>TryTake</c>) and the engine members beneath the door that block (<c>ConfinedDirectory.AcquireLock</c>,
+/// <c>FileLock.Acquire</c> and <c>FileLockWait.Acquire</c>).
 /// </para>
 /// <para>
 /// Two shapes pass. A call whose timeout argument is the constant zero polls and does not block. A task's
@@ -87,7 +88,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
     }
 
     private static void AnalyzeInvocation(OperationAnalysisContext context) {
-        var invocation = (IInvocationOperation)context.Operation;
+        var invocation = ((IInvocationOperation)context.Operation);
         var method = invocation.TargetMethod;
 
         if (!IsBlocking(method: method) || InsideTheDoor(symbol: context.ContainingSymbol) || PollsWithZeroTimeout(invocation: invocation)) {
@@ -100,14 +101,14 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
         Report(context: context, location: invocation.Syntax.GetLocation(), symbol: method);
     }
     private static void AnalyzeMethodReference(OperationAnalysisContext context) {
-        var reference = (IMethodReferenceOperation)context.Operation;
+        var reference = ((IMethodReferenceOperation)context.Operation);
 
         if (IsBlocking(method: reference.Method) && !InsideTheDoor(symbol: context.ContainingSymbol)) {
             Report(context: context, location: reference.Syntax.GetLocation(), symbol: reference.Method);
         }
     }
     private static void AnalyzePropertyReference(OperationAnalysisContext context) {
-        var reference = (IPropertyReferenceOperation)context.Operation;
+        var reference = ((IPropertyReferenceOperation)context.Operation);
         var property = reference.Property;
 
         if (
@@ -127,7 +128,6 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
             location: location,
             messageArgs: $"{symbol.ContainingType?.Name}.{symbol.Name}"
         ));
-
     private static bool IsBlocking(IMethodSymbol method) {
         for (var current = method.OriginalDefinition; (current is not null); current = current.OverriddenMethod?.OriginalDefinition) {
             if (IsBlockingDefinition(method: current)) {
@@ -147,35 +147,36 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         return name switch {
             "Wait" => (
-                Is(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
-                Is(type: type, @namespace: "System.Threading", name: "ManualResetEventSlim") ||
-                Is(type: type, @namespace: "System.Threading", name: "SemaphoreSlim") ||
-                Is(type: type, @namespace: "System.Threading", name: "CountdownEvent") ||
-                Is(type: type, @namespace: "System.Threading", name: "Monitor")
+                Is(name: "Task", @namespace: "System.Threading.Tasks", type: type) ||
+                Is(name: "ManualResetEventSlim", @namespace: "System.Threading", type: type) ||
+                Is(name: "SemaphoreSlim", @namespace: "System.Threading", type: type) ||
+                Is(name: "CountdownEvent", @namespace: "System.Threading", type: type) ||
+                Is(name: "Monitor", @namespace: "System.Threading", type: type)
             ),
             "WaitAll" or "WaitAny" => (
-                Is(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
-                Is(type: type, @namespace: "System.Threading", name: "WaitHandle")
+                Is(name: "Task", @namespace: "System.Threading.Tasks", type: type) ||
+                Is(name: "WaitHandle", @namespace: "System.Threading", type: type)
             ),
-            "WaitOne" => Is(type: type, @namespace: "System.Threading", name: "WaitHandle"),
+            "WaitOne" => Is(name: "WaitHandle", @namespace: "System.Threading", type: type),
             "SignalAndWait" => (
-                Is(type: type, @namespace: "System.Threading", name: "WaitHandle") ||
-                Is(type: type, @namespace: "System.Threading", name: "Barrier")
+                Is(name: "WaitHandle", @namespace: "System.Threading", type: type) ||
+                Is(name: "Barrier", @namespace: "System.Threading", type: type)
             ),
-            "Join" or "Sleep" => Is(type: type, @namespace: "System.Threading", name: "Thread"),
-            "SpinWait" => Is(type: type, @namespace: "System.Threading", name: "Thread"),
-            "SpinUntil" or "SpinOnce" => Is(type: type, @namespace: "System.Threading", name: "SpinWait"),
-            "Take" => Is(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection"),
-            "TryTake" => (Is(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection") && (method.Parameters.Length > 1)),
-            "AcquireLock" => Is(type: type, @namespace: "Puck.Confinement", name: "ConfinedDirectory"),
+            "Join" or "Sleep" => Is(name: "Thread", @namespace: "System.Threading", type: type),
+            "SpinWait" => Is(name: "Thread", @namespace: "System.Threading", type: type),
+            "SpinUntil" or "SpinOnce" => Is(name: "SpinWait", @namespace: "System.Threading", type: type),
+            "Take" => Is(name: "BlockingCollection", @namespace: "System.Collections.Concurrent", type: type),
+            "TryTake" => (Is(name: "BlockingCollection", @namespace: "System.Collections.Concurrent", type: type) && (method.Parameters.Length > 1)),
+            "AcquireLock" => Is(name: "ConfinedDirectory", @namespace: "Puck.Confinement", type: type),
+            "Acquire" => (Is(name: "FileLockWait", @namespace: "Puck.Confinement", type: type) || Is(name: "FileLock", @namespace: "Puck.Abstractions", type: type)),
             _ => false,
         };
     }
     private static bool IsAwaiterGetResult(IMethodSymbol method) =>
-        (method.Name == "GetResult") &&
+        ((method.Name == "GetResult") &&
         (method.ContainingType is { } awaiter) &&
-        awaiter.Name.EndsWith(value: "Awaiter", comparisonType: StringComparison.Ordinal) &&
-        (Outermost(type: awaiter).ContainingNamespace?.ToDisplayString() == "System.Runtime.CompilerServices");
+        awaiter.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "Awaiter") &&
+        (Outermost(type: awaiter).ContainingNamespace?.ToDisplayString() == "System.Runtime.CompilerServices"));
     private static INamedTypeSymbol Outermost(INamedTypeSymbol type) {
         while (type.ContainingType is { } outer) {
             type = outer;
@@ -184,8 +185,8 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
         return type;
     }
     private static bool InsideTheDoor(ISymbol? symbol) {
-        for (var type = symbol as INamedTypeSymbol ?? symbol?.ContainingType; (type is not null); type = type.ContainingType) {
-            if (Is(type: type, @namespace: DoorNamespace, name: DoorType)) {
+        for (var type = ((symbol as INamedTypeSymbol) ?? symbol?.ContainingType); (type is not null); type = type.ContainingType) {
+            if (Is(name: DoorType, @namespace: DoorNamespace, type: type)) {
                 return true;
             }
         }
@@ -194,7 +195,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
     }
     private static bool PollsWithZeroTimeout(IInvocationOperation invocation) {
         foreach (var argument in invocation.Arguments) {
-            if ((argument.Parameter is not { } parameter) || (parameter.Name.IndexOf(value: "imeout", comparisonType: StringComparison.Ordinal) < 0)) {
+            if ((argument.Parameter is not { } parameter) || (parameter.Name.IndexOf(comparisonType: StringComparison.Ordinal, value: "imeout") < 0)) {
                 continue;
             }
 
@@ -203,7 +204,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
             while (value is IConversionOperation conversion) {
                 value = conversion.Operand;
             }
-            if (value.ConstantValue is { HasValue: true, Value: int zero } && (zero == 0)) {
+            if ((value.ConstantValue is { HasValue: true, Value: int zero }) && (zero == 0)) {
                 return true;
             }
             if ((value is IFieldReferenceOperation { Field.Name: "Zero" } field) && Is(type: field.Field.ContainingType, @namespace: "System", name: "TimeSpan")) {
@@ -213,7 +214,6 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         return false;
     }
-
     // Whether `node` reads `receiver` only where a condition on its way up has proven `receiver` complete.
     private static bool ProvenComplete(SyntaxNode node, IOperation? receiver) {
         if (receiver is null) {
@@ -233,7 +233,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
                 IfStatementSyntax ifStatement when (ifStatement.Statement == child) => ifStatement.Condition,
                 ConditionalExpressionSyntax conditional when (conditional.WhenTrue == child) => conditional.Condition,
                 BinaryExpressionSyntax binary when (binary.IsKind(kind: SyntaxKind.LogicalAndExpression) && (binary.Right == child)) => binary.Left,
-                _ => (ExpressionSyntax?)null,
+                _ => ((ExpressionSyntax?)null),
             };
 
             if ((condition is not null) && Proves(condition: condition, key: key)) {
@@ -250,11 +250,11 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
         foreach (var descendant in condition.DescendantNodesAndSelf()) {
             switch (descendant) {
                 case MemberAccessExpressionSyntax access when CompletionTests.Contains(item: access.Name.Identifier.ValueText):
-                    if ((Key(node: access.Expression) == key) && ReachesConditionThroughAnd(node: access, condition: condition)) {
+                    if ((Key(node: access.Expression) == key) && ReachesConditionThroughAnd(condition: condition, node: access)) {
                         return true;
                     }
                     break;
-                case RecursivePatternSyntax pattern when (pattern.Designation is SingleVariableDesignationSyntax designation) && (designation.Identifier.ValueText == key):
+                case RecursivePatternSyntax pattern when ((pattern.Designation is SingleVariableDesignationSyntax designation) && (designation.Identifier.ValueText == key)):
                     if (pattern.PropertyPatternClause is { } clause) {
                         foreach (var subpattern in clause.Subpatterns) {
                             if (
@@ -262,7 +262,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
                                 CompletionTests.Contains(item: name) &&
                                 (subpattern.Pattern is ConstantPatternSyntax { Expression: LiteralExpressionSyntax literal }) &&
                                 literal.IsKind(kind: SyntaxKind.TrueLiteralExpression) &&
-                                ReachesConditionThroughAnd(node: pattern, condition: condition)
+                                ReachesConditionThroughAnd(condition: condition, node: pattern)
                             ) {
                                 return true;
                             }
