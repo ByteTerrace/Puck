@@ -962,8 +962,13 @@ laws exercise that boundary.
   the tables take (`lease-waits`, zero on one queue);
   `world.gpu-timing` does not see the work. A slot's buffers are the
   service's, created through one door that reserves them before the device is
-  asked (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`, `CopyToReadback`;
-  workspace under `SdfResidencySelector.WorkOwner`): its readback and the
+  asked (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`, `CopyToReadback`,
+  `ReserveReadback`; workspace under `SdfResidencySelector.WorkOwner`) and that
+  creates nothing once the job has consumed state (`CopyRegion` takes a
+  region's owed words): a job asks for every buffer, its readback reserved,
+  before it copies a region, so a refusal hands it back whole. A client's own
+  cache initialization (the probe hit cache's clear, the meter cache's fill)
+  stays owed until a job that recorded it completes. Its readback and the
   bake's point table, sampled table, masks and samples grow to the slot's
   largest batch and go once no job has needed them at that size for
   `SdfGpuWork.IdleSeconds`, so a settled bake holds none;

@@ -148,7 +148,13 @@ whose exposure was held. Readiness waits for the next prepared frame. A held
 frame shows nothing new, so its staging drives the service
 (`SdfGpuWork.Drive`): the thread waits on the host, with a deadline, for a
 job's fence or a client's offer, outside the budgets that protect a queued
-frame, and the host's wait between frames steps the work the same way, and `SdfWorldPasses.WithheldOf` has the
+frame, and the host's wait between frames steps the work the same way. The
+drive runs inside the frame's open batch (the render graph stages residencies
+after `BeginBatch`), so before each wait it hands its jobs to the queue
+(`IGpuSubmissionFence.HandOff`): a deferred job neither runs nor wakes the
+wait until the batch's flush, which holds a drain to a job a frame. A withheld
+residency's top-of-frame pump is unmetered too (`SdfGpuWork.Pump`'s
+`withheld`), and `SdfWorldPasses.WithheldOf` has the
 render graph record no pass of the view again until the hold ends
 (`IRenderGraphPackageFactory.WithheldOf`), so the drain has the GPU. A view
 with no completed image still renders once. A residency no scheduled render
