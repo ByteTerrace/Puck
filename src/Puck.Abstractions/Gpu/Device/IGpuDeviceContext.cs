@@ -39,10 +39,21 @@ public interface IGpuDeviceContext {
     GpuMemoryReading MemoryReading { get; }
 
     /// <summary>Refreshes <see cref="MemoryReading"/> when its device marked it stale: on Direct3D 12 when the budget-change
-    /// event is set, tested without waiting; on Vulkan, whose budget has no signal, at a low fixed rate. A refresh that
+    /// event is set, tested without waiting; on Vulkan, whose budget has no signal, at a low fixed rate; and on both at
+    /// once after the device refused an allocation (<see cref="GpuDeviceMemoryWork.DeviceRefusals"/>). A refresh that
     /// finds nothing stale makes no driver call, and one never brings the device up. The host calls it once a frame on
     /// its frame thread, at the top of the frame.</summary>
     void RefreshMemoryReading();
+    /// <summary>Tells the device's memory manager how many bytes of device memory the process cannot run without, where
+    /// the API has such a reservation: Direct3D 12's <c>IDXGIAdapter3::SetVideoMemoryReservation</c> on the local
+    /// segment group, clamped to what the last reading says may be reserved. It is a hint the memory manager weighs,
+    /// never capacity an account counts on; the next reading's reservation figure says what stands. The host passes the
+    /// figure once a frame on its frame thread, and a device makes the native call only when the clamped figure
+    /// changes. A device not brought up, and an API with no reservation (Vulkan), do nothing.</summary>
+    /// <param name="bytes">The bytes the process cannot run without.</param>
+    /// <returns>The bytes passed to the API, after clamping, or <see langword="null"/> where there is no reservation
+    /// or the API refused the call.</returns>
+    ulong? ReserveMemory(ulong bytes) => null;
     /// <summary>Blocks until the device is idle — all queued work has completed. A device that was never brought up
     /// has run no work, so waiting on it returns at once and never attempts the bring-up; teardown relies on this.</summary>
     void WaitIdle();

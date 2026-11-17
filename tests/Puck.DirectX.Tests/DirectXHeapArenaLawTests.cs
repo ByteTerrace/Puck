@@ -10,7 +10,6 @@ namespace Puck.DirectX.Tests;
 /// <summary>Holds the heap arena's laws apart from every other test: its registry of placed resources is the process's.</summary>
 [CollectionDefinition(name: nameof(HeapArenaCollection), DisableParallelization = true)]
 public sealed class HeapArenaCollection;
-
 /// <summary>
 /// Laws over a device's heap arena (<see cref="DirectXHeapArena"/>) on fake device calls: resources share a heap of their
 /// type, category and role at the alignment the device reports, a resource past half a heap gets its own, a resource's
@@ -22,6 +21,7 @@ public sealed class HeapArenaCollection;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed unsafe class DirectXHeapArenaLawTests {
     private const ulong Heap = DirectXHeapArena.HeapBytes;
+
     private static readonly HRESULT Ok = new(value: 0);
     private static readonly HRESULT OutOfMemory = new(value: unchecked((int)0x8007000E));
 
@@ -29,6 +29,7 @@ public sealed unsafe class DirectXHeapArenaLawTests {
     public void ResourcesShareHeapsAndFindTheirRangesThroughTheirTokens() {
         var calls = new FakeHeapCalls();
         var work = new GpuDeviceMemoryWork(backend: "directx");
+
         work.BeginDevice(device: 0xD0, segments: GpuMemorySegments.FromDirectX(profile: default));
         var arena = new DirectXHeapArena(calls: calls, device: 0xD0, memory: work);
         var upload = D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_UPLOAD;
@@ -58,9 +59,9 @@ public sealed unsafe class DirectXHeapArenaLawTests {
             actual: calls.Log
         );
         Assert.True(condition: work.TryRead(kind: GpuDeviceMemoryWork.Allocations, value: out var allocations));
-        Assert.Equal(expected: 4L, actual: allocations);
+        Assert.Equal(actual: allocations, expected: 4L);
         Assert.True(condition: work.TryRead(kind: GpuDeviceMemoryWork.Allocated, value: out var allocated));
-        Assert.Equal(expected: ((long)(2UL * Heap)), actual: allocated);
+        Assert.Equal(actual: allocated, expected: ((long)(2UL * Heap)));
 
         // A release finds the range through the resource's token, once; a resource the arena never placed, or one whose
         // token it already returned, is not its to release. A pool keeps one empty heap and releases the next.
@@ -76,8 +77,9 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         // heap, so no later resource is placed in it and holds it.
         calls.Log.Clear();
         var own = Create(arena: arena, description: Buffer(bytes: (2UL * Heap)), heapType: upload, role: GpuMemoryRole.HostVisible);
+
         Assert.True(condition: DirectXHeapArena.Release(calls: calls, resource: own));
-        Assert.Equal(expected: [$"heap 5 {2UL * Heap} {D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS}", $"place {own} heap 5 at 0", "release heap 5"], actual: calls.Log);
+        Assert.Equal(expected: [$"heap 5 {(2UL * Heap)} {D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_ALLOW_ONLY_BUFFERS}", $"place {own} heap 5 at 0", "release heap 5"], actual: calls.Log);
 
         // A failed placement, and a failed tag, give their range back to the heap, which the next resource takes.
         calls.Log.Clear();
@@ -88,11 +90,14 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         _ = Assert.Throws<DirectXException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: upload, role: GpuMemoryRole.HostVisible));
         calls.FailTag = false;
         var again = Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: upload, role: GpuMemoryRole.HostVisible);
-        Assert.Equal(expected: ["place 0 heap 1 at 0", $"place {again - 1} heap 1 at 0", $"release resource {again - 1}", $"place {again} heap 1 at 0"], actual: calls.Log);
 
-        // A heap the device refuses surfaces as the call's failure.
+        Assert.Equal(expected: ["place 0 heap 1 at 0", $"place {(again - 1)} heap 1 at 0", $"release resource {(again - 1)}", $"place {again} heap 1 at 0"], actual: calls.Log);
+
+        // A heap the device has no memory for hands its grant back as the device's refusal: nothing is counted, and the
+        // ledger marks the reading stale.
         calls.FailHeap = true;
-        _ = Assert.Throws<DirectXException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal));
+        Assert.True(condition: Assert.Throws<GpuMemoryRefusedException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal)).ByDevice);
+        Assert.Equal(expected: 1L, actual: work.DeviceRefusals);
         calls.FailHeap = false;
 
         // The device's release frees every heap and forgets every token, so no later release finds one.
@@ -107,10 +112,11 @@ public sealed unsafe class DirectXHeapArenaLawTests {
         Assert.Empty(collection: calls.Log);
         _ = Assert.Throws<ObjectDisposedException>(testCode: () => Create(arena: arena, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal));
         Assert.True(condition: work.TryRead(kind: GpuDeviceMemoryWork.Released, value: out var released));
-        Assert.Equal(expected: allocated, actual: released);
+        Assert.Equal(actual: released, expected: allocated);
 
         // An arena with no counts places alike.
         var uncounted = new DirectXHeapArena(calls: calls, device: 0xD0, memory: null);
+
         _ = Create(arena: uncounted, description: Buffer(bytes: 1000UL), heapType: gpu, role: GpuMemoryRole.DeviceLocal);
         uncounted.FreeAll();
         _ = Assert.Throws<ArgumentNullException>(testCode: () => new DirectXHeapArena(calls: null!, device: 0, memory: null));
@@ -134,36 +140,37 @@ public sealed unsafe class DirectXHeapArenaLawTests {
     // the resource. A texture sizes at 64 KiB, a buffer at its width rounded up to 64 KiB.
     private sealed class FakeHeapCalls : IDirectXCommandCalls {
         private readonly Dictionary<(nint Resource, Guid Key), long> m_tags = [];
+
         private nint m_heaps;
         private nint m_resources = 0x1000;
 
-        public List<string> Log { get; } = [];
         public bool FailHeap { get; set; }
         public bool FailPlacement { get; set; }
         public bool FailTag { get; set; }
+        public List<string> Log { get; } = [];
 
         public D3D12_HEAP_PROPERTIES CustomHeapProperties(D3D12_HEAP_TYPE heapType) => default;
         public D3D12_RESOURCE_ALLOCATION_INFO AllocationInfo(D3D12_RESOURCE_DESC* description) => new() {
             Alignment = 65536UL,
-            SizeInBytes = ((description->Dimension == D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER) ? ((description->Width + 65535UL) & ~65535UL) : 65536UL),
+            SizeInBytes = ((description->Dimension == D3D12_RESOURCE_DIMENSION.D3D12_RESOURCE_DIMENSION_BUFFER) ? (description->Width + 65535UL) & ~65535UL : 65536UL),
         };
         public HRESULT CreateHeap(D3D12_HEAP_DESC* description, ID3D12Heap** heap) {
             if (FailHeap) {
                 return OutOfMemory;
             }
             *heap = ((ID3D12Heap*)(++m_heaps));
-            Log.Add(item: $"heap {(nint)(*heap)} {description->SizeInBytes} {description->Flags}");
+            Log.Add(item: $"heap {((nint)(*heap))} {description->SizeInBytes} {description->Flags}");
 
             return Ok;
         }
         public HRESULT CreatePlacedResource(ID3D12Heap* heap, ulong offset, D3D12_RESOURCE_DESC* description, D3D12_RESOURCE_STATES initialState, D3D12_CLEAR_VALUE* clearValue, ID3D12Resource** resource) {
             *resource = (FailPlacement ? null : ((ID3D12Resource*)(++m_resources)));
-            Log.Add(item: $"place {(nint)(*resource)} heap {(nint)heap} at {offset}");
+            Log.Add(item: $"place {((nint)(*resource))} heap {((nint)heap)} at {offset}");
 
             return (FailPlacement ? OutOfMemory : Ok);
         }
-        public void ReleaseHeap(ID3D12Heap* heap) => Log.Add(item: $"release heap {(nint)heap}");
-        public void ReleaseResource(ID3D12Resource* resource) => Log.Add(item: $"release resource {(nint)resource}");
+        public void ReleaseHeap(ID3D12Heap* heap) => Log.Add(item: $"release heap {((nint)heap)}");
+        public void ReleaseResource(ID3D12Resource* resource) => Log.Add(item: $"release resource {((nint)resource)}");
         public HRESULT Tag(ID3D12Resource* resource, Guid key, long value) {
             if (FailTag) {
                 return OutOfMemory;

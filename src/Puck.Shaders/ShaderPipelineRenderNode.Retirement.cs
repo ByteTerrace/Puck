@@ -376,7 +376,7 @@ public sealed partial class ShaderPipelineRenderNode {
         if (inFlight || holdsBorrowedPublication) {
             m_retired.Add(item: retired);
         } else {
-            retired.Dispose(node: this, completed: true);
+            retired.Dispose(completed: true, node: this);
         }
         foreach (var held in m_retired) { held.ReleasePublication(node: this); }
     }
@@ -439,14 +439,19 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // Retires every queued object whose retiring submission has completed.
     private void RetireCompleted() {
+        var released = false;
+
         for (var index = (m_retired.Count - 1); (index >= 0); index--) {
             var retired = m_retired[index];
 
             if (retired.ReadersCompleted || ((retired.Fence is { } fence) && Signaled(fence: fence))) {
-                retired.Dispose(node: this, completed: true);
+                retired.Dispose(completed: true, node: this);
                 m_retired.RemoveAt(index: index);
+                released = true;
             }
         }
+        // A replacement reserved the old graph and the new one together; the old one's release lowers the promise.
+        if (released) { SettleReservation(); }
     }
 
     /// <summary>Completes displaced borrowed publications against the runtime frame's final submission, ordered
@@ -477,7 +482,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // Releases everything queued or held without waiting: the caller has drained the device, or lost it.
     private void ReleaseRetired() {
         foreach (var retired in m_retired) {
-            retired.Dispose(node: this, completed: false);
+            retired.Dispose(completed: false, node: this);
         }
         foreach (var held in m_held) {
             held.Resource.Dispose();
@@ -485,6 +490,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         m_retired.Clear();
         m_held.Clear();
+        ReleaseReservation();
         m_lastSubmissionFence = null;
         m_firstSubmission = null;
         m_completedSubmission = false;

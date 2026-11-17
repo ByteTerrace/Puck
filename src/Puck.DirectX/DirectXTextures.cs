@@ -105,22 +105,19 @@ public static unsafe class DirectXTextures {
             return arena.Create(clearValue: clearValue, description: in description, family: family, heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, initialState: initialState, role: GpuMemoryRole.DeviceLocal);
         }
 
+        var answerer = (calls ?? new DirectXDeviceCommandCalls(device: device));
+        var grant = DirectXDeviceMemory.Admit(calls: answerer, description: in description, device: device, family: family, heap: in heapProperties, memory: memory, role: GpuMemoryRole.DeviceLocal);
         var texture = DirectXCommandCalls.CreateCommittedResource(
-            calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
+            calls: answerer,
             clearValue: clearValue,
             description: in description,
+            grant: grant,
             heapFlags: heapFlags,
             heapProperties: in heapProperties,
             initialState: initialState
         );
 
-        DirectXDeviceMemory.CountAllocated(
-            device: device,
-            family: family,
-            memory: memory,
-            resource: texture,
-            role: GpuMemoryRole.DeviceLocal
-        );
+        DirectXDeviceMemory.CountAllocated(grant: grant, memory: memory, resource: texture);
 
         return texture;
     }

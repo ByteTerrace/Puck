@@ -59,22 +59,19 @@ public static unsafe class DirectXBuffers {
             return arena.Create(clearValue: null, description: in description, family: family, heapType: heapType, initialState: initialState, role: role);
         }
 
+        var answerer = (calls ?? new DirectXDeviceCommandCalls(device: device));
+        var grant = DirectXDeviceMemory.Admit(calls: answerer, description: in description, device: device, family: family, heap: in heapProperties, memory: memory, role: role);
         var buffer = DirectXCommandCalls.CreateCommittedResource(
-            calls: (calls ?? new DirectXDeviceCommandCalls(device: device)),
+            calls: answerer,
             clearValue: null,
             description: in description,
+            grant: grant,
             heapFlags: D3D12_HEAP_FLAGS.D3D12_HEAP_FLAG_NONE,
             heapProperties: in heapProperties,
             initialState: initialState
         );
 
-        DirectXDeviceMemory.CountAllocated(
-            device: device,
-            family: family,
-            memory: memory,
-            resource: buffer,
-            role: role
-        );
+        DirectXDeviceMemory.CountAllocated(grant: grant, memory: memory, resource: buffer);
 
         return buffer;
     }

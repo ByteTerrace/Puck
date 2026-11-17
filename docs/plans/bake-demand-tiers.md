@@ -48,10 +48,11 @@ first frame takes that frame's demand points
 ## The region's budget
 
 Finer replacements alone are a ratchet: every place a viewer has been keeps its
-finest tier. So the mesh region has a limit, a share of the device's
-device-local memory (`SdfWorldTables.MeshRegionLimitOf`), and the bake a budget
-inside it (`SdfMeshTier.BudgetEighths`), with the rest left for a replacement
-to land beside the mesh it replaces. `Retier` holds the bytes the frame's draws
+finest tier. So the mesh region has a limit, what the presentation's selector
+reserved for it in the account (`SdfResidencyGrant.ReserveGrowth`), and the
+bake a budget the selector grants (`SdfResidencyGrant.Budget`,
+`SdfMeshTier.BudgetEighths` of what the pool leaves the regions), with the rest
+left for a replacement to land beside the mesh it replaces. `Retier` holds the bytes the frame's draws
 name under the budget: a finer tier starts only while it fits; while the budget
 presses, a group drawing a finer tier than its demand asks is planned again at
 the demanded one, the largest saving first; and when it presses with nothing

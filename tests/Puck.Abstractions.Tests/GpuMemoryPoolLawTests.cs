@@ -14,58 +14,58 @@ public sealed class GpuMemoryPoolLawTests {
     [Fact]
     public void AStaleReturnIsRefusedOnceItsOffsetHoldsAnotherResource() {
         var (pool, log) = Pool();
-        var first = Place(pool: pool, key: 0, size: 64UL);
+        var first = Place(key: 0, pool: pool, size: 64UL);
 
         pool.Return(placement: first);
 
-        var second = Place(pool: pool, key: 0, size: 64UL);
+        var second = Place(key: 0, pool: pool, size: 64UL);
 
         Assert.Equal(expected: first.Offset, actual: second.Offset);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => pool.Return(placement: first));
         // The second resource kept its range: the next placement does not overlap it.
-        Assert.Equal(expected: 64UL, actual: Place(pool: pool, key: 0, size: 64UL).Offset);
+        Assert.Equal(expected: 64UL, actual: Place(key: 0, pool: pool, size: 64UL).Offset);
         pool.Return(placement: second);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => pool.Return(placement: second));
-        Assert.Equal(expected: ["alloc 1 1024"], actual: log);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024"]);
     }
     [Fact]
     public void ABindThatThrowsGivesItsRangeBackAndItsOwnBlockGoes() {
         var (pool, log) = Pool();
 
         _ = Assert.Throws<InvalidOperationException>(testCode: () => pool.Place<int>(alignment: 1UL, bind: static _ => throw new InvalidOperationException(), key: 0, size: 64UL));
-        Assert.Equal(expected: 0UL, actual: Place(pool: pool, key: 0, size: 64UL).Offset);
+        Assert.Equal(expected: 0UL, actual: Place(key: 0, pool: pool, size: 64UL).Offset);
         _ = Assert.Throws<InvalidOperationException>(testCode: () => pool.Place<int>(alignment: 1UL, bind: static _ => throw new InvalidOperationException(), key: 1, size: (Block * 2UL)));
-        Assert.Equal(expected: ["alloc 1 1024", "alloc 2 2048", "free 2"], actual: log);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 2048", "free 2"]);
         Assert.Equal(expected: 1, actual: pool.Blocks);
     }
     [Fact]
     public void AKeyKeepsOneEmptySharedBlockAndAnOwnBlockGoesWhenItEmpties() {
         var (pool, log) = Pool();
-        var a = Place(pool: pool, key: 0, size: Block);
-        var b = Place(pool: pool, key: 0, size: 512UL);
-        var c = Place(pool: pool, key: 0, size: 512UL);
-        var d = Place(pool: pool, key: 0, size: 512UL);
+        var a = Place(key: 0, pool: pool, size: Block);
+        var b = Place(key: 0, pool: pool, size: 512UL);
+        var c = Place(key: 0, pool: pool, size: 512UL);
+        var d = Place(key: 0, pool: pool, size: 512UL);
 
         // An own block (past half a block) goes as it empties; of two empty shared blocks, the second goes.
         pool.Return(placement: a);
         pool.Return(placement: b);
         pool.Return(placement: c);
         pool.Return(placement: d);
-        Assert.Equal(expected: ["alloc 1 1024", "alloc 2 1024", "alloc 3 1024", "free 1", "free 3"], actual: log);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "alloc 3 1024", "free 1", "free 3"]);
         Assert.Equal(expected: 1, actual: pool.Blocks);
     }
     [Fact]
     public void RetirementFreesEveryBlockOnceTakesNothingBackAndPlacesNothing() {
         var (pool, log) = Pool();
-        var live = Place(pool: pool, key: 0, size: 64UL);
+        var live = Place(key: 0, pool: pool, size: 64UL);
 
-        _ = Place(pool: pool, key: 1, size: 64UL);
+        _ = Place(key: 1, pool: pool, size: 64UL);
         Assert.True(condition: pool.FreeAll());
         Assert.False(condition: pool.FreeAll());
         pool.Return(placement: live);
-        Assert.Equal(expected: ["alloc 1 1024", "alloc 2 1024", "free 1 retiring", "free 2 retiring"], actual: log);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "free 1 retiring", "free 2 retiring"]);
         Assert.True(condition: pool.IsRetired);
-        _ = Assert.Throws<ObjectDisposedException>(testCode: () => Place(pool: pool, key: 0, size: 64UL));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => Place(key: 0, pool: pool, size: 64UL));
     }
 
     private static GpuMemoryPlacement<int> Place(GpuMemoryPool<int, int> pool, int key, ulong size) =>
@@ -74,8 +74,8 @@ public sealed class GpuMemoryPoolLawTests {
         var log = new List<string>();
         var next = 0;
         var pool = new GpuMemoryPool<int, int>(
-            allocate: (_, bytes) => {
-                log.Add(item: $"alloc {++next} {bytes}");
+            allocate: request => {
+                log.Add(item: $"alloc {++next} {request.Bytes}");
                 return next;
             },
             blockBytes: Block,

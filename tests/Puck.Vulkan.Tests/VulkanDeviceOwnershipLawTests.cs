@@ -18,6 +18,7 @@ namespace Puck.Vulkan.Tests;
 /// the device API records each table whose device it destroys.</summary>
 public sealed unsafe class VulkanDeviceOwnershipLawTests {
     private static readonly GpuMemorySegments OneHeap = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [0x1U, 0U], profile: default);
+
     private const nint FirstDeviceHandle = 0x0D00;
     private const nint SecondDeviceHandle = 0x0E00;
 
@@ -75,8 +76,8 @@ public sealed unsafe class VulkanDeviceOwnershipLawTests {
 
         memory.BeginDevice(device: FirstDeviceHandle, segments: OneHeap);
         memory.BeginDevice(device: SecondDeviceHandle, segments: OneHeap);
-        lost.Commands.CountAllocated(allocationSize: 4096UL, family: null, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
-        replacement.Commands.CountAllocated(allocationSize: 256UL, family: null, memoryHandle: Reused, memoryTypeIndex: 0U, role: GpuMemoryRole.DeviceLocal);
+        memory.CountAllocated(allocation: Reused, grant: memory.Admit(bytes: 4096L, device: FirstDeviceHandle, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: 0));
+        memory.CountAllocated(allocation: Reused, grant: memory.Admit(bytes: 256L, device: SecondDeviceHandle, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: 0));
 
         var refusal = Assert.Throws<InvalidOperationException>(testCode: lost.Dispose);
 
