@@ -250,7 +250,8 @@ agent works in that mode by default, without asking:
     becoming OBSESSED with it?"). Look, feel and performance are judged in
     real time and in motion: presented frames while moving, frame-time
     statistics, counters and the artifacts a player meets (shimmer, pops,
-    holes, swimming shadows, hitches), on the benchmark route. Lockstep, settled stills and
+    holes, swimming shadows, hitches), on
+    [the benchmark](docs/plans/benchmark.md) route. Lockstep, settled stills and
     equality with a previous build are a narrow tool for a change that claims
     to change nothing (rule 4), never the default evidence and never the shape
     of a new instrument. Evidence is not chosen because a machine can compare
