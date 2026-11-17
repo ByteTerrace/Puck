@@ -221,7 +221,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
                 new(Center: Vector3.Zero, Half: (OwnHalf * scale), Rotation: Quaternion.Identity, Material: 0),
                 new(Center: new Vector3(x: rows.Span[(1 + (3 * member))].X, y: rows.Span[(1 + (3 * member))].Y, z: rows.Span[(1 + (3 * member))].Z), Half: (MemberHalf * scale), Rotation: Quaternion.Identity, Material: 0),
             };
-            var spacing = SdfMeshBakeTaps.Spacing(cell: request.Cell);
+            var spacing = request.TapSpacing;
 
             for (var local = 0; (local < request.Samples); local++, sample++) {
                 var position = request.SampleAt(local: local);

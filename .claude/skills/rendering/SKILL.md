@@ -1309,7 +1309,10 @@ by its fence share is GPU back-pressure, not CPU work.
   after a `-nodeReuse:false` build (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`.
   Anything that answers a bake lattice on the CPU (`MeshCpuBake`, the SdfVm laws' kernel stand-ins) places
   each sample with `SdfMeshBakeRequest.SampleAt`, as the kernel does: a slab keeps its final lattice's
-  origin and counts its planes from `Slab`, so a copied grid formula answers a slab at the wrong planes. Cross-backend
+  origin and counts its planes from `Slab`, so a copied grid formula answers a slab at the wrong planes. Its
+  gradient taps lie `SdfMeshBakeRequest.TapSpacing` out, which the kernel reads from the lattice's record;
+  the fixed-point evaluator widens only what it cannot resolve (`SdfMeshCpuField.TapSpacing`), and
+  `mesh audit --cpu` counts those samples on a `cpu taps:` line. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.
