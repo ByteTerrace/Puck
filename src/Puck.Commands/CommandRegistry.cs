@@ -123,12 +123,15 @@ public sealed partial class CommandRegistry {
     /// </summary>
     /// <param name="modules">The modules whose command definitions are aggregated.</param>
     /// <param name="observers">Observers notified after each command dispatch; defaults to none.</param>
+    /// <param name="authority">The live authority of the world each invocation addresses.</param>
     /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
     public CommandRegistry(
         IEnumerable<ICommandModule> modules,
-        IEnumerable<ICommandObserver>? observers = null
+        IEnumerable<ICommandObserver>? observers = null,
+        ICommandAuthority? authority = null
     ) {
         ArgumentNullException.ThrowIfNull(modules);
+        m_authority = authority;
 
         m_observers = ((observers is null)
             ? []
@@ -839,10 +842,7 @@ public sealed partial class CommandRegistry {
 
         try {
             faulted = false;
-            result = (AudienceRefusal(
-                definition: definition,
-                principal: context.Principal
-            ) ?? definition.Handler(arg: context));
+            result = (AudienceRefusal(definition: definition, context: context) ?? definition.Handler(arg: context));
         } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
@@ -901,10 +901,7 @@ public sealed partial class CommandRegistry {
 
         try {
             faulted = false;
-            result = (AudienceRefusal(
-                definition: definition,
-                principal: principal
-            ) ?? definition.WireArgsHandler!(
+            result = (AudienceRefusal(definition: definition, context: context) ?? definition.WireArgsHandler!(
                 arg1: context,
                 arg2: new WireArgs(
                     echo: !quiet,
@@ -938,11 +935,14 @@ public sealed partial class CommandRegistry {
     // The one audience check, ahead of both handler boundaries: a verb never runs for a principal its audience does not
     // admit (an operator verb for anyone but the console, a local verb for anyone but the console or a seat), whichever
     // door the line arrived through.
-    private static CommandResult? AudienceRefusal(CommandDefinition definition, Principal principal) => (definition.Audience.Admits(principal: principal)
+    private readonly ICommandAuthority? m_authority;
+    /// <summary>Checks the addressed world at dispatch time.</summary>
+    public bool IsOperator(CommandContext context) => m_authority?.IsOperator(context) == true;
+    private CommandResult? AudienceRefusal(CommandDefinition definition, CommandContext context) => (definition.Audience.Admits(principal: context.Principal, operates: IsOperator(context))
         ? null
         : CommandResult.Error(output: ((definition.Audience == CommandAudience.Operator)
-            ? $"[{definition.Name}: refused — an operator verb; {principal.Describe()} is not the operator]"
-            : $"[{definition.Name}: refused — {definition.Audience.Describe()}; {principal.Describe()} is neither]"))
+            ? $"[{definition.Name}: refused — an operator verb; {context.Principal.Describe()} is not the operator]"
+            : $"[{definition.Name}: refused — {definition.Audience.Describe()}; {context.Principal.Describe()} is neither]"))
     );
     /// <summary>Renders a handler's escaped exception as the error result the wire reports it through.</summary>
     /// <param name="definition">The command whose handler threw.</param>
@@ -1319,10 +1319,7 @@ public sealed partial class CommandRegistry {
             CommandResult result;
 
             try {
-                result = (AudienceRefusal(
-                    definition: definition,
-                    principal: principal
-                ) ?? definition.Handler(arg: context));
+                result = (AudienceRefusal(definition: definition, context: context) ?? definition.Handler(arg: context));
             } catch (Exception exception) when (IsContainable(exception: exception)) {
                 result = HandlerFault(
                     definition: definition,

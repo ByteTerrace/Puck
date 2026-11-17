@@ -845,15 +845,10 @@ public sealed partial class WorldTick {
                     Host.GrantTable.RevokeStaleEmbodiments(index: peer.BodyIndex);
                 }
 
-                var installedGrants = new List<WorldGrant>();
-
-                foreach (var grant in admitted.MintedGrants) {
-                    if (Host.GrantTable.TryApplyGrant(
-                        grant: grant,
-                        actor: Principal.Console
-                    )) {
-                        installedGrants.Add(item: grant);
-                    }
+                var installedGrants = Host.GrantTable.TryGrantSet(admitted.MintedGrants, Principal.World, out var grantReason)
+                    ? admitted.MintedGrants : Array.Empty<WorldGrant>();
+                if (installedGrants.Count != admitted.MintedGrants.Count) {
+                    Host.Document.DenyGrantTable("admission grant set refused: " + grantReason, SubmissionEnvelope.LocalConnectionId, 0);
                 }
 
                 foreach (var peer in admitted.Entries) {
@@ -887,6 +882,7 @@ public sealed partial class WorldTick {
                         peer: in peer,
                         tick: Host.NextInputTick
                     );
+                    Host.ClosePeerTransport(peer.Identity);
                 }
 
                 foreach (var grant in disconnected.RevokedGrants) {

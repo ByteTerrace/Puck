@@ -165,6 +165,7 @@ public static class WorldSiloApplication {
             tagging: sp.GetRequiredService<SiloConsoleTagging>()
         ));
         builder.Services.AddSingleton<IWorldConsoleAuthority, SiloConsoleAuthority>();
+        builder.Services.AddSingleton<ICommandAuthority>(sp => sp.GetRequiredService<IWorldConsoleAuthority>());
         builder.Services.AddSingleton<IControlSessionHost, SiloControlSessionHost>();
         builder.Services.AddSingleton(implementationFactory: static sp => new WorldSiloHost(
             blobStore: sp.GetRequiredService<Puck.Storage.IObjectBlobStore>(),

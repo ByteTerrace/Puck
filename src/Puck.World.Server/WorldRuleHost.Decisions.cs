@@ -526,6 +526,7 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
                 var unit = DocumentUnit(rows: m_proposedRows);
 
                 if (!WorldDocument.TryCompose(
+            authority: Host.GrantTable,
                     candidate: out proposed,
                     current: current,
                     engineTick: firing.EngineTick,

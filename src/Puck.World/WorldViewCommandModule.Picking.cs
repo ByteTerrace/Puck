@@ -58,7 +58,7 @@ internal sealed partial class WorldViewCommandModule {
         if (instance == "primary") { instance = presented; }
 
         if (args.Count == 3 && args.Is(1, "finding")) {
-            if (!context.Principal.IsAuthority) {
+            if (!(context.Registry?.IsOperator(context) == true)) {
                 return CommandResult.Error("[world.view.pick: diagnostic findings require the operator]");
             }
             if (diagnostics?.Find(args[2].ToString()) is not { } finding || finding.Identity.Instance != instance) {

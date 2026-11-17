@@ -32,10 +32,11 @@ public static class CommandAudienceExtensions {
     /// <summary>Returns whether an audience admits a principal.</summary>
     /// <param name="audience">The command's audience.</param>
     /// <param name="principal">The acting principal.</param>
+    /// <param name="operates">The addressed world's live operator decision.</param>
     /// <returns><see langword="true"/> when the principal may run a command with this audience.</returns>
-    public static bool Admits(this CommandAudience audience, Principal principal) => audience switch {
+    public static bool Admits(this CommandAudience audience, Principal principal, bool operates = false) => audience switch {
         CommandAudience.Anyone => true,
-        CommandAudience.Operator => (principal.Kind == PrincipalKind.Console),
+        CommandAudience.Operator => operates,
         CommandAudience.Local => (principal.Kind is PrincipalKind.Console or PrincipalKind.Seat),
         CommandAudience.Host => principal.Kind == PrincipalKind.Console,
         _ => false,

@@ -206,7 +206,7 @@ public sealed partial class WorldStateCommandModule {
                 var acting = context.Principal;
 
                 if (
-                    (acting.Kind != PrincipalKind.Console) &&
+                    !server.Grants.IsOperator(acting) &&
                     (acting != principal)
                 ) {
                     return CommandResult.Error(output: $"[world.observe: refused — {acting.Describe()} may observe only itself, not {principal.Describe()}]");

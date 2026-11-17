@@ -235,14 +235,21 @@ There are two DIFFERENT trust boundaries in this file, and they diverge on
 `Addon`. Conflating them
 is the wrong-answer trap.
 
-**Administration/metering trust** (`WorldGrants.Conflicts`'s untrusted-budget
-requirement, `IsLegitimateSubject`'s wildcard gate, `HoldsForAdministration`):
-`Console` and `Seat` are trusted; the COMPLEMENT (`Addon`, `Peer`, any future
-kind) is untrusted, computed by predicate rather than by name:
-every mounted addon is still `PrincipalKind.Addon`, still budgeted
-(`budget:<n>` required on its Drive/Observe/Mutate rows), still handle-mediated,
-still never wildcarded, still never ceiling-carrying (a `Ceiling` may only
-ride a `Seat`'s own body row — see `IsOwnSeatBody`).
+**Administration and metering** use `WorldGrants.IsOperator`: Console and
+the world’s own program structurally, otherwise eligible live `Operate/all`
+holders, including role-qualified groups and ownership. Ordinary seats have
+explicit seed budgets and dispatch masks; they retain own-body consent, not
+general administration. Narrow non-Operate delegation retains its held-capability
+ceiling. Addons cannot become operators, directly or through groups.
+
+`WorldGrants.Authority.cs` owns transition admission. Direct grant/revoke,
+document composition (every batch prefix), rebuild and checkpoint restoration
+validate there before installing. Raw table and group installers are private;
+callers consume a prepared authority transition. An operator acquired by a
+batch cannot authorize that batch. Operator group roles, membership, kinds,
+ownership and referenced state sources are protected by the same admission.
+The current group schema carries literal members and roles; the existing
+document-reference collector follows any state-backed holders in this graph.
 
 **The fold's OWN contributor-trust predicate** (`WorldTick.StageContribution`,
 `WorldAddonRuntime.ContributionAccepted`) **keys on HOST LOCUS, not principal
@@ -281,15 +288,14 @@ or Peer); Mutate takes `section:<name>`/`creation:<id>`/`placement:<id>` (the DI
 section-Mutate hold AND a row-concrete Edit hold (see [mutations.md](mutations.md)'s "Double authority check") — every
 other section's mutation checks Mutate alone.
 
-`TryGrant` rule ladder (highlights): a `world` or `document:` principal holds no
-live row at all (rules (-1)/(-1b), above); an UNTRUSTED principal is REFUSED
+`TryGrant` takes the actor and passes through transition admission. Document grantees
+do not hold live authority. A non-operator is refused
 `Mutate`/`section:rules` outright (owner ruling — a rule's EFFECTS act as
 `Principal.World`, which the admission door admits structurally and never
 meters, so one gated authoring act launders every budget and verb mask the row
-carries, and a verb mask cannot bound what the row does not dispatch; trusted
-principals are unaffected); exclusive-over-`all` refused outright;
+carries, and a verb mask cannot bound what the row does not dispatch; operators are unaffected); exclusive-over-`all` refused outright;
 `budget:<n>` is REQUIRED on an untrusted principal's Drive/Observe row and on
-its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), and refused everywhere else — including an
+its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), and may remain on an operator for later demotion. It is refused on an
 untrusted `Mutate`/`state:<name>` row, which is the cross-document write-back
 channel and has no dispatch door to meter (`budget:0` refused — omit the token
 instead; a re-grant IS the budget update). `verbs:<name,...>` is likewise

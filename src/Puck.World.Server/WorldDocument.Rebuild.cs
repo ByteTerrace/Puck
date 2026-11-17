@@ -26,7 +26,7 @@ public sealed partial class WorldDocument {
         // Only this authority reconstructs the wire delta. The candidate still crosses the ordinary neighbour,
         // local validation and install doors. Keep its pins until ApplyRebuild rechecks the base after queuing.
         if (request.Delta is { } delta) {
-            if (!principal.IsAuthority) {
+            if (!Host.Grants.IsOperator(principal)) {
                 preparationFailure = "world.reload requires the operator";
             } else if (delta.TryPrepare(m_definition, Host.DocumentVersion, out var candidate, out var deltaReason)) {
                 request = request with { Definition = candidate };

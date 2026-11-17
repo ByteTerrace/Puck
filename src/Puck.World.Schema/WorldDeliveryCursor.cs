@@ -15,6 +15,7 @@ public sealed class WorldDeliveryCursor {
     private int[] m_ordered = [];
     private ContentPin? m_definition;
     private ContentPin? m_frame;
+    private bool m_operator;
 
     /// <summary>The sequence this stream has delivered.</summary>
     public long Sequence { get; private set; }
@@ -30,7 +31,7 @@ public sealed class WorldDeliveryCursor {
     /// <param name="view">The stream's view.</param>
     /// <returns><see langword="true"/> when the stream owes a document for a value-only change.</returns>
     public bool FrameMoved(WorldRecipientView view) => view.Observes && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) &&
-        (m_frame != view.Images.FrameIdentity(view));
+        (m_operator != view.IsAuthority || m_frame != view.Images.FrameIdentity(view));
     /// <summary>Delivers a definition only when its observable content differs, and seeds all its row images.</summary>
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
         if (!view.Observes) { return null; }
@@ -38,7 +39,7 @@ public sealed class WorldDeliveryCursor {
         var presented = replica ? null : view.Definition;
         var identity = replica ? view.Images.DefinitionIdentity(view) : ContentPin.Compute(WorldDefinitionSerialization.SerializeCompact(presented!));
         if (replica) { m_frame = view.Images.FrameIdentity(view); }
-        if (identity == m_definition) { return null; }
+        if (identity == m_definition) { if (m_operator != view.IsAuthority) { Seed(view); } return null; }
         m_definition = identity;
         Seed(view);
         Delivered();
@@ -49,6 +50,7 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Records one observable delivery, preserving the sequence across a withheld span.</summary>
     public void Delivered() => Sequence = checked(Sequence + 1);
     private void Seed(WorldRecipientView view) {
+        m_operator = view.IsAuthority;
         m_rows.Clear();
         m_metadataPrimers.Clear();
         for (var row = 0; row < view.Source.AuthoredState.Count; row++) {
@@ -63,11 +65,13 @@ public sealed class WorldDeliveryCursor {
     }
     internal IReadOnlyList<WorldRowReplacement> Advance(WorldRecipientView view, ReadOnlySpan<int> rows) {
         // Nothing changed and no primer is owed: no row can need a replacement, so the audience is not composed.
-        if (rows.IsEmpty && (m_metadataPrimers.Count == 0)) { return []; }
+        var authorityChanged = m_operator != view.IsAuthority;
+        if (!authorityChanged && rows.IsEmpty && (m_metadataPrimers.Count == 0)) { return []; }
         List<WorldRowReplacement>? result = null;
         string? audience = null;
         m_affected.Clear();
         view.Images.Affected(view, rows, m_affected);
+        if (authorityChanged) { for (var row = 0; row < view.Source.AuthoredState.Count; row++) { m_affected.Add(row); } m_operator = view.IsAuthority; }
         foreach (var primer in m_metadataPrimers) { m_affected.Add(index: primer); }
         if (m_ordered.Length < m_affected.Count) { m_ordered = new int[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)m_affected.Count)]; }
         var ordered = m_ordered.AsSpan(0, m_affected.Count);

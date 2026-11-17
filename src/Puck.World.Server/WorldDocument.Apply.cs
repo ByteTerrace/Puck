@@ -55,7 +55,7 @@ public sealed partial class WorldDocument {
 
             if (
                 !ownsBody &&
-                (principal.Kind != PrincipalKind.Console) &&
+                !Host.Grants.IsOperator(principal) &&
                 (!Host.GrantTable.TryGetChannelReach(
                 channels: source.Channels,
                 mask: out var reach,
@@ -382,12 +382,26 @@ public sealed partial class WorldDocument {
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = RebuildVerb(kind: request.Kind);
-        if (!principal.IsAuthority) {
+        if (!Host.Grants.IsOperator(principal)) {
             DenyGrantTable(denial: $"{verb} requires the operator", connectionId: connectionId,
                 correlationId: correlationId, echoKind: WorldEditEchoKind.Rebuild);
             return false;
         }
         var priorDefinition = m_definition;
+        var preRebuildPeerRows = new Dictionary<int, IReadOnlyList<WorldGrant>>();
+
+        for (var peerIndex = Host.Population.LocalSeatCount; (peerIndex < Host.Population.Capacity); peerIndex++) {
+            if (
+                !Host.Population.IsAdmittedPeer(bodyIndex: peerIndex) ||
+                Host.Population.IsParked(index: peerIndex)
+            ) {
+                continue;
+            }
+
+            preRebuildPeerRows[peerIndex] = Host.GrantTable.Rows(principal: Host.Population.PeerPrincipal(index: peerIndex));
+        }
+
+
 
         if (request.Delta is { } delta &&
             (preparationFailure ?? delta.RefuseBase(m_definition, Host.DocumentVersion)) is { } deltaFailure) {
@@ -441,6 +455,13 @@ public sealed partial class WorldDocument {
 
             throw ReplayRefusal.RebuildContentMismatch.Raise(message: $"{verb}: content hash mismatch on {pinned} — found {contentHash}, expected {expected} (recorded). The pinned content has changed since this recording was made; re-record it.");
         }
+
+        var keepAuthority = ((request.Kind == WorldRebuildKind.Reload) && priorDefinition.Grants.SequenceEqual(second: candidate.Grants) &&
+            (System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
+                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
+            System.Text.Json.JsonSerializer.Serialize(candidate.Admission,
+                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>)))));
+
 
         Host.RebuildTap?.Invoke(
             arg1: request,
@@ -727,7 +748,10 @@ public sealed partial class WorldDocument {
             // A whole-document rebuild restarts scalar state and lattice stores together. Preserving one while
             // reseeding the other can duplicate finite stores; live mutations and checkpoints retain their own paths.
 
+            var authority = keepAuthority ? Host.GrantTable.PrepareDocument(principal, priorDefinition, installed)
+                : Host.GrantTable.PrepareReset(principal, priorDefinition, installed);
             Install(
+                authority: authority,
                 arena: rebuildArena,
                 compilation: compilation,
                 definition: installed,
@@ -775,50 +799,7 @@ public sealed partial class WorldDocument {
         // inside its reconnect grace — WorldPopulation.IsAdmittedPeer stays true through that window) is excluded
         // outright: it has no live session to act through, so it is re-authorized (and, if still trusted, reminted)
         // only on an actual reconnect, never on a rebuild that happens to land during its grace window.
-        var keepAuthority = ((request.Kind == WorldRebuildKind.Reload) && priorDefinition.Grants.SequenceEqual(second: candidate.Grants) &&
-            (System.Text.Json.JsonSerializer.Serialize(priorDefinition.Admission,
-                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
-            System.Text.Json.JsonSerializer.Serialize(candidate.Admission,
-                WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>)))));
-
         if (!keepAuthority) {
-            var preRebuildPeerRows = new Dictionary<int, IReadOnlyList<WorldGrant>>();
-
-            for (var peerIndex = Host.Population.LocalSeatCount; (peerIndex < Host.Population.Capacity); peerIndex++) {
-                if (
-                    !Host.Population.IsAdmittedPeer(bodyIndex: peerIndex) ||
-                    Host.Population.IsParked(index: peerIndex)
-                ) {
-                    continue;
-                }
-
-                preRebuildPeerRows[peerIndex] = Host.GrantTable.Rows(principal: Host.Population.PeerPrincipal(index: peerIndex));
-            }
-
-            // THE GRANT-TABLE HALF: runtime grants drop; document grants re-apply as at boot.
-            // A world.grant/world.revoke acquisition is RUNTIME state — orthogonal to the document
-            // and never touched by Install/Rebuild on its own — so a rebuild that left it standing would silently keep
-            // whatever authority the PRE-rebuild session had accumulated, including grants a fresh boot of this exact
-            // document would never have seeded. Reset silently to the SAME permissive local-play defaults the
-            // constructor seeds (WorldGrants.Reset — never the loud Grant door, exactly like the constructor's own
-            // seed), THEN replay the NEW candidate's own document-authored Grants section under Console through the
-            // IDENTICAL loud accept/reject path the constructor and world.grant both use — same consent-withholding
-            // (WithoutAuthoredConsent), same narration.
-            Host.GrantTable.Reset(seatCount: Host.Population.LocalSeatCount);
-
-            foreach (var grant in candidate.Grants) {
-                if (WorldTick.IsDocumentChannelRow(grant: grant)) {
-                    continue;
-                }
-
-                Host.Grant(
-                    grant: Host.GrantTable.WithoutAuthoredConsent(grant: grant),
-                    actor: Principal.Console,
-                    connectionId: connectionId,
-                    correlationId: correlationId
-                );
-            }
-
             // Admitted PEER CONNECTIONS are the one exception: "admitted peers survive"
             // means their CONNECTION stays (WorldPopulation never dropped them — Install/Rebuild's own Install call
             // above left every admitted peer body active), but the reset above just wiped their admission grant along
@@ -1129,8 +1110,9 @@ public sealed partial class WorldDocument {
     // assignment, motion, producer, seat kit, spawns) recompile the population's fixed tables and live bodies; the
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
-    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldRuleCompilation? compilation = null, StateArena? arena = null,
+    internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
         WorldRebuildKind? rebuildKind = null) {
+        authority.Install();
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
 
         WorldBootWork.Count(kind: WorldBootWork.FullInstalls);
@@ -1142,11 +1124,6 @@ public sealed partial class WorldDocument {
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
-        Host.GrantTable.SyncGroups(
-            groups: (definition.Groups ?? WorldGroupsSection.Empty).Groups,
-            kinds: (definition.Groups ?? WorldGroupsSection.Empty).Kinds,
-            ownership: (definition.Groups ?? WorldGroupsSection.Empty).Ownership
-        );
         // Unconditional here (no touchedRow) — the mutation kinds that reach Install (a whole-document rebuild)
         // are too varied to cheaply name the one row they touched, unlike the single-cell write InstallRuntimeStateValue
         // below narrows. This is what makes a live world.state.cell.set that flips a gate settle before the SAME

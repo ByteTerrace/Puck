@@ -240,6 +240,7 @@ public static class WorldWireLeaves {
         var identityDomain = reader.ReadString(field: "peer identity domain");
         var identitySubject = reader.ReadString(field: "peer identity subject");
         var admissionTrust = ReadAdmissionTrust(reader: ref reader);
+        var tier = (WorldDisclosureTier)reader.ReadByte();
         var authorityTransferred = reader.ReadBoolean();
         var placementId = reader.ReadNullableString(field: "peer placement id");
         var catalogRig = reader.ReadByte();
@@ -267,6 +268,7 @@ public static class WorldWireLeaves {
 
         return new WorldPeerEventEntry(
             AdmissionTrust: admissionTrust,
+            Tier: tier,
             AuthorityTransferred: authorityTransferred,
             BodyIndex: bodyIndex,
             CatalogRig: catalogRig,
@@ -303,6 +305,7 @@ public static class WorldWireLeaves {
         writer.WriteString(value: peer.IdentityDomain);
         writer.WriteString(value: peer.IdentitySubject);
         WriteAdmissionTrust(writer: writer, trust: peer.AdmissionTrust);
+        writer.WriteByte((byte)peer.Tier);
         writer.WriteBoolean(value: peer.AuthorityTransferred);
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);

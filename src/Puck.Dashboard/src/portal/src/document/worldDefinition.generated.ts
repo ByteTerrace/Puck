@@ -2330,7 +2330,7 @@ export type CreationNoiseDocument = {
    */
   frequency: number;
   /**
-   * The peak outward displacement, world units (clamped to (0, MaxAmplitude]; zero drops the facet).
+   * The peak displacement in creation units, scaled with the stamp (clamped to (0, MaxAmplitude]; zero drops the facet).
    */
   amplitude: number;
   /**
@@ -6518,7 +6518,7 @@ export type WorldCameraSubjectWorldPoint = {
 /**
  * The coarse capability verbs a WorldGrant confers — the closed set the server checks a submission's Principal against at each write boundary. A genre world arrives as different data (new subjects, new sections), never a new capability.
  */
-export type WorldCapability = "Drive" | "Observe" | "Control" | "Mutate" | "Edit";
+export type WorldCapability = "Drive" | "Observe" | "Control" | "Mutate" | "Edit" | "Operate";
 
 export type WorldCapabilityRequest = {
   /**

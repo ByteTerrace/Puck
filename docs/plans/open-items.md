@@ -1958,34 +1958,15 @@ escalation laws, then the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high] No principal but the host's console can declare a state row, moderate
-  a hosted world or operate a world it owns: the write door refuses every
-  recipient declaration, and the operator is a principal kind.
-  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
-  is the revised design: operator grant and Host audience; writable scopes
-  with private contributor policies, structural membership and runtime row/key/
-  byte partitions; declarations-only preparation; a static declaration security
-  closure whose checks recorded reads cannot remove; and validity maintained
-  by each authority commit. It answers H1–H6, M1–M8 and L1–L7 of rd2-review.
-  D1 is blocked WIP, not a completed capability: the Host audience, authored
-  Host-call refusal and peer-report field split are preparatory code only.
-  Operator still means Console, and no Operate capability has been introduced.
-  The operator predicate must replace all kind-keyed
-  trust checks together with group and grants-section escalation admission,
-  single-subject admission templates, field-split peer reporting and silo
-  admission. Peer disconnect, revocation reseeding and observer invalidation
-  also remain. No single admission enforces D1's authority-transition invariant
-  yet. Its law set is in the one [build table](disclosure.md#the-build-order).
-  In the disconnect closure, account for parked peers: `IsAdmittedPeer` retains
-  them (`src/Puck.World.Server/WorldPopulation.Admission.cs`), while
-  `SiloControlSessionHost.Allows` currently checks admission and generation,
-  not parking. Infer that parking alone cannot revoke a live control session;
-  D1 must close its transport and command admission together.
+- [high] Ordinary recipient declarations still require the closed-scope and
+  acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
+  D1 implements the live operator grant, guarded authority transitions,
+  single-subject templates, Host separation and peer disconnect. Its remaining
+  verification is tracked in the build table until the lane’s finish line passes.
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
   host preparation and authority maintenance land separately as D0b2–D0b4.
   D4/D5/D7 build closed scopes, D6 opens and migrates private/default-tier input,
-  then D0c switches the remaining general routes. No partial Operate capability
-  is introduced by the memo. Implementation still needs the specified checks
+  then D0c switches the remaining general routes. Those steps need their specified checks
   and trust-boundary review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit

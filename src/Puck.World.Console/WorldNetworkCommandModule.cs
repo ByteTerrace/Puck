@@ -242,11 +242,25 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.peer.disconnect",
+            forms: CommandForms.Of("world.peer.disconnect", "<peer>"),
+            description: "Disconnects a peer generation, closes its transports and refuses further commands from that connection.",
+            valueKind: CommandValueKind.Digital,
+            handler: (context, args) => {
+                if (!authority.TryResolve(context, out var instance, out var refusal)) { return CommandResult.Error($"[world.peer.disconnect: {refusal}]"); }
+                if (!PrincipalTokens.TryParse(args[0], out var peer) || peer.Kind != PrincipalKind.Peer ||
+                    !instance.Server.DisconnectPeer(peer, context.Principal)) { return CommandResult.Error("[world.peer.disconnect: expected a live peer principal]"); }
+                return new CommandResult(Output: $"[world.peer.disconnect: {peer.Describe()}]");
+            }
+        );
         yield return CommandDefinition.Verb(
             audience: CommandAudience.Operator,
             bindability: CommandBindability.Unbindable,
             name: "world.peers",
-            description: "Lists live admitted peer bodies, transferred travellers, connection ids, peer principals, disclosure tiers and federation refusal counts. The host console also sees listen and remote endpoints and verified admission identities. Population rows include control sessions even when no QUIC listener runs. Identity fields come only from verified admission. This remains an Operator verb; remote operator admission is pending the atomic Operate implementation.",
+            description: "Lists live admitted peer bodies, transferred travellers, connection ids, peer principals, disclosure tiers and federation refusal counts. The host console also sees listen and remote endpoints and verified admission identities. Population rows include control sessions even when no QUIC listener runs. Identity fields come only from verified admission.",
             valueKind: CommandValueKind.Digital,
             handler: context => {
                 if (!authority.TryResolve(

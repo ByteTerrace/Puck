@@ -301,10 +301,10 @@ internal sealed class WorldInstanceCommandModule(WorldInstanceHost instances, Cl
                 // The clock the seat's world presents by: its step and the spread of its snapshots' arrivals. The
                 // arrivals are wall time, a diagnostic for the operator alone, like host.frames.
                 Span<double> intervals = stackalloc double[63];
-                var count = (context.Principal.IsAuthority
+                var count = ((context.Principal.Kind == PrincipalKind.Console)
                     ? seatLocation.Endpoint.Mirror.SnapshotArrivalIntervals(milliseconds: intervals)
                     : 0);
-                var clock = (context.Principal.IsAuthority ? " clock: no snapshots yet" : string.Empty);
+                var clock = ((context.Principal.Kind == PrincipalKind.Console) ? " clock: no snapshots yet" : string.Empty);
 
                 if (count > 0) {
                     var held = intervals[..count];

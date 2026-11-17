@@ -50,6 +50,13 @@ public enum WorldAdmissionRefusal : byte {
 /// claims, issuer re-attestation).</para>
 /// </summary>
 public static class WorldAdmissionDoor {
+    /// <summary>Whether an entry's operator templates are pinned to one subject at Replica, without payloads.</summary>
+    public static bool AllowsOperatorTemplates(WorldAdmissionEntry entry) => !entry.Grants.Any(row => row.Capability == WorldCapability.Operate) ||
+        (entry.Tier == WorldDisclosureTier.Replica && entry.Mode is WorldAdmissionTrustMode.SignsDirectly or WorldAdmissionTrustMode.OAuth &&
+        !string.IsNullOrWhiteSpace(entry.Domain) && !entry.Domain.Contains('*') && !string.IsNullOrWhiteSpace(entry.Subject) && !entry.Subject.Contains('*') &&
+        entry.Grants.Where(row => row.Capability == WorldCapability.Operate).All(row => row.Subject == GrantSubject.All && !row.Exclusive &&
+            row.Budget is null && row.EventBudget is null && row.KindMask is null));
+
     // Document validation and live verification must interpret a keyed admission row identically. Keep only the
     // row-to-attestation mapping here; the validator still reports shape errors and browser crypto deferrals itself.
     internal static TrustListEntry TrustEntry(WorldAdmissionEntry entry, byte[] spki) => new(
@@ -210,6 +217,7 @@ public static class WorldAdmissionDoor {
         WorldAdmissionEntry? wildcard = null;
 
         foreach (var entry in rows) {
+                if (!AllowsOperatorTemplates(entry)) { continue; }
             if (entry.Mode != WorldAdmissionTrustMode.FederatedAuthority) {
                 continue;
             }
@@ -309,6 +317,7 @@ public static class WorldAdmissionDoor {
     public static bool TryMatchEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string? domain, string? subject, WorldAdmissionTrustIdentity? trustIdentity, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAdmissionVerdict? verdict) {
         if (entries is { Count: > 0 } rows) {
             foreach (var entry in rows) {
+                if (!AllowsOperatorTemplates(entry)) { continue; }
                 if ((trustIdentity is null) || (WorldAdmissionTrustIdentity.FromEntry(entry: entry) != trustIdentity)) {
                     continue;
                 }
@@ -356,6 +365,7 @@ public static class WorldAdmissionDoor {
     /// <returns>Whether an exact OAuth row admits this identity; no wildcard or attestation row can authorize it.</returns>
     public static bool TryMatchOAuthEntry(IReadOnlyList<WorldAdmissionEntry>? entries, string issuer, string subject, out WorldAdmissionVerdict verdict) {
         foreach (var row in (entries ?? [])) {
+            if (!AllowsOperatorTemplates(row)) { continue; }
             if (
                 (row.Mode == WorldAdmissionTrustMode.OAuth) &&
                 (row.Domain == issuer) &&

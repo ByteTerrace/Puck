@@ -2284,7 +2284,7 @@
                 "type": "number"
               },
               "amplitude": {
-                "description": "The peak outward displacement, world units (clamped to (0, MaxAmplitude]; zero drops the facet).",
+                "description": "The peak displacement in creation units, scaled with the stamp (clamped to (0, MaxAmplitude]; zero drops the facet).",
                 "type": "number"
               },
               "octaves": {

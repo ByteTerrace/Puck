@@ -24,7 +24,7 @@ public sealed partial class WorldDocument {
     // rehydration a hit triggers does. A member that can add or drop a reference — a whole-row write, or an edit to
     // any other section — drops the set, so the next state member collects it again from the document that member
     // produced.
-    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode) {
+    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority) {
         refusalCode = null;
         var working = current;
         var time = ComposeTime(
@@ -41,7 +41,7 @@ public sealed partial class WorldDocument {
         foreach (var member in batch.Mutations) {
             if (member is WorldMutation.UpsertStateCell upsert) { seeded.Add(item: upsert.Row); } else if (member is WorldMutation.RemoveStateCell remove) { seeded.Add(item: remove.Row); } else { seeded = null; break; }
         }
-        if (!batch.Principal.IsAuthority && seeded is not null) {
+        if (!authority.IsOperator(batch.Principal) && seeded is not null) {
             // Partial cell composition still needs the public audience rows its targeted declarations read.
             // Include them before loading scratch, so sequential policy checks see earlier audience writes too.
             var policies = WorldStateReader.Arena(current);
@@ -58,7 +58,7 @@ public sealed partial class WorldDocument {
         reason = string.Empty;
         evictedKey = null;
         if (batch.ExpectedCells is { Count: > 0 } || batch.ExpectedDefinition is not null || batch.ExpectedInputs is not null || batch.ExpectedSpatialReads is { Count: > 0 }) {
-            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time);
+            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time, operates: () => authority.IsOperator(batch.Principal));
             if (!view.CheckGuards(batch, out reason)) { candidate = current; return false; }
         }
 
@@ -67,7 +67,7 @@ public sealed partial class WorldDocument {
                 var member = batch.Mutations[index];
                 string? writtenRow = null;
                 // Recheck against preceding members' declarations, never against a future write's membership.
-                if (!batch.Principal.IsAuthority) {
+                if (!authority.IsOperator(batch.Principal)) {
                     var memberView = WorldRecipientView.ForComposition(working, batch.Principal, arena, time);
                     if (!memberView.Admits(member, out var withheld)) {
                         candidate = current; reason = memberView.Refusal("batch", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
@@ -145,7 +145,10 @@ public sealed partial class WorldDocument {
                             break;
                         }
                     default: {
-                            SyncArenaExport(
+                            if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
+                candidate = current; return false;
+            }
+            SyncArenaExport(
                                 arena: arena,
                                 arenaDirty: ref arenaDirty,
                                 working: ref working
@@ -160,7 +163,8 @@ public sealed partial class WorldDocument {
                                 mutation: member,
                                 reason: out reason,
                                 tick: tick,
-                                refusalCode: out refusalCode
+                                refusalCode: out refusalCode,
+            authority: authority
                             )) {
                                 candidate = current;
 
@@ -205,6 +209,9 @@ public sealed partial class WorldDocument {
                         }
                 }
 
+                if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
+                    candidate = current; return false;
+                }
                 if (writtenRow is null) {
                     continue;
                 }
@@ -220,6 +227,9 @@ public sealed partial class WorldDocument {
                     candidate = current;
 
                     return false;
+                }
+                if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
+                    candidate = current; return false;
                 }
             }
 

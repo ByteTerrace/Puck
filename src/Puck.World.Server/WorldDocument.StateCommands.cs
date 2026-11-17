@@ -36,7 +36,7 @@ public sealed partial class WorldDocument {
     }
     private bool TryStateMembers(WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
         reason = string.Empty; evicted = null;
-        if (!mutation.Principal.IsAuthority) {
+        if (!Host.Grants.IsOperator(mutation.Principal)) {
             var view = Host.WriteView(mutation.Principal);
             if (!view.Admits(mutation, out var withheld)) {
                 m_lastMutationFailureCode = WorldRecipientMutations.NotDisclosedCode;

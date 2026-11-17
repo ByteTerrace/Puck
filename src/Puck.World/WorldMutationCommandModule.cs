@@ -542,11 +542,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var view = server.ReadView(context);
                 if (!view.Observes) { return new CommandResult(Output: "[world.status: not disclosed]"); }
                 var definition = view.Definition;
-                var isOperator = context.Principal.IsAuthority;
+                var isOperator = server.Grants.IsOperator(context.Principal);
                 var source = isOperator ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty;
                 // The journal and the save snapshot are the authority's edit history: the journal's length moves with
                 // an operator's hidden-only edit, so a recipient's status carries neither.
-                var journal = (context.Principal.IsAuthority
+                var journal = (server.Grants.IsOperator(context.Principal)
                     ? $" session-drift {WorldSessionCapture.DescribeDrift(
                         definition: definition,
                         snapshot: WorldSaveSnapshot.Compose(

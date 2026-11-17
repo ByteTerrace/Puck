@@ -500,6 +500,7 @@ public sealed partial class WorldPopulation {
         // ApplyPeerDisconnected — SetSimulatedCount skips a slot carrying it exactly like an inhabited one, so a
         // world.population edit can never silently reassign or deactivate a connected human's body.
         public bool IsRemoteHuman { get; set; }
+        public WorldDisclosureTier AdmissionTier { get; set; }
         // Kind is fixed at construction (LocalSeat for slots 0..3, NetworkPeer thereafter) and never changes: an
         // inhabitant is a NetworkPeer distinguished by its PlacementId, not a kind flip.
         public required PopulationKind Kind { get; init; }

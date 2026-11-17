@@ -151,6 +151,7 @@ public sealed class WorldGrantCommandModule(IWorldConsoleAuthority authority) : 
         return CommandResult.None;
     }
     private static bool TryParseCapability(ReadOnlySpan<char> token, out WorldCapability capability) {
+        if (token.Equals("operate", StringComparison.OrdinalIgnoreCase)) { capability = WorldCapability.Operate; return true; }
         if (token.Equals(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             other: "drive"

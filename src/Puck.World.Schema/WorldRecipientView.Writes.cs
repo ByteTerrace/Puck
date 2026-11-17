@@ -20,9 +20,9 @@ public sealed partial class WorldRecipientView {
 
     /// <summary>Creates a capability at a trusted, detached composition boundary. Live ingress uses the server's
     /// minted capability so session ceilings and live Observe admission cannot be raised.</summary>
-    public static WorldRecipientView ForComposition(WorldDefinition document, Principal actor, StateArena? store = null, ArenaTime? time = null) =>
+    public static WorldRecipientView ForComposition(WorldDefinition document, Principal actor, StateArena? store = null, ArenaTime? time = null, Func<bool>? operates = null) =>
         new(() => document, () => store ?? WorldStateReader.Arena(document), actor, WorldDisclosureTier.Replica,
-            static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin);
+            static () => true, new WorldDisclosureImages(), string.Empty, () => time ?? ArenaTime.Origin, operates);
 
     /// <summary>Admits a row's declared write footprint from policy alone: the row, its token domain, and every row
     /// keyed over it (<see cref="StateCatalog.DependentRows"/>). A write into a keyed row is refused by the transaction

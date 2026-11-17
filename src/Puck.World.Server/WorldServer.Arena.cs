@@ -88,7 +88,7 @@ public sealed partial class WorldServer {
         if (m_grants.TryGetWriteMask(capability: WorldCapability.Edit, grantee: principal, mask: out var mask, subject: subject) && !mask.Contains(kind: write)) {
             return WorldCellWriteVerdict.Masked;
         }
-        if (!WorldGrants.IsTrusted(principal: principal)) {
+        if (!Grants.IsOperator(principal)) {
             var meter = (principal, subject);
 
             m_cellWriteCounts.TryGetValue(key: meter, value: out var count);
