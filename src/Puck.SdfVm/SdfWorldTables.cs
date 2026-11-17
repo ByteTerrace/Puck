@@ -331,7 +331,7 @@ public sealed partial class SdfWorldTables : IDisposable {
             region: DecalRegionIndex
         ));
         // Reserved before it is created, so the ledger admits the region's first buffer against the grant.
-        m_meshGrant = scope.Own(created: SdfResidencySelector.Of(device: device).Register(name: ObjectOwner));
+        m_meshGrant = scope.Own(created: (options.Selector ?? SdfResidencySelector.Of(device: device)).Register(name: ObjectOwner));
         m_meshGrant.Created(capacityBytes: SdfMeshRegion.DrawBytes);
         m_meshRegion = scope.Own(created: CreateRegion(
             byteCount: SdfMeshRegion.DrawBytes,

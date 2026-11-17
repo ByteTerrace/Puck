@@ -1450,7 +1450,8 @@ the fixed shares are gone.
   `GpuMemoryRefusedException`, which a region's growth and shrink catch.
   Fixed and floor storage is admitted past the limit and counted
   (`MemoryAdmissionReading.OverLimitGrants`), which is the presentation whose
-  least does not fit.
+  least does not fit; a holder states its floor with its reservation, and a
+  mesh region's draw records are one (`SdfResidencyGrant.ReserveFloorGrowth`).
 - **Reservations.** A holder reserves the peak its resources hold before it
   allocates (`MemoryAccount.ReserveDevice`, `MemoryAccount.DeviceReservation`),
   under the owner its objects are named for (`GpuObjectName.MemoryOwnerOf`).
@@ -1558,8 +1559,9 @@ falling budget, a covered allocation, the floor, the device's refusal, the one
 forced job, the host's free memory, the pressure trim),
 `SdfResidencySelectorLawTests` (four residencies' grants under the limit at
 every step of a falling budget, the one bias, a region's growth under its
-reservation, the work budget's rate), and the pipeline's refusal by the
-account. The windowed readings are verification requests to the lead: the
+reservation, the work budget's rate), the tables' law that a region with no
+room keeps its buffer and refuses the meshes past it without throwing, and
+the pipeline's refusal by the account. The windowed readings are verification requests to the lead: the
 lowered-budget path (`host.memory budget device` in steps at the meadow, on
 both backends: `over-limit`, `detail-bias`, `refusals` and `growth-refusals`
 at each step, with captures), and the slow-present reading above.

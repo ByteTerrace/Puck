@@ -370,7 +370,7 @@ public sealed partial class SdfWorldTables {
     private SdfMeshStagingCause RefusalOf(SdfFrame frame) {
         // Serials belong to one producer. A replacement list can start at the serial the previous list ended at.
         if ((frame.MeshDrawChangesCause is { } stated) &&
-            (!ReferenceEquals(frame.MeshDraws, m_meshSource) || (frame.MeshDrawChangesSerial != m_drawChangesSerial))) { return stated; }
+            (!ReferenceEquals(objA: frame.MeshDraws, objB: m_meshSource) || (frame.MeshDrawChangesSerial != m_drawChangesSerial))) { return stated; }
         if ((frame.MeshDrawChanges is null) || (m_meshSource is null)) { return SdfMeshStagingCause.Cursor; }
         return ((!m_meshStaged || !m_stagedWhole || (m_owedWords != 0) || (frame.MeshDraws.Count != m_stagedCount))
             ? SdfMeshStagingCause.Landing
@@ -924,9 +924,11 @@ public sealed partial class SdfWorldTables {
         );
     }
     // The growth is reserved before the plan that asks for it (PrepareMeshRegionLimit), so the ledger admits the new
-    // buffer against the grant. A device that refuses it all the same leaves the region as it is: the placements past
-    // what it holds are taken back and refused (SdfMeshRegionArena.Clip), their draws wait, and nothing throws. Only a
-    // region that cannot hold its draw records, which a residency cannot draw without, is an error.
+    // buffer against the grant. A growth refused all the same (the pool had no room for a replacement beside the
+    // standing buffer, or the device said no) leaves the region as it is: the placements past what it holds are taken
+    // back and refused (SdfMeshRegionArena.Clip), their draws wait, and nothing throws. Draw records the buffer cannot
+    // hold are the floor, which a residency cannot draw without: their growth is reserved whatever the pool holds and
+    // admitted past the limit, counted. Only a device that refuses that too is an error.
     private void EnsureMeshRegionCapacity(ulong bytes) {
         var current = ((ulong)m_meshRegion.ByteCount);
 
@@ -941,15 +943,25 @@ public sealed partial class SdfWorldTables {
 
         try {
             replaced = m_meshRegion.Grow(byteCount: ((long)grown));
-        } catch (GpuMemoryRefusedException refusal) {
+        } catch (GpuMemoryRefusedException) {
             m_meshGrant.Kept(refused: true);
             m_meshArena.Clip(limitBytes: current);
             ForgetArenaMeshes();
-            if ((((ulong)m_meshArena.Words) * sizeof(uint)) > current) {
-                throw new InvalidOperationException(innerException: refusal, message: $"The mesh region holds {current} bytes and could not grow to the {(((ulong)m_meshArena.Words) * sizeof(uint))} its draw records need.");
+
+            var floor = (((ulong)m_meshArena.Words) * sizeof(uint));
+
+            if (floor <= current) {
+                return;
             }
 
-            return;
+            grown = MeshRegionGrownBytes(needBytes: floor);
+            m_meshGrant.ReserveFloorGrowth(newBytes: ((long)grown));
+            try {
+                replaced = m_meshRegion.Grow(byteCount: ((long)grown));
+            } catch (GpuMemoryRefusedException refusal) {
+                m_meshGrant.Kept(refused: true);
+                throw new InvalidOperationException(innerException: refusal, message: $"The mesh region holds {current} bytes and the device refused the {grown} its draw records need.");
+            }
         }
 
         ReplacedMeshRegion(newBytes: grown, oldBytes: ((long)current), replaced: replaced);

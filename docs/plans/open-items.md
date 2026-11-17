@@ -989,10 +989,17 @@ and every memory owner are its steps. This packet holds the defects beside it.
   `SdfResidencyGrant.StagingAllowanceBytes` of it, and a flush that stages
   more with the pool at its limit is refused as a region's growth is, where it
   throws from the upload. Reserve the staging with the flush that sizes it.
-- [low] A mesh region whose device refuses a growth after the account admitted
-  it, while its draw records alone pass the buffer it holds, still throws
+- [low] A mesh region whose draw records pass the buffer it holds grows for
+  them whatever the pool holds (`SdfResidencyGrant.ReserveFloorGrowth`), and
+  the meshes the old buffer could not hold are refused until a later plan. If
+  the device itself refuses that growth the region throws
   (`SdfWorldTables.EnsureMeshRegionCapacity`): the draw records are the floor
   and have no smaller form.
+- [medium] A fixed reservation (a shader pipeline's replacement) is refused
+  when its pool is full, and elastic storage does not yet give way for it: a
+  resize or reload at a full pool keeps the installed graph
+  (`SHADERPIPE_BUDGET`) until the bias has made room. The plan's step 5 is
+  what gives way.
 - [low] A shader pipeline's reservation is lowered when its replaced objects
   are released; a build discarded before it installs keeps its peak promised
   until the instance's next build or release.

@@ -424,6 +424,11 @@ public sealed class SdfResidencyGrant : IDisposable {
     /// <returns><see langword="true"/> when the replacement may be created; <see langword="false"/> leaves the region as
     /// it is.</returns>
     public bool TryReserveReplacement(long newBytes) => Reserve(floor: Standing, peak: (Standing + newBytes));
+    /// <summary>Reserves a replacement of <paramref name="newBytes"/> beside the standing buffer as the reservation's
+    /// floor, whatever the pool holds: the growth the region's draw records need, which a residency cannot draw
+    /// without. The ledger admits the replacement past a limit and counts it.</summary>
+    /// <param name="newBytes">The bytes of the buffer the draw records need.</param>
+    public void ReserveFloorGrowth(long newBytes) => _ = Reserve(floor: (Standing + newBytes), peak: (Standing + newBytes));
     /// <summary>Records that a replaced buffer's readers finished and it was released: its bytes leave the
     /// reservation.</summary>
     /// <param name="bytes">The bytes of the released buffer.</param>
