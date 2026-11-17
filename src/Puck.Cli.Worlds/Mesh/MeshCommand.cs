@@ -4,6 +4,7 @@ using System.Numerics;
 using System.Text;
 
 using Puck.Cli.Host;
+using Puck.Maths;
 using Puck.SdfVm;
 using Puck.SignedDistance.Queries;
 using Puck.World.Client;
@@ -391,7 +392,7 @@ public static class MeshCommand {
             var refusals = chosen.SelectMany(selector: group => verdicts(arg: group).Where(predicate: static verdict => (verdict.Measured && !verdict.Kept))).ToArray();
             var reasons = refusals.SelectMany(selector: static verdict => verdict.Reasons.Split(separator: ' ').Where(predicate: static word => (char.IsLetter(c: word[0]) && (word != "mm")))).GroupBy(keySelector: static word => word).OrderBy(keySelector: static named => named.Key, comparer: StringComparer.Ordinal);
 
-            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name}: kept{appended} | coarsest nonempty {floor} ({(((double)collapseFloor) / Math.Max(val1: 1L, val2: floor)):0.0}x below the collapse's); {gained} group(s) gain a field level, {empty} run to the empty level unbroken; coarsest error over half-diagonal p50 {Quantile(at: 0.5, sorted: share):0.###} p90 {Quantile(at: 0.9, sorted: share):0.###}\n");
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name}: kept{appended} | coarsest nonempty {floor} ({(((double)collapseFloor) / Math.Max(val1: 1L, val2: floor)):0.0}x below the collapse's); {gained} group(s) gain a field level, {empty} run to the empty level unbroken; coarsest error over half-diagonal p50 {((share.Length == 0) ? 0.0 : OrderStatistics.Quantile(ascending: share, fraction: 0.5)):0.###} p90 {((share.Length == 0) ? 0.0 : OrderStatistics.Quantile(ascending: share, fraction: 0.9)):0.###}\n");
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels {name} refusals: {refusals.Length} level(s); {string.Join(separator: ", ", values: reasons.Select(selector: static named => $"{named.Key} {named.Count()}"))}\n");
         }
 
@@ -420,7 +421,6 @@ public static class MeshCommand {
 
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"field levels cost: bake evaluations {bakeEvaluations}, contour evaluations {contour} ({(((double)contour) / Math.Max(val1: 1L, val2: bakeEvaluations)):0.00}x the bake's), oracle evaluations {oracle} (the audit's, not the bake's); {ThreadCycles.Unit} contour {contourCycles} ({(((double)contourCycles) / Math.Max(val1: 1UL, val2: collapseCycles)):0.00}x the collapse's {collapseCycles}), oracle {oracleCycles}\n");
     }
-    private static double Quantile(double[] sorted, double at) => ((sorted.Length == 0) ? 0.0 : sorted[((int)((sorted.Length - 1) * at))]);
     // The worst clusters across every group, each with its image when a directory is named.
     private static void WriteWorst(Outcome?[] results, int[] ordered, int worst, string? images, int level, StringBuilder output) {
         var clusters = ordered

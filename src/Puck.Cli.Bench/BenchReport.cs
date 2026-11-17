@@ -1,4 +1,5 @@
 using Puck.Abstractions;
+using Puck.Maths;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -89,24 +90,12 @@ public sealed record BenchMetric(string Unit, double Median, double P10, double 
         var ordered = samples.Order().ToArray();
 
         return new BenchMetric(
-            Median: Quantile(fraction: 0.5, ordered: ordered),
-            P10: Quantile(fraction: 0.1, ordered: ordered),
-            P90: Quantile(fraction: 0.9, ordered: ordered),
+            Median: OrderStatistics.Quantile(ascending: ordered, fraction: 0.5),
+            P10: OrderStatistics.Quantile(ascending: ordered, fraction: 0.1),
+            P90: OrderStatistics.Quantile(ascending: ordered, fraction: 0.9),
             Samples: [.. samples],
             Unit: unit
         );
-    }
-    /// <summary>Returns a quantile of ascending samples, interpolated linearly between the neighbouring samples: the one
-    /// quantile every measurement verb reports.</summary>
-    /// <param name="ordered">The samples in ascending order; at least one.</param>
-    /// <param name="fraction">The quantile, from 0 to 1.</param>
-    /// <returns>The quantile.</returns>
-    public static double Quantile(IReadOnlyList<double> ordered, double fraction) {
-        var position = ((ordered.Count - 1) * fraction);
-        var lower = (int)Math.Floor(d: position);
-        var upper = (int)Math.Ceiling(a: position);
-
-        return (ordered[lower] + ((ordered[upper] - ordered[lower]) * (position - lower)));
     }
 }
 
@@ -134,6 +123,7 @@ public sealed record BenchHostLoad(int Readings, double CpuMeanPercent, double C
 /// <param name="Metrics">Each metric by name.</param>
 /// <param name="Rows">The lane's printed table from its last repeat, row name to text.</param>
 /// <param name="Startup">The startup lane's per-process samples, or <see langword="null"/> for another lane.</param>
+/// <param name="Benchmark">The benchmark lane's runs, loops and chapters with their conditions, or <see langword="null"/> for another lane.</param>
 public sealed record BenchReport(
     string Schema,
     string Verb,
@@ -146,7 +136,8 @@ public sealed record BenchReport(
     bool Complete,
     IReadOnlyDictionary<string, BenchMetric> Metrics,
     IReadOnlyList<KeyValuePair<string, string>>? Rows = null,
-    IReadOnlyList<StartupSample>? Startup = null
+    IReadOnlyList<StartupSample>? Startup = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] JsonObject? Benchmark = null
 ) {
     /// <summary>The report format's name.</summary>
     public const string SchemaName = "puck.bench.v1";

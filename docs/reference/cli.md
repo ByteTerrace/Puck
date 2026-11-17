@@ -92,6 +92,7 @@ half of these rules on every command, with no exemptions.
 | [`puck artifacts`](#automation-commands) | capture, restore, and test the compiled-solution archive CI passes between jobs. |
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
 | [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
+| [`puck benchmark`](#puck-benchmarkthe-route-benchmark) | plays a route (the `test` blocks of a `.puck` source) through a fresh paused World in real time on each backend and reports every chapter's frame statistics, hitches, GPU passes and counters; `--against` and `compare` compare reports and refuse unlike runs by name. |
 | [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
@@ -2872,6 +2873,84 @@ every content search in this repo through the checkout's own `puck search` build
 
 ---
 
+## `puck benchmark`—the route benchmark
+
+`puck benchmark` plays a route through a World in real time and reports what the host did: the benchmark of
+[the benchmark plan](../plans/benchmark.md), whose stage 3 is this verb. A route is the `test` blocks of one `.puck`
+source (`--route`, optionally the chapters whose names start with `--chapter`), each block a chapter: its `when`
+lines are a controller program and its `expect` lines its arrival. The verb boots a fresh World paused before its
+first tick (`--paused`), waits for the renderer with authority held, sends the in-game verb `world.benchmark run`
+and resumes. The World plays the route itself, as a `timedemo` does, arming each chapter's rows through the seat's own
+ingress at ticks it computes from the run's start; the verb is the launcher and the comparer, holds no copy of the route
+and pins no steps. Every process uses `--devices none` and its own state directory, and a windowed one takes the GPU
+lease through `WorldLaunch`.
+
+```sh
+puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the valley into the gallery, fastest' --backend directx vulkan
+puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the garden painting' --loops 3 --at 120
+puck benchmark --headless --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the lift, walking' --output artifacts/benchmark
+puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the lift, walking' --against artifacts/benchmark/<earlier run id>
+puck benchmark compare <baseline report.json or directory> <candidate report.json or directory> [--all] [--json]
+```
+
+- **Backends.** `--backend` names each windowed backend, `directx` and `vulkan`; each gets a World of its own, one after
+  another. Omitted, a Windows run plays both and another OS plays Vulkan. `--headless` plays one World with no window or
+  renderer: the arrival, the state hash and the host iterations are reported, and every reading that needs a renderer (GPU
+  passes, `world.residency`, the render counters) is absent.
+- **Where a run starts.** The World boots paused, so the route is armed before the first tick: `--at <tick>` names the tick
+  the first chapter's first line lands at (otherwise four ticks after the boot), and every line then lands on the same
+  absolute tick in every run. The report's `start` says `fresh`; a run typed into a running World with `world.benchmark
+  run` is `attached`, and its state hashes are informational and never compared. `--loops <n>` (1..16) plays the route
+  again from the state the run left, armed as each loop ends, and the report calls the first loop cold, the second warm and
+  the rest steady.
+- **Pace.** A run is display-paced with the ordinary lighting budget; nothing in it pauses, settles or waits, and the run
+  turns lockstep presentation off at its start and records that it did. `--uncapped` boots with the immediate present mode for a throughput
+  trend, and the report records it in the run's conditions; the presentation target itself is the host's own cap (`world.target`
+  is bounded by the display), so an uncapped run is bounded only by what the present mode lets the swapchain do.
+  `--timeout-seconds` (default 600) is the run's wall-time limit: a run that passes it, or that `world.benchmark stop`
+  ends, drops its armed lines, lets go the controls its program held and writes a partial report that names the reason and
+  marks each chapter ended, unfinished or unreached. The verb itself waits a further 240 s for the boot and collection.
+- **The report.** `<output>/<run id>/report.json` is a `puck.bench.v1` report (verb `benchmark`) whose `metrics` hold one
+  sample of every number of every chapter, named `<backend>.<cold|warm|steady>.<chapter-slug>.<metric>`, and whose
+  `benchmark` section holds, for each backend: its `conditions` (backend, shape, size, whether it ran uncapped, budget,
+  start tick, loops, operating system, logical processors), whether the run `complete`d and how it `ended`, whether it
+  began in lockstep, its `boot` span, each loop's `run` statistics and each chapter's report. A chapter reports its identity
+  (the hash of its program), arrival (`arrived`, `off course` with the gates it failed, or `unmeasured`), the end state
+  hash, `disturbed` reasons, the frame statistics (iterations, seconds, rate, interval and work as mean, median, 95th, 99th and
+  99.9th percentile and maximum, the 1% and 0.1% lows, iterations over the budget, twice it, 50 ms and 100 ms, pacing
+  deviation, ticks stepped, collections and pauses, bytes allocated per iteration, the longest span that stepped no tick),
+  its `hitches` (the count of iterations whose work passed the budget and the longest 32, each with its tick, the body's last
+  sampled position, its phase split and its collections), each GPU pass's mean and maximum (`gpu`: the rolling window mean
+  `world.gpu-timing` prints, sampled every 30 ticks), and the change across the chapter of each `world.residency` degradation
+  count, the `render.record`, `gpu.queue` and `sdf` counters and `host.memory`'s working set, private bytes and ledger peaks
+  (`readings`; a reading the host cannot answer is listed under `unmeasured`). The `boot` span is the statistics of the
+  host's first iterations, from its first through the start of the first chapter, kept for the host's life in its boot
+  recording (`HostFrameTimeline.Boot`, its first 16384 iterations); `truncated` says the host ran longer than that before the
+  route began. `<output>/<run id>/<backend>/run.json` is the World's own report (`puck.benchmark.run.v1`) and `frames.csv`
+  holds every iteration with its loop, chapter and tick. An iteration is the host loop's interval, never the time a frame stood on the display, and
+  percentiles are linearly interpolated between order statistics (`OrderStatistics.Quantile`), so the 99th percentile of
+  fewer than 100 iterations lies between its two longest.
+- **Comparing.** `--against <report>` and `compare` compare the candidate with the baseline backend by backend, loop by loop
+  and chapter by chapter. A comparison is **refused**, by name, for `another-route` (the route or its chapters differ),
+  `unlike-conditions` (any condition differs, each named with both values), `began-in-lockstep` (either run began with
+  presentation locked to ticks) and `missing-metric` (a frame statistic, the hitch count or a GPU pass that one report holds
+  and the other lacks, named). A chapter is **comparable**, a **changed workload** (its program hash differs: both are
+  described and no difference is attributed to execution), or **unavailable** (off course, disturbed, unfinished, unreached or
+  its arrival unmeasured, in either run: nothing is compared and the reason is named). The numbers of a comparable chapter are
+  set side by side with their difference and labelled by what they answer: per frame, load-dependent or exact. The comparer
+  applies no threshold, and a timing difference from one run each is a lead that [`puck measure`](#puck-measurequeued-measurement-windows)
+  confirms in a quiet window. The end state hashes are compared only for two fresh runs, and are information.
+- **Exit status.** `0`: the run finished and the comparison, if asked, was made. `1`: the run did not finish, or every chapter
+  of it (or of the comparison) is unavailable, so a run whose every chapter is off course or disturbed is a failure and never
+  a completed comparison. `2`: a refusal, a usage error, a build or boot that failed.
+
+`puck measure request ... -- benchmark --route ...` admits the verb, with `--metric /metrics/<name>/median` over the report's
+metric names (`/metrics/directx.cold.seam-walk-the-lift-walking.frames.interval.p99/median`); the runner supplies
+`--world-artifact` and `--output`. The verb takes no sample count of its own: the loops are separate metrics and the pairs are
+the measurement's replication.
+
+---
+
 ## `puck measure`—queued measurement windows
 
 Under Git Bash on Windows, export `MSYS_NO_PATHCONV=1` before passing a `--metric`
@@ -2896,7 +2975,7 @@ puck measure withdraw <request-id> --reason 'its change landed; the question no 
 
 `--before-commit <revision>` and `--after-commit <revision>` replace the artifact and input-tree options for their side. Each commit side freezes its whole revision tree, including worlds and plan inputs, beside its build. Each artifact side requires `--before-input-tree <root>` or `--after-input-tree <root>` to declare the inputs it pairs with. A git input tree snapshots tracked and nonignored untracked files from disk; a standalone tree copies all its contents. The command runs inside each side's frozen tree, so later edits and removal of the requesting checkout cannot change it. Use repository-relative input paths; absolute paths inside the requesting checkout become relative, and paths escaping it are refused.
 
-Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup`, `bench frames` and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup, `/metrics/boot.frames.p99/median` for windowed boot frames or `/signals/0/metrics/<key>` for a sweep; the bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
+Forward the command after `--`, without the leading `puck`. Supported forms are `bench world`, `bench startup`, `bench frames`, [`benchmark`](#puck-benchmarkthe-route-benchmark) and `sweep`; the runner supplies `--world-artifact` and `--output`, which the request must omit. A headless `host.frames` run or an individual sweep signal uses an ordinary sweep plan (`sweep --plan <plan.json> --no-scenarios`). `--metric` is a repeatable JSON pointer into the existing command's `report.json`, such as `/metrics/idle-tick/median` for `bench world`, `/metrics/startup/median` for startup, `/metrics/boot.frames.p99/median` for windowed boot frames or `/signals/0/metrics/<key>` for a sweep; the bench lanes write the one `puck.bench.v1` report described under [`puck bench world`](#puck-bench-world). Numeric JSON strings from sweep metrics are accepted; absent or nonfinite values refuse. Use `~1` for `/` and `~0` for `~` within a key.
 
 Replication inside a request is the run's paired ABAB rounds alone. A bench command's own sample count (`--samples` for `bench startup` and `bench frames`, `--repeats` for `bench world`) must be 1 or absent: `request` refuses a larger one by name, and freezes an absent one as `--samples 1` or `--repeats 1` (`bench startup` defaults to 3 fresh processes). Refusing keeps one question from paying its replication twice, and a refusal at filing cannot be missed the way a silently lowered count in a report could; raise `run --repeats` for more samples instead.
 

@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Launcher;
 
 /// <summary>One host iteration as a <see cref="HostFrameRecording"/> keeps it. Durations are in the timeline's clock
@@ -41,6 +43,9 @@ public struct HostFrameSample {
     public int Gen2;
     /// <summary>What <see cref="HostFrameRecording.Flags"/> answered as the iteration closed.</summary>
     public int Flags;
+    /// <summary>The simulation tick last completed as the iteration closed, as <see cref="HostFrameRecording.Ticks"/>
+    /// answered, or zero when the recording reads none.</summary>
+    public ulong Tick;
 
     /// <summary>Gets the iteration's work: its interval less the pacer's wait.</summary>
     public readonly long Work => (Interval - Wait);
@@ -92,10 +97,10 @@ public readonly record struct HostFrameDistribution(double Mean, double P50, dou
         : new HostFrameDistribution(
             Max: sorted[^1],
             Mean: (total / sorted.Length),
-            P50: HostFrameTimeline.Percentile(fraction: 0.5, sorted: sorted),
-            P95: HostFrameTimeline.Percentile(fraction: 0.95, sorted: sorted),
-            P99: HostFrameTimeline.Percentile(fraction: 0.99, sorted: sorted),
-            P999: HostFrameTimeline.Percentile(fraction: 0.999, sorted: sorted)
+            P50: OrderStatistics.Quantile(ascending: sorted, fraction: 0.5),
+            P95: OrderStatistics.Quantile(ascending: sorted, fraction: 0.95),
+            P99: OrderStatistics.Quantile(ascending: sorted, fraction: 0.99),
+            P999: OrderStatistics.Quantile(ascending: sorted, fraction: 0.999)
         )
     );
 }
@@ -130,6 +135,9 @@ public sealed class HostFrameRecording {
     /// reader of the recording must know held. Runs on the host pump every iteration, so it reads fields and nothing
     /// more.</summary>
     public Func<int>? Flags { get; set; }
+    /// <summary>Gets or sets the simulation tick last completed, which each iteration's <see cref="HostFrameSample.Tick"/>
+    /// reads as it closes. Runs on the host pump every iteration, so it reads a field and nothing more.</summary>
+    public Func<ulong>? Ticks { get; set; }
     /// <summary>Gets the clock ticks in a second, set when a timeline starts writing.</summary>
     public long Frequency { get; internal set; } = 1L;
     /// <summary>Gets the held iterations, oldest first.</summary>
@@ -147,6 +155,7 @@ public sealed class HostFrameRecording {
 
         sample.Start = (start - m_origin);
         sample.Flags = (Flags?.Invoke() ?? 0);
+        sample.Tick = (Ticks?.Invoke() ?? 0UL);
         m_samples[Count++] = sample;
     }
 

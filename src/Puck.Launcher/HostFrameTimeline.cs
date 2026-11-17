@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Maths;
 
 namespace Puck.Launcher;
 
@@ -32,6 +33,8 @@ public enum HostFramePhase {
 public sealed class HostFrameTimeline {
     /// <summary>The iterations the ring holds.</summary>
     public const int Capacity = 4096;
+    /// <summary>The iterations the boot recording holds: about four minutes at 60 iterations a second.</summary>
+    public const int BootCapacity = 16384;
 
     private const int PhaseCount = 7;
 
@@ -77,10 +80,15 @@ public sealed class HostFrameTimeline {
 
         Time = time;
         m_frequency = time.TimestampFrequency;
+        Boot = new HostFrameRecording(capacity: BootCapacity) { Frequency = m_frequency };
     }
 
     /// <summary>Gets the clock the timeline reads.</summary>
     public TimeProvider Time { get; }
+    /// <summary>Gets the first <see cref="BootCapacity"/> iterations the host ran, from its first, kept for the life of
+    /// the host and unaffected by <see cref="Reset"/>: the boot a benchmark reports as its own span. Later iterations are
+    /// counted in <see cref="HostFrameRecording.Dropped"/> and not kept.</summary>
+    public HostFrameRecording Boot { get; }
     /// <summary>Gets the recording every closing iteration is also written to, or <see langword="null"/>.</summary>
     public HostFrameRecording? Recording => m_recording;
 
@@ -131,28 +139,28 @@ public sealed class HostFrameTimeline {
             m_collections[(slot * 3)] = (gen0 - m_gen0);
             m_collections[((slot * 3) + 1)] = (gen1 - m_gen1);
             m_collections[((slot * 3) + 2)] = (gen2 - m_gen2);
-            m_recording?.Add(
-                sample: new HostFrameSample {
-                    Allocated = m_allocated[slot],
-                    Begin = m_open[((int)HostFramePhase.Begin)],
-                    Commands = m_open[((int)HostFramePhase.Commands)],
-                    Gen0 = (gen0 - m_gen0),
-                    Gen1 = (gen1 - m_gen1),
-                    Gen2 = (gen2 - m_gen2),
-                    Input = m_open[((int)HostFramePhase.Input)],
-                    Interval = m_intervals[slot],
-                    Late = m_openLate,
-                    Pause = m_pauses[slot],
-                    Present = m_open[((int)HostFramePhase.Present)],
-                    Produce = m_open[((int)HostFramePhase.Produce)],
-                    ProduceBlocked = m_openProduceBlocked,
-                    Simulate = m_open[((int)HostFramePhase.Simulate)],
-                    Steps = m_openSteps,
-                    ThreadAllocated = m_threadAllocated[slot],
-                    Wait = m_open[((int)HostFramePhase.Wait)],
-                },
-                start: m_iterationStart
-            );
+            var sample = new HostFrameSample {
+                Allocated = m_allocated[slot],
+                Begin = m_open[((int)HostFramePhase.Begin)],
+                Commands = m_open[((int)HostFramePhase.Commands)],
+                Gen0 = (gen0 - m_gen0),
+                Gen1 = (gen1 - m_gen1),
+                Gen2 = (gen2 - m_gen2),
+                Input = m_open[((int)HostFramePhase.Input)],
+                Interval = m_intervals[slot],
+                Late = m_openLate,
+                Pause = m_pauses[slot],
+                Present = m_open[((int)HostFramePhase.Present)],
+                Produce = m_open[((int)HostFramePhase.Produce)],
+                ProduceBlocked = m_openProduceBlocked,
+                Simulate = m_open[((int)HostFramePhase.Simulate)],
+                Steps = m_openSteps,
+                ThreadAllocated = m_threadAllocated[slot],
+                Wait = m_open[((int)HostFramePhase.Wait)],
+            };
+
+            Boot.Add(sample: sample, start: m_iterationStart);
+            m_recording?.Add(sample: sample, start: m_iterationStart);
             Array.Copy(
                 destinationArray: m_phases,
                 destinationIndex: (slot * PhaseCount),
@@ -351,7 +359,7 @@ public sealed class HostFrameTimeline {
 
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[host.frames: {count} iterations | avg={(total / count):0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms | over {budgetMilliseconds:0.0} ms: {over} | busiest {busiest:0.00} ms of work | pacer late at most {latest:0.00} ms | {collections} collections pausing {TimeSpan.FromTicks(value: pause).TotalMilliseconds:0.00} ms]"
+            handler: $"[host.frames: {count} iterations | avg={(total / count):0.00} p50={OrderStatistics.Quantile(ascending: sorted, fraction: 0.5):0.00} p99={OrderStatistics.Quantile(ascending: sorted, fraction: 0.99):0.00} max={sorted[^1]:0.00} ms | over {budgetMilliseconds:0.0} ms: {over} | busiest {busiest:0.00} ms of work | pacer late at most {latest:0.00} ms | {collections} collections pausing {TimeSpan.FromTicks(value: pause).TotalMilliseconds:0.00} ms]"
         );
 
         // The frame thread's own work per iteration: produce and simulate, the two phases a frame's cost lives in.
@@ -405,7 +413,7 @@ public sealed class HostFrameTimeline {
             }
             Array.Sort(array: costs);
             builder.Append(provider: CultureInfo.InvariantCulture,
-                handler: $"\n  ticks: count={tickCount} avg={(totalCost / tickCount):0.00} p50={Percentile(fraction: 0.5, sorted: costs):0.00} p99={Percentile(fraction: 0.99, sorted: costs):0.00} max={costs[^1]:0.00} ms");
+                handler: $"\n  ticks: count={tickCount} avg={(totalCost / tickCount):0.00} p50={OrderStatistics.Quantile(ascending: costs, fraction: 0.5):0.00} p99={OrderStatistics.Quantile(ascending: costs, fraction: 0.99):0.00} max={costs[^1]:0.00} ms");
         }
         builder.Append(provider: CultureInfo.InvariantCulture, handler: $"\n  steps.shed={ShedSteps}");
         return builder.ToString();
@@ -457,28 +465,25 @@ public sealed class HostFrameTimeline {
         Array.Sort(array: sorted);
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"\n  {label}: avg={sorted.Average():0.00} p50={Percentile(fraction: 0.5, sorted: sorted):0.00} p99={Percentile(fraction: 0.99, sorted: sorted):0.00} max={sorted[^1]:0.00} ms"
+            handler: $"\n  {label}: avg={sorted.Average():0.00} p50={OrderStatistics.Quantile(ascending: sorted, fraction: 0.5):0.00} p99={OrderStatistics.Quantile(ascending: sorted, fraction: 0.99):0.00} max={sorted[^1]:0.00} ms"
         );
     }
     // Appends the frame thread's allocated bytes per iteration: its distribution and total.
     private void AppendThreadAllocation(StringBuilder builder, long[] indices) {
-        var sorted = new long[indices.Length];
-
-        for (var i = 0; (i < indices.Length); i++) {
-            sorted[i] = m_threadAllocated[((int)(indices[i] % Capacity))];
-        }
-        Array.Sort(array: sorted);
+        var sorted = new double[indices.Length];
         var total = 0L;
 
-        foreach (var bytes in sorted) { total += bytes; }
+        for (var i = 0; (i < indices.Length); i++) {
+            var bytes = m_threadAllocated[((int)(indices[i] % Capacity))];
+
+            sorted[i] = bytes;
+            total += bytes;
+        }
+        Array.Sort(array: sorted);
         builder.Append(
             provider: CultureInfo.InvariantCulture,
-            handler: $"\n  frame thread allocated: avg={(total / sorted.Length)} p50={sorted[Math.Min(sorted.Length - 1, sorted.Length / 2)]} p99={sorted[Math.Min(sorted.Length - 1, (int)(0.99 * sorted.Length))]} max={sorted[^1]} total={total} bytes"
+            handler: $"\n  frame thread allocated: avg={(total / sorted.Length)} p50={OrderStatistics.Quantile(ascending: sorted, fraction: 0.5):0} p99={OrderStatistics.Quantile(ascending: sorted, fraction: 0.99):0} max={sorted[^1]:0} total={total} bytes"
         );
     }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);
-    internal static double Percentile(double[] sorted, double fraction) => sorted[Math.Min(
-        val1: (sorted.Length - 1),
-        val2: ((int)Math.Floor(d: (fraction * sorted.Length)))
-    )];
 }

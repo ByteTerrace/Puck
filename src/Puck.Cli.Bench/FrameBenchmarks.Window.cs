@@ -1,7 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Puck.Abstractions;
 using Puck.Cli.Sweep;
 using Puck.Commands;
@@ -17,58 +15,20 @@ public static partial class FrameBenchmarks {
     private const string WindowFrames = "host.frames 4096 16.7 8";
 
     // One reading taken at both ends of the window.
-    private sealed record WindowRead(string Name, string Open, string Close, WindowParse Parse);
-
-    // How an answer's key-value pairs are named: bare (Pairs); under the residency each report block names (Residency);
-    // under the words that lead each ` | `-separated part of a host.memory answer (Memory); from a counters JSON answer
-    // (Counters); or not read as pairs at all (Text).
-    private enum WindowParse { Pairs, Residency, Memory, Counters, Text }
-
-    // A reading the plan names that exists today, looked for by key in the answers. The key is a suffix, so a residency's
-    // block prefix and a counter's source prefix both match.
-    private sealed record WindowKey(string Read, string Key, string Meaning);
+    private sealed record WindowRead(string Name, string Open, string Close, ReadingParse Parse);
 
     // A reading the plan names that no console line answers today, with the step of the build order that supplies it.
     private sealed record WindowAbsent(string Reading, string Supplied);
 
     private static readonly WindowRead[] WindowReads = [
-        new("frames", "host.frames 1 16.7 0", WindowFrames, WindowParse.Pairs),
-        new("residency", "world.residency", "world.residency", WindowParse.Residency),
-        new("render.record", "world.counters render.record --json", "world.counters render.record --json", WindowParse.Counters),
-        new("gpu.queue", "world.counters gpu.queue --json", "world.counters gpu.queue --json", WindowParse.Counters),
-        new("sdf", "world.counters sdf --json", "world.counters sdf --json", WindowParse.Counters),
-        new("memory", "host.memory", "host.memory", WindowParse.Memory),
-        new("audio", "audio.state", "audio.state", WindowParse.Pairs),
-        new("body", "body.where 0", "body.where 0", WindowParse.Text),
-    ];
-
-    private static readonly WindowKey[] WindowKeys = [
-        new("frames", "steps.shed", "ticks shed: whole owed steps dropped when catch-up spent its wall-time budget"),
-        new("residency", "owed", "bytes of mesh words the region still owes"),
-        new("residency", "owed-frames", "frames the region spent owing words"),
-        new("residency", "tiers-owed", "groups drawing a coarser tier than their demand asks"),
-        new("residency", "owed-error", "the worst such group's cell, in display pixels"),
-        new("residency", "worst-owed-error", "the worst owed-error since the bake started"),
-        new("residency", "worst-owed-frames", "the longest a group went owing a tier since the bake started"),
-        new("residency", "refusals", "meshes the region refused"),
-        new("residency", "relocations", "arena relocations"),
-        new("residency", "late-stagings", "stagings a residency's preparation did not make"),
-        new("residency", "unbound", "background-work pumps that found no binding to upload against"),
-        new("residency", "region-refused", "meshes the region's budget refused"),
-        new("render.record", "render.record.frames", "frames the render graph recorded"),
-        new("render.record", "render.record.failed", "recordings that failed"),
-        new("render.record", "render.record.longest-microseconds", "the longest recording"),
-        new("gpu.queue", "gpu.queue.executes", "queue executes"),
-        new("memory", "ws", "the process's working set, MiB"),
-        new("memory", "private", "the process's private bytes, MiB"),
-        new("memory", "budget", "each pool's and segment's budget"),
-        new("memory", "spend-limit", "each pool's and segment's spend limit"),
-        new("memory", "usage", "each segment's usage as the API reports it"),
-        new("memory", "reservation", "each segment's current reservation"),
-        new("memory", "ledger-held", "the bytes the backend's ledger placed in each segment"),
-        new("memory", "usage-beyond-ledger", "usage past the ledger's held bytes: driver, swapchain and uncounted memory"),
-        new("memory", "peak", "each ledger row's peak"),
-        new("memory", "released", "each ledger row's released bytes"),
+        new("frames", "host.frames 1 16.7 0", WindowFrames, ReadingParse.Pairs),
+        new("residency", "world.residency", "world.residency", ReadingParse.Residency),
+        new("render.record", "world.counters render.record --json", "world.counters render.record --json", ReadingParse.Counters),
+        new("gpu.queue", "world.counters gpu.queue --json", "world.counters gpu.queue --json", ReadingParse.Counters),
+        new("sdf", "world.counters sdf --json", "world.counters sdf --json", ReadingParse.Counters),
+        new("memory", "host.memory", "host.memory", ReadingParse.Memory),
+        new("audio", "audio.state", "audio.state", ReadingParse.Pairs),
+        new("body", "body.where 0", "body.where 0", ReadingParse.Text),
     ];
 
     // The residency's own landing times from the bake's start (a time not reached reads pending), which are the only
@@ -87,15 +47,6 @@ public static partial class FrameBenchmarks {
         new("the seat's commands per tick across the crossing", "the transfers packet (open-items: Transfers, federation and server)"),
         new("the voices the mixer started and released", "the transfers packet (audio.state reads only the live voice count)"),
     ];
-
-    [GeneratedRegex(@"(?<![\w.\-])(?<key>[a-z][a-z0-9.\-]*)[=:](?<value>[^\s,\]\[=]+)", RegexOptions.CultureInvariant)]
-    private static partial Regex WindowPairPattern();
-
-    [GeneratedRegex(@"residency=(?<name>\S+)", RegexOptions.CultureInvariant)]
-    private static partial Regex WindowResidencyName();
-
-    [GeneratedRegex(@"^-?\d+(\.\d+)?", RegexOptions.CultureInvariant)]
-    private static partial Regex WindowNumber();
 
     // Everything a window needs of the run that owns it.
     private sealed record WindowRun(SweepWorld World, SweepTour Tour, string Root, string Directory, bool Headless, string[] Passes, Func<string, bool, string> Ask, Action<string, double> Add, List<KeyValuePair<string, string>> Rows, Action<string> Print);
@@ -204,13 +155,13 @@ public static partial class FrameBenchmarks {
         string? frames = null;
 
         foreach (var read in WindowReads) {
-            var before = WindowValues(read, OpenAnswer(read.Open), out var beforeNote);
-            var after = WindowValues(read, Answer(read.Close), out var afterNote);
+            var before = ConsoleReadings.Values(read.Parse, OpenAnswer(read.Open), out var beforeNote);
+            var after = ConsoleReadings.Values(read.Parse, Answer(read.Close), out var afterNote);
             if (read.Name == "frames") { frames = Answer(read.Close); }
-            if (read.Parse == WindowParse.Text) { text.AppendLine($"  {read.Name}: {Squash(OpenAnswer(read.Open))} -> {Squash(Answer(read.Close))}"); }
+            if (read.Parse == ReadingParse.Text) { text.AppendLine($"  {read.Name}: {Squash(OpenAnswer(read.Open))} -> {Squash(Answer(read.Close))}"); }
             if ((beforeNote ?? afterNote) is { } unread) { text.AppendLine($"  {read.Name}: unmeasured: {unread}"); }
 
-            var keys = WindowKeys.Where(key => key.Read == read.Name).ToArray();
+            var keys = ConsoleReadings.Keys.Where(key => key.Read == read.Name).ToArray();
             if ((afterNote is not null) && (keys.Length > 0)) {
                 text.AppendLine($"  {read.Name}: absent, so are {string.Join(", ", keys.Select(key => key.Key))}");
             } else {
@@ -223,8 +174,8 @@ public static partial class FrameBenchmarks {
                     }
                 }
             }
-            if ((read.Parse != WindowParse.Text) && (read.Name != "frames")) {
-                var moved = after.Where(pair => (WindowNumber().Match(pair.Value) is { Success: true } number) && before.TryGetValue(pair.Key, out var start) && (WindowNumber().Match(start) is { Success: true } first) && (Parse(number.Value) != Parse(first.Value)) && !found.Contains(pair.Key)).Select(pair => $"{pair.Key} {Delta(before[pair.Key], pair.Value)}").ToArray();
+            if ((read.Parse != ReadingParse.Text) && (read.Name != "frames")) {
+                var moved = after.Where(pair => (ConsoleReadings.Number().Match(pair.Value) is { Success: true } number) && before.TryGetValue(pair.Key, out var start) && (ConsoleReadings.Number().Match(start) is { Success: true } first) && (Parse(number.Value) != Parse(first.Value)) && !found.Contains(pair.Key)).Select(pair => $"{pair.Key} {Delta(before[pair.Key], pair.Value)}").ToArray();
                 if (moved.Length > 0) { text.AppendLine($"  {read.Name}: also moved: {string.Join(", ", moved)}"); }
             }
         }
@@ -238,8 +189,8 @@ public static partial class FrameBenchmarks {
                 run.Add($"{stop.Name}.window.frames.{field}", number);
             }
             if (header.TryGetValue("over", out var over) && double.TryParse(over, NumberStyles.Float, CultureInfo.InvariantCulture, out var overCount)) { run.Add($"{stop.Name}.window.frames.over", overCount); }
-            var shed = WindowValues(WindowReads[0], OpenAnswer(WindowReads[0].Open), out _).GetValueOrDefault("steps.shed");
-            var shedAfter = WindowValues(WindowReads[0], frames, out _).GetValueOrDefault("steps.shed");
+            var shed = ConsoleReadings.Values(WindowReads[0].Parse, OpenAnswer(WindowReads[0].Open), out _).GetValueOrDefault("steps.shed");
+            var shedAfter = ConsoleReadings.Values(WindowReads[0].Parse, frames, out _).GetValueOrDefault("steps.shed");
             if ((shed is not null) && (shedAfter is not null)) { run.Add($"{stop.Name}.window.steps.shed", Parse(shedAfter) - Parse(shed)); }
             text.AppendLine($"  the slowest frames and what each did: the answer's tail, kept in {stop.Name}/frames.txt; {SweepSignals.Read("frames", frames, null).GetValueOrDefault("iterations", "?")} iterations read, budget {WindowBudgetMilliseconds:0.0} ms");
             File.WriteAllText(Path.Combine(folder, "frames.txt"), frames);
@@ -278,11 +229,11 @@ public static partial class FrameBenchmarks {
         if ((arrival is { Count: > 0 }) && !run.Headless) { throw new InvalidDataException($"{stop.Name}: off course, so the window did not walk the crossing: {string.Join("; ", arrival)}"); }
 
         static string Squash(string? answer) => ((answer is null) ? "no answer" : answer.Trim().ReplaceLineEndings(" "));
-        static double Parse(string value) => double.Parse(WindowNumber().Match(value).Value, CultureInfo.InvariantCulture);
+        static double Parse(string value) => double.Parse(ConsoleReadings.Number().Match(value).Value, CultureInfo.InvariantCulture);
         static string Delta(string before, string after) => string.Create(CultureInfo.InvariantCulture, $"{before} -> {after} ({(Parse(after) - Parse(before)):+0.###;-0.###;0})");
     }
 
-    private static void WindowKeyLine(StringBuilder text, WindowRead read, WindowKey key, SortedDictionary<string, string> before, SortedDictionary<string, string> after, HashSet<string> found) {
+    private static void WindowKeyLine(StringBuilder text, WindowRead read, ReadingKey key, SortedDictionary<string, string> before, SortedDictionary<string, string> after, HashSet<string> found) {
         var names = after.Keys.Where(name => (name == key.Key) || name.EndsWith("." + key.Key, StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
         if (names.Length == 0) {
             text.AppendLine($"  {key.Key}: absent from the {read.Name} answer ({key.Meaning})");
@@ -292,7 +243,7 @@ public static partial class FrameBenchmarks {
             _ = found.Add(name);
             var start = before.GetValueOrDefault(name, "absent");
             var end = after[name];
-            var number = WindowNumber();
+            var number = ConsoleReadings.Number();
             var change = (number.IsMatch(start) && number.IsMatch(end))
                 ? string.Create(CultureInfo.InvariantCulture, $" (change {(double.Parse(number.Match(end).Value, CultureInfo.InvariantCulture) - double.Parse(number.Match(start).Value, CultureInfo.InvariantCulture)):+0.###;-0.###;0})")
                 : string.Empty;
@@ -300,60 +251,4 @@ public static partial class FrameBenchmarks {
         }
     }
 
-    // The key-value readings of one answer, each key by the name the plan uses; a residency's keys carry its name. The note
-    // says why an answer holds none: the verb refused, or the World gave no answer.
-    private static SortedDictionary<string, string> WindowValues(WindowRead read, string? answer, out string? note) {
-        var values = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        note = null;
-        if (string.IsNullOrWhiteSpace(answer)) {
-            note = "the pinned line has no answer in the World's log";
-            return values;
-        }
-        switch (read.Parse) {
-            case WindowParse.Counters: {
-                var text = answer.Trim();
-                if (!text.StartsWith("[world.counters: {", StringComparison.Ordinal) && !text.StartsWith('{')) {
-                    note = $"refused: {Truncate(text)}";
-                    return values;
-                }
-                try {
-                    foreach (var (name, value) in SweepSignals.Read("counters", text, null)) {
-                        if (name != "text") { values[name] = value; }
-                    }
-                } catch (JsonException exception) {
-                    note = $"unreadable: {exception.Message}";
-                }
-                break;
-            }
-            case WindowParse.Residency: {
-                if (answer.Contains("renderer not built yet", StringComparison.Ordinal) || answer.Contains("unknown command", StringComparison.Ordinal)) {
-                    note = $"absent in this World: {Truncate(answer.Trim())}";
-                    return values;
-                }
-                var prefix = string.Empty;
-                foreach (var line in answer.Split('\n')) {
-                    if (line.Contains("residency-id=", StringComparison.Ordinal)) {
-                        prefix = (WindowResidencyName().Match(line) is { Success: true } name) ? (name.Groups["name"].Value + ".") : string.Empty;
-                    }
-                    foreach (Match pair in WindowPairPattern().Matches(line)) { _ = values.TryAdd(prefix + pair.Groups["key"].Value, pair.Groups["value"].Value); }
-                }
-                break;
-            }
-            case WindowParse.Memory:
-                foreach (var part in answer.Split(['|', '\n'])) {
-                    // The words before a part's first pair name it: `pool device`, `segment local`, `ledger vulkan.local`.
-                    var first = WindowPairPattern().Match(part);
-                    var head = (first.Success ? part[..first.Index] : part).Trim().TrimStart('[').Replace(": ", ".").Replace(' ', '.').Trim('.');
-                    var prefix = ((head.Length == 0) ? string.Empty : (head + "."));
-                    foreach (Match pair in WindowPairPattern().Matches(part)) { _ = values.TryAdd(prefix + pair.Groups["key"].Value, pair.Groups["value"].Value); }
-                }
-                break;
-            case WindowParse.Pairs:
-                foreach (Match pair in WindowPairPattern().Matches(answer)) { _ = values.TryAdd(pair.Groups["key"].Value, pair.Groups["value"].Value); }
-                break;
-        }
-        return values;
-    }
-
-    private static string Truncate(string text) => ((text.Length <= 160) ? text : (text[..160] + "..."));
 }

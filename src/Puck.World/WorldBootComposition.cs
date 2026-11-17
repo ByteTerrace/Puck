@@ -998,6 +998,7 @@ public static class WorldBootComposition {
         // iteration. Core, so a headless boot plays a route and reports its arrivals; the timeline, the pacing control
         // and the state root are each optional.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldBenchmarkCommandModule(
+            gpu: sp.GetService<WorldGpuTiming>(),
             pacing: sp.GetService<PresentPacingControl>(),
             router: sp.GetRequiredService<Func<InputRouter>>(),
             script: sp.GetRequiredService<WorldTickScript>(),

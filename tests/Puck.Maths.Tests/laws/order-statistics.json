@@ -1,0 +1,32 @@
+[
+  {
+    "Id": "order-statistics.quantile-hand-computed",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.OrderStatistics",
+        "Name": "Quantile"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.Quantile over fixed ascending samples: the integers 1 to 10, the integers 1 to 1000, a single sample and a pair, at the minimum, the median, the 95th, 99th and 99.9th percentiles and the maximum",
+        "Against": "values written out by hand from the definition (linear interpolation at position (count - 1) times the fraction, between the neighbouring samples): 1 to 10 gives 5.5 at 0.5, 9.55 at 0.95 and 9.91 at 0.99; 1 to 1000 gives 500.5 at 0.5, 990.01 at 0.99 and 999.001 at 0.999; a pair of 2 and 4 gives 2.5 at 0.25; a single sample gives itself at every fraction",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      },
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "OrderStatistics.Quantile refusals: an empty sample, a fraction below 0, above 1 and NaN",
+        "Against": "the documented exceptions: ArgumentException for an empty sample and ArgumentOutOfRangeException for a fraction outside 0 to 1, NaN included",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

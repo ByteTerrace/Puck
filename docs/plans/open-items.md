@@ -2892,9 +2892,9 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: the live overlay and the
-`puck benchmark` command ([the build order](benchmark.md#the-build-order)'s
-stages 2 and 3), and stage 1's windowed fresh-run readings on both backends.
+Owner: one benchmark lane per stage · high · Next: the live overlay (stage 2),
+and the lead's windowed readings of `puck benchmark` and of the fresh-run start on
+both backends ([the build order](benchmark.md#the-build-order)'s stages 1 and 3).
 
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
@@ -2922,13 +2922,26 @@ the stages; this packet holds what a stage does not.
   what a pose across the world allocates
   ([the job system packet](#engine-job-system) owns allocation on the frame
   thread).
-- [low] Three order-statistic helpers do one job: `HostFrameTimeline.Percentile`
-  (which the recording's statistics reuse), `BenchMetric.Quantile` and
-  `MeshCommand`'s private `Quantile`. Give them one home in `Puck.Maths` when
-  stage 3 moves statistics the CLI and the World share.
-- [low] A World started through the MCP server removes its state directory
-  when it stops, and a run's report with it. An agent names
-  `output <directory>`; the command (stage 3) passes one.
+- [medium] `puck benchmark --uncapped` boots with the immediate present mode and
+  does not lift the presentation target: `PresentPacingPolicy.Resolve` caps an
+  explicit `world.target` at the display's ceiling (a variable-refresh range's
+  maximum, or the signal), and only an unknown signal resolves unbounded. Add a
+  way to ask for no target (a `world.target` form, the lever and the policy's
+  `Unbounded` basis) and show a windowed uncapped run presents past the
+  display's rate.
+- [medium] A run that is stopped mid-chapter releases only the controls its
+  program leaves held at its end (`WorldBenchmarkCommandModule.Hold` keeps the
+  last state of each `player.signal` source), so a control a chapter presses
+  and releases itself is left pressed when `stop` or the wall-time limit lands
+  between the two lines. Track every control any line touched and release each
+  one at the end.
+- [low] The comparer reads the operating system and the logical processor count
+  as the machine's identity; it does not read the GPU adapter, the driver or the
+  display, and it does not know whether the live overlay was on. Add both when
+  stage 2 lands and a platform probe names the adapter.
+- [low] A chapter's GPU maximum is the largest of the rolling window means
+  sampled every 30 ticks (`SampleTicks`), not the longest single pass: the
+  timestamps keep a window mean and no per-submission series.
 - [low] The sweep's windowed open items
   ([sweep and visual checks](#sweep-and-visual-checks)) that concern the
   tour's stills, its 2% threshold and its paired tour close when stage 6
