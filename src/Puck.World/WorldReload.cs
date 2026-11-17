@@ -103,23 +103,30 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     // On the thread pool: reads the source, admits it on its own facts and the proof transport, resolves its text
     // assets and diffs it against the captured declarations.
     private Prepared Prepare(string path, WorldSourceWatch.Reads? reads, WorldDefinition basis, WorldDocumentVersion version, IWorldDocumentSource? documents, string instanceIdentity, IWorldNeighbourResolver? neighbours) {
+        bool Load(out WorldDefinitionAdmission? admission, out string contentHash, out string reason) => WorldDefinitionLoader.TryLoadFileForAdmission(
+            admission: out admission,
+            catalog: machineCatalog,
+            contentHash: out contentHash,
+            documents: documents,
+            instanceIdentity: instanceIdentity,
+            neighbours: neighbours,
+            path: path,
+            reason: out reason
+        );
         WorldDefinitionAdmission? admission;
         string contentHash;
         string reason;
+        bool loadedSource;
 
-        using (reads is null ? null : new RecordingScope(log: reads.Log)) {
-            if (!WorldDefinitionLoader.TryLoadFileForAdmission(
-                admission: out admission,
-                catalog: machineCatalog,
-                contentHash: out contentHash,
-                documents: documents,
-                instanceIdentity: instanceIdentity,
-                neighbours: neighbours,
-                path: path,
-                reason: out reason
-            )) {
-                return new Prepared(ContentHash: string.Empty, Delta: null, Refusal: reason);
+        if (reads is null) {
+            loadedSource = Load(admission: out admission, contentHash: out contentHash, reason: out reason);
+        } else {
+            using (CompileInputs.Record(log: reads.Log)) {
+                loadedSource = Load(admission: out admission, contentHash: out contentHash, reason: out reason);
             }
+        }
+        if (!loadedSource) {
+            return new Prepared(ContentHash: string.Empty, Delta: null, Refusal: reason);
         }
 
         var loaded = admission!.Definition;
@@ -154,12 +161,5 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
             principal: context.Principal,
             verb: Verb
         );
-    }
-
-    // Records the compile's reads into a watched reload's log on the preparing flow.
-    private sealed class RecordingScope(CompileInputLog log) : IDisposable {
-        private readonly CompileInputs.Scope m_scope = CompileInputs.Record(log: log);
-
-        public void Dispose() => m_scope.Dispose();
     }
 }
