@@ -73,8 +73,7 @@ public sealed class FixedRigidWorld {
         m_staticSoftness = FixedSoftConstraint.Create(
             rateHz: options.RateHz,
             substepCount: options.SubstepCount,
-            hertz: (FixedQ4816.Min(x: options.ContactHertz,
-                y: (FixedQ4816.FromInteger(value: substepRate) / FixedQ4816.FromInteger(value: 8L))) * FixedQ4816.FromInteger(value: 2L)),
+            hertz: FixedSaturate.Multiply(left: options.ContactHertz, right: FixedQ4816.FromInteger(value: 2L)),
             dampingRatio: (options.ContactDampingRatio * FixedQ4816.FromDouble(value: 0.5d)),
             fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
         );
