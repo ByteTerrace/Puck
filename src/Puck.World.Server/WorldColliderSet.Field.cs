@@ -28,7 +28,7 @@ public sealed partial class WorldColliderSet {
     private readonly FixedStaticCollider?[] m_liveFields;
 
     private sealed class SampledField(IFieldEvaluator? field, IFieldBounds? bounds) : IFieldEvaluator, IFieldBounds {
-        public FieldEvaluatorCapabilities Capabilities => @field?.Capabilities ?? new(true, FixedQ4816.One);
+        public FieldEvaluatorCapabilities Capabilities => (@field?.Capabilities ?? new(true, FixedQ4816.One));
         public FixedQ4816 StepScale => Capabilities.StepScale;
 
         public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
@@ -46,15 +46,15 @@ public sealed partial class WorldColliderSet {
         }
     }
     private sealed class PosedField(WorldColliderSet owner, int row) : IFieldEvaluator, IFieldBounds {
-        public FieldEvaluatorCapabilities Capabilities => owner.m_attachedFields[row]?.Field?.Field.Capabilities ?? new(true, FixedQ4816.One);
+        public FieldEvaluatorCapabilities Capabilities => (owner.m_attachedFields[row]?.Field?.Field.Capabilities ?? new(true, FixedQ4816.One));
         public FixedQ4816 StepScale => Capabilities.StepScale;
 
         public bool TryDistance(FixedPosition position, out FixedQ4816 distance, out int material) {
             distance = FixedQ4816.MaxValue; material = 0;
-            if ((owner.m_rideExcludedRow == row) || owner.m_liveFields[row] is not { } collider) { return true; }
-            material = -row - 1;
-            return position.TryDelta(FixedPosition.Zero, out var point) && collider.Field!.Field.TryDistance(
-                FixedPosition.FromLocal(FixedFieldColliderContact.ToLocal(collider, point)), out distance, out _);
+            if ((owner.m_rideExcludedRow == row) || (owner.m_liveFields[row] is not { } collider)) { return true; }
+            material = (-row - 1);
+            return (position.TryDelta(FixedPosition.Zero, out var point) && collider.Field!.Field.TryDistance(
+                FixedPosition.FromLocal(local: FixedFieldColliderContact.ToLocal(collider: collider, world: point)), out distance, out _));
         }
         public bool TryFieldGradient(FixedPosition position, out FixedVector3 gradient) => TryFieldGradient(position, FixedQ4816.Zero, out gradient);
         public bool TryFieldGradient(FixedPosition position, FixedQ4816 epsilon, out FixedVector3 gradient) {
@@ -66,7 +66,7 @@ public sealed partial class WorldColliderSet {
         }
         public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance) {
             distance = FixedInterval.FromPoint(value: FixedQ4816.MaxValue);
-            if ((owner.m_rideExcludedRow == row) || owner.m_liveFields[row] is not { } collider) { return true; }
+            if ((owner.m_rideExcludedRow == row) || (owner.m_liveFields[row] is not { } collider)) { return true; }
             if (!lower.TryDelta(FixedPosition.Zero, out var lo) || !upper.TryDelta(FixedPosition.Zero, out var hi) ||
                 (collider.Field?.Bounds is not { } bounds) ||
                 !FixedVector3.TrySubtract(lo, collider.Center, out var localLo) || !FixedVector3.TrySubtract(hi, collider.Center, out var localHi) ||

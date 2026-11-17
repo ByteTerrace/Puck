@@ -57,9 +57,10 @@ public sealed partial class WorldColliderSet : IContactField {
     // Hold queries retain each moving row's authored grip policy beside the sampled colliders.
     private sealed record MovingSolidRow(WorldPlacement Placement, WorldPrototype Creation, FixedVector3 Origin,
         FixedQuaternion Rotation, FixedVector3? ReflectionNormal) {
-        public StateBinding? SizeBinding { get; } = StateBinding.Parse(Creation.Document.SizeBy);
-        public CellName SizeKey { get; } = CellName.Parse(StateBinding.Parse(Creation.Document.SizeBy)?.Key is StateBinding.BodyKey
-            ? IndexKeyCache.Get(Placement.Attach!.BodyIndex) : StateBinding.Parse(Creation.Document.SizeBy)?.Key ?? StateRow.SlotKey.Value);
+        public StateBinding? SizeBinding { get; } = StateBinding.Parse(token: Creation.Document.SizeBy);
+        public CellName SizeKey { get; } = CellName.Parse(candidate: ((StateBinding.Parse(token: Creation.Document.SizeBy)?.Key is StateBinding.BodyKey)
+            ? IndexKeyCache.Get(index: Placement.Attach!.BodyIndex) : (StateBinding.Parse(token: Creation.Document.SizeBy)?.Key ?? StateRow.SlotKey.Value)));
+
         public StateCatalog? SizeCatalog;
         public StateHandle SizeHandle;
     }
@@ -68,9 +69,9 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private FixedQ4816[] m_attachedScales;
     private FixedQ4816[] m_previousAttachedScales;
+
     private readonly WorldSolidScale[] m_sampledScales;
     private readonly int[] m_scaleSlots;
-
     private readonly FixedStaticCollider[] m_colliders;
     // m_colliders with each one's world bounds, compiled once: what every solve runs over.
     private readonly FixedStaticColliderSet m_staticSet;
@@ -81,22 +82,25 @@ public sealed partial class WorldColliderSet : IContactField {
     private readonly FixedStaticColliderSet m_rideSet = new();
     private readonly List<FixedStaticCollider> m_rideColliders = [];
     private int m_rideExcludedRow = -1;
-    private FixedStaticColliderSet QueryAttachedSet => m_rideExcludedRow < 0 ? m_attachedSet : m_rideSet;
+
+    private FixedStaticColliderSet QueryAttachedSet => ((m_rideExcludedRow < 0) ? m_attachedSet : m_rideSet);
+
     private readonly FixedStaticColliderSet m_bornSupportSet = new();
-    private static readonly FixedStaticColliderSet EmptyColliders = new([]);
+    private static readonly FixedStaticColliderSet EmptyColliders = new(colliders: []);
 
     // During a ride only the support being displaced is omitted: its new pose may already enclose the start.
     // Every other solid, portal and neighbouring authority still participates through the body's normal sweep door.
     internal RideSweep ExcludeRideSupport(int row) {
-        if (m_rideExcludedRow >= 0) { throw new InvalidOperationException("A ride sweep is already active."); }
+        if (m_rideExcludedRow >= 0) { throw new InvalidOperationException(message: "A ride sweep is already active."); }
         m_rideColliders.Clear();
-        for (var index = 0; index < m_attachedColliders.Count; index++) {
-            if (m_attachedColliderRows[index] != row) { m_rideColliders.Add(m_attachedColliders[index]); }
+        for (var index = 0; (index < m_attachedColliders.Count); index++) {
+            if (m_attachedColliderRows[index] != row) { m_rideColliders.Add(item: m_attachedColliders[index]); }
         }
-        m_rideSet.Refresh(System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_rideColliders));
+        m_rideSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_rideColliders));
         m_rideExcludedRow = row;
-        return new RideSweep(this);
+        return new RideSweep(owner: this);
     }
+
     internal readonly ref struct RideSweep(WorldColliderSet owner) {
         public void Dispose() => owner.m_rideExcludedRow = -1;
     }
@@ -125,14 +129,17 @@ public sealed partial class WorldColliderSet : IContactField {
     // it" fact.
     private readonly bool[] m_holdableGrantedByOverride;
     private readonly bool m_defaultGrip;
+
     private readonly List<FixedStaticCollider> m_movingHoldable = [];
     private readonly List<bool> m_movingGripOverrides = [];
 
     internal bool MovingHoldable(int row, out bool grantedByOverride) {
         var grip = m_attachedRows[row].Placement.Grip;
-        grantedByOverride = grip is not null;
-        return grip?.Holdable ?? m_defaultGrip;
+
+        grantedByOverride = (grip is not null);
+        return (grip?.Holdable ?? m_defaultGrip);
     }
+
     private readonly FixedStaticContactSolver m_solver;
 
     // A running fold of the last-refreshed m_attachedColliders, so RefreshAttached can tell whether the carrier
@@ -152,9 +159,10 @@ public sealed partial class WorldColliderSet : IContactField {
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
-        var placements = attachedRows.Select(row => row.Placement.Id.ToString()).Distinct(StringComparer.Ordinal).ToArray();
-        m_sampledScales = placements.Select(id => new WorldSolidScale(id, FixedQ4816.Zero)).ToArray();
-        m_scaleSlots = attachedRows.Select(row => Array.IndexOf(placements, row.Placement.Id.ToString())).ToArray();
+        var placements = attachedRows.Select(selector: row => row.Placement.Id.ToString()).Distinct(comparer: StringComparer.Ordinal).ToArray();
+
+        m_sampledScales = placements.Select(selector: id => new WorldSolidScale(Placement: id, Scale: FixedQ4816.Zero)).ToArray();
+        m_scaleSlots = attachedRows.Select(selector: row => Array.IndexOf(array: placements, value: row.Placement.Id.ToString())).ToArray();
         m_attachedFields = new FixedStaticCollider?[attachedRows.Count];
         m_fieldContactRows = new bool[attachedRows.Count];
         m_scaledAttachedFields = new FixedStaticCollider?[attachedRows.Count];
@@ -162,7 +170,7 @@ public sealed partial class WorldColliderSet : IContactField {
         m_liveFields = new FixedStaticCollider?[attachedRows.Count];
         for (var row = 0; (row < attachedRows.Count); row++) {
             var (placement, creation, _, rotation, reflection) = attachedRows[row];
-            m_fieldContactRows[row] = movingOnly || CollidesAsField(document: creation.EngineDocument);
+            m_fieldContactRows[row] = (movingOnly || CollidesAsField(document: creation.EngineDocument));
             m_attachedFields[row] = ReliefCollider(creation.EngineDocument,
                 new FixedCreationStampTransform(FixedVector3.Zero, FixedQuaternion.Identity, FixedQ4816.FromDouble(value: placement.Scale), ((reflection is { } normal) ? rotation.RotateInverse(vector: normal) : null)),
                 placement.Solid!.Margin, partitioned: false);
@@ -900,7 +908,7 @@ public sealed partial class WorldColliderSet : IContactField {
             }
             for (var attached = 0; (attached < m_attachedRows.Count); attached++) {
                 if (!ReferenceEquals(objA: m_attachedRows[attached].Placement, objB: placement)) { continue; }
-                if (!m_attachedResolved[attached]) { box.Fold(FixedAabb.Everywhere); }
+                if (!m_attachedResolved[attached]) { box.Fold(box: FixedAabb.Everywhere); }
                 for (var index = 0; (index < m_attachedColliders.Count); index++) {
                     if (m_attachedColliderRows[index] == attached) { box.Fold(collider: m_attachedColliders[index]); }
                 }
@@ -937,8 +945,8 @@ public sealed partial class WorldColliderSet : IContactField {
         if (attached.Field is not null) { m_liveFields[m_refreshRow] = attached; }
         m_attachedColliders.Add(item: attached);
         m_attachedColliderRows.Add(item: m_refreshRow);
-        if (MovingHoldable(m_refreshRow, out var grantedByOverride)) {
-            m_movingHoldable.Add(attached); m_movingGripOverrides.Add(grantedByOverride);
+        if (MovingHoldable(grantedByOverride: out var grantedByOverride, row: m_refreshRow)) {
+            m_movingHoldable.Add(item: attached); m_movingGripOverrides.Add(item: grantedByOverride);
         }
         FoldCollider(collider: in attached, hash: ref m_refreshHash);
     }
@@ -955,12 +963,26 @@ public sealed partial class WorldColliderSet : IContactField {
             if (!m_attachedResolved[row] || (m_attachedScales[row] <= FixedQ4816.Zero)) { continue; }
 
             var (placement, creation, _, _, reflection) = m_attachedRows[row];
-            var margin = FixedQ4816.FromDouble(value: placement.Solid!.Margin) * m_attachedScales[row];
+            var margin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * m_attachedScales[row]);
             var colliders = new List<WorldDiagnosticCollider>();
             var pose = new WorldPosedSolid(Creation: creation, Origin: m_attachedOrigins[row], Placement: placement, Rotation: m_attachedRotations[row], Scale: (FixedQ4816.FromDouble(value: placement.Scale) * m_attachedScales[row]), ReflectionNormal: reflection);
 
             if (m_fieldContactRows[row]) {
                 if (PosedAttachedField(row, pose.Origin, pose.Rotation, m_attachedScales[row]) is { } field) {
+                    // Diagnostic witnesses are world-space geometry. The live field's program stays in its local
+                    // frame, but its immutable compile-pose bases cannot be used at a moved or scaled pose.
+                    var bases = new List<FixedStaticCollider>();
+
+                    CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument, transform: pose.Transform,
+                        visitor: copy => bases.Add(item: CopyCollider(copy: copy, margin: margin)));
+                    var sampled = field.Field!;
+
+                    field = field with {
+                        Field = new FixedColliderField(sampled.Field, sampled.GradientStep, sampled.Bounded) {
+                            Bases = bases,
+                            Bounds = sampled.Bounds,
+                        },
+                    };
                     colliders.Add(item: new WorldDiagnosticCollider(field, placement.Id.ToString(), creation.Id.ToString(), "relief", "Field/relief", placement.Solid!.Margin));
                 }
             } else {
@@ -975,8 +997,9 @@ public sealed partial class WorldColliderSet : IContactField {
 
     private void RefreshAttachedRows(WorldPopulation population, WorldDefinition definition, ulong tick, ulong engineTick) {
         m_refreshHash = Fnv1aHash.Create();
-        var arena = WorldStateReader.Arena(definition);
+        var arena = WorldStateReader.Arena(definition: definition);
         var time = new ArenaTime(tick, engineTick, definition.SimulationRateHz, definition.Dynamics);
+
         for (var row = 0; (row < m_attachedRows.Count); row++) {
             var moving = m_attachedRows[row];
             var origin = moving.Origin;
@@ -987,15 +1010,16 @@ public sealed partial class WorldColliderSet : IContactField {
                 rotation = FixedQuaternion.FromAxisAngle(angle: yaw, axis: FixedVector3.UnitY);
             }
             var scale = FixedQ4816.One;
+
             if (moving.SizeBinding is { } binding) {
-                if (!ReferenceEquals(moving.SizeCatalog, arena.Catalog)) {
+                if (!ReferenceEquals(objA: moving.SizeCatalog, objB: arena.Catalog)) {
                     if (!arena.Catalog.TryResolve(StateLane.Document, binding.Row, out moving.SizeHandle)) {
-                        throw new InvalidOperationException($"Solid size binding '{binding.Row}' no longer resolves.");
+                        throw new InvalidOperationException(message: $"Solid size binding '{binding.Row}' no longer resolves.");
                     }
                     moving.SizeCatalog = arena.Catalog;
                 }
-                scale = arena.Keys.TryResolve(moving.SizeKey, out var key) && arena.TryReadLive(moving.SizeHandle.Ordinal, key, time, out var value)
-                    ? WorldCreationSize.Of(value) : FixedQ4816.Zero;
+                scale = ((arena.Keys.TryResolve(moving.SizeKey, out var key) && arena.TryReadLive(moving.SizeHandle.Ordinal, key, time, out var value))
+                    ? WorldCreationSize.Of(value: value) : FixedQ4816.Zero);
             }
 
             RestoreAttachedRow(origin: origin, rotation: rotation, row: row, scale: scale);
@@ -1009,9 +1033,10 @@ public sealed partial class WorldColliderSet : IContactField {
 
     /// <summary>Publishes the authority-sampled root sizes in storage borrowed until the next snapshot, like its body entries.</summary>
     public WorldSolidScale[] SampledScales() {
-        for (var row = 0; row < m_attachedRows.Count; row++) {
+        for (var row = 0; (row < m_attachedRows.Count); row++) {
             var slot = m_scaleSlots[row];
-            m_sampledScales[slot] = m_sampledScales[slot] with { Scale = m_attachedResolved[row] ? m_attachedScales[row] : FixedQ4816.Zero };
+
+            m_sampledScales[slot] = m_sampledScales[slot] with { Scale = (m_attachedResolved[row] ? m_attachedScales[row] : FixedQ4816.Zero) };
         }
         return m_sampledScales;
     }
@@ -1048,45 +1073,53 @@ public sealed partial class WorldColliderSet : IContactField {
                     continue;
                 }
                 var carriedPoint = position;
+
                 if (m_attachedScales[row] != m_previousAttachedScales[row]) {
-                    var probe = position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal);
-                    if (!FixedSurfaceQuery.TryNearest([collider], [], probe, skin + push.Penetration, out var surface)) { continue; }
+                    var probe = (position + FixedRigidWitness.Anchor(volume, FixedVector3.Zero, orientation, -push.Normal));
+
+                    if (!FixedSurfaceQuery.TryNearest([collider], [], probe, (skin + push.Penetration), out var surface)) { continue; }
                     // Only the material point on the support scales. Body standoff, skin and overhang do not.
                     carriedPoint = surface.Point;
                 }
                 found = true;
                 supportRow = row;
                 bestDepth = push.Penetration;
-                var offset = carriedPoint - m_previousAttachedOrigins[row];
-                var sameRotation = m_attachedRotations[row] == m_previousAttachedRotations[row];
-                var local = sameRotation ? offset : m_previousAttachedRotations[row].RotateInverse(offset);
+                var offset = (carriedPoint - m_previousAttachedOrigins[row]);
+                var sameRotation = (m_attachedRotations[row] == m_previousAttachedRotations[row]);
+                var local = (sameRotation ? offset : m_previousAttachedRotations[row].RotateInverse(vector: offset));
+
                 local = new FixedVector3(
-                    FusedArithmetic.MultiplyDivide(local.X, m_attachedScales[row], m_previousAttachedScales[row]),
-                    FusedArithmetic.MultiplyDivide(local.Y, m_attachedScales[row], m_previousAttachedScales[row]),
-                    FusedArithmetic.MultiplyDivide(local.Z, m_attachedScales[row], m_previousAttachedScales[row]));
-                displacement = m_attachedOrigins[row] + (sameRotation ? local : m_attachedRotations[row].Rotate(local)) - carriedPoint;
+                    X: FusedArithmetic.MultiplyDivide(local.X, m_attachedScales[row], m_previousAttachedScales[row]),
+                    Y: FusedArithmetic.MultiplyDivide(local.Y, m_attachedScales[row], m_previousAttachedScales[row]),
+                    Z: FusedArithmetic.MultiplyDivide(local.Z, m_attachedScales[row], m_previousAttachedScales[row]));
+                displacement = ((m_attachedOrigins[row] + (sameRotation ? local : m_attachedRotations[row].Rotate(vector: local))) - carriedPoint);
             }
         }
         if (!found) {
             // A newly born solid has no previous surface. Descend onto its new surface from above its bounds.
-            for (var index = 0; index < m_attachedColliders.Count; index++) {
+            for (var index = 0; (index < m_attachedColliders.Count); index++) {
                 var row = m_attachedColliderRows[index];
-                if (!m_previousAttachedResolved[row] || m_previousAttachedScales[row] > FixedQ4816.Zero) { continue; }
+
+                if (!m_previousAttachedResolved[row] || (m_previousAttachedScales[row] > FixedQ4816.Zero)) { continue; }
                 var collider = m_attachedColliders[index];
-                if (!collider.WorldBox().Intersects(FixedAabb.FromCenter(position, FixedVector3.Zero).Grow(skin))) { continue; }
+
+                if (!collider.WorldBox().Intersects(other: FixedAabb.FromCenter(center: position, extent: FixedVector3.Zero).Grow(margin: skin))) { continue; }
                 var box = collider.WorldBox();
+
                 if (box.IsEverywhere) { continue; }
-                var corner = new FixedVector3(up.X >= FixedQ4816.Zero ? box.Maximum.X : box.Minimum.X,
-                    up.Y >= FixedQ4816.Zero ? box.Maximum.Y : box.Minimum.Y, up.Z >= FixedQ4816.Zero ? box.Maximum.Z : box.Minimum.Z);
+                var corner = new FixedVector3(X: ((up.X >= FixedQ4816.Zero) ? box.Maximum.X : box.Minimum.X),
+                    Y: ((up.Y >= FixedQ4816.Zero) ? box.Maximum.Y : box.Minimum.Y), Z: ((up.Z >= FixedQ4816.Zero) ? box.Maximum.Z : box.Minimum.Z));
                 var bottom = FixedQ4816.MaxValue;
+
                 foreach (ref readonly var volume in volumes) {
-                    bottom = FixedQ4816.Min(bottom, FixedColliderBounds.MinimumProjection(position, orientation, volume, up));
+                    bottom = FixedQ4816.Min(x: bottom, y: FixedColliderBounds.MinimumProjection(normal: up, orientation: orientation, position: position, volume: volume));
                 }
-                var lift = FixedQ4816.Max(FixedQ4816.Zero, FixedVector3.Dot(corner, up) - bottom) + skin;
-                var above = position + up * lift;
-                m_bornSupportSet.Refresh([collider]);
+                var lift = (FixedQ4816.Max(x: FixedQ4816.Zero, y: (FixedVector3.Dot(left: corner, right: up) - bottom)) + skin);
+                var above = (position + (up * lift));
+
+                m_bornSupportSet.Refresh(colliders: [collider]);
                 if (m_solver.TrySupportDistance(m_bornSupportSet, EmptyColliders, above, orientation, volumes, up, lift, out var descent)) {
-                    displacement = up * (lift - descent);
+                    displacement = (up * (lift - descent));
                     supportRow = row;
                     found = true;
                     break;
@@ -1240,7 +1273,7 @@ public sealed partial class WorldColliderSet : IContactField {
             candidate: out candidate,
             colliders: m_holdableColliders,
             direction: in direction,
-            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_movingHoldable),
+            dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_movingHoldable),
             maxDistance: maxDistance,
             origin: in origin
         )) {
@@ -1250,8 +1283,8 @@ public sealed partial class WorldColliderSet : IContactField {
             return false;
         }
 
-        grantedByOverride = candidate.Source == FixedSurfaceColliderSource.Static
-            ? m_holdableGrantedByOverride[candidate.ColliderIndex] : m_movingGripOverrides[candidate.ColliderIndex];
+        grantedByOverride = ((candidate.Source == FixedSurfaceColliderSource.Static)
+            ? m_holdableGrantedByOverride[candidate.ColliderIndex] : m_movingGripOverrides[candidate.ColliderIndex]);
 
         return true;
     }
@@ -1261,7 +1294,7 @@ public sealed partial class WorldColliderSet : IContactField {
         candidate: out candidate,
         colliders: m_colliders,
         direction: in direction,
-        dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_attachedColliders),
+        dynamicColliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders),
         maxDistance: maxDistance,
         origin: in origin
     );

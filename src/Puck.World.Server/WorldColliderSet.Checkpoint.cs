@@ -7,20 +7,23 @@ namespace Puck.World.Server;
 public sealed partial class WorldColliderSet {
     // A rebuild changes the compiled inventory, not the latest contact sample of every unchanged moving root.
     internal void CarrySamplesFrom(WorldColliderSet? previous) {
-        if (previous is null || ReferenceEquals(previous, this)) { return; }
+        if ((previous is null) || ReferenceEquals(objA: previous, objB: this)) { return; }
         var rows = new WorldAttachedSolidCheckpoint[m_attachedRows.Count];
-        var lookup = previous.m_attachedRows.Select((moving, row) => (moving, row)).GroupBy(pair =>
+        var lookup = previous.m_attachedRows.Select(selector: (moving, row) => (moving, row)).GroupBy(keySelector: pair =>
             (pair.moving.Placement.Id, pair.moving.Creation.Hash, pair.moving.Origin, pair.moving.Rotation, pair.moving.ReflectionNormal,
                 pair.moving.Placement.Scale, pair.moving.Placement.Solid!.Margin, pair.moving.Placement.Attach)).ToDictionary(group => group.Key, group => group.First().row);
-        for (var row = 0; row < rows.Length; row++) {
+
+        for (var row = 0; (row < rows.Length); row++) {
             var moving = m_attachedRows[row];
-            rows[row] = !lookup.TryGetValue((moving.Placement.Id, moving.Creation.Hash, moving.Origin, moving.Rotation, moving.ReflectionNormal,
-                moving.Placement.Scale, moving.Placement.Solid!.Margin, moving.Placement.Attach), out var old)
+
+            rows[row] = (!lookup.TryGetValue(key: (moving.Placement.Id, moving.Creation.Hash, moving.Origin, moving.Rotation, moving.ReflectionNormal,
+                moving.Placement.Scale, moving.Placement.Solid!.Margin, moving.Placement.Attach), value: out var old)
                 ? new(false, default, FixedQuaternion.Identity, FixedQ4816.Zero) :
-                new(previous.m_attachedResolved[old], previous.m_attachedOrigins[old], previous.m_attachedRotations[old], previous.m_attachedScales[old]);
+                new(previous.m_attachedResolved[old], previous.m_attachedOrigins[old], previous.m_attachedRotations[old], previous.m_attachedScales[old]));
         }
-        RestoreAttached(rows);
+        RestoreAttached(rows: rows);
     }
+
     /// <summary>Captures the sampled carrier transforms, which may precede their current post-rule poses.</summary>
     public WorldAttachedSolidCheckpoint[] CaptureAttached() => Enumerable.Range(0, m_attachedRows.Count)
         .Select(selector: row => new WorldAttachedSolidCheckpoint(m_attachedResolved[row], m_attachedOrigins[row], m_attachedRotations[row], m_attachedScales[row])).ToArray();
@@ -55,7 +58,7 @@ public sealed partial class WorldColliderSet {
         var (placement, creation, _, _, reflection) = m_attachedRows[row];
         m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true; m_attachedScales[row] = scale;
         if (scale <= FixedQ4816.Zero) { return; }
-        m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin) * scale; m_refreshRow = row;
+        m_refreshMargin = (FixedQ4816.FromDouble(value: placement.Solid!.Margin) * scale); m_refreshRow = row;
         m_liveFields[row] = PosedAttachedField(origin: origin, rotation: rotation, row: row, scale: scale);
         if (m_fieldContactRows[row]) {
             if (m_liveFields[row] is { } field) { RecordAttachedCollider(attached: field); }
@@ -73,9 +76,9 @@ public sealed partial class WorldColliderSet {
                 m_scaledAttachedFields[row] = field with {
                     Center = (field.Center * scale),
                     Extent = new FixedVector3(
-                        (FixedInterval.FromPoint(field.Extent.X) * FixedInterval.FromPoint(scale)).Upper + FixedQ4816.Epsilon,
-                        (FixedInterval.FromPoint(field.Extent.Y) * FixedInterval.FromPoint(scale)).Upper + FixedQ4816.Epsilon,
-                        (FixedInterval.FromPoint(field.Extent.Z) * FixedInterval.FromPoint(scale)).Upper + FixedQ4816.Epsilon),
+                        X: ((FixedInterval.FromPoint(value: field.Extent.X) * FixedInterval.FromPoint(value: scale)).Upper + FixedQ4816.Epsilon),
+                        Y: ((FixedInterval.FromPoint(value: field.Extent.Y) * FixedInterval.FromPoint(value: scale)).Upper + FixedQ4816.Epsilon),
+                        Z: ((FixedInterval.FromPoint(value: field.Extent.Z) * FixedInterval.FromPoint(value: scale)).Upper + FixedQ4816.Epsilon)),
                     Field = new FixedColliderField(scaled, FixedQ4816.Max(x: FixedQ4816.FromRawBits(value: 1), y: (field.Field.GradientStep * scale)), field.Field.Bounded) { Bounds = scaled },
                 };
                 m_scaledAttachedSizes[row] = scale;

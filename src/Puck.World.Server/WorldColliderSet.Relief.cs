@@ -225,7 +225,7 @@ public sealed partial class WorldColliderSet {
         var relieved = Relieves(document: document);
         var growth = ((relieved ? (FixedQ4816.FromDouble(value: MathF.Abs(x: document.Noise!.Amplitude)) * transform.Scale) : FixedQ4816.Zero) + BlendGrowth(program: envelope));
         var primitives = PrimitiveColliders(bounds: out var box, document: document, growth: growth, margin: fixedMargin, partition: out var partition,
-            partitioned: partitioned && !relieved, transform: transform, unbounded: out var unbounded);
+            partitioned: (partitioned && !relieved), transform: transform, unbounded: out var unbounded);
 
         var (center, half) = ((unbounded || box.IsEmpty) ? (transform.Origin, FixedVector3.Zero) : (box.Center, box.Extent));
         var local = (transform with { Origin = (transform.Origin - center) });

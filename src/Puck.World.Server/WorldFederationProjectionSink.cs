@@ -44,14 +44,17 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     private readonly WorldDeliveryCursor m_cursor = new();
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
-    private readonly WorldRecipientView? m_view = view ?? server?.DeliveryView(recipient, tier);
+    private readonly WorldRecipientView? m_view = (view ?? server?.DeliveryView(recipient, tier));
+
     private WorldDocumentVersion Version => (server?.DocumentVersion ?? default) with { Sequence = m_cursor.Sequence };
 
     private bool m_invalidated;
 
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
-    internal bool HoldsProjection => m_view is null || (m_feed?.Holds(m_view) ?? m_cursor.Holds(m_view));
+
+    internal bool HoldsProjection => ((m_view is null) || (m_feed?.Holds(view: m_view) ?? m_cursor.Holds(view: m_view)));
+
     /// <inheritdoc/>
     public string? DetachReason { get; private set; }
 
@@ -133,8 +136,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (!Current()) {
             return;
         }
-        if (m_view is null) { throw new InvalidOperationException("A document delivery requires its authority view."); }
-        server!.AttachCursor(recipient, m_cursor);
+        if (m_view is null) { throw new InvalidOperationException(message: "A document delivery requires its authority view."); }
+        server!.AttachCursor(cursor: m_cursor, recipient: recipient);
 
         if (m_feed is not null) {
             var time = server!.DeliveryTime;
@@ -143,7 +146,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             // hub detaches the sink for.
             try {
                 Present(
-                    delivery: m_feed.Compose(m_view, m_cursor),
+                    delivery: m_feed.Compose(cursor: m_cursor, view: m_view),
                     engineTick: time.EngineTick,
                     tick: time.Tick,
                     version: Version
@@ -155,9 +158,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             return;
         }
 
-        if (m_cursor.DeliverDefinition(m_view) is { } delivered) {
+        if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
             Write(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                WorldDefinitionSerialization.SerializeCompact(delivered), tier, Version));
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
         }
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
@@ -198,7 +201,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
             );
         }
         if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, projected.FieldCells, (tier == WorldDisclosureTier.Replica)) }; } else if (!projected.FieldCells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
-        projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = m_view is null ? default : m_scales.Filter(m_view, projected.SolidScales) };
+        projected = projected with { Revision = checked((int)m_cursor.Sequence), SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };
         projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
         Write(
             WorldFederationResponse.Snapshot,
@@ -208,7 +211,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     // The replica wire carries one definition-frame kind, so a value-only delivery rides the same encode; a
     // presentation-tier peer is owed only the members of its projection that the values moved.
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
-        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(m_view))) { DeliverDefinition(definition: definition, version: version); }
+        if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDefinition(definition: definition, version: version); }
     }
     public void PrimeRoute(in WorldAuthorityRouteDescription route) => Write(
         WorldFederationResponse.Route,
@@ -223,7 +226,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     /// <summary>Releases what the peer's feed holds, its anchor rows included: the peer is gone. Called under the
     /// authority gate once the sink is detached, so no delivery follows it.</summary>
     public void Release() {
-        m_feed?.Release(); m_cursor.Release(); server?.DetachCursor(recipient, m_cursor);
+        m_feed?.Release(); m_cursor.Release(); server?.DetachCursor(cursor: m_cursor, recipient: recipient);
     }
     public Task StreamAsync(Stream output, CancellationToken ct) =>
         WorldProjectionStream.RunAsync(

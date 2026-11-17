@@ -70,7 +70,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // The iteration budget at unit step scale. A non-accepted point advance is at least
     // max(floor(HitEpsilon * stepScale), one Q48.16 tick) — the divisor m_marchIterations rescales by — so this budget
     // times HitEpsilon is the distance a point march always covers before it may exhaust, at every step scale.
-    private const int BaseMarchIterations = 512;
     // A scope's compiled candidate scale is a 2⁻³² fraction (CompileScopeScale).
     private const int ScopeScaleBits = 32;
     private const double ScopeScaleOne = 4294967296.0;
@@ -140,7 +139,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         m_reading = reading;
         m_instructions = Compile(program: program, reading: reading);
         m_stepScale = CertifiedStepScale(compiled: m_instructions, program: program);
-        m_marchIterations = MarchIterationsFor(stepScale: m_stepScale);
+        m_marchIterations = SdfFieldMarch.IterationsFor(stepScale: m_stepScale);
         var reaches = BuildShapeReaches(compiled: m_instructions, program: program);
 
         (m_cullBounds, m_members) = BuildCullBounds(compiled: m_instructions, program: program, reaches: reaches);
@@ -798,7 +797,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // The shared sphere-trace march over this evaluator's own exact samples — see SdfFieldMarch for the accept and
     // advance rules. Every sample is exact, so the bound budget is never spent.
     MarchOutcome ISdfFieldMarcher.March(FixedPosition origin, FixedVector3 direction, FixedQ4816 maxDistance, FixedQ4816 radius, out RayHit hit) {
-        var sampler = new ExactSampler(evaluator: this);
+        var sampler = new SdfFieldMarch.ExactSampler(evaluator: this);
 
         return SdfFieldMarch.Run(
             boundBudget: 0,
@@ -814,28 +813,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         );
     }
 
-    // The iteration budget that keeps a point cast's guaranteed pre-exhaustion reach at BaseMarchIterations *
-    // HitEpsilon however far the step scale clamps the advance. A non-accepting point iteration advances at least
-    // max(floor(HitEpsilon * stepScale), one Q48.16 tick), so the budget is that reach divided by the same floor,
-    // rounded up. The one-tick half bounds the budget on its own: no step scale can push it past 33,792 iterations
-    // (raw HitEpsilon 66 * BaseMarchIterations, over a one-tick divisor), so a pathologically clamped program cannot
-    // spin. Exactly BaseMarchIterations at stepScale 1, so a warp-free program's answers are unchanged to the bit.
-    // A radius cast has no equivalent reach guarantee: it stops as soon as the scaled field cannot clear the unscaled
-    // radius, which the tick floor deliberately does not lift, so it may report a bounded answer having travelled
-    // nothing at all. Across both, an exhausted answer has exactly three causes: that vanished radius clearance, this
-    // budget running out, and a marched point the program's frame cannot express.
-    internal static int MarchIterationsFor(FixedQ4816 stepScale) {
-        var reach = (SdfFieldMarch.HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
-        var floor = FixedQ4816.Max(
-            x: SdfFieldMarch.ScaleDistanceDown(
-                distance: SdfFieldMarch.HitEpsilon,
-                scale: stepScale
-            ),
-            y: FixedQ4816.Epsilon
-        );
-
-        return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
-    }
     private static FixedQ4816 RadialLength(FixedQ4816 x, FixedQ4816 z) =>
         new FixedVector2(
             X: x,
@@ -1755,18 +1732,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     public bool TryGroundHeight(FixedPosition position, FixedQ4816 probeUp, FixedQ4816 probeDown, out FixedQ4816 groundY) =>
         SdfFieldMarch.GroundHeight(groundY: out groundY, marcher: this, position: position, probeDown: probeDown, probeUp: probeUp);
 
-    // The march sampler over this evaluator's own field: every sample exact, the radius unread.
-    private readonly struct ExactSampler(SdfFieldEvaluator evaluator) : ISdfMarchSampler {
-        public bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact) {
-            exact = true;
-
-            return evaluator.TryDistance(
-                distance: out distance,
-                material: out material,
-                position: position
-            );
-        }
-    }
     // The compiled, fixed-point form of one SdfInstruction: every Data0/Data1 float lane converted to FixedQ4816
     // ONCE at construction (see Compile). Field names mirror the shader's data0.x/y/z/w and data1.x/y/z/w swizzles
     // directly so a shape/op body reads as a transcription of its mapCore counterpart, not a re-derivation.

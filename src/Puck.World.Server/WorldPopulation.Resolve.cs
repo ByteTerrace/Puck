@@ -130,6 +130,7 @@ public sealed partial class WorldPopulation {
     // swap that moves a solid row (TryInstallResponseSolids) both compile them through here.
     private void CompileSolidConsumers(WorldDefinition definition, WorldSolidField? solids, NavigationRuntime? previousNavigation) {
         var previousMoving = MovingSolids;
+
         m_contactCensus = null;
         m_censusDefinition = definition;
         var tuning = FixedWorldCollision.Compile(collision: definition.Collision);
@@ -154,9 +155,9 @@ public sealed partial class WorldPopulation {
             definition: definition,
             solids: derivedSolids
         );
-        MovingSolids?.CarrySamplesFrom(previousMoving);
-        if (derivedSolids is not null && m_baseContactField is WorldColliderSet analytic) {
-            derivedSolids = derivedSolids.WithMovingSolids(analytic, tuning);
+        MovingSolids?.CarrySamplesFrom(previous: previousMoving);
+        if ((derivedSolids is not null) && (m_baseContactField is WorldColliderSet analytic)) {
+            derivedSolids = derivedSolids.WithRegions(movingSolids: analytic, regions: m_fieldRegions, tuning: tuning);
         }
         m_adjacencyDefinition = definition;
         ComposeContactField();
@@ -276,7 +277,7 @@ public sealed partial class WorldPopulation {
                     ))],
                 Then: [.. transform.Then.Select(selector: write => new FieldWriteInput(
                         TakeFrom: write.TakeFrom?.Ordinal,
-                        Retain: (write.Retain is { } retain ? Scalar(input: retain) : null),
+                        Retain: ((write.Retain is { } retain) ? Scalar(input: retain) : null),
                         Field: write.Field.Ordinal,
                         Op: MapWriteOp(op: write.Op),
                         Value: Scalar(input: write.Value)
@@ -869,7 +870,7 @@ public sealed partial class WorldPopulation {
         // only, so frozen/frozen pairs are never visited or charged against a contact budget.
         var grid = m_dynamicContactGrid;
 
-        grid.Rebuild(spheres: contacts.AsSpan(start: 0, length: count));
+        grid.Rebuild(spheres: contacts.AsSpan(length: count, start: 0));
         Array.Clear(array: m_dynamicContactDegrees);
         for (var leftOrdinal = 0; (leftOrdinal < count); leftOrdinal++) {
             var leftIndex = grid.Sphere(ordinal: leftOrdinal).Index;

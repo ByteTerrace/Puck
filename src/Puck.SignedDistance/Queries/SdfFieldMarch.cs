@@ -40,6 +40,27 @@ internal interface ISdfFieldMarcher {
 // evaluator's own march has, so a march that never leaves the band answers bit-identically to that evaluator; a bound
 // sample counts against boundBudget, which the caller sizes from the smallest advance a bound can produce.
 internal static class SdfFieldMarch {
+    internal const int BaseMarchIterations = 512;
+
+    // An exact live sample, independent of whether its field is a program or a posed composition.
+    internal readonly struct ExactSampler(IFieldEvaluator evaluator) : ISdfMarchSampler {
+        public bool TrySample(FixedPosition position, FixedQ4816 radius, out FixedQ4816 distance, out int material, out bool exact) {
+            exact = true;
+            return evaluator.TryDistance(distance: out distance, material: out material, position: position);
+        }
+    }
+
+    // A non-accepting point iteration advances at least max(floor(HitEpsilon * stepScale), one Q48.16 tick).
+    // This budget preserves BaseMarchIterations * HitEpsilon of guaranteed reach, capped at 33,792 iterations
+    // even at the smallest step scale. A radius cast has no such reach guarantee: its scaled clearance can
+    // vanish before accepting a surface. That, budget exhaustion and an unrepresentable point obstruct conservatively.
+    internal static int IterationsFor(FixedQ4816 stepScale) {
+        var reach = (HitEpsilon * FixedQ4816.FromInteger(value: BaseMarchIterations));
+        var floor = FixedQ4816.Max(x: ScaleDistanceDown(distance: HitEpsilon, scale: stepScale), y: FixedQ4816.Epsilon);
+
+        return ((int)(((reach.Value + floor.Value) - 1L) / floor.Value));
+    }
+
     // The march accept threshold: a sample within this of the surface counts as a hit rather than one more step.
     // Matches the scale of SdfFieldEvaluator.GradientEpsilon (both are "close enough" tolerances against the same
     // fixed-point field) — tighten per-consumer by wrapping a provider, not by editing the shared constant.
