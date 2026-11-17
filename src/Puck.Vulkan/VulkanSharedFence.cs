@@ -103,18 +103,15 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
     /// <see cref="DeviceLostException"/>.</remarks>
     public ulong CompletedValue {
         get {
-            ObjectDisposedException.ThrowIf(
-                condition: (0 == m_semaphore),
-                instance: this
-            );
-            m_device.GetSemaphoreCounterValue(
-                m_device.Handle,
-                m_semaphore,
-                out var value
-            ).ThrowIfFailed(device: m_device, operation: "vkGetSemaphoreCounterValue");
-
-            return value;
+            return ReadCompletedValue(m_device, m_semaphore);
         }
+    }
+
+    internal static ulong ReadCompletedValue(VulkanDeviceCommands device, nint semaphore) {
+        ObjectDisposedException.ThrowIf(semaphore == 0, typeof(VulkanSharedFence));
+        device.GetSemaphoreCounterValue(device.Handle, semaphore, out var value)
+            .ThrowIfFailed(device: device, operation: "vkGetSemaphoreCounterValue");
+        return value;
     }
 
     /// <inheritdoc/>

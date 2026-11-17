@@ -9,13 +9,7 @@ internal sealed class VulkanQueueTimeline(VulkanLogicalDevice device) : GpuQueue
 
     protected override void Signal(ulong value) => m_submitter.Signal(device: device.Commands,
         graphicsQueue: device.GraphicsQueue, commandBufferHandles: [], semaphore: m_semaphore, value: value);
-    protected override ulong ReadCompleted() {
-        unsafe {
-            device.Commands.GetSemaphoreCounterValue(device.Commands.Handle, m_semaphore, out var value)
-                .ThrowIfFailed(device: device.Commands, operation: "vkGetSemaphoreCounterValue");
-            return value;
-        }
-    }
+    protected override ulong ReadCompleted() => VulkanSharedFence.ReadCompletedValue(device.Commands, m_semaphore);
     protected override void DisposeNative() {
         unsafe { device.Commands.Destroy(destroy: device.Commands.DestroySemaphore, handle: m_semaphore); }
     }
