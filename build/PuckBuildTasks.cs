@@ -71,6 +71,8 @@ public sealed class PuckBuildTask : Task, ICancelableTask {
     public string DxcCommand { get; set; } = "";
     /// <summary>See <see cref="PuckShaderBuild.Host"/>.</summary>
     public string Host { get; set; } = "";
+    /// <summary>See <see cref="PuckShaderBuild.IncludeDirectory"/>.</summary>
+    public string IncludeDirectory { get; set; } = "";
     /// <summary>See <see cref="PuckShaderBuild.InputsFile"/>.</summary>
     public string InputsFile { get; set; } = "";
     /// <summary>See <see cref="PuckShaderBuild.LockFile"/>.</summary>
@@ -121,6 +123,7 @@ public sealed class PuckBuildTask : Task, ICancelableTask {
                     CacheDirectory = CacheDirectory,
                     DxcCommand = DxcCommand,
                     Host = Host,
+                    IncludeDirectory = IncludeDirectory,
                     InputsFile = InputsFile,
                     LockFile = LockFile,
                     Mode = Mode,
@@ -688,6 +691,8 @@ public sealed class PuckShaderBuild : Task, ICancelableTask {
     public string DxcCommand { get; set; } = "";
     /// <summary>Where a compile writes every file it read once it succeeds, or empty for none.</summary>
     public string InputsFile { get; set; } = "";
+    /// <summary>The include directory every stage source resolves a shared header through, or empty for none.</summary>
+    public string IncludeDirectory { get; set; } = "";
 
     /// <inheritdoc/>
     public override bool Execute() {
@@ -737,6 +742,10 @@ public sealed class PuckShaderBuild : Task, ICancelableTask {
         if (!string.IsNullOrEmpty(value: InputsFile)) {
             argumentList.Add(item: "--inputs");
             argumentList.Add(item: InputsFile);
+        }
+        if (!string.IsNullOrEmpty(value: IncludeDirectory)) {
+            argumentList.Add(item: "--include");
+            argumentList.Add(item: IncludeDirectory);
         }
         foreach (var argument in argumentList) {
             arguments.Append(value: ((arguments.Length == 0) ? "" : " ")).Append(value: Quote(argument: argument));
