@@ -2891,6 +2891,12 @@ runs.
 
 ### The benchmark
 
+- [low] A headless benchmark reports `rendered: true` because
+  `WorldBenchmarkCommandModule.Finish` tests whether pacing exists, rather than
+  whether a renderer exists. The headless Free Cam seat program observed this
+  alongside `gpu.state: absent`. Derive the report's rendered flag from the
+  presentation host, keeping host-iteration timing available headless.
+
 Owner: one benchmark lane per stage · high · Next: the lead's windowed reading
 of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
@@ -3044,36 +3050,12 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
-- [medium] Two Free Cam compositions: `PlayerCommandModule.ActivateCameraApplication`
-  (`src/Puck.World/PlayerCommandModule.Mode.cs`, client side: finds the camera body through
-  the client's inhabitant table, checks `CheckEngage`, then submits a Console Drive grant and a
-  `ComposeControl` as two submissions) and `WorldInputRuntime.TrySetCameraRoute`
-  (`src/Puck.World.Server/WorldInputRuntime.Camera.cs`, authority side: one activation scope,
-  `CheckEngagePolicy`, `Compose`, then the grant). `ApplyMode` takes the authority path only when
-  the routed document's `inputModes` declare a `SeatState` family of that name, and the debug
-  world's do not, so the debug world's Free Cam runs the client path. Route every camera-target
-  seat-mode edge through the authority (a `SeatState` selection need not require an `inputModes`
-  family) and delete the client composition with its separate grant.
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-- [low] The rule VM's latch keeps a binding in two dictionaries,
-  `RuleLatch.RuleState.Held` and `RuleLatch.RuleState.Scheduling`, both walked
-  by `RuleLatch.EndSweep`. One binding entry holding the edge bit and the
-  schedule, with the hashed bit kept apart from the unhashed schedule cache
-  (`RuleLatch.AppendStateHash`); the body door's D10 takes it. The host's
-  interaction path also resolves its `RuleState` by name per tick
-  (`IRuleOwner.TryEvaluateOwn`).
-- [low] The render node's retirement polls fences beside the slot proof its
-  packages use: `RetiredGraph` disposes on `Fence.IsSignaled`
-  (`ShaderPipelineRenderNode.RetireCompleted`). Key it on the node's
-  submission count through `GpuRetirementQueue`, completed by `WaitSlot`,
-  after giving a re-keyed borrowed publication
-  (`RetiredGraph.ReleasePublication`) and one awaiting consumers
-  (`RetiredGraph.ArmAfterConsumers`) their own completion.
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -3369,6 +3351,14 @@ reversal brake, then a sitting.
   responding after the first scroll.
 
 ### Input channels
+
+- [medium · unconfirmed] Reconcile camera mode lifecycle reseeding with its
+  authority state: `WorldSeatBindings.SyncSeatModes` resets client defaults and
+  raises `CameraApplicationDropped`, whose composition-root handler sends a
+  dissolve, while `WorldInputRuntime.PrepareOwner` retains a valid seat state.
+  Check a changed document or route while Free Cam is active for a retained
+  `free` state beside a dissolved application. Ordinary F9 entry and exit take
+  the authority path; reload and route teardown still need this focused check.
 
 Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns

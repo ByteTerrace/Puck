@@ -535,9 +535,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var replaced = gpu.CreatedObjects.Where(predicate: IsPassPipelineObject).ToArray();
         var creations = gpu.CreationCount;
 
-        // While the queue has finished nothing, the replaced graph's submissions may still read its pipelines: the
-        // replacement's shaders differ, so its entries are new and sit beside the replaced ones, which keep their leases
-        // however many frames the replacement renders.
+        // Keep the producer paused so no slot reuse can wait the latest submission complete. The replacement's
+        // shaders differ, so its entries sit beside the old ones until that submission is proved complete.
+        node.Paused = true;
         gpu.QueueHeld = true;
         _ = SwapAndProduce(
             gpu: gpu,
@@ -571,6 +571,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // Once the queue finishes, the replaced graph retires, and its leases were the last on the replaced entries: each
         // of their objects is disposed once, and the replacement's stay.
         gpu.QueueHeld = false;
+        node.Paused = false;
         Produce(
             frames: ((int)InFlight),
             node: node
