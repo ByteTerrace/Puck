@@ -534,8 +534,10 @@ public sealed partial class SdfMeshPathBake {
 
         internal long Revision { get; }
         internal long CopyLayoutRevision { get; }
-        internal IReadOnlyList<SdfMeshBakeGroup> Groups => m_owner.m_groups;
+        // The groups are read by index, so a dress allocates no enumerator.
+        internal int GroupCount => m_owner.m_groups.Count;
 
+        internal SdfMeshBakeGroup GroupAt(int index) => m_owner.m_groups[index];
         internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Shown;
         internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
         internal void Acknowledge() => m_owner.m_dressedRevision = Revision;

@@ -55,6 +55,11 @@ public sealed class SdfMeshRows {
     public GpuRowChanges Changes => m_changes.Reader;
     /// <summary>Gets the published journal endpoint.</summary>
     public long Serial => m_changes.Serial;
+    /// <summary>Gets why the journal entry ending at <see cref="Serial"/> owes every row: the dresser's statement at the
+    /// publication that began that entry (<see cref="SdfMeshStagingCause.Rebuild"/>, <see cref="SdfMeshStagingCause.Portal"/> or
+    /// <see cref="SdfMeshStagingCause.Retry"/>), or <see langword="null"/> when the entry names rows. The tables count the
+    /// records a staging packs under it (<see cref="SdfMeshHistory.RowsPackedOf"/>).</summary>
+    public SdfMeshStagingCause? Cause { get; private set; }
 
     /// <summary>Reads a staged row, or the absent draw for a free row.</summary>
     public SdfMeshDraw this[int row] => ((((uint)row) < ((uint)Count)) ? m_cells[row].Draw : default);
@@ -157,14 +162,21 @@ public sealed class SdfMeshRows {
             m_table.m_startingOver = true;
         }
         /// <summary>Publishes writes as one captured journal endpoint.</summary>
-        public void Publish() {
+        /// <param name="cause">Why the entry this publication begins owes every row, or <see langword="null"/>; kept
+        /// only when the publication begins an entry, so a publication that owes nothing leaves the entry's cause standing.</param>
+        public void Publish(SdfMeshStagingCause? cause = null) {
             var owned = 0;
 
             foreach (var row in m_table.m_ownedChanges) { if (row < m_table.Count) { owned++; } }
             SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.RowsOwnedChanged, owned);
             m_table.m_ownedChanges.Clear();
             if (m_table.m_everything || (m_table.m_pending.Count > 0)) { m_table.Revision = checked((m_table.Revision + 1)); }
-            m_table.m_changes.Begin(rows: m_table.Count, everything: m_table.m_everything);
+            // A publication that owes nothing and leaves the extent alone is the endpoint already published, so a consumer
+            // current through it is still current and a frame that carries it stands.
+            if (m_table.m_everything || (m_table.m_pending.Count > 0) || (m_table.m_changes.Serial == 0L) || (m_table.m_changes.RowCount != m_table.Count)) {
+                m_table.m_changes.Begin(rows: m_table.Count, everything: m_table.m_everything);
+                m_table.Cause = cause;
+            }
             for (var run = 0; (run < m_table.m_pending.Count); run++) {
                 var start = m_table.m_pending.Start(index: run);
                 var length = Math.Min(val1: (m_table.Count - start), val2: m_table.m_pending.Length(index: run));
@@ -183,8 +195,15 @@ public sealed class SdfMeshRows {
 }
 
 // A non-owning view over host inputs or retained rows. It cannot be downcast to a writable list.
+// The one door a consumer of the frame's staged draws reads their revision and journal through: the dresser's retained rows
+// when the frame was dressed, the producer's own list otherwise. A dressed frame's host inputs (MeshDraws and its journal)
+// stay the dresser's inputs, so dressing the frame again reads them unchanged.
 internal readonly struct SdfMeshDraws(SdfFrame frame) {
     public SdfMeshRows? Rows => frame.MeshRows;
+    public long Revision => ((frame.MeshRows is { } rows) ? rows.Revision : frame.MeshDrawsRevision);
+    public GpuRowChanges? Changes => ((frame.MeshRows is { } rows) ? rows.Changes : frame.MeshDrawChanges);
+    public long Serial => ((frame.MeshRows is { } rows) ? rows.Serial : frame.MeshDrawChangesSerial);
+    public SdfMeshStagingCause? Cause => frame.MeshRows?.Cause;
     public object Roster => (((object?)frame.MeshRows) ?? frame.MeshDraws);
     public int Count => (frame.MeshRows?.Count ?? frame.MeshDraws.Count);
 

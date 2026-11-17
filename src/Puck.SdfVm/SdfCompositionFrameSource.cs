@@ -32,7 +32,8 @@ public interface ISdfFrameDresser {
     /// from frame to frame; <paramref name="meshDrawsRevision"/> moves whenever it does.</param>
     /// <param name="meshDrawsRevision">The composed draws' revision, which the dressed frame carries as
     /// <see cref="SdfFrame.MeshDrawsRevision"/>.</param>
-    /// <returns>The frame to render.</returns>
+    /// <returns>The frame to render. The composition completes it in place (its pick map, slot clips, geometry assets
+    /// and sampled snapshots), so a dresser returns a frame it hands to no one else.</returns>
     SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha);
 
     /// <summary>Gets the font atlas the dressed world's text samples, which the composed frame source hands its host as
@@ -523,9 +524,14 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_meshAssetSlots.Clear();
         var root = m_programSlots;
 
-        foreach (var emitter in m_emitters) {
+        for (var owner = 0; (owner < m_emitters.Count); owner++) {
+            var emitter = m_emitters[owner];
+            var copies = emitter.MeshInstances;
+
             m_meshAssetSlots.AddRange(collection: emitter.MeshAssetSlots);
-            foreach (var copy in emitter.MeshInstances) {
+            for (var at = 0; (at < copies.Count); at++) {
+                var copy = copies[at];
+
                 copy.FrameSlot = root;
                 var previous = m_transforms[root];
 
@@ -543,6 +549,34 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         m_transformsPacked = true;
+    }
+
+    // Apart from CaptureFrame, whose closure scope would otherwise cover every frame: a steady frame starts no build.
+    private void StartBuild(SdfProgramBuilder builder) {
+        var held = m_program;
+        var observer = Volatile.Read(location: ref m_built);
+        var emittedUnder = m_builtTransforms;
+
+        if (observer is not null) {
+            if (emittedUnder.Length != m_transforms.Length) {
+                emittedUnder = new DynamicTransform[m_transforms.Length];
+                m_builtTransforms = emittedUnder;
+            }
+
+            m_transforms.AsSpan().CopyTo(destination: emittedUnder);
+        }
+
+        // The build also finds the words its program differs in from the one held, so the tables that hold
+        // that program upload the new one without comparing it on the frame thread, and hands the program to its
+        // observer before the frame that adopts it.
+        m_building = Task.Run(function: () => {
+            var built = Build(builder: builder);
+            var delta = ((held is null) ? null : ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
+
+            observer?.Invoke(arg1: built, arg2: emittedUnder);
+
+            return (built, delta);
+        });
     }
 
     /// <inheritdoc/>
@@ -571,7 +605,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         //
         // A frame holding the previous program while its successor builds packs only the moved transforms: a slot's owner
         // may differ between the two programs for the frames until the adoption, which repacks the whole table.
-        foreach (var emitter in m_emitters) { emitter.PrepareFrame(); }
+        for (var index = 0; (index < m_emitters.Count); index++) { m_emitters[index].PrepareFrame(); }
         var slots = 0;
         var layoutChanged = false;
 
@@ -583,7 +617,9 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         layoutChanged |= (slots != m_programSlots);
         m_programSlots = slots;
         if (layoutChanged) { m_layout++; }
-        var roots = m_emitters.Sum(selector: emitter => emitter.MeshInstances.Count);
+        var roots = 0;
+
+        for (var index = 0; (index < m_emitters.Count); index++) { roots += m_emitters[index].MeshInstances.Count; }
 
         // A resize allocates a new table, so a frame captured before it keeps the one it carries.
         if (m_transforms.Length != (slots + roots)) {
@@ -628,30 +664,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 rebuilt = true;
                 fits = true;
             } else {
-                var held = m_program;
-                var observer = Volatile.Read(location: ref m_built);
-                var emittedUnder = m_builtTransforms;
-
-                if (observer is not null) {
-                    if (emittedUnder.Length != m_transforms.Length) {
-                        emittedUnder = new DynamicTransform[m_transforms.Length];
-                        m_builtTransforms = emittedUnder;
-                    }
-
-                    m_transforms.AsSpan().CopyTo(destination: emittedUnder);
-                }
-
-                // The build also finds the words its program differs in from the one held, so the tables that hold
-                // that program upload the new one without comparing it on the frame thread, and hands the program to its
-                // observer before the frame that adopts it.
-                m_building = Task.Run(function: () => {
-                    var built = Build(builder: builder);
-                    var delta = ((held is null) ? null : ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
-
-                    observer?.Invoke(arg1: built, arg2: emittedUnder);
-
-                    return (built, delta);
-                });
+                StartBuild(builder: builder);
             }
         }
 
@@ -683,7 +696,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
         dressed.SlotClips = ComposeSlotClips();
-        dressed = dressed with { MeshAssetSlots = m_meshAssetSlots, MeshInstances = m_meshInstances, Sampled = m_sampled };
+        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.Words.Length} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }
         Frames++;

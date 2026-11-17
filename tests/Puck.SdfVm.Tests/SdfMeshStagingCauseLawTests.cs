@@ -90,7 +90,7 @@ public sealed class SdfMeshStagingCauseLawTests {
         draws[0] = draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(xPosition: 5, yPosition: 0, zPosition: 0) };
         var replacement = second.Dresser.Dress(frame: input);
 
-        Assert.Equal(original.MeshDrawChangesSerial, replacement.MeshDrawChangesSerial);
+        Assert.Equal(original.MeshRows!.Serial, replacement.MeshRows!.Serial);
         RenderRootCut(frame: replacement, rig: rig);
 
         Assert.Equal(0L, (work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild)) - before));

@@ -194,6 +194,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, in VkPresentInfoKhr, VkResult> QueuePresentKhr;
     /// <summary>The <c>vkQueueSubmit</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult> QueueSubmit;
+    /// <summary>The optional <c>vkQueueBindSparse</c> entry point, used only on a sparse-enabled device.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, uint, in VkBindSparseInfo, nint, VkResult> QueueBindSparse;
     /// <summary>The <c>vkQueueWaitIdle</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, VkResult> QueueWaitIdle;
     /// <summary>The <c>vkResetFences</c> entry point.</summary>
@@ -583,6 +585,10 @@ public sealed unsafe class VulkanDeviceCommands {
         QueueSubmit = ((delegate* unmanaged[Cdecl]<nint, uint, in VkSubmitInfo, nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkQueueSubmit"u8
+        ));
+        QueueBindSparse = ((delegate* unmanaged[Cdecl]<nint, uint, in VkBindSparseInfo, nint, VkResult>)procedures.ResolveOptionalDeviceProc(
+            deviceHandle: deviceHandle,
+            functionName: "vkQueueBindSparse"u8
         ));
         QueueWaitIdle = ((delegate* unmanaged[Cdecl]<nint, VkResult>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,

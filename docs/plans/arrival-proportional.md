@@ -231,8 +231,8 @@ downcast.
 
 **The frame carries a reader, not the journal.** `GpuChangedRows.Begin` and
 `GpuChangedRows.Owe` stay with the producer. The frame members that carry a
-draw journal (`SdfFrame.MeshDrawChanges` out of the dresser, and the host's
-own into it) carry a reader instead (working name `GpuChangedRowsReader`): one
+draw journal (`SdfMeshRows.Changes` out of the dresser, and the host's own
+`SdfFrame.MeshDrawChanges` into it) carry a reader instead (working name `GpuChangedRowsReader`): one
 object per journal, so a consumer still tells two producers apart by
 reference, with the serial, the row count and nothing that writes.
 

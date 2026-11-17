@@ -1181,6 +1181,11 @@ public sealed class MemoryAccount {
     // What a backend's ledger asks and reports to: the admission door, a segment owner per segment and a family owner
     // per family and segment.
     private sealed class LedgerOwners(MemoryAccount account, string backend) : IGpuMemoryOwners {
+        public event Action? TrimRequested {
+            add => account.TrimRequested += value;
+            remove => account.TrimRequested -= value;
+        }
+
         public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay) =>
             account.Admit(backend: backend, bytes: bytes, givesWay: givesWay, payer: payer, payerBytes: payerBytes, segment: segment);
         public void Settle(GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) =>

@@ -39,10 +39,12 @@ public sealed class WorldComposedPickMapLawTests {
         using var dresser = new SdfMeshDresser(bake);
         try {
             var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!;
+            var host = captured.PickMap;
             var dressed = dresser.Dress(frame: captured);
             var meshDraw = SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0);
 
-            Assert.NotSame(actual: dressed.PickMap, expected: captured.PickMap);
+            Assert.Same(expected: captured, actual: dressed);
+            Assert.NotSame(actual: dressed.PickMap, expected: host);
             Assert.Equal(expected: "first", actual: Assert.IsType<WorldPickTarget>(@object: dressed.PickMap!.Resolve(identity: meshDraw)).Placement);
             Assert.Same(expected: dressed.PickMap, actual: dresser.Dress(frame: captured).PickMap);
 

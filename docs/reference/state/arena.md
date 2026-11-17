@@ -130,8 +130,7 @@ answers `false` and the indexer throws.
 A handle lives as long as its catalog. If a document update changes only
 values, the declaration shape is unchanged, the host can keep the catalog, and
 every handle stays valid. `StateCatalog.MatchesShape` answers that question for
-a candidate section without allocating, and `HasSameShape` compares two
-catalogs. A change to the declaration shape (a row added, removed, reordered, or
+a candidate section without allocating. A change to the declaration shape (a row added, removed, reordered, or
 given a new kind) produces a replacement catalog, and the old handles are
 refused. Pool instance handles follow the same rule; see
 [Records, pools, and handles](records-and-pools.md).

@@ -51,13 +51,15 @@ public static class WorldArtifactBuild {
     /// source state, so the store keeps it apart from the Direct3D 12 build.</param>
     /// <param name="wait">How long the run may wait, in total, for other runs' builds of this source state and for the
     /// machine's build lease, or <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
+    /// <param name="cancellationToken">Cancels the build and its waits.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, bool spirv = false, TimeSpan? wait = null) =>
+    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, bool spirv = false, TimeSpan? wait = null, CancellationToken cancellationToken = default) =>
         TryResolve(
+            cancellationToken: cancellationToken,
             artifact: out artifact,
             builder: null,
             error: out error,
-            leaseRoot: () => CliLease.RootAsync(checkout: repositoryRoot).GetAwaiter().GetResult(),
+            leaseRoot: () => CliLease.RootAsync(cancellationToken: cancellationToken, checkout: repositoryRoot).GetAwaiter().GetResult(),
             logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
             spirv: spirv,
@@ -82,8 +84,10 @@ public static class WorldArtifactBuild {
     /// <param name="spirv">Whether the checkout's build carries Vulkan SPIR-V; a named build is used as given.</param>
     /// <param name="wait">How long the run may wait for other runs' builds and the machine's build lease, or
     /// <see langword="null"/> for <see cref="CliLease.DefaultWait"/>.</param>
+    /// <param name="cancellationToken">Cancels the build and its waits.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
-    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error, bool spirv = false, TimeSpan? wait = null) {
+    public static bool TryResolveNamed(string? named, string verb, string repositoryRoot, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out string? path, out WorldArtifact? lease, out string error, bool spirv = false, TimeSpan? wait = null, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
         lease = null;
 
         if (named is { }) {
@@ -98,19 +102,21 @@ public static class WorldArtifactBuild {
 
             // Named artifacts in the managed store need the same pruning lease as a source-resolved build. An
             // external package remains caller-owned; no store manages or prunes its directory.
-            var entry = new DirectoryInfo(Path.GetDirectoryName(path)!);
+            var entry = new DirectoryInfo(path: Path.GetDirectoryName(path: path)!);
             var parent = entry.Parent;
+
             static string ResolvedDirectory(DirectoryInfo directory) => Path.TrimEndingDirectorySeparator(
-                (directory.ResolveLinkTarget(returnFinalTarget: true) ?? directory).FullName);
-            var managedRoot = new DirectoryInfo(WorldArtifactStore.DefaultRoot);
-            if (managedRoot.Exists && parent is not null && Puck.Abstractions.PuckPaths.Comparer.Equals(ResolvedDirectory(parent), ResolvedDirectory(managedRoot))) {
-                if ((entry.Attributes & FileAttributes.ReparsePoint) != 0 || (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0) {
+                path: (directory.ResolveLinkTarget(returnFinalTarget: true) ?? directory).FullName);
+            var managedRoot = new DirectoryInfo(path: WorldArtifactStore.DefaultRoot);
+
+            if (managedRoot.Exists && (parent is not null) && Puck.Abstractions.PuckPaths.Comparer.Equals(x: ResolvedDirectory(directory: parent), y: ResolvedDirectory(directory: managedRoot))) {
+                if (((entry.Attributes & FileAttributes.ReparsePoint) != 0) || ((File.GetAttributes(path: path) & FileAttributes.ReparsePoint) != 0)) {
                     error = "A named managed-store artifact must be a published entry, not a symbolic-link alias.";
                     path = null;
                     return false;
                 }
-                lease = new WorldArtifactStore(parent.FullName).TryTake(key: WorldArtifactStore.KeyOf(name: entry.Name), artifactName: Path.GetFileName(path),
-                    reused: true, clock: Stopwatch.StartNew(), budget: timeout);
+                lease = new WorldArtifactStore(root: parent.FullName).TryTake(key: WorldArtifactStore.KeyOf(name: entry.Name), artifactName: Path.GetFileName(path: path),
+                    reused: true, clock: Stopwatch.StartNew(), budget: timeout, cancellationToken: cancellationToken);
                 if ((lease is null) || !Puck.Abstractions.PuckPaths.Comparer.Equals(x: Path.GetDirectoryName(path: lease.Path), y: entry.FullName)) {
                     lease?.Dispose();
                     lease = null;
@@ -126,6 +132,7 @@ public static class WorldArtifactBuild {
         }
         if (!TryResolve(
             artifact: out lease,
+            cancellationToken: cancellationToken,
             error: out error,
             logDirectory: logDirectory,
             repositoryRoot: repositoryRoot,
@@ -153,6 +160,7 @@ public static class WorldArtifactBuild {
     /// <param name="timeout">How long the build itself may run; waiting for other runs is not counted.</param>
     /// <param name="artifact">The leased build, or <see langword="null"/> on failure.</param>
     /// <param name="error">Why the artifact is unavailable, or empty on success.</param>
+    /// <param name="cancellationToken">Cancels the build and its waits.</param>
     /// <returns><see langword="true"/> when an artifact is available.</returns>
     /// <param name="wait">How long the run may wait, in total, for another run's build of this source state and for the
     /// build lease, or <see langword="null"/> for <see cref="CliLease.DefaultWait"/>. The wait and the build have
@@ -166,7 +174,8 @@ public static class WorldArtifactBuild {
     /// it, and the lease is held only for the build and its publication.</param>
     /// <param name="spirv">Whether the build carries Vulkan SPIR-V (<c>-p:PuckShaderSpirvEnabled=true</c>), which
     /// keys it apart from a Direct3D 12 build of the same sources.</param>
-    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null, Func<string>? leaseRoot = null, bool spirv = false, TimeSpan? wait = null) {
+    public static bool TryResolve(string verb, string repositoryRoot, WorldArtifactStore store, Func<IReadOnlyList<string>, TimeSpan, CliProcessResult>? builder, string logDirectory, TimeSpan timeout, [NotNullWhen(returnValue: true)] out WorldArtifact? artifact, out string error, Action? waiting = null, Func<string>? leaseRoot = null, bool spirv = false, TimeSpan? wait = null, CancellationToken cancellationToken = default) {
+        cancellationToken.ThrowIfCancellationRequested();
         var queue = Stopwatch.StartNew();
         var limit = (wait ?? CliLease.DefaultWait);
         IReadOnlyList<string> properties = (spirv ? ["-p:PuckShaderSpirvEnabled=true"] : []);
@@ -193,6 +202,7 @@ public static class WorldArtifactBuild {
             if (store.TryTake(
                 artifactName: ArtifactName,
                 budget: limit,
+                cancellationToken: cancellationToken,
                 clock: queue,
                 key: key,
                 reused: true
@@ -206,6 +216,7 @@ public static class WorldArtifactBuild {
 
             using var claim = store.AcquireBuild(
                 budget: limit,
+                cancellationToken: cancellationToken,
                 clock: queue,
                 key: key,
                 waited: out var waited,
@@ -225,6 +236,7 @@ public static class WorldArtifactBuild {
             if (store.TryTake(
                 artifactName: ArtifactName,
                 budget: limit,
+                cancellationToken: cancellationToken,
                 clock: queue,
                 key: key,
                 reused: true
@@ -240,6 +252,7 @@ public static class WorldArtifactBuild {
             using var slot = ((leaseRoot is null)
                 ? null
                 : CliLease.AcquireAsync(
+                    cancellationToken: cancellationToken,
                     ancestor: ProcessInspection.IsAncestor,
                     checkout: repositoryRoot,
                     clock: TimeProvider.System,
@@ -262,13 +275,14 @@ public static class WorldArtifactBuild {
                 var built = CliProjectBuild.TryBuild(
                     artifactName: ArtifactName,
                     build: out _,
-                    project: WorldArtifactClosure.WorldProject,
-                    repositoryRoot: repositoryRoot,
-                    logDirectory: logDirectory,
-                    runner: builder,
+                    cancellationToken: cancellationToken,
                     error: out error,
+                    logDirectory: logDirectory,
                     outputDirectory: staging,
+                    project: WorldArtifactClosure.WorldProject,
                     properties: properties,
+                    repositoryRoot: repositoryRoot,
+                    runner: builder,
                     timeout: timeout
                 );
 
@@ -281,6 +295,7 @@ public static class WorldArtifactBuild {
                 }
 
                 artifact = store.Publish(
+                    cancellationToken: cancellationToken,
                     artifactName: ArtifactName,
                     budget: limit,
                     claim: claim,

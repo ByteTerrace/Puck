@@ -28,13 +28,13 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
         var firstDraw = dresser.Dress(frame: frame);
-        var revision = firstDraw.MeshDrawsRevision;
+        var revision = firstDraw.DrawRowsRevision;
 
         Assert.Same(expected: firstMesh, actual: Assert.Single(collection: firstDraw.DressedDraws()).Mesh);
         var replacement = dresser.Dress(frame: frame with { Program = second });
 
         Assert.Same(expected: secondMesh, actual: Assert.Single(collection: replacement.DressedDraws()).Mesh);
-        Assert.True(condition: (replacement.MeshDrawsRevision > revision));
+        Assert.True(condition: (replacement.DrawRowsRevision > revision));
         Assert.False(condition: bake.Pending);
     }
     // A program rebuilt after the bake's identity moved (an applied update to the code the bake runs, a reloaded bake
