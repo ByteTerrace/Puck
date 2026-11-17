@@ -396,38 +396,6 @@ also records whether the overlay was requested at entry and changed during
 the run. A run with the overlay on is compared only with another that had it
 on throughout; stage 3's comparer enforces this.
 
-Stage 2's remaining windowed proof runs on each backend (`directx` and
-`vulkan`). Start `worlds/debug` through `puck_world_start` from the checkout
-being verified, with `paused: true`, `windowed: true`, and the selected
-backend, under its GPU lease. Before arming the run, wait for startup once:
-
-```text
-world.wait ready 120
-world.wait bakes 120
-world.benchmark run worlds/debug/walkthrough-tests.puck "seam walk: the valley into the gallery, walking" at 30
-world.rate resume
-world.wait until 150
-world.hud
-host.frames 1 16.667 1
-world.gpu-timing
-```
-
-Capture eight presented frames with `puck_capture_frame` (`mode: "presented"`,
-`frames: 8`, naming that World), while the chapter is moving. Then run:
-
-```text
-world.wait until 1130
-world.benchmark
-```
-
-Keep the run's reported `report.json` and the presented burst, then stop the
-World through `puck_world_stop` immediately. Nothing settles or holds a frame
-inside the run. The panel must remain readable in motion, with both series
-scrolling and the white budget line in the authored range. `world.hud` must
-agree with `host.frames` at the same sample index, and the overlay pass must
-have completed samples in both `world.gpu-timing` and the report's `gpu`
-window. Those observations close the proof; rendering alone does not.
-
 ### Artifacts in motion
 
 The owner's difficulty is knowing when and how an artifact shows. Every
@@ -578,7 +546,6 @@ stage with the check that closes it:
 
 | Stage | Lane | Builds | Done when |
 |---|---|---|---|
-| 2. The live overlay's windowed proof | Lead's GPU window | The reading/recent bindings, plot writer, per-panel bar reservation and standard panel are built. Verify the live composition | A presented burst of a run shows the panel on both backends; the overlay's pass is in `world.gpu-timing` and the report's closing rolling GPU window |
 | 3. The command and the rest of the report | CLI and World; headless | `puck benchmark`: a fresh paused boot, the route armed at a named tick, both backends, `--uncapped`, loops reported cold, warm and steady, `--against`; `puck measure` admitting it; the hitch list, GPU passes, streaming counts and counters per chapter; a `boot` span from the renderer's first iteration to the first chapter; the comparer and its exit statuses | Statistics agree with hand-computed values on a fixed sample set; the comparer refuses another route, unlike conditions, a run that began in lockstep, an off-course chapter and a missing metric, each by name; a run with every chapter unavailable exits as a failure; a wall-time limit and a `stop` each leave a partial report |
 | 4. The route in the document | World and language; headless | The `route` block and `routes` section lowered through the `test` emitter's logic; marks; waypoints and the numeric pose samples; chapter and capture identity; the per-tick hash sequence; the seat-started, bindable run; recording a played chapter; the debug world's nine chapters | A denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable; a recorded chapter replayed from its start gives the recorded per-tick input, pointer motion included |
 | 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |

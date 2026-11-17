@@ -97,8 +97,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
-21. [high] [The benchmark](#the-benchmark): the overlay's windowed proof and the
-    command ([the memo](benchmark.md#the-build-order)'s stages 2 and 3). It replaces
+21. [high] [The benchmark](#the-benchmark): the command and the rest of the
+    report ([the memo](benchmark.md#the-build-order)'s stage 3). It replaces
     [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
     next batch.
 22. Then, by ordinary priority:
@@ -2891,9 +2891,9 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: the overlay's windowed proof and the
+Owner: one benchmark lane per stage · high · Next: the
 `puck benchmark` command ([the build order](benchmark.md#the-build-order)'s
-stages 2 and 3).
+stage 3).
 
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
@@ -2909,12 +2909,14 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] The live overlay's windowed proof remains: on Direct3D 12 and
-  Vulkan, play a seam chapter, capture a presented burst with its standard
-  panel visible, and read `world.gpu-timing` during the run. The report's
-  `gpu` closing rolling window must name the overlay pass with completed
-  samples. The generic reading/recent bindings, plot and per-panel bar
-  reservation are built; the memo's stage 2 owns this GPU check.
+- [medium] The overlay pass costs about 0.9 ms of GPU time on Direct3D 12
+  (`world.gpu-timing`'s `main$overlay` with the benchmark panel up), more
+  than the world's composite and resolve passes; attribute it (the panel's
+  two 60-bar plots against the rest of the overlay) and cut it at the cause.
+- [medium] Stopping a World while `world.benchmark` plays leaves no report:
+  `stop` and the wall-time limit write a partial one, a World's shutdown does
+  not. Shutdown ends the run as `stop` does. The report's `gpu` window naming
+  the overlay pass is therefore still unread on a window.
 - [medium] A chapter's first iteration is its slowest by far: the opening
   `body.pose` to a spawn point steps the simulation for well over a 60 Hz
   period and allocates on the order of a hundred megabytes on the frame
