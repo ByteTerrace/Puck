@@ -23,8 +23,10 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     // A bind of this resource fails, and memory of this type refuses its mapping.
     private const nint Refused = 666;
     private const uint Unmappable = 9;
+
     // One heap whose ten memory types the laws bind to, as a device registers its segments.
-    private static readonly GpuMemorySegments TenTypes = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [.. Enumerable.Repeat(element: 0U, count: 20)], profile: default);
+    private static readonly GpuMemorySegments TenTypes = GpuMemorySegments.FromVulkan(memoryHeaps: [(1UL << 30), 1UL], memoryTypes: [.. Enumerable.Repeat(count: 20, element: 0U)], profile: default);
+
     private const ulong Block = VulkanMemoryArena.BlockBytes;
 
     [ThreadStatic] private static List<string>? Calls;
@@ -33,35 +35,60 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     [ThreadStatic] private static VulkanMemoryArena? Watched;
 
     [Fact]
+    public void PressureReturnsPhysicalBytesOnlyAfterTheLastPlacementReturns() {
+        Calls = [];
+        NextMemory = 1000;
+        var work = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+
+        work.BeginDevice(device: 17, segments: TenTypes);
+        var arena = device.Arena;
+        var requirements = new VkMemoryRequirements { Alignment = 65536, Size = 65536 };
+
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: requirements, resource: 1, role: GpuMemoryRole.DeviceLocal);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: requirements, resource: 2, role: GpuMemoryRole.DeviceLocal);
+        arena.Trim();
+        Assert.Equal(((long)Block), work.Held);
+        Assert.True(condition: arena.Release(image: false, resource: 1));
+        Assert.Equal(((long)Block), work.Held);
+        Assert.True(condition: arena.Release(image: false, resource: 2));
+        Assert.Equal(0, work.Held);
+        Assert.Equal(0, arena.Blocks);
+        Assert.Contains(collection: Calls, expected: "free 1000");
+        arena.FreeAll();
+        work.EndDevice(device: 17);
+    }
+    [Fact]
     public void ResourcesShareBlocksAndGiveBackTheirRanges() {
         Calls = [];
         NextMemory = 1000;
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
         var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+
         work.BeginDevice(device: 17, segments: TenTypes);
         var arena = device.Arena;
         var small = new VkMemoryRequirements { Alignment = 256UL, Size = 1000UL };
 
         // Two buffers share a block at aligned offsets; an image of the same type takes a block of its own kind, and a
         // buffer past half a block that no block holds gets one its size.
-        Assert.Equal(expected: 1000, actual: arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: 1000, actual: arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 2, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: 1001, actual: arena.Bind(image: true, memoryTypeIndex: 0, requirements: in small, resource: 3, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
+        Assert.Equal(expected: 1000, actual: arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal));
+        Assert.Equal(expected: 1000, actual: arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 2, role: GpuMemoryRole.DeviceLocal));
+        Assert.Equal(expected: 1001, actual: arena.Bind(family: GpuObjectName.UnnamedFamily, image: true, memoryTypeIndex: 0, requirements: in small, resource: 3, role: GpuMemoryRole.DeviceLocal));
         Assert.Equal(expected: 1002, actual: arena.Bind(image: false, memoryTypeIndex: 0, requirements: new VkMemoryRequirements { Alignment = 1UL, Size = Block }, resource: 4, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: 1003, actual: arena.Bind(image: false, memoryTypeIndex: 1, requirements: in small, resource: 5, role: GpuMemoryRole.HostVisible, family: GpuObjectName.UnnamedFamily));
+        Assert.Equal(expected: 1003, actual: arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 1, requirements: in small, resource: 5, role: GpuMemoryRole.HostVisible));
         Assert.Equal(expected: 4, actual: arena.Blocks);
         Assert.Equal(
-            expected: [$"alloc 1000 {Block} type=0", "bind buffer 1 1000 0", "bind buffer 2 1000 1024", $"alloc 1001 {Block} type=0", "bind image 3 1001 0", $"alloc 1002 {Block} type=0", "bind buffer 4 1002 0", $"alloc 1003 {Block} type=1", "map 1003", "bind buffer 5 1003 0"],
-            actual: Calls
+            actual: Calls,
+            expected: [$"alloc 1000 {Block} type=0", "bind buffer 1 1000 0", "bind buffer 2 1000 1024", $"alloc 1001 {Block} type=0", "bind image 3 1001 0", $"alloc 1002 {Block} type=0", "bind buffer 4 1002 0", $"alloc 1003 {Block} type=1", "map 1003", "bind buffer 5 1003 0"]
         );
         Assert.True(condition: work.TryRead(kind: GpuDeviceMemoryWork.Allocations, value: out var allocations));
-        Assert.Equal(expected: 4L, actual: allocations);
+        Assert.Equal(actual: allocations, expected: 4L);
 
         // Only a host-visible block is mapped, at the resource's offset.
         Assert.True(condition: arena.TryMapped(pointer: out var mapped, resource: 5));
-        Assert.Equal(expected: ((nint)0x10000), actual: mapped);
+        Assert.Equal(actual: mapped, expected: ((nint)0x10000));
         Assert.False(condition: arena.TryMapped(pointer: out mapped, resource: 1));
-        Assert.Equal(expected: 0, actual: mapped);
+        Assert.Equal(actual: mapped, expected: 0);
         Assert.False(condition: arena.TryMapped(pointer: out _, resource: 99));
 
         // A pool keeps one empty block and frees a second; a resource the arena never bound is not its to release.
@@ -70,63 +97,63 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         Assert.True(condition: arena.Release(image: false, resource: 2));
         Assert.True(condition: arena.Release(image: false, resource: 1));
         Assert.True(condition: arena.Release(image: false, resource: 4));
-        Assert.Equal(expected: ["free 1002"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["free 1002"]);
 
         // A buffer and an image may share a handle value, as a layer that wraps handles hands them out: each binds and
         // releases as its own resource.
         Calls.Clear();
-        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 3, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 3, role: GpuMemoryRole.DeviceLocal);
         Assert.True(condition: arena.Release(image: false, resource: 3));
         Assert.False(condition: arena.Release(image: false, resource: 3));
-        Assert.Equal(expected: ["bind buffer 3 1000 0"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["bind buffer 3 1000 0"]);
 
         // A destroy gives the range back before the driver destroys the handle, so a creation handed the same handle
         // value the moment it is destroyed finds no range still standing under it.
         Calls.Clear();
         Watched = arena;
-        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 9, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 9, role: GpuMemoryRole.DeviceLocal);
         device.Destroy(destroy: device.DestroyBuffer, handle: 9, memoryHandle: 1000);
         Watched = null;
-        Assert.Equal(expected: ["bind buffer 9 1000 0", "destroy buffer 9 standing=False"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["bind buffer 9 1000 0", "destroy buffer 9 standing=False"]);
 
         // A failed bind gives its range back to the block, which the next resource takes.
         Calls.Clear();
-        _ = Assert.Throws<VulkanException>(testCode: () => arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: Refused, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: 1000, actual: arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 6, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: [$"bind buffer {Refused} 1000 0", "bind buffer 6 1000 0"], actual: Calls);
+        _ = Assert.Throws<VulkanException>(testCode: () => arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: Refused, role: GpuMemoryRole.DeviceLocal));
+        Assert.Equal(expected: 1000, actual: arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 6, role: GpuMemoryRole.DeviceLocal));
+        Assert.Equal(actual: Calls, expected: [$"bind buffer {Refused} 1000 0", "bind buffer 6 1000 0"]);
 
         // A block whose mapping fails is freed before the failure surfaces.
         Calls.Clear();
-        _ = Assert.Throws<VulkanException>(testCode: () => arena.Bind(image: false, memoryTypeIndex: Unmappable, requirements: in small, resource: 7, role: GpuMemoryRole.HostVisibleDeviceLocal, family: GpuObjectName.UnnamedFamily));
-        Assert.Equal(expected: [$"alloc 1004 {Block} type={Unmappable}", "map 1004", "free 1004"], actual: Calls);
+        _ = Assert.Throws<VulkanException>(testCode: () => arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: Unmappable, requirements: in small, resource: 7, role: GpuMemoryRole.HostVisibleDeviceLocal));
+        Assert.Equal(actual: Calls, expected: [$"alloc 1004 {Block} type={Unmappable}", "map 1004", "free 1004"]);
 
         // A resource's own block, larger than a shared one, is freed when it empties although the pool keeps no other
         // empty block, so no later resource binds into it and holds it.
         Calls.Clear();
         Assert.Equal(expected: 1005, actual: arena.Bind(image: false, memoryTypeIndex: 2, requirements: new VkMemoryRequirements { Alignment = 1UL, Size = (2UL * Block) }, resource: 8, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
         Assert.True(condition: arena.Release(image: false, resource: 8));
-        Assert.Equal(expected: [$"alloc 1005 {2UL * Block} type=2", "bind buffer 8 1005 0", "free 1005"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"alloc 1005 {(2UL * Block)} type=2", "bind buffer 8 1005 0", "free 1005"]);
 
         // Destroying a resource the arena bound returns its range; any other resource frees its own memory.
         Calls.Clear();
         device.Destroy(destroy: device.DestroyBuffer, handle: 6, memoryHandle: 1000);
         device.Destroy(destroy: device.DestroyBuffer, handle: 77, memoryHandle: 555);
-        Assert.Equal(expected: ["destroy buffer 6", "destroy buffer 77", "free 555"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["destroy buffer 6", "destroy buffer 77", "free 555"]);
 
         // The device's teardown frees every block, unmapping the mapped one.
         Calls.Clear();
         arena.FreeAll();
         Assert.Equal(expected: 0, actual: arena.Blocks);
-        Assert.Equal(expected: ["free 1000", "free 1001", "unmap 1003", "free 1003"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["free 1000", "free 1001", "unmap 1003", "free 1003"]);
         Assert.False(condition: arena.Release(image: true, resource: 3));
     }
-
     [Fact]
     public void ALostDeviceTearsDownWithBlocksLiveFreeingEachOnceAndTouchingNothingAfterDestroy() {
         Calls = [];
         NextMemory = 1000;
         var work = new GpuDeviceMemoryWork(backend: "vulkan");
         var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+
         work.BeginDevice(device: 17, segments: TenTypes);
         var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi());
         var sync = new SynchronizationApi();
@@ -136,12 +163,14 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         var buffers = new VulkanNativeBufferApi();
 
         // Mid-frame: a device-local buffer and image, and a mapped staging buffer, all live when the device is lost.
-        _ = arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily);
-        _ = arena.Bind(image: true, memoryTypeIndex: 0, requirements: in small, resource: 2, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily);
-        _ = arena.Bind(image: false, memoryTypeIndex: 1, requirements: in small, resource: 3, role: GpuMemoryRole.HostVisible, family: GpuObjectName.UnnamedFamily);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: true, memoryTypeIndex: 0, requirements: in small, resource: 2, role: GpuMemoryRole.DeviceLocal);
+        _ = arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 1, requirements: in small, resource: 3, role: GpuMemoryRole.HostVisible);
         var staging = new VulkanBufferHandles(Buffer: 3, Device: device, Memory: 1002);
+
         Assert.Equal(expected: ((nint)0x10000), actual: buffers.Map(handles: staging, sizeBytes: 1000UL));
         using var fence = queue.CreateSubmissionFence();
+
         queue.Submit(commandBufferHandles: [42], fence: fence);
         sync.Lost = true;
         _ = Assert.Throws<DeviceLostException>(testCode: fence.Wait);
@@ -151,7 +180,7 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         Calls.Clear();
         logical.Dispose();
         logical.Dispose();
-        Assert.Equal(expected: ["free 1000", "free 1001", "unmap 1002", "free 1002", "destroy device"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["free 1000", "free 1001", "unmap 1002", "free 1002", "destroy device"]);
         Assert.True(condition: device.IsDestroyed);
         Assert.Equal(expected: 0L, actual: work.Held);
 
@@ -166,16 +195,17 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
         Assert.Empty(collection: Calls);
         Assert.False(condition: arena.TryMapped(pointer: out _, resource: 3));
         _ = Assert.Throws<InvalidOperationException>(testCode: () => buffers.Map(handles: staging, sizeBytes: 1000UL));
-        _ = Assert.Throws<ObjectDisposedException>(testCode: () => arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 4, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
+        _ = Assert.Throws<ObjectDisposedException>(testCode: () => arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 4, role: GpuMemoryRole.DeviceLocal));
 
         // The rebuilt device's arena is its own: it allocates afresh and frees only its own blocks.
         var rebuilt = new VulkanDeviceCommands(18, Procedures(), memory: work);
+
         work.BeginDevice(device: 18, segments: TenTypes);
         using (var rebuiltLogical = new VulkanLogicalDevice(rebuilt, default, new VkQueue(familyIndex: 0, handle: 32), default, new LogicalApi())) {
-            Assert.Equal(expected: 1003, actual: rebuilt.Arena.Bind(image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal, family: GpuObjectName.UnnamedFamily));
+            Assert.Equal(expected: 1003, actual: rebuilt.Arena.Bind(family: GpuObjectName.UnnamedFamily, image: false, memoryTypeIndex: 0, requirements: in small, resource: 1, role: GpuMemoryRole.DeviceLocal));
             rebuilt.Destroy(destroy: rebuilt.DestroyBuffer, handle: 1, memoryHandle: 1003);
         }
-        Assert.Equal(expected: [$"alloc 1003 {Block} type=0", "bind buffer 1 1003 0", "destroy buffer 1", "free 1003", "destroy device"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"alloc 1003 {Block} type=0", "bind buffer 1 1003 0", "destroy buffer 1", "free 1003", "destroy device"]);
     }
 
     private static VulkanProcResolver Procedures() => new(getDeviceProcAddr: &Resolve, getInstanceProcAddr: &Resolve);

@@ -165,9 +165,45 @@ public sealed record SdfFrame(
     IReadOnlyList<SdfViewSnapshot> Views,
     float Time
 ) {
-    /// <summary>Gets the immutable host identity table for the composed frame. Composition fills it before publishing
-    /// the frame; it is CPU-only presentation data and is never uploaded to the frame block.</summary>
-    public ISdfPickMap? PickMap { get; internal set; }
+    /// <summary>Gets the identity table that resolves this frame's visibility identities. Composition fills the host's
+    /// table before publishing the frame; a frame the mesh dresser dressed answers its dressed table, which resolves
+    /// retained row addresses to the host's identities. It is CPU-only presentation data and is never uploaded to the
+    /// frame block.</summary>
+    public ISdfPickMap? PickMap {
+        get => (m_dressedPickMap ?? m_pickMap);
+        internal set => m_pickMap = value;
+    }
+
+    /// <summary>Gets the identity table the host composed, which the dresser extends; a dressed frame keeps it
+    /// unchanged.</summary>
+    internal ISdfPickMap? HostPickMap => m_pickMap;
+
+    private ISdfPickMap? m_pickMap;
+    private ISdfPickMap? m_dressedPickMap;
+    private SdfMeshRows? m_meshRows;
+    private IReadOnlyList<int> m_meshAssetSlots = [];
+    private IReadOnlyList<SdfMeshInstance> m_meshInstances = [];
+
+    /// <summary>Adopts the draw rows the mesh dresser retains and the pick map that resolves them, which the dresser owns
+    /// and keeps current: the frame references them and the host's inputs stay as they were, so dressing the same frame
+    /// again reads them unchanged.</summary>
+    /// <param name="rows">The dresser's retained rows.</param>
+    /// <param name="picks">The pick map over <paramref name="rows"/>, or <see langword="null"/> when the host composed none.</param>
+    internal void AdoptDressing(SdfMeshRows rows, ISdfPickMap? picks) {
+        m_meshRows = rows;
+        m_dressedPickMap = picks;
+    }
+
+    /// <summary>Sets the geometry the composition publishes beside the program's: the baked template slots, the rigid
+    /// copies and the sampled-field snapshots. Composition calls it once for the frame it was dressed into.</summary>
+    /// <param name="meshAssetSlots">The baked template slots.</param>
+    /// <param name="meshInstances">The copies of local geometry assets.</param>
+    /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
+    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled) {
+        m_meshAssetSlots = meshAssetSlots;
+        m_meshInstances = meshInstances;
+        m_sampled = sampled;
+    }
     /// <summary>The host's immutable document version, retained through bake dressing for matching-state diagnostics.
     /// Compared by value: a delivered client document need not be the authority's object.</summary>
     public object? DiagnosticSource { get; init; }
@@ -229,31 +265,43 @@ public sealed record SdfFrame(
     /// revision.</summary>
     public IReadOnlyList<SdfMeshDraw> MeshDraws { get; init; } = [];
 
-    /// <summary>The dresser's retained rows. The host's input draw list remains in <see cref="MeshDraws"/>.</summary>
-    public SdfMeshRows? MeshRows { get; init; }
+    /// <summary>The rows the mesh dresser retains and the frame was dressed into; <see langword="null"/> before dressing.
+    /// The dresser owns them: the frame references them, and its revision, journal and cause are the rows' own. The host's
+    /// input draw list remains in <see cref="MeshDraws"/>.</summary>
+    public SdfMeshRows? MeshRows {
+        get => m_meshRows;
+        init => m_meshRows = value;
+    }
 
     internal SdfMeshDraws DrawRows => new(frame: this);
 
+    /// <summary>Gets the revision of the draws the frame stages: the dressed rows' revision when the frame was dressed,
+    /// otherwise <see cref="MeshDrawsRevision"/>.</summary>
+    public long DrawRowsRevision => DrawRows.Revision;
+
     /// <summary>Gets the baked template slots, which draw only through MeshInstances.</summary>
-    public IReadOnlyList<int> MeshAssetSlots { get; init; } = [];
+    public IReadOnlyList<int> MeshAssetSlots {
+        get => m_meshAssetSlots;
+        init => m_meshAssetSlots = value;
+    }
     /// <summary>Gets the copies of local geometry assets.</summary>
-    public IReadOnlyList<SdfMeshInstance> MeshInstances { get; init; } = [];
+    public IReadOnlyList<SdfMeshInstance> MeshInstances {
+        get => m_meshInstances;
+        init => m_meshInstances = value;
+    }
 
     /// <summary>The revision of <see cref="MeshDraws"/>' content, which a producer that rewrites one list in place moves
-    /// whenever it does; 0 for a producer that supplies a new list instead.</summary>
+    /// whenever it does; 0 for a producer that supplies a new list instead. It is the host's input: dressing leaves it
+    /// as the producer set it.</summary>
     public long MeshDrawsRevision { get; init; }
     /// <summary>Gets the producer's bounded draw-row changes, or null when a consumer must compare the revised list.
-    /// The list and journal are borrowed together until their producer next rewrites them.</summary>
+    /// The list and journal are borrowed together until their producer next rewrites them. It is the host's input:
+    /// dressing leaves it as the producer set it, and the dressed rows keep their own journal
+    /// (<see cref="SdfMeshRows.Changes"/>).</summary>
     public GpuRowChanges? MeshDrawChanges { get; init; }
-    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. Consumers collect only through this
-    /// serial and retain their own staged records when a later producer frame rewrites the borrowed list.</summary>
+    /// <summary>Gets the journal endpoint captured with <see cref="MeshDraws"/>. The dresser collects only through this
+    /// serial and retains its own rows when a later producer frame rewrites the borrowed list.</summary>
     public long MeshDrawChangesSerial { get; init; }
-    /// <summary>Gets why the journal entry ending at <see cref="MeshDrawChangesSerial"/> owes every row:
-    /// <see cref="SdfMeshStagingCause.Rebuild"/>, <see cref="SdfMeshStagingCause.Portal"/> or
-    /// <see cref="SdfMeshStagingCause.Retry"/> as the dresser states it, or <see langword="null"/> when the entry names
-    /// rows or the producer states no cause. The tables count the records a staging packs under it
-    /// (<see cref="SdfMeshHistory.RowsPackedOf"/>).</summary>
-    public SdfMeshStagingCause? MeshDrawChangesCause { get; init; }
     /// <summary>The lit path's lights table, its shadow slots and its curvature shading. The default is the pinned sun
     /// an unauthored world renders.</summary>
     public SdfLights Lights {

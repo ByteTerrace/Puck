@@ -7,7 +7,7 @@
 // its medium and its revealed flow surface receive.
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
+#include "Shared/luma.hlsli"
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
 

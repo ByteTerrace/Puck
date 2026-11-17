@@ -170,8 +170,9 @@ Scratch is allocated at the render ceiling; current-grid changes, a layout
 transition's dip among them, replace no resources and rebuild nothing. `place`
 places the full-output image in its rect, resampling it again unless the
 scheduled extent equals the rect's pixels. No output-sized surface is written
-until a reader needs one. The shared `Puck.Shaders/Assets/Shaders/Shared/reconstruction.hlsli`
-module supplies both kernels' filter and has no SDF-layer dependency.
+until a reader needs one. The shared `Shared/reconstruction.hlsli` module
+(in `Puck.Shaders/Assets/Shaders`) supplies both kernels' filter and has no
+SDF-layer dependency.
 
 The surface, views and views-filter kernels share one entry point (`passes/sdf-pixel-entry.hlsli`),
 one 8×8 group (`SDF_VISIBILITY_GROUP_EDGE`) per block of the render grid: the

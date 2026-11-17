@@ -60,6 +60,68 @@ public sealed class ShaderCompilerSnapshotLawTests {
         }
     }
 
+    // One spelling of a shared header resolves in a checkout's layout (the header in another project) and in a deployed one
+    // (the header beside the kernel tree), through the include directory each layout names, and the
+    // shared header's own relative include resolves beside it; an error in the shared header reports at its own path.
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [Theory]
+    public void ASharedHeaderSpelledOnceCompilesInTheCheckoutAndTheDeployedLayout(bool deployed, bool broken) {
+        Assert.SkipWhen(
+            condition: (new ShaderToolchain().Locate(name: ShaderCompiler.DxcTool) is null),
+            reason: "DXC is required to compile through the include directory."
+        );
+        using var scratch = new TemporaryDirectory(prefix: "puck-include-");
+        var shaders = (deployed
+            ? Path.Combine(path1: scratch.RootPath, path2: "app", path3: "Assets", path4: "Shaders")
+            : Path.Combine(paths: [scratch.RootPath, "src", "Puck.Shaders", "Assets", "Shaders"]));
+        var tree = (deployed
+            ? Path.Combine(path1: shaders, path2: "Kernels")
+            : Path.Combine(paths: [scratch.RootPath, "src", "Puck.Kernels", "Assets", "Shaders", "Kernels"]));
+        var header = Path.Combine(path1: shaders, path2: ShaderIncludeDirectories.SharedDirectoryName, path3: "scale.hlsli");
+        var source = Path.Combine(path1: tree, path2: "passes", path3: "s.comp.hlsl");
+
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: header)!);
+        Directory.CreateDirectory(path: Path.GetDirectoryName(path: source)!);
+        File.WriteAllText(contents: (broken ? "static const uint Base = undefinedName;\n" : "static const uint Base = 2u;\n"), path: Path.Combine(path1: Path.GetDirectoryName(path: header)!, path2: "base.hlsli"));
+        File.WriteAllText(contents: "#include \"base.hlsli\"\nstatic const uint Scale = Base;\n", path: header);
+
+        var text = "#include \"Shared/scale.hlsli\"\nRWStructuredBuffer<uint> output : register(u0);\n[numthreads(1, 1, 1)]\nvoid CSMain() { output[0] = Scale; }\n";
+
+        File.WriteAllText(contents: text, path: source);
+
+        // A runtime reader finds a deployment's directory itself; the build names a checkout's
+        // (ShaderIncludeDirectories.CheckoutDirectory below the checkout's root).
+        var includeDirectories = (deployed ? ShaderIncludeDirectories.Of(sourcePath: source) : [Path.Combine(path1: scratch.RootPath, path2: ShaderIncludeDirectories.CheckoutDirectory)]);
+
+        Assert.Equal(expected: [Path.GetFullPath(path: shaders)], actual: includeDirectories.Select(selector: static directory => Path.GetFullPath(path: directory)));
+
+        var compiled = new ShaderCompiler(cacheDirectory: Path.Combine(path1: scratch.RootPath, path2: "cache")).Compile(descriptor: new ShaderCompilationRequest(
+            name: "shared",
+            stages: [new ShaderStageSource(
+                EntryPoint: "CSMain",
+                IncludeDirectories: includeDirectories,
+                Path: source,
+                Source: text,
+                Stage: ShaderStage.Compute
+            )]
+        ));
+
+        if (broken) {
+            Assert.False(condition: compiled.IsSuccess);
+            Assert.Contains(collection: compiled.Diagnostics, filter: diagnostic => (diagnostic.IsError && (diagnostic.Line == 1) && string.Equals(a: diagnostic.Path, b: Path.Combine(path1: Path.GetDirectoryName(path: header)!, path2: "base.hlsli"), comparisonType: StringComparison.OrdinalIgnoreCase)));
+        } else {
+            Assert.True(condition: compiled.IsSuccess, userMessage: string.Join(separator: "; ", values: compiled.Diagnostics.Select(selector: static diagnostic => diagnostic.Message)));
+        }
+
+        // Without the include directory the same spelling is refused by name, before any tool runs.
+        var refused = Assert.Throws<ShaderClosureRefusedException>(testCode: () => ShaderSourceClosure.Collect(limits: ShaderSourceLimits.Default, sources: [(source, text)]));
+
+        Assert.Equal(expected: ShaderClosureRefusedException.IncludeMissing, actual: refused.Code);
+    }
+
     // Directory names of SegmentLength characters, as many as fit in length.
     private static string[] Segments(string prefix, int length) =>
         [.. Enumerable.Range(count: (length / (SegmentLength + 1)), start: 0).Select(selector: index => $"{prefix}{index:D9}")];

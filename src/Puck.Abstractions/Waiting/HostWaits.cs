@@ -199,7 +199,9 @@ public static class HostWaits {
     /// thread's wake event.</summary>
     /// <param name="reason">The subsystem served and what the service does.</param>
     /// <param name="service">Runs on the calling thread inside its pacer wait, handed the time left before the pacer's
-    /// deadline, each time the thread's wake is set or the time a service asked for has come. It returns how long from
+    /// deadline once the services before it in that turn have run (what they spent is gone from it, and a service whose
+    /// turn comes after the deadline waits for the next wait, whose turn starts with it), each time the thread's wake is
+    /// set or the time a service asked for has come. It returns how long from
     /// now it wants to run again whether or not it is woken (at least <see cref="LeastServiceDelay"/> is waited), or
     /// <see langword="null"/> to run only when woken. It must not throw.</param>
     /// <returns>The registration; disposing it ends it.</returns>
@@ -250,16 +252,14 @@ public static class HostWaits {
                 return;
             }
 
-            var left = TimeSpan.FromSeconds(value: (((double)remaining) / frequency));
-
             if (serve) {
-                due = served.Run(remaining: left);
+                due = served.Run(deadlineTimestamp: deadlineTimestamp, time: time);
                 serve = false;
 
                 continue;
             }
 
-            var sleep = left;
+            var sleep = TimeSpan.FromSeconds(value: (((double)remaining) / frequency));
 
             if (due != long.MaxValue) {
                 var until = Stopwatch.GetElapsedTime(startingTimestamp: Stopwatch.GetTimestamp(), endingTimestamp: due);
@@ -488,6 +488,8 @@ public static class HostWaits {
     internal sealed class ServedThread {
         private readonly Lock m_gate = new();
         private WaitService[] m_services = [];
+        // The service the next run's turn starts at; read and written only on the serving thread.
+        private int m_first;
 
         public readonly AutoResetEvent Wake = new(initialState: false);
 
@@ -503,13 +505,28 @@ public static class HostWaits {
         public void Remove(WaitService service) {
             lock (m_gate) { Volatile.Write(location: ref m_services, value: [.. m_services.Where(predicate: other => !ReferenceEquals(objA: other, objB: service))]); }
         }
-        // Runs every service once and returns the Stopwatch timestamp the earliest asked to run again by, or
-        // long.MaxValue when none asked.
-        public long Run(TimeSpan remaining) {
+        // Runs each service once, in turn, and returns the Stopwatch timestamp the earliest asked to run again by, or
+        // long.MaxValue when none asked. Each service is handed the time left before the pacer's deadline when its turn
+        // comes, read from the clock then, so one service's work shortens what the next may spend and together they end
+        // by the deadline; a service whose turn comes after it is not run. The next run's turn starts at the first
+        // service a run left out, so a service that runs long cannot keep the ones after it from ever being served.
+        public long Run(long deadlineTimestamp, TimeProvider time) {
+            var services = Volatile.Read(location: ref m_services);
+            var count = services.Length;
+            var first = ((m_first < count) ? m_first : 0);
+            var frequency = (double)time.TimestampFrequency;
             var next = TimeSpan.MaxValue;
 
-            foreach (var service in Volatile.Read(location: ref m_services)) {
-                if ((service.Run(remaining: remaining) is { } delay) && (delay < next)) {
+            for (var turn = 0; (turn < count); turn++) {
+                var index = ((first + turn) % count);
+                var remaining = (deadlineTimestamp - time.GetTimestamp());
+
+                if (remaining <= 0L) {
+                    m_first = index;
+
+                    break;
+                }
+                if ((services[index].Run(remaining: TimeSpan.FromSeconds(value: (remaining / frequency))) is { } delay) && (delay < next)) {
                     next = delay;
                 }
             }

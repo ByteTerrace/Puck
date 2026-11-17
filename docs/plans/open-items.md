@@ -974,8 +974,10 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
-contiguous fallback, shared retirement timeline and destination page proofs:
-native mappings on both backends, page admission and pressure release.
+contiguous fallback, shared retirement timeline, destination page proofs,
+native-pool pressure trim and Vulkan's ordered binding door: native sparse
+resource ownership, Direct3D 12 tile mappings, page admission and pressure
+unmapping/compaction. Mesh regions still use contiguous storage.
 The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
 current hardware qualification reads the 4070, 2060 and Deck, then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
@@ -983,6 +985,17 @@ owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
+
+- [medium] Before sparse external targets are used, retain the exact host-word
+  coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
+  an external region can also write beyond that prefix. Its consumed disjoint
+  words currently need its publication owner to re-owe them. Step 7 owns the
+  coverage implementation and a nonzero-target, disjoint-write remapping law.
+- [low] `GpuBufferPages.Lease.IsCurrent`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuBufferPages.cs:138`) scans a lease's
+  pages after an unrelated global revision on every later check. Step 7 owns
+  revision-aware retained-proof validation before sparse churn is enabled.
 
 - [medium] Background GPU work is serviced inside the host's timer wait and
   not inside the swap chain's own (`ISwapChainPacing.TryWaitForFrame`) or a
@@ -996,11 +1009,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
-- [low · inferred, not run on a device] The Vulkan fence watcher
-  (`VulkanFenceWatch`) waits fences in submission order on one thread, so a
-  completion is signaled only after every earlier watched submission's. One
-  queue retires in order, so that holds today; a second queue needs a wait on
-  any of several fences.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -1384,20 +1392,6 @@ step 2 legs on the RTX 2060 and the Deck, then step 5, the work bound
 calibrated and the device-loss quarantine, then step 6, the engine's layers
 migrated to standard programs.
 
-- [high] The deployed kernel tree cannot read its own sources.
-  `SdfKernelSource.Read` of the specialized kernels (views, glass and the shade
-  views) from `Assets/Shaders/Sdf` beside the application is refused with
-  `SHADERSRC_INCLUDE_MISSING`: `field/sdf-shapes.hlsli`, `shade/sdf-light.hlsli`
-  and other kernel sources include
-  `../../../../../Puck.Shaders/Assets/Shaders/Shared/*.hlsli`, a path that
-  exists only in a source checkout. `SdfKernelSet.Load` swallows the refusal, so
-  a running World keeps no kernel source and every shade specialization is
-  refused by name; a copied kernel tree fails a shader reload the same way
-  (`SdfShadeKernelsSourceLawTests.TheDeployedKernelsCarryTheSourcesASpecializationPlansFrom`
-  and `SdfWorldResidencyShaderReloadLawTests.AReloadOfKernelsRetunedByATuningConstantApplies`
-  are red for this cause). An include resolves beside the file that names it, so
-  either the deployed layout carries the shared headers where each includer
-  reaches them or the includes take one spelling that resolves in both layouts.
 - [medium · unconfirmed] One authored program edit compiles two sets:
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
   and glass make 2, likely a requested set overtaken while the active and

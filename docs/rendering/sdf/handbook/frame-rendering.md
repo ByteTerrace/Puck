@@ -1615,7 +1615,7 @@ frame thread; any other upload compares the program with the live one. Mesh draw
 `SdfMeshRecord.DrawWords`-word record per draw, then each distinct mesh's geometry
 once. `SdfMeshDresser` retains one allocator run per owner, indexes binding
 dependencies by source slot or occurrence, and publishes
-changed draw rows through `SdfFrame.MeshDrawChanges` with a captured endpoint.
+changed draw rows through the rows' own journal (`SdfMeshRows.Changes`, `SdfMeshRows.Serial`), which the dressed frame reaches by reference; the frame's `MeshDrawChanges` stays the host's input.
 The shared `GpuChangedRows` journal also backs `SdfMovedTransforms`. Frames publish only its
 read-only `GpuRowChanges`; every consumer uses `GpuRowCursor` to collect its own skipped-frame
 union at a captured endpoint. Reader, roster, revision or history refusal returns one

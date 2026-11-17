@@ -31,7 +31,7 @@
 //   layer meter nothing.
 // A far layer keeps premultiplied geometry and coverage: no background sky or air on a missing-geometry ray. Its
 // covered share still takes the same atmosphere and bounded media. The view layer unpremultiplies after image filtering.
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/luma.hlsli"
+#include "Shared/luma.hlsli"
 #include "sdf-sky-pass.hlsli"
 #include "../shade/shade-volumes.hlsli"
 

@@ -26,6 +26,10 @@
         <VertexShaderSource Include="Assets/Shaders/**/*.vert.hlsl" />
         <FragmentShaderSource Include="Assets/Shaders/**/*.frag.hlsl" />
         <ComputeShaderSource Include="Assets/Shaders/**/*.comp.hlsl" />
+        <!-- The headers every project's shaders share, deployed to Assets/Shaders/Shared beside the application, where a
+             deployed kernel tree's source (Assets/Shaders/Sdf) finds them through its include directory
+             (ShaderIncludeDirectories), as a checkout's finds them here. -->
+        <Content Include="Assets/Shaders/Shared/**/*.hlsli" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <!-- puck.probe.v1 kind manifests and their kernel HLSL sources ship as content; each kernel's entry points compile

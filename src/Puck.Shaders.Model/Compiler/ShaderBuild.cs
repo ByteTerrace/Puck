@@ -38,6 +38,7 @@ public sealed partial class ShaderBuild {
     private readonly string m_lockFile;
     private readonly TextWriter m_log;
     private readonly Func<long?>? m_availableMemory;
+    private readonly string[] m_includeDirectories;
 
     /// <summary>Initializes a project's shader build.</summary>
     /// <param name="compiler">The compiler and cache every output compiles through.</param>
@@ -48,7 +49,10 @@ public sealed partial class ShaderBuild {
     /// <param name="availableMemory">Reads the physical memory free now, in bytes, or <see langword="null"/> when it
     /// cannot (<see cref="Puck.Hosting.HostMemory.AvailablePhysicalBytes"/>); without it, compiles are bounded by cores
     /// alone.</param>
-    public ShaderBuild(ShaderCompiler compiler, string projectDirectory, string lockFile, TextWriter log, Func<long?>? availableMemory = null) {
+    /// <param name="includeDirectories">The include directories every stage source resolves through
+    /// (<see cref="ShaderStageSource.IncludeDirectories"/>): the checkout's <see cref="ShaderIncludeDirectories.CheckoutDirectory"/>,
+    /// which <c>build/Shaders.targets</c> passes; or <see langword="null"/> for none.</param>
+    public ShaderBuild(ShaderCompiler compiler, string projectDirectory, string lockFile, TextWriter log, Func<long?>? availableMemory = null, IReadOnlyList<string>? includeDirectories = null) {
         ArgumentNullException.ThrowIfNull(argument: compiler);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: projectDirectory);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: lockFile);
@@ -58,6 +62,7 @@ public sealed partial class ShaderBuild {
         m_lockFile = Path.GetFullPath(path: lockFile);
         m_log = log;
         m_availableMemory = availableMemory;
+        m_includeDirectories = [.. (includeDirectories ?? []).Select(selector: static directory => Path.GetFullPath(path: directory))];
     }
 
     /// <summary>Gets the outputs the last <see cref="CompileAsync"/> ran a compiler for, in completion order.</summary>
@@ -208,6 +213,7 @@ public sealed partial class ShaderBuild {
                 plans.Add(item: (output, m_compiler.Plan(
                     stage: new ShaderStageSource(
                         EntryPoint: ShaderCompiler.BuildEntryPointOf(stage: output.Stage),
+                        IncludeDirectories: m_includeDirectories,
                         Path: output.SourcePath,
                         Source: text,
                         Stage: output.Stage

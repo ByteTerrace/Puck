@@ -15,6 +15,31 @@ namespace Puck.Vulkan.Tests;
 /// portal's glass, is refused by name
 /// (<see cref="VulkanLogicalDeviceFactory.FeatureIndicesOf"/>).</summary>
 public sealed class VulkanGroupedBindingFloorLawTests {
+    [Fact]
+    public void SparseBuffersRequireBothFeaturesAndARealQueueButNeitherAliasingNorStrictResidency() {
+        var support = Enumerable.Repeat(count: 55, element: true).ToArray();
+
+        support[52] = false;
+        var sparse = Puck.Vulkan.Bindings.VkQueueFlags.SparseBinding;
+        Puck.Vulkan.Bindings.VkQueueFamilyInfo[] families = [new(Flags: sparse, Index: 2, QueueCount: 1), new(Flags: sparse, Index: 3, QueueCount: 1)];
+
+        Assert.Equal(3U, VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 3, support: support));
+        Assert.Equal(2U, VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 7, support: support));
+        Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(support, [new(Flags: sparse, Index: 2, QueueCount: 0)], 2));
+        Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(families: [], graphicsFamily: 2, support: support));
+        var enabled = VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true);
+
+        Assert.Contains(collection: enabled, expected: 44U);
+        Assert.Contains(collection: enabled, expected: 45U);
+        Assert.DoesNotContain(collection: enabled, expected: 52U);
+        foreach (var missing in new[] { 44, 45 }) {
+            support[missing] = false;
+            Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 3, support: support));
+            Assert.Throws<ArgumentException>(testCode: () => VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true));
+            support[missing] = true;
+        }
+    }
+
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
         Backend: "vulkan",
         MaxBoundDescriptorSets: sets,
@@ -55,14 +80,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
     [InlineData(34, "shaderSampledImageArrayDynamicIndexing")]
     [InlineData(26, "fragmentStoresAndAtomics")]
     [InlineData(29, "shaderStorageImageExtendedFormats")]
-    [InlineData(35, "shaderStorageBufferArrayDynamicIndexing")]
     [InlineData(37, "shaderClipDistance")]
     [Theory]
     public void ADeviceWithoutARequiredBaseFeatureIsRefusedByName(int required, string feature) {
         const int SampledImageArrayDynamicIndexing = 34;
         const int FragmentStoresAndAtomics = 26;
         const int StorageImageExtendedFormats = 29;
-        const int StorageBufferArrayDynamicIndexing = 35;
         const int ClipDistance = 37;
         var every = Enumerable.Repeat(count: 55, element: true).ToArray();
         var without = every.ToArray();
@@ -79,12 +102,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         }
 
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 5),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)StorageBufferArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 4),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or StorageBufferArrayDynamicIndexing or ClipDistance))]),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)StorageBufferArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or ClipDistance))]),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
     }
 }

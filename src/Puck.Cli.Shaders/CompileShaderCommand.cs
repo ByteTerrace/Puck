@@ -43,7 +43,8 @@ internal static class CompileShaderCommand {
                             shaderStage,
                             path,
                             text,
-                            result.GetRequiredValue(option: entry)
+                            result.GetRequiredValue(option: entry),
+                            ShaderIncludeDirectories.Of(sourcePath: path)
                         )]
                 );
                 var compiled = await compiler.CompileAsync(
