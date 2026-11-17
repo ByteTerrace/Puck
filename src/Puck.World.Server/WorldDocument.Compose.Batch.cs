@@ -41,25 +41,28 @@ public sealed partial class WorldDocument {
         foreach (var member in batch.Mutations) {
             if (member is WorldMutation.UpsertStateCell upsert) { seeded.Add(item: upsert.Row); } else if (member is WorldMutation.RemoveStateCell remove) { seeded.Add(item: remove.Row); } else { seeded = null; break; }
         }
-        if (!authority.IsOperator(batch.Principal) && seeded is not null) {
+        if (!authority.IsOperator(principal: batch.Principal) && (seeded is not null)) {
             // Partial cell composition still needs the public audience rows its targeted declarations read.
             // Include them before loading scratch, so sequential policy checks see earlier audience writes too.
-            var policies = WorldStateReader.Arena(current);
+            var policies = WorldStateReader.Arena(definition: current);
+
             foreach (var member in batch.Mutations) {
-                var name = StateRowOf(member)!;
-                if (!policies.Catalog.TryResolve(StateLane.Document, name, out var handle)) { continue; }
-                if (policies.Rows[handle.Ordinal].Visibility?.ReadersFrom is { } readers) { seeded.Add(readers); }
-                foreach (var zone in policies.Catalog.ContainingZones(handle.Ordinal)) {
-                    if (policies.Rows[zone].Visibility?.ReadersFrom is { } audience) { seeded.Add(audience); }
+                var name = StateRowOf(mutation: member)!;
+
+                if (!policies.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: name)) { continue; }
+                if (policies.Rows[handle.Ordinal].Visibility?.ReadersFrom is { } readers) { seeded.Add(item: readers); }
+                foreach (var zone in policies.Catalog.ContainingZones(rowOrdinal: handle.Ordinal)) {
+                    if (policies.Rows[zone].Visibility?.ReadersFrom is { } audience) { seeded.Add(item: audience); }
                 }
             }
         }
 
         reason = string.Empty;
         evictedKey = null;
-        if (batch.ExpectedCells is { Count: > 0 } || batch.ExpectedDefinition is not null || batch.ExpectedInputs is not null || batch.ExpectedSpatialReads is { Count: > 0 }) {
-            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time, operates: () => authority.IsOperator(batch.Principal));
-            if (!view.CheckGuards(batch, out reason)) { candidate = current; return false; }
+        if ((batch.ExpectedCells is { Count: > 0 }) || (batch.ExpectedDefinition is not null) || (batch.ExpectedInputs is not null) || (batch.ExpectedSpatialReads is { Count: > 0 })) {
+            var view = WorldRecipientView.ForComposition(current, batch.Principal, time: time, operates: () => authority.IsOperator(principal: batch.Principal));
+
+            if (!view.CheckGuards(batch: batch, reason: out reason)) { candidate = current; return false; }
         }
 
         try {
@@ -67,9 +70,10 @@ public sealed partial class WorldDocument {
                 var member = batch.Mutations[index];
                 string? writtenRow = null;
                 // Recheck against preceding members' declarations, never against a future write's membership.
-                if (!authority.IsOperator(batch.Principal)) {
+                if (!authority.IsOperator(principal: batch.Principal)) {
                     var memberView = WorldRecipientView.ForComposition(working, batch.Principal, arena, time);
-                    if (!memberView.Admits(member, out var withheld)) {
+
+                    if (!memberView.Admits(mutation: member, row: out var withheld)) {
                         candidate = current; reason = memberView.Refusal("batch", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
                     }
                 }
@@ -145,16 +149,14 @@ public sealed partial class WorldDocument {
                             break;
                         }
                     default: {
-                            if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
-                candidate = current; return false;
-            }
-            SyncArenaExport(
+                            SyncArenaExport(
                                 arena: arena,
                                 arenaDirty: ref arenaDirty,
                                 working: ref working
                             );
 
                             if (!TryComposeCore(
+                                authority: authority,
                                 candidate: out var next,
                                 current: working,
                                 engineTick: engineTick,
@@ -162,9 +164,8 @@ public sealed partial class WorldDocument {
                                 instanceIdentity: instanceIdentity,
                                 mutation: member,
                                 reason: out reason,
-                                tick: tick,
                                 refusalCode: out refusalCode,
-            authority: authority
+                                tick: tick
                             )) {
                                 candidate = current;
 
@@ -209,9 +210,6 @@ public sealed partial class WorldDocument {
                         }
                 }
 
-                if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
-                    candidate = current; return false;
-                }
                 if (writtenRow is null) {
                     continue;
                 }
@@ -227,9 +225,6 @@ public sealed partial class WorldDocument {
                     candidate = current;
 
                     return false;
-                }
-                if (!authority.TryPrepareDocument(batch.Principal, current, working, false, out _, out reason)) {
-                    candidate = current; return false;
                 }
             }
 

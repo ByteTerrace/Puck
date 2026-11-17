@@ -281,7 +281,7 @@ Step 2's implementation invariant: every recipient read derives from its live
 `WorldDeliveryCursor`. The existing `WorldStateReadView` remains a console
 adapter until step 6, with its definition and value reads delegated to that
 capability. Session capabilities retain their admission tier and recheck live
-Observe. Resource/work measurements in `world.budget` remain operator reads;
+Observe. Host resource/work measurements in `world.budget` remain Host reads;
 recipient budgets count only the disclosed document. Search output audiences
 must be enclosed by every dependency of candidate generation, judging and
 scoring, checked before execution and before landing against live policy.
@@ -823,11 +823,15 @@ outside the guarantee; authored quotas and key exhaustion are inside it.
   `Operate` supplies full world administration/read/write authority; it never
   supplies Host authority. The predicate reads explicit Operate holds and
   role-qualified group holds directly, without calling a generic `Allows`
-  method that calls the predicate again. Validate a document's complete grant
-  set before seeding it so authoring order cannot decide whether a Peer
-  operator's program grant is legitimate. Ordinary seat seed grants must gain
+  method that calls the predicate again. Boot and admission install Operate rows
+  first, then the remaining rows, refusing only each bad row loudly. Rebuilds
+  validate the complete transition before changing live state. Ordinary seat seed grants must gain
   the explicit dispatch masks/budgets required of recipients, using the
   existing grant/budget machinery; no kind-based unmetered fallback survives.
+  Explicit rows of revocable operators and groups carry those payloads too;
+  their validity cannot depend on who temporarily holds Operate. Camera-body
+  Drive uses the local-seat seed budget. Exclusive reservations bind every actor,
+  and explicit operator payloads resolve against their deciding rows.
   D1 keeps ordinary seat controls and own-body consent working and exercises
   admission-template ordering and operator revocation with bound handles.
   A couch world's author may grant `seat1 operate all` explicitly.
@@ -849,8 +853,8 @@ outside the guarantee; authored quotas and key exhaustion are inside it.
   of operator membership are operator-owned, including any state row feeding
   membership. Refuse a mutable non-operator membership source when installing
   an operator grant. This closes escalation through default seat Mutate/groups.
-  Check batch prefixes and the final candidate, so creating a group and granting
-  it in either order cannot evade the check. A grant acquired in the batch
+  Check the final candidate against the actor's pre-batch authority, so creating
+  a group and granting it in either order cannot evade the check. A grant acquired in the batch
   cannot authorize that batch. Narrow delegated non-Operate grant/revoke still
   uses the existing administered-capability ceiling; grants-section replacement
   is never that delegation path. `Operate` alone authorizes program editing;

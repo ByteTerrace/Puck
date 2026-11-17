@@ -36,8 +36,8 @@ caller who cannot mutate the row. All four mutation verbs are unbindable, and
 
 ## Vocabulary
 
-- `WorldCapability` (5 members): `Drive`, `Observe`, `Control`, `Mutate`,
-  `Edit`, each with one ABI capability bit (see [addons.md](addons.md)).
+- `WorldCapability`: `Drive`, `Observe`, `Control`, `Mutate`, `Edit`, and
+  `Operate`. Operate has no addon ABI bit (see [addons.md](addons.md)).
 - `Principal` (`Puck.Commands`, `PrincipalKind`): who is acting — the one
   identity a command context, a submission envelope, a mutation, an intent and
   a replay entry carry. Kinds: `Unspecified` (0, no door stamped it — never an
@@ -241,15 +241,23 @@ holders, including role-qualified groups and ownership. Ordinary seats have
 explicit seed budgets and dispatch masks; they retain own-body consent, not
 general administration. Narrow non-Operate delegation retains its held-capability
 ceiling. Addons cannot become operators, directly or through groups.
+Federated namespace sessions cannot hold Operate; remote operators require one
+authenticated subject at Replica. The hold is checked before remote eligibility.
+Explicit dispatch rows for every non-host grantee require budgets and masks even
+while that grantee holds Operate, so revocation and differently-roled group members
+cannot expose an unmetered row. Operator payload lookup uses the deciding explicit
+row; exclusive reservations bind operators and Console too.
 
 `WorldGrants.Authority.cs` owns transition admission. Direct grant/revoke,
-document composition (every batch prefix), rebuild and checkpoint restoration
+document composition (the completed candidate under the actor's pre-batch authority), rebuild and checkpoint restoration
 validate there before installing. Raw table and group installers are private;
 callers consume a prepared authority transition. An operator acquired by a
 batch cannot authorize that batch. Operator group roles, membership, kinds,
 ownership and referenced state sources are protected by the same admission.
 The current group schema carries literal members and roles; the existing
 document-reference collector follows any state-backed holders in this graph.
+Single-row grants and revocations validate against live indexes without copying
+the table. Unchanged group sections retain their indexes and handle revisions.
 
 **The fold's OWN contributor-trust predicate** (`WorldTick.StageContribution`,
 `WorldAddonRuntime.ContributionAccepted`) **keys on HOST LOCUS, not principal
@@ -294,12 +302,12 @@ do not hold live authority. A non-operator is refused
 `Principal.World`, which the admission door admits structurally and never
 meters, so one gated authoring act launders every budget and verb mask the row
 carries, and a verb mask cannot bound what the row does not dispatch; operators are unaffected); exclusive-over-`all` refused outright;
-`budget:<n>` is REQUIRED on an untrusted principal's Drive/Observe row and on
-its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), and may remain on an operator for later demotion. It is refused on an
+`budget:<n>` is REQUIRED on every non-host grantee's Drive/Observe row and on
+its `Mutate` dispatch row (`section:`/`creation:`/`placement:`), including revocable operators and groups. It is refused on an
 untrusted `Mutate`/`state:<name>` row, which is the cross-document write-back
 channel and has no dispatch door to meter (`budget:0` refused — omit the token
 instead; a re-grant IS the budget update). `verbs:<name,...>` is likewise
-REQUIRED on an untrusted `Mutate` dispatch row: the admission
+REQUIRED on every non-host `Mutate` dispatch row: the admission
 predicate reads an ABSENT mask as FULL REACH (Console's boot seed holds
 maskless Mutate rows, so refuse-all there would deny every trusted mutation),
 so the strictness lives at the grant door and a maskless untrusted row is
@@ -423,15 +431,21 @@ verifies no identity at all, still mints the `Control/all` seed
 In `.puck` source, `grants` is an ordinary array-of-objects property like any
 other document section — no dedicated sugar (grammar belongs to the
 `puck-dsl` skill). A world document's `grants` section applies in the
-`WorldServer` constructor, in document order, under the Console actor,
+`WorldServer` constructor, with Operate rows first and otherwise in document order, under the Console actor,
 through the same `Grant` path `world.grant` uses — same loud accept/reject
 lines.
+Boot and admission refuse only the invalid row and continue. Rebuild and undo
+refuse the entire transition before live input, solids or population changes;
+checkpoint authority validation likewise precedes adoption. A replay-start restore
+resets session epochs and the ordinal bound, while a live restore retains retired epochs.
+The seat's runtime camera-body Drive grant carries the same explicit 65535 budget
+as its own-body seed; camera mode does not grant Operate.
 `WithoutAuthoredConsent` strips `Reach`/`Consent`/`Ceiling` from any
 document row carrying a ceiling, prints the withholding loudly, and applies
 the row with no pool: consent is authored LIVE by the seated human, never
 shipped in a document. (A document contributor row carrying only `Reach`
 passes through untouched.) `UpsertGrant`/`RemoveGrant` mutations edit the
-DOCUMENT rows only — next boot, never the live table.
+document and live rows through the same prepared authority transition.
 
 ## The co-driving fold
 

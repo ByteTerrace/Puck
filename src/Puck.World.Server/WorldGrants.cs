@@ -222,7 +222,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // Peer authority is minted only when a concrete generation is admitted. Pre-seeding index-only peers here
         // would let a later occupant inherit an earlier session's authority.
     }
-
     private void AddOwnedGroup(Principal owner, string groupId) {
         if (!m_ownedGroups.TryGetValue(
             key: owner,
@@ -265,17 +264,26 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // human-cadence op (never the tick path), so the two scans are affordable; both are skipped entirely for the common
     // idempotent re-grant (a matching holder is the incoming principal itself).
     private bool Conflicts(WorldGrant grant, out string reason) {
-        if (m_host is not null && grant.Capability == WorldCapability.Drive &&
-            grant.Subject.Kind == GrantSubjectKind.Body && Host.Population.IsAdmittedPeer(grant.Subject.Value) &&
-            grant.Grantee != Host.Population.PeerPrincipal(grant.Subject.Value)) {
-            reason = $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it";
+        if (grant.Consent is { Registers: not 0 }) { reason = "pool consent cannot name target registers"; return true; }
+        if (m_host is not null) {
+            foreach (var name in (grant.Reach?.Channels ?? [])) {
+                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"reach names undeclared channel '{name}'"; return true; }
+            }
+            foreach (var name in (grant.Consent?.Channels ?? [])) {
+                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"consent names undeclared channel '{name}'"; return true; }
+            }
+        }
+        if ((m_host is not null) && (grant.Capability == WorldCapability.Drive) &&
+            (grant.Subject.Kind == GrantSubjectKind.Body) && Host.Population.IsAdmittedPeer(bodyIndex: grant.Subject.Value) &&
+            (grant.Grantee != Host.Population.PeerPrincipal(index: grant.Subject.Value))) {
+            reason = $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(index: grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it";
             return true;
         }
         if (grant.Capability == WorldCapability.Operate) {
-            if (grant.Subject != GrantSubject.All || grant.Exclusive || grant.Budget is not null || grant.EventBudget is not null ||
-                grant.HoldCeiling is not null || grant.KindMask is not null || grant.WriteMask is not null ||
-                grant.Reach is not null || grant.Consent is not null || grant.Ceiling is not null ||
-                grant.Grantee.Kind == GranteeKind.Document || grant.Grantee.Principal.Kind == PrincipalKind.Addon) {
+            if ((grant.Subject != GrantSubject.All) || grant.Exclusive || (grant.Budget is not null) || (grant.EventBudget is not null) ||
+                (grant.HoldCeiling is not null) || (grant.KindMask is not null) || (grant.WriteMask is not null) ||
+                (grant.Reach is not null) || (grant.Consent is not null) || (grant.Ceiling is not null) ||
+                (grant.Grantee.Kind == GranteeKind.Document) || (grant.Grantee.Principal.Kind == PrincipalKind.Addon)) {
                 reason = "Operate requires all, no payload or exclusivity, and cannot be held by an addon or document";
                 return true;
             }
@@ -338,7 +346,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // principal may not carry one, and budget:0 is refused outright. Mutate over a concrete state:<name> is a
         // different lane entirely (the cross-document durable-state write-back channel), gated by a write mask
         // rather than a budget, so a budget there is refused by name.
-        var untrustedPrincipal = !IsOperatorGrantee(grant.Grantee);
+        // Row payloads survive Operate revocation and can reach differently-roled group members.
+        // Only intrinsic host/program principals are permanently unmetered; a revocable operator's
+        // explicit rows carry the same budgets and masks they will need after losing Operate.
+        var untrustedPrincipal = (!grant.Grantee.TryGetPrincipal(principal: out var payloadPrincipal) ||
+            (payloadPrincipal.Kind is not (PrincipalKind.Console or PrincipalKind.World)));
         var meteredMutate = ((grant.Capability == WorldCapability.Mutate) && IsMutateDispatchSubject(subject: grant.Subject));
         var metered = ((grant.Capability is WorldCapability.Observe or WorldCapability.Drive or WorldCapability.Edit) || meteredMutate);
 
@@ -351,7 +363,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         if (
             (metered && (grant.Capability != WorldCapability.Edit)) &&
             untrustedPrincipal &&
-            (grant.Budget is null) && !m_budgets.ContainsKey((grant.Grantee, grant.Capability, grant.Subject))
+            (grant.Budget is null) && !m_budgets.ContainsKey(key: (grant.Grantee, grant.Capability, grant.Subject))
         ) {
             reason = $"an untrusted {Label(capability: grant.Capability)} grant to {grant.Grantee.Describe()} requires an explicit budget:<n> — a defaulted per-tick dispatch allowance would silently decide a denial-of-service ceiling";
 
@@ -376,7 +388,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         // effects that fire as Principal.World, admitted structurally with no budget or mask enforcement — one gated
         // act would otherwise launder unbounded, unmetered writes.
         if (
-            untrustedPrincipal &&
+            !IsOperatorGrantee(grantee: grant.Grantee) &&
             (grant.Capability == WorldCapability.Mutate) &&
             (grant.Subject.Kind == GrantSubjectKind.Section) &&
             ((WorldSection)grant.Subject.Value).IsProgram()
@@ -710,10 +722,10 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // the local trust boundary for that capability — Console and Seat generally, plus Peer additionally for
     // Control. A Drive or Observe Body is additionally bounded to an index the population actually holds.
     private bool IsLegitimateSubject(Principal principal, WorldCapability capability, GrantSubject subject) {
-        var trustedWildcard = IsOperator(principal) || principal.Kind == PrincipalKind.Seat;
+        var trustedWildcard = (IsOperator(principal: principal) || (principal.Kind == PrincipalKind.Seat));
 
         return capability switch {
-            WorldCapability.Operate => subject.Kind == GrantSubjectKind.All,
+            WorldCapability.Operate => (subject.Kind == GrantSubjectKind.All),
             WorldCapability.Drive => (((subject.Kind == GrantSubjectKind.Body) && (((uint)subject.Value) < ((uint)m_population))) ||
                 ((subject.Kind == GrantSubjectKind.All) && trustedWildcard)),
             // Observe additionally admits Screen/Region/Seat/Adjacency, untrusted principals only — the event-only
@@ -848,7 +860,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             grant: new WorldGrant(
                 Grantee: principal,
                 Capability: WorldCapability.Observe,
-                Budget: IsOperator(principal) ? null : ushort.MaxValue,
+                Budget: (IsOperator(principal: principal) ? null : ushort.MaxValue),
                 Subject: GrantSubject.All,
                 Exclusive: false
             ),
@@ -868,7 +880,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                 Grantee: principal,
                 Capability: WorldCapability.Edit,
                 Subject: GrantSubject.All,
-                Budget: IsOperator(principal) ? null : ushort.MaxValue,
+                Budget: (IsOperator(principal: principal) ? null : ushort.MaxValue),
                 Exclusive: false
             ),
             reason: out _
@@ -893,7 +905,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // so a seeded row would name a door that never opens.
             if (
                 ((section == WorldSection.Grants) || section.IsProgram()) &&
-                !IsOperator(principal)
+                !IsOperator(principal: principal)
             ) {
                 continue;
             }
@@ -905,8 +917,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
                     Grantee: principal,
                     Capability: WorldCapability.Mutate,
                     Subject: subject,
-                    Budget: IsOperator(principal) ? null : ushort.MaxValue,
-                    KindMask: IsOperator(principal) ? null : WorldMutationKindCatalog.KindsOf(section),
+                    Budget: (IsOperator(principal: principal) ? null : ushort.MaxValue),
+                    KindMask: (IsOperator(principal: principal) ? null : WorldMutationKindCatalog.KindsOf(section: section)),
                     Exclusive: false
                 ),
                 reason: out _
@@ -943,7 +955,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             return $"seat:{subject.Value} does not exist — local seats are 0..{(WorldBodiesLimits.LocalSeatCount - 1)}";
         }
 
-        var trusted = IsOperator(principal) || principal.Kind == PrincipalKind.Seat;
+        var trusted = (IsOperator(principal: principal) || (principal.Kind == PrincipalKind.Seat));
 
         return capability switch {
             WorldCapability.Operate => "operate requires all",
@@ -997,17 +1009,22 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// to an unwanted allow, and no existing caller's allow is ever taken away.</para></remarks>
     public GrantVerdict Allows(Principal principal, WorldCapability capability, GrantSubject subject) {
         // A session that ended or faulted holds nothing, whatever rows still wait for its end to be applied.
-        if (IsStaleSession(principal: principal) || (principal.Kind == PrincipalKind.Peer && m_host is not null && !Host.IsLivePeer(principal))) {
+        if (IsStaleSession(principal: principal) || ((principal.Kind == PrincipalKind.Peer) && (m_host is not null) && !Host.IsLivePeer(principal: principal))) {
             return new GrantVerdict(Rule: GrantRule.NoHold);
         }
 
-        if (IsOperator(principal)) { return new GrantVerdict(Rule: GrantRule.WildcardHold); }
+        // Reservations and an operator's explicit payload-bearing rows retain their ordinary meaning.
+        var held = AllowsRecipient(capability: capability, principal: principal, subject: subject);
 
-        if (capability == WorldCapability.Edit &&
-            m_operatorSources.Any(name => subject == GrantSubject.All || subject == GrantSubject.State(name))) {
+        if (held.Rule == GrantRule.BeatenByReserver) { return held; }
+        if (IsOperator(principal: principal)) { return (held.IsAllowed ? held : new GrantVerdict(Rule: GrantRule.WildcardHold)); }
+
+        if ((capability == WorldCapability.Edit) &&
+            (((subject == GrantSubject.All) && (m_operatorSources.Count != 0)) ||
+                ((subject.Kind == GrantSubjectKind.State) && (subject.Id is { } source) && m_operatorSources.Contains(item: source)))) {
             return new GrantVerdict(Rule: GrantRule.NoHold);
         }
-        return AllowsRecipient(principal, capability, subject);
+        return held;
     }
 
     private GrantVerdict AllowsRecipient(Principal principal, WorldCapability capability, GrantSubject subject) {
@@ -1062,6 +1079,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return new GrantVerdict(Rule: GrantRule.NoHold);
     }
+
     /// <inheritdoc/>
     public GrantVerdict Holds(Grantee grantee, WorldCapability capability, GrantSubject subject) {
         // The exclusivity override: a reserved subject answers for its reserver ALONE, so an exclusively-held body has
@@ -1408,7 +1426,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // Operators administer the world. An ordinary seat keeps its own-body consent gesture;
     // other delegated non-Operate administration cannot exceed the capability already held.
     private bool HoldsForAdministration(Principal principal, WorldCapability capability, GrantSubject subject) {
-        if (IsOperator(principal)) { return true; }
+        if (IsOperator(principal: principal)) { return true; }
         if (capability == WorldCapability.Operate) { return false; }
 
         if (principal.Kind == PrincipalKind.Seat) {
@@ -1460,6 +1478,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return false;
     }
+
     /// <inheritdoc/>
     public ChannelCeilings PoolCeilings(Principal seat, GrantSubject subject) {
         var projected = default(ChannelCeilings);
@@ -1607,7 +1626,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         SeedLocalPlayDefaults(seatCount: seatCount);
     }
-
     /// <summary>Removes a grant (capability+subject) from a principal, and clears any matching exclusive reservation.
     /// A no-op that returns <see langword="false"/> when the principal did not hold it. Not part of
     /// <see cref="IWorldGrantsView"/>: this is an authority door, reached only through
@@ -1674,7 +1692,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             // WorldHandleTable's own remarks on why a cleared slot is what the projection BECOMES, never an
             // independent edit made here.
             m_revision++;
-            if (!m_proposal && capability == WorldCapability.Drive) { m_host?.Input.RevokeDrive(grantee: grantee, subject: subject); }
+            if (!m_proposal && (capability == WorldCapability.Drive)) { m_host?.Input.RevokeDrive(grantee: grantee, subject: subject); }
 
             // Revoking Control re-tests every application this principal stands on: the authority to apply and the
             // application are separate storage, so nothing else would ever drop one whose authority has been
@@ -1690,10 +1708,11 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return removed;
     }
+
     /// <inheritdoc/>
     public bool TryValidateApplications(Principal principal, IReadOnlyList<ControlApplication> applications, out string reason) {
         if ((m_host is not null) && !m_host.Input.TryValidateApplications(applications: applications, principal: principal, reason: out reason)) {
-            m_host.Output.Narrate(channel: "input.refused", text: reason);
+            if (!m_proposal) { m_host.Output.Narrate(channel: "input.refused", text: reason); }
             return false;
         }
         reason = string.Empty;
@@ -1893,7 +1912,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
 
         return false;
     }
-
     /// <summary>Adds a grant, enforcing exclusivity in both orders. An incoming exclusive grant over the wildcard
     /// <see cref="GrantSubject.All"/> is rejected outright (an exclusive reservation must name a concrete subject). A
     /// grant is rejected outright when its subject is not one its capability legitimately admits (see
@@ -1918,21 +1936,19 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// <param name="reason">On rejection, the human-readable reason; empty on success.</param>
     /// <returns><see langword="true"/> when the grant was added.</returns>
     private bool InstallGrant(WorldGrant grant, out string reason) {
-        if (grant.Consent is { Registers: not 0 }) { reason = "pool consent cannot name target registers"; return false; }
-        if (m_host is not null) {
-            foreach (var name in (grant.Reach?.Channels ?? [])) {
-                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"reach names undeclared channel '{name}'"; return false; }
-            }
-            foreach (var name in (grant.Consent?.Channels ?? [])) {
-                if (!Host.Population.Channels.TryGetLogicalId(logical: out _, name: name)) { reason = $"consent names undeclared channel '{name}'"; return false; }
-            }
-        }
         if (Conflicts(
             grant: grant,
             reason: out reason
         )) {
             return false;
         }
+
+        InstallAdmittedGrant(grant: grant);
+        return true;
+    }
+    // Only seeding/scratch validation and the admitted transition reach this writer. Installation cannot
+    // re-refuse after the document has swapped its population or authority graph.
+    private void InstallAdmittedGrant(WorldGrant grant) {
 
         if (grant.Exclusive) {
             m_exclusive[new ExclusiveKey(
@@ -2014,8 +2030,6 @@ public sealed partial class WorldGrants : IWorldGrantsView {
             subject: grant.Subject
         );
         m_revision++;
-
-        return true;
     }
 
     /// <inheritdoc/>

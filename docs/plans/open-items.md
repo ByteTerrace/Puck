@@ -1978,6 +1978,24 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [low, D2/F12; before state-fed membership is introduced] Operator-source
+  protection currently rejects any dependency writable through a recipient's
+  seeded Edit/all, and `Allows` denies Edit/all wholesale when an operator source
+  exists (`src/Puck.World.Server/WorldGrants.Authority.cs`,
+  `src/Puck.World.Server/WorldGrants.cs`). Today's group members and roles are
+  literal, so the reference collector reaches no such source. When membership
+  becomes state-fed, protect the concrete source at the write door and admit
+  unrelated state edits; prove both cases with an ordinary seeded seat. Do not
+  make a live membership source render all authority transitions unusable.
+- [low, D2/F18] Operator-group comparison uses record equality over list-bearing
+  groups and kinds in `src/Puck.World.Server/WorldGrants.Authority.cs`. A separately
+  materialized but equivalent protected group can therefore cause a conservative
+  refusal when an ordinary seat edits another group. Replace that comparison with
+  the group's canonical structural equality and prove independent materialization
+  plus a real membership change. Duplicate kind names and group ids are already
+  refused by `WorldDefinitionValidator.ValidateGroups`; the first/last lookup
+  discrepancy is unreachable through admitted documents.
+
 - [high] Ordinary recipient declarations still require the closed-scope and
   acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,

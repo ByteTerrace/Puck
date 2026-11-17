@@ -40,6 +40,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms WorldSaveForms = CommandForms.Of(verb: "world.save", "[path]");
     private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
     private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
+
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -324,6 +325,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 WorldReloadDelta delta;
+
                 try {
                     // The delta names installed declarations. A recipient export contains tick values instead,
                     // which are neither this base nor what a reload installs. This verb is operator-only.
@@ -540,10 +542,12 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 var view = server.ReadView(context);
+
                 if (!view.Observes) { return new CommandResult(Output: "[world.status: not disclosed]"); }
                 var definition = view.Definition;
                 var isOperator = server.Grants.IsOperator(context.Principal);
-                var source = isOperator ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty;
+                var isHost = (context.Principal.Kind == PrincipalKind.Console);
+                var source = (isHost ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty);
                 // The journal and the save snapshot are the authority's edit history: the journal's length moves with
                 // an operator's hidden-only edit, so a recipient's status carries neither.
                 var journal = (server.Grants.IsOperator(context.Principal)
@@ -582,7 +586,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     )
                     : "none"
                 );
-                var basis = ((isOperator && WorldDefinitionFileSource.TryPeekBasis(
+                var basis = ((isHost && WorldDefinitionFileSource.TryPeekBasis(
                     basisPath: out var basisPath,
                     path: source,
                     reason: out var unusedPeekReason
@@ -594,20 +598,20 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // documents this process merged, not about the world one of them describes: `shared` counts the
                 // reaches answered from a document already composed here, which is what a shard's four neighbours
                 // and its own basis all naming one island turns into.
-                var documents = isOperator ? string.Create(
+                var documents = (isHost ? string.Create(
                     provider: CultureInfo.InvariantCulture,
                     handler: $"composed {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} shared {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
-                ) : string.Empty;
+                ) : string.Empty);
                 var journalDepth = definition.Host.JournalDepth;
                 var journalDepthText = ((journalDepth > 0)
                     ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
                     : "unbounded"
                 );
 
-                var machineFaults = isOperator ? string.Concat(server.Machines.InstanceNames.Select(name => server.Machines.InstanceState(name))
-                    .Where(state => state?.Fault is not null).Select(state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}")) : string.Empty;
-                var provenance = isOperator ? $" source {source} basis {basis} documents {documents}" : string.Empty;
-                var sleeping = isOperator ? $" sleeping {server.Population.SleepingCount}" : string.Empty;
+                var machineFaults = (isOperator ? string.Concat(server.Machines.InstanceNames.Select(name => server.Machines.InstanceState(name))
+                    .Where(state => (state?.Fault is not null)).Select(state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}")) : string.Empty);
+                var provenance = (isHost ? $" source {source} basis {basis} documents {documents}" : string.Empty);
+                var sleeping = (isOperator ? $" sleeping {server.Population.SleepingCount}" : string.Empty);
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,

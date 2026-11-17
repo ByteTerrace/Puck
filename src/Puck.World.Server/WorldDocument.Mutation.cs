@@ -63,7 +63,7 @@ public sealed partial class WorldDocument {
                     Host.Output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {reason} — {WorldServer.Describe(mutation: mutation)} dropped]");
                 }
                 Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode ? reason : $"{WorldServer.Describe(mutation: mutation)} denied: {reason}",
+                    Message: ((m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode) ? reason : $"{WorldServer.Describe(mutation: mutation)} denied: {reason}"),
                     Rejected: true,
                     Kind: WorldEditEchoKind.Mutation,
                     Mutation: mutation,
@@ -121,6 +121,7 @@ public sealed partial class WorldDocument {
         }
 
         if (!TryCompose(
+            prepareAuthority: false,
             authority: Host.GrantTable,
             current: current,
             mutation: mutation,
@@ -132,7 +133,7 @@ public sealed partial class WorldDocument {
             evictedKey: out var evictedKey,
             refusalCode: out var refusalCode
         )) {
-            m_lastMutationFailureCode = refusalCode ?? "world.mutation.refused";
+            m_lastMutationFailureCode = (refusalCode ?? "world.mutation.refused");
             return false;
         }
 
@@ -184,10 +185,10 @@ public sealed partial class WorldDocument {
             replacesArena &&
             !Host.TryPrepareArenaReplacement(
             definition: candidate,
+            edit: edit,
             prepared: out arena,
             reason: out reason,
-            settled: out candidate,
-            edit: edit
+            settled: out candidate
         )) {
             return false;
         }
@@ -223,7 +224,7 @@ public sealed partial class WorldDocument {
         // Only a full install installs compiled rules, so only its validation keeps what it compiled.
         if (ReferenceEquals(objA: candidate, objB: validated)) {
             compilation = validatedCompilation;
-        } else if (!TryValidateMutationCandidate(candidate: candidate, current: current, mutation: mutation, reason: out reason, compilation: out compilation,
+        } else if (!TryValidateMutationCandidate(candidate: candidate, compilation: out compilation, current: current, mutation: mutation, reason: out reason,
             retainCompilation: installsArena)) {
             return false;
         }
@@ -358,11 +359,11 @@ public sealed partial class WorldDocument {
             }
 
             if (!Host.GrantTable.TryPrepareDocument(mutation.Principal, current, candidate,
-                WorldMutationKindCatalog.SectionOf(mutation) == WorldSection.Grants, out var authority, out reason)) { return false; }
+                (WorldMutationKindCatalog.SectionOf(mutation: mutation) == WorldSection.Grants), out var authority, out reason)) { return false; }
             prepared = new WorldPreparedMutation(
-                authority: authority!,
                 addonPlan: addonPlan,
                 arena: arena,
+                authority: authority!,
                 candidate: candidate,
                 compilation: compilation,
                 engineTick: engineTick,
@@ -550,6 +551,7 @@ public sealed partial class WorldDocument {
     // session, so it is narrated on the transcript and echoed to none: an echo is a submitter's verdict, and one
     // raised here would reach the toast, the console tape and the edit cue lane as if a seat had typed it.
     private static bool HasSubmitter(WorldMutation mutation) => (mutation.Principal != Principal.World);
+
     // A state-value mutation can reuse every compiled product only while it keeps the catalog identity and does
     // not rebind a population look. All other mutations install a replacement prepared alongside the document.
     /// <summary>Returns whether installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
@@ -571,6 +573,7 @@ public sealed partial class WorldDocument {
             mutation: mutation
         )
     );
+
     // Whether a full install of the mutation recompiles the population (Rebuild, then the reconciles).
     private bool RecompilesPopulation(WorldMutation mutation, WorldDefinition candidate) => (
         AffectsPopulation(mutation: mutation) ||
@@ -580,6 +583,7 @@ public sealed partial class WorldDocument {
         ) ||
         (AffectsSolidField(mutation: mutation) && WorldContactSelection.RequiresField(collision: candidate.Collision))
     );
+
     /// <summary>Returns what installing <paramref name="mutation"/>, composed into <paramref name="candidate"/> over
     /// <paramref name="previous"/>, rebuilds: the one classification the prepare step, the install and the population
     /// forecast read.</summary>
@@ -608,6 +612,7 @@ public sealed partial class WorldDocument {
             ? WorldInstallKind.Presentation
             : WorldInstallKind.Full);
     }
+
     // Whether a creation upsert replaces an installed row with one that differs from it only in what shading reads
     // (WorldPrototype.DiffersInShadingAlone): the submitted row itself before composition, or the composed one after.
     // A row whose values are still unresolved references is not judged before composition resolves it.
@@ -634,6 +639,7 @@ public sealed partial class WorldDocument {
         Host.AdoptBound(definition: definition);
     }
 }
+
 /// <summary>What installing a prepared mutation rebuilds (<see cref="WorldDocument.InstallKindOf"/>).</summary>
 internal enum WorldInstallKind {
     /// <summary>State values moved alone: the arena loads the rows the write replaced and every compiled product

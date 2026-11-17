@@ -192,13 +192,13 @@ public sealed partial class WorldTick {
                 ? WorldMutationOutcome.AppliedOutcome(
                     binding: binding,
                     code: "world.mutation.applied",
-                    version: Host.RecipientVersion(binding.Actor)
+                    version: Host.RecipientVersion(recipient: binding.Actor)
                 )
                 : WorldMutationOutcome.RefusedOutcome(
                     binding: binding,
                     code: Host.Document.LastMutationFailureCode,
                     detail: (Host.Document.LastMutationFailureDetail ?? "mutation was refused"),
-                    version: Host.RecipientVersion(binding.Actor)
+                    version: Host.RecipientVersion(recipient: binding.Actor)
                 )
             );
 
@@ -217,7 +217,7 @@ public sealed partial class WorldTick {
                 addonInstanceId: addonMutate.SourceAddonInstanceId,
                 actOrdinal: addonMutate.ActOrdinal,
                 applied: ok,
-                refusalCode: ok ? null : Host.Document.LastMutationFailureCode
+                refusalCode: (ok ? null : Host.Document.LastMutationFailureCode)
             );
         }
 
@@ -846,10 +846,9 @@ public sealed partial class WorldTick {
                     Host.GrantTable.RevokeStaleEmbodiments(index: peer.BodyIndex);
                 }
 
-                var installedGrants = Host.GrantTable.TryGrantSet(admitted.MintedGrants, Principal.World, out var grantReason)
-                    ? admitted.MintedGrants : Array.Empty<WorldGrant>();
-                if (installedGrants.Count != admitted.MintedGrants.Count) {
-                    Host.Document.DenyGrantTable("admission grant set refused: " + grantReason, SubmissionEnvelope.LocalConnectionId, 0);
+                var installedGrants = new List<WorldGrant>();
+                foreach (var grant in admitted.MintedGrants.OrderByDescending(keySelector: row => (row.Capability == WorldCapability.Operate))) {
+                    if (Host.GrantTable.TryGrant(grant, Principal.World, out var grantReason)) { installedGrants.Add(item: grant); } else { Host.Document.DenyGrantTable(("admission grant refused: " + grantReason), SubmissionEnvelope.LocalConnectionId, 0); }
                 }
 
                 foreach (var peer in admitted.Entries) {
@@ -883,7 +882,7 @@ public sealed partial class WorldTick {
                         peer: in peer,
                         tick: Host.NextInputTick
                     );
-                    Host.ClosePeerTransport(peer.Identity);
+                    if (!Host.ReplaysInput) { Host.ClosePeerTransport(principal: peer.Identity); }
                 }
 
                 foreach (var grant in disconnected.RevokedGrants) {
