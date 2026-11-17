@@ -497,7 +497,13 @@ internal sealed class FakeGpuDevice :
 
         return LastCreatedFence;
     }
-    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline ??= new SubmissionTimeline(this);
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline {
+        get {
+            Hit(key: "IGpuQueueSubmitter.Timeline");
+
+            return (m_timeline ??= new SubmissionTimeline(this));
+        }
+    }
     private SubmissionTimeline? m_timeline;
     private sealed class SubmissionTimeline(FakeGpuDevice gpu) : GpuQueueTimeline {
         private readonly Queue<(ulong Value, long Order)> m_pending = new();

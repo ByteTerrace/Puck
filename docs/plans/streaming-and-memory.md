@@ -1548,11 +1548,15 @@ the fixed shares are gone.
   one operating-system wait on the high-resolution timer and the event
   (`IPrecisionWaiter.TryWait` with a wake), and runs the work registered for
   it (`HostWaits.Serve`, a `WaitService`) when the event is set or the time a
-  service asked for comes. Three things set it. A job's fence, asked as the
-  job is submitted (`IGpuSubmissionFence.SignalOnCompletion`): Direct3D 12
-  sets the event's own handle from `ID3D12Fence::SetEventOnCompletion`, and
-  on Vulkan, which has no such call, one thread for the process waits each
-  watched fence in the driver and sets it (`VulkanFenceWatch`). A client with
+  service asked for comes; each service is handed what is left of the wait
+  when its turn comes, so several together end by the deadline. Three things
+  set it. A job's fence, asked as the job is submitted
+  (`IGpuSubmissionFence.SignalOnCompletion`): Direct3D 12 sets the event's
+  own handle from `ID3D12Fence::SetEventOnCompletion`, and where a backend
+  cannot register one (Vulkan, which has no such call, or a refused Direct3D
+  12 registration) a shared watcher waits that fence in the driver on a
+  thread of its own and sets it (`GpuFenceWatch`), so no fence's pending
+  submission hides another's completion. A client with
   a job to take or a slot given back (`SdfGpuWork.Wake`), which the bake calls
   when work of its pool has finished since its last take
   (`SdfMeshPathBake.Offered`). And time: a step the budget held asks to run

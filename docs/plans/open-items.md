@@ -1000,11 +1000,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
-- [low · inferred, not run on a device] The Vulkan fence watcher
-  (`VulkanFenceWatch`) waits fences in submission order on one thread, so a
-  completion is signaled only after every earlier watched submission's. One
-  queue retires in order, so that holds today; a second queue needs a wait on
-  any of several fences.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and

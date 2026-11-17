@@ -184,6 +184,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),
             ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: rig.Services.QueueSubmitter.CreateSubmissionFence()), none),
             ["IGpuQueueSubmitter.SubmitAndWait"] = (_ => { }, none),
+            ["IGpuQueueSubmitter.Timeline"] = (rig => _ = rig.Services.QueueSubmitter.Timeline, none),
             ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
             ["IGpuStorageBuffer.Write"] = (rig => rig.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
             ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
@@ -198,6 +199,11 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
             ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
             ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),
+            ["IGpuSubmissionFence.SignalOnCompletion"] = (rig => {
+                using var signal = new AutoResetEvent(initialState: false);
+
+                rig.Services.QueueSubmitter.CreateSubmissionFence().SignalOnCompletion(signal: signal);
+            }, none),
         };
     }
     private static long Expected((WorkKind Kind, long Amount)[] expected, WorkKind kind) {
