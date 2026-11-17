@@ -130,8 +130,8 @@ head, each named by the lane whose landing waits on it:
   whole, on both backends.
 - c03: the converged still at a lockstep stop against the build before c03,
   on both backends (the control gap is read on both).
-- sm7p: the indexed slab read's paired cost on both backends, two frozen
-  builds through `puck measure` (the recipe is in
+- sm7p: the indexed slab read's paired cost on Vulkan with the counted draws
+  held equal (Direct3D 12 is read; see
   [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
