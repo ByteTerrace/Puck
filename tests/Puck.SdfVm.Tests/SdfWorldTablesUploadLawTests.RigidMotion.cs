@@ -17,11 +17,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         builder.BeginInstanceDynamic(0, Vector3.Zero, 2).ResetPoint().TransformDynamic(0).Sphere(1, 0).EndInstance();
         var program = builder.Build();
         var poses = new[] { new DynamicTransform(Vector3.Zero, Quaternion.Identity) };
-        var group = Assert.Single(SdfMeshBakeGroup.Plan(program, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        var group = Assert.Single(SdfMeshBakeGroup.Plan(program, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic), tier: MeshBakeTestRun.PlannedTier));
         using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 

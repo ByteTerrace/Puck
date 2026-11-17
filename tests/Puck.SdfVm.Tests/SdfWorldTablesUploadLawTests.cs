@@ -897,7 +897,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Render(meshDraws: [small, large], time: 0f);
         rig.Render(meshDraws: [small, large], time: 0f);
         Assert.Equal(expected: (held, held, 1), actual: (rig.Engine.MeshRegionBytes, rig.Engine.MeshRegionLimitBytes, rig.Engine.MeshRegionRefused));
-        Assert.Equal(expected: 1U, actual: rig.Engine.MeshDrawCount);
+        Assert.Equal(expected: 2U, actual: rig.Engine.MeshDrawCount);
+        Assert.True(condition: rig.Engine.DrawsAwaitMeshes);
         Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).OverLimitGrants);
         // With room again the next list places the refused mesh and the region grows under its reservation.
         account.SetBudget(bytes: null, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
@@ -922,7 +923,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
         // More draws than the region reserves records for, naming none of the big mesh's words, which outnumber the
-        // retained slack, so planning them relocates every mesh.
+        // retained slack; a forced relocation packs every mesh the list names, the one relocation the region shrinks at.
         var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 44), start: 0).Select(selector: index => new SdfMeshDraw(
             Identity: index,
             Material: 1,
@@ -937,6 +938,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var grown = rig.Engine.MeshRegionBytes;
 
+        rig.Engine.ForceMeshRelocation();
         rig.Land(meshDraws: many, time: 0f);
         // A region that never grew past the granule, planned through the same draw lists but a small first mesh, lays the
         // second list out alike.

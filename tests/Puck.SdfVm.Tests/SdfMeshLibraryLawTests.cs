@@ -164,7 +164,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         library.Store(geometry: geometry, materials: [.. materials], mesh: Mesh(materials: [1u, 2u, 2u]));
 
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "alone" }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "alone" }, ownsLibrary: false);
 
         var bake = bakeRun.Bake;
 
@@ -233,7 +233,7 @@ public sealed class SdfMeshLibraryLawTests {
         library.Store(geometry: geometry, materials: materials, mesh: Mesh(materials: [0u, 0u, 0u]));
 
         bool Bakes(SdfProgram ball) {
-            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "ball" }, ownsLibrary: false);
+            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "ball" }, ownsLibrary: false);
             var bake = bakeRun.Bake;
             var dresser = bakeRun.Dresser;
 
@@ -296,10 +296,6 @@ public sealed class SdfMeshLibraryLawTests {
         }
     }
 
-    // The tier every plan of these laws asks of its groups, so a stored geometry and a bake that takes it agree on the tier
-    // the sealed geometry holds (a bake with no view has no demand to choose one).
-    private static readonly Func<SdfMeshBakeGroup, int> PlannedTier = static _ => 0;
-
     private static DynamicTransform[] Identities(int count) =>
         [.. Enumerable.Repeat(element: new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), count: count)];
     // The sealed geometry and material order of the one group a plan of the program makes that the predicate names: the
@@ -309,7 +305,7 @@ public sealed class SdfMeshLibraryLawTests {
             create: static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic),
             farDistance: SdfFrame.DefaultFarDistance,
             program: program,
-            tier: PlannedTier,
+            tier: MeshBakeTestRun.PlannedTier,
             transforms: transforms
         ).Single(predicate: which);
 
@@ -324,7 +320,7 @@ public sealed class SdfMeshLibraryLawTests {
     }
     // Whether a bake of the plate holding the library still owes a lattice: it bakes the plate rather than taking a mesh.
     private static bool Baking(SdfMeshLibrary library, Plate plate) {
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "plate" }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "plate" }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 

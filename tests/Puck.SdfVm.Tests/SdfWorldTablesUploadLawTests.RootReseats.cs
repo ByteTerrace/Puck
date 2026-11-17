@@ -122,8 +122,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 },
                 members: skinned ? new[] { new SdfMeshMember(1, Vector3.Zero, Quaternion.Identity), new SdfMeshMember(2, Vector3.Zero, Quaternion.Identity) } : default,
                 vertexMembers: skinned ? new byte[] { 0, 0, SdfMesh.NoMember } : default);
-            m_run = new MeshBakeTestRun(new SdfMeshPathBake());
-            foreach (var group in SdfMeshBakeGroup.Plan(Program, m_poses, 40, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic))) {
+            m_run = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier });
+            foreach (var group in SdfMeshBakeGroup.Plan(Program, m_poses, 40, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic), tier: MeshBakeTestRun.PlannedTier)) {
                 m_run.Bake.Library.Store(group.Sealed, mesh, group.MaterialOrder);
             }
         }

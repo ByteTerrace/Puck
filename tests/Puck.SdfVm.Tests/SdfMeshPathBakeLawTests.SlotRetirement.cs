@@ -19,12 +19,12 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var poses = new[] { new DynamicTransform(Vector3.Zero, Quaternion.Identity), new DynamicTransform(new Vector3(10, 0, 0), Quaternion.Identity) };
         var first = ProgramOn(0);
         var second = ProgramOn(1);
-        var group = Assert.Single(SdfMeshBakeGroup.Plan(first, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        var group = Assert.Single(SdfMeshBakeGroup.Plan(first, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic), tier: MeshBakeTestRun.PlannedTier));
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
         using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
