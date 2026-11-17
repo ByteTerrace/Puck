@@ -26,77 +26,37 @@ public sealed partial class WorldDocument {
         // stream — in the document; the apply side then repaints the field at the new cursor/masks. The pass at the
         // CURRENT cursor is fired here only for its tail (the masks it ends with), never for its values.
         if (siteRow.Field is { } latticeTrait) {
-            if (WorldLatticeFill.FindDraw(trait: latticeTrait) is not { } fill) {
+            if (WorldLatticeFill.FindDraw(trait: latticeTrait) is null) {
                 reason = $"state row '{mutation.Row}' is a lattice row with no draw paint — 'generate' redraws a draw site or a lattice row painted by a draw fill";
 
                 return false;
             }
 
-            if (!GeneratorEngine.TryResolveSource(
-                generators: current.Generators,
-                draw: new Draw(
-                    Source: fill.Source,
-                    Generator: fill.Generator
-                ),
-                generator: out var fillSource,
-                reason: out var fillResolveReason
-            )) {
-                reason = $"state row '{mutation.Row}' draw fill {fillResolveReason}";
-
-                return false;
-            }
-
-            var shape = current.FieldRegions.First(predicate: region => region.Fields.Any(predicate: field => (field.Name == siteRow.Name.Value))).Lattice;
-            var cellCount = ((shape.Width * shape.Layers) * shape.Depth);
-            var fillSite = WorldDrawSites.StateRow(rowName: siteRow.Name);
-
-            if (!GeneratorEngine.TryAdvanceBatch(
-                generator: fillSource,
-                targetKind: CellKind.Fixed,
-                seedState: GeneratorEngine.ComputeSeedState(
-                    documentSeed: (current.Generation?.WorldSeed ?? 0UL),
-                    instanceIdentity: instanceIdentity,
-                    site: fillSite
-                ),
-                stream: GeneratorEngine.ComputeStreamId(site: fillSite),
+            if (!WorldDrawBootResolver.TryAdvanceLatticePass(
+                definition: current,
+                instanceIdentity: instanceIdentity,
+                row: siteRow,
                 cursor: siteRow.DrawCursor,
                 masks: siteRow.DrawnMasks,
-                sampleCount: cellCount,
-                masksAfter: out var masksAfter,
                 advances: out var advances,
-                reason: out var fillFireReason
+                masksAfter: out var advancedMasks,
+                reason: out reason
             )) {
-                reason = $"state row '{mutation.Row}' draw fill {fillFireReason}";
-
                 return false;
             }
-
-            var advancedMasks = GeneratorEngine.MasksAfter(
-                generator: fillSource,
-                fired: masksAfter,
-                previous: siteRow.DrawnMasks
-            );
 
             // The apply side paints the pass at the advanced position, so that pass is drawn here too: a draw the
             // source refuses (an exhausted bounded draw, a drawn-out mask) refuses the mutation rather than the repaint.
-            if (!GeneratorEngine.TryAdvanceBatch(
-                generator: fillSource,
-                targetKind: CellKind.Fixed,
-                seedState: GeneratorEngine.ComputeSeedState(
-                    documentSeed: (current.Generation?.WorldSeed ?? 0UL),
-                    instanceIdentity: instanceIdentity,
-                    site: fillSite
-                ),
-                stream: GeneratorEngine.ComputeStreamId(site: fillSite),
+            if (!WorldDrawBootResolver.TryAdvanceLatticePass(
+                definition: current,
+                instanceIdentity: instanceIdentity,
+                row: siteRow,
                 cursor: (siteRow.DrawCursor + advances),
                 masks: advancedMasks,
-                sampleCount: cellCount,
-                masksAfter: out _,
                 advances: out _,
-                reason: out var paintReason
+                masksAfter: out _,
+                reason: out reason
             )) {
-                reason = $"state row '{mutation.Row}' draw fill {paintReason}";
-
                 return false;
             }
 

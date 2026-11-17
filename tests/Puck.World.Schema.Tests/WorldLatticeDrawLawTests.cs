@@ -408,6 +408,52 @@ public sealed class WorldLatticeDrawLawTests {
         );
     }
     [Fact]
+    public void BootResolution_RefusesAPersistedPassItsSourceCannotDraw_ByName() {
+        var bag = CountedBag(mode: GeneratorMode.WithoutReplacement);
+        var (seed, stream) = Keys();
+
+        // One four-cell pass takes four of the bag's six units; the persisted masks leave two, so the next pass cannot draw.
+        Assert.True(
+            condition: GeneratorEngine.TryAdvanceBatch(
+                generator: bag,
+                targetKind: CellKind.Fixed,
+                seedState: seed,
+                stream: stream,
+                cursor: 0L,
+                masks: null,
+                sampleCount: 4,
+                masksAfter: out var masksAfter,
+                advances: out var advances,
+                reason: out var reason
+            ),
+            userMessage: reason
+        );
+
+        var definition = new WorldDefinition(
+            Simulation: new WorldSimulationDefaults(RateHz: 240),
+            StateRaw: LatticeState(
+                fill: new WorldLatticeFill.Draw(Generator: bag),
+                cursor: advances,
+                masks: GeneratorEngine.MasksAfter(
+                    generator: bag,
+                    fired: masksAfter,
+                    previous: null
+                )
+            )
+        );
+
+        Assert.False(condition: WorldDrawBootResolver.TryResolve(
+            definition: definition,
+            instanceIdentity: Instance,
+            reason: out reason,
+            resolved: out _
+        ));
+        Assert.Contains(
+            actualString: reason,
+            expectedSubstring: "state row 'tiles' draw fill"
+        );
+    }
+    [Fact]
     public void Validator_RefusesBadMultiplicities_AndTooManyUnits() {
         static string Refusal(StateGenerator generator) => Validate(state: new WorldStateSection(World: [
             new WorldStateRow(

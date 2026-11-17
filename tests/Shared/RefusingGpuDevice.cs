@@ -81,8 +81,6 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => throw Reach(member: "IGpuRecorder.Dispatch");
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw Reach(member: "IGpuRecorder.DispatchIndirect");
 
-    bool IGpuRecorder.CanDrawIndirectCount => throw Reach(member: "IGpuRecorder.CanDrawIndirectCount");
-
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => throw Reach(member: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reach(member: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reach(member: "IGpuRecorder.ClearStorageBuffer");
