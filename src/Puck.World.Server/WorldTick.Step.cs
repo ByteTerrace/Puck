@@ -114,6 +114,7 @@ public sealed partial class WorldTick {
     internal bool DrainPendingOps(ulong tick) {
         var applied = false;
 
+        Host.Document.TakePreparedRebuilds();
         while (Host.Document.Pending.TryDequeue(result: out var op)) {
             if (op is WorldPendingOp.Mutate { SourceAddonInstanceId: >= 0, Mutation: WorldMutation.UpsertStateCell } first) {
                 m_cellBurst.Clear();
@@ -164,7 +165,9 @@ public sealed partial class WorldTick {
             connectionId: rebuild.ConnectionId,
             correlationId: rebuild.CorrelationId,
             expectedContentHash: rebuild.ExpectedContentHash,
-            preparationFailure: rebuild.PreparationFailure
+            preparationFailure: rebuild.PreparationFailure,
+            admission: rebuild.Admission,
+            basis: rebuild.Basis
         ),
             WorldPendingOp.Undo undo => Host.Persistence.ApplyUndo(
             count: undo.Count,

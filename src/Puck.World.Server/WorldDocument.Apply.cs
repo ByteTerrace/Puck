@@ -259,7 +259,7 @@ public sealed partial class WorldDocument {
             case WorldSubmissionPayload.Session session:
                 return new WorldSubmissionResult.Session(Reply: Host.ApplySession(request: session.Value));
             case WorldSubmissionPayload.Rebuild rebuild:
-                EnqueueRebuild(
+                SubmitRebuild(
                     request: rebuild.Value,
                     principal: envelope.Principal,
                     connectionId: envelope.ConnectionId,
@@ -382,7 +382,12 @@ public sealed partial class WorldDocument {
     // on its own, and a rebuild is exactly the kind of whole-state swap a future authority change might reasonably
     // reset around — this closes that loudly, by construction, rather than by omission). A Load/Reload candidate was
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
-    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
+    // A prepared admission replaces the apply-time local validation only for the exact candidate and machine catalog it
+    // validated (WorldDefinitionAdmission.AppliesTo). A delta reconstructed against the exact declarations it names (its
+    // basis, whose content preparation compared with the base pin) is a complete target, which an install since does not
+    // change, as a reload replaces the document whatever stands; only a delta whose basis is unknown (a pending op a
+    // checkpoint restored) is checked against the live document here.
+    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldDefinition? basis = null) {
         var verb = RebuildVerb(kind: request.Kind);
 
         if (!Host.Grants.IsOperator(principal: principal)) {
@@ -407,7 +412,7 @@ public sealed partial class WorldDocument {
 
 
         if ((request.Delta is { } delta) &&
-            ((preparationFailure ?? delta.RefuseBase(current: m_definition, version: Host.DocumentVersion)) is { } deltaFailure)) {
+            ((preparationFailure ?? ((basis is null) ? delta.RefuseBase(current: m_definition, version: Host.DocumentVersion) : null)) is { } deltaFailure)) {
             RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: deltaFailure, verb: verb);
             return false;
         }
@@ -525,12 +530,19 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        // The load command already proved cross-document claims before enqueue. Apply-time validation runs from
-        // Step, so it repeats only document-local checks and never reaches transport from the tick path.
-        if (!WorldDefinitionValidator.TryValidateLocally(
-            compilation: out var compilation,
+        // Cross-document claims were proved before enqueue. Apply-time validation runs from Step, so it repeats only
+        // document-local checks and never reaches transport from the tick path, and a prepared admission of this exact
+        // candidate already holds them.
+        var admitted = ((admission is not null) && admission.AppliesTo(definition: candidate, machines: Host.Machines.ValidationCatalog))
+            ? admission
+            : null;
+        var compilation = admitted?.Compilation;
+        var validationReason = string.Empty;
+
+        if ((compilation is null) && !WorldDefinitionValidator.TryValidateLocally(
+            compilation: out compilation,
             definition: candidate,
-            reason: out var validationReason
+            reason: out validationReason
         )) {
             RejectRebuild(
                 connectionId: connectionId,
@@ -699,6 +711,7 @@ public sealed partial class WorldDocument {
             }
 
             if (!Host.Machines.TryPrepare(
+                admission: admitted,
                 candidate: candidate,
                 current: m_definition,
                 plan: out rebuildMachinePlan,

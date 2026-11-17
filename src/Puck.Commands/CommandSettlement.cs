@@ -44,8 +44,10 @@ public sealed class CommandSettlement {
 
         return false;
     }
-    // Runs the continuation with the verdict: inline when it is already known, otherwise when it arrives.
-    internal void OnSettled(Action<CommandResult> continuation) {
+    /// <summary>Runs <paramref name="continuation"/> with the verdict: inline when it is already known, otherwise on the
+    /// settling thread when it arrives.</summary>
+    /// <param name="continuation">The verdict's consumer.</param>
+    public void OnSettled(Action<CommandResult> continuation) {
         CommandResult settled;
 
         lock (m_gate) {

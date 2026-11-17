@@ -27,8 +27,12 @@ public abstract record WorldPendingOp {
     /// <param name="ConnectionId">The submitting envelope's connection id.</param>
     /// <param name="CorrelationId">The submitting envelope's correlation id.</param>
     /// <param name="ExpectedContentHash">The candidate's CAS content hash, when the submitter pinned one.</param>
-    /// <param name="PreparationFailure">The refusal the synchronous preparation already decided, when it failed.</param>
-    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null) : WorldPendingOp;
+    /// <param name="PreparationFailure">The refusal preparation already decided, when it failed.</param>
+    /// <param name="Admission">The candidate's validation, whose programs the install adopts, when preparation
+    /// admitted it.</param>
+    /// <param name="Basis">The installed declarations a reload delta was reconstructed against, whose content
+    /// preparation compared with the delta's base pin.</param>
+    public sealed record Rebuild(WorldRebuildRequest Request, Principal Principal, int ConnectionId, long CorrelationId, string? ExpectedContentHash = null, string? PreparationFailure = null, WorldDefinitionAdmission? Admission = null, WorldDefinition? Basis = null) : WorldPendingOp;
     /// <summary>One buffered journal undo.</summary>
     /// <param name="Count">How many journal entries to drop from the tail.</param>
     /// <param name="Principal">The acting principal.</param>
