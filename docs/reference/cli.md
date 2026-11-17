@@ -4929,13 +4929,18 @@ Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch`
 the unused reserve over one minute without a material allocation (64 MB),
 releasing it entirely at the plateau and restoring it if growth resumes. A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
-`HostStartTracker` learns the maximum private bytes and the maximum working set observed in plateaued or
-finished processes observed for a full plateau window of each kind, then raises known measurements when live usage
-exceeds them. These measurements replace the fallback in either direction,
-without clipping real peaks, and persist per machine in the shared lease root
-under `host-peaks/<HostStartKind>` (private bytes) and `host-peaks/<HostStartKind>.resident`
-(working set). An exclusive sibling guard per file merges concurrent
-measurements. Before the first measurement, `HostLoadThresholds.DefaultPeakGb`
+`HostStartTracker` keeps, per kind, the private-byte and working-set peaks of its last ten observed
+processes (plateaued, or finished after a full plateau window; a shorter run counts only to raise a kind that has
+observations) and expects the high percentile of them (the fourth fifth), so one unusual session raises the
+estimate only until five observations exist and leaves the window after ten newer starts, a rise to a new level
+is learned once three of ten starts reach it, and a fall is learned as readily. A live process above the
+estimate is still counted at its own usage, without clipping real peaks. The windows persist per machine in the
+shared lease root, one file per kind under `host-observations/<HostStartKind>` (a line per process:
+start ticks, process id, private GB, working-set GB). An exclusive sibling guard merges each process's own new
+observations into the file, which decides the estimate: a long-lived CLI or MCP session holds nothing the file does not.
+A start whose own expected peak plus the commit reserve exceeds the commit limit, or whose expected working set plus the
+pressure floor exceeds the installed memory, is refused by name at once (`gate: refused <step>: a windowed World can
+never be admitted on this machine, ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
 provides the private-byte fallback, and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
 private-byte peak is the working-set fallback until the kind's working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
