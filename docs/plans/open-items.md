@@ -1556,17 +1556,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `FixedDynamicBodyContacts.ClosestDelta` forms carrier-rounded
-  Q48.16 dot products before its segment-pair divisions: a sphere core at
-  `(0.001, 0, 0)` against a capsule core from the origin to `(0.002, 0, 0)`
-  returns `(66, 0, 0)` raws instead of zero, so overlap can miss the pair.
-  Replace the whole segment-pair solve with full-width arithmetic and verify
-  short, crossing, parallel and extreme-coordinate pairs against exact
-  geometry.
-- [medium] `physics.contact` adds three or four shared `CompareExchange`
-  updates to every surviving convex query whether or not a reader exists
-  (`FixedStaticContactWork`). Count per thread or per tick and publish on
-  read.
+- [medium] `physics.contact` still counts through the shared atomic
+  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
+  a surviving convex query adds three or four `WorkCount.AddShared` CAS
+  updates, even without a reader. The cause is shared counter storage, not
+  the physics wrapper. Add single-writer shards in the common counting home
+  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
+  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
+  handling rather than making physics carry a second aggregator. Preserve
+  totals when a writer thread exits, and bound retained shard state under
+  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
+  Check concurrent writers, reads and retirement for exact monotonic totals,
+  then physics ordering/friction laws and `world.counters physics.contact`.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -1588,10 +1589,7 @@ collider, then the lifecycle lows as one pass.
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
   a carried body's contacts are never released, so the box beneath cannot
   park; one refused probe drops a body's surface warm start
-  (`ReleaseUntouchedRigidContacts`); the rest latch's hold counter grows
-  unclamped past `policy.RestHoldTicks`, so a still body's replay hash can
-  move; `FixedPairManifoldSlot.IsPersistentStateEqual` and
-  `FixedPairManifoldSlotTable.Fold` have no caller; a lattice spill into an
+  (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).
 
@@ -2339,6 +2337,8 @@ retirement.
   references outside a `<PuckProvider>` project; and the WebAssembly publish's
   trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
   (`Activator.CreateInstance` on an unannotated type).
+  After the trim fix, re-run the browser AOT publish and Node harness; the
+  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -2413,6 +2413,15 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop and the cold and warm builds timed on a quiet machine.
 
 The edit loop:
+
+- [low] Staging unchanged source bytes invalidates a pending World build:
+  `WorldArtifactKey` hashes `CheckoutContent.Change.Entry`, including Git's
+  index/worktree status. An easy-b2 headless start was refused after its
+  build-lease wait with "sources changed while waiting" when only `git add`
+  changed that status. Key the effective source content independently of
+  staging, preserving additions, deletions and paths. Check that staging and
+  unstaging identical bytes retain the key and a queued build, while changing
+  a source byte still invalidates it.
 
 - [high] A fresh landscape World artifact builds for minutes before boot,
   against the 30-second bar. A live compiler stack sat in ILLink's data-flow
@@ -2865,9 +2874,8 @@ validation that makes the skill suites believable.
   an async replacement is attributed to the call that starts it; STALE002
   ignores inherited root accessors; `[Replaces(typeof(object))]` and stale
   marks are never checked; `IdentityCounterAnalyzer` matches project paths
-  relative to the scan root and drops namespace and arity from type keys;
-  `ExactKeyAnalyzer` misses `Dictionary` keys of `Vector3`, `float` and
-  tuples. Low: mentioning a counter counts as persisting it, and a tolerant
+  relative to the scan root and drops namespace and arity from type keys.
+  Low: mentioning a counter counts as persisting it, and a tolerant
   `Matches` reads as exact. Fix each or list it on the page.
 - [high] The skill-eval programme
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill)),
@@ -2915,10 +2923,6 @@ validation that makes the skill suites believable.
   `records-and-pools.md` sections 1 to 4 to `docs/reference/state`,
   `updater-policy.md`, editor E5 and E9, the demand tiers' invariants, and
   water's "as built" sections.
-- [low] Pages still cite canaries that moved to
-  `experimental/tests/Puck.World.Canaries` (`docs/reference/audio.md`,
-  `src/Puck.World/Audio/README.md`, `docs/reference/physics.md`,
-  `docs/reference/state/testing.md`).
 - [low] The hazard detectors' follow-ups: mark the next replaceable family (a
   GPU device lost and recreated is the likely one); triage `puck scan --only
   clones` below its heaviest thirty clusters; a C# and HLSL formula pair has
@@ -2962,16 +2966,6 @@ proves itself with `puck compile` lowering to the same document.
   R1a; replace their setup/expectations from the current mechanisms when next
   working that area. R1a's direct table law and frame/header/layout laws pass.
 
-- [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
-  (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
-  (`Puck.Abstractions`, path-based) each try, test a timeout and sleep on the
-  token's wait handle. One loop over an opener delegate belongs in
-  `Puck.Confinement`, beneath both; `WAIT001` already treats
-  `ConfinedDirectory.AcquireLock` as a blocking member, so the merged loop is
-  answered at its callers.
-- [low] `Puck.World.Console` references `Puck.Launcher` and no code in it uses
-  the reference; drop it, re-record the lock files (`puck locks`, minding the item below) and narrow its
-  profile in `build/Architecture.props`.
 - [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
   which can re-resolve unrelated transitive packages after a project-reference change.
   The verb's promise to keep every other pinned version needs an enforcing mechanism:
@@ -2979,6 +2973,12 @@ proves itself with `puck compile` lowering to the same document.
   and FSharp.Core without `--update`. The experiment was backed up and reverted;
   rf2's final project graph needs no lock changes. Fix the non-update path in
   `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
+  Removing Console's launcher reference also left orphan project entries when
+  `puck locks` reported no changes; `--force-evaluate` pruned them but upgraded
+  unrelated packages. Regeneration must derive the current project closure
+  while retaining pinned package versions. A local feed containing only the
+  prior closure's pinned packages allowed that reference removal to regenerate
+  without upgrades.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events
@@ -2993,11 +2993,6 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-- Recursive `Directory.Delete` remains in assemblies the browser payload
-  links: `CacheRetention` (`Puck.Abstractions`) and `ConsoleControlSession`
-  (`Puck.Hosting`). Route them through `ConfinedDirectory.RemoveTree`, after
-  one `browser.yml` AOT publish shows the payload still boots with
-  `Puck.Confinement` in its closure.
 - [low] The rule VM's latch keeps a binding in two dictionaries,
   `RuleLatch.RuleState.Held` and `RuleLatch.RuleState.Scheduling`, both walked
   by `RuleLatch.EndSweep`. One binding entry holding the edge bit and the

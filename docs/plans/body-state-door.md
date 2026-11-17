@@ -557,7 +557,8 @@ a restore writes slots through the same objects
 So a contact's state is written from outside its owner, for an owner that may
 not be stepping, through an object graph `ref readonly` does not reach. A slot
 also mixes two kinds of field: nine that persist and a checkpoint carries
-(`FixedPairManifoldSlot.IsPersistentStateEqual` names them), and sixteen the
+(occupancy, source and feature identity, both anchors, the normal, normal
+and friction impulses, and the idle count), and sixteen the
 solver derives again each step. Whether a contact was touched this step is a
 third kind: a flag on the object that only a stepping owner's release pass
 clears (`WorldPopulation.ReleaseUntouchedRigidContacts`) and that no
@@ -1066,7 +1067,7 @@ a section's value is stored. D12 is the one step the payoff does not need.
 | The `field` keyword (`StateSection`'s frozen lists, `Entry`'s occupancy) | Kept where it is, and used for the profile binding | Right for a scalar whose setter has a side effect; fails arrays and mutable structs (the spike) |
 | `WorldPopulation.DisturbBody`, `WorldBody.WakeIfResting` | Unchanged | They wake a body; they are not a version, and the door does not replace them |
 | `WorldBody.RigidSolverHandle`, `WorldBody.CommitRigidStep` | The pattern for the contacts | The solver works on a view and the body commits; the contacts take the same shape |
-| `FixedPairManifoldSlot.IsPersistentStateEqual`, `FixedPairManifoldSlotTable.Fold` | Deleted | Each lists the persistent fields by hand, the fold without the anchors, and neither has a caller; the slot state struct is that list as a type |
+| The former pair-slot persistent comparison and table digest | Already deleted | Both were unused hand-written field lists; the proposed slot state struct will make that list a type |
 | `OutcomeAnalyzer`, `StaleCaptureAnalyzer` | The home and the precedent for DOOR001 to DOOR005 | Build-error rules over calls and declarations |
 | `WorldBodyTransferState`, `WorldBodyIntegrationResidue` | The residue replaced by the sections; the transfer record kept as the crossing's projection | Two hand-written field lists that must agree with the codec |
 | `WorldBody.StepScratch` | Reused, simpler | It already holds two whole records and says a field added to either is covered; sections make that true for all of them |

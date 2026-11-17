@@ -25,7 +25,7 @@ public sealed class WaitAnalyzerTests {
         var result = Harness.Analyze(
             analyzer: new WaitAnalyzer(),
             // A compilation that references xUnit is a test assembly, which the rule never holds.
-            compilation: compilation.WithReferences(references: Harness.RuntimeReferences.Where(predicate: static reference => !(reference.Display ?? string.Empty).Contains(value: "xunit", comparisonType: StringComparison.OrdinalIgnoreCase))),
+            compilation: compilation.WithReferences(references: Harness.RuntimeReferences.Where(predicate: static reference => !(reference.Display ?? string.Empty).Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "xunit"))),
             globalOptions: (options ?? Held)
         );
 
@@ -52,6 +52,27 @@ public sealed class WaitAnalyzerTests {
             """);
 
         Assert.Equal(expected: 9, actual: result.WithId(id: "WAIT001").Length);
+    }
+    [Fact]
+    public void LockWaitEntryPointsCannotBypassTheDoor() {
+        var result = Analyze(source: """
+            namespace Puck.Confinement {
+                public sealed class ConfinedDirectory { public void AcquireLock() { } }
+                public static class FileLockWait { public static void Acquire() { } }
+            }
+            namespace Puck.Abstractions {
+                public static class FileLock { public static void Acquire() { } }
+            }
+            public sealed class Subject {
+                public void Block(Puck.Confinement.ConfinedDirectory directory) {
+                    directory.AcquireLock();
+                    Puck.Confinement.FileLockWait.Acquire();
+                    Puck.Abstractions.FileLock.Acquire();
+                }
+            }
+            """);
+
+        Assert.Equal(expected: 3, actual: result.WithId(id: "WAIT001").Length);
     }
     [Fact]
     public void AMethodGroupBoundToABlockingMemberIsReported() {

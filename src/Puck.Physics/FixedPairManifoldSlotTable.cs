@@ -11,8 +11,8 @@ public enum FixedPairManifoldSlotDisposition {
 }
 /// <summary>One persistent manifold slot for a two-body contact: the geometry a candidate wrote into it, the impulses it
 /// accumulates across steps, and the per-step terms the solver derives from both. The persistent part — occupancy,
-/// identity, anchors, normal, the normal and friction impulses and the idle count — is what a checkpoint carries
-/// (<see cref="IsPersistentStateEqual"/> names it); every other field is re-derived before it is read.</summary>
+/// identity, anchors, normal, the normal and friction impulses and the idle count — is what a checkpoint carries;
+/// every other field is re-derived before it is read.</summary>
 public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     /// <summary>Whether the slot holds a live association.</summary>
     public bool Occupied;
@@ -85,21 +85,6 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     readonly int IManifoldSlot<FixedTwoBodyContact>.FeatureId => FeatureId;
     readonly FixedVector3 IManifoldSlot<FixedTwoBodyContact>.Normal => Normal;
     readonly bool IManifoldSlot<FixedTwoBodyContact>.IsIdle => (Disposition == FixedPairManifoldSlotDisposition.Idle);
-
-    /// <summary>Compares the persistent part of two slots — the part a checkpoint carries.</summary>
-    /// <param name="other">The other slot.</param>
-    /// <returns><see langword="true"/> when occupancy, identity, anchors, normal, both impulses and the idle count are
-    /// bit-identical.</returns>
-    public readonly bool IsPersistentStateEqual(in FixedPairManifoldSlot other) =>
-        (Occupied == other.Occupied) &&
-        (SourceId == other.SourceId) &&
-        (FeatureId == other.FeatureId) &&
-        (AnchorA == other.AnchorA) &&
-        (AnchorB == other.AnchorB) &&
-        (Normal == other.Normal) &&
-        (NormalImpulseRaw == other.NormalImpulseRaw) &&
-        (FrictionImpulse == other.FrictionImpulse) &&
-        (IdleSteps == other.IdleSteps);
 
     void IManifoldSlot<FixedTwoBodyContact>.Claim(in FixedTwoBodyContact candidate) {
         Occupied = true;
@@ -196,23 +181,4 @@ public sealed class FixedPairManifoldSlotTable {
         );
     /// <summary>Clears every slot.</summary>
     public void Clear() => Array.Clear(array: m_slots);
-    /// <summary>Folds every slot's persistent state into a running digest, in slot index order.</summary>
-    /// <param name="digest">The running digest, advanced in place.</param>
-    public void Fold(ref Fnv1aHash digest) {
-        for (var index = 0; (index < Capacity); ++index) {
-            ref readonly var slot = ref m_slots[index];
-
-            digest.Add(value: (slot.Occupied ? 1L : 0L));
-            digest.Add(value: ((long)slot.SourceId));
-            digest.Add(value: ((long)slot.FeatureId));
-            digest.Add(value: slot.NormalImpulseRaw);
-            digest.Add(value: slot.FrictionImpulse.X.Value);
-            digest.Add(value: slot.FrictionImpulse.Y.Value);
-            digest.Add(value: slot.FrictionImpulse.Z.Value);
-            digest.Add(value: slot.Normal.X.Value);
-            digest.Add(value: slot.Normal.Y.Value);
-            digest.Add(value: slot.Normal.Z.Value);
-            digest.Add(value: ((long)slot.IdleSteps));
-        }
-    }
 }
