@@ -117,10 +117,9 @@ batched window holds the GPU at once.
 **Windowed readings owed** to the lead's next GPU window, on the integration
 head, each named by the lane whose landing waits on it:
 
-- crease1: the GPU bake against the CPU audit (a cold boot per backend with a
-  fresh `--cache-dir`, then `puck mesh audit --backend` over the 24 tour
-  exhibits and the Moth), the whole debug world's store audit, and the cold
-  bake time against the one-minute bar.
+- crease1: the 24 tour exhibits' stored meshes against their CPU bakes, from
+  a cold boot per backend with a fresh `--cache-dir` (the Moth is read; see
+  [bake detail](#bake-detail)).
 - sm0: the seam walk's baseline legs, `puck bench frames --plan
   worlds/debug/seam-walk.sweep.json --stop <stop> --window` on both backends
   over its nine stops, in a quiet window; correct the burst ticks after.
@@ -129,10 +128,11 @@ head, each named by the lane whose landing waits on it:
   (expect `screens` at most 4).
 - relief1: a World boot and captures of a noise-relieved creation moving as a
   whole, on both backends.
-- c03: at a lockstep walkthrough stop that converges lighting, on both
-  backends, a console verb issued during the drain answers within one
-  iteration (`host.frames`' control gap under the wait budget plus a pacer
-  period), and the stop's still against the build before it.
+- c03: on Vulkan, at a lockstep stop that converges lighting, a console verb
+  issued during the drain answers within one iteration (`host.frames`'
+  control gap under the wait budget plus a pacer period); on both backends,
+  the stop's still against the build before c03. Direct3D 12's control gap
+  is read.
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
 
@@ -185,7 +185,9 @@ is filed with `puck measure`.
   [rendering plan](rendering.md) still owes.
 - The cold bake against the one-minute bar,
   `bench startup worlds/debug --bake --backend <backend>` through
-  `puck measure`; and the cold-bake pause comparison, at least three
+  `puck measure`: a cold windowed boot beside two writing lanes read the
+  world residency's bake over the bar on both backends; and the cold-bake
+  pause comparison, at least three
   alternating runs with collections read from the trace.
 - The field-query counts ([frame-time findings](#other-frame-time-findings)),
   and the gen2 count and pause per 45 s settled, standing and walking.
@@ -834,6 +836,20 @@ Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
+
+- [high] The GPU bake contours the Moth's shin worse than the CPU bake of the
+  same group, so the CPU audit that judges bake changes does not see what
+  ships: `puck mesh audit --prototype moth --group shin-right` reads 866
+  folds and 1690 flipped triangles from a cold Direct3D 12 store, 866 and
+  1689 from a cold Vulkan store, and 578 and 1041 with `--cpu`
+  (`MeshCpuBake`). The two backends agree with each other, so the difference
+  is between the CPU twin and the bake kernels. Find where they diverge and
+  make them one result; then a change judged by `--cpu` holds on the device.
+- [medium] `puck mesh audit` over a cold store audits only the groups stored
+  at the tier it plans: over the whole debug world it read 238 of 6544
+  groups and reported 6306 "with no stored mesh", although the residency
+  baked 7525 meshes. A whole-world store audit needs the tier each group was
+  stored at (the store records it), not tier 0 for every group.
 
 - [medium] A small relieved union retains contour defects in both its static
   and root-moving forms: the relief1 CPU audit finds 6 folds, 2 flipped
