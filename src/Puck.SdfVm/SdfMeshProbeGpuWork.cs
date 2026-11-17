@@ -52,18 +52,27 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private Job? m_waiting;
     private long m_waitingSince;
 
+    /// <summary>Returns the descriptors the client's pool holds: a trace set and a relight set a slot, the whole of each
+    /// interface's groups.</summary>
+    internal static GpuDescriptorPoolSizes PoolSizes {
+        get {
+            var sizes = GpuDescriptorPoolSizes.ForGroups(SdfWorldInterfaces.ProbeTraceLayout.PipelineLayout(GpuShaderStage.Compute).Groups) + GpuDescriptorPoolSizes.ForGroups(SdfWorldInterfaces.ProbeRelightLayout.PipelineLayout(GpuShaderStage.Compute).Groups);
+            var total = sizes;
+
+            for (var slot = 1; (slot < SdfGpuWork.SlotCount); slot++) { total += sizes; }
+
+            return total;
+        }
+    }
+
     internal SdfMeshProbeGpuWork(SdfWorldTables tables, SdfMeshIrradiance volume) {
         m_volume = volume;
         m_gpu = tables.Gpu;
         m_tables = tables;
         using var scope = new GpuCreationScope();
-        var layout = SdfWorldInterfaces.ProbeTraceLayout.PipelineLayout(GpuShaderStage.Compute);
         var pipeline = tables.Pipeline(SdfKernel.ProbeTrace);
         var relightPipeline = tables.Pipeline(SdfKernel.ProbeRelight);
-        var sizes = GpuDescriptorPoolSizes.ForGroups(layout.Groups) + GpuDescriptorPoolSizes.ForGroups(SdfWorldInterfaces.ProbeRelightLayout.PipelineLayout(GpuShaderStage.Compute).Groups);
-        var total = sizes;
-        for (var i = 1; i < m_slots.Length; i++) { total += sizes; }
-        m_pool = scope.Own(handle: m_gpu.Bindings.CreatePool(name: Name(part: "pool"), sizes: total), release: m_gpu.Bindings.DestroyPool);
+        m_pool = scope.Own(handle: m_gpu.Bindings.CreatePool(name: Name(part: "pool"), sizes: PoolSizes), release: m_gpu.Bindings.DestroyPool);
         m_directions = scope.Own(created: m_gpu.BufferFactory.CreateHostVisible(name: Name(part: "directions"),
             sizeBytes: SdfMeshProbeDepth.HitCount * 16, usage: GpuBufferUsage.Storage));
         var directions = new Vector4[SdfMeshProbeDepth.HitCount];
