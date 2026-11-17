@@ -4,7 +4,8 @@ namespace Puck.Physics;
 
 /// <summary>
 /// The deterministic work <see cref="FixedFieldContactSolver.ResolveSweep"/> spends proving how far a body may move,
-/// counted in a <see cref="WorkCounterSet"/> and read through <see cref="IWorkCounterSource"/> under the source name
+/// counted in a <see cref="ShardedWorkCounterSet"/> (each thread counts into a shard of its own) and read through
+/// <see cref="IWorkCounterSource"/> under the source name
 /// <see cref="SourceName"/>: the certified sweeps it runs, one per core sphere of each collider volume, the bounds
 /// queries they charge to their budget, and how many of them stopped at a possible contact or
 /// ended undecided.
@@ -18,7 +19,7 @@ public sealed class FixedContactSweepWork : IWorkCounterSource {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.sweep";
 
-    private readonly WorkCounterSet m_counts = new(
+    private readonly ShardedWorkCounterSet m_counts = new(
         kinds: [Sweeps, BoundsQueries, Contacts, Exhausted],
         name: SourceName
     );
@@ -49,15 +50,17 @@ public sealed class FixedContactSweepWork : IWorkCounterSource {
     /// <param name="contact">Whether it stopped at a possible contact.</param>
     /// <param name="exhausted">Whether it ended undecided, out of budget or refused.</param>
     public void Count(int boundsQueries, bool contact, bool exhausted) {
-        m_counts.Count(kind: Sweeps);
-        m_counts.Add(amount: boundsQueries, kind: BoundsQueries);
+        var shard = m_counts.ThreadShard;
+
+        shard.Count(kind: Sweeps);
+        shard.Add(amount: boundsQueries, kind: BoundsQueries);
 
         if (contact) {
-            m_counts.Count(kind: Contacts);
+            shard.Count(kind: Contacts);
         }
 
         if (exhausted) {
-            m_counts.Count(kind: Exhausted);
+            shard.Count(kind: Exhausted);
         }
     }
     /// <summary>Reads the current total of one of this ledger's kinds.</summary>

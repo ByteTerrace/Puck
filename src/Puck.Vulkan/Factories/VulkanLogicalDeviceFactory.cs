@@ -7,12 +7,12 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
-/// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>shaderStorageBufferArrayDynamicIndexing</c>,
-/// <c>shaderStorageBufferArrayNonUniformIndexing</c>, <c>fragmentStoresAndAtomics</c> and
-/// <c>shaderStorageImageExtendedFormats</c> and <c>shaderDemoteToHelperInvocation</c> always, refusing a device without any of them,
+/// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>fragmentStoresAndAtomics</c> and
+/// <c>shaderStorageImageExtendedFormats</c>, <c>shaderDemoteToHelperInvocation</c> and <c>timelineSemaphore</c>
+/// always, refusing a device without any of them,
 /// and the optional pipeline-executable-properties,
 /// storage-image-without-format, external memory and semaphore,
-/// timeline-semaphore, and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
+/// and GPU capability-floor (fp16, 16-bit storage, subgroup-size-control) features only when the
 /// physical device supports them.
 /// </summary>
 public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
@@ -46,7 +46,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // support the feature.
     private const uint StructureTypePhysicalDeviceSubgroupSizeControlFeatures = 1000225002;
     // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES; its first VkBool32 is timelineSemaphore, which a
-    // Direct3D 12 shared fence imported as a semaphore needs.
+    // device-wide retirement timeline and an imported Direct3D 12 shared fence need.
     private const uint StructureTypePhysicalDeviceTimelineSemaphoreFeatures = 1000207000;
     private const string SwapchainExtension = "VK_KHR_swapchain";
 
@@ -85,8 +85,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // The 0-based VkPhysicalDeviceFeatures flag index of shaderClipDistance: the SDF mesh and shadow passes' vertex stages
     // write a clip distance, which clips a body straddling a portal at the portal's glass.
     private const uint ClipDistanceFeatureIndex = 37u;
-    // The 0-based VkPhysicalDeviceFeatures flag index of shaderStorageBufferArrayDynamicIndexing: the mesh words' slab
-    // read (frame/sdf-mesh-words.hlsli) indexes an array of storage buffers.
+    // Optional storage-buffer indexing, retained as a support reading only.
     private const uint StorageBufferArrayDynamicIndexingFeatureIndex = 35u;
     // The sparse flags among VkPhysicalDeviceFeatures (sparseBinding, sparseResidencyBuffer, sparseResidencyAliased),
     // read for the capability record and never enabled. Indices from the Vulkan SDK 1.4.363 vulkan_core.h.
@@ -94,8 +93,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     private const int SparseResidencyBufferFeatureIndex = 45;
     private const int SparseResidencyAliasedFeatureIndex = 52;
     // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES (Vulkan 1.2 core), whose sixth VkBool32 (index 5) is
-    // shaderStorageBufferArrayNonUniformIndexing: the slab read's index differs across a compute wave's lanes (each pixel
-    // names its own draw), so it needs the non-uniform qualifier and this feature.
+    // shaderStorageBufferArrayNonUniformIndexing, retained as a support reading only.
     private const uint StructureTypePhysicalDeviceDescriptorIndexingFeatures = 1000161001;
     private const int StorageBufferArrayNonUniformIndexingFlag = 5;
     // VK_EXT_memory_priority and VK_EXT_pageable_device_local_memory, each with its feature structure whose first VkBool32
@@ -111,7 +109,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
-        (StorageBufferArrayDynamicIndexingFeatureIndex, "shaderStorageBufferArrayDynamicIndexing", "the mesh words' slab read indexes an array of storage buffers"),
         (ClipDistanceFeatureIndex, "shaderClipDistance", "the SDF mesh and shadow passes clip a body straddling a portal at its glass"),
     ];
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
@@ -202,7 +199,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// <summary>Returns the backing a physical device offers (<see cref="GpuBackingSupport"/>), beyond what its sparse
     /// properties already put in its capabilities: the sparse base features, a queue family that binds sparse memory,
     /// storage-buffer array indexing, and the memory priority and pageable device-local memory extensions, each present
-    /// with its feature reported. Nothing read here is enabled except the indexing the slab read requires.</summary>
+    /// with its feature reported. These support readings enable no optional feature.</summary>
     private GpuBackingSupport BackingOf(VulkanInstanceCommands instance, nint physicalDeviceHandle, IReadOnlyList<bool> support) {
         bool Base(int index) => ((index < support.Count) && support[index]);
         bool Extension(string name, uint structureType) => (
@@ -252,10 +249,6 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");
         }
         featureStructureTypes.Add(item: ShaderDrawParameters);
-        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle,
-            structureType: StructureTypePhysicalDeviceDescriptorIndexingFeatures, flag: StorageBufferArrayNonUniformIndexingFlag)) {
-            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderStorageBufferArrayNonUniformIndexing, which the mesh words' slab read needs to index its storage buffers per pixel.");
-        }
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 
@@ -327,13 +320,14 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             extensions.AddRange(collection: ExternalSemaphoreExtensions);
         }
 
-        if (m_physicalDeviceApi.IsExtensionFeatureSupported(
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(
             instance: instance,
             physicalDeviceHandle: physicalDeviceHandle,
             structureType: StructureTypePhysicalDeviceTimelineSemaphoreFeatures
         )) {
-            featureStructureTypes.Add(item: StructureTypePhysicalDeviceTimelineSemaphoreFeatures);
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan 1.3 device does not report its required timelineSemaphore feature for queue retirement.");
         }
+        featureStructureTypes.Add(item: StructureTypePhysicalDeviceTimelineSemaphoreFeatures);
 
         var presentTiming = SupportsPresentTiming(
             instance: instance,
@@ -528,7 +522,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
         var request = new VulkanLogicalDeviceCreateRequest(
             AddressBindings: instance.AddressBindings,
-            EnabledFeatureFlags: [new VulkanFeatureFlag(Flag: StorageBufferArrayNonUniformIndexingFlag, StructureType: StructureTypePhysicalDeviceDescriptorIndexingFeatures)],
+            EnabledFeatureFlags: [],
             EnabledFeatureIndices: featureIndices,
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,

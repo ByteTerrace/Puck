@@ -5,11 +5,15 @@ namespace Puck.Abstractions.Counting;
 /// number of threads count into. An owner whose counts need no more than that — a compiler counting requests, a loader
 /// counting the files it read — declares its kinds and holds one set instead of writing its own source. Every write is
 /// interlocked (<see cref="WorkCount.AddShared"/>), so a count taken on a build thread and one taken on the frame thread
-/// land in the same total. A read allocates nothing.
+/// land in the same total. A read allocates nothing. A count taken on a hot path by many threads goes through a
+/// <see cref="ShardedWorkCounterSet"/> instead, whose per-thread shards are sets that one thread writes without an
+/// interlock.
 /// </summary>
 public sealed class WorkCounterSet : IWorkCounterSource {
     private readonly WorkCount[] m_counts;
+    private readonly object m_home;
     private readonly WorkKind[] m_kinds;
+    private readonly bool m_singleWriter;
 
     /// <summary>Initializes a new instance of the <see cref="WorkCounterSet"/> class, every kind at zero.</summary>
     /// <param name="name">The source's name.</param>
@@ -17,47 +21,27 @@ public sealed class WorkCounterSet : IWorkCounterSource {
     /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="name"/> is not a dotted work name, <paramref name="kinds"/>
     /// is empty, or it holds a <see langword="null"/> kind or one kind twice.</exception>
-    public WorkCounterSet(string name, ReadOnlySpan<WorkKind> kinds) {
-        Name = WorkKind.RequireSourceName(
-            name: name,
-            paramName: nameof(name)
-        );
+    public WorkCounterSet(string name, ReadOnlySpan<WorkKind> kinds) : this(
+        home: null,
+        kinds: Declare(kinds: kinds, name: name),
+        name: name,
+        singleWriter: false
+    ) { }
+    // home is the owner a kind's HomeSet names for this set's layout: null for a set that is its own, or the key of the
+    // ShardedWorkCounterSet whose shard this is. A single-writer set's totals are written by one thread with plain
+    // stores.
+    private WorkCounterSet(object? home, WorkKind[] kinds, string name, bool singleWriter) {
+        m_counts = new WorkCount[kinds.Length];
+        m_home = (home ?? this);
+        m_kinds = kinds;
+        m_singleWriter = singleWriter;
+        Name = name;
 
-        if (kinds.IsEmpty) {
-            throw new ArgumentException(
-                message: $"Work source '{name}' must count at least one kind.",
-                paramName: nameof(kinds)
+        if (home is null) {
+            ClaimHome(
+                home: this,
+                kinds: kinds
             );
-        }
-
-        for (var index = 0; (index < kinds.Length); index++) {
-            if (kinds[index] is null) {
-                throw new ArgumentException(
-                    message: $"Work source '{name}' lists a null kind at {index}.",
-                    paramName: nameof(kinds)
-                );
-            }
-
-            for (var earlier = 0; (earlier < index); earlier++) {
-                if (ReferenceEquals(objA: kinds[earlier], objB: kinds[index])) {
-                    throw new ArgumentException(
-                        message: $"Work source '{name}' lists kind '{kinds[index].Name}' twice.",
-                        paramName: nameof(kinds)
-                    );
-                }
-            }
-        }
-
-        m_kinds = kinds.ToArray();
-        m_counts = new WorkCount[m_kinds.Length];
-
-        for (var index = 0; (index < m_kinds.Length); index++) {
-            var kind = m_kinds[index];
-
-            if (Volatile.Read(location: ref kind.HomeSet) is null) {
-                kind.HomeIndex = index;
-                Volatile.Write(location: ref kind.HomeSet, value: this);
-            }
         }
     }
 
@@ -67,14 +51,23 @@ public sealed class WorkCounterSet : IWorkCounterSource {
     public ReadOnlySpan<WorkKind> WorkKinds =>
         m_kinds;
 
-    /// <summary>Adds a non-negative amount of one total kind, from any thread.</summary>
+    /// <summary>Adds a non-negative amount of one total kind, from any thread (from the one owning thread, for a
+    /// <see cref="ShardedWorkCounterSet.ThreadShard"/>).</summary>
     /// <param name="kind">One of this set's kinds, a total.</param>
     /// <param name="amount">The amount of work, in the kind's unit; zero leaves the count unchanged.</param>
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds, or is a peak.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is negative.</exception>
     /// <exception cref="OverflowException">The total would exceed <see cref="long.MaxValue"/>; the count is unchanged.</exception>
-    public void Add(WorkKind kind, long amount) =>
-        m_counts[IndexOf(kind: kind, peak: false)].AddShared(amount: amount);
+    public void Add(WorkKind kind, long amount) {
+        ref var count = ref m_counts[IndexOf(kind: kind, peak: false)];
+
+        if (m_singleWriter) {
+            count.Add(amount: amount);
+        }
+        else {
+            count.AddShared(amount: amount);
+        }
+    }
     /// <summary>Raises one peak kind to <paramref name="value"/> when it is larger than the peak held since the set's
     /// peaks were last cleared, from any thread.</summary>
     /// <param name="kind">One of this set's kinds, a peak.</param>
@@ -92,7 +85,8 @@ public sealed class WorkCounterSet : IWorkCounterSource {
             }
         }
     }
-    /// <summary>Adds one of a total kind, from any thread.</summary>
+    /// <summary>Adds one of a total kind, from any thread (from the one owning thread, for a
+    /// <see cref="ShardedWorkCounterSet.ThreadShard"/>).</summary>
     /// <param name="kind">One of this set's kinds, a total.</param>
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of this set's kinds, or is a peak.</exception>
     /// <exception cref="OverflowException">The count is already <see cref="long.MaxValue"/>; it is unchanged.</exception>
@@ -122,8 +116,63 @@ public sealed class WorkCounterSet : IWorkCounterSource {
         return true;
     }
 
+    // Records, on each kind not yet homed, that its counter in storage laid out as kinds sits at its position there, so
+    // a count finds it without scanning. The index is written before the home is published.
+    internal static void ClaimHome(object home, WorkKind[] kinds) {
+        for (var index = 0; (index < kinds.Length); index++) {
+            var kind = kinds[index];
+
+            if (Volatile.Read(location: ref kind.HomeSet) is null) {
+                kind.HomeIndex = index;
+                Volatile.Write(location: ref kind.HomeSet, value: home);
+            }
+        }
+    }
+    // A shard is a set whose single owning thread counts with plain stores; its layout is the sharded set's.
+    internal static WorkCounterSet CreateShard(object home, WorkKind[] kinds, string name) =>
+        new(
+            home: home,
+            kinds: kinds,
+            name: name,
+            singleWriter: true
+        );
+    // Validates a set's name and kinds and returns the kinds as the array the set keeps.
+    internal static WorkKind[] Declare(ReadOnlySpan<WorkKind> kinds, string name) {
+        _ = WorkKind.RequireSourceName(
+            name: name,
+            paramName: nameof(name)
+        );
+
+        if (kinds.IsEmpty) {
+            throw new ArgumentException(
+                message: $"Work source '{name}' must count at least one kind.",
+                paramName: nameof(kinds)
+            );
+        }
+
+        for (var index = 0; (index < kinds.Length); index++) {
+            if (kinds[index] is null) {
+                throw new ArgumentException(
+                    message: $"Work source '{name}' lists a null kind at {index}.",
+                    paramName: nameof(kinds)
+                );
+            }
+
+            for (var earlier = 0; (earlier < index); earlier++) {
+                if (ReferenceEquals(objA: kinds[earlier], objB: kinds[index])) {
+                    throw new ArgumentException(
+                        message: $"Work source '{name}' lists kind '{kinds[index].Name}' twice.",
+                        paramName: nameof(kinds)
+                    );
+                }
+            }
+        }
+
+        return kinds.ToArray();
+    }
+
     private int Find(WorkKind kind) {
-        if ((kind is not null) && ReferenceEquals(objA: Volatile.Read(location: ref kind.HomeSet), objB: this)) {
+        if ((kind is not null) && ReferenceEquals(objA: Volatile.Read(location: ref kind.HomeSet), objB: m_home)) {
             return kind.HomeIndex;
         }
 

@@ -13,6 +13,9 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     private readonly VkQueue m_presentQueue;
 
     private bool m_disposed;
+    private VulkanQueueTimeline? m_timeline;
+
+    internal GpuQueueTimeline Timeline => (m_timeline ??= new VulkanQueueTimeline(this));
 
     /// <summary>Gets the graphics queue of the device, first handing the open batch's deferred submissions to it
     /// (<see cref="GpuSubmissionBatch.Split"/>), so a submit, signal, present or wait a caller puts on the returned
@@ -116,6 +119,7 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
         }
 
         PipelineCache?.Dispose();
+        m_timeline?.Dispose();
         Commands.Arena.FreeAll();
         m_logicalDeviceApi.DestroyDevice(device: Commands);
         Commands.MarkDestroyed();

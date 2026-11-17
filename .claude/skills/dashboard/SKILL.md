@@ -89,9 +89,6 @@ code disagree, the code wins and this file is corrected in the same change.
   the architecture gate cannot see in an npm project; the fix is a sign-in and
   a store seam the portal is handed
   ([provider independence](../../../docs/plans/open-items.md#provider-independence)).
-- **The Node `pathToFileURL` boot helper is written twice**, in `workerBoot.ts`
-  and `engineBoot.ts`
-  ([refactoring campaign](../../../docs/plans/open-items.md#refactoring-campaign)).
 - A composed-world finding caused by an imported file names the root at line
   0; a source declaring several worlds is checked as one; the limitations
   list in [the README](../../../src/Puck.Dashboard/README.md#limitations)

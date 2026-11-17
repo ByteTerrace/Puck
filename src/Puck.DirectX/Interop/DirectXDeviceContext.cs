@@ -518,7 +518,25 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     // Releases the fence, its event, the queue, the info queue, the dispatch signature, the pipeline library, the
     // descriptor heaps, the budget reading and the device, without a GPU drain, leaving the context with no device.
     private void ReleaseDeviceObjects() {
+        ReleaseQueueObjects();
         ReleaseVideoMemory();
+
+        if (0 != m_infoQueue) {
+            _ = ((IUnknown*)m_infoQueue)->Release();
+            m_infoQueue = 0;
+        }
+
+        ReleaseDispatchSignature();
+        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
+        PipelineLibrary?.Dispose();
+        PipelineLibrary = null;
+        m_bindings.ReleaseDeviceHeaps();
+        m_idleFenceValue = 1;
+        ReleaseDevice();
+    }
+    // Shared by normal teardown and device recreation; both release the queue's completion objects first.
+    private void ReleaseQueueObjects() {
+        m_submitter.ReleaseTimeline();
 
         if (0 != m_idleFence) {
             _ = ((IUnknown*)m_idleFence)->Release();
@@ -534,19 +552,6 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
             _ = ((IUnknown*)m_commandQueue)->Release();
             m_commandQueue = 0;
         }
-
-        if (0 != m_infoQueue) {
-            _ = ((IUnknown*)m_infoQueue)->Release();
-            m_infoQueue = 0;
-        }
-
-        ReleaseDispatchSignature();
-        // Serializing a removed device's library can fail; that is reported, and the file already on disk stays.
-        PipelineLibrary?.Dispose();
-        PipelineLibrary = null;
-        m_bindings.ReleaseDeviceHeaps();
-        m_idleFenceValue = 1;
-        ReleaseDevice();
     }
     // Unregisters the budget reading's event and releases its adapter, keeping the serial it reached.
     private void ReleaseVideoMemory() {
@@ -817,21 +822,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
 
         ReportRemoval();
         m_disposed = true;
-
-        if (0 != m_idleFence) {
-            _ = ((IUnknown*)m_idleFence)->Release();
-            m_idleFence = 0;
-        }
-
-        if (!m_idleFenceEvent.IsNull) {
-            _ = PInvoke.CloseHandle(hObject: m_idleFenceEvent);
-            m_idleFenceEvent = HANDLE.Null;
-        }
-
-        if (0 != m_commandQueue) {
-            _ = ((IUnknown*)m_commandQueue)->Release();
-            m_commandQueue = 0;
-        }
+        ReleaseQueueObjects();
 
         ReleaseDispatchSignature();
         ReleaseVideoMemory();
