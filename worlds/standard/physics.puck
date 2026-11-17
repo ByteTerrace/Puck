@@ -1,0 +1,8 @@
+// The standard's soft-contact response. An importing world can replace these fields in its collision section.
+collision {
+  bodyContacts {
+    contactHertz: 30
+    contactDampingRatio: 10
+    contactSpeed: 3
+  }
+}

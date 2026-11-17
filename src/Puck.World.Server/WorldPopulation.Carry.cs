@@ -6,7 +6,6 @@ namespace Puck.World.Server;
 
 public sealed partial class WorldPopulation {
     private readonly record struct CarryRelationship(int CarrierIndex, int TargetIndex);
-
     // The broadphase scratch a carried target's neighbour queries share: an image of the awake bodies' poses, which is
     // Fresh only until a pose it holds changes, and the buffers its queries fill. Created with the first carry, so a
     // population that never carries pays nothing.
@@ -15,6 +14,7 @@ public sealed partial class WorldPopulation {
         public readonly FixedSweepSphere[] Spheres = new FixedSweepSphere[capacity];
         public readonly int[] Found = new int[capacity];
         public readonly int[] Sleepers = new int[capacity];
+
         public bool Fresh;
     }
 
@@ -50,6 +50,8 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
+        // A carried body becomes a static solver side; discard the warm start from its former dynamic contacts.
+        ForgetRigidContacts(index: targetIndex, keepReferred: false);
         RegisterCarry(
             carrierIndex: carrierIndex,
             targetIndex: targetIndex
@@ -150,8 +152,8 @@ public sealed partial class WorldPopulation {
     /// <summary>Reconciles invalidated active relationships before body integration, so an orphaned target re-enters
     /// rigid advance and contact in the same tick its carrier disappears or either required facet is removed.</summary>
     public void PrepareCarriedBodies() => ReconcileCarriedBodies(follow: false);
-    /// <summary>Updates valid attachments from their carriers' final pose after movement, dynamic contact, and tether
-    /// correction, then performs the same bounded consistency check. Both carry passes walk the sorted,
+    /// <summary>Updates valid attachments after movement and tether correction, before the rigid solve and again
+    /// after it to follow a rigid carrier's solved pose, then performs the same bounded consistency check. The passes walk the sorted,
     /// preallocated active-relationship table, so a NO-CARRY tick is O(1) and allocation-free rather than scanning
     /// population capacity. A tick with an active carry builds one <see cref="FixedSweepGrid"/> over the awake solid
     /// bodies' poses (rebuilt only after a push moved one) and asks it, with the retained sleeping index, for the
@@ -208,12 +210,13 @@ public sealed partial class WorldPopulation {
             relationshipIndex++;
         }
     }
-    /// <summary>Pushes, and is blocked by, every other active solid body a carried target's own (already static-
+    /// <summary>Pushes, and is blocked by, each active solid locomotion body a carried target's own (already static-
     /// geometry-blocked — see <see cref="WorldBody.FollowCarrier"/>) position would overlap: the SAME positional
     /// split every plain dynamic pair applies, folded back onto the carrier too so it feels a body it is holding get
     /// stopped exactly as it already feels a wall. Physics owns the pairwise overlap geometry
     /// (<see cref="FixedDynamicBodyContacts.TryCorrection"/>); which bodies pair is this population's own call, on
-    /// the same terms as <see cref="ResolveDynamicContacts"/>.</summary>
+    /// the same terms as <see cref="ResolveDynamicContacts"/>. Rigid neighbours instead meet the carried body as a
+    /// static side in the population's rigid solve.</summary>
     private void ResolveCarriedBodyPush(WorldBody carrier, int carrierIndex, WorldBody target, int targetIndex) {
         if (target.Collider is null) {
             return;
@@ -230,7 +233,7 @@ public sealed partial class WorldPopulation {
         for (var ordinal = 0; (ordinal < neighbours.Length); ordinal++) {
             var otherIndex = neighbours[ordinal];
 
-            if (!IsCarryNeighbour(index: otherIndex, other: out var other)) {
+            if (!IsCarryNeighbour(index: otherIndex, other: out var other) || other.IsRigid) {
                 continue;
             }
 
@@ -256,12 +259,12 @@ public sealed partial class WorldPopulation {
                 right: other
             );
 
-            target.ApplyRigidPositionalCorrection(correction: targetShare);
+            target.ApplyCarryBlock(correction: targetShare, ceiling: FixedQ4816.Zero);
 
-            // A rigid other body takes the push through its rigid door, which wakes it — ApplyDynamicContact is the
-            // locomotion body's own planar/vertical-velocity channels, which a rigid body does not read.
-            ApplyPairShare(body: other, share: otherShare);
-            ApplyPairShare(body: carrier, share: targetShare);
+            // Rigid neighbours are handled only by the population's solve. This split is for locomotion neighbours;
+            // the held pose and the carrier receive the admitted block through the existing carry seam.
+            other.ApplyDynamicContact(correction: otherShare);
+            carrier.ApplyCarryBlock(correction: targetShare, ceiling: FixedQ4816.Zero);
             // Two bodies moved, so the awake image the next carry queries no longer holds their poses.
             neighbourhood.Fresh = false;
         }
@@ -296,7 +299,7 @@ public sealed partial class WorldPopulation {
                     neighbourhood.Spheres[count++] = new FixedSweepSphere(Index: index, Center: awake.FixedPosition, Radius: awake.BroadphaseRadius);
                 }
             }
-            neighbourhood.Grid.Rebuild(spheres: neighbourhood.Spheres.AsSpan(start: 0, length: count));
+            neighbourhood.Grid.Rebuild(spheres: neighbourhood.Spheres.AsSpan(length: count, start: 0));
             neighbourhood.Fresh = true;
         }
 
@@ -317,19 +320,10 @@ public sealed partial class WorldPopulation {
         }
 
         // Awake and sleeping slots never repeat; one sort of both yields slot order.
-        var neighbours = neighbourhood.Found.AsSpan(start: 0, length: kept);
+        var neighbours = neighbourhood.Found.AsSpan(length: kept, start: 0);
 
         neighbours.Sort();
         return neighbours;
-    }
-    // A carry share through the body's own door: the rigid positional correction for a rigid body, the locomotion one
-    // otherwise.
-    private static void ApplyPairShare(WorldBody body, FixedVector3 share) {
-        if (body.IsRigid) {
-            body.ApplyRigidPositionalCorrection(correction: share);
-        } else {
-            body.ApplyDynamicContact(correction: share);
-        }
     }
     private void RebuildCarryRelationships() {
         m_activeCarryCount = 0;

@@ -424,8 +424,10 @@ public sealed partial class WorldTick {
             engageProbeOrdinals: engageProbeOrdinals,
             engageEdges: engageEdges
         );
-        Host.Population.ResolveDynamicContacts();
         Host.Population.ResolveTethers();
+        Host.Population.UpdateCarriedBodies();
+        Host.Population.ResolveDynamicContacts();
+        // The solve may move a rigid carrier. Reconcile its held pose after the contact step as well.
         Host.Population.UpdateCarriedBodies();
         Host.Population.CompleteStep(tick: tick);
         // Kit effects have settled their authoritative cells. Install their input barrier before world rules

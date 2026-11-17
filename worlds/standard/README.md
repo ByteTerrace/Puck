@@ -62,6 +62,10 @@ that flies it, and the key that toggles it. The importing world owns the populat
 `bodies.capacity` and expands the template in a fragment imported ahead of its other inhabitants
 ([`../debug/free-camera.puck`](../debug/free-camera.puck)); a world that does not expand it has no Free Cam.
 
+`physics.puck` authors `collision.bodyContacts`' soft-contact frequency, damping
+ratio and maximum push-out speed. The standard chooses 30 Hz, 10 and 3 m/s;
+an importing world overrides those fields in its own collision section.
+
 `styles.puck` is a library of cel styles (`celStyle`, `celHardStyle`, `continuousStyle`): a palette row names one
 as its own (`toon: celStyle`) and a world names one as the default every other material inherits
 (`render { toon: celStyle }`), which `world.toon` switches live.

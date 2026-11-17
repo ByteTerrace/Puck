@@ -73,7 +73,8 @@ public sealed class FixedRigidWorld {
         m_staticSoftness = FixedSoftConstraint.Create(
             rateHz: options.RateHz,
             substepCount: options.SubstepCount,
-            hertz: (options.ContactHertz * FixedQ4816.FromInteger(value: 2L)),
+            hertz: (FixedQ4816.Min(x: options.ContactHertz,
+                y: (FixedQ4816.FromInteger(value: substepRate) / FixedQ4816.FromInteger(value: 8L))) * FixedQ4816.FromInteger(value: 2L)),
             dampingRatio: (options.ContactDampingRatio * FixedQ4816.FromDouble(value: 0.5d)),
             fractionBitCount: FixedSoftConstraint.DefaultFractionBitCount
         );
@@ -253,10 +254,10 @@ public sealed class FixedRigidWorld {
     private FixedQ4816 RestitutionTarget(FixedRigidManifold manifold, in FixedPairManifoldSlot slot) =>
         (RelativeVelocity(direction: slot.Normal, manifold: manifold, slot: in slot) + (manifold.Restitution * slot.RelativeVelocity));
     private bool Restitutes(in FixedPairManifoldSlot slot) =>
-        (slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+        ((slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
         (slot.NormalMassRaw > 0L) &&
         (slot.MaxNormalImpulseRaw > 0L) &&
-        (slot.RelativeVelocity <= (-m_options.RestitutionThreshold));
+        (slot.RelativeVelocity <= (-m_options.RestitutionThreshold)));
     private long EffectiveMass(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, FixedVector3 direction) {
         var refusals = 0;
 
@@ -401,6 +402,10 @@ public sealed class FixedRigidWorld {
 
                 slot.RollingImpulse1Raw = 0L;
                 slot.RollingImpulse2Raw = 0L;
+                slot.TorsionalImpulseRaw = 0L;
+                slot.TorsionalMassRaw = ((manifold.RollingResistance > FixedQ4816.Zero)
+                    ? AngularMass(axis: slot.Normal, manifold: manifold)
+                    : 0L);
 
                 if (manifold.RollingResistance > FixedQ4816.Zero) {
                     slot.RollingMass1Raw = AngularMass(axis: slot.Tangent1, manifold: manifold);
@@ -431,8 +436,8 @@ public sealed class FixedRigidWorld {
     private long Product(long aRaw, int aBits, long bRaw, int bBits, int outBits) {
         if (!FusedArithmetic.TryMixedScaleProduct(
             a: aRaw,
-            fractionBitsA: aBits,
             b: bRaw,
+            fractionBitsA: aBits,
             fractionBitsB: bBits,
             fractionBitsOut: outBits,
             result: out var product
@@ -493,8 +498,8 @@ public sealed class FixedRigidWorld {
             manifold: manifold,
             slot: in slot
         );
-        var delta1 = -ToImpulse(value: velocity1, factorRaw: slot.TangentMass1Raw);
-        var delta2 = -ToImpulse(value: velocity2, factorRaw: slot.TangentMass2Raw);
+        var delta1 = -ToImpulse(factorRaw: slot.TangentMass1Raw, value: velocity1);
+        var delta2 = -ToImpulse(factorRaw: slot.TangentMass2Raw, value: velocity2);
         var maximum = ScaleImpulse(coefficient: manifold.Friction, impulseRaw: slot.NormalImpulseRaw);
         // The pair's raws sit at the impulse placement; the clamp compares and rescales raws exactly, so it reads them
         // at any placement.
@@ -550,6 +555,18 @@ public sealed class FixedRigidWorld {
         slot.RollingImpulse2Raw = accumulated.Y.Value;
         ApplyAngularImpulse(axis: slot.Tangent1, impulseRaw: applied1, manifold: manifold);
         ApplyAngularImpulse(axis: slot.Tangent2, impulseRaw: applied2, manifold: manifold);
+    }
+    // The same authored lever is the contact patch radius for spin about the normal: angular impulse is bounded by
+    // radius times normal impulse. With no load or no patch, a free spin loses nothing.
+    private void SolveTorsion(FixedRigidManifold manifold, ref FixedPairManifoldSlot slot) {
+        var delta = -ToImpulse(factorRaw: slot.TorsionalMassRaw,
+            value: FixedTwoBodyKernel.RelativeAngularVelocity(axis: slot.Normal, bodyA: manifold.BodyA!, bodyB: manifold.BodyB!));
+        var maximum = ScaleImpulse(coefficient: manifold.RollingResistance, impulseRaw: slot.NormalImpulseRaw);
+        var accumulated = Math.Clamp(max: maximum, min: -maximum, value: (slot.TorsionalImpulseRaw + delta));
+        var applied = (accumulated - slot.TorsionalImpulseRaw);
+
+        slot.TorsionalImpulseRaw = accumulated;
+        ApplyAngularImpulse(axis: slot.Normal, impulseRaw: applied, manifold: manifold);
     }
     // What a slot asks for this pass, from the bodies' current velocities and displacement: the velocity its impulse
     // must remove (the speculative bias while the slot lies above the rest band, the soft bias in the biased pass once
@@ -616,7 +633,7 @@ public sealed class FixedRigidWorld {
     private long NormalDelta(FixedRigidManifold manifold, in FixedPairManifoldSlot slot, in FixedSoftConstraint softness, bool useBias) {
         var (driven, relaxed) = NormalAsk(manifold: manifold, slot: in slot, softness: in softness, useBias: useBias);
 
-        return (-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - relaxed);
+        return (-ToImpulse(factorRaw: slot.NormalMassRaw, value: driven) - relaxed);
     }
     // Adds a normal impulse raw to a slot's accumulated impulse, clamped at zero, and applies what the clamp let through.
     private void AccumulateNormal(FixedRigidManifold manifold, ref FixedPairManifoldSlot slot, long deltaRaw) {
@@ -662,7 +679,7 @@ public sealed class FixedRigidWorld {
 
             var (driven, relaxed) = NormalAsk(manifold: manifold, slot: in slot, softness: in softness, useBias: useBias);
 
-            if ((slot.NormalImpulseRaw <= 0L) && ((-ToImpulse(value: driven, factorRaw: slot.NormalMassRaw) - relaxed) <= 0L)) {
+            if ((slot.NormalImpulseRaw <= 0L) && ((-ToImpulse(factorRaw: slot.NormalMassRaw, value: driven) - relaxed) <= 0L)) {
                 return;
             }
 
@@ -745,6 +762,10 @@ public sealed class FixedRigidWorld {
                         slot: ref slot
                     );
                 }
+                if ((slot.Disposition == FixedPairManifoldSlotDisposition.Constraint) &&
+                    (slot.NormalMassRaw > 0L) && (slot.TorsionalMassRaw > 0L)) {
+                    SolveTorsion(manifold: manifold, slot: ref slot);
+                }
             }
         }
     }
@@ -817,6 +838,7 @@ public sealed class FixedRigidWorld {
 
                 ApplyAngularImpulse(axis: slot.Tangent1, impulseRaw: slot.RollingImpulse1Raw, manifold: manifold);
                 ApplyAngularImpulse(axis: slot.Tangent2, impulseRaw: slot.RollingImpulse2Raw, manifold: manifold);
+                ApplyAngularImpulse(axis: slot.Normal, impulseRaw: slot.TorsionalImpulseRaw, manifold: manifold);
             }
         }
     }

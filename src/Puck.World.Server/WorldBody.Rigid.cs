@@ -19,13 +19,19 @@ namespace Puck.World.Server;
 /// <see cref="WorldBodyContactPolicy.RigidSubstepCeiling"/>.</param>
 /// <param name="PairRestitutionThreshold">Below this closing speed a rigid contact restitutes at zero rather than its
 /// pair's coefficient — see <see cref="WorldBodyContactPolicy.RigidPairRestitutionSpeed"/>.</param>
+/// <param name="ContactHertz">The authored soft-contact frequency in hertz, before the substep clamp.</param>
+/// <param name="ContactDampingRatio">The authored dimensionless contact damping ratio.</param>
+/// <param name="ContactSpeed">The authored maximum push-out speed in metres per second.</param>
 public readonly record struct RigidContactPolicy(
     FixedQ4816 RestSpeedThreshold,
     ulong RestHoldTicks,
     FixedQ4816 SubstepTravelFraction,
     FixedQ4816 SubstepMinimumTravel,
     int SubstepCeiling,
-    FixedQ4816 PairRestitutionThreshold
+    FixedQ4816 PairRestitutionThreshold,
+    FixedQ4816 ContactHertz,
+    FixedQ4816 ContactDampingRatio,
+    FixedQ4816 ContactSpeed
 ) {
     /// <summary>Compiles an authored <see cref="WorldBodyContactPolicy"/>'s rigid fields to this fixed-point form.</summary>
     /// <param name="policy">The authored policy.</param>
@@ -36,7 +42,10 @@ public readonly record struct RigidContactPolicy(
         SubstepTravelFraction: FixedQ4816.FromDouble(value: policy.RigidSubstepTravelFraction),
         SubstepMinimumTravel: FixedQ4816.FromDouble(value: policy.RigidSubstepMinimumTravel),
         SubstepCeiling: policy.RigidSubstepCeiling,
-        PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed)
+        PairRestitutionThreshold: FixedQ4816.FromDouble(value: policy.RigidPairRestitutionSpeed),
+        ContactHertz: FixedQ4816.FromDouble(value: policy.ContactHertz),
+        ContactDampingRatio: FixedQ4816.FromDouble(value: policy.ContactDampingRatio),
+        ContactSpeed: FixedQ4816.FromDouble(value: policy.ContactSpeed)
     );
 }
 
@@ -435,7 +444,7 @@ public sealed partial class WorldBody {
             handle.InverseInertiaXX = 0L;
             handle.InverseInertiaYY = 0L;
             handle.InverseInertiaZZ = 0L;
-        } else if (m_rigid is { } rigid) {
+        } else if ((m_carriedByIndex < 0) && (m_rigid is { } rigid)) {
             var scaledRigid = ScaleRigid(rigid: rigid);
 
             handle.LinearVelocity = m_rigidVelocity;
@@ -456,6 +465,7 @@ public sealed partial class WorldBody {
         handle.InverseInertiaXY = 0L;
         handle.InverseInertiaXZ = 0L;
         handle.InverseInertiaYZ = 0L;
+        if (!handle.IsDynamic) { handle.ResetStepAccumulators(); }
 
         return handle;
     }
@@ -487,21 +497,6 @@ public sealed partial class WorldBody {
         Root: m_position,
         Volume: RigidWitnessVolume()
     );
-    /// <summary>Applies a positional-only correction to a rigid body and wakes it: the carry path's tangibility push,
-    /// where a carried body (posed by its carrier, outside the rigid solve) shoves the body it overlaps. A no-op for zero
-    /// correction, and for a body whose sweep was refused this tick, which is immovable until the tick ends.</summary>
-    /// <param name="correction">The world-space displacement.</param>
-    internal void ApplyRigidPositionalCorrection(FixedVector3 correction) {
-        if (
-            (correction == FixedVector3.Zero) ||
-            m_sweepRefusedThisTick
-        ) {
-            return;
-        }
-
-        m_position += correction;
-        InvalidateRigidRest();
-    }
 
     private static FixedQ4816 StepSeconds(ulong stepTicks) =>
         (FixedQ4816.FromInteger(value: unchecked((long)stepTicks)) / FixedQ4816.FromInteger(value: EngineTicksPerSecond));
@@ -772,7 +767,7 @@ public sealed partial class WorldBody {
     }
     /// <summary>Gets this body's solver view for the step: a dynamic view of a prepared, unrefused rigid body carrying the
     /// step's acceleration, and a static one (which pushes with its velocity and is never pushed) for a refused or
-    /// locomotion body.</summary>
+    /// carried or locomotion body.</summary>
     /// <returns>The solver view, reused from step to step.</returns>
     internal FixedRigidBody RigidSolverHandle() {
         var handle = TwoBodyHandle();

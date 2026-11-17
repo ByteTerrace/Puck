@@ -118,6 +118,15 @@ same change.
 - **Scale reaches every contact query.** A body's `Scale` multiplies its
   collider volumes for world contact, body pairs, events, the adjacency
   sweep's local side and rigid probing alike.
+- **Carried rigid contacts use the solve.** `TwoBodyHandle` makes a carried body
+  static with its carrier's velocity. Its owned pair manifolds still join the
+  solve; it never joins the integration roster. Carry's positional pair split
+  handles only locomotion neighbours.
+- **Contact softness is authored.** `collision.bodyContacts` supplies
+  `contactHertz`, `contactDampingRatio` and `contactSpeed`; the standard package
+  chooses their values. `RigidContactPolicy` compiles them once, and a retune
+  rebuilds the solver. The authored rolling lever also bounds torsion as the
+  contact patch radius; neither row resists without normal load.
 - **Solid size reads the current authority.** `WorldTick` passes its live definition to
   `WorldPopulation.AdvanceSimulated` for `WorldColliderSet.RefreshAttached` to sample.
   The geometry compiler's retained definition can still name a retired arena after a

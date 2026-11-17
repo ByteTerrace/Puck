@@ -1290,8 +1290,9 @@ awake rigid body together through `Puck.Physics.FixedRigidWorld`
   non-penetration constraint, so a resting body neither sinks under its load nor
   reads as penetrating its support's skin. Each contact point resists the pair's
   relative rolling with an angular impulse of at most `rollingResistance` times
-  its normal impulse, solved beside friction; spin about the normal is not
-  resisted.
+  its normal impulse, solved beside friction. A torsional row about the contact
+  normal uses that same authored lever as its patch radius and the same load
+  bound, so a curved body spun on one point also settles.
 
 `WorldBody.ScaleRigid` derives a scale-consistent copy of the compiled facet
 from the body's own live `Scale` (`WorldBody.Scale.cs`) on every read:
@@ -1399,26 +1400,26 @@ live-scaled `RigidMass` exceeds the carrier's live-scaled ceiling
 with the carrier too, matching its collider and reach. A carried body's own `Advance` is a no-op—
 its rigid integration is suspended, never solved—and
 `WorldPopulation.PrepareCarriedBodies` first releases invalidated relationships
-before integration; `UpdateCarriedBodies` then runs after both advance passes,
-dynamic-body contact, and tether correction, so it derives a DESIRED position
+before integration; `UpdateCarriedBodies` runs after both advance passes and
+tether correction, before body contacts, and again after the solve to follow a
+rigid carrier's solved pose. It derives a desired position
 and orientation from the carrier's final authoritative pose for that tick:
 `carrier.root + carrier.orientation·(Offset × Scale)`. That desired position is
 never taken unconditionally—TANGIBLE carry: the target's own collider is
 swept from its previous position to the desired one against static geometry
 (`WorldBody.FollowCarrier`, the same `IContactField.ResolveSweep` a rigid
 body's own static contact uses), and `WorldPopulation.ResolveCarriedBodyPush`
-then resolves the swept position against every other active solid body on the
-same positional-split terms `ResolveDynamicContacts` already applies to a
-plain pair, pushing the other body away. Whichever correction either sweep
-applied is handed straight back to the carrier through its own motion seam:
-`WorldBody.ApplyRigidPositionalCorrection` for a rigid carrier (which also
-wakes its exact-rest latch), or `WorldBody.ApplyDynamicContact` for a
-locomotion carrier. The carrier itself is therefore stopped by what it is
-holding, not just the held body. The target derives rigid velocity from the
-carrier's own `ApproximateWorldVelocity`.
-A carried body is excluded from `ResolveDynamicContacts`'
-broadphase and from `$physics:quiescent`'s census (`CarriedBy: null` on both)—
-its own tangibility sweep above is the ONLY contact path it participates in.
+then resolves the swept position against locomotion neighbours on the same
+positional-split terms as a plain pair. Static-geometry and locomotion blocks
+reach the carrier through `WorldBody.ApplyCarryBlock`, which uses the admitted
+contact-response seam for a rigid carrier and the dynamic-contact seam for a
+locomotion carrier. Both wake the carrier when moved. Against a free rigid body,
+the carried collider enters `ResolveDynamicContacts`' broadphase and the one
+rigid solve instead: `WorldBody.TwoBodyHandle` makes it static, with the carrier's
+live velocity, so it pushes without being pushed. Its own carrier is excluded.
+Manifolds owned by a carried lower-index body join the solve without putting
+that body in the integration roster; old dynamic contacts are released on pickup.
+A carried body stays outside `$physics:quiescent`'s census.
 `body.release` refuses by name (`WorldPopulation.TryEndCarry`, leaving the
 relationship untouched) when the target's CURRENT pose still overlaps static
 geometry (`WorldBody.IsPenetratingStaticGeometry`—a zero-displacement probe

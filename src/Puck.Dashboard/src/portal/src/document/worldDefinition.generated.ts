@@ -6050,6 +6050,18 @@ export type WorldBodyContactPolicy = {
    * Below this closing speed (world units/second), a rigid contact restitutes at zero rather than its pair's coefficient, so two bodies at rest never micro-bounce. Non-negative; small enough that a real strike is unaffected.
    */
   rigidPairRestitutionSpeed?: number;
+  /**
+   * The contact spring frequency in hertz, clamped by the solver to one eighth of the substep rate. Non-negative; zero authors no soft push.
+   */
+  contactHertz?: number;
+  /**
+   * The contact spring's damping ratio, dimensionless and non-negative.
+   */
+  contactDampingRatio?: number;
+  /**
+   * The maximum penetration push-out speed, in metres per second. Non-negative; zero authors no push-out bias.
+   */
+  contactSpeed?: number;
 };
 
 /**
@@ -12219,7 +12231,7 @@ export type WorldRigid = {
    */
   friction?: number;
   /**
-   * The rolling-resistance lever, in metres at scale one: each contact point resists the body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair's average applies, and it never resists spin about the contact normal. Non-negative; zero (the default) applies none.
+   * The rolling-resistance lever, in metres at scale one: each contact point resists the body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair's average applies. It is also the patch radius bounding torsional resistance about the contact normal, so a body spun on a curved point settles too. Non-negative; zero (the default) applies none.
    */
   rollingResistance?: number;
   /**
