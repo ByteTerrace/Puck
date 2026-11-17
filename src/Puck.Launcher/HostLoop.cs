@@ -1,26 +1,83 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Waiting;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Maths;
 
 namespace Puck.Launcher;
 
-/// <summary>The common iteration handed to a presentation adapter.</summary>
-/// <param name="TickLocked">Whether the iteration stepped at most one tick for its frame, read once as the iteration began.</param>
-/// <param name="IntervalTicks">The wall interval the iteration sampled, in engine ticks.</param>
-/// <param name="StepTicks">The fixed step, in engine ticks.</param>
-/// <param name="ElapsedTicks">The engine ticks the pump has consumed.</param>
-/// <param name="Steps">The whole steps the iteration ran.</param>
-/// <param name="HasSimulation">Whether the host steps a simulation.</param>
-/// <param name="Holding">Whether the previous frame left its tick owing a rendered frame.</param>
-/// <param name="StepsNext">Whether the next iteration is expected to run a step: under lockstep whenever the host steps
-/// a simulation, otherwise when the pump's held remainder and one more interval like this one reach a step
-/// (<see cref="FrameContext.StepsNext"/>).</param>
-public readonly record struct HostIteration(bool TickLocked, ulong IntervalTicks, ulong StepTicks, ulong ElapsedTicks, int Steps, bool HasSimulation, bool Holding, bool StepsNext = false) {
+/// <summary>
+/// The common iteration handed to a presentation adapter's produce, minted only by the loop's control phase.
+/// <para>
+/// It is a <see langword="ref"/> struct, so the compiler keeps it from being stored in a field, captured by a lambda or
+/// kept past the produce call it was passed to: no adapter can replay an iteration from an earlier callback. Its
+/// constructor checks the loop's own phase state (a control phase completed for this iteration and no iteration minted
+/// since), so a mint outside that window throws whoever calls it, and a <see langword="default"/> iteration, which no
+/// control phase minted, throws when read.
+/// </para>
+/// </summary>
+public readonly ref struct HostIteration {
+    private readonly bool m_minted;
+    private readonly bool m_tickLocked;
+    private readonly ulong m_intervalTicks;
+    private readonly ulong m_stepTicks;
+    private readonly ulong m_elapsedTicks;
+    private readonly int m_steps;
+    private readonly bool m_hasSimulation;
+    private readonly bool m_holding;
+    private readonly bool m_stepsNext;
+
+    /// <summary>Initializes a new instance of the <see cref="HostIteration"/> struct for the iteration whose control phase
+    /// <paramref name="loop"/> has just run.</summary>
+    /// <param name="loop">The loop whose control phase mints the iteration.</param>
+    /// <param name="tickLocked">Whether the iteration stepped at most one tick for its frame, read once as the iteration
+    /// began.</param>
+    /// <param name="intervalTicks">The wall interval the iteration sampled, in engine ticks.</param>
+    /// <param name="stepTicks">The fixed step, in engine ticks.</param>
+    /// <param name="elapsedTicks">The engine ticks the pump has consumed.</param>
+    /// <param name="steps">The whole steps the iteration ran.</param>
+    /// <param name="hasSimulation">Whether the host steps a simulation.</param>
+    /// <param name="holding">Whether the previous frame left its tick owing a rendered frame.</param>
+    /// <param name="stepsNext">Whether the next iteration is expected to run a step (<see cref="StepsNext"/>).</param>
+    /// <exception cref="InvalidOperationException">No control phase of <paramref name="loop"/> has run since its last
+    /// iteration was minted.</exception>
+    internal HostIteration(HostLoop loop, bool tickLocked, ulong intervalTicks, ulong stepTicks, ulong elapsedTicks, int steps, bool hasSimulation, bool holding, bool stepsNext) {
+        loop.Mint();
+        m_minted = true;
+        m_tickLocked = tickLocked;
+        m_intervalTicks = intervalTicks;
+        m_stepTicks = stepTicks;
+        m_elapsedTicks = elapsedTicks;
+        m_steps = steps;
+        m_hasSimulation = hasSimulation;
+        m_holding = holding;
+        m_stepsNext = stepsNext;
+    }
+
+    /// <summary>Gets whether the iteration stepped at most one tick for its frame, read once as the iteration began.</summary>
+    public bool TickLocked => (Minted() && m_tickLocked);
+    /// <summary>Gets the wall interval the iteration sampled, in engine ticks.</summary>
+    public ulong IntervalTicks => (Minted() ? m_intervalTicks : 0UL);
+    /// <summary>Gets the fixed step, in engine ticks.</summary>
+    public ulong StepTicks => (Minted() ? m_stepTicks : 0UL);
+    /// <summary>Gets the engine ticks the pump has consumed.</summary>
+    public ulong ElapsedTicks => (Minted() ? m_elapsedTicks : 0UL);
+    /// <summary>Gets the whole steps the iteration ran.</summary>
+    public int Steps => (Minted() ? m_steps : 0);
+    /// <summary>Gets whether the host steps a simulation.</summary>
+    public bool HasSimulation => (Minted() && m_hasSimulation);
+    /// <summary>Gets whether the previous frame left its tick owing a rendered frame.</summary>
+    public bool Holding => (Minted() && m_holding);
+    /// <summary>Gets whether the next iteration is expected to run a step: under lockstep whenever the host steps a
+    /// simulation, otherwise when the pump's held remainder and one more interval like this one reach a step
+    /// (<see cref="FrameContext.StepsNext"/>).</summary>
+    public bool StepsNext => (Minted() && m_stepsNext);
     /// <summary>Gets the simulation tick the pump has consumed through.</summary>
     public long Tick => ((StepTicks == 0UL) ? 0L : ((long)(ElapsedTicks / StepTicks)));
+
+    private bool Minted() => (m_minted ? true : throw new InvalidOperationException(message: "This host iteration was not minted by a control phase."));
 }
 /// <summary>Owns input contributions, console drains, fixed steps, frame holds, deadlines and pacing for every
 /// launcher registration. Presentation adapters supply window input, frame production and display waits.</summary>
@@ -36,8 +93,27 @@ public sealed class HostLoop(
     private readonly ISnapshotInputCapture[] m_captures = [.. captures];
     private readonly IPrecisionWaiter? m_waiter = waiters.FirstOrDefault();
 
+    // The control phases run and the iterations minted, on the pump thread: an iteration is minted at most once per
+    // control phase (HostIteration's constructor calls Mint).
+    private long m_controlPhases;
+    private long m_minted;
+
     /// <summary>Whether a completed tick still owes a renderable frame.</summary>
     public static bool HoldsTick(bool hasSimulation, FrameCompletion completion) => (hasSimulation && (completion == FrameCompletion.NotYetRenderable));
+    // The control phase: the console drain, the control gap's mark, and a fresh wait allowance for the pump thread of
+    // one pacer period, so the waits it takes through HostWaits before the next control phase block for at most that.
+    private void ControlPhase() {
+        HostConsoleDrain.Collect(output: output, source: textSource);
+        timeline.NoteControlPhase();
+        HostWaits.BeginPumpIteration(allowance: TimeSpan.FromSeconds(value: (1.0 / LauncherHostLoop.ResolveRatePerSecond(simulation: m_simulation))));
+        m_controlPhases++;
+    }
+    internal void Mint() {
+        if (m_minted >= m_controlPhases) {
+            throw new InvalidOperationException(message: "A host iteration is minted only once per control phase, by the loop that ran it.");
+        }
+        m_minted = m_controlPhases;
+    }
     /// <summary>Runs inline on the hosted service's existing pump thread. No simulation thread is started here.</summary>
     public void Run(CancellationToken stoppingToken, Func<bool>? isOpen = null,
         Action<ulong>? captureInput = null,
@@ -46,7 +122,7 @@ public sealed class HostLoop(
             throw new InvalidOperationException(message: "A fixed-step simulation and its InputRouter must be registered together. Use AddFixedStepSimulation<TSimulation>().");
         }
         registry.RouteSimulationTo(sink: m_router?.ConsoleTextSink);
-        var pump = FixedStepPump.CreateHosted(m_simulation, m_router, registry, inputClock, textSource, output, terminal, backlog,
+        var pump = FixedStepPump.CreateHosted(m_simulation, m_router, registry, inputClock, textSource, ControlPhase, terminal, backlog,
             holdsClock: (produce is not null), timeline: timeline);
         var clock = TickClock.Start(time: time);
         var frequency = time.TimestampFrequency;
@@ -66,7 +142,7 @@ public sealed class HostLoop(
                 if (pump is not null) {
                     pump.BeginIteration();
                 } else {
-                    HostConsoleDrain.Collect(output: output, source: textSource);
+                    ControlPhase();
                 }
                 if ((exitAt is { } deadline) && (time.GetTimestamp() >= deadline)) {
                     terminal.RequestExit();
@@ -105,7 +181,17 @@ public sealed class HostLoop(
                 if (produce is not null) {
                     var stepsNext = ((pump is not null) && (tickLocked || ((pump.AccumulatorTicks + interval) >= stepTicks)));
 
-                    holding = produce(new HostIteration(tickLocked, interval, stepTicks, (pump?.ElapsedTicks ?? 0UL), steps, (pump is not null), holding, stepsNext));
+                    holding = produce(new HostIteration(
+                        elapsedTicks: (pump?.ElapsedTicks ?? 0UL),
+                        hasSimulation: (pump is not null),
+                        holding: holding,
+                        intervalTicks: interval,
+                        loop: this,
+                        steps: steps,
+                        stepsNext: stepsNext,
+                        stepTicks: stepTicks,
+                        tickLocked: tickLocked
+                    ));
                 }
                 if (terminal.TryConsumeExit()) {
                     break;
@@ -121,7 +207,7 @@ public sealed class HostLoop(
                     if ((now - nextDeadline) > period) {
                         nextDeadline = now;
                     } else {
-                        LauncherHostLoop.WaitUntil(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
+                        HostWaits.Until(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
                         timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - nextDeadline)));
                     }
                     timeline.Mark(phase: HostFramePhase.Wait);
@@ -131,6 +217,7 @@ public sealed class HostLoop(
             fault = exception;
             throw;
         } finally {
+            HostWaits.EndPump();
             try {
                 LauncherHostRun.RunTeardown(fault, logger, ("flush output", output.Flush));
             } finally {

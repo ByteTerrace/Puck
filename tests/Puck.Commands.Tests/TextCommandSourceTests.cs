@@ -3,9 +3,9 @@ using Xunit;
 
 namespace Puck.Commands.Tests;
 
-/// <summary>Exercises the drain itself: the source-wide <see cref="TextCommandSource.HoldGate"/>, how it composes with
-/// a session's own hold and with the read-after-write barrier, and the thread-safety the type's own remarks
-/// advertise — background producers enqueueing while the frame thread collects.</summary>
+/// <summary>Exercises the drain itself: how a session's own hold composes with the read-after-write barrier, and the
+/// thread-safety the type's own remarks advertise — background producers enqueueing while the frame thread
+/// collects.</summary>
 public sealed class TextCommandSourceTests {
     private static TextCommandSource Source(List<string> submitted, out TextCommandSession session) {
         var registry = new CommandRegistry(modules: [new ProbeModule()]);
@@ -49,63 +49,6 @@ public sealed class TextCommandSourceTests {
         );
 
         await Assert.ThrowsAsync<ObjectDisposedException>(testCode: async () => await closed);
-    }
-    [Fact]
-    public void ALineWhoseHandlerArmsTheGateStopsTheDrainAtThatLine() {
-        var submitted = new List<string>();
-        var held = false;
-        var registry = new CommandRegistry(modules: [new ProbeModule(), new GateModule(arm: () => held = true)]);
-        var source = new TextCommandSource(registry: registry);
-        var session = source.CreateSession(
-            onResult: (line, _) => submitted.Add(item: line),
-            principal: Principal.Console
-        );
-
-        source.HoldGate = () => held;
-        session.Enqueue(line: "probe before");
-        session.Enqueue(line: "step");
-        session.Enqueue(line: "probe after");
-        source.Collect();
-
-        // This is the whole point of the seam: a `step`/`settle` verb defers the REST of a piped script to a later
-        // frame, and the queue's FIFO order survives the pause.
-        Assert.Equal(
-            actual: submitted,
-            expected: ["probe before", "step"]
-        );
-
-        held = false;
-        source.Collect();
-
-        Assert.Equal(
-            actual: submitted,
-            expected: ["probe before", "step", "probe after"]
-        );
-    }
-    [Fact]
-    public void AnArmedHoldGateDefersEveryQueuedLineUntilItLetsGo() {
-        var submitted = new List<string>();
-        var source = Source(
-            session: out var session,
-            submitted: submitted
-        );
-        var held = true;
-
-        source.HoldGate = () => held;
-        session.Enqueue(line: "probe a");
-        session.Enqueue(line: "probe b");
-        source.Collect();
-
-        // The gate is checked BEFORE the first dequeue, so an armed gate costs the frame nothing and loses nothing.
-        Assert.Empty(collection: submitted);
-
-        held = false;
-        source.Collect();
-
-        Assert.Equal(
-            actual: submitted,
-            expected: ["probe a", "probe b"]
-        );
     }
     [Fact]
     public async Task BackgroundProducersEnqueueWhileTheFrameThreadCollects() {
@@ -318,60 +261,10 @@ public sealed class TextCommandSourceTests {
             await later
         );
     }
+    // Law: a session's own hold rotates only that session; another session's ready line runs in the same drain, which
+    // is what lets a second control attachment answer while the first holds on a wait.
     [Fact]
-    public void TheGateAndTheReadAfterWriteBarrierBothHaveToLetGo() {
-        var submitted = new List<string>();
-        var registry = new CommandRegistry(modules: [new ProbeModule(), new DeferredModule()]);
-        var router = new InputRouter(
-            registry: registry,
-            bindings: new EmptyBindings(),
-            principalResolver: new ConsolePrincipal()
-        );
-        var source = new TextCommandSource(registry: registry);
-        var session = source.CreateSession(
-            onResult: (line, _) => submitted.Add(item: line),
-            principal: Principal.Console,
-            simulationSink: router.ConsoleTextSink
-        );
-        var held = false;
-
-        source.HoldGate = () => held;
-        session.Enqueue(line: "sim.defer payload");
-        session.Enqueue(line: "probe after");
-        source.Collect();
-
-        // The deferred line went out; the immediate read-back behind it waits for the tick that applies it.
-        Assert.Equal(
-            actual: submitted,
-            expected: ["sim.defer payload"]
-        );
-
-        held = true;
-
-        var snapshot = router.SnapshotForTick(
-            tick: 1UL,
-            windowEndTick: ulong.MaxValue
-        );
-
-        registry.ApplySnapshot(snapshot: in snapshot);
-        source.Collect();
-
-        // The barrier has released, but the gate has not: the two holds are independent and BOTH must let go.
-        Assert.Equal(
-            actual: submitted,
-            expected: ["sim.defer payload"]
-        );
-
-        held = false;
-        source.Collect();
-
-        Assert.Equal(
-            actual: submitted,
-            expected: ["sim.defer payload", "probe after"]
-        );
-    }
-    [Fact]
-    public void TheSourceGateHoldsEverySessionWhileASessionsOwnHoldHoldsOnlyIt() {
+    public void ASessionsOwnHoldHoldsOnlyThatSession() {
         var registry = new CommandRegistry(modules: [new ProbeModule()]);
         var source = new TextCommandSource(registry: registry);
         var first = new List<string>();
@@ -391,39 +284,13 @@ public sealed class TextCommandSourceTests {
         sessionTwo.Enqueue(line: "probe two");
         source.Collect();
 
-        // A session's own hold rotates only that session; the other seat keeps draining.
         Assert.Empty(collection: first);
-        Assert.Equal(
-            actual: second,
-            expected: ["probe two"]
-        );
+        Assert.Equal(actual: second, expected: ["probe two"]);
 
-        var held = true;
-
-        source.HoldGate = () => held;
         firstHeld = false;
-        sessionTwo.Enqueue(line: "probe three");
         source.Collect();
 
-        // The source-wide gate is the other axis: it stops the drain for everyone, including the session whose own
-        // hold has just let go.
-        Assert.Empty(collection: first);
-        Assert.Equal(
-            actual: second,
-            expected: ["probe two"]
-        );
-
-        held = false;
-        source.Collect();
-
-        Assert.Equal(
-            actual: first,
-            expected: ["probe one"]
-        );
-        Assert.Equal(
-            actual: second,
-            expected: ["probe two", "probe three"]
-        );
+        Assert.Equal(actual: first, expected: ["probe one"]);
     }
     // Law: in a session that settles results, a line that holds its session answers when the hold ends, with its
     // release report or else its own result, even with no line queued behind it; a session that reports at submit

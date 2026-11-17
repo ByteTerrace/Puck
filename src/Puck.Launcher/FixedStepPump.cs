@@ -121,8 +121,9 @@ public sealed class FixedStepPump {
     /// <param name="registry">The command registry.</param>
     /// <param name="inputClock">The input clock whose current reading pins the capture origin, and the wall clock a
     /// burst is bounded by.</param>
-    /// <param name="textSource">The console text source drained before every step.</param>
-    /// <param name="output">The buffered console output flushed after every drain.</param>
+    /// <param name="textSource">The console text source, whose administrative session can release the first step.</param>
+    /// <param name="controlPhase">The host loop's control phase, run before every step: it drains
+    /// <paramref name="textSource"/> and flushes the console output.</param>
     /// <param name="terminal">The terminal whose exit request stops stepping.</param>
     /// <param name="inputBacklog">The standard-input backlog the first step is held on.</param>
     /// <param name="holdsClock">Whether the pump holds its clock for owed frames, as windowed and offscreen hosts
@@ -130,7 +131,7 @@ public sealed class FixedStepPump {
     /// <param name="timeline">The host's tick-cost and shed-step recorder, or null for an unobserved pump.</param>
     /// <returns>The pump, or <see langword="null"/> when no simulation is registered.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="registry"/>, <paramref name="inputClock"/>,
-    /// <paramref name="textSource"/>, <paramref name="output"/>, <paramref name="terminal"/>, or
+    /// <paramref name="textSource"/>, <paramref name="controlPhase"/>, <paramref name="terminal"/>, or
     /// <paramref name="inputBacklog"/> is <see langword="null"/>.</exception>
     /// <remarks>The first step waits until the standard-input backlog is released (input ended, failed, is a
     /// terminal, or its writer had written nothing when first read) or the administrative session cannot progress
@@ -138,11 +139,11 @@ public sealed class FixedStepPump {
     /// of that point has run, however the writer chunked the pipe. The release is sampled before the drain: the reader
     /// releases only after queuing every line it read, so a release seen before the drain is a release whose lines the
     /// drain takes. Once one step has run, the gate never holds again.</remarks>
-    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, BufferedConsoleOutput output, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock, HostFrameTimeline? timeline = null) {
+    public static FixedStepPump? CreateHosted(IFixedStepSimulation? simulation, InputRouter? inputRouter, CommandRegistry registry, IInputClock inputClock, TextCommandSource textSource, Action controlPhase, TerminalControl terminal, StandardInputBacklog inputBacklog, bool holdsClock, HostFrameTimeline? timeline = null) {
         ArgumentNullException.ThrowIfNull(argument: registry);
         ArgumentNullException.ThrowIfNull(argument: inputClock);
         ArgumentNullException.ThrowIfNull(argument: textSource);
-        ArgumentNullException.ThrowIfNull(argument: output);
+        ArgumentNullException.ThrowIfNull(argument: controlPhase);
         ArgumentNullException.ThrowIfNull(argument: terminal);
         ArgumentNullException.ThrowIfNull(argument: inputBacklog);
 
@@ -159,7 +160,7 @@ public sealed class FixedStepPump {
         return new FixedStepPump(
             beforeStep: () => {
                 inputReleased = !inputBacklog.IsHolding;
-                HostConsoleDrain.Collect(output: output, source: textSource);
+                controlPhase();
             },
             captureOriginTicks: inputClock.NowTicks,
             holdsClock: holdsClock,

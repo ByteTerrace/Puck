@@ -22,10 +22,9 @@ public static class WorldServerStepShell {
     /// nothing records.</param>
     /// <param name="publishTick">Called after each server step and tape close, with the host work count — the
     /// caller's own tick-clock sink (a console wait gate's <c>PublishTick</c>, or a no-op for a caller with nothing
-    /// subscribed to publish yet). This project cannot name <c>Puck.World</c>'s <c>WorldConsoleWaitGate</c> or
-    /// <c>Puck.Launcher</c>'s <c>ITextCommandHoldGate</c> it implements — both sit above this project's
-    /// exact-equality closure (<c>build/Architecture.props</c>) — so the shell takes the one member either shape
-    /// actually calls, as a delegate, rather than the type.</param>
+    /// subscribed to publish yet). This project cannot name <c>WorldConsoleWaitGate</c>, which sits above this
+    /// project's exact-equality closure (<c>build/Architecture.props</c>), so the shell takes the one member it calls,
+    /// as a delegate, rather than the type.</param>
     /// <param name="pacing">The pacing of the host stepping the server: a replay drive fast-forwards several ticks in
     /// one call only under a host that does not step one tick per produced frame.</param>
     /// <param name="context">Host pacing coordinates and step width. Only the width advances simulation state:

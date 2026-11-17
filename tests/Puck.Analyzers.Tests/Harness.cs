@@ -91,9 +91,17 @@ internal static class Harness {
     /// <param name="compilation">The compilation to analyze.</param>
     /// <param name="analyzer">The analyzer to run.</param>
     /// <returns>The analyzer's and the compiler's diagnostics.</returns>
-    public static AnalysisResult Analyze(CSharpCompilation compilation, DiagnosticAnalyzer analyzer) {
+    public static AnalysisResult Analyze(CSharpCompilation compilation, DiagnosticAnalyzer analyzer) =>
+        Analyze(analyzer: analyzer, compilation: compilation, globalOptions: ImmutableDictionary<string, string>.Empty);
+    /// <summary>Runs <paramref name="analyzer"/> over <paramref name="compilation"/> with the global analyzer config
+    /// options an MSBuild build would surface (<c>build_property.*</c> keys).</summary>
+    /// <param name="compilation">The compilation to analyze.</param>
+    /// <param name="analyzer">The analyzer to run.</param>
+    /// <param name="globalOptions">The global analyzer config options.</param>
+    /// <returns>The analyzer's and the compiler's diagnostics.</returns>
+    public static AnalysisResult Analyze(CSharpCompilation compilation, DiagnosticAnalyzer analyzer, ImmutableDictionary<string, string> globalOptions) {
         var options = new CompilationWithAnalyzersOptions(
-            options: new AnalyzerOptions(additionalFiles: ImmutableArray<AdditionalText>.Empty),
+            options: new AnalyzerOptions(additionalFiles: ImmutableArray<AdditionalText>.Empty, optionsProvider: new GlobalOptionsProvider(options: globalOptions)),
             onAnalyzerException: null,
             concurrentAnalysis: true,
             logAnalyzerExecutionTime: false
@@ -113,6 +121,18 @@ internal static class Harness {
             Analyzer: analyzerDiagnostics,
             Compiler: compilation.GetDiagnostics(cancellationToken: CancellationToken.None)
         );
+    }
+    private sealed class GlobalOptionsProvider(ImmutableDictionary<string, string> options) : AnalyzerConfigOptionsProvider {
+        private static readonly AnalyzerConfigOptions None = new Options(values: ImmutableDictionary<string, string>.Empty);
+
+        public override AnalyzerConfigOptions GlobalOptions { get; } = new Options(values: options);
+
+        public override AnalyzerConfigOptions GetOptions(SyntaxTree tree) => None;
+        public override AnalyzerConfigOptions GetOptions(AdditionalText textFile) => None;
+
+        private sealed class Options(ImmutableDictionary<string, string> values) : AnalyzerConfigOptions {
+            public override bool TryGetValue(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value) => values.TryGetValue(key: key, value: out value);
+        }
     }
     /// <summary>Builds a compilation from <paramref name="sources"/> plus the global usings the SDK would supply.</summary>
     /// <param name="assemblyName">The compilation's assembly name.</param>

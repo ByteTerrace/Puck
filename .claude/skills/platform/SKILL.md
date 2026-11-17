@@ -34,7 +34,7 @@ corrected in the same change.
 | A native window, its events and its surface | `INativeWindow`, `INativeWindowFactory`, `INativeWindowBackend`; `Win32NativeWindow`, `WaylandNativeWindow`, `XcbNativeWindow`; `ConfiguredNativeWindow` as the headless stand-in | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Which display kind to open on Linux | `NativeDisplayEnvironment`, `NativeDisplayKindSelector` (environment variables only) | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Variable refresh range, display timing, colour space, keeping the display awake | `IDisplayTimingInfo` on `Win32NativeWindow` (`Win32NativeWindow.Vrr.cs`), `EdidVariableRefreshParser`, `Win32DisplayColorSpaceProbe`, the display power request in `Win32NativeWindow.DisplayPower.cs` | [host pacing](../../../docs/reference/hosting.md#host-pacing) |
-| Wait until a deadline without spinning or raising timer resolution | `IPrecisionWaiter`: `Win32HighResolutionWaitableTimer` (the window implements it; `Win32PrecisionWaiter` serves a headless host through `AddWindowsPrecisionWaiter`), consumed by `LauncherHostLoop.WaitUntil` | [below](#play-nice-with-the-host) |
+| Wait until a deadline without spinning or raising timer resolution | `IPrecisionWaiter`: `Win32HighResolutionWaitableTimer` (the window implements it; `Win32PrecisionWaiter` serves a headless host through `AddWindowsPrecisionWaiter`), consumed by `HostWaits.Until`, the wait door's pacer form | [below](#play-nice-with-the-host) |
 | Unmanaged memory | `IAllocator`, `MimallocAllocator`, registered by `AddPuckAllocator` | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Clipboard | `IClipboardService`: `Win32ClipboardService`; `NullClipboardService` on Linux | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Mouse, keyboard and pointer lock at the OS boundary | `Win32NativeWindow` messages, `Win32RawInput` (relative motion per mouse), `Win32PointerLock`, `WindowInputQueue` | [pointer input](../../../src/Puck.Platform.Windows/README.md#pointer-input) |
@@ -80,7 +80,7 @@ process-wide timer resolution. In this area that means:
 - Wait on `IPrecisionWaiter`. `Win32HighResolutionWaitableTimer` uses
   `CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`, which wakes within about half a
   millisecond without `timeBeginPeriod` and without spinning;
-  `LauncherHostLoop.WaitUntil` re-reads its clock after each wait and falls
+  `HostWaits.Until` re-reads its clock after each wait and falls
   back to a one-millisecond sleep where no waiter exists. A busy loop on a
   stopwatch is a defect, however short.
 - Swap-chain waits pace a windowed host ([host pacing](../../../docs/reference/hosting.md#host-pacing));

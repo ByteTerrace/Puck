@@ -24,9 +24,6 @@ public sealed class TextCommandSource : ITextCommandSink {
     private readonly List<TextCommandSession> m_holding = [];
     private readonly CommandRegistry m_registry;
 
-    // See HoldGate's remarks: volatile because a host may arm the gate from a thread other than the one that drains.
-    private volatile Func<bool>? m_holdGate;
-
     internal void EnqueueSession(TextCommandSession session, TextSessionWork work) {
         session.EnqueuePending(work: work);
         m_pending.Enqueue(item: session);
@@ -65,7 +62,6 @@ public sealed class TextCommandSource : ITextCommandSink {
 
         while (
             (scanBudget-- > 0) &&
-            !(HoldGate?.Invoke() ?? false) &&
             m_pending.TryDequeue(result: out var session)
         ) {
             if (
@@ -278,19 +274,6 @@ public sealed class TextCommandSource : ITextCommandSink {
         ArgumentNullException.ThrowIfNull(line);
 
         m_administrativeSession.Enqueue(line: line);
-    }
-
-    /// <summary>Gets or sets a source-wide hold gate. While it returns true, no session drains; a handler that
-    /// arms it stops the current drain too. Use <see cref="TextCommandSession.HoldWhile(Func{bool})"/> for a wait that belongs
-    /// to only one session. Null leaves all ready sessions eligible to drain.</summary>
-    /// <remarks>THREADING: unlike <see cref="Enqueue"/>, which any producer may call, this is read on the frame thread
-    /// inside <see cref="Collect"/> and is expected to be set from there too — in practice by a handler the drain
-    /// itself just ran. The backing field is <see langword="volatile"/> so a host that arms the gate from another
-    /// thread is seen by the next drain rather than by whichever one the JIT decides to reload on; the gate's own
-    /// delegate is invoked on the frame thread, so whatever it reads must be safe to read there.</remarks>
-    public Func<bool>? HoldGate {
-        get => m_holdGate;
-        set => m_holdGate = value;
     }
 
     /// <summary>Initializes a new instance of the <see cref="TextCommandSource"/> class.</summary>

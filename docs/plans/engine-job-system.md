@@ -159,9 +159,14 @@ probes to trace first, by level and distance, then relights by their lighting's
 age, passes, level and distance. The scheduler takes the policies
 as comparers; it decides no priority of its own.
 
-`Frame` and `Tick` are forks the frame thread drives and joins in the same
-iteration, so they never queue behind each other; their order matters only
+`Frame` and `Tick` are forks the frame thread drives and joins for the same
+frame or tick, so they never queue behind each other; their order matters only
 against background work, which they always preempt at the next unit boundary.
+A join on the frame thread takes the control plane's wait budget: a fork that
+has not finished by then is an operation the frame thread owns and polls after
+the next control phase, keeping its storage and its inputs' versions, so a
+frame or tick can complete across host iterations
+([C0](#how-it-composes)).
 
 ### The bounded unit is the preemption
 
@@ -257,9 +262,12 @@ owner's direction is no added latency. So:
 - **A synchronous dependency settles in the same frame.** A lockstep frame waits
   for its scene build and refill and traces before it renders
   (`SdfMeshIrradiance.cs:531-549`). That work runs as a `Frame` fork the
-  frame thread helps with, and its results install immediately in the same
-  call, so lockstep publication stays synchronous and a `[still]` traces the
-  frame's own scene.
+  frame thread helps with, and its results install when it joins, before the
+  frame renders, so lockstep publication stays synchronous and a `[still]`
+  traces the frame's own scene. The same frame is the same logical frame: a
+  join past the wait budget holds the tick and resumes after the next control
+  phase, with the scene, light and window versions it started from
+  ([C0](#how-it-composes)).
 - **Simulation never reads a channel.** No tick depends on background work,
   which keeps the tick deterministic whatever the workers did. The reflow
   preview (`WorldServer.Reflow.cs:67-84`) is a server-owned channel the drain
@@ -653,7 +661,9 @@ residency per frame; then the slot's descriptor writes, mesh sets included,
 which are now safe because the fence has retired the slot. A recording thread
 only binds and records; `GpuPassPipelineCache` is read-only during the fork and
 a miss is a prepare-phase `Bake` job. Submission runs after the join on the
-frame thread, keeping submission records and fence identities single-threaded.
+frame thread, keeping submission records and fence identities single-threaded;
+a wave whose join passes the wait budget stays pending with its lists unsubmitted
+and its outputs unpublished until it joins ([C0](#how-it-composes)).
 The pose pack partitions by registration (the packet's
 measurement) and runs as a `Frame` fork before the first wave; the irradiance
 and exposure staging stay serial until measured.
@@ -823,10 +833,11 @@ probes traced is a cost reading, never a correctness reading.
 
 ## The control plane's phase and bounded waits
 
-This section designs step C0 of the build order. It is a design, reviewed by
-another family before any of it is built. It adds no thread and no scheduler:
-it states what the host loop already promises the control plane, names what
-breaks that promise today, and gives waits one door.
+This section designs step C0 of the build order. Another family reviewed its
+first draft and raised nine findings; this revision answers each of them
+([the review's findings](#the-reviews-findings)) and is what is built. It adds
+no thread and no scheduler: it states what the host loop already promises the
+control plane, names what breaks that promise today, and gives waits one door.
 
 ### What the code does today
 
@@ -841,10 +852,10 @@ breaks that promise today, and gives waits one door.
   control attachment are sessions of one `TextCommandSource`. A session's hold
   (`TextCommandSession.HoldWhile`) rotates only that session, so another
   session's ready line still runs. A control attachment sets a
-  `TextAnswerDeadline` for each call (`ConsoleControlSession.cs:252`), and a
-  hold armed under it ends with an answer when it passes; a piped script's hold
-  has no deadline of its own, so `world.wait ready`, `bakes` and `captures`
-  each require a count of seconds (`WorldWaitCommandModule`).
+  `TextAnswerDeadline` for each call (`ConsoleControlSession`), and a hold
+  armed under it ends with an answer when it passes; a piped script's hold has
+  no deadline of its own, so `world.wait ready`, `bakes` and `captures` each
+  require a count of seconds (`WorldWaitCommandModule`).
 - **A wait across iterations already has a shape.** A root that cannot render
   the frame answers `FrameRender.Waiting` with a reason, and under lockstep the
   loop holds the tick (`HostLoop.HoldsTick`) and iterates, so the console
@@ -853,214 +864,447 @@ breaks that promise today, and gives waits one door.
   drain runs once an iteration, so the control plane is as late as the longest
   iteration. The known case: a lockstep frame that converges lighting
   (`PresentPacingControl.ConvergesLighting`) blocks inside produce on the scene
-  build (`SdfMeshIrradiance.cs:664`), the refill (`:724`) and the worker
-  (`:736`), then traces the window to the end on the frame thread. No console
-  line, MCP call or input sample is read until it returns.
-- **A host-wide hold exists with no deadline and no user.** `TextCommandSource.HoldGate`
-  stops every session's drain while it returns true. Nothing implements
-  `ITextCommandHoldGate` in `src/` (the search for the interface finds only its
-  declaration and its registration, `LauncherServiceRegistration.cs:107`).
+  build and the refill (`SdfMeshIrradiance.Stage`'s converging branch). Where
+  the trace runs on the CPU (`GpuTrace` is null) it also waits for the worker
+  and then traces the window to the end on the frame thread; with a GPU trace
+  the drain runs on a worker (`StartWorker`) and the frame waits only for the
+  scene and the refill. No console line, MCP call or input sample is read until
+  produce returns.
+- **Three more waits sit in a windowed iteration.** The pacing wait asks the
+  swap chain (`ISwapChainPacing.TryWaitForFrame`), which waits natively for up
+  to 100 ms on Direct3D 12 (`DirectXSurfaceCompositor.FrameLatencyWaitTimeoutMilliseconds`,
+  a wait `BeginFrame` also makes) and up to 50 ms on Vulkan
+  (`VulkanFramePresenter.PresentWaitTimeoutNanoseconds`); neither takes a
+  caller's deadline. A withheld frame runs its residency's background GPU work
+  at the GPU's pace inside produce (`SdfWorldResidency`'s `FrameWithheld`
+  branch calls `SdfGpuWork.Drive`). Device-loss recovery retries its rebuild
+  inside one iteration, sleeping `DeviceLossRecovery.ReacquireBackoff` (250 ms)
+  between tries for up to `ReacquireBudget` (10 s), through a sleep delegate
+  the windowed and offscreen hosts bind to the pacer's `HostWaits.Until`.
 
 ### The invariant
 
 Three statements, each checked by the step that builds it.
 
 1. **Phase.** Between two control phases of a live host, the pump thread
-   blocks only on the pacer's deadline and on waits taken through the door
-   below, whose budgets on that thread sum to at most one wait budget. The
-   control plane is therefore read at least once every wait budget plus one
-   pacer period of waiting, whatever a subsystem is waiting for.
+   blocks only in waits taken through the door below. Their budgets on that
+   thread sum to at most one wait budget, and the pacing wait, which is a door
+   wait too, ends by the pacer's deadline. The control plane is therefore read
+   at least once every wait budget plus one pacer period, whatever a subsystem
+   is waiting for.
 2. **Reason.** A wait of one subsystem on another's progress, on any thread,
    carries a deadline and a named reason, and its expiry is a value the waiter
-   handles. No wait is unbounded and anonymous.
+   handles. No wait is unbounded and anonymous. A project is held to this when
+   it turns `WAIT001` on; until then its waits are on the compiler's list
+   (below), not under the guarantee.
 3. **A hold spans iterations; it never lives inside one.** Work the frame
    cannot be shown without is a `FrameRender.Waiting` the loop holds, with its
-   reason and a deadline. The tick is held; the thread is not.
+   reason. A tick the authority cannot finish within its budget is held the same
+   way: the authority keeps the unfinished operation and resumes the same tick,
+   and nothing reads, publishes or frees the half-done tick
+   ([an incomplete tick](#an-incomplete-tick)). The tick is held; the thread is
+   not.
 
-The wait budget is a host pacing value, by default one pacer period, set by
-measurement in the step that moves the fences (below).
+Two bounds, kept apart. The **wait budget**, a host pacing value (by default
+one pacer period, set by measurement in C0.5 and C0.6), is a slice: it governs
+returning to the control plane, and a slice that expires returns deadline
+passed. An operation's **stall deadline** is counted from the operation's first
+slice and never restarted by a later one: it governs giving up, as the tick's
+authority fault and as a fence's device-loss watchdog (today 30 seconds,
+`VulkanFenceWait.TimeoutNanoseconds` and `DirectXCommandCalls.FenceWaitTimeout`).
+Only the stall deadline declares a device lost or an authority stalled.
 
 ### What enforces it
 
-- **The control phase is a receipt the iteration needs.** The loop's first
-  block becomes one method that returns a control receipt, and `HostIteration`
-  cannot be constructed without one (its constructor becomes internal to
-  `Puck.Launcher` and takes it). A presentation adapter receives a
-  `HostIteration`, so no produce runs in an iteration whose control phase did
-  not. `HostLoop.Run` stays the only loop; a second loop has no way to mint an
-  iteration.
-- **One door for waits, `HostWaits` in `Puck.Hosting`.** It takes what is waited on
-  (a wait handle, a task, a submission fence), a `WaitReason` (the waiting
-  subsystem and what it waits for, both constant strings) and a budget, and
-  returns a `WaitOutcome` of completed or deadline passed. On the pump thread,
-  which the loop registers with the door at each control phase, a budget is
-  clipped to what the iteration has left. The door keeps the standing waits
-  and the latest expired ones (reason, thread, start, budget), which is what
-  `world.wait` and `host.frames` read. A completed wait allocates nothing.
+- **The door lives where every waiter can reach it.** `HostWaits` is in
+  `Puck.Abstractions` (namespace `Puck.Abstractions.Waiting`), the leaf every
+  engine runtime project already references. `Puck.Hosting` cannot hold it:
+  `Puck.Machines` references `Puck.Abstractions` and not `Puck.Hosting`, and
+  `Puck.Abstractions` has waits of its own (`Retry.Run`, `FileLock.Acquire`,
+  the fence and readback contracts), so a door above it would force a reference
+  cycle. The door holds the blocking mechanism and its neutral contracts
+  (`WaitReason`, `WaitDeadline`, `WaitOutcome`); the host supplies only
+  registration: the loop's control phase opens the pump thread's allowance
+  (`HostWaits.BeginPumpIteration`), so nothing below needs a host type.
+  `Puck.Confinement`, beneath `Puck.Abstractions`, keeps its one wait
+  (`ConfinedDirectory.AcquireLock`, a cross-process lock-file poll bounded by
+  its caller's timeout and token); `WAIT001` treats that member as blocking,
+  so its wait is answered where it is called, in a project held to the rule.
+- **The door's forms.** Each deadline form takes what is waited on, a
+  `WaitReason` (the waiting subsystem and what it waits for, both constant
+  strings) and a `WaitDeadline`, and returns a `WaitOutcome` of completed or
+  deadline passed: a wait handle, a slim event, a semaphore (acquired or not,
+  so an admission that times out never took a permit and releases none), a
+  task, a monitor condition (the caller holds the monitor and re-tests its
+  condition), a thread's join, and `Until`, which sleeps to the deadline and is
+  the pacer's own. On the pump thread a deadline is clipped to what the
+  iteration's allowance has left, and the time a wait took is charged to it, so
+  sequential waits cannot each spend a full budget. The door keeps the standing
+  waits and the latest expired ones (reason, thread, start, budget), which is
+  what `world.wait` and `host.frames` read. A wait that finds its object
+  already complete records nothing and allocates nothing.
+- **Idle is a role, not a reason.** Only a queue's consumer waits without a
+  deadline. `HostWaits.ClaimConsumer` mints a `WaitConsumer` bound to the
+  calling thread, and refuses on a thread the loop registered as the pump; the
+  idle forms take that consumer and refuse it on any other thread. A producer
+  waiting for a queue's capacity (`QueuedWorkerLifecycle.Submit`) is not its
+  consumer and cannot hold one: it waits with a deadline as a tick dependency
+  (C0.5). The parks that keep the idle form are workers waiting for their own
+  next work: `JobPool.Work`, `QueuedWorkerLifecycle.TakeWork`, and the audio
+  and socket loops.
+- **Lifetime parks and startup rendezvous have their own forms.** A thread
+  started to own a resource for the process's life (the allocator's owner
+  thread, `MimallocAllocator`) parks through `HostWaits.Park` with its
+  consumer, which names the ownership instead of hiding it in an infinite
+  sleep. A thread that waits for another to finish initializing (the
+  allocator's load, a WASAPI device's start) waits with a startup deadline and
+  a reason, and expiry fails the open with that reason.
+- **The control phase mints the iteration.** `HostIteration` becomes a `ref
+  struct`. The compiler then keeps it from being stored in a field, captured by
+  a lambda or kept past the produce call it was passed to, so no adapter can
+  replay an iteration from an earlier callback. Its constructor takes the loop
+  and checks the loop's own phase state: a control phase completed for this
+  sequence and no produce yet for it; any other mint throws, whoever calls it.
+  A `default` iteration carries no loop, and reading it throws. Those three
+  facts are the enforcement; the constructor's assembly-internal visibility is
+  not. `HostLoop.Run` stays the only loop. What this does not stop is a second
+  loop that calls `IRenderRoot.ProduceFrame` without an iteration: today its
+  host callers are the two presentation adapters, and the control gap (below)
+  measures any other.
 - **The unbounded members go.** `IGpuSubmissionFence.Wait`, `BackgroundBuild`'s
-  and `GpuBuildCache`'s waits and `QueuedWorkerLifecycle.Drain` lose their
-  no-argument forms; each takes the door's bound and returns the outcome. A
-  caller cannot reach the old path because it is not there.
-- **An exact analyzer closes the rest.** `WAIT001` in `Puck.Analyzers`: a call
-  of a blocking runtime member (`Task.Wait`, `Task.Result` and
-  `GetAwaiter().GetResult()` on a task not proven complete on that path,
-  `WaitHandle.WaitOne`, `ManualResetEventSlim.Wait`, `SemaphoreSlim.Wait`,
-  `Monitor.Wait`, `Thread.Join`, `Thread.Sleep`, `SpinWait`) outside the door's
-  own file. Tool, CLI and test assemblies are not held to it, as they are not
-  to `OUTCOME001`. `WaitOutcome` joins the types `OutcomeAnalyzer` refuses to
-  see dropped. The rule lands as a warning and becomes an error project by
-  project, which is the order J1 migrates in.
-- **A thread idle on its own queue is not a wait on another subsystem.** A
-  worker parked for work (`JobPool.cs:188`, `QueuedWorkerLifecycle.cs:274` and
-  `:299`, the audio and socket loops) calls the door's idle form, which takes a
-  reason and no deadline and is the only form the analyzer allows without one.
+  and `GpuBuildCache`'s waits, `QueuedWorkerLifecycle.Drain` and `Submit`, and
+  `ISwapChainPacing.TryWaitForFrame` lose their deadline-free forms; each takes
+  a deadline and returns the outcome. `DeviceLossRecovery` loses its sleep
+  delegate and becomes an operation polled across iterations
+  ([how it composes](#how-it-composes)). A caller cannot reach the old path
+  because it is not there.
+- **An exact analyzer closes the rest.** `WAIT001` in `Puck.Analyzers` reports
+  any reference to a blocking member outside the door's type: a call, a method
+  group or delegate conversion (`m_sleep = (sleep ?? Thread.Sleep)` is one), or
+  a property read. The set is every managed wait family: `Task.Wait`,
+  `Task.WaitAll`, `Task.WaitAny`, `Task<T>.Result`, the task awaiters'
+  `GetResult`, `WaitHandle.WaitOne`, `WaitAll`, `WaitAny` and `SignalAndWait`,
+  `ManualResetEventSlim.Wait`, `SemaphoreSlim.Wait`, `CountdownEvent.Wait`,
+  `Barrier.SignalAndWait`, `Monitor.Wait`, `Thread.Join`, `Thread.Sleep`,
+  `Thread.SpinWait`, `SpinWait.SpinUntil` and `SpinOnce`,
+  `BlockingCollection<T>.Take`, and the Puck members below the door that block
+  (`ConfinedDirectory.AcquireLock`). `Result` and `GetResult` pass only where
+  the receiver is proven complete on the path: inside the true branch of a test
+  of the same variable's `IsCompleted`, `IsCompletedSuccessfully` or
+  `IsFaulted`, or after `&&` on one. The native wait entry points
+  (`WaitForSingleObject`, `WaitForMultipleObjects` and their `Ex` forms,
+  `vkWaitForFences`, `vkWaitForPresentKHR`, `vkQueueWaitIdle`,
+  `vkDeviceWaitIdle`, `vkWaitSemaphores`) join the set in C0.6, where a call is
+  allowed only in a method that takes a `WaitDeadline`, which is where a native
+  wrapper lives; whether its timeout derives from that deadline is read in
+  review, not checked. What `WAIT001` cannot see: a wait reached through
+  reflection, through a delegate bound in an assembly not held to the rule, or
+  inside native code entered through an entry point the set does not name. A
+  lambda's body is ordinary code and is read. A project turns the rule on with
+  `<PuckWaitRule>true</PuckWaitRule>`, and under the repository's
+  warnings-as-errors it is then an error; test, tool and CLI assemblies never
+  turn it on. `WaitOutcome` joins the types `OutcomeAnalyzer` refuses to see
+  dropped.
+- **The list is the compiler's.** `dotnet build <project> -c Release
+  -p:PuckWaitRule=true -p:TreatWarningsAsErrors=false
+  -p:CodeAnalysisTreatWarningsAsErrors=false` prints every site in a project
+  as a `WAIT001` warning. A text survey over the source is a cross-check only;
+  where the two differ the compiler's list wins, because a method group, a
+  property read or a native entry point has no `.Wait(` to match. The survey
+  in turn matches calls of Puck members that wrap a wait
+  (`IGpuSubmissionFence.Wait`, `GpuSurfaceReadback`'s slot, `CanceledBuild<T>.Wait`):
+  the compiler reports such a wait once, at the runtime member inside the
+  wrapper, and its callers become held when the wrapper takes a deadline, which
+  is why the unbounded members change rather than their callers being listed.
 
 ### Where the guarantee stops
 
 The door sees waits. It does not see work: a long computation on the pump
 thread, a driver call that blocks inside the device (a present, a queue
 submission, a map, a swap chain resize), a collection's suspension, or
-contention on a `lock`. Nothing in C0 prevents those. What covers them is a
-measurement, not a structure: `host.frames` gains the control gap, the longest
-time between two control phases over the window, so an iteration held by any
-cause shows as a number against the bound. Locks stay with `puck scan`'s lock
-analyzer until J1 removes them. A wait inside a native library the engine calls
-is outside the analyzer too; the device waits are wrapped at the two backend
-calls the survey lists.
+contention on a `lock`, the authority gate's included. Nothing in C0 prevents
+those. What covers them is a measurement, not a structure: `host.frames` gains
+the control gap, the longest time between two control phases over the window,
+so an iteration held by any cause shows as a number against the bound. Locks
+stay with `puck scan`'s lock analyzer until J1 removes them. A wait inside a
+native library is outside the analyzer unless its entry point is named; the
+device and present waits are named and wrapped in C0.6.
 
 ### What a deadline's expiry does
 
-Expiry is decided by what the waiter owes, in four classes.
+Expiry is decided by what the waiter owes, which is a property of the caller
+and its operation, never of the file the wait sits in.
 
 | Class | On expiry |
 |---|---|
-| Presentation, on the pump thread: a build, a lease, a fence the frame needs | The node answers `FrameRender.Waiting` with the wait's reason. Under lockstep the loop holds the tick; otherwise the latest image stands. The next iteration's control phase runs first. |
-| The tick, where a result is simulation state: a machine step's drain, a tick fork's join | The tick cannot skip or substitute (rule 4), so the authority stops stepping with the reason, as an addon host's epoch timeout already freezes its authority ([durable addon state](../../.claude/skills/puck-world/SKILL.md#live-state-reads-and-writes)). The control plane stays live and `world.rate` names the stall. State never depends on the timing. |
-| A device wait with no frame behind it: a readback, an upload, a retiring slot | The owner keeps the resource and polls the fence on later frames, as `SdfGpuWork.Pump` polls its slots today. A fence that never signals is the device-loss path's (`DeviceLossRecovery`). |
-| Shutdown and disposal joins | The owner narrates the reason and what it abandoned, and continues the teardown. The audio thread's join (`WorldAudioRenderService.cs:190`) and the request lane's (`PersistentRequestLane.cs:540`) already have bounds. |
+| Presentation, on the pump thread: a build, a lease, a fence or a present the frame needs | The node answers `FrameRender.Waiting` with the wait's reason. Under lockstep the loop holds the tick; otherwise the latest image stands. The next iteration's control phase runs first. |
+| The tick, where a result is simulation state: a machine step's drain, a producer waiting for the machine queue's capacity, a tick fork's join | The step is pending, not complete, and the authority keeps the unfinished operation ([an incomplete tick](#an-incomplete-tick)). |
+| A live request, whose caller waits for work another thread runs: a machine checkpoint, memory peek and poke, time travel or reconfiguration (`QueuedWorkerLifecycle.EnqueueAndWait`), a module load's admission (`WasmModuleLoader.Load`), a background build's result or pipeline lease, a capture's encoder window (`FrameCaptureRequest`) | A request has four outcomes: refused, accepted, pending and completed. Expiry before acceptance is refused and nothing ran: an admission that times out took no permit. Expiry after acceptance is pending: the request's owner keeps the request and its completion until the worker acknowledges it, the caller polls it on later iterations or gives up its interest, and a late completion reaches the owner, which discards what it carries through the owner's discard action. A caller never assumes a pending request did not run. |
+| A device wait with no frame behind it: a readback, an upload, a retiring slot | The owner keeps the resource and polls the fence on later frames, as `SdfGpuWork.Pump` polls its slots today. A slice returns deadline passed; only the operation's stall deadline declares the device lost (`DeviceLossRecovery`). |
+| Teardown: the joins and drains before a disposal | One of three outcomes ([teardown](#teardown)). |
+| A startup rendezvous: the allocator's load, an audio device's start | The open fails with the wait's reason. |
+
+#### An incomplete tick
+
+- **The authority owns the unfinished operation.** When a tick's join (a fork's
+  join, a machine's drain, a producer's capacity wait) passes its slice, the
+  step answers pending. The authority keeps an incomplete-tick record holding
+  everything the unfinished work still uses: the fork or barrier and its
+  generation, the partitions' scratch, the read epoch and the workers'
+  references. `JobPool.Fork` keeps its busy flag and body until the join
+  completes, so no other fork reuses its storage. `QueuedWorkerLifecycle.Drain`
+  keeps its one barrier with its generation and issues no new barrier while one
+  is pending, so a late signal can only acknowledge the barrier it was given.
+- **The same tick resumes.** The pump does not count the step (the accumulator
+  keeps the interval, as `FixedStepPump.Hold` does), runs the next iteration's
+  control phase, and then polls the same operation with a fresh slice. When it
+  completes, the tick is counted, published and hashed, and its post-step hooks
+  run. A tick therefore completes later in wall time and identically in state:
+  no completed tick depends on the timing (AGENTS.md rule 4).
+- **Nothing touches the half-done tick.** While the record stands, a console
+  read-back is refused with the stall's reason, and a mutation, checkpoint or
+  export, attach, reload or reset waits behind the tick as a simulation
+  submission already does, or is refused when its caller cannot wait. Disposal
+  follows teardown's rule. The check has one home, the authority's own entry:
+  the authority operation door (`WorldServer.ExecuteAuthorityOperation`, which
+  federation and sessions already enter) and the console's read view
+  (`IWorldConsoleAuthority.ReadView`, which the server mints). C0.5's first task
+  is to list the paths that reach the arena without either (checkpoints
+  snapshot arena columns directly, for one) and route them through the entry,
+  so no path gets around the check once the record can stand.
+- **The stall deadline faults the authority.** An incomplete tick past its
+  stall deadline (finite on an unpaced host too) freezes the authority with the
+  reason, as an addon host's epoch timeout already does
+  ([durable addon state](../../.claude/skills/puck-world/SKILL.md#live-state-reads-and-writes)):
+  it refuses a checkpoint of the incomplete tick, its last completed tick is
+  what exports, and the record keeps the workers' references until they
+  acknowledge or the process ends. Two machines can therefore stop at different
+  tick prefixes; no completed tick differs between them.
+
+#### Teardown
+
+- **Drained.** Every join and drain completed: disposal runs as today.
+- **The device is proven lost.** The loss path's own release
+  (`DeviceLossRecovery`, whose idle wait already tolerates a removed device)
+  releases the device-side resources as lost.
+- **An owner is unretired.** Neither holds, because a timeout proves neither
+  cancellation nor device loss. The owner keeps the whole dependency closure of
+  what is still in use (a slot's fence and command pool, a readback lease and
+  its buffer, a cancelled build's candidate, and the render root and device they
+  depend on) on a process-lifetime retirement list, narrates the reason and
+  what it kept, and the host skips that closure's disposal and lets the process
+  exit release it. Nothing still in use is freed. `WorldAudioRenderService.StopAsync`
+  today ignores its join's result and disposes its stop event after it; under
+  C0 a thread still alive keeps the event.
+- **J1 agrees.** J1's shutdown settlement (pool quiescence, then
+  take-or-discard, then disposal of the render root and device, section 1)
+  takes the third outcome when quiescence passes its deadline.
 
 ### How it composes
 
-- **J1.** C0 is first because J1 moves these waits onto the pool, and a wait
-  with no deadline moved onto a pool is still a stall. J1's rule that no job
-  waits inside a unit is this door seen from a worker: after J1, a worker
-  calls only the idle form. The convergence drain below is J1's `Frame` fork
-  once the pool exists; until then it is the same work in bounded slices on
-  the pump.
+- **J1's fork returns an operation the forking thread owns.** C0 is first
+  because J1 moves these waits onto the pool, and a wait with no deadline moved
+  onto a pool is still a stall. On a worker a fork still joins in its call (the
+  parent helps, so it is always working, and after J1 a worker calls only the
+  idle form). On the pump the join takes the wait budget; past it the operation
+  is pending, keeps its partitions' scratch, its command storage and the scene,
+  light and window versions it started from, and is polled after the next
+  control phase. Submission, publication and scratch retirement follow only its
+  join. A control command that reloads or changes the view while one is pending
+  cancels it at its next unit boundary, its result is discarded after its join,
+  and a fresh pass starts from the new versions, so a half-done pass is never
+  published or mixed with another. A frame completes when its logical work
+  does, which may span host iterations; sections 1 and 3 say "the same frame"
+  in that sense. Until the pool exists, the convergence drain is the same work
+  in bounded slices on the pump.
 - **Published values need no wait.** A pump-thread wait that exists only to
   read what another thread built is replaced by a publication, not bounded:
   `PublishBuffer<T>` and `PublishArena<T>` readers never wait or retry. The
-  static field's adoption and the composition program's are that shape. The
-  door is for what is left: device back-pressure, the tick's own joins, the
-  pacer and teardown.
-- **The streaming plan's background budget.** [Step 3](streaming-and-memory.md#step-3-one-reservation)
-  services background GPU work during the host's present wait. That wait is
-  the pacer's, the one pump wait with a deadline by construction, and
-  `SdfGpuWork`'s drive already waits inside it for a fence or a wake up to the
-  slice it has left (`SdfGpuWork.cs:376`, `:383`). Under C0 those two waits
-  take the pacer's deadline through the door, so servicing can use the whole
-  present wait and can never delay the next control phase.
+  static field's adoption and the composition program's are that shape. A
+  latest-value publication is not a transfer: a result that owns something to
+  dispose keeps its build owner's take-or-discard lifecycle (`BackgroundBuild`'s
+  candidate). The door is for what is left: device back-pressure, the tick's own
+  joins, live requests, the pacer and teardown.
+- **Pacing is one door wait with one deadline.** Timer pacing, swap-chain
+  readiness and background service share one absolute deadline the loop owns.
+  `ISwapChainPacing.TryWaitForFrame` takes it, and each backend passes the
+  remainder to its native wait: the Direct3D 12 frame latency waitable, in
+  `TryWaitForFrame` and in `BeginFrame`, and Vulkan's present wait. The
+  [streaming plan's step 3](streaming-and-memory.md#step-3-one-reservation)
+  services background GPU work during that wait, which needs a wake for present
+  readiness beside GPU completion and work arrival. On Direct3D 12 the frame
+  latency waitable is a handle the door can wait on beside the work's wake;
+  Vulkan's present wait has no handle, so there the service runs in slices
+  between zero-timeout readiness polls. This is work to build in that step, not
+  a hook that exists: today the drive waits inside produce (`SdfGpuWork.Drive`,
+  its fence wait unbounded and its wake wait bounded by its own slice) and the
+  pacing wait runs apart from it.
+- **Device-loss recovery is an operation.** `DeviceLossRecovery` keeps its loss
+  across iterations instead of looping inside one: it makes one rebuild attempt
+  an iteration once its backoff deadline has passed, the frame answers waiting
+  with the recovery's reason in between, and the reacquire budget is its stall
+  deadline. The sleep delegate, and the default `Thread.Sleep` it binds, go.
 - **The attach primer.** The packet's unconfirmed item (`WorldDocument.AttachSink`
   reading `WorldDisclosureImages.Current` outside `WorldServer.AuthorityGate`)
-  is a lock question, not a wait, so the door does not see it. It goes with
-  this step because the fix routes the attach through the authority's
-  operation, which is a bounded pump-side submission.
+  is fixed by routing the attach through `WorldServer.ExecuteAuthorityOperation`,
+  as an authenticated peer's attach and `TryObserveAsSession` already are. That
+  operation is a synchronous lock (`EnterAuthorityGate`), not a bounded
+  submission, so C0 leaves the residual wait a lock wait, outside the door as
+  stated above; C0.7 audits the lock order of the callbacks the attach delivers
+  to inside it (definition and primer delivery), and a pending submission belongs
+  to J1's channels.
 
 ### The waits C0 rules on
 
-The survey is one command, and its output, not this table, is the list: the
-technique patterns `\.Wait\(`, `\.WaitOne\(`, `SpinUntil`, `SpinWait`,
-`Monitor\.Wait`, `GetAwaiter\(\)\.GetResult\(\)`, `\.WaitAsync\(`,
-`WaitHandle\.Wait`, `Task\.WaitAll`, `Task\.WaitAny`, `Thread\.Sleep`,
-`Thread\.Yield` and `\.Join\(` over `src/`, less the CLI, Post, Azure and
-research projects. It finds no `SpinUntil`, `SpinWait` or `Thread.Yield` in the
-engine's runtime, and no condition loop that spins on a flag: the loops that
-re-test a flag do so under `Monitor.Wait` (`SdfGpuWork.cs:123`,
-`QueuedWorkerLifecycle.cs:274`). `WAIT001`'s first build prints the same list
-from the compiler, which is what a builder reads; the rows below are the ones
-this design decides, with the line each was read at.
+The list is the compiler's (`WAIT001`, above). The text survey (the patterns
+`\.Wait\(`, `\.WaitOne\(`, `SpinUntil`, `SpinWait`, `Monitor\.Wait`,
+`GetAwaiter\(\)\.GetResult\(\)`, `\.WaitAsync\(`, `WaitHandle\.Wait`,
+`Task\.WaitAll`, `Task\.WaitAny`, `Thread\.Sleep`, `Thread\.Yield` and `\.Join\(`
+over `src/`, less the CLI, Post, Azure and research projects) cross-checks it.
+It finds no `SpinUntil`, `SpinWait` or `Thread.Yield` in the engine's runtime,
+and no condition loop that spins on a flag: the loops that re-test a flag do so
+under `Monitor.Wait`. The rows below are the ones this design decides, each by
+its caller and operation, with the line each was read at.
 
-Reached from the pump thread inside an iteration (read at the cited line):
+Reached from the pump thread inside an iteration:
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `SdfMeshIrradiance.cs:664`, `:724`, `:736` | A converging lockstep frame blocks on the scene build, the refill and the worker, then drains on the frame thread | `FrameRender.Waiting` naming the stage and its progress; the drain runs in slices of one wait budget an iteration and the tick is held between them |
+| `SdfMeshIrradiance.cs:664`, `:724`, `:736` | A converging lockstep frame blocks on the scene build and the refill, and with a CPU trace on the worker, then drains on the frame thread | `FrameRender.Waiting` naming the stage and its progress; the drain runs in slices of one wait budget an iteration and the tick is held between them |
 | `WorldFramePresenter.cs:528` (`AdoptStaticField` with `wait`) | Blocks on the static field's build | The build publishes; adoption reads the publication, and a frame that needs it answers waiting |
 | `SdfCompositionFrameSource.cs:275` (`WaitsForBuild`), `:566` (a layout change) | Blocks on the program build | The same: published program, or waiting with the reason |
 | `SdfWorldResidency.cs:434` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
+| `SdfWorldResidency`'s withheld frame (`SdfGpuWork.Drive`, `SdfGpuWork.cs:376` and `:383`) | The drive's fence wait is unbounded; its wake wait has its own slice's remainder | Both take the iteration's deadline through the door |
 | `SurfaceEncoder.cs:162`, `SurfaceCompositor.cs:207`, `DirectXSurfaceCompositor.cs:917` | A pipeline lease waited with no cancellation | Polled; the present shows the latest image while it builds |
 | `ShaderPipelineRenderNode.cs:1546` (`WaitSlot`, the one door a slot's fence is waited through) | Unbounded fence wait before a slot is reused | The door; on expiry the node answers waiting and its image stands |
-| `RenderGraphRuntime.StandIns.cs:126`, `GpuCommandSlot.cs:17`, `GpuSurfaceReadback.cs:71` and `:91`, `GpuSurfaceUpload.cs:127`, `FrameCaptureRequest.cs:193`, `SdfWorldTables.Upload.cs:38` and `:103`, `SdfGpuWork.cs:466` and `:491` | Unbounded fence and slot waits | The door, as device waits |
-| `SdfGpuWork.cs:376`, `:383` | The drive's fence wait is unbounded; its wake wait has the slice's remainder | Both take the pacer's deadline |
-| `GpuWorkCountingFence.cs:37`, `GpuBatchedSubmissionFence` (`Wait`), `VulkanFrameSynchronization.cs:111`, `VulkanGpuQueueSubmitter.cs:216`, `DirectXGpuQueueSubmitter.cs:246`, `DirectXSurfaceCompositor.cs:490` and `:511` | The fence implementations and the two backends' native waits | Take the bound and return the outcome; the native call receives the timeout |
-| `QueuedWorkerLifecycle.cs:147` (`Drain`, once a synchronous machine step) | Unbounded, and allocates an event a step | Bounded as a tick wait; one retained event (section 1) |
-| `JobPool.cs:108` (a fork's join) | Unbounded | Bounded as a tick or frame wait; expiry names the partition still held |
-| `LauncherHostLoop.cs:54` | The pacer's one-millisecond sleep where no precision waiter exists | Stays; it is the wait the deadline belongs to. Its reason is the pacer's |
-| `SdfMeshProbeGpuWork.cs:194`, `SdfMeshProbeGpuWork.Scene.cs:25` and `:117`, `ShaderCompiler.cs:92`, `ShaderPackager.cs:358`, `ShaderPackager.Store.cs:310`, `ShaderPipelineLoader.cs:200` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | The builder reads the caller first: on the pump they become waiting answers, on a worker a run-after edge (J1) |
+| `RenderGraphRuntime.StandIns.cs:126`, `GpuCommandSlot.cs:17`, `GpuSurfaceReadback.cs:71` and `:91`, `GpuSurfaceUpload.cs:127`, `SdfWorldTables.Upload.cs:38` and `:103` | Unbounded fence and slot waits | The door, as device waits |
+| `ISwapChainPacing.TryWaitForFrame` (`DirectXSurfaceCompositor.cs:572`, also from `BeginFrame`; `VulkanFramePresenter.cs:313`) | Native waits of up to 100 ms and 50 ms with no caller deadline | The loop's pacing deadline, through the door and into the native timeout |
+| `DeviceLossRecovery.TryRecover` (`:212`) | Up to 10 s of 250 ms backoff sleeps inside one iteration, through a delegate | An operation polled across iterations; the frame answers waiting between attempts |
+| `GpuWorkCountingFence.cs:37`, `GpuBatchedSubmissionFence` (`Wait`), `VulkanFrameSynchronization.cs:111`, `VulkanGpuQueueSubmitter.cs:216`, `DirectXGpuQueueSubmitter.cs:246`, `DirectXSurfaceCompositor.cs:490` and `:511` | The fence implementations and the two backends' native waits | Take the deadline and return the outcome; the native call receives the remainder as its timeout, and the stall deadline keeps the 30-second watchdog |
+| `VulkanQueueSubmitter.cs:221` (`vkQueueWaitIdle`), `VulkanLogicalDevice.cs:152` (`vkDeviceWaitIdle`) | Queue and device idle waits outside the fence wrappers | Replaced by fence-based progress where a deadline applies, or named as native teardown and loss-path waits in C0.6 |
+| The pacer's sleep (`HostWaits.Until`) | A one-millisecond sleep where no precision waiter exists | Built in C0.2: the door's pacer form, bounded by the pacer's deadline |
+| `SdfMeshProbeGpuWork.cs:194`, `ShaderCompiler.cs:92`, `ShaderPackager.cs:358`, `ShaderPackager.Store.cs:310`, `ShaderPipelineLoader.cs:200` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | C0.8 reads each caller: on the pump they become waiting answers, on a worker a run-after edge (J1) |
 
-Teardown, bounded by the last class above: `BackgroundBuild.cs:84`, `:161`
-and `:254`, `GpuBuildCache.cs:158`, `:176` and `:387`, `RetiredBuilds.cs:76`,
-`GpuImageLeases.cs:93`, `SdfKernelTreeLoad.cs:142`, `SdfMesh.Restore.cs:173`,
-`SdfGpuWork.cs:123`, `JobPool.cs:127`, `QueuedWorkerLifecycle.cs:170`, `:247`
-and `:250`, `QueuedMachineWorker.cs:840`, `LinkedMachineGroup.cs:300`,
-`WasmModuleLoader.cs:132`.
+The tick's waits (C0.5):
+
+| Wait | Today | Under C0 |
+|---|---|---|
+| `QueuedWorkerLifecycle.cs:147` (`Drain`, once a synchronous machine step) | Unbounded, and allocates an event a step | A tick wait with one retained barrier and its generation; past its slice the tick is incomplete |
+| `QueuedWorkerLifecycle.cs:274` (`Submit` with a full pending window) | The producer waits on the condition for another thread's completions | A tick wait with a deadline, never the idle form; past its slice the tick is incomplete |
+| `JobPool.cs:108` (a fork's join) | Unbounded | A tick or frame wait; the fork keeps its storage while pending, and expiry names the partition still held |
+
+Live requests (C0.8):
+
+| Wait | Today | Under C0 |
+|---|---|---|
+| `QueuedWorkerLifecycle.cs:170` (`EnqueueAndWait`, from `QueuedMachineWorker`'s checkpoint, memory, time-travel and reconfigure requests) | Unbounded wait on a completion the caller disposes | Refused, accepted, pending or completed; the lifecycle owns a pending request's completion until the worker acknowledges it |
+| `WasmModuleLoader.cs:132` (`CompilationSlots.Wait` in `Load`) | Unbounded admission | Admission with a deadline: acquired, or refused having taken no permit |
+| `BackgroundBuild.cs:161` (`WaitOut`, reached by `GpuBuildCache`'s pipeline lease), `GpuBuildCache.cs:387` | A live result wait | Pending or completed; the pump rows above poll it |
+| `FrameCaptureRequest.cs:193` (`m_pending.Wait`, the encoder window released at `:214`) | CPU encoder back-pressure before a frame is queued for PNG encoding | The capture stays armed and queues the frame on a later iteration, or the request is refused with the encoder's reason |
+
+Teardown, with [its three outcomes](#teardown): `BackgroundBuild.cs:84` and
+`:254`, `GpuBuildCache.cs:158` and `:176`, `RetiredBuilds.cs:76`
+(`Task.WaitAll`), `GpuImageLeases.cs:93`, `SdfKernelTreeLoad.cs:142`,
+`SdfMesh.Restore.cs:173`, `SdfGpuWork.cs:123` (the readback lease's
+`WaitReleased`) and `:466`, `SdfMeshProbeGpuWork.Scene.cs:117`, `JobPool.cs:127`,
+`QueuedWorkerLifecycle.cs:247` and `:250`, `QueuedMachineWorker.cs:840`,
+`LinkedMachineGroup.cs:300`, `GamepadDevice.cs:800` (`Task.WaitAny` on a join's
+deadline), `WorldAudioRenderService.cs:190`, `PersistentRequestLane.cs:540`.
+
+Startup rendezvous and lifetime parks: `MimallocAllocator.cs:34`'s load
+(`GetResult` on the owner's start) and the owner's infinite sleep at `:30`,
+`WasapiAudioRenderDevice.cs:80` and `WasapiAudioCaptureSource.cs:57`
+(`m_initDone.Wait`). `RecordingSession.cs:197` (`WaitHandle.WaitAny` over its
+stop signal and its muxer's readiness) is its own thread's consumer wait.
 
 Not read after completion, so not waits: `WorldViewGraphHost.cs:970` (guarded
-by `IsCompleted`), `WorldCaptureScheduler.cs:818` and `WorldCompareCapture.cs:84`
-(a served request's result). The analyzer lets these through only where the
-completion is proven on the path.
+by `IsCompleted`), `WorldConfiguredExtensions.Observations.cs:109` (guarded by
+`IsCompleted` at `:106`), `SdfMeshProbeGpuWork.Scene.cs:25` (rethrows a task
+already `IsFaulted`), `SdfGpuWork.cs:491` (after `IsSignaled`),
+`WorldCaptureScheduler.cs:818` and `WorldCompareCapture.cs:84` (a served
+request's result). The analyzer lets these through only where the completion is
+proven on the path; a proof that crosses a helper boundary
+(`WorldCaptureScheduler`'s) is restated at the read or the read moves behind the
+check.
 
 Storage, federation and extension I/O waited synchronously
 (`WorldOwnedWorldSync.cs:166`, `:375`, `:605`, `:731` and `:811`,
 `WorldRemoteAuthority.cs:311` and `:1092`, `WorldFederatedServerLink.cs:158`,
 `WorldDocumentOrigin.cs:271`, `WorldStorageDocumentSource.cs:49`,
 `WorldStorageNeighbourResolver.cs:136` and `:160`,
-`WorldConfiguredExtensions.Observations.cs:109`, `WorldStorageCommandModule.cs:66`,
-`UpdateCommandModule.cs:56` and `:78`): section 1 already rules that I/O
-completes into its owner's channel. Which of these run on the pump or the tick
-thread was not read for this design; each is bounded through the door in its
-project's turn and moved to a channel with J1.
+`WorldStorageCommandModule.cs:66`, `UpdateCommandModule.cs:56` and `:78`):
+section 1 already rules that I/O completes into its owner's channel. C0.8 reads
+which of these run on the pump or the tick thread, bounds those through the door
+as live requests, and leaves the rest to J1's channels.
 
 Dedicated threads keep their loops (section 1): the platform's camera, capture
 and audio threads, the recording session, the gamepad loops, the silo and the
-MCP front. Their waits are idle waits or teardown joins and migrate with their
-projects.
+MCP front. Their waits are consumer idle waits, rendezvous or teardown joins,
+and migrate with their projects.
 
 ### The steps
 
-Each lands on its own, in this order.
+Each lands on its own, in this order. A project turns `WAIT001` on in the step
+that clears its last site; the compiler's list says which step that is.
 
 | Step | Lands | Check |
 |---|---|---|
-| **C0.1** | `HostWaits`, `WaitReason`, `WaitOutcome`; `WAIT001` as a warning | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a completed wait allocates 0 B (`AllocationWindow`). The build's `WAIT001` list against the survey command's. |
-| **C0.2** | The control receipt; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap no longer than its longest iteration, and a `world.status` issued through a second attachment while the first holds on `world.wait 300` answers at once. |
-| **C0.3** | The convergence waits become waiting answers and the drain runs in slices | The row's check: at a lockstep walkthrough tour stop that converges lighting, a console verb issued during the drain answers within one iteration (the control gap stays under the wait budget plus a pacer period), and the stop's still against the build before it, compared with the tolerance above. A windowed leg on both backends. |
+| **C0.1** | Built. `HostWaits` and its forms, `WaitReason`, `WaitDeadline`, `WaitOutcome`, `WaitConsumer`, the pump allowance and the wait records, in `Puck.Abstractions`; `WAIT001` behind `PuckWaitRule`, with every managed family, method groups and delegate conversions, the completion proof and `ConfinedDirectory.AcquireLock` | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a pump-thread wait is clipped to the iteration's allowance; a consumer claim on the pump thread and a consumer used on another thread are refused; a completed wait allocates 0 B (`AllocationWindow`). Analyzer laws for a method group, a delegate conversion and the completion proof. The compiler's list for `Puck.Launcher`, `Puck.Hosting`, `Puck.Machines` and `Puck.Abstractions` against the survey's, each difference explained. |
+| **C0.2** | Built. The control phase mints the iteration (`HostIteration` a `ref struct` checked against the loop's phase); the pump allowance opened at each control phase; the pacer's sleep through `HostWaits.Until`; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap no longer than its longest iteration, and a session's own hold holds only that session (`TextCommandSourceTests.ASessionsOwnHoldHoldsOnlyThatSession`), which is what lets a second control attachment answer while the first holds on `world.wait`; the MCP adapter runs one call at a time per World, so two attachments cannot be raced through it. |
+| **C0.3** | The convergence waits become waiting answers and the drain runs in slices, on the CPU-trace and GPU-trace paths both | At a lockstep walkthrough tour stop that converges lighting, a console verb issued during the drain answers within one iteration (the control gap stays under the wait budget plus a pacer period), and the stop's still against the build before it, compared with the tolerance above. A windowed leg on both backends. |
 | **C0.4** | The static field, composition program and pipeline lease waits become publications or waiting answers; `world.wait`'s release names the standing reason | A `world.reload` that changes the layout: no control gap over the bound; `world.wait ready 5` issued while a build stands releases with that build's reason in its answer instead of the bare timeout. |
-| **C0.5** | The tick's waits: the machine drain and the fork join bounded; a stall stops the authority and names itself | A law over `QueuedWorkerLifecycle` with a worker held: the drain returns deadline passed within its budget and allocates 0 B when it completes. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures unchanged. |
-| **C0.6** | Fences and device waits through the door; the unbounded fence member deleted; the wait budget set from readings; `WAIT001` an error for `Puck.Launcher`, `Puck.Hosting`, `Puck.Shaders`, `Puck.SdfVm`, `Puck.World.Client`, `Puck.Machines` and `Puck.Abstractions` | Those projects build with the rule as an error. An armed device loss (`gpu.faults`) during a fence wait recovers on both backends. `host.frames` standing at the lobby: produce-fence unchanged against the build before. |
-| **C0.7** | The attach primer under the authority's operation | First a law that shows the defect or clears the item: an attach from a second thread while a tick writes. Then the route, with `puck test --reproduce` on the session fixtures. |
+| **C0.5** | The tick's waits: the drain, the producer's capacity wait and the fork join bounded; the incomplete-tick record, the read view's refusal and the stall deadline; first, the list of read paths that bypass the read view | A law over `QueuedWorkerLifecycle` and the authority with a worker held past its slice: the step answers pending within its budget; a console read, a checkpoint, an attach and a reset issued while the record stands are refused or wait with the stall's reason; the late worker completion finishes the same tick, whose hash equals an unheld run's; a completed drain allocates 0 B. A held fork the same way. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures. |
+| **C0.6** | Fences, device, present and recovery waits through the door: the native entry points in `WAIT001`; `GpuFenceBlocking`'s per-thread blocked time folded into the door's own accounting, so produce-fence reads one mechanism; `TryWaitForFrame` and `BeginFrame` on the pacing deadline; recovery as an operation; the teardown outcomes and the retirement list; the wait budget and stall deadlines set from readings | An armed device loss (`gpu.faults`) during a fence wait recovers across iterations on both backends with the console answering between attempts. A minimized or occluded window keeps the control gap under the wait budget plus a pacer period on both backends. A fence, a readback lease and a build that complete after their teardown deadline leave no device-after-dispose message in stderr and the narration lists what was kept. `host.frames` standing at the lobby: produce-fence against the build before. |
+| **C0.7** | The attach primer under the authority's operation, with its callbacks' lock order audited | First a law that shows the defect or clears the item: an attach from a second thread while a tick writes. Then the route, with `puck test --reproduce` on the session fixtures. |
+| **C0.8** | The live requests' outcomes; the startup rendezvous and lifetime park forms; the compile, probe and storage callers read and classified; `WAIT001` on in every project C0 cleared | A machine checkpoint and a memory poke issued while the machine's worker is held answer pending and complete once it is released, with no wait on a disposed completion; a module load whose admission is full is refused and leaves the semaphore's count unchanged; those projects build with the rule on. |
 
-The remaining projects take `WAIT001` as an error as J1 migrates each.
+The remaining projects turn `WAIT001` on as J1 migrates each.
 
 ### What this design did not settle
 
-- The wait budget's default (one pacer period) is a guess until fences run
-  through the door; C0.6 sets it from the standing stops' produce-fence
-  readings.
+- The wait budget's default (one pacer period) and the stall deadlines are
+  guesses until the tick's waits and the fences run through the door. C0.5 and
+  C0.6 set them from readings that include preempted workers, cold work and
+  host load, give an unpaced host a finite stall deadline, and fix what a
+  pending operation does when the pacer's rate changes: each slice reads the
+  current budget, and the stall deadline stays the one fixed at the operation's
+  first slice.
 - Whether slicing the convergence drain changes a converged still beyond the
   capture noise; C0.3's comparison reads it, and a difference there is a
   lighting-order question for the [illumination plan](illumination.md), not a
-  reason to block.
-- The callers of the synchronous compile and probe waits and of the storage
-  waits, named in the table; each is the first task of the step that reaches
-  its project.
+  reason to block. It is separate from the correctness condition, which is not
+  measured but held: a pending pass keeps the versions it started from and is
+  discarded, never mixed, when they change.
+
+### The review's findings
+
+The review argued from source without running anything; each line it cited was
+reopened before its ruling.
+
+| Finding | Ruling |
+|---|---|
+| **R1** [high] Producer backpressure (`QueuedWorkerLifecycle.Submit`) was given the idle form. | Accepted. `Submit` waits for another thread's completions: it is a tick wait with a deadline and the incomplete-tick protocol. Idle is a role held by a `WaitConsumer` the pump cannot claim and another thread cannot use. |
+| **R2** [high] A timed-out tick join had no ownership or incomplete-tick protocol. | Accepted. The authority keeps an incomplete-tick record that retains the fork or barrier, scratch, read epoch and workers; the same tick resumes; the read view and the authority operation door refuse or defer every read and write until it completes; the stall deadline freezes the authority and refuses a checkpoint of the incomplete tick. C0.5's check holds a worker, issues a checkpoint, an attach and a reset, and lets the worker complete late. |
+| **R3** [high] Teardown expiry could free resources still in use. | Accepted. Teardown has three outcomes: drained, device proven lost, and an unretired owner whose dependency closure is kept until process exit and never disposed. J1's settlement takes the same outcome. The audio join is corrected to match. C0.6's check completes a fence, a lease and a build after their deadline. |
+| **R4** [high] The analyzer and survey missed a pump wait reached through a delegate (`DeviceLossRecovery`), and several wait families. | Accepted. `WAIT001` reads member references, method groups and delegate conversions, and every managed family; native entry points join in C0.6. Device recovery becomes an operation polled across iterations. The compiler's list is the inventory and the text survey a cross-check, and the claim of exact coverage is narrowed to what the set names. |
+| **R5** [medium] Live waits were classified as teardown, and expiry had no answer for a live operation. | Accepted. Classes are by caller and operation. Live requests have refused, accepted, pending and completed outcomes, with late completions owned; admission refuses without taking a permit. The encoder window is a live request, the startup waits are rendezvous, the allocator's park is a lifetime park, completed-task reads left the list, and the unread callers are C0.8's. |
+| **R6** [high] Present pacing's own waits were outside the migration, and background service was assumed to sit inside the present wait. | Accepted. `TryWaitForFrame` and `BeginFrame`'s wait take the loop's one pacing deadline; background service inside that wait is stated as the streaming step's work to build, with its readiness wake per backend; C0.6's check is a stalled display on both backends. |
+| **R7** [medium] An internal constructor taking a receipt does not prove one control phase per iteration. | Accepted. `HostIteration` becomes a `ref struct` (it cannot outlive its call or be replayed), its constructor checks the loop's phase state, and a `default` one throws when read. Assembly-internal construction is no longer described as the enforcement, and what remains outside (a loop that calls `ProduceFrame` directly) is named. |
+| **R8** [medium] J1's same-call fork join would undo the cross-iteration hold. | Accepted. A pump-side fork returns an owned operation, polled after control phases, that retains its storage and the versions it started from; a control change cancels and discards it; sections 1 and 3 now mean the same logical frame, not the same host iteration. |
+| **R9** [medium] A door in `Puck.Hosting` cannot be reached by the layers below it. | Accepted. The door is in `Puck.Abstractions`, reachable by `Puck.Machines` and every runtime project; the host supplies only registration; `Puck.Confinement`'s one wait is a blocking member answered at its callers. |
+
+The review's open points are answered in place: the budget and stall bounds
+above (its point 1), the GPU-trace drain in what the code does today and the
+held version rule under C0.3 (point 2), the unread callers as C0.8 and the
+guarded observation read removed (point 3), and the attach primer's lock under
+how it composes (point 4).
 
 ## 6. Build order
 
 Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
-to fail when the step's main risk is real. Built: the scheduling stage (S1),
+to fail when the step's main risk is real. Built: the scheduling stage (S1), C0.1 and C0.2,
 the memory account, native movers 1 and 2, the worker-count harness (`--workers` and
 `puck test --workers`), snapshot partitions and GPU culling in the indirect
 path.
@@ -1090,8 +1334,8 @@ as `puck mesh audit` for bake defects.
 | Step | Lands | Check on `worlds/debug` that catches its failure |
 |---|---|---|
 | **S1's reading** | Nothing more to build: the scheduling stage is in. Its standing reading on a windowed World is owed. | At `debug.go desktop` and `debug.go overlook`, `world.rates`' `burst` reads about half of each lever's items rated at one tier, where one shared phase reads all of them, and `host.frames` standing there shows no iteration over 16.7 ms of work from a tick meeting the burst. |
-| **C0 The control plane's phase, and bounded waits** ([designed above](#the-control-planes-phase-and-bounded-waits), steps C0.1 to C0.7, after its review) | The host loop gives the control plane (console, MCP, input) a guaranteed phase of every iteration, held iterations included; every cross-subsystem wait carries a deadline and a named reason, so a presentation wait on lighting convergence cannot starve the console. Headless; no new thread. It is first because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | A lockstep walkthrough tour stop that converges lighting: a console verb issued during the drain answers within one iteration, and a wait that exceeds its deadline reports its named reason in `world.wait`'s answer instead of holding. |
-| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
+| **C0 The control plane's phase, and bounded waits** ([designed and reviewed above](#the-control-planes-phase-and-bounded-waits), steps C0.1 to C0.8) | The host loop gives the control plane (console, MCP, input) a guaranteed phase of every iteration, held iterations included; every cross-subsystem wait carries a deadline and a named reason, so a presentation wait on lighting convergence cannot starve the console. Headless; no new thread. It is first because J1 moves the waits it names, and a wait with no deadline moved onto a pool is still a stall. | A lockstep walkthrough tour stop that converges lighting: a console verb issued during the drain answers within one iteration, and a wait that exceeds its deadline reports its named reason in `world.wait`'s answer instead of holding. |
+| **J1 The pool and the channels** | The design comes first, as a document reviewed by another family before any build: the hand-rolled concurrency sites moved onto the job system project by project, with the scheduler analyzer and `puck scan`'s `LockAnalyzer` switched on for each project as it migrates. Then `Puck.Hosting.Jobs`: classes with their comparers, bounded units, the dependency rules, a fork that returns an operation its forking thread owns (C0's contract for a join past the wait budget), the cap with hysteresis, per-owner channels drained at each owner's install point, parking, shutdown settlement; every site in section 1's table moved; the bake's static pool, the irradiance worker counts and the engine's `Parallel.For` deleted; `JobWorkers`' `0` reconciled with the pool's `max(2, ProcessorCount - 2)` workers plus the frame thread. A worker preempted while it holds a partition holds the join, so the cap against oversubscription is measured with other programs running before smaller partitions are tried. | A cold bake with `host.frames` sampled through it, and the process's thread count at `workers + 2` plus the dedicated threads. A lockstep `world.at` still after a `world.reload` traces its own scene (`[sdf.mesh-gi]` reports the frame's draw count). A channel forced full by a scratch world with more groups than its capacity lands every group (`[sdf.mesh-bake] done` counts match). A headless boot with a reflow verb answers it. `quit` during a cold bake exits cleanly with no device-after-dispose message in stderr on both backends. The first visible group bakes before any unseen one (`[sdf.mesh-bake]` order against `world.view.pick`). |
 | **T3 Crossing scan partitions** | E3 by seat partition with occupancy deltas. | T0 on a fixture of 40 seats where two seats enter one party-travel door on one tick and seats straddle the 32-seat boundary; the crossing log (transfer tick, cohort) identical across counts and against the recording. |
 | **T2 Rigid advance partitions** | E1 for rigid bodies with partition scratch; the rigid share measured first; the one pose-read change re-recorded. | T0 on a fixture of 200 rigid bodies (a rack and a domino line) beside kit bodies whose producers target a rigid body; hashes identical across counts; `puck bench world` at 0 B median a tick; a standing `host.frames` simulate read. |
 | **R1 Parallel recording in waves** (held until it pays) | Admission first: recording is taken only on a workload whose serial record sum (`world.counters render.record`, `record-microseconds` over `frames`) is several milliseconds with the critical path (`longest-microseconds` over `frames`) well below it; with residency staging moved into package preparation the debug world's sum is about a millisecond, so concurrency could save about half of one and is not yet worth workers. When admitted: waves, prepare-before-fork with the fence first, residency upload and extent in preparation, in-order submission, the pose pack fork; and before it is safe, a thread-safe pipeline cache lookup, a counting recorder and per-worker command pools, with queue operations still serialized and the join before commit. The prepare, record and commit separation of a node's frame stays whether or not recording forks. Direct3D 12 and a windowed Vulkan boot. | `host.frames` produce avg at the lobby; a `world.at` script that moves a portal view and changes a screen's source every frame for 120 frames, with stills at three ticks compared as above with the serial build's on both backends (a one-frame-late read or a descriptor overwritten under a slot in flight shows as a localized difference beyond the noise); GPU-based validation clean on Direct3D 12 and the validation layer clean on Vulkan. |

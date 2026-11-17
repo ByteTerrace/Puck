@@ -1,0 +1,139 @@
+using Puck.Abstractions.Counting;
+using Puck.Abstractions.Waiting;
+
+namespace Puck.Abstractions.Tests;
+
+/// <summary>
+/// The wait door's contract, which running the engine cannot show: a deadline wait on something that never completes
+/// returns its expiry as a value and is listed with its reason; on the pump thread the door clips a wait to the
+/// iteration's allowance and charges it; the consumer role is refused to the pump and to any thread but its own; and a
+/// wait whose object is already complete allocates nothing.
+/// </summary>
+public sealed class HostWaitsLawTests {
+    private static readonly WaitReason Reason = new(Subsystem: "laws", WaitsFor: "a signal nobody sets");
+
+    // Runs `body` on a fresh thread, so pump and consumer registration never leak into the test runner's threads.
+    private static void OnOwnThread(Action body) {
+        Exception? failure = null;
+        var thread = new Thread(start: () => {
+            try {
+                body();
+            } catch (Exception exception) {
+                failure = exception;
+            }
+        }) { IsBackground = true, Name = "host-waits law" };
+
+        thread.Start();
+        Assert.True(condition: thread.Join(timeout: TimeSpan.FromSeconds(value: 30)), userMessage: "the law's thread did not finish");
+        if (failure is not null) {
+            throw new Xunit.Sdk.XunitException(userMessage: $"the law's thread failed: {failure}");
+        }
+    }
+
+    [Fact]
+    public void AWaitNobodySignalsReturnsDeadlinePassedAndIsListedWithItsReason() {
+        OnOwnThread(body: () => {
+            using var signal = new ManualResetEventSlim(initialState: false);
+            var deadline = WaitDeadline.In(budget: TimeSpan.FromMilliseconds(value: 40));
+
+            Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Wait(deadline: deadline, reason: Reason, signal: signal));
+            Assert.True(condition: deadline.HasPassed);
+
+            var expired = new WaitRecord[16];
+            var count = HostWaits.Expired(destination: expired);
+
+            Assert.Contains(expected: Reason, collection: expired[..count].ToArray().Where(predicate: record => (record.ThreadId == Environment.CurrentManagedThreadId)).Select(selector: record => record.Reason));
+
+            var standing = new WaitRecord[64];
+
+            Assert.DoesNotContain(collection: standing[..HostWaits.Standing(destination: standing)].ToArray(), filter: record => (record.ThreadId == Environment.CurrentManagedThreadId));
+        });
+    }
+    [Fact]
+    public void APumpWaitIsClippedToTheIterationsAllowanceAndCharged() {
+        OnOwnThread(body: () => {
+            using var signal = new ManualResetEventSlim(initialState: false);
+            var allowance = TimeSpan.FromMilliseconds(value: 30);
+
+            HostWaits.BeginPumpIteration(allowance: allowance);
+            try {
+                Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Wait(deadline: WaitDeadline.In(budget: TimeSpan.FromMinutes(value: 5)), reason: Reason, signal: signal));
+                Assert.Equal(expected: TimeSpan.Zero, actual: HostWaits.PumpAllowance);
+
+                var expired = new WaitRecord[16];
+                var count = HostWaits.Expired(destination: expired);
+                var mine = expired[..count].ToArray().First(predicate: record => (record.ThreadId == Environment.CurrentManagedThreadId));
+
+                Assert.True(condition: mine.OnPump);
+                Assert.True(condition: (mine.BudgetTicks <= WaitDeadline.TicksOf(budget: allowance)), userMessage: $"budget {mine.BudgetTicks} ticks exceeds the allowance");
+
+                // The allowance is spent, so a second wait in the same iteration does not block at all.
+                Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Wait(deadline: WaitDeadline.In(budget: TimeSpan.FromMinutes(value: 5)), reason: Reason, signal: signal));
+                count = HostWaits.Expired(destination: expired);
+                Assert.Equal(expected: 0L, actual: expired[..count].ToArray().First(predicate: record => (record.ThreadId == Environment.CurrentManagedThreadId)).BudgetTicks);
+
+                // The next control phase opens a fresh allowance.
+                HostWaits.BeginPumpIteration(allowance: allowance);
+                Assert.Equal(expected: allowance, actual: HostWaits.PumpAllowance);
+            } finally {
+                HostWaits.EndPump();
+            }
+            Assert.Null(@object: HostWaits.PumpAllowance);
+        });
+    }
+    [Fact]
+    public void TheConsumerRoleIsRefusedToThePumpAndToOtherThreads() {
+        WaitConsumer? consumer = null;
+
+        OnOwnThread(body: () => {
+            HostWaits.BeginPumpIteration(allowance: TimeSpan.FromMilliseconds(value: 1));
+            try {
+                _ = Assert.Throws<InvalidOperationException>(testCode: () => HostWaits.ClaimConsumer(reason: Reason));
+            } finally {
+                HostWaits.EndPump();
+            }
+        });
+        OnOwnThread(body: () => {
+            consumer = HostWaits.ClaimConsumer(reason: Reason);
+            Assert.Same(expected: consumer, actual: HostWaits.ClaimConsumer(reason: Reason));
+            _ = Assert.Throws<InvalidOperationException>(testCode: () => HostWaits.BeginPumpIteration(allowance: TimeSpan.FromMilliseconds(value: 1)));
+        });
+        OnOwnThread(body: () => {
+            using var signal = new ManualResetEvent(initialState: true);
+
+            _ = Assert.Throws<InvalidOperationException>(testCode: () => HostWaits.Idle(consumer: consumer!, handle: signal));
+        });
+    }
+    [Fact]
+    public void AWaitWhoseObjectIsAlreadyCompleteAllocatesNothing() {
+        using var signal = new ManualResetEventSlim(initialState: true);
+        using var semaphore = new SemaphoreSlim(initialCount: 1, maxCount: 1);
+        var task = Task.CompletedTask;
+
+        void Body() {
+            var deadline = WaitDeadline.In(budget: TimeSpan.FromMilliseconds(value: 5));
+
+            if (HostWaits.Wait(deadline: deadline, reason: Reason, signal: signal) != WaitOutcome.Completed) {
+                throw new InvalidOperationException(message: "a set event did not complete");
+            }
+            if (HostWaits.Wait(deadline: deadline, reason: Reason, task: task) != WaitOutcome.Completed) {
+                throw new InvalidOperationException(message: "a completed task did not complete");
+            }
+            if (HostWaits.Acquire(deadline: deadline, reason: Reason, semaphore: semaphore) != WaitOutcome.Completed) {
+                throw new InvalidOperationException(message: "a free semaphore did not admit");
+            }
+            _ = semaphore.Release();
+        }
+
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Body));
+    }
+    [Fact]
+    public void AnAdmissionThatExpiresTookNoPermit() {
+        OnOwnThread(body: () => {
+            using var semaphore = new SemaphoreSlim(initialCount: 0, maxCount: 1);
+
+            Assert.Equal(expected: WaitOutcome.DeadlinePassed, actual: HostWaits.Acquire(deadline: WaitDeadline.In(budget: TimeSpan.FromMilliseconds(value: 20)), reason: Reason, semaphore: semaphore));
+            Assert.Equal(expected: 0, actual: semaphore.CurrentCount);
+        });
+    }
+}

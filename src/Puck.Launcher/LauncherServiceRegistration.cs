@@ -104,7 +104,6 @@ public static class LauncherServiceRegistration {
         services.TryAddEnumerable(descriptor: ServiceDescriptor.Singleton<ICommandObserver, SimulationCommandOutputObserver>());
         services.TryAddSingleton(implementationFactory: static provider => {
             var output = provider.GetRequiredService<BufferedConsoleOutput>();
-            var holdGates = provider.GetServices<ITextCommandHoldGate>().ToArray();
 
             return new TextCommandSource(
                 onResult: (line, result) => {
@@ -130,11 +129,7 @@ public static class LauncherServiceRegistration {
                     }
                 },
                 registry: provider.GetRequiredService<CommandRegistry>()
-            ) {
-                HoldGate = ((holdGates.Length == 0)
-                ? null
-                : () => IsAnyTextCommandGateHolding(gates: holdGates)),
-            };
+            );
         });
         // The terminal's own command surface (just `quit`, which drives the baton). The fixed-step/tick hosted
         // service AND the stdin reader are added by the CALLER (AddLauncherTerminal / AddLauncherHeadlessTerminal),
@@ -151,15 +146,6 @@ public static class LauncherServiceRegistration {
             source: sp.GetRequiredService<TextCommandSource>(),
             threadName: "Puck.Launcher Stdin Reader"
         ));
-    }
-    private static bool IsAnyTextCommandGateHolding(IReadOnlyList<ITextCommandHoldGate> gates) {
-        for (var index = 0; (index < gates.Count); index++) {
-            if (gates[index].IsHolding()) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /// <summary>Registers the generic backend switch: it fronts every contributed <see cref="SurfacePresenterDescriptor"/>
