@@ -33,7 +33,7 @@ public sealed class SdfFieldSliceLawTests {
 
         foreach (var lattice in batch.Lattices) {
             var field = ((lattice.Selector == int.MinValue) ? world : instances);
-            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
+            var spacing = lattice.TapSpacing;
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);
