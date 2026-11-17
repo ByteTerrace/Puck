@@ -281,10 +281,10 @@ Every directory a run makes under the temporary directory follows one policy,
 `RunDirectory` in `build/RunDirectory.cs`. `Directory.Build.targets` links it
 into the CLI and every test and validation project, and `Directory.Build.props`
 into file apps. Every `RunDirectory` removal goes through `Puck.Confinement`
-(`ConfinedDirectory.DeleteTree`: iterative, link-refusing), which those projects
+(`ConfinedDirectory.DeleteTree`: iterative, never following links), which those projects
 reference (file apps compile its sources), so a tree of any depth cannot
-overflow the removing process's stack; a directory holding a link, or one
-something still holds, is left in place and named in a
+overflow the removing process's stack. Descendant links are removed without
+touching their targets; a directory something still holds is left in place and named in a
 `run directory not removed:` line, and never stops a sweep. A directory is named `<kind><process id>-<token>`: its kind,
 which starts with `puck-` and names its owner, the process that created it, and
 a unique token. A run that passes deletes it. A run that fails keeps it, names

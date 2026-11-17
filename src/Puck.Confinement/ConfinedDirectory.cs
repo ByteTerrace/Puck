@@ -456,18 +456,20 @@ public sealed partial class ConfinedDirectory : IDisposable {
     }
     /// <summary>Removes everything below this directory, held for removal, and then the directory itself, which is
     /// <paramref name="name"/> in <paramref name="parent"/>. Every step acts through handles and never follows a link;
-    /// a link refuses the removal there.</summary>
+    /// a link refuses the removal there unless <paramref name="removeLinks"/> requests unlinking it.</summary>
     /// <param name="parent">The directory this one is in.</param>
     /// <param name="name">This directory's current name in <paramref name="parent"/>.</param>
+    /// <param name="removeLinks">Whether to remove descendant links themselves, without following their targets.</param>
     /// <exception cref="InvalidOperationException">This directory was not opened by
     /// <see cref="TryOpenChildForRemoval"/>.</exception>
-    /// <exception cref="IOException">An entry below is a link or is held, or a removal fails; what was not yet removed
+    /// <exception cref="IOException">An entry below is a link and <paramref name="removeLinks"/> is false, or is held,
+    /// or a removal fails; what was not yet removed
     /// stays in place.</exception>
-    public void DeleteTree(ConfinedDirectory parent, string name) {
+    public void DeleteTree(ConfinedDirectory parent, string name, bool removeLinks = false) {
         ArgumentNullException.ThrowIfNull(argument: parent);
         RequireName(name: name);
         RequireRemovable();
-        RemoveContents(directory: Handle);
+        RemoveContents(directory: Handle, removeLinks: removeLinks);
         if (OperatingSystem.IsWindows()) {
             Windows.Remove(handle: Handle);
         } else {
@@ -480,11 +482,14 @@ public sealed partial class ConfinedDirectory : IDisposable {
     /// itself are followed), then removed by <see cref="DeleteTree"/>: iteratively, one open handle per level, so a
     /// tree of any depth cannot overflow the stack, and never through a link.</summary>
     /// <param name="path">The directory to remove.</param>
-    /// <exception cref="IOException">The directory or an entry below it is a link or is held by another process, or
+    /// <param name="removeLinks">Whether to remove descendant links themselves, without following their targets.
+    /// The root directory must still be a directory, never a link.</param>
+    /// <exception cref="IOException">The directory is a link, an entry below it is a link and
+    /// <paramref name="removeLinks"/> is false, an entry is held by another process, or the directory
     /// cannot be removed, or <paramref name="path"/> is a volume root; what was not yet removed stays in place. A
     /// directory that does not exist is not an error.</exception>
     /// <exception cref="PlatformNotSupportedException">The platform is neither Windows nor Linux x64.</exception>
-    public static void RemoveTree(string path) {
+    public static void RemoveTree(string path, bool removeLinks = false) {
         var full = System.IO.Path.TrimEndingDirectorySeparator(path: System.IO.Path.GetFullPath(path: path));
         var name = System.IO.Path.GetFileName(path: full);
 
@@ -519,7 +524,8 @@ public sealed partial class ConfinedDirectory : IDisposable {
         using (directory) {
             directory.DeleteTree(
                 name: name,
-                parent: parent
+                parent: parent,
+                removeLinks: removeLinks
             );
         }
     }
@@ -599,14 +605,14 @@ public sealed partial class ConfinedDirectory : IDisposable {
         : Linux.Entries(handle: directory));
     // Removes everything below a directory, depth first and without recursion, so a tree of any depth costs one open
     // handle per level and no stack. The caller keeps the directory itself and its handle.
-    private static void RemoveContents(SafeFileHandle directory) {
+    private static void RemoveContents(SafeFileHandle directory, bool removeLinks = false) {
         var levels = new Stack<(SafeFileHandle Directory, SafeFileHandle? Parent, string? Name, Queue<string> Remaining)>();
 
         levels.Push(item: (directory, null, null, new Queue<string>(collection: EntriesOf(directory: directory).Select(selector: static entry => entry.Name))));
         try {
             while (levels.TryPeek(result: out var level)) {
                 if (level.Remaining.TryDequeue(result: out var name)) {
-                    if (OpenForRemoval(existed: out _, name: name, parent: level.Directory) is { } child) {
+                    if (OpenForRemoval(existed: out _, name: name, parent: level.Directory, removeLinks: removeLinks) is { } child) {
                         levels.Push(item: (child, level.Directory, name, new Queue<string>()));
                         foreach (var entry in EntriesOf(directory: child)) { levels.Peek().Remaining.Enqueue(item: entry.Name); }
                     }
@@ -624,7 +630,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
     // One step of a removal: the entry is opened relative to its parent's handle without following it and inspected
     // through its own handle. A file is removed at once (through its handle on Windows, by name relative to the parent
     // after the same no-follow inspection on Linux); a directory's handle is returned for emptying.
-    private static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, out bool existed) {
+    private static SafeFileHandle? OpenForRemoval(SafeFileHandle parent, string name, out bool existed, bool removeLinks = false) {
         existed = false;
         if (OperatingSystem.IsWindows()) {
             var handle = Windows.OpenAny(access: Windows.Delete | Windows.ListDirectory | Windows.ReadAttributes | Windows.WriteAttributes, isDirectory: out var isDirectory,
@@ -634,7 +640,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
             existed = true;
             if (isDirectory && !isLink) { return handle; }
             using (handle) {
-                if (isLink) { throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place."); }
+                if (isLink && !removeLinks) { throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place."); }
                 Windows.Remove(handle: handle);
                 return null;
             }
@@ -652,6 +658,10 @@ public sealed partial class ConfinedDirectory : IDisposable {
         if (error is not (Linux.NotDirectory or Linux.Loop)) { throw Linux.Error(code: error, message: $"Cannot open confined entry '{name}'"); }
         if (Linux.StatAt(name: name, parent: parent) is not { } stat) { return null; }
         if (Linux.Kind(stat: stat) == ConfinedEntryKind.Link) {
+            if (removeLinks) {
+                existed = Linux.Unlink(directory: false, name: name, parent: parent);
+                return null;
+            }
             throw new IOException(message: $"'{name}' is a link; a confined removal never deletes through one and left it in place.");
         }
         if (Linux.Kind(stat: stat) == ConfinedEntryKind.File) {
