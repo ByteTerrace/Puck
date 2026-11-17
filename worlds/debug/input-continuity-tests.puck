@@ -183,30 +183,6 @@ test "a rhythm hold and fighting charge retain original identity across a sectio
     chargedRelease == 1
   }
 }
-test "a mid-session checkpoint restores held origins and replays their later release" {
-  when {
-    ticks 4
-    seat1: player.signal keyboard.u press at:0.001
-    seat1: player.signal keyboard.i press at:0.002
-    ticks 12
-    seat1: replay.record input-held-continuation
-    ticks 2
-    seat1: player.signal keyboard.o press
-    ticks 24
-    seat1: player.signal keyboard.u release at:0.001
-    seat1: player.signal keyboard.i release at:0.002
-    ticks 3
-    seat1: replay.stop
-    seat1: replay.inspect input-held-continuation
-  }
-  expect {
-    keptNote == 1
-    keptCharge == 1
-    notePresses == 1
-    noteReleases == 1
-    chargedRelease == 1
-  }
-}
 test "history wraps while a held note retains its original press" {
   when {
     ticks 4

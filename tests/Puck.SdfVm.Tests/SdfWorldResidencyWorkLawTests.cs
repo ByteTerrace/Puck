@@ -113,7 +113,12 @@ public sealed class SdfWorldResidencyWorkLawTests {
                         Y: 0f
                     )
                 )]
-            );
+            ) {
+                // A source supplies its lights and sky; a frame left without them builds the defaults again in each copy
+                // the dresser takes, which is no cost of counting.
+                Lights = SdfLights.Default(),
+                Sky = new SdfSky(),
+            };
 
             Node = new SdfWorldResidency(
                 frameSource: new FixedFrameSource(frame: frame),

@@ -171,6 +171,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBindings.DestroySampler"] = (rig => rig.Services.Bindings.DestroySampler(samplerHandle: 2), none),
             ["IGpuBindings.WriteBuffer"] = (rig => rig.Services.Bindings.WriteBuffer(binding: 0, bufferHandle: 5, bufferSize: 16UL, descriptorSetHandle: 4, elementStride: 0, kind: GpuBindingKind.ReadWriteBuffer), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.HeapReleaseRevision"] = (rig => _ = rig.Services.Bindings.HeapReleaseRevision, none),
+            ["IGpuBindings.MaxConstantBufferBytes"] = (rig => _ = rig.Services.Bindings.MaxConstantBufferBytes, none),
             ["IGpuBindings.WriteConstantBuffer"] = (rig => rig.Services.Bindings.WriteConstantBuffer(arrayElement: 0, binding: 0, bufferHandle: 5, bufferSize: 256UL, descriptorSetHandle: 4), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteSampledImage"] = (rig => rig.Services.Bindings.WriteSampledImage(arrayElement: 0, binding: 1, descriptorSetHandle: 4, imageViewHandle: 5), [(GpuWork.DescriptorWrites, 1L)]),
             ["IGpuBindings.WriteSampler"] = (rig => rig.Services.Bindings.WriteSampler(arrayElement: 0, binding: 2, descriptorSetHandle: 4, samplerHandle: 6), [(GpuWork.DescriptorWrites, 1L)]),

@@ -527,6 +527,8 @@ public sealed class ShaderInterfaceLawTests {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
                 }
+                void puckCountRejectedHit() {
+                }
 
                 #endif // PUCK_SHADER_INTERFACE_TYPED_BUFFERS
 
@@ -577,6 +579,8 @@ public sealed class ShaderInterfaceLawTests {
                 void puckCountShapes(uint shapes, uint gradients) {
                 }
                 void puckCountFragmentWork(uint steps, uint texels) {
+                }
+                void puckCountRejectedHit() {
                 }
 
                 #endif // PUCK_SHADER_INTERFACE_PIXELATE

@@ -92,21 +92,24 @@ public sealed partial class SdfMeshIrradiance {
             m_gpuMeterAskedOf = client;
             m_gpuMeterAt = Stopwatch.GetTimestamp();
         }
-        m_gpuMeterTask = ReadMeter();
-        async Task ReadMeter() {
-            try {
-                var answer = await gpu.Meter(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion).ConfigureAwait(false);
-                // Admission checked the scene and window, and the device read the volume they stood for, so the reading
-                // stands for its positions even when the window has moved on since.
-                lock (m_gate) {
-                    if (m_disposed || !ReferenceEquals(GpuTrace, gpu)) { return; }
-                    m_gpuMeter = new GpuMeterReading(gpu, answer, positions, rows, cuts);
-                }
-            } catch (OperationCanceledException) {
-                // Admission saw an obsolete window or a stopping device; the next Stage asks again.
-                lock (m_gate) { m_gpuMeterAskedOf = null; }
-            } finally { snapshot.Scene.Dispose(); }
-        }
+        m_gpuMeterTask = ReadMeter(gpu, snapshot, origins, lighting, words, positions, rows, cuts);
+    }
+    // A method of its own rather than a local function of ScheduleGpuMeters: a local function that captures the schedule's
+    // locals makes the compiler allocate their closure on entry, on every frame, though most frames return before they
+    // are set.
+    private async Task ReadMeter(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, long[] cuts) {
+        try {
+            var answer = await gpu.Meter(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion).ConfigureAwait(false);
+            // Admission checked the scene and window, and the device read the volume they stood for, so the reading
+            // stands for its positions even when the window has moved on since.
+            lock (m_gate) {
+                if (m_disposed || !ReferenceEquals(GpuTrace, gpu)) { return; }
+                m_gpuMeter = new GpuMeterReading(gpu, answer, positions, rows, cuts);
+            }
+        } catch (OperationCanceledException) {
+            // Admission saw an obsolete window or a stopping device; the next Stage asks again.
+            lock (m_gate) { m_gpuMeterAskedOf = null; }
+        } finally { snapshot.Scene.Dispose(); }
     }
 
     /// <summary>Names what a view's camera sample waits for while it has none, for <c>world.exposure</c>: <c>window</c>

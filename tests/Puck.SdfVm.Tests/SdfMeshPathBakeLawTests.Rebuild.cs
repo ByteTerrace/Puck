@@ -15,7 +15,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
             var program = builder.Translate(offset: new Vector3(x: x, y: 0, z: 0)).Sphere(radius: 0.5f, material: material).Build();
 
             mesh = new SdfMesh(positions: new Vector3[] { new(x: x, y: 0, z: 0), new(x: (x + 1), y: 0, z: 0), new(x: x, y: 1, z: 0) }, indices: new uint[] { 0, 1, 2 });
-            foreach (var group in SdfMeshBakeGroup.Plan(program: program, transforms: [], farDistance: 100,
+            foreach (var group in SdfMeshBakeGroup.Plan(program: program, transforms: [], farDistance: 100, tier: MeshBakeTestRun.PlannedTier,
                 create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector))) {
                 library.Store(geometry: group.Sealed, materials: group.MaterialOrder, mesh: mesh);
             }
@@ -23,7 +23,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         }
         var first = Cached(mesh: out var firstMesh, x: 0);
         var second = Cached(mesh: out var secondMesh, x: 5);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = MeshBakeTestRun.PlannedTier }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
         var frame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { FarDistance = 100 };
@@ -56,12 +56,12 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var mesh = new SdfMesh(positions: new Vector3[] { new(x: 0, y: 0, z: 0), new(x: 1, y: 0, z: 0), new(x: 0, y: 1, z: 0) }, indices: new uint[] { 0, 1, 2 });
         var first = Sphere();
 
-        foreach (var group in SdfMeshBakeGroup.Plan(program: first, transforms: [], farDistance: 100,
+        foreach (var group in SdfMeshBakeGroup.Plan(program: first, transforms: [], farDistance: 100, tier: MeshBakeTestRun.PlannedTier,
             create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector))) {
             library.Store(geometry: group.Sealed, identity: built.Value, materials: group.MaterialOrder, mesh: mesh);
         }
 
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = built, Library = library, Residency = "built" }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = built, Library = library, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "built" }, ownsLibrary: false);
 
         var bake = bakeRun.Bake;
 
@@ -82,7 +82,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.True(condition: bake.Pending);
         Assert.Same(expected: mesh, actual: Assert.Single(collection: rebuilt.DressedDraws()).Mesh);
 
-        using var arrivingRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = moved, Library = library, Residency = "arriving" }, ownsLibrary: false);
+        using var arrivingRun = new MeshBakeTestRun(new SdfMeshPathBake { Identity = moved, Library = library, PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "arriving" }, ownsLibrary: false);
 
         var arriving = arrivingRun.Bake;
 

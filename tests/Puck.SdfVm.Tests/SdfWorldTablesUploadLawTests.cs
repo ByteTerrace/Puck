@@ -922,7 +922,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             positions: new Vector3[] { new(x: 0f, y: 0f, z: 0f), new(x: 1f, y: 0f, z: 0f), new(x: 1f, y: 1f, z: 0f), new(x: 0f, y: 1f, z: 0f) }
         );
         // More draws than the region reserves records for, naming none of the big mesh's words, which outnumber the
-        // retained slack, so planning them relocates every mesh.
+        // retained slack; a forced relocation packs every mesh the list names, the one relocation the region shrinks at.
         var many = Enumerable.Range(count: (SdfMeshRegionArena.MinimumDrawCapacity + 44), start: 0).Select(selector: index => new SdfMeshDraw(
             Identity: index,
             Material: 1,
@@ -937,6 +937,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var grown = rig.Engine.MeshRegionBytes;
 
+        rig.Engine.ForceMeshRelocation();
         rig.Land(meshDraws: many, time: 0f);
         // A region that never grew past the granule, planned through the same draw lists but a small first mesh, lays the
         // second list out alike.
@@ -1060,8 +1061,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         // Construction creates exactly the pools admission declares, including compact-history copies.
         Assert.Equal(
             actual: rig.Gpu.PoolsCreated.CountBy(keySelector: static pool => pool).ToDictionary(),
-            // The final admitted pool belongs to the residency's bake client, absent from standalone tables.
-            expected: SdfWorldTables.DescriptorPools[..^1].CountBy(keySelector: static pool => pool).ToDictionary()
+            // The final two admitted pools belong to the residency's bake and probe clients, absent from standalone tables.
+            expected: SdfWorldTables.DescriptorPools[..^2].CountBy(keySelector: static pool => pool).ToDictionary()
         );
 
         var pools = rig.Gpu.PoolsCreated.Count;
