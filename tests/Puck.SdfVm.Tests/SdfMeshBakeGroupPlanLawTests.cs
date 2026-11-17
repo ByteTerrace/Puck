@@ -47,7 +47,7 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
         Assert.False(Assert.Single(groups, static group => !group.Dynamic && group.FirstInstance == 2).Geometry.ContainsGlyph);
         Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
         Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
-        Assert.Equal(2, SdfMeshBakeGroup.Refresh(groups, program, transforms, 50f, static _ => true, Create, SdfSampledSet.Empty));
+        Assert.Equal(2, SdfMeshBakeGroup.Refresh(groups, program, transforms, 50f, static group => (group.Dynamic || group.Geometry.ReadsSlots), Create, SdfSampledSet.Empty));
         Assert.True(Assert.Single(groups, static group => group.Dynamic && group.Slot == 0).Geometry.ContainsGlyph);
         Assert.False(Assert.Single(groups, static group => group.Dynamic && group.Slot == 1).Geometry.ContainsGlyph);
     }
@@ -136,14 +136,14 @@ public sealed class SdfMeshBakeGroupPlanLawTests {
         var whole = SdfMeshBakeGroup.Plan(create: Create, farDistance: 50f, program: program, transforms: late);
         var refreshed = SdfMeshBakeGroup.Plan(create: Create, farDistance: 50f, program: program, transforms: At(shift: 0f));
         var planned = refreshed.ToArray();
-        // Every group but the dynamic group of slot 0 is named.
+        // The caller names a dynamic group of another slot than 0 and a static group whose geometry reads a slot.
         var count = SdfMeshBakeGroup.Refresh(
             create: Create,
             farDistance: 50f,
             groups: refreshed,
             program: program,
             sampled: SdfSampledSet.Empty,
-            stale: static group => !(group.Dynamic && (group.Slot == 0)),
+            stale: static group => (group.Dynamic ? (group.Slot != 0) : group.Geometry.ReadsSlots),
             transforms: late
         );
 

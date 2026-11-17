@@ -18,12 +18,9 @@ namespace Puck.SdfVm.Tests;
 /// </summary>
 public sealed class SdfWorldPipelineCatalogLawTests {
     private const uint Extent = 32;
-    // The bake mask, the bake, the depth pyramid, the surface, views, sky, composite and glass kernels and the three
-    // environment kernels. Resolve is acquired on demand.
-    private const long KernelPipelines = 14L;
-    // The kernels, the region copy, the mesh pass, the shadow cascades' depth and exit-layer passes, the glass pass and
-    // the mesh pass's occlusion kernel.
-    private const int ResidencyPipelines = 20;
+    // The pipelines one residency records with: its kernels, the region copy, the mesh pass, the shadow cascades' depth and
+    // exit-layer passes, the glass pass and the mesh pass's occlusion kernel.
+    private const int ResidencyPipelines = 30;
 
     [Fact]
     public void TwoResidenciesOverOneCatalogRenderWithOneCreationPerPipeline() {
@@ -62,6 +59,10 @@ public sealed class SdfWorldPipelineCatalogLawTests {
             device: gpu,
             kernels: SdfTestPipelines.Kernels(mask: 1)
         );
+
+        // The kernels' entries, which the second set shares but for the one kernel it changes.
+        var kernelPipelines = Created(catalog: pipelines);
+
         using var second = SdfTestPipelines.Build(
             cache: pipelines.Pipelines,
             device: gpu,
@@ -70,7 +71,7 @@ public sealed class SdfWorldPipelineCatalogLawTests {
 
         Assert.Equal(
             actual: (pipelines.Pipelines.SharedPipelines, Created(catalog: pipelines)),
-            expected: ((((int)KernelPipelines) + 1), (KernelPipelines + 1L))
+            expected: ((((int)kernelPipelines) + 1), (kernelPipelines + 1L))
         );
     }
 

@@ -72,7 +72,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
     [Fact]
     public void DisabledEnvironmentRendersNothingUntilAConsumerReadsIt() {
-        using var rig = new EnvironmentRig(indirectSources: 0);
+        using var rig = new EnvironmentRig(indirect: (SdfIndirectSources.Direct | SdfIndirectSources.Emission));
 
         rig.Frame.Sky.Atmosphere.FogDensity = 0f;
         rig.Frame.Sky.Block.Ambient = 0f;
@@ -90,9 +90,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     }
     [Fact]
     public void TheAtmosphereOwesTheEnvironmentOnlyWhileItInScattersTheSky() {
-        using var rig = new EnvironmentRig(indirectSources: 0);
+        using var rig = new EnvironmentRig(indirect: (SdfIndirectSources.Direct | SdfIndirectSources.Emission));
 
-        // Isolate atmosphere from indirect and surface lighting. A fog in-scattering its own colour reads no sky.
+        // Isolate atmosphere from the two surface-lighting consumers. A fog in-scattering its own colour reads no sky.
         rig.Frame.Sky.Block.Ambient = 0f;
         rig.Frame.Sky.Block.Reflection = 0f;
         rig.Frame.Sky.Atmosphere = (SdfAtmosphere.Default with { FogColor = Vector3.One, FogColorAuthored = true });

@@ -285,8 +285,9 @@ public sealed class SdfMeshStoreLawTests {
         File.SetLastWriteTimeUtc(lastWriteTimeUtc: old.AddMinutes(value: 1), path: Path.Combine(path1: directory, path2: "newer.mesh"));
         File.WriteAllText(contents: "notes", path: Path.Combine(path1: directory, path2: "notes.txt"));
 
-        // Room for two entries: the write keeps itself and the more recent of the two.
-        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length), directory: directory);
+        // Room for two entries and the low-water margin a trim leaves (CacheBound.LowWater): the write keeps itself and the
+        // more recent of the two.
+        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory);
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
@@ -302,7 +303,7 @@ public sealed class SdfMeshStoreLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var directory = scratch.PathOf(name: "meshes");
         var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
-        var store = new SdfMeshStore(capacityBytes: (3 * entry.Length), directory: directory);
+        var store = new SdfMeshStore(capacityBytes: (3 * entry.Length) + (entry.Length / 2), directory: directory);
         var now = DateTime.UtcNow;
         var active = store.SetDirectoryOf(identity: 1);
         var idle = store.SetDirectoryOf(identity: 2);
@@ -335,7 +336,7 @@ public sealed class SdfMeshStoreLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var directory = scratch.PathOf(name: "meshes");
         var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
-        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length), directory: directory);
+        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory);
         var own = store.SetDirectoryOf(identity: Identity);
         var now = DateTime.UtcNow;
 

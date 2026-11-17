@@ -109,7 +109,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         using var rig = new Rig();
 
         // Tables create region-copy, mesh-region-copy, strided-history-copy and World pools. Admission also reserves the
-        // bake client's pool, which the residency creates after the tables; a standalone tables fixture has no bake client.
+        // bake and probe clients' pools, which the residency creates after the tables; a standalone tables fixture has none.
         var copyPool = SdfWorldTables.DescriptorPools[1];
         var meshCopyPool = SdfWorldTables.DescriptorPools[2];
 
@@ -119,7 +119,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         );
         Assert.Equal(
             expected: [SdfWorldTables.DescriptorPoolSizes, copyPool, meshCopyPool, GpuBufferStridedCopy.PoolSizes(frameSlotCount: SdfWorldTables.FrameRingSize, recordingCount: 2)],
-            actual: SdfWorldTables.DescriptorPools[..^1]
+            actual: SdfWorldTables.DescriptorPools[..^2]
         );
     }
     [Fact]

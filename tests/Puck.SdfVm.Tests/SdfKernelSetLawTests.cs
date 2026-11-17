@@ -16,7 +16,8 @@ namespace Puck.SdfVm.Tests;
 /// interface on both backends, stamp included; and the stamp moves with the instruction set.
 /// </summary>
 public sealed class SdfKernelSetLawTests {
-    private static readonly string[] Stems = SdfKernelSet.Kernels.Select(selector: SdfKernelSet.StemOf).ToArray();
+    // A kernel's file holds its enum value, once more than the value: each kernel's bytes tell it from every other's.
+    private static byte[] BytesOf(SdfKernel kernel) => Enumerable.Repeat(count: (((int)kernel) + 1), element: ((byte)kernel)).ToArray();
 
     private static WorkCounterSet Work() =>
         new(
@@ -31,14 +32,14 @@ public sealed class SdfKernelSetLawTests {
 
         var expected = 0L;
 
-        for (var index = 0; (index < Stems.Length); index++) {
-            var bytes = Enumerable.Repeat(count: (index + 1), element: ((byte)index)).ToArray();
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            var bytes = BytesOf(kernel: kernel);
 
             File.WriteAllBytes(
                 bytes: bytes,
                 path: Path.Combine(
                     path1: directory,
-                    path2: $"{Stems[index]}.comp.spv"
+                    path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"
                 )
             );
             expected += bytes.Length;
@@ -102,7 +103,8 @@ public sealed class SdfKernelSetLawTests {
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }
     // What the build compiles is what a host installs: every kernel reflects, on both backends, exactly the bindings its
-    // interface places, and its pass block under the name this host's instruction-set stamp gives it.
+    // interface places, and any pass block it keeps under the name this host's instruction-set stamp gives it (a kernel
+    // that reads none of its pass block has the compiler remove it).
     [Fact]
     public void EveryCompiledKernelReadsItsHostsInterfaceOnBothBackends() {
         using var reflector = SdfTestPipelines.Reflector();

@@ -81,6 +81,8 @@ public sealed partial class SdfVisibilityLawTests {
         var spellers = Directory.EnumerateFiles(path: Root, searchPattern: "*.hlsl*", searchOption: SearchOption.AllDirectories)
             .Select(selector: path => Path.GetRelativePath(path: path, relativeTo: Root).Replace(newChar: '/', oldChar: '\\'))
             .Where(predicate: static path => !path.StartsWith(comparisonType: StringComparison.Ordinal, value: "isa/"))
+            // The irradiance volume's cage word packs a probe level in its top two bits: a packing of its own, not an identity.
+            .Where(predicate: static path => (path != "shade/sdf-mesh-irradiance.hlsli"))
             .Where(predicate: path => HandSpelledPattern().IsMatch(input: CodeOf(path: path)))
             .Order(comparer: StringComparer.Ordinal);
 

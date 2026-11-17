@@ -418,7 +418,13 @@ internal sealed class FakeGpuDevice :
             return (DescriptorHeap?.ReleaseRevision ?? 0L);
         }
     }
-    ulong IGpuBindings.MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
+    ulong IGpuBindings.MaxConstantBufferBytes {
+        get {
+            Hit(key: "IGpuBindings.MaxConstantBufferBytes");
+
+            return GpuDeviceCapabilities.DirectXConstantBufferBytes;
+        }
+    }
 
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         Hit(key: "IGpuBindings.CreatePool");

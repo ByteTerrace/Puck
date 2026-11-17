@@ -55,14 +55,14 @@ public enum WorldScheduleExpectation {
 /// <summary>
 /// The closed verb vocabulary a <see cref="WorldScheduleRow.Command"/> may open with: the steps that reach the
 /// simulation through an ordinary actor's door — state mutations, guarded transforms, body intents and poses, a seat's
-/// pointer ray, and joining or leaving a seat — plus disclosed reads and checkpoint-backed replay recording.
+/// pointer ray, and joining or leaving a seat — plus disclosed reads.
 /// </summary>
 /// <remarks>
 /// <para>The set is enumerated here rather than derived from <c>CommandRegistry.RoutesToSimulation</c>: that
 /// predicate answers whether a verb's verdict arrives at apply time, and <c>world.grant</c>, <c>world.revoke</c>,
 /// <c>world.load</c> and <c>world.reload</c> all satisfy it while reaching outside the simulation — the grant
-/// table, the filesystem. Replay recording is explicitly admitted so a scenario can capture a mid-session
-/// checkpoint and verify its restored trajectory through the ordinary replay commands.</para>
+/// table, the filesystem. The replay verbs are host verbs a scheduled step is refused; a run's replay is
+/// <c>puck test --reproduce</c>.</para>
 /// <para>A read step runs inline at its tick and records the ingress's answer, so a test can claim that a seat reads a
 /// cell its visibility admits and is refused one it does not. The reads are the state read-backs that answer through
 /// the caller's own disclosure; an operator diagnostic is none of them, since a scheduled step never acts as the
@@ -113,10 +113,6 @@ public static class WorldScheduleCommands {
     );
     private static readonly HashSet<string> ImmediateVerbs = new(
         collection: [
-            "replay.record",
-            "replay.stop",
-            "replay.inspect",
-            "replay.verify",
             "world.hud.template",
             "world.match",
             "world.observe",

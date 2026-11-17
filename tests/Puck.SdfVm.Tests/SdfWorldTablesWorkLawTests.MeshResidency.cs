@@ -41,8 +41,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
 
         rig.Engine.Pack(frame: frame);
         Assert.False(condition: rig.Engine.MeshesResident);
+        // The staged table holds a row for each draw the producer lists, absent until its mesh lands.
         Assert.Equal(expected: 1u, actual: rig.Engine.MeshDrawCount);
-        Assert.True(rig.Engine.DrawsAwaitMeshes);
+        Assert.True(condition: rig.Engine.DrawsAwaitMeshes);
         // The grown region's carry rides the first upload; the landing job, queued after it, completes it too.
         var geometryFence = Land(rig: rig, frame: frame);
         Assert.Equal(expected: 1u, actual: rig.Engine.MeshDrawCount);
@@ -67,9 +68,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         var replaced = frame with { MeshDraws = [draw with { Mesh = replacement }], MeshDrawsRevision = 6 };
         rig.Engine.Pack(frame: replaced);
         Assert.False(condition: rig.Engine.MeshesResident);
-        // An owed mesh keeps its producer row as an absent record until its words land.
+        // The draw whose mesh is owed waits absent in the staged records rather than drawing words not yet landed.
         Assert.Equal(expected: 1u, actual: rig.Engine.MeshDrawCount);
-        Assert.True(rig.Engine.DrawsAwaitMeshes);
+        Assert.True(condition: rig.Engine.DrawsAwaitMeshes);
         _ = Land(rig: rig, frame: replaced);
         Assert.Equal(expected: 1u, actual: rig.Engine.MeshDrawCount);
         Assert.True(condition: rig.Engine.MeshesResident);

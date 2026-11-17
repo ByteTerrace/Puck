@@ -26,7 +26,7 @@ public sealed class SdfMeshRegionArenaLawTests {
         arena.Plan(draws: [Draw(mesh: room), Draw(mesh: body)]);
         Assert.Equal(expected: (false, 0, placed), actual: (arena.Relocated, arena.Placed.Count, arena.Placements[body]));
 
-        // Past the slack, once the words no list names outnumber the named meshes', the arena packs what the list names.
+        // Past the slack, the arena forgets the meshes no list names and places the named one in the words they free.
         var other = Triangle(offset: 2f);
 
         arena.Plan(draws: [Draw(mesh: other)]);

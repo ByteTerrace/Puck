@@ -127,7 +127,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
 
     [Fact]
     public void AReferenceRepublishedEveryFrameNeverStarvesItsGroupAndItsNewestPlanLands() {
-        using var run = new MeshBakeTestRun(new SdfMeshPathBake { Residency = "flips" });
+        using var run = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = MeshBakeTestRun.PlannedTier, Residency = "flips" });
         var bake = run.Bake;
         var field = Field(height: 0.5f);
         var program = Program(field: field);
@@ -165,7 +165,7 @@ public sealed class SdfMeshPathBakeSampledLawTests {
             return (!bake.Pending && (dispatched is null));
         });
 
-        var newest = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, sampled: sampled.Baked, transforms: [])
+        var newest = SdfMeshBakeGroup.Plan(create: static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector), farDistance: 100f, program: program, sampled: sampled.Baked, tier: MeshBakeTestRun.PlannedTier, transforms: [])
             .Single(predicate: static group => (group.Selector == HeightSelector));
 
         Assert.Same(expected: field.Reference.Current, actual: newest.SampledSnapshots.Single().Snapshot);

@@ -236,6 +236,13 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             return ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroyPipelineCache));
         }
 
+        // The instance has no VK_EXT_debug_utils entry point of its own, so the device-address record the factory keeps
+        // beside the messenger finds nothing to create and is absent (VulkanDeviceAddressBindings.Create returns null);
+        // the messenger this law counts is the driver's.
+        if (functionName.SequenceEqual(other: "vkCreateDebugUtilsMessengerEXT"u8)) {
+            return 0;
+        }
+
         return ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, nint>)&Trap));
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]

@@ -23,6 +23,12 @@ internal static partial class Fixtures {
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldServer, Dictionary<Principal, InputFixtureState>> InputFixtures = new();
 
+    /// <summary>Captures a body's integration residue without its contact-field stamp, which counts the capturing
+    /// authority's own contact field and so differs between a live authority and the one restored from its checkpoint
+    /// while the integrator state they carry is equal.</summary>
+    public static WorldBodyIntegrationResidue ContinuationResidue(WorldBody body) =>
+        (body.CaptureIntegrationResidue() with { LastContactFieldVersion = 0UL });
+
     /// <summary>Builds one current-format observation from the authority's accepted source state. When recording,
     /// pass that tape's link so profile admission is recorded through the same door as its input.</summary>
     public static IntentSubmission Input(WorldServer server, Principal actor, int body, PlayerIntent image, ulong tick, IServerLink? link = null) {

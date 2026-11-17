@@ -17,7 +17,9 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         private readonly SdfTestView m_view;
         private readonly FrameContext m_context;
 
-        public EnvironmentRig(bool holdFences = false, SdfIndirectSources indirectSources = SdfIndirectSources.All) {
+        // The sources the frame names as indirect light: a frame that names the sky owes the environment whatever its
+        // ambient, reflection and air ask.
+        public EnvironmentRig(bool holdFences = false, SdfIndirectSources indirect = SdfIndirectSources.All) {
             Gpu = new FakeGpuDevice(holdFences: holdFences);
             var pipelines = SdfTestPipelines.Cache();
 
@@ -25,7 +27,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
                 Views: [new SdfViewSnapshot(Camera: CameraSnapshot.LookAt(fieldOfViewRadians: 1f,
                     position: new Vector3(x: 0f, y: 0f, z: -5f), target: Vector3.Zero,
                     viewportHeight: Extent, viewportWidth: Extent),
-                    Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]) { IndirectSources = indirectSources };
+                    Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f))]) { IndirectSources = indirect };
             var residency = new SdfWorldResidency(frameSource: this,
                 height: Extent, width: Extent, kernels: SdfTestPipelines.Kernels(), name: SdfTestView.Instance,
                 pipelines: pipelines);
