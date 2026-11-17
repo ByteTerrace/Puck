@@ -133,8 +133,14 @@ never holds the coordinator or the meter behind it without bound.
 A relight's GPU time is rays, not probes: each hit texel traces toward every
 shadowing light that reaches the probe, and a probe that cannot reuse its
 local cube traces toward every point light in range. `RelightGpu` predicts each
-probe's rays and submits a batch as consecutive jobs of at most
-`RelightRaysPerJob`, each committed before the next. A batch cut by probe count
+probe's rays and submits a batch as consecutive jobs, each committed before the
+next, cut to background work's frame share at the relight's measured rate
+(`RelightRaysWithinShare`): at most `RelightRaysPerJob` until a relight's
+timestamps measure the rate (always, on a queue without timestamps), and at most
+`RelightRaysCeiling` after. Each job and its commit are a round trip through the
+frame queue, so a cut below the share multiplies the volume's relight time; the
+service log's `trace-jobs=[kind:jobs/units/latency]` (in `world.residency`)
+shows a volume's jobs, their mean size and their round trip. A batch cut by probe count
 alone (384 fresh probes beside the stage, 78 point lights in range of each) ran
 one dispatch past the device timeout. The walk's step bound bounds one ray, never
 a dispatch. A slow job prints `[sdf.gpu-work] slow`, a device loss lists the

@@ -249,18 +249,24 @@ public sealed partial class SdfMeshIrradiance {
         return rows;
     }
 
-    // The predicted rays one relight job carries at most whatever its measured rate (RelightRays). A relight shades every
-    // hit texel of each probe toward every shadowing light that reaches it (sdfProbeShade): a probe that reuses its local
-    // cube traces toward the directional lights alone, a fresh one toward every point light in range as well, so one
-    // batch's cost spans two orders of magnitude for one probe count. A whole 384-probe batch of fresh probes beside the
-    // debug world's stage, 78 shadowing point lights in range of each, ran past the device's timeout as one dispatch.
+    // The predicted rays one relight job carries at most before the relight's timestamps have measured its rate
+    // (RelightRays), and on a queue without timestamps. A relight shades every hit texel of each probe toward every
+    // shadowing light that reaches it (sdfProbeShade): a probe that reuses its local cube traces toward the directional
+    // lights alone, a fresh one toward every point light in range as well, so one batch's cost spans two orders of
+    // magnitude for one probe count. A whole 384-probe batch of fresh probes beside the debug world's stage, 78 shadowing
+    // point lights in range of each (about 4.4 million rays), ran past the device's timeout as one dispatch.
     internal const long RelightRaysPerJob = 1L << 17;
+    // The predicted rays one relight job carries at most once the rate is measured, a quarter of that dispatch: the
+    // measured rate cuts a job to background work's share of a frame below it, and it bounds a job whose rays cost far
+    // more than the rate's recent jobs.
+    internal const long RelightRaysCeiling = 1L << 20;
     private long[] m_gpuRelightRays = [];
 
     // Relights a batch's probes on the GPU and commits each probe's published record into the feedback volume: the rows
     // for the whole batch are composed once, then submitted in consecutive jobs whose predicted rays fit background
     // work's share of a frame at the relight's measured rate (SdfMeshProbeGpuWork.RelightRaysWithinShare, at most
-    // RelightRaysPerJob; a probe whose own prediction exceeds it goes alone), each committed before the next is
+    // RelightRaysCeiling, and RelightRaysPerJob until the rate is measured; a probe whose own prediction exceeds it goes
+    // alone), each committed before the next is
     // submitted, so no relight job holds the frame behind it longer than that share however many lights reach the batch.
     // False when the snapshot no longer stands at a commit; the probes committed before it stay committed.
     private bool RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
