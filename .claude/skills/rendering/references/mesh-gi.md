@@ -146,8 +146,9 @@ the whole frame, including the final meter. `SdfWorldPasses.WaitingOf` feeds it
 to render-graph completion. A worker finishing later cannot certify an image
 whose exposure was held. Readiness waits for the next prepared frame. A held
 frame shows nothing new, so its staging drives the service
-(`SdfGpuWork.Drive`): the thread waits on the host for each job, outside the
-budgets that protect a queued frame, and `SdfWorldPasses.WithheldOf` has the
+(`SdfGpuWork.Drive`): the thread waits on the host, with a deadline, for a
+job's fence or a client's offer, outside the budgets that protect a queued
+frame, and the host's wait between frames steps the work the same way, and `SdfWorldPasses.WithheldOf` has the
 render graph record no pass of the view again until the hold ends
 (`IRenderGraphPackageFactory.WithheldOf`), so the drain has the GPU. A view
 with no completed image still renders once. A residency no scheduled render

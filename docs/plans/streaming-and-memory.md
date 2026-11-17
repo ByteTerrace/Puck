@@ -208,16 +208,17 @@ What the memory side holds today:
   segment the device placed it in. Resources share blocks of
   `GpuMemoryPool.BlockBytes`, a resource past half a block takes its own, and
   a key keeps one emptied block.
-- **Background GPU work has one budget, and is still paced by presentation.**
-  Every residency's `SdfGpuWork` draws on its presentation's
+- **Background GPU work has one budget, and is serviced when a job
+  completes.** Every residency's `SdfGpuWork` draws on its presentation's
   `SdfGpuWorkBudget`: `SdfGpuWork.GpuShare` of GPU time and
   `SdfGpuWork.UploadBytesPerSecond` for all of them together, banked by wall
-  time. Its jobs still run on the presenting queue and take work only at frame
-  pumps, so a present slower than the budget's bank
-  (`SdfGpuWorkBudget.MostBankSeconds`) paces the bake and the lighting, and
-  the bake's admission still reads its backlog at the take right after a burst
-  of answers (`SdfMeshPathBake.Backlogged`), which leaves workers idle on slow
-  frames.
+  time. Its jobs run on the presenting queue, recorded on the frame thread,
+  and are stepped at the frame's pumps and inside the host's wait between
+  frames (`HostWaits.Pace`), which a job's fence, a client's offer and the
+  budget's next credit end early, so a slow present no longer paces the bake
+  or the lighting ([step 3](#step-3-one-reservation)). The bake's admission
+  measures its backlog in wall time (`SdfMeshBakeBacklog`). The swap chain's
+  own wait and a frame that never waits are still stepped at pumps alone.
 - **The region gives memory back only by replacing itself.** It grows by
   allocating a larger buffer and copying (`GpuRegion.Grow`), and shrinks the
   same way (`GpuRegion.Shrink` from `SdfWorldTables.FitMeshRegion`), so both
@@ -1209,7 +1210,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [1. Device readings and pools](#step-1-as-a-brief) | Budgets per segment, placement in the ledger, pools on the account as ledgers | Nothing |
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. The backing prototype](#step-7-the-backing) | Slabs or sparse backing, chosen by measurement | Beside 1 and 2, with a GPU grant |
-| [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit. Built, apart from background work serviced off the frame pump | 1, 2 |
+| [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
 | [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device | 3; 7 before it claims relief |
@@ -1531,6 +1532,55 @@ the fixed shares are gone.
 - **One background budget.** Every residency's `SdfGpuWork` draws on its
   selector's `SdfGpuWorkBudget`; a service that found it empty makes the next
   accrual bank its whole gap, up to `SdfGpuWorkBudget.MostBankSeconds`.
+- **Servicing on completion.** Background work is stepped on the recording
+  thread at three kinds of point: the frame's pumps, a held frame's drive, and
+  the host's wait between frames. That wait is serviced (`HostWaits.Pace`):
+  the pump thread sleeps on the pacer's deadline and one wake event together,
+  one operating-system wait on the high-resolution timer and the event
+  (`IPrecisionWaiter.TryWait` with a wake), and runs the work registered for
+  it (`HostWaits.Serve`, a `WaitService`) when the event is set or the time a
+  service asked for comes. Three things set it. A job's fence, asked as the
+  job is submitted (`IGpuSubmissionFence.SignalOnCompletion`): Direct3D 12
+  sets the event's own handle from `ID3D12Fence::SetEventOnCompletion`, and
+  on Vulkan, which has no such call, one thread for the process waits each
+  watched fence in the driver and sets it (`VulkanFenceWatch`). A client with
+  a job to take or a slot given back (`SdfGpuWork.Wake`), which the bake calls
+  when work of its pool has finished since its last take
+  (`SdfMeshPathBake.Offered`). And time: a step the budget held asks to run
+  again when the budget next holds credit (`SdfGpuWorkBudget.UntilHolds`). A
+  step inside the wait takes no job within `SdfGpuWork.HostBudget` of the
+  wait's deadline, and a failure there is kept for the next pump, where the
+  host's recovery catches a lost device. A held frame's drive
+  (`SdfGpuWork.Drive`) waits on the same event through the door, with a
+  deadline, in place of an unbounded fence wait.
+- **The backlog as time.** The bake's admission compares two wall times the
+  pool measures of itself (`SdfMeshBakeBacklog`): what its workers take to
+  drain the stages queued and those of groups admitted and still on their way,
+  against what a new admission takes to reach them
+  (`SdfMeshBakeBacklog.Round`). A take right after a burst of answers
+  therefore admits what the workers finish before those groups arrive,
+  whatever the frame rate.
+- **Leases.** A job leases the tables' generation as it is taken
+  (`SdfWorldTables.BackgroundGeneration`) until its fence. The tables' one
+  retirement door releases nothing retired at or after the oldest lease in
+  flight (`SdfGpuWork.OldestLease`), and the upload waits out every lease on
+  the ring slot it rewrites (`SdfGpuWork.EndLeases`).
+- **A job's hold.** A slot's buffers, its readback among them, come from one
+  door (`SdfGpuWorkRecording.HostBuffer`, `SdfGpuWorkRecording.DeviceBuffer`,
+  `SdfGpuWorkRecording.CopyToReadback`), which raises the service's
+  reservation before it creates one (`SdfGpuWorkHold`, workspace under
+  `SdfResidencySelector.WorkOwner`, in the device's pool and the host's) and
+  lowers it when the buffer goes. A job the pool has no room for is handed
+  back to its client and offered again once a slot comes back or
+  `SdfGpuWork.DeferralRetry` has passed; a service with nothing in flight and
+  no slot a reader still holds reserves its job as its floor, as does one
+  whose job has waited `SdfGpuWork.ForcedPatience`. The account's floor is
+  measured in the owner's own bytes, so it admits the shared block the device
+  places a small resource in.
+- **The clamped credit.** A settled charge is at most the wall time its job
+  was in flight (`SdfGpuWorkBudget.MeasuredWithin`), and the GPU credit stops
+  at `SdfGpuWorkBudget.MostDebtSeconds` of debt; both are counted on the
+  budget's line (`clamped`, `floored`).
 - **Readings.** `host.memory` prints each pool's limit, held, peak, retired
   and promised bytes, its room, what stands past the limit, the forced job and
   the counted exceptions, the bytes by class, and each ledger segment's limit,
@@ -1567,6 +1617,71 @@ the fixed shares are gone.
 - *The budgets are one sum.* The selector computes every residency's budget
   from one reading under one lock; the residencies' budgets add up to the
   elastic budget.
+- *A job's completion wakes the host's wait.* One door submits a job
+  (`SdfGpuWork`'s own submit), and it asks the slot's fence for the wake as it
+  does, so no job is in flight without one. The wake may come early or twice;
+  a step reads the fences either way. It stops at the host: a thread that
+  never paces steps the work at its frame's pumps alone.
+- *A service runs only between a frame's present and the next control
+  phase.* Only the pacer's form of the door services (`HostWaits.Pace`); a
+  wait inside an iteration never re-enters one.
+- *What a job reads is neither rewritten nor released before its fence.* The
+  lease is stamped in the one door that submits a job, and the tables' two
+  doors read it: the retirement door and the upload. It holds on any queue;
+  on the frame's own queue the upload's wait for its predecessor already
+  implies it, so the doors never wait and `lease-waits` reads zero.
+- *What a job holds is reserved before it is allocated.* The slot door is the
+  only place a slot's buffer is created, and only it names objects for the
+  work's owner. It stops at the owner (every service shares one account
+  entry, so another service's idle buffers stand against a floor until they
+  go, within `SdfGpuWork.IdleSeconds`) and at the clients' own tables and
+  caches, which outlive a job.
+- *The backlog is wall time on both sides.* `SdfMeshBakeBacklog.Holds` is the
+  one test, and the pool feeds it: each worker times the stage it ran, and a
+  group's first queued stage times its lead.
+- *The GPU credit lies between a bank's worth and the debt's floor.* One
+  private write lowers it (`SdfGpuWorkBudget`), which drops what passes the
+  floor, and a settled charge passes `SdfGpuWorkBudget.MeasuredWithin` first.
+
+**Why the frame thread, and not a queue and thread of its own.** The cause is
+that only the frame thread records and submits, and it did so at two fixed
+points of its iteration, so work that completed between them waited for the
+next. Two changes remove that: have the frame thread take the work up
+wherever it would otherwise sleep, or give the work a thread and queue. The
+first is built.
+
+- The frame thread's long sleep is the pacer's wait, on both backends: a
+  target the swap chain cannot reach in a whole number of refreshes, and
+  every target on a variable-refresh display, is paced by the timer
+  (`PresentPacingPolicy.Resolve`), and that wait is now ended by the work.
+  Nothing in it spins: the thread sleeps in one operating-system wait and
+  each wake has work behind it or a time a service named.
+- A second recording thread needs every device object the jobs touch to be
+  safe from two threads: the submission batch and its fences, the recorder's
+  resource states on Direct3D 12, descriptor writes, the memory arenas and the
+  work counters are single-threaded by contract
+  (`GpuBatchedSubmissionFence`, `GpuSubmissionBatch`). It also needs jobs to
+  read the tables without the frame thread, which the leases above make
+  possible but which no part of the tables does yet. Its gain over the built
+  form is confined to the time the frame thread is busy or blocked in a
+  driver call, which is under a frame.
+- A second queue would let the driver's scheduler interleave a long job with
+  the frame, in place of cutting jobs to `SdfGpuWork.FrameShareSeconds`. That
+  is a rendering gain, not a servicing one, and it is what would justify the
+  cost above; the leases are what such a queue needs, so it moves the
+  service's submit and keeps the rest.
+
+**How the job system's pool takes this.** The pool owns CPU work
+([the engine job system](engine-job-system.md#1-the-scheduler)); the frame
+thread stays the one thread that records and submits, and drains each result
+at its own install point. Three seams are the ones it moves, none replaced:
+the bake's static pool, whose queue and workers `SdfMeshBakeBacklog` reads
+and whose stage and lead timings it is fed, becomes the `Bake` class's ready
+queue and the pool's worker count; `SdfMeshPathBake.Offered` becomes the
+bake channel's signal that it holds a result; and a channel whose reader is
+the frame thread registers a `WaitService` whose wake its producers set, so
+the pacer's wait is the frame thread's drain between frames for every such
+channel, as it is for the fences here.
 
 **Replaced.** The mesh region's and the shader pipeline's quarter of the
 device and the helper they shared; a bias per bake; a budget per `SdfGpuWork`;
@@ -1575,22 +1690,28 @@ mesh region's growth; the observed owner that stood outside admission.
 
 **What remains of the step.**
 
-- *Servicing decoupled from presentation.* Background jobs are still taken
-  only at frame pumps. Serviced during the host's present wait, it needs a wait
-  on a fence or the frame's deadline, whichever comes first: a completion
-  handle from each backend's fence, and a precision wait that such a handle
-  ends. On Vulkan a present that blocks inside the swapchain call has no wait
-  to service in, so a queue and recording thread of its own is the other
-  candidate, and the measurement decides: with the display held at a slow
-  present, the bake's and the lighting's GPU time a second against the
-  budget's rate, on both backends. With it go the bake's backlog admission
-  (`SdfMeshPathBake.Backlogged`) as a rate of wall time, background jobs that
-  lease the generations they read until their fence, and a reservation for
-  what a job holds on the device.
+- *Waits the door does not service.* The swap chain's own wait
+  (`ISwapChainPacing.TryWaitForFrame`, a native wait of up to
+  `ISwapChainPacing.MaxRefreshesPerPresent` refreshes) and a present that
+  blocks in the driver are not ended by the work. At one refresh a present
+  that costs nothing: the frame's pumps come every refresh. Past it only
+  Direct3D 12 paces off the swap chain (its sync interval; Vulkan's FIFO has
+  none, so the timer paces every Vulkan target below the display's rate, and
+  is serviced), so a Direct3D 12 host at two to four refreshes a present
+  steps the work at its pumps alone, and the serialized lighting, a job at a
+  time, feels that first. The
+  [control plane's step C0.6](engine-job-system.md#the-steps) puts the
+  Direct3D 12 frame latency waitable on the door, where it is serviced as the
+  timer is; the reading below at such a target says how much is lost until
+  then.
+- *A frame that never waits.* A frame bound by its own CPU or GPU work past
+  its period has no pacer wait, and steps the work at its two pumps.
 - *The workspace class's size.* Bake workspaces reserve against the host pool,
   and no job is split or failed by name for passing a class of its own.
-- *The lighting's device memory and the background work's buffers* are fixed
+- *The lighting's device memory* (the trace scene's region, the feedback
+  volume, the hit and meter caches) and each client's small tables are fixed
   storage until they reserve: never refused, and outside the elastic budget.
+  They outlive a job, so they are a holder's reservation, not a job's.
 - *Retired bytes by segment.* A holder states them and names a pool.
 - *Priority across residencies.* The budgets and the background budget are
   shared equally and first come.
@@ -1607,10 +1728,51 @@ region with no room keeps its buffer and refuses the meshes past it without
 throwing, the store's law that a read with no workspace is a miss that keeps
 the entry, and the pipeline's laws: the refusal by the account, a failed
 candidate's promise, an earlier graph released under a running build, and a
-candidate whose allocations the pool cannot hold. The windowed readings are verification requests to the lead: the
+candidate whose allocations the pool cannot hold. For the servicing:
+`HostWaitsLawTests` (the pacer's wait serves when woken and when a service
+asks, never sooner than `HostWaits.LeastServiceDelay`, and ends on its
+deadline), `GpuSubmissionBatchLawTests` (a completion signal follows a
+submission through its batch, and one owed to a submission that never reaches
+the queue is set, not lost), `SdfWorldTablesWorkLawTests` (a completed job is
+answered and the next taken inside the wait with no pump; a failure there is
+kept for the next pump; a job's lease holds what it reads under a fence no
+later submission completes; what a job holds is reserved before it is
+allocated and a job with no room waits; a service with nothing in flight
+reserves its job as its floor; a reversed timestamp pair charges the
+estimate), `SdfMeshBakeBacklogLawTests` (the same queue admits or waits by
+the lead), `SdfResidencySelectorLawTests` (the budget's debt is bounded
+whatever a job reports) and `MemoryAdmissionLawTests` (a floor admits the
+shared block its resource is placed in). The windowed readings are verification requests to the lead: the
 lowered-budget path (`host.memory budget device` in steps at the meadow, on
 both backends: `over-limit`, `detail-bias`, `refusals` and `growth-refusals`
-at each step, with captures), and the slow-present reading above.
+at each step, with captures), and the two below.
+
+*The slow-present reading.* From a cold store on each backend, with
+`world.target 10` and then `world.target 5` set before the bake settles, read
+`world.residency` twice some seconds apart. What decides it: the budget's
+`gpu-charged` over the wall time between the readings reaches
+`SdfGpuWork.GpuShare` while the bake owes meshes, at both targets (before,
+it fell with the target: a job a pump for the serialized lighting, and a
+bank of `SdfGpuWorkBudget.MostBankSeconds` at five frames a second);
+`gpu-work`'s `services` and `service-jobs` rise between the readings, since
+the jobs are now taken inside the wait; and the bake's done line reads fewer
+`idle` takes of its `takes` and a lower `per-take` `waiting` than the frame
+rate alone gave. `lease-waits`, `clamped` and `floored` read zero, and
+`deferred` reads zero unless the device pool is full. A third target, which
+the swap chain paces on Direct3D 12 and the timer on Vulkan (`world.target 20`
+on a fixed 60 Hz display), reads the part the door does not service: the
+Direct3D 12 share there against Vulkan's is the loss.
+
+*The quiet cold bake.* `puck bench startup worlds/debug --bake` on each
+backend. The bake's GPU time is held to the share by design, so servicing
+does not raise it; what it removes is waiting: an answer reaches the workers
+when its job completes and a lattice is taken when it is ready, in place of
+a frame later each, and admission keeps the workers fed. What decides it: the
+done line's `idle` takes fall as a share of `takes`, `per-take` `waiting`
+falls, the `cpu=[…]` stage totals stand, and the interval falls by the time
+the workers stood idle. If `budget-holds` now dominates the takes, the share
+is what holds the minute, and raising it while a boot has nothing worth
+protecting is a call on the frame during a cold boot.
 
 ### Step 4: staged by demand
 

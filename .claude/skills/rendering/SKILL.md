@@ -418,7 +418,8 @@ add the row you found.
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork` | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`) | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
 | Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
@@ -461,8 +462,10 @@ The mesh bake's two kernels (`sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) are no pass of a view: they run as the residency's
 background GPU work (`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`), a
 ring of slots each submitted on its own fence and refilled when a slot's job
-completes and its readback is released, pumped on the frame thread at the top
-of each frame and after each upload. A job binds the latest upload's World set
+completes and its readback is released, stepped on the frame thread at the top
+of each frame, after each upload, and inside the host's wait between frames
+(`HostWaits.Pace`), which a job's fence, a client's offer and the budget's
+next credit end early. A job binds the latest upload's World set
 with its own point table and runs only while the tables' uploaded program is
 the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 `world.gpu-timing` does not see it; the bake's done line carries its

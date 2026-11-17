@@ -297,7 +297,8 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
 The dispatch's fixed `MeshBakeMaxSamples` budget counts sampled values, not
 the saved pose rows appended to its input point table. Each slot of the
 background GPU work holds its batch's point table, a host-visible buffer the
-kernel reads in place (`SdfMeshBakeGpuWork`), grown in 4 MiB granules once the
+kernel reads in place (`SdfMeshBakeGpuWork`), which the service owns and
+reserves (`SdfGpuWorkRecording.HostBuffer`), grown in 4 MiB granules once the
 slot's last job is released (`SdfGpuWork.Granule`), and bound through the slot's
 own World set at the bake's point member, where the tables' World sets bind the
 unused-member buffer (`SdfWorldTables.WriteBackgroundWorldSet`).
@@ -932,7 +933,15 @@ laws exercise that boundary.
   frame, before any residency prepares, and after each upload: it hands every
   job whose fence signaled to its client, which copies and decodes the samples
   on the bake's pool and releases the slot (`SdfGpuWorkReadback.Release`), and
-  refills every released slot while the budget holds. The budget is
+  refills every released slot while the budget holds. Between two frames the
+  host's wait takes the same step (`HostWaits.Pace`, the service's
+  `WaitService`): the frame thread sleeps on its deadline and one wake
+  together, and a job's fence (`IGpuSubmissionFence.SignalOnCompletion`), a
+  lattice a worker readied (`SdfMeshPathBake.Offered`), a released readback
+  and the budget's next credit each end the sleep early, so a batch is
+  answered when it completes and the next taken when it is ready, whatever
+  the frame rate. Such a step takes no job within `SdfGpuWork.HostBudget` of
+  the wait's deadline. The budget is
   `SdfGpuWork.GpuShare` of the GPU's time, charged by each job's own
   timestamps (a client's estimate, `NanosecondsPerTap`, until they land or on a
   queue without them), banking at most a short spell while idle. A job binds the
@@ -943,15 +952,28 @@ laws exercise that boundary.
   lattice is chunked to fit `SdfMeshPathBake.LatticeTaps` (final lattices in
   slabs, material and gradient, fine and material points in chunks). The done
   line's `gpu-work=[…]` reads jobs, their measured GPU time, the wall time some
-  job was in flight and the GPU's share of it, the most in flight, the pumps,
-  the drives of held frames and their waits, the pumps the World set could not
-  be bound in and those the budget held;
-  `world.gpu-timing` does not see the work. A slot's readback and the bake's
-  per-slot point table, sampled table, masks and samples grow to its largest
-  batch and go once a free slot has not needed them for `SdfGpuWork.IdleSeconds`
-  (`ISdfGpuWorkClient.ReleaseIdle`, called only where `Refill` would reuse the
-  slot), so a settled bake holds none; `world.residency`'s `gpu-work` line
-  reads what remains. Gradients are measured only at the
+  job was in flight and the GPU's share of it, the most in flight, the steps
+  (`pumps`), those taken inside the host's wait and the jobs they submitted
+  (`services`, `service-jobs`), the drives of held frames and their waits, the
+  steps the World set could not be bound in, those the budget held, the jobs
+  handed back for want of device room (`deferred`) and the waits a lease made
+  the tables take (`lease-waits`, zero on one queue);
+  `world.gpu-timing` does not see the work. A slot's buffers are the
+  service's, created through one door that reserves them before the device is
+  asked (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`, `CopyToReadback`;
+  workspace under `SdfResidencySelector.WorkOwner`): its readback and the
+  bake's point table, sampled table, masks and samples grow to the slot's
+  largest batch and go once no job has needed them at that size for
+  `SdfGpuWork.IdleSeconds`, so a settled bake holds none;
+  `world.residency`'s `gpu-work` line reads what remains and what is
+  reserved. A client keeps what it wrote into a buffer, or the sets that name
+  it, by comparing the buffer's object: a replaced one is another object. A
+  batch the pool has no room for goes back to the bake (`Abandon`) and is
+  offered again once a slot comes back; a service with nothing in flight
+  reserves its batch as its floor. Admission of a group's final lattice waits
+  on the pool's backlog measured as wall time (`SdfMeshBakeBacklog`): the
+  stages queued and on their way against what the workers drain in an
+  admission's lead. Gradients are measured only at the
   samples `SdfDualContouring` reads a normal at
   (`SdfSampledLattice.GradientPoints`): a cell's normal reads its own eight
   corners, so no other sample needs one.
@@ -979,7 +1001,11 @@ laws exercise that boundary.
   no view dispatches or reads back a batch. A slot is reused only after its
   fence signaled and its client released the readback (`SdfGpuWork`, the one
   owner of its slots), and a slot's inputs and outputs (its pass block, point
-  table, instance masks and samples) are written only while it is free. A batch
+  table, instance masks and samples) are written only while it is free. What a
+  batch reads of the tables it leases until its fence
+  (`SdfWorldTables.BackgroundGeneration`, `SdfGpuWork.OldestLease`): the
+  tables' retirement door releases nothing retired since, and an upload waits
+  out a lease on the ring slot it rewrites. A batch
   abandoned (a recording that failed, a disposed service) returns its lattices
   to their groups, which dispatch them again, and counts its samples as
   `discarded`; `Answered` settles a batch once.

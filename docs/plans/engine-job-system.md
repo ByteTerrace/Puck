@@ -1130,14 +1130,18 @@ and its operation, never of the file the wait sits in.
   remainder to its native wait: the Direct3D 12 frame latency waitable, in
   `TryWaitForFrame` and in `BeginFrame`, and Vulkan's present wait. The
   [streaming plan's step 3](streaming-and-memory.md#step-3-one-reservation)
-  services background GPU work during that wait, which needs a wake for present
-  readiness beside GPU completion and work arrival. On Direct3D 12 the frame
-  latency waitable is a handle the door can wait on beside the work's wake;
-  Vulkan's present wait has no handle, so there the service runs in slices
-  between zero-timeout readiness polls. This is work to build in that step, not
-  a hook that exists: today the drive waits inside produce (`SdfGpuWork.Drive`,
-  its fence wait unbounded and its wake wait bounded by its own slice) and the
-  pacing wait runs apart from it.
+  services background GPU work during the timer's part of that wait: the
+  pacer's form of the door (`HostWaits.Pace`) sleeps on its deadline and the
+  pump thread's one wake together and runs the work registered for the thread
+  (`HostWaits.Serve`, a `WaitService`), and GPU completion
+  (`IGpuSubmissionFence.SignalOnCompletion`) and work arrival set that wake.
+  A held frame's drive (`SdfGpuWork.Drive`) waits on the same wake through
+  the door, clipped to the pump's allowance. What C0.6 still owes is present
+  readiness: on Direct3D 12 the frame latency waitable is a handle the door
+  can wait on beside the work's wake, so the swap chain's wait is serviced
+  once it passes the door; Vulkan's present wait has no handle, so there the
+  service would run in slices between zero-timeout readiness polls, if the
+  streaming plan's reading shows the loss is worth them.
 - **Device-loss recovery is an operation.** `DeviceLossRecovery` keeps its loss
   across iterations instead of looping inside one: it makes one rebuild attempt
   an iteration once its backoff deadline has passed, the frame answers waiting
@@ -1173,7 +1177,7 @@ Reached from the pump thread inside an iteration:
 | `WorldFramePresenter.cs:528` (`AdoptStaticField` with `wait`) | Blocks on the static field's build | The build publishes; adoption reads the publication, and a frame that needs it answers waiting |
 | `SdfCompositionFrameSource.cs:275` (`WaitsForBuild`), `:566` (a layout change) | Blocks on the program build | The same: published program, or waiting with the reason |
 | `SdfWorldResidency.cs:434` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
-| `SdfWorldResidency`'s withheld frame (`SdfGpuWork.Drive`, `SdfGpuWork.cs:376` and `:383`) | The drive's fence wait is unbounded; its wake wait has its own slice's remainder | Both take the iteration's deadline through the door |
+| `SdfWorldResidency`'s withheld frame (`SdfGpuWork.Drive`) | Built with the streaming plan's step 3: one wait on the service's wake, which a job's fence and a client's offer both set, through the door with the drive's slice as its deadline | The pump's allowance clips it, as every pump wait |
 | `SurfaceEncoder.cs:162`, `SurfaceCompositor.cs:207`, `DirectXSurfaceCompositor.cs:917` | A pipeline lease waited with no cancellation | Polled; the present shows the latest image while it builds |
 | `ShaderPipelineRenderNode.cs:1546` (`WaitSlot`, the one door a slot's fence is waited through) | Unbounded fence wait before a slot is reused | The door; on expiry the node answers waiting and its image stands |
 | `RenderGraphRuntime.StandIns.cs:126`, `GpuCommandSlot.cs:17`, `GpuSurfaceReadback.cs:71` and `:91`, `GpuSurfaceUpload.cs:127`, `SdfWorldTables.Upload.cs:38` and `:103` | Unbounded fence and slot waits | The door, as device waits |
@@ -1204,8 +1208,8 @@ Live requests (C0.8):
 Teardown, with [its three outcomes](#teardown): `BackgroundBuild.cs:84` and
 `:254`, `GpuBuildCache.cs:158` and `:176`, `RetiredBuilds.cs:76`
 (`Task.WaitAll`), `GpuImageLeases.cs:93`, `SdfKernelTreeLoad.cs:142`,
-`SdfMesh.Restore.cs:173`, `SdfGpuWork.cs:123` (the readback lease's
-`WaitReleased`) and `:466`, `SdfMeshProbeGpuWork.Scene.cs:117`, `JobPool.cs:127`,
+`SdfMesh.Restore.cs:173`, `SdfGpuWorkReadback.WaitReleased` and
+`SdfGpuWork.Dispose`'s fence waits, `SdfMeshProbeGpuWork.Scene.cs:117`, `JobPool.cs:127`,
 `QueuedWorkerLifecycle.cs:247` and `:250`, `QueuedMachineWorker.cs:840`,
 `LinkedMachineGroup.cs:300`, `GamepadDevice.cs:800` (`Task.WaitAny` on a join's
 deadline), `WorldAudioRenderService.cs:190`, `PersistentRequestLane.cs:540`.
@@ -1219,7 +1223,7 @@ stop signal and its muxer's readiness) is its own thread's consumer wait.
 Not read after completion, so not waits: `WorldViewGraphHost.cs:970` (guarded
 by `IsCompleted`), `WorldConfiguredExtensions.Observations.cs:109` (guarded by
 `IsCompleted` at `:106`), `SdfMeshProbeGpuWork.Scene.cs:25` (rethrows a task
-already `IsFaulted`), `SdfGpuWork.cs:491` (after `IsSignaled`),
+already `IsFaulted`), `SdfGpuWork`'s poll (after `IsSignaled`),
 `WorldCaptureScheduler.cs:818` and `WorldCompareCapture.cs:84` (a served
 request's result). The analyzer lets these through only where the completion is
 proven on the path; a proof that crosses a helper boundary
