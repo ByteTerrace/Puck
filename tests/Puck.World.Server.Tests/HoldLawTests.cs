@@ -922,7 +922,7 @@ public sealed class HoldLawTests {
         Assert.Equal(expected: uninterrupted.HoldSpendRemaining, actual: restored.HoldSpendRemaining);
         // The whole integrator continues from the restore, not merely the hold identity: the spend remainder and
         // every accumulator ride the same residue.
-        Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+        Assert.Equal(expected: Fixtures.ContinuationResidue(body: uninterrupted), actual: Fixtures.ContinuationResidue(body: restored));
 
         var elapsed = 0UL;
         var nextTick = fixture.Server.NextInputTick;
@@ -938,7 +938,7 @@ public sealed class HoldLawTests {
             restoredServer.Step(context: in context);
 
             Assert.Equal(expected: WorldReplaySnapshot.HashState(population: fixture.Server.Population), actual: WorldReplaySnapshot.HashState(population: restoredServer.Population));
-            Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+            Assert.Equal(expected: Fixtures.ContinuationResidue(body: uninterrupted), actual: Fixtures.ContinuationResidue(body: restored));
         }
     }
     [Fact]
@@ -1958,7 +1958,7 @@ public sealed class HoldLawTests {
         var restored = restoredServer.Body(index: 0)!;
 
         // The flag rides the residue, so the restored body is leaned before it takes a single step.
-        Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+        Assert.Equal(expected: Fixtures.ContinuationResidue(body: uninterrupted), actual: Fixtures.ContinuationResidue(body: restored));
 
         // Let go on both and watch the axis come back: the live body turns over its own span, and the restored
         // body must turn through the same arc rather than seating.
@@ -1981,7 +1981,7 @@ public sealed class HoldLawTests {
             fixture.Server.Step(context: in context);
             restoredServer.Step(context: in context);
 
-            Assert.Equal(expected: uninterrupted.CaptureIntegrationResidue(), actual: restored.CaptureIntegrationResidue());
+            Assert.Equal(expected: Fixtures.ContinuationResidue(body: uninterrupted), actual: Fixtures.ContinuationResidue(body: restored));
 
             if (((double)Up(body: restored).Y) > 0.999) {
                 seated++;

@@ -901,8 +901,8 @@ public sealed class TetherLawTests {
 
         Assert.NotNull(@object: restoredBody.TetherLength);
         Assert.Equal(
-            expected: uninterruptedBody.CaptureIntegrationResidue(),
-            actual: restoredBody.CaptureIntegrationResidue()
+            expected: Fixtures.ContinuationResidue(body: uninterruptedBody),
+            actual: Fixtures.ContinuationResidue(body: restoredBody)
         );
 
         var elapsed = 0UL;
@@ -930,8 +930,8 @@ public sealed class TetherLawTests {
                 actual: WorldReplaySnapshot.HashState(population: restored.Server.Population)
             );
             Assert.Equal(
-                expected: uninterruptedBody.CaptureIntegrationResidue(),
-                actual: restoredBody.CaptureIntegrationResidue()
+                expected: Fixtures.ContinuationResidue(body: uninterruptedBody),
+                actual: Fixtures.ContinuationResidue(body: restoredBody)
             );
         }
     }

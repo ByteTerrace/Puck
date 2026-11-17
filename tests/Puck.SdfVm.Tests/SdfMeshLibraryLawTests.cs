@@ -160,17 +160,17 @@ public sealed class SdfMeshLibraryLawTests {
         var crowded = Body(crowd: true, slot: 3, offset: Vector3.Zero);
         var alone = Body(crowd: false, slot: 7, offset: Vector3.Zero);
 
-        var (geometry, materials) = Geometry(program: crowded, instance: 1);
+        var (geometry, materials) = Planned(program: crowded, transforms: Identities(count: 8), which: static group => group.Dynamic);
 
         library.Store(geometry: geometry, materials: [.. materials], mesh: Mesh(materials: [1u, 2u, 2u]));
 
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "alone" }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "alone" }, ownsLibrary: false);
 
         var bake = bakeRun.Bake;
 
         var dresser = bakeRun.Dresser;
         var dressed = dresser.Dress(frame: new SdfFrame(Program: alone, ProgramChanged: true, Time: 0f, Views: []) {
-            DynamicTransforms = [.. Enumerable.Repeat(element: new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), count: 8)],
+            DynamicTransforms = Identities(count: 8),
         });
 
         Assert.False(condition: bake.Pending);
@@ -206,7 +206,7 @@ public sealed class SdfMeshLibraryLawTests {
     public void ABakeTakesAPooledGroupOnlyWhileItsShapesStandWhereTheStoredMeshHadThem() {
         using var library = new SdfMeshLibrary();
 
-        var (geometry, materials) = PlateGeometry(plate: Plate.Rest);
+        var (geometry, materials) = Planned(program: Plate.Rest.Program(), transforms: Plate.Rest.Transforms(), which: static group => group.Dynamic);
 
         library.Store(geometry: geometry, materials: materials, mesh: Mesh(materials: [0u, 0u, 1u]));
 
@@ -225,21 +225,15 @@ public sealed class SdfMeshLibraryLawTests {
             return builder.ResetPoint().Translate(offset: new Vector3(x: x, y: 0f, z: 0f)).Sphere(material: material, radius: 0.5f).Build();
         }
 
-        var program = Ball(x: 0f);
-        var builder = new SdfMeshGeometryBuilder(dynamic: false);
-
-        for (var index = 0; (index < program.Instructions.Count); index++) {
-            builder.AppendInstruction(index: index, program: program, transforms: [], sampled: SdfSampledSet.Empty);
-        }
         // The world group bakes over a box the frame's reach wide, which its geometry holds.
-        builder.AppendReach(reach: SdfFrame.DefaultFarDistance);
+        var (geometry, materials) = Planned(program: Ball(x: 0f), transforms: [], which: static _ => true);
 
         using var library = new SdfMeshLibrary();
 
-        library.Store(geometry: builder.Geometry, materials: [], mesh: Mesh(materials: [0u, 0u, 0u]));
+        library.Store(geometry: geometry, materials: materials, mesh: Mesh(materials: [0u, 0u, 0u]));
 
         bool Bakes(SdfProgram ball) {
-            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "ball" }, ownsLibrary: false);
+            using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "ball" }, ownsLibrary: false);
             var bake = bakeRun.Bake;
             var dresser = bakeRun.Dresser;
 
@@ -302,6 +296,25 @@ public sealed class SdfMeshLibraryLawTests {
         }
     }
 
+    // The tier every plan of these laws asks of its groups, so a stored geometry and a bake that takes it agree on the tier
+    // the sealed geometry holds (a bake with no view has no demand to choose one).
+    private static readonly Func<SdfMeshBakeGroup, int> PlannedTier = static _ => 0;
+
+    private static DynamicTransform[] Identities(int count) =>
+        [.. Enumerable.Repeat(element: new DynamicTransform(Position: Vector3.Zero, Orientation: Quaternion.Identity), count: count)];
+    // The sealed geometry and material order of the one group a plan of the program makes that the predicate names: the
+    // key a bake of the program takes a stored mesh under.
+    private static (SdfMeshGeometry Geometry, int[] Materials) Planned(SdfProgram program, IReadOnlyList<DynamicTransform> transforms, Func<SdfMeshBakeGroup, bool> which) {
+        var group = SdfMeshBakeGroup.Plan(
+            create: static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic),
+            farDistance: SdfFrame.DefaultFarDistance,
+            program: program,
+            tier: PlannedTier,
+            transforms: transforms
+        ).Single(predicate: which);
+
+        return (group.Sealed, group.MaterialOrder);
+    }
     private static (SdfMeshGeometry Geometry, int[] Materials) PlateGeometry(Plate plate) {
         var builder = new SdfMeshGeometryBuilder(dynamic: true);
 
@@ -311,7 +324,7 @@ public sealed class SdfMeshLibraryLawTests {
     }
     // Whether a bake of the plate holding the library still owes a lattice: it bakes the plate rather than taking a mesh.
     private static bool Baking(SdfMeshLibrary library, Plate plate) {
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, Residency = "plate" }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = PlannedTier, Residency = "plate" }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
