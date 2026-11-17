@@ -13,6 +13,7 @@ namespace Puck.World.Server;
 /// <param name="BodyIndex">The body an embodiment assigned, or <see langword="null"/> for an unembodied session.</param>
 /// <param name="BodyGeneration">The generation of that body when it was assigned.</param>
 /// <param name="ObserverEnded">Whether the session's observer faulted or detached itself, so it acts no more.</param>
+/// <param name="Tier">The entitlement retained from admission.</param>
 /// <param name="Input">The input the session's viewer last forwarded.</param>
 public sealed record WorldSessionCheckpoint(
     Principal Session,
@@ -20,7 +21,8 @@ public sealed record WorldSessionCheckpoint(
     int? BodyIndex,
     int BodyGeneration,
     bool ObserverEnded,
-    PlayerIntent Input
+    PlayerIntent Input,
+    WorldDisclosureTier Tier = WorldDisclosureTier.Frames
 );
 /// <summary>One handle table as a checkpoint carries it: the handles a guest holds name a slot index and generation,
 /// so the slots, the generation counter and the grant revision the slots were projected at are state.</summary>

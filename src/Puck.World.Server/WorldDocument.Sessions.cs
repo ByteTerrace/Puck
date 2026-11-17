@@ -8,8 +8,8 @@ public sealed partial class WorldDocument {
     // admitted, is refused by name before its payload is read.
     private bool TryRefuseStaleSession(in SubmissionEnvelope envelope, out WorldSubmissionResult refusal) {
         if (
-            (envelope.Principal.Kind == PrincipalKind.Session) &&
-            !Host.GrantTable.IsLiveSession(principal: envelope.Principal)
+            ((envelope.Principal.Kind == PrincipalKind.Session) && !Host.GrantTable.IsLiveSession(principal: envelope.Principal)) ||
+            ((envelope.Principal.Kind == PrincipalKind.Peer) && !Host.IsLivePeer(envelope.Principal))
         ) {
             refusal = new WorldSubmissionResult.Refusal(
                 Code: WorldServer.StaleSessionCode,

@@ -53,6 +53,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: row.Edit,
             writeItem: WorldWireCodec.WriteSubject
         );
+        writer.WriteArray(items: row.Operate, writeItem: WorldWireCodec.WriteSubject);
         writer.WriteArray(
             items: row.Applications,
             writeItem: WriteControlApplication
@@ -109,6 +110,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(reader: ref r),
             maximum: MaxCollectionCount
         );
+        var operate = reader.ReadArray(field: "grants operate subjects", readItem: static (ref WireReader r) => WorldWireCodec.ReadSubject(ref r), maximum: MaxCollectionCount);
         var applications = reader.ReadArray(
             field: "grants control applications",
             readItem: static (ref WireReader r) => ReadControlApplication(reader: ref r),
@@ -120,6 +122,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Control: control,
             Drive: drive,
             Edit: edit,
+            Operate: operate,
             Grantee: grantee,
             Mutate: mutate,
             Observe: observe
@@ -281,6 +284,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     value: session.BodyIndex,
                     writeValue: static (w2, v) => w2.WriteInt32(value: v)
                 );
+                w.WriteByte((byte)session.Tier);
                 w.WriteInt32(value: session.BodyGeneration);
                 w.WriteBoolean(value: session.ObserverEnded);
                 WorldWireCodec.WriteIntent(
@@ -372,6 +376,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
         var bodyIndex = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt32());
+        var tier = (WorldDisclosureTier)reader.ReadByte();
         var bodyGeneration = reader.ReadInt32();
         var observerEnded = reader.ReadBoolean();
         var input = WorldWireCodec.ReadIntent(reader: ref reader);
@@ -382,7 +387,8 @@ public static partial class WorldAuthorityCheckpointCodec {
             Input: input,
             ObserverEnded: observerEnded,
             Session: session,
-            Templates: templates
+            Templates: templates,
+            Tier: tier
         );
     }
     private static bool TryDecodeGrants(byte[] bytes, out string reason, out WorldGrantsCheckpoint section) => TryDecodeSection(

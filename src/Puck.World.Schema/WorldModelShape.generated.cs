@@ -253,7 +253,6 @@ public static partial class WorldModelShape {
                 M("name", typeof(global::System.String), typeof(global::Puck.Commands.Principal), "Name", Read | Write, static value => ((global::Puck.Commands.Principal)value).Name),
                 M("generation", typeof(global::System.Int32), typeof(global::Puck.Commands.Principal), "Generation", Read | Write, static value => ((global::Puck.Commands.Principal)value).Generation),
                 M("isStamped", typeof(global::System.Boolean), typeof(global::Puck.Commands.Principal), "IsStamped", Read, static value => ((global::Puck.Commands.Principal)value).IsStamped),
-                M("isAuthority", typeof(global::System.Boolean), typeof(global::Puck.Commands.Principal), "IsAuthority", Read, static value => ((global::Puck.Commands.Principal)value).IsAuthority),
             ]),
         T(typeof(global::Puck.Hosting.CameraBloom), true, JsonTypeInfoKind.Object, null,
             [],

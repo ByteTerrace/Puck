@@ -14,6 +14,9 @@ namespace Puck.World.Server;
 /// reach them, because the concrete <see cref="WorldGrants"/> instance stays private to <see cref="WorldServer"/>.
 /// </summary>
 public interface IWorldGrantsView {
+    /// <summary>Whether this principal operates the world at this check, including live role membership.</summary>
+    bool IsOperator(Principal principal);
+
     /// <summary>Determines whether <paramref name="principal"/> holds <paramref name="capability"/> over <paramref name="subject"/>
     /// — the allocation-free, O(1) hot-path check, returning which rule decided rather than a bare
     /// <see langword="bool"/> (a decision is data, never a boolean; the <see cref="GrantVerdict"/> converts

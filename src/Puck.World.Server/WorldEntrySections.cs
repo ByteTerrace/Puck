@@ -29,6 +29,7 @@ namespace Puck.World.Server;
 /// <param name="IdentityDomain">The verified admission identity's domain.</param>
 /// <param name="IdentitySubject">The verified admission identity's subject.</param>
 /// <param name="AdmissionTrust">The admission's trust mode and pinned identity.</param>
+/// <param name="AdmissionTier">The connection's independent disclosure entitlement.</param>
 public readonly record struct EntryAdmissionSection(
     int Generation,
     bool IsAuthorityTransferred,
@@ -48,7 +49,8 @@ public readonly record struct EntryAdmissionSection(
     IReadOnlyList<(WorldCapability Capability, GrantSubject Subject)> RevokedKeys,
     string IdentityDomain,
     string IdentitySubject,
-    WorldAdmissionTrustIdentity? AdmissionTrust
+    WorldAdmissionTrustIdentity? AdmissionTrust,
+    WorldDisclosureTier AdmissionTier = WorldDisclosureTier.Frames
 ) : IContinuationSection<EntryAdmissionSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Admission;
@@ -89,6 +91,7 @@ public readonly record struct EntryAdmissionSection(
         writer.WriteString(value: section.IdentityDomain);
         writer.WriteString(value: section.IdentitySubject);
         WorldWireLeaves.WriteAdmissionTrust(trust: section.AdmissionTrust, writer: writer);
+        writer.WriteByte((byte)section.AdmissionTier);
     }
     /// <inheritdoc/>
     public static EntryAdmissionSection Read(ref WireReader reader) => new(
@@ -123,7 +126,8 @@ public readonly record struct EntryAdmissionSection(
         ),
         IdentityDomain: reader.ReadString(field: "population entry identity domain"),
         IdentitySubject: reader.ReadString(field: "population entry identity subject"),
-        AdmissionTrust: WorldWireLeaves.ReadAdmissionTrust(reader: ref reader)
+        AdmissionTrust: WorldWireLeaves.ReadAdmissionTrust(reader: ref reader),
+        AdmissionTier: (WorldDisclosureTier)reader.ReadByte()
     );
 }
 /// <summary>The targets a slot's occupant has designated, one per designation register.</summary>

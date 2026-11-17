@@ -788,6 +788,7 @@ public sealed partial class WorldRuleHost {
         m_documentArms.Add(item: mutation);
 
         return (WorldDocument.TryCompose(
+            authority: Host.GrantTable,
             candidate: out _,
             current: Proposed().Definition,
             engineTick: firing.EngineTick,

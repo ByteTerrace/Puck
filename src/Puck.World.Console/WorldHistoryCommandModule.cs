@@ -252,15 +252,15 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
             );
         }
 
-        var route = (principal.IsAuthority
+        var route = ((m_instances.Boot?.Server.Grants.IsOperator(principal) == true)
             ? (report.RebuiltDocument ? " (through the load door)" : " (in place)")
             : string.Empty);
         var how = ((report.KeyframeTick is { } keyframe)
             ? $"restored keyframe {keyframe}{route}, re-simulated {report.TicksResimulated} tick(s)"
             : $"re-simulated {report.TicksResimulated} tick(s) forward");
         var proof = (report.Matches
-            ? (principal.IsAuthority ? $"authoritative 0x{report.LiveHash:X16} matches the recording" : "the authoritative state matches the recording")
-            : (principal.IsAuthority ? $"DIVERGED at tick {(report.DivergedAt ?? report.To)} — live 0x{report.LiveHash:X16}, recorded 0x{report.RecordedHash:X16}"
+            ? ((m_instances.Boot?.Server.Grants.IsOperator(principal) == true) ? $"authoritative 0x{report.LiveHash:X16} matches the recording" : "the authoritative state matches the recording")
+            : ((m_instances.Boot?.Server.Grants.IsOperator(principal) == true) ? $"DIVERGED at tick {(report.DivergedAt ?? report.To)} — live 0x{report.LiveHash:X16}, recorded 0x{report.RecordedHash:X16}"
                 : $"DIVERGED at tick {(report.DivergedAt ?? report.To)}"));
 
         if (report.MachineCoresOutsideProof) {

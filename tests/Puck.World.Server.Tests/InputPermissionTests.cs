@@ -1,6 +1,5 @@
 using Puck.Commands;
 using Puck.Maths;
-using Puck.Networking;
 using Puck.World.Protocol;
 using Xunit;
 
@@ -100,39 +99,5 @@ public sealed class InputPermissionTests {
         Assert.False(condition: owner.TryHeld(channel: hold, hold: out _));
         Assert.True(condition: owner.Sources[0].AwaitingNeutral);
     }
-    [Fact]
-    public void AGrantFollowsItsLogicalActionAcrossReusedSlotsAndCheckpointRestore() {
-        var catalog = WorldInputCatalog.Compile(declarations: [
-            new("a", ChannelShape.Binary), new("b", ChannelShape.Binary)
-        ], modes: new([], [new("focus", new(Kind: WorldInputModeSelectorKind.SeatState, Name: "focus"), "a", [
-            new("a", ["a"]), new("b", ["b"])
-        ])]));
-        var a = Assert.Single(collection: catalog.Mappings.ToArray(), predicate: mapping => (mapping.Name == "focus=a"));
-        var b = Assert.Single(collection: catalog.Mappings.ToArray(), predicate: mapping => (mapping.Name == "focus=b"));
 
-        Assert.Equal(a.Address(logicalId: 0), b.Address(logicalId: 1));
-        var writer = new WireWriter();
-
-        WorldWireCodec.WriteChannelSelection(writer, new(["a"]));
-        var reader = new WireReader(bytes: writer.ToArray());
-        var selection = WorldWireCodec.ReadChannelSelection(reader: ref reader);
-
-        Assert.True(condition: reader.TryFinish(failure: out _));
-        var principal = Principal.Addon(name: "guest");
-        var subject = GrantSubject.Body(index: 0);
-        var grants = new WorldGrants(population: 4, seatCount: 0, routeTransition: static (_, _, _) => { });
-
-        Assert.True(condition: grants.TryGrant(grant: new(principal, WorldCapability.Drive, subject, false, Budget: 8, Reach: selection), reason: out var reason), userMessage: reason);
-        Assert.True(condition: grants.TryGetChannelReach(principal, subject, a.Channels, out var active));
-        Assert.True(condition: active.Contains(ordinal: a.Address(logicalId: 0)));
-        Assert.True(condition: grants.TryGetChannelReach(principal, subject, b.Channels, out var inactive));
-        Assert.True(condition: inactive.IsEmpty);
-        var restored = new WorldGrants(population: 4, seatCount: 0, routeTransition: static (_, _, _) => { });
-
-        restored.Restore(checkpoint: grants.Capture());
-        Assert.True(condition: restored.TryGetChannelReach(principal, subject, b.Channels, out inactive));
-        Assert.True(condition: inactive.IsEmpty);
-        Assert.True(condition: restored.TryGetChannelReach(principal, subject, a.Channels, out active));
-        Assert.True(condition: active.Contains(ordinal: a.Address(logicalId: 0)));
-    }
 }

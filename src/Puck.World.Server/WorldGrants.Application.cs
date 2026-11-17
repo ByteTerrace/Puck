@@ -25,22 +25,8 @@ public sealed partial class WorldGrants {
             return false;
         }
 
-        if (
-            (grant.Capability == WorldCapability.Drive) &&
-            (grant.Subject.Kind == GrantSubjectKind.Body) &&
-            Host.Population.IsAdmittedPeer(bodyIndex: grant.Subject.Value) &&
-            (grant.Grantee != Host.Population.PeerPrincipal(index: grant.Subject.Value))
-        ) {
-            Host.Document.DenyGrantTable(
-                denial: $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(index: grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it",
-                connectionId: connectionId,
-                correlationId: correlationId
-            );
-
-            return false;
-        }
-
         if (TryGrant(
+            actor: actor,
             grant: grant,
             reason: out var reason
         )) {
@@ -190,6 +176,7 @@ public sealed partial class WorldGrants {
         }
 
         var removed = Revoke(
+            actor: actor,
             grantee: grant.Grantee,
             capability: grant.Capability,
             subject: grant.Subject
@@ -265,6 +252,10 @@ public sealed partial class WorldGrants {
     /// <returns><see langword="true"/> when every gate cleared (and the dispatch was charged, when metered).</returns>
     internal bool TryAdmitMutation(Principal principal, WorldSection section, int kindOrdinal, GrantSubject? rowScopedEditSubject, GrantSubject? rowScopedMutateSubject, bool meter, out WorldMutationAdmission admission) {
         var sectionSubject = GrantSubject.Section(section: section);
+        if (!IsOperator(principal) && (section == WorldSection.Grants || section.IsProgram())) {
+            admission = new WorldMutationAdmission(WorldMutationAdmissionRule.SectionDenied, default, sectionSubject, sectionSubject, default, 0);
+            return false;
+        }
 
         // THE ONE STRUCTURAL EXEMPTION, keyed on the principal KIND and decided HERE so nothing else has to know
         // about it — no bypass parameter threaded through the apply path, no seeded wildcard row standing in for
@@ -273,7 +264,7 @@ public sealed partial class WorldGrants {
         // done without consulting this table at all. See Principal.World for the full argument, including why
         // this is NOT the "handler constructs a principal to launder an identity" defect. Every gate BELOW authority
         // still runs unconditionally at the call site: compose, whole-document validate, envelope, solids.
-        if (principal.Kind == PrincipalKind.World) {
+        if (IsOperator(principal)) {
             admission = new WorldMutationAdmission(
                 Rule: WorldMutationAdmissionRule.Structural,
                 Verdict: default,
@@ -424,7 +415,7 @@ public sealed partial class WorldGrants {
         // defeats the very budget this gate exists to enforce.
         if (
             meter &&
-            !WorldGrants.IsTrusted(principal: principal)
+            !IsOperator(principal)
         ) {
             if (!TryGetBudget(
                 principal: principal,

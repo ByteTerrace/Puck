@@ -588,7 +588,7 @@ public sealed partial class WorldServer {
             out _,
             out reason,
             out _,
-            refusalCode: out _
+            refusalCode: out _, authority: GrantTable
         )) { return false; }
         proposal = new WorldPlacementProposal(
             Candidates: work,

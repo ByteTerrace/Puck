@@ -218,7 +218,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return Simulation(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             name: "world.load",
             description: $"Loads a DIFFERENT world file and rebuilds from it — the loaded document becomes the new base (fully validated off disk, then re-validated at the apply boundary → swap → derived rebuild → journal RESET): {WorldLoadForms.Spelling}. Refused (naming world.save/world.reset/force as the outs) while the journal is DIRTY unless force is passed — a load discards unsaved work, and doing that silently is dishonest. A missing/invalid file, or the every-section Mutate hold world.load/world.undo have always needed, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the exact bytes read off disk — a re-drive re-reads the same path and refuses BY NAME if the file has moved since the recording was made. The accept echo names the new origin.",
             forms: WorldLoadForms,
@@ -285,7 +285,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
             routing: CommandRouting.Simulation,
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             name: "world.reload",
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
@@ -380,7 +380,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             }
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
             name: "world.save",
             description: $"Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): {WorldSaveForms.Spelling}. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
@@ -542,11 +542,11 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var view = server.ReadView(context);
                 if (!view.Observes) { return new CommandResult(Output: "[world.status: not disclosed]"); }
                 var definition = view.Definition;
-                var isOperator = context.Principal.IsAuthority;
+                var isOperator = server.Grants.IsOperator(context.Principal);
                 var source = isOperator ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty;
                 // The journal and the save snapshot are the authority's edit history: the journal's length moves with
                 // an operator's hidden-only edit, so a recipient's status carries neither.
-                var journal = (context.Principal.IsAuthority
+                var journal = (server.Grants.IsOperator(context.Principal)
                     ? $" session-drift {WorldSessionCapture.DescribeDrift(
                         definition: definition,
                         snapshot: WorldSaveSnapshot.Compose(

@@ -94,6 +94,7 @@ internal sealed class WorldDisclosureRun : IDisposable {
                 due.Add(item: (run.m_sessions[index], input));
             }
         }
+        run.ValidateObservers();
         run.m_run.Ticked += run.Act;
         return run;
     }
@@ -102,6 +103,7 @@ internal sealed class WorldDisclosureRun : IDisposable {
     /// exports.</summary>
     /// <param name="directory">The run's export directory.</param>
     public void Write(string directory) {
+        ValidateObservers();
         foreach (var (step, answered) in m_steps.Values.OrderBy(keySelector: static entry => entry.Step.At)) {
             if (answered is not { } tick) {
                 m_transcript.Invalidate(reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"variant step at {step.At} '{step.Run}' never answered before the export"));
@@ -138,13 +140,21 @@ internal sealed class WorldDisclosureRun : IDisposable {
         m_transport.OperationIds = WorldOperationIds.Random;
     }
 
+    private void ValidateObservers() {
+        _ = PrincipalTokens.TryParse(m_leg.Observer, out var observer);
+        if (m_server.Grants.IsOperator(observer) || m_sessions.Any(session => session.Principal is { } actor && m_server.Grants.IsOperator(actor))) {
+            m_transcript.Invalidate("a disclosure observer holds Operate");
+        }
+    }
     private void Act(ulong tick) {
+        ValidateObservers();
         if (m_actions.Remove(key: tick, value: out var due)) {
             foreach (var (session, action) in due) { session.Act(words: action.Words); }
         }
     }
     // A line answered: an observed one is recorded as its principal received it, a variant step settles or is refused.
     private void Answered(WorldTickScript.Line line, CommandResult result) {
+        ValidateObservers();
         if (m_observed.TryGetValue(key: line, value: out var label)) {
             m_transcript.RecordResponse(line: line.Text, principal: label, result: in result);
             return;

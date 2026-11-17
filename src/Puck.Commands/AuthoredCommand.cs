@@ -454,8 +454,8 @@ public sealed class AuthoredCommandSet {
     /// <param name="metadata">The called verb's facts.</param>
     /// <returns>The refusal clause, or <see langword="null"/>.</returns>
     public static string? RefusesCall(CommandMetadata metadata) {
-        if (metadata.Audience == CommandAudience.Operator) {
-            return "which answers the operator alone; an authored command calls only what a binding may name";
+        if (metadata.Audience is CommandAudience.Operator or CommandAudience.Host) {
+            return $"which is {metadata.Audience.Describe()}; an authored command calls only what a binding may name";
         }
 
         return ((metadata.Bindability == CommandBindability.Bindable)

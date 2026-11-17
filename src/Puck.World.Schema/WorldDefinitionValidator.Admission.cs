@@ -334,6 +334,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.disclosure 'frames' mints {(row.Grants ?? []).Count} grant(s) — a frames-tier peer receives no document to address them against.");
             }
 
+            if (!WorldAdmissionDoor.AllowsOperatorTemplates(row)) { errors.Add($"{path}: Operate requires one pinned SignsDirectly or exact OAuth subject at Replica, over all without payloads"); }
             var grants = (row.Grants ?? []);
 
             for (var grantIndex = 0; (grantIndex < grants.Count); grantIndex++) {
@@ -395,6 +396,7 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; (index < grants.Count); index++) {
             var grant = grants[index];
             var path = $"grants[{index}]";
+            if (grant.Capability == WorldCapability.Operate && (grant.Grantee.Kind == GranteeKind.Document || grant.Grantee.Principal.Kind == PrincipalKind.Addon || grant.Subject != GrantSubject.All || grant.Exclusive || grant.Budget is not null || grant.EventBudget is not null || grant.HoldCeiling is not null || grant.Reach is not null || grant.Consent is not null || grant.Ceiling is not null || grant.KindMask is not null || grant.WriteMask is not null)) { errors.Add($"{path}: invalid Operate holder, subject or payload"); }
 
             // A `world` row is refused HERE, at the document's own door, rather than only at the boot replay: the
             // grant table refuses it on EVERY boot (WorldGrants.Conflicts rule (-1) — the world's authority is
