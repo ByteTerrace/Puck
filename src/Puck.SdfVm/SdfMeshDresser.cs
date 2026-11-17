@@ -63,6 +63,7 @@ public sealed class SdfMeshDresser : IDisposable {
     public SdfFrame Dress(SdfFrame frame) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         using var access = m_bake.PrepareFrame(frame: frame);
+
         m_faultThisDress |= SdfRowChecks.TakeDressFault();
         var retry = m_pending;
 
@@ -112,7 +113,7 @@ public sealed class SdfMeshDresser : IDisposable {
             var copies = access.CopiesOf(group: group);
             var count = (mesh.PieceCount * (copies?.Count ?? 1));
             var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) ||
-                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(copies ?? Array.Empty<int>())));
+                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
 
             if (!changed) { continue; }
             var old = state.Run;

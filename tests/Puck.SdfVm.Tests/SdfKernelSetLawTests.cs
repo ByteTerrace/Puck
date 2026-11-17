@@ -54,7 +54,7 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
         Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
         // Passed through: each kernel is its own file's bytes.
-        Assert.Equal(expected: Enumerable.Repeat(count: (int)SdfKernel.Surface + 1, element: (byte)SdfKernel.Surface), actual: kernels[SdfKernel.Surface].ToArray());
+        Assert.Equal(expected: Enumerable.Repeat(count: (((int)SdfKernel.Surface) + 1), element: ((byte)SdfKernel.Surface)), actual: kernels[SdfKernel.Surface].ToArray());
         Assert.Equal(expected: Enumerable.Repeat(count: (((int)SdfKernel.Views) + 1), element: ((byte)SdfKernel.Views)), actual: kernels[SdfKernel.Views].ToArray());
 
         _ = SdfKernelSet.Load(
@@ -117,8 +117,8 @@ public sealed class SdfKernelSetLawTests {
                 )));
 
                 Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
-                if (SdfKernelSet.LayoutOf(kernel).Groups.Single(group => group.Group == ShaderInterfaceGroup.Pass).BlockVariableName is { } pass) {
-                    Assert.Contains(collection: reflected, filter: binding => binding.Name == pass);
+                if (SdfKernelSet.LayoutOf(kernel: kernel).Groups.Single(predicate: group => (group.Group == ShaderInterfaceGroup.Pass)).BlockVariableName is { } pass) {
+                    Assert.Contains(collection: reflected, filter: binding => (binding.Name == pass));
                 }
             }
         }

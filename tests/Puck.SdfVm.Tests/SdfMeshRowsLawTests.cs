@@ -108,10 +108,12 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
 
         input = producer.FrameAt(1, 1, 1) with { MeshDraws = new[] { firstHost with { Mesh = secondHost.Mesh }, secondHost }, MeshDrawsRevision = 1 };
         var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
         frame = producer.Dress(frame: input);
         RenderRootCut(frame: frame, rig: rig);
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        output.WriteLine($"standing-hand-over packed={work.Read(SdfMeshHistory.RecordsPacked) - packed} planned={work.Read(SdfMeshHistory.StagingPlanRecords) - planned} owned={work.Read(SdfMeshHistory.RowsOwnedChanged) - owned} whole={work.Read(SdfMeshHistory.RowsWalkedWhole) - walked} allocated={allocated}B");
+        var allocated = (GC.GetAllocatedBytesForCurrentThread() - allocatedBefore);
+
+        output.WriteLine(message: $"standing-hand-over packed={(work.Read(kind: SdfMeshHistory.RecordsPacked) - packed)} planned={(work.Read(kind: SdfMeshHistory.StagingPlanRecords) - planned)} owned={(work.Read(kind: SdfMeshHistory.RowsOwnedChanged) - owned)} whole={(work.Read(kind: SdfMeshHistory.RowsWalkedWhole) - walked)} allocated={allocated}B");
         Assert.Equal(1, (work.Read(kind: SdfMeshHistory.RecordsPacked) - packed));
         Assert.Equal(1, (work.Read(kind: SdfMeshHistory.StagingPlanRecords) - planned));
         Assert.Equal((work.Read(kind: SdfMeshHistory.RowsOwnedChanged) - owned), (work.Read(kind: SdfMeshHistory.RecordsPacked) - packed));
@@ -123,6 +125,12 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
         RenderRootCut(frame: frame, rig: rig);
         Assert.Equal((rebuilds + 1), work.Read(kind: SdfMeshHistory.DressTopologyBuilds));
         Assert.True(condition: frame.MeshRows!.Canonical);
+        var rebuiltRecords = work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild));
+
+        rig.Engine.ForceSkipTables();
+        rig.Engine.ForceMeshRelocation();
+        LandRootCut(frame: frame, rig: rig);
+        Assert.Equal(rebuiltRecords, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild)));
         var locked = producer.Dress(frame: input with { TickLocked = true });
 
         Assert.Equal((rebuilds + 1), work.Read(kind: SdfMeshHistory.DressTopologyBuilds));
@@ -158,7 +166,6 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
             Assert.Equal(builds, SdfMeshHistory.ProcessWork.Read(kind: SdfMeshHistory.DressTopologyBuilds));
         } finally { SdfRowChecks.Enabled = false; SdfRowChecks.DressFaultAfter = 0; }
     }
-
     [Fact]
     public void RandomProductsCopiesProgramsAndClipsAgreeWithTheRebuildAfterEveryPublication() {
         SdfRowChecks.Enabled = true;
@@ -166,31 +173,38 @@ public sealed class SdfMeshRowsLawTests(ITestOutputHelper output) {
             using var library = new SdfMeshLibrary();
             using var run = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = static _ => 0 }, ownsLibrary: false);
             using var rig = new Rig(1);
-            var transforms = Transforms(1);
+            var transforms = Transforms(slots: 1);
             var programs = new SdfProgram[3];
-            var meshes = Enumerable.Range(0, 3).Select(i => HostDraw($"part{i}", i).Mesh).ToArray();
-            for (var i = 0; i < programs.Length; i++) {
+            var meshes = Enumerable.Range(count: 3, start: 0).Select(selector: i => HostDraw(identity: $"part{i}", x: i).Mesh).ToArray();
+
+            for (var i = 0; (i < programs.Length); i++) {
                 var builder = new SdfProgramBuilder();
-                builder.AddMaterial(new SdfMaterial(Vector3.One));
-                builder.BeginInstanceDynamic(0, Vector3.Zero, 2, separateBake: true).ResetPoint().TransformDynamic(0).Sphere(0.5f + i * 0.1f, 0).EndInstance();
+
+                builder.AddMaterial(material: new SdfMaterial(Vector3.One));
+                builder.BeginInstanceDynamic(0, Vector3.Zero, 2, separateBake: true).ResetPoint().TransformDynamic(slot: 0).Sphere((0.5f + (i * 0.1f)), 0).EndInstance();
                 programs[i] = builder.Build();
-                foreach (var group in SdfMeshBakeGroup.Plan(programs[i], transforms, 40, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic))) {
-                    library.Store(group.Sealed, meshes[0] with { Chunks = meshes.Take(i + 1).ToArray() }, group.MaterialOrder, form: group.Form);
+                foreach (var group in SdfMeshBakeGroup.Plan(programs[i], transforms, 40, static (slot, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: slot))) {
+                    library.Store(group.Sealed, meshes[0] with { Chunks = meshes.Take(count: (i + 1)).ToArray() }, group.MaterialOrder, form: group.Form);
                 }
             }
-            var random = new Random(0x119b);
-            for (var edit = 0; edit < 64; edit++) {
-                var copies = Enumerable.Range(0, random.Next(1, 5)).Select(i => new SdfMeshInstance(0, $"copy{i}", new(new Vector3(i, edit % 3, 0), Quaternion.Identity), 1, true) { Mesh = (i % 2 == 0 ? null : meshes[1]) }).ToArray();
-                var host = Enumerable.Range(0, random.Next(0, 4)).Select(i => new SdfMeshDraw(meshes[2], Matrix4x4.CreateTranslation(i, 0, 0), 0, $"host{i}") { FrameSlot = 0 }).ToArray();
-                var frame = Frame(programs[random.Next(programs.Length)], edit, transforms) with {
-                    MeshDraws = host, MeshDrawsRevision = edit, MeshAssetSlots = new[] { 0 }, MeshInstances = copies,
-                    SlotClips = edit % 3 == 0 ? new[] { new SdfSlotClip(0, 1, Vector4.UnitX, Quaternion.Identity, Vector3.UnitY, Vector4.UnitY) } : Array.Empty<SdfSlotClip>(),
-                    TickLocked = edit % 7 == 0,
+            var random = new Random(Seed: 0x119b);
+
+            for (var edit = 0; (edit < 64); edit++) {
+                var copies = Enumerable.Range(0, random.Next(maxValue: 5, minValue: 1)).Select(selector: i => new SdfMeshInstance(0, $"copy{i}", new(new Vector3(x: i, y: (edit % 3), z: 0), Quaternion.Identity), 1, true) { Mesh = (((i % 2) == 0) ? null : meshes[1]) }).ToArray();
+                var host = Enumerable.Range(0, random.Next(maxValue: 4, minValue: 0)).Select(selector: i => new SdfMeshDraw(meshes[2], Matrix4x4.CreateTranslation(xPosition: i, yPosition: 0, zPosition: 0), 0, $"host{i}") { FrameSlot = 0 }).ToArray();
+                var frame = Frame(program: programs[random.Next(maxValue: programs.Length)], time: edit, transforms: transforms) with {
+                    MeshDraws = host,
+                    MeshDrawsRevision = edit,
+                    MeshAssetSlots = new[] { 0 },
+                    MeshInstances = copies,
+                    SlotClips = (((edit % 3) == 0) ? new[] { new SdfSlotClip(0, 1, Vector4.UnitX, Quaternion.Identity, Vector3.UnitY, Vector4.UnitY) } : Array.Empty<SdfSlotClip>()),
+                    TickLocked = ((edit % 7) == 0),
                 };
-                var dressed = run.Dresser.Dress(frame);
-                LandRootCut(rig, dressed);
-                Assert.Null(rig.Engine.RowCheckFailure);
-                if (frame.TickLocked) { Assert.True(dressed.MeshRows!.Canonical); }
+                var dressed = run.Dresser.Dress(frame: frame);
+
+                LandRootCut(frame: dressed, rig: rig);
+                Assert.Null(@object: rig.Engine.RowCheckFailure);
+                if (frame.TickLocked) { Assert.True(condition: dressed.MeshRows!.Canonical); }
             }
         } finally { SdfRowChecks.Enabled = false; }
     }

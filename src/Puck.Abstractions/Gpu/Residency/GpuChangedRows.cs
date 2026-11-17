@@ -123,7 +123,7 @@ public sealed class GpuChangedRows {
             var slot = ((int)(serial % m_frames.Length));
 
             into?.Append(m_frames[slot], rows);
-            reseated?.Append(m_reseats?[slot], rows);
+            reseated?.Append(limit: rows, source: m_reseats?[slot]);
         }
         return true;
     }

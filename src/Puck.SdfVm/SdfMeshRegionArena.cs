@@ -237,7 +237,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         if (!m_placements.ContainsKey(key: mesh)) { m_toPlace.Add(item: mesh); }
     }
     internal void EndRows() {
-        SdfMeshHistory.ProcessWork.Raise(SdfMeshHistory.PeakRowsPlanned, m_namesChanged);
+        SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsPlanned, value: m_namesChanged);
         if (m_latestMeshCount > m_drawCapacity) {
             GrowReserve(drawCount: m_latestMeshCount);
             foreach (var mesh in m_moved) { m_toPlace.Add(item: mesh); }

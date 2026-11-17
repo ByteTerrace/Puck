@@ -6,6 +6,7 @@ namespace Puck.SdfVm;
 public sealed class SdfMeshRows {
     /// <summary>Starts over once free rows exceed one third of the extent.</summary>
     public const int PackingFreeDivisor = 3;
+
     /// <summary>An owner's allocation, protected against reuse by the allocator's ticket.</summary>
     public readonly record struct Run(int Start, int Count, ulong Ticket);
     /// <summary>The picking provenance of a row: a host ordinal, program instance, or copied row.</summary>
@@ -32,6 +33,7 @@ public sealed class SdfMeshRows {
 
     private ulong m_occupancy;
     private bool m_everything;
+
     private bool m_startingOver = true;
 
     private SdfMeshRows() { }
@@ -102,7 +104,7 @@ public sealed class SdfMeshRows {
         /// <summary>Frees a complete allocation by ticket, releasing its claims inside the same door.</summary>
         public void Free(Run run) {
             if (run.Count == 0) { return; }
-            Validate(run);
+            Validate(run: run);
             _ = m_table.m_ranges.Free(start: ((ulong)run.Start), ticket: run.Ticket);
             _ = m_table.m_runs.Remove(key: run.Start);
             for (var row = run.Start; (row < (run.Start + run.Count)); row++) {
@@ -129,7 +131,7 @@ public sealed class SdfMeshRows {
         private void SetCore(Run run, int offset, in SdfMeshDraw draw, Owner owner, bool setBase) {
             ArgumentOutOfRangeException.ThrowIfNegative(offset);
             ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(offset, run.Count);
-            Validate(run);
+            Validate(run: run);
             var row = (run.Start + offset);
             ref var cell = ref m_table.m_cells[row];
 
@@ -150,7 +152,7 @@ public sealed class SdfMeshRows {
 
         /// <summary>Releases every run, including one not yet remembered by a failed publication's owner.</summary>
         public void StartOver() {
-            foreach (var run in m_table.m_runs.Values.ToArray()) { Free(run); }
+            foreach (var run in m_table.m_runs.Values.ToArray()) { Free(run: run); }
             m_table.m_everything = true;
             m_table.m_startingOver = true;
         }
@@ -173,8 +175,9 @@ public sealed class SdfMeshRows {
             m_table.m_pending.Clear();
             if (m_table.m_startingOver) { m_table.Canonical = true; m_table.m_startingOver = false; }
         }
+
         private void Validate(Run run) {
-            if (!m_table.m_runs.TryGetValue(run.Start, out var allocated) || allocated != run) { throw new InvalidOperationException("Stale or altered row run."); }
+            if (!m_table.m_runs.TryGetValue(key: run.Start, value: out var allocated) || (allocated != run)) { throw new InvalidOperationException(message: "Stale or altered row run."); }
         }
     }
 }

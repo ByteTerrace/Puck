@@ -48,7 +48,7 @@ public sealed class GpuUploadRuns {
     /// <param name="limit">The exclusive bound of incoming runs; existing destination runs are retained.</param>
     public void Append(GpuUploadRuns? source, int limit = int.MaxValue) {
         if ((source is null) || ReferenceEquals(objA: source, objB: this)) { return; }
-        for (var run = 0; (run < source.Count); run++) { Add(start: source.Start(index: run), length: Math.Min(limit - source.Start(run), source.Length(index: run))); }
+        for (var run = 0; (run < source.Count); run++) { Add(start: source.Start(index: run), length: Math.Min(val1: (limit - source.Start(index: run)), val2: source.Length(index: run))); }
     }
 
     /// <summary>Gets the logical bytes in the retained integer arrays, excluding object and array headers.</summary>
@@ -78,8 +78,10 @@ public sealed class GpuUploadRuns {
         }
 
         var first = 0;
+
         while ((first < m_count) && (m_ends[first] < start)) { first++; }
         var after = first;
+
         while ((after < m_count) && (m_starts[after] <= end)) {
             start = Math.Min(val1: start, val2: m_starts[after]);
             end = Math.Max(val1: end, val2: m_ends[after]);
@@ -150,11 +152,14 @@ public sealed class GpuUploadRuns {
     public int AddMask(ulong mask, int start = 0) {
         ArgumentOutOfRangeException.ThrowIfNegative(start);
         var changed = System.Numerics.BitOperations.PopCount(value: mask);
+
         while (mask != 0) {
             var first = System.Numerics.BitOperations.TrailingZeroCount(value: mask);
             var length = System.Numerics.BitOperations.TrailingZeroCount(value: ~(mask >> first));
+
             Add(length: length, start: checked((start + first)));
             var end = (first + length);
+
             mask = ((end == 64) ? 0UL : mask & (ulong.MaxValue << end));
         }
         return changed;
@@ -169,7 +174,6 @@ public sealed class GpuUploadRuns {
     /// <param name="index">The run, below <see cref="Count"/>.</param>
     /// <returns>The run's start.</returns>
     public int Start(int index) => m_starts[index];
-
     /// <summary>Returns whether a unit lies in the retained sorted runs. Coarsening includes the gaps it closed, so
     /// membership describes the conservative represented ranges rather than only the originally added units.</summary>
     /// <param name="value">The unit to find.</param>
@@ -180,6 +184,7 @@ public sealed class GpuUploadRuns {
 
         while (low < high) {
             var middle = (low + ((high - low) >>> 1));
+
             if (value < m_starts[middle]) { high = middle; } else if (value >= m_ends[middle]) { low = (middle + 1); } else { return true; }
         }
         return false;

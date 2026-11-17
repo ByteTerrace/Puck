@@ -37,8 +37,9 @@ public sealed class SdfDressedPickMapLawTests {
         Assert.Equal("host0", map.Resolve(identity: Mesh(row: copies.Start)));
         Assert.Equal("instance3/4", map.MaterialName(identity: Mesh(row: (copies.Start + 1)), material: 4));
         var revision = rows.Revision;
-        var captured = new SdfPickResult(1, 0, 0, 1, 1, Mesh(host.Start), 1, 0,
-            new Puck.SignedDistance.SdfProgramBuilder().Build(), revision, map) { RowStamp = new(rows, revision) };
+        var captured = new SdfPickResult(1, 0, 0, 1, 1, Mesh(row: host.Start), 1, 0,
+            new Puck.SignedDistance.SdfProgramBuilder().Build(), revision, map) { RowStamp = new(Revision: revision, Rows: rows) };
+
         Assert.Equal("host0", captured.Target);
 
         writer.Free(run: host);
@@ -48,7 +49,7 @@ public sealed class SdfDressedPickMapLawTests {
         writer.Publish();
         Assert.Equal(host.Start, reused.Start);
         Assert.False(condition: rows.IdentityStands(host.Start, revision));
-        Assert.Null(captured.Target);
+        Assert.Null(@object: captured.Target);
         Assert.True(condition: rows.IdentityStands(group.Start, revision));
         Assert.Throws<InvalidOperationException>(testCode: () => writer.Free(run: host));
         writer.StartOver(); writer.Publish();
