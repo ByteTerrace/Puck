@@ -120,12 +120,13 @@ All paths are under `src/` unless stated.
   no run is refused (`_ = m_refused.Add(item: mesh);`, :211) and its draws wait out of the frame; a relocation packs
   when refused meshes would fit packed or free words pass `PackedShare = 3` times named (:223-231); an account trim
   forgets unnamed meshes on the frame thread (`ServiceMemoryTrim`, MeshRegion.cs:53-66) **[opened]**.
-- **A device refusal still throws:** `EnsureMeshRegionCapacity` calls `m_meshRegion.Grow(...)` (MeshRegion.cs:874-891),
-  which for a staged region calls `GrowDestination` → `m_buffers.CreateDeviceLocal(...)` (GpuRegion.cs:821-822,
-  964-969) with no catch on that path **[opened]**. Also `GrowReserve` throws when the draw records alone pass the
-  limit (src/Puck.SdfVm/SdfMeshRegionArena.cs:411-413) **[opened]**.
-- **Shrink:** only after a relocation, when the region holds more than 1.5x the fitted size (`FitMeshRegion`,
-  MeshRegion.cs:858-873) **[opened]**.
+- **Device refusal:** `SdfWorldTables.EnsureMeshRegionCapacity` catches a refused
+  growth, clips placements to the buffer it holds and leaves those rows absent.
+  Only refusal of the draw-record floor itself throws. Reserve-displaced chains
+  still stage in that transaction, including a mesh the clip refuses.
+- **Shrink:** `SdfWorldTables.FitMeshRegion` considers both relocation and
+  forgotten slack, so freeing an unused tail can shrink without relocating
+  standing geometry.
 
 ### 1.9 `GpuRegion` (Puck.Abstractions/Gpu/Residency/GpuRegion.cs) — every table's residency
 
@@ -252,7 +253,7 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
 |---|---|---|
 | **Device budget readings** | A live reading beside the static profile on `IGpuDeviceContext` (`GpuMemoryProfile MemoryProfile { get; }`, Puck.Abstractions/Gpu/Device/IGpuDeviceContext.cs:34); Direct3D 12 in `DirectXNativeDeviceApi.ReadMemoryProfile(IDXGIAdapter1* adapter, ...)` (DirectXNativeDeviceApi.cs:231; `IDXGIAdapter3` needed for `QueryVideoMemoryInfo` **[inference]**); Vulkan beside `VulkanNativePhysicalDeviceApi.GetMemoryProfile` (VulkanNativePhysicalDeviceApi.cs:319; needs the extension enabled at device creation **[inference]**); fields in `HostMemoryCommandModule.Describe` (:54-75) | The static shares: `MeshRegionLimitOf` (MeshRegion.cs:225), `ShaderPipelineMemoryBudget.For` (:22), and the bake's `HostMemory.AvailablePhysicalBytes` pacing (SdfMeshPathBake.cs:766-774) on unified memory |
 | **One byte authority** | `MemoryAccount` (Puck.Hosting). `GpuRegion` lives in Puck.Abstractions, below Puck.Hosting, so it can only report through `IAllocationObserver` (Puck.Abstractions/Memory/OwnedBuffer.cs:6-10), the interface `MemoryAccount.Owner` already implements (MemoryAccount.cs:106). Puck.Shaders references Puck.Hosting (Puck.Shaders.csproj:14), so the pipeline budget can reserve directly. `GpuDeviceMemoryWork` would become an owner feed or the account would read it | `ShaderPipelineMemoryBudget`'s separate quarter; each residency's own region limit (SdfWorldTables.cs:205); per-residency `SdfGpuWork` budgets (SdfWorldTables.cs:400); `RegionBudgetBytes` read from one residency's tables (Tiers.cs:65) |
-| **Eviction by priority** | `SdfMeshPathBake.Retier` spare/bias logic (Tiers.cs:232-408) reading one cross-residency reservation; `SdfMeshRegionArena.Plan` refusal (src/Puck.SdfVm/SdfMeshRegionArena.cs:197-213) and `ForgetUnnamed`; `SdfWorldTables.EnsureMeshRegionCapacity` (MeshRegion.cs:874-891) catching a device refusal and lowering the limit; the library's weight (SdfMeshLibrary.cs:315, 321-330) charging only cache-only payloads | Arena refusal that leaves draws out (a hole), the throw on refused growth, "coarsen every demand evenly" bias as the only response |
+| **Eviction by priority** | `SdfMeshPathBake.Retier` spare/bias logic (Tiers.cs:232-408) reading one cross-residency reservation; `SdfMeshRegionArena.Plan` refusal (src/Puck.SdfVm/SdfMeshRegionArena.cs:197-213) and `ForgetUnnamed`; `SdfWorldTables.EnsureMeshRegionCapacity` (the same region growth door) catching a device refusal and lowering the limit; the library's weight (SdfMeshLibrary.cs:315, 321-330) charging only cache-only payloads | Arena refusal that leaves draws out (a hole), the throw on refused growth, "coarsen every demand evenly" bias as the only response |
 | **Mapped demand through portal faces** | `SdfMeshDemand` gains points not from `frame.Views` (`Place` exists for offline use, SdfMeshDemand.cs:81-94); the producer is the fitted window camera already computed in `WorldScreenBinder.SharedViewOf` (Device.Session.cs:117-138) and `WorldSessionSceneEmitter` (WorldSessionSceneEmitter.cs:494-497); a residency must pack and upload its tables with no view rendered so `BindsBackgroundWork` (src/Puck.SdfVm/SdfWorldTables.Bindings.cs:61) holds | `ReserveArrivals`/`ReachForArrival`/`RendersForArrival` (WorldViewGraphHost.cs:1594-1654), the `ArrivalShare` cases (:1698-1704, :1798-1801, :1838-1840), `WorldPortalVisibility.ArrivalShare` (:40), and the arriving-world reads (`WorldScreenBinder.Nesting.cs:389`) |
 | **Lighting on the demand points** | `SdfMeshIrradiance.WindowCamera`/`WindowAnchor`/`WindowLow`/`CaptureViewCameras` (:573-575, :925-985, :1225-1235) reading the residency's `SdfMeshDemand` instead of re-deriving from `frame.Views`; `StaticKey`/`StartSceneBuild` (:1290-1374) filtering to the window's reach; `ProbeCache.Retain` (:2890) by bytes from the account; `ScenePendingDue` (:1267) | The second demand derivation; the whole-frame trace scene; cell-count retention |
 | **Authored areas** | Candidates for "an existing volume vocabulary": `WorldPlacementSpatialVolume` with `WorldPlacementSpatialRole` `Occupation`/`Clearance`/`Influence` (Puck.World.Schema/WorldPlacementSpatial.cs:13-20, 51-57), whose influence channel "is opaque to the engine and is never interpreted" (:44); and `WorldGravityArea` bounds (WorldGravity.cs:69-75). Neither has openings. Consumption point: `SdfMeshPathBake.Prioritize`/`MeasureDemand` (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:90-106, 324-336) | Nothing (new) |
@@ -284,10 +285,6 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
    worker, build and refill (SdfMeshIrradiance.cs:737, 1387, 1556), restore work on `ThreadPool`
    (SdfMesh.Restore.cs:350), and a per-residency `SdfGpuWork` budget (SdfWorldTables.cs:400). The decision's "engine
    job scheduler" the selector feeds does not exist as one type (§6, assumption 7).
-6. **Glass counted three ways** (residency loop, tables' count, `GlassMaySee` index rebuilt each revision): already
-   recorded by arrival-proportional's L2; still present (`GlassMaySee` rebuild, MeshRegion.cs:284-290;
-   `SdfWorldResidency.Capture` count, :928-937) **[opened]**.
-
 ### Stand-ins (where the decision's design should be)
 
 1. **Rendering hidden windows to make worlds load:** `ArrivalShare = 0.0625` renders (WorldViewGraphHost.cs:1698-1704
@@ -297,9 +294,6 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
    return cheap.
 3. **Holes instead of coarse:** a refused first mesh's draws are filtered out (MeshRegion.cs:492-497); nothing draws a
    coarser stand-in or haze for it **[inference: no fallback path found on the refusal branch]**.
-4. **Whole-list staging while any mesh lands:** the landing filter (MeshRegion.cs:488-498) and the refusal of the
-   journal while `m_owedWords != 0` (:355-358); designed away by arrival-proportional R1a, not built (no
-   `SdfMeshRows`/`GpuChangedRowsCursor` in `src/`, grep).
 5. **Whole trace scene per change:** every static draw, rebuilt top level, while the bake is pending every 4 s
    (§1.11).
 6. **Relocation re-lands every mesh from the host** (`m_meshesOwed.ReplaceWith(meshes: m_meshArena.Placements.Keys);`,
@@ -432,7 +426,7 @@ and R1a/R1b do not.
     stamp is not reset by a device loss **[unverified this lane]**. Low risk; judged-by readings need these fixed or
     worked around.
 12. **"A refused growth lowers the limit and coarsens" (step 5).** *For:* one call site (`EnsureMeshRegionCapacity`,
-    MeshRegion.cs:874-891) and the budget already re-reads the limit each frame (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:351). Low risk.
+    the same region growth door) and the budget already re-reads the limit each frame (src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:351). Low risk.
 
 ---
 
@@ -446,3 +440,4 @@ and R1a/R1b do not.
   `trace-scene-cpu-array-bytes`.
 - The decision's "probe table of about 193 MiB" figure, the open items' readings (pagefile section, JIT counts,
   post-bake private bytes), and SdfSampledLattice's managed working memory were not re-checked.
+

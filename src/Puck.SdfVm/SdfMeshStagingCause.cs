@@ -22,24 +22,18 @@ public enum SdfMeshStagingCause : byte {
     /// <summary>The journal is taken, and the record keeps its mesh: a pose, metadata or a history cut changed.</summary>
     Pose = 6,
 }
-
 /// <summary>The first reason that fired for a topology rebuild of the dresser (<see cref="SdfMeshDresser.Dress"/>),
 /// counted by <see cref="SdfMeshHistory.TopologyBuildsOf"/>.</summary>
 public enum SdfMeshTopologyReason : byte {
     /// <summary>The publication before the frame failed, so it retries from the inputs.</summary>
     Retry = 0,
-    /// <summary>The host's draw count changed.</summary>
-    HostDraws = 1,
-    /// <summary>The bake's copy layout revision moved.</summary>
-    CopyLayout = 2,
-    /// <summary>A group finished that the last dressing did not hold.</summary>
-    GroupNew = 3,
-    /// <summary>A group's mesh was replaced by one with another piece count or another copy count.</summary>
-    GroupReshaped = 4,
-    /// <summary>The count of finished groups changed.</summary>
-    GroupCount = 5,
+    /// <summary>Free rows passed one third of the extent.</summary>
+    FreeShare = 1,
+    /// <summary>A locked frame required canonical row order.</summary>
+    Locked = 2,
+    /// <summary>The operator requested a canonical start over.</summary>
+    Forced = 3,
 }
-
 /// <summary>The names <see cref="SdfMeshStagingCause"/>'s members take in work kind names.</summary>
 public static class SdfMeshStagingCauses {
     private static readonly string[] Names = ["rebuild", "portal", "retry", "landing", "cursor", "hand-over", "pose"];
@@ -50,5 +44,5 @@ public static class SdfMeshStagingCauses {
     /// <summary>Returns a cause's name in a work kind name.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The dotted-name segment, such as <c>hand-over</c>.</returns>
-    public static string NameOf(SdfMeshStagingCause cause) => Names[(int)cause];
+    public static string NameOf(SdfMeshStagingCause cause) => Names[((int)cause)];
 }

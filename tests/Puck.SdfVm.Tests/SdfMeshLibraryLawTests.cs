@@ -21,40 +21,40 @@ public sealed class SdfMeshLibraryLawTests {
         var glass = Of(append: static geometry => geometry.AppendGlass());
         var reach = Of(append: static geometry => geometry.AppendReach(reach: BitConverter.UInt32BitsToSingle(value: 0x47_4C_41_53u)));
 
-        Assert.NotEqual(expected: glass, actual: reach);
+        Assert.NotEqual(actual: reach, expected: glass);
         Assert.NotEqual(expected: glass, actual: Of(append: static _ => { }));
         Assert.Equal(expected: glass, actual: Of(append: static geometry => geometry.AppendGlass()));
     }
     [Fact]
     public void BakeGroupsKeepTheirOwnDetailWhileSharingOneMotionSlot() {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));
 
         for (var index = 0; (index < 2); index++) {
-            builder.BeginInstanceDynamic(3, new Vector3((index * 10), 0, 0), 1, detail: ((index == 0) ? 0.002f : 0), separateBake: true, boundInSlotFrame: true);
-            builder.ResetPoint().TransformDynamic(3).Translate(new Vector3((index * 10), 0, 0)).Sphere(material: material, radius: 0.5f);
+            builder.BeginInstanceDynamic(3, new Vector3(x: (index * 10), y: 0, z: 0), 1, detail: ((index == 0) ? 0.002f : 0), separateBake: true, boundInSlotFrame: true);
+            builder.ResetPoint().TransformDynamic(slot: 3).Translate(offset: new Vector3(x: (index * 10), y: 0, z: 0)).Sphere(material: material, radius: 0.5f);
             builder.EndInstance();
         }
         var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 4).ToArray();
 
         transforms[3] = new DynamicTransform(Vector3.Zero, Quaternion.CreateFromAxisAngle(Vector3.UnitY, (MathF.PI / 2)));
         var program = builder.Build();
-        var groups = SdfMeshBakeGroup.Plan(program, transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic));
+        var groups = SdfMeshBakeGroup.Plan(program, transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector));
 
         Assert.Equal(2, groups.Count);
         Assert.All(groups, group => Assert.Equal(3, group.Slot));
         Assert.NotEqual(groups[0].Selector, groups[1].Selector);
         Assert.Equal(0.002f, groups[0].Detail);
         Assert.Equal(0, groups[1].Detail);
-        Assert.True((groups[0].High.X < groups[1].Low.X));
-        Assert.Equal(new Vector3(9, -1, -1), groups[1].Low);
-        Assert.Equal(new Vector3(11, 1, 1), groups[1].High);
+        Assert.True(condition: (groups[0].High.X < groups[1].Low.X));
+        Assert.Equal(new Vector3(x: 9, y: -1, z: -1), groups[1].Low);
+        Assert.Equal(new Vector3(x: 11, y: 1, z: 1), groups[1].High);
         using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake());
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
-        dresser.Dress(new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
-        Assert.True(bake.TryTake(bake.Program, out var batch));
+        dresser.Dress(frame: new SdfFrame(Program: program, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = transforms });
+        Assert.True(condition: bake.TryTake(bake.Program, out var batch));
         Assert.All(batch!.Lattices, lattice => Assert.Equal(3, lattice.FrameSlot));
     }
     // A body drawn at another size keys the geometry and the skin poses of its own size, since its slots carry the scale
@@ -62,40 +62,40 @@ public sealed class SdfMeshLibraryLawTests {
     [Fact]
     public void AScaledBodyKeysTheGeometryOfItsOwnSize() {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));
 
         builder.BeginInstanceDynamic(0, Vector3.Zero, 2);
-        builder.ResetPoint().TransformDynamic(0).Box(halfExtents: new Vector3(0.3f), round: 0f, material: material);
-        builder.ResetPoint().TransformDynamic(1).Sphere(material: material, radius: 0.2f);
+        builder.ResetPoint().TransformDynamic(slot: 0).Box(halfExtents: new Vector3(value: 0.3f), round: 0f, material: material);
+        builder.ResetPoint().TransformDynamic(slot: 1).Sphere(material: material, radius: 0.2f);
         builder.EndInstance();
         var program = builder.Build();
         var turn = Quaternion.CreateFromAxisAngle(Vector3.UnitY, 0.7f);
 
         DynamicTransform[] Body(float scale) => [
-            new DynamicTransform(new Vector3(5, 0, 2), turn) { Scale = scale },
-            new DynamicTransform((new Vector3(5, 0, 2) + Vector3.Transform((new Vector3(0, 0.6f, 0.1f) * scale), turn)), turn) { Scale = scale },
+            new DynamicTransform(new Vector3(x: 5, y: 0, z: 2), turn) { Scale = scale },
+            new DynamicTransform((new Vector3(x: 5, y: 0, z: 2) + Vector3.Transform((new Vector3(x: 0, y: 0.6f, z: 0.1f) * scale), turn)), turn) { Scale = scale },
         ];
-        SdfMeshBakeGroup Group(float scale) => SdfMeshBakeGroup.Plan(program, Body(scale), 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)).Single(group => group.Dynamic);
+        SdfMeshBakeGroup Group(float scale) => SdfMeshBakeGroup.Plan(program, Body(scale: scale), 40, static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector)).Single(predicate: group => group.Dynamic);
 
-        var full = Group(1f);
-        var quarter = Group(0.25f);
+        var full = Group(scale: 1f);
+        var quarter = Group(scale: 0.25f);
 
         Assert.Equal(full.Sealed, quarter.Sealed);
         Assert.Equal(full.Geometry.Poses[1].Position, quarter.Geometry.Poses[1].Position);
         // A scale that is not positive reads as one.
-        Assert.Equal(1f, SdfMeshGeometryBuilder.UnitsOf(default));
-        Assert.Equal(0.25f, SdfMeshGeometryBuilder.UnitsOf(Body(0.25f)[0]));
+        Assert.Equal(1f, SdfMeshGeometryBuilder.UnitsOf(transform: default));
+        Assert.Equal(0.25f, SdfMeshGeometryBuilder.UnitsOf(transform: Body(scale: 0.25f)[0]));
     }
     [Fact]
     public void AnUnrepresentableSkinIsRefusedBeforeAnyBakeIsQueued() {
         var builder = new SdfProgramBuilder();
-        var material = builder.AddMaterial(new SdfMaterial(Vector3.One));
+        var material = builder.AddMaterial(material: new SdfMaterial(Vector3.One));
 
         builder.BeginInstanceDynamic(0, Vector3.Zero, 1);
-        for (var slot = 1; (slot <= 256); slot++) { builder.ResetPoint().TransformDynamic(slot).Sphere(material: material, radius: 0.01f); }
+        for (var slot = 1; (slot <= 256); slot++) { builder.ResetPoint().TransformDynamic(slot: slot).Sphere(material: material, radius: 0.01f); }
         builder.EndInstance();
         var transforms = Enumerable.Repeat(new DynamicTransform(Vector3.Zero, Quaternion.Identity), 257).ToArray();
-        var refusal = Assert.Throws<InvalidOperationException>(() => SdfMeshBakeGroup.Plan(builder.Build(), transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        var refusal = Assert.Throws<InvalidOperationException>(testCode: () => SdfMeshBakeGroup.Plan(builder.Build(), transforms, 40, static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector)));
 
         Assert.Contains("instance 0", refusal.Message);
         Assert.Contains("256 skin members", refusal.Message);
@@ -111,23 +111,23 @@ public sealed class SdfMeshLibraryLawTests {
         static SdfMeshGeometry Key(float x) {
             var builder = new SdfMeshGeometryBuilder(dynamic: false);
             var field = new SdfProgramBuilder();
-            var material = field.AddMaterial(new SdfMaterial(Vector3.One));
-            var program = field.ResetPoint().Translate(new Vector3(x, 0, 0)).Sphere(material: material, radius: 1).Build();
+            var material = field.AddMaterial(material: new SdfMaterial(Vector3.One));
+            var program = field.ResetPoint().Translate(offset: new Vector3(x: x, y: 0, z: 0)).Sphere(material: material, radius: 1).Build();
 
             for (var index = 0; (index < program.Instructions.Count); index++) { builder.AppendInstruction(index: index, program: program, transforms: [], sampled: SdfSampledSet.Empty); }
             return builder.Geometry;
         }
-        var first = Key(0); var recent = Key(1); var incoming = Key(2);
+        var first = Key(x: 0); var recent = Key(x: 1); var incoming = Key(x: 2);
 
         // The budget counts each mesh's storage bytes: two meshes fit, and a third evicts the oldest alone.
         _ = library.Store(geometry: first, materials: [], mesh: mesh); _ = library.Store(geometry: recent, materials: [], mesh: mesh);
         _ = library.Store(geometry: incoming, materials: [], mesh: mesh);
-        Assert.False(library.TryTake(geometry: first, materials: [], mesh: out _));
-        Assert.True(library.TryTake(geometry: recent, materials: [], mesh: out _));
-        Assert.True(library.TryTake(geometry: incoming, materials: [], mesh: out _));
+        Assert.False(condition: library.TryTake(geometry: first, materials: [], mesh: out _));
+        Assert.True(condition: library.TryTake(geometry: recent, materials: [], mesh: out _));
+        Assert.True(condition: library.TryTake(geometry: incoming, materials: [], mesh: out _));
         Assert.Equal((2 * mesh.StorageBytes), library.RetainedBytes);
         _ = library.Store(geometry: first, materials: [], mesh: mesh);
-        Assert.True(library.TryTake(geometry: first, materials: [], mesh: out _));
+        Assert.True(condition: library.TryTake(geometry: first, materials: [], mesh: out _));
         Assert.Equal(2, library.Count);
     }
     [Fact]
@@ -135,15 +135,15 @@ public sealed class SdfMeshLibraryLawTests {
         var crowded = Body(crowd: true, slot: 3, offset: new Vector3(x: 1f, y: 0f, z: 0f));
         var alone = Body(crowd: false, slot: 7, offset: new Vector3(x: 0f, y: 1f, z: 0f));
 
-        var (crowdedGeometry, crowdedMaterials) = Geometry(program: crowded, instance: 1);
-        var (aloneGeometry, aloneMaterials) = Geometry(program: alone, instance: 0);
+        var (crowdedGeometry, crowdedMaterials) = Geometry(instance: 1, program: crowded);
+        var (aloneGeometry, aloneMaterials) = Geometry(instance: 0, program: alone);
 
         // Another palette numbering, slot, world-axis bound and side-table offset leave the body's geometry alone; its
         // materials are the program's own.
-        Assert.Equal(expected: crowdedGeometry, actual: aloneGeometry);
+        Assert.Equal(actual: aloneGeometry, expected: crowdedGeometry);
         Assert.True(condition: crowdedGeometry.Dynamic);
-        Assert.Equal(expected: [1, 2], actual: crowdedMaterials);
-        Assert.Equal(expected: [0, 1], actual: aloneMaterials);
+        Assert.Equal(actual: crowdedMaterials, expected: [1, 2]);
+        Assert.Equal(actual: aloneMaterials, expected: [0, 1]);
 
         // Another surface is another geometry, and so is the same surface baked in world space.
         var other = new SdfMeshGeometryBuilder(dynamic: true);
@@ -175,7 +175,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         Assert.False(condition: bake.Pending);
 
-        var draw = Assert.Single(collection: dressed.MeshDraws);
+        var draw = Assert.Single(collection: dressed.DressedDraws());
 
         Assert.Equal(expected: 7, actual: draw.FrameSlot);
         Assert.Equal(expected: [0u, 1u, 1u], actual: draw.Mesh.TriangleMaterials.ToArray());
@@ -196,7 +196,7 @@ public sealed class SdfMeshLibraryLawTests {
         // The same plate on other slots, under a root elsewhere and turned, is the same geometry.
         var elsewhere = (plate with {
             RootPosition = new Vector3(x: 41.5f, y: 3.25f, z: -27f),
-            RootRotation = Quaternion.CreateFromYawPitchRoll(yaw: 1.1f, pitch: 0.2f, roll: -0.4f),
+            RootRotation = Quaternion.CreateFromYawPitchRoll(pitch: 0.2f, roll: -0.4f, yaw: 1.1f),
             SlotBase = 23,
         });
 
@@ -283,7 +283,7 @@ public sealed class SdfMeshLibraryLawTests {
             var transforms = new DynamicTransform[(SlotBase + 3)];
 
             DynamicTransform Shape(Vector3 position, Quaternion rotation, float lane = 0f) => new(
-                Lanes: new Vector4(x: lane, y: 0f, z: 0f, w: 0f),
+                Lanes: new Vector4(w: 0f, x: lane, y: 0f, z: 0f),
                 Orientation: (RootRotation * rotation),
                 Position: (RootPosition + Vector3.Transform(rotation: RootRotation, value: position))
             );
@@ -363,6 +363,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         return (builder.Geometry, [.. builder.Materials]);
     }
+
     // A native library publishes a stored mesh in its first taker's ids only when later takers can renumber from them: a
     // triangle id no shape of the baking group owns keeps its value in every variant, even when the first taker carries
     // that id at a place.
@@ -406,7 +407,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var native, refusal: out _));
         Assert.NotNull(@object: native);
-        AssertSamePlanes(expected: arrays, actual: native);
+        AssertSamePlanes(actual: native, expected: arrays);
         AssertARestoreWritesTheSameWords(native: native);
         native.Release();
     }
@@ -422,7 +423,7 @@ public sealed class SdfMeshLibraryLawTests {
         var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0003ul);
         UInt128 identity = 5;
         // The entry numbers materials by place, so a group whose ids are its places reads back the ids it stored.
-        var source = (chunked ? SdfMeshChunks.Join(chunks: [Piece(offset: 0f, skinned: false, first: 0u, second: 1u), Piece(offset: 3f, skinned: false, first: 0u, second: 1u)]) : Piece(offset: 0f, skinned: true, first: 0u, second: 1u));
+        var source = (chunked ? SdfMeshChunks.Join(chunks: [Piece(first: 0u, offset: 0f, second: 1u, skinned: false), Piece(first: 0u, offset: 3f, second: 1u, skinned: false)]) : Piece(first: 0u, offset: 0f, second: 1u, skinned: true));
 
         using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
 
@@ -431,13 +432,14 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True(condition: store.TryRead(geometry: geometry, identity: identity, materials: out _, mesh: out var arrays, refusal: out _));
         Assert.NotNull(@object: arrays);
         Assert.NotEqual(expected: source.Normals.ToArray(), actual: stored.Normals.ToArray());
-        AssertSamePlanes(expected: arrays, actual: stored);
+        AssertSamePlanes(actual: stored, expected: arrays);
         Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var taken));
-        AssertSamePlanes(expected: arrays, actual: taken);
+        AssertSamePlanes(actual: taken, expected: arrays);
         AssertARestoreWritesTheSameWords(native: stored);
         taken.Release();
         stored.Release();
     }
+
     private static void AssertSamePlanes(SdfMesh expected, SdfMesh actual) {
         Assert.Equal(expected: expected.Chunks.Count, actual: actual.Chunks.Count);
         Assert.Equal(expected: expected.Positions.ToArray(), actual: actual.Positions.ToArray());
@@ -484,9 +486,9 @@ public sealed class SdfMeshLibraryLawTests {
         var first = new uint[words];
         var again = new uint[words];
 
-        SdfMeshRegion.WriteMeshes(meshes: meshes, layout: default, destination: first);
-        SdfMeshRegion.WriteMeshes(meshes: meshes, layout: default, destination: again);
-        Assert.Equal(expected: first, actual: again);
+        SdfMeshRegion.WriteMeshes(destination: first, layout: default, meshes: meshes);
+        SdfMeshRegion.WriteMeshes(destination: again, layout: default, meshes: meshes);
+        Assert.Equal(actual: again, expected: first);
         Assert.Contains(expectedSubstring: "mesh-restore-misses=0", actualString: SdfMesh.DescribeRestores());
     }
     // A mesh of two triangles, two materials, a coarser level, and, when it is skinned, a member and a blended vertex.
@@ -499,13 +501,15 @@ public sealed class SdfMeshLibraryLawTests {
         triangleMaterials: new uint[] { first, second },
         vertexMembers: (skinned ? new byte[] { 0, 0, SdfMesh.NoMember, SdfMesh.NoMember } : default)) {
         BakeCell = new Vector3(value: 0.05f),
-        Levels = [new SdfMeshLevel(new uint[] { 0, 1, 3 }, new uint[] { second }, 0.1f)],
+        Levels = [new SdfMeshLevel(Error: 0.1f, Indices: new uint[] { 0, 1, 3 }, TriangleMaterials: new uint[] { second })],
     };
+
     private sealed unsafe class HeapAllocator : Puck.Abstractions.Memory.IAllocator {
         public void* Allocate(nuint size, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedAlloc(byteCount: Math.Max(val1: size, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
         public void Free(void* ptr) => System.Runtime.InteropServices.NativeMemory.AlignedFree(ptr: ptr);
         public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedRealloc(ptr: ptr, byteCount: Math.Max(val1: newSize, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
     }
+
     private static SdfMesh Mesh(uint[] materials) => new(
         indices: new uint[] { 0, 1, 2, 0, 2, 1, 1, 2, 0 },
         positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY },

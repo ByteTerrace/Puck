@@ -1011,7 +1011,10 @@ segments from it). The work keeps a ring of slots, each submitted on its own
 fence and refilled once its job completed and its samples were copied off, and
 takes at most `SdfGpuWork.GpuShare` of the GPU's time by each job's own
 timestamps, so a cold bake samples as fast as its groups ask for lattices
-rather than one batch a rendered frame. Every lattice is chunked to
+rather than one batch a rendered frame. The work is stepped at the frame's
+pumps and inside the host's wait between frames (`HostWaits.Pace`), which a
+job's fence, a readied lattice and the budget's next credit end early, so a
+slow present does not pace it either. Every lattice is chunked to
 `SdfMeshPathBake.LatticeTaps` field evaluations (a gradient sample counting
 five), so the meshes depend on neither the chunking nor the frame rate. A take
 takes its lattices in the groups' order, not round robin, so the groups finish in
@@ -1439,7 +1442,9 @@ that failed, the tables disposed mid-bake) returns its lattices to their groups,
 which dispatch them again, and the line reports those samples as `discarded`,
 so `samples` less `discarded` counts the samples that answered. The done line's
 `gpu-work=[…]` field counts the jobs, their measured GPU time, the wall time a
-job was in flight and the share of it the GPU spent on them. Until a group's
+job was in flight and the share of it the GPU spent on them, and the steps
+taken inside the host's wait with the jobs they submitted (`services`,
+`service-jobs`). Until a group's
 first mesh lands, the group draws nothing.
 
 The walk merges the world-segment list with the selected instances' ranges and
@@ -1606,24 +1611,35 @@ the thread pool carries the words it differs in from the one held before it
 (`SdfFrame.ProgramDelta`), which its build measured, so tables holding that
 program copy only those words (`GpuRegion.WriteRuns`) and compare nothing on the
 frame thread; any other upload compares the program with the live one. Mesh draws
-(`SdfFrame.MeshDraws`) occupy the mesh region (`SdfMeshRegion`): one
+(`SdfFrame.MeshRows`, with the host's inputs still in `SdfFrame.MeshDraws`) occupy the mesh region (`SdfMeshRegion`): one
 `SdfMeshRecord.DrawWords`-word record per draw, then each distinct mesh's geometry
-once. A new list or revision requires staging. `SdfMeshDresser` retains binding
-topology, indexes its dependencies by source slot or occurrence, and publishes
+once. `SdfMeshDresser` retains one allocator run per owner, indexes binding
+dependencies by source slot or occurrence, and publishes
 changed draw rows through `SdfFrame.MeshDrawChanges` with a captured endpoint.
 The shared `GpuChangedRows` journal also backs `SdfMovedTransforms`. Frames publish only its
 read-only `GpuRowChanges`; every consumer uses `GpuRowCursor` to collect its own skipped-frame
-union at a captured endpoint. Reader, roster, extent, revision or history refusal returns one
+union at a captured endpoint. Reader, roster, revision or history refusal returns one
 whole-table run. Runs can conservatively include unchanged gaps. A cursor commits after consumption.
+Dense input journals also refuse a changed extent; the row table's stable-address journal
+accepts extent changes and bounds the union to its captured endpoint. Each consumer retires a lost suffix.
 
-A complete staged roster with unchanged mesh references keeps its placement plan
-and mesh claims; the tables compare and pack only its changed runs, even while other meshes are owed.
-Changed geometry and unknown provenance use ordinary planning. Producers
+A row table has private storage and one writer, returned only at creation. Its allocate,
+free and set operations carry the journal, mesh claims, glass count and picking provenance.
+Allocator tickets reject stale frees; occupancies never repeat within the table, including
+across a start over. A reshaped group reallocates only its run. The arena names and unnames
+changed rows through the same operations a full plan uses; moved meshes and their row chains
+stage in one call. Producers
 without a draw journal still supply a different list or move its revision, and the
 tables compare that revised list. `SdfMeshDraw.SameStagedContent` supplies the one
 exact comparison for both dressing and staging, including float bits and motion
-interpretation. Active or removed portal clipping currently publishes full draw
-changes. An empty draw delta still allows the GPU's final motion-history settle.
+interpretation. Active or removed portal clipping still visits every base row through the
+writer and retains one run of carried copies. Indexed clip derivation is the next arrival step.
+An empty draw delta still allows the GPU's final motion-history settle.
+
+Only a start over rebuilds all owner runs: publication retry, free rows beyond
+`SdfMeshRows.PackingFreeDivisor`, an operator pack, or restoring canonical order for
+`SdfFrame.TickLocked`. Set operations retain the canonical flag; allocation and free clear it.
+The first reconciliation and a completed start over set it. A canonical locked frame packs nothing.
 
 Transform ownership cuts also reach mesh history independently of draw content.
 A cut to a draw's root slot or a skin member actually named by a vertex starts a
@@ -1633,7 +1649,7 @@ own captured endpoint; ordinary movement adds no cut-driven roster walk. Missing
 history conservatively cuts dependent draws. Staged indices always equal producer indices.
 
 `SdfWorldTables.StageMeshDraw` is the one record-writing door. A standing mesh is observed
-and packed at its arena placement. An owed or refused mesh retires that row's history and
+and packed at its arena placement with its table identity and occupancy. A free row or an owed or refused mesh retires that row's history and
 packs an absent record with zero placement and generation words. Selection resets and emits
 empty commands for its absent bit, and the hit resolver rejects its zero index range.
 `GpuRowIndex` indexes each mesh's rows, so a landing revisits only those rows and each seeds
@@ -1642,12 +1658,16 @@ Landing copies require the background recording's actual queue to be the device'
 row reuse relies on that queue's order.
 
 The operator's `world.rows check on` compares every producer row against pure packing,
-an independent identity/absence generation ledger and pending history seeds. A background readback
+an independent occupancy/identity/absence generation ledger and pending history seeds. It also
+compares the live dress as a multiset against the canonical rebuild. A background readback
 compares device records to a host snapshot only when the region owes no copies or carry and
 no landing is in flight. `world.counters sdf.rows.check` reports comparisons, mismatches and
 forcing counts; `world.rows status` names the first differing row and identity.
-`world.rows force limit <bytes|auto>`, `force relocate` and `force skip tables` exercise admission,
-relocation and expired history. `host.memory collect` and `gpu.faults lose` exercise trim and new tables.
+`world.rows force limit <bytes|auto>`, `force relocate`, `force skip <tables|host|scene>`,
+`force pack` and `force dress-fault [<dresses>]` exercise admission, relocation, expired history,
+canonical packing and publication retry. `host.memory collect` and `gpu.faults lose` exercise trim and new tables.
+The static scene's key is a per-row sum, and its diagnostic comparison is a multiset, so
+packing rows alone keeps the trace scene. Its static-row set supplies scene-build snapshots.
 
 The region starts with one draw record when the tables are built
 and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,
@@ -1787,3 +1807,4 @@ the one that replaces it. `world.view.pick <instance>
 presentation cursor override; `clear` restores the real pointer feed. It does
 not move the OS cursor or send simulation input. The argument-free pointer
 query keeps its existing readout.
+

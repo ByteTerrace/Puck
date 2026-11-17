@@ -390,9 +390,13 @@ public sealed partial class SdfMeshPathBake {
     private bool Owes() {
         if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
         if ((m_slice is not null) || (m_successors > 0)) { return true; }
-        // A group's Done only turns on, so the groups before the cursor stay done until one is replaced.
+        return (DoneThrough() < m_groups.Count);
+    }
+    // Advances and returns the done cursor: the index every group before which is done. A group's Done only turns on, so
+    // the groups before the cursor stay done until one is replaced. Under the gate.
+    private int DoneThrough() {
         while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
-        return (m_doneThrough < m_groups.Count);
+        return m_doneThrough;
     }
 
     /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
@@ -405,7 +409,10 @@ public sealed partial class SdfMeshPathBake {
                 foreach (var group in m_ahead) {
                     if ((!group.Dynamic || m_fixedAssetSlots.Contains(item: group.Slot)) && !group.Glass && !group.Retired && group.Ahead) { return true; }
                 }
-                foreach (var group in m_groups) {
+                // Every group before the done cursor is done, so a settled bake answers without walking its groups.
+                for (var index = DoneThrough(); (index < m_groups.Count); index++) {
+                    var group = m_groups[index];
+
                     if ((!group.Dynamic || m_fixedAssetSlots.Contains(item: group.Slot)) && !group.Glass && !group.Done) { return true; }
                 }
                 return false;
@@ -621,6 +628,8 @@ public sealed partial class SdfMeshPathBake {
         batch = null;
         using (EnterFrameGate()) {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
+            // Work that finishes from here on offers the next take.
+            Volatile.Write(location: ref m_offered, value: 0);
 
             var lattices = m_takenLattices;
             var tickets = m_takenTickets;
@@ -651,15 +660,19 @@ public sealed partial class SdfMeshPathBake {
             var flying = 0;
             var working = 0;
             var admitted = 0;
+            // The groups admitted whose first stage has not reached the pool's queue: stages on their way.
+            var awaiting = 0;
 
             candidates.Clear();
-            for (var index = 0; (index < m_groups.Count); index++) {
+            // Every group before the done cursor is done and offers nothing, so a settled bake takes without a walk.
+            for (var index = DoneThrough(); (index < m_groups.Count); index++) {
                 var group = m_groups[index];
 
                 pending |= !group.Done;
                 flying += ((!group.Done && group.InFlight) ? 1 : 0);
                 working += ((!group.Done && group.Contouring) ? 1 : 0);
                 admitted += ((!group.Done && group.Admitted) ? 1 : 0);
+                awaiting += ((!group.Done && group.AwaitsStage) ? 1 : 0);
                 if (group.Done || group.InFlight || group.Contouring || (group.Next is null)) { continue; }
                 candidates.Add(item: (group.Priority, index));
             }
@@ -674,8 +687,7 @@ public sealed partial class SdfMeshPathBake {
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
-            var backlogged = false;
-            var backlogRead = false;
+            var queued = -1;
 
             foreach (var (_, index) in candidates) {
                 if (lattices.Count >= SdfWorldPackage.MeshBakeBatch) { stop = 3; break; }
@@ -701,10 +713,10 @@ public sealed partial class SdfMeshPathBake {
                 // A first slab returned unanswered keeps the admission it took.
                 if ((next.Slab == 0) && !group.Admitted) {
                     if (admissionWaits) { continue; }
-                    // A group admitted while the queue already holds a round of every worker's stages would only wait
-                    // there holding its lattice: admission waits for the queue to drain (Backlogged).
-                    if (!backlogRead) { backlogged = Backlogged(); backlogRead = true; }
-                    if (backlogged && (admitted > 0)) {
+                    // A group admitted while the pool already holds the stages its workers drain in an admission's
+                    // lead would only wait there holding its lattice: admission waits for the pool (Backlogged).
+                    if (queued < 0) { queued = QueuedStages(); }
+                    if ((admitted > 0) && Backlogged(awaiting: awaiting, queued: queued)) {
                         admissionWaits = true;
                         continue;
                     }
@@ -727,7 +739,9 @@ public sealed partial class SdfMeshPathBake {
                     }
                     group.DeferredReported = false;
                     group.Admitted = true;
+                    group.MarkAdmitted(timestamp: Stopwatch.GetTimestamp());
                     admitted++;
+                    awaiting++;
                 }
                 group.InFlight = true;
                 samples += next.Samples;
@@ -847,6 +861,8 @@ public sealed partial class SdfMeshPathBake {
             }
             Complete(batch: batch, index: index, request: in lattice, samples: slice);
         }
+        // A slice's answer readies its next lattice with no stage queued for it.
+        Offer();
     }
 
     // The one transition of a batch's ticket out of Taken, which answering and abandoning both take: Answered once its
@@ -2526,6 +2542,14 @@ public sealed partial class SdfMeshPathBake {
         public bool Stored { get; set; }
         // Whether the group has reserved its final lattice and result peak.
         public bool Admitted { get; set; }
+        // When the group was admitted (a Stopwatch timestamp), until its first stage is queued: its lead, which the
+        // pool's backlog measures, and the mark of a group still on its way to the workers. Zero otherwise.
+        private long m_admittedAt;
+
+        public bool AwaitsStage => (Volatile.Read(location: ref m_admittedAt) != 0L);
+
+        public void MarkAdmitted(long timestamp) => Volatile.Write(location: ref m_admittedAt, value: timestamp);
+        public long TakeAdmittedAt() => Interlocked.Exchange(location1: ref m_admittedAt, value: 0L);
         public bool DeferredReported { get; set; }
         // Whether a stage of the group threw (Fail), so no later program keeps it.
         public bool Failed { get; set; }

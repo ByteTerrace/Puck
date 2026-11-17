@@ -17,6 +17,19 @@ public sealed partial class SdfMeshPathBake {
     /// background GPU work, <see cref="SdfGpuWork.Describe"/>), or <see langword="null"/> for nothing. It only reports:
     /// no mesh depends on it.</summary>
     public Func<string>? DispatchReport { get; set; }
+    /// <summary>Gets or sets what the bake calls, on a worker, when work of its pool has finished since its last take, so
+    /// a lattice may wait to be taken: the residency's background GPU work's wake (<see cref="SdfGpuWork.Wake"/>), which
+    /// takes it then rather than at the next frame. Called at most once between two takes; <see langword="null"/> for
+    /// nothing, and a lattice is then taken at the next pump.</summary>
+    public Action? Offered { get; set; }
+
+    // Whether work of the bake finished since its last take: set by a worker, which then calls Offered, and cleared by
+    // the take.
+    private int m_offered;
+
+    private void Offer() {
+        if (Interlocked.Exchange(location1: ref m_offered, value: 1) == 0) { Offered?.Invoke(); }
+    }
 
     // The latest dressed frame's dynamic transforms, which carry a dynamic group's demand box into world space.
     private IReadOnlyList<DynamicTransform> m_demandTransforms = [];
@@ -48,6 +61,9 @@ public sealed partial class SdfMeshPathBake {
 
     private static readonly List<(Group Group, Action Work)> WorkQueue = [];
     private static readonly Queue<Action> AnswerQueue = new();
+    // The pool's backlog as time, which paces admission: the workers time each queued stage, and a group's first
+    // queued stage times its lead from admission.
+    private static readonly SdfMeshBakeBacklog PoolBacklog = new();
 
     private static int RunningWorkers;
 
@@ -151,6 +167,8 @@ public sealed partial class SdfMeshPathBake {
     // holds it, as a restart does.
     private bool Schedule(Group group, Action work) {
         if (!group.QueueWork()) { return false; }
+        // The first stage queued after a group's admission ends its lead.
+        if (group.TakeAdmittedAt() is var admittedAt and not 0L) { PoolBacklog.ObserveLead(seconds: Stopwatch.GetElapsedTime(startingTimestamp: admittedAt).TotalSeconds); }
         Enqueue(group: group, urgent: false, work: work);
         return true;
     }
@@ -175,6 +193,7 @@ public sealed partial class SdfMeshPathBake {
                 Fail(exception: exception, group: group);
             } finally {
                 group.EndWork();
+                Offer();
             }
         }
         lock (WorkGate) {
@@ -210,12 +229,15 @@ public sealed partial class SdfMeshPathBake {
             Finish();
         }
     }
-    // Whether the pool's queued stages, every residency's, fill a round of its workers. A worker starts whenever a slot is
-    // free (StartWorkers), so such a queue keeps every worker busy for a round, which covers the GPU rounds a newly
-    // admitted group takes before its first stage; a group admitted beyond it would only hold its lattice in the queue.
-    private static bool Backlogged() {
-        lock (WorkGate) { return (WorkQueue.Count >= WorkerSlots.Length); }
+    // The pool's queued stages, every residency's.
+    private static int QueuedStages() {
+        lock (WorkGate) { return WorkQueue.Count; }
     }
+    // Whether the pool's stages, those queued and those of groups admitted and still on their way (awaiting), keep every
+    // worker busy for the lead a newly admitted group takes before its first stage (SdfMeshBakeBacklog): a group
+    // admitted beyond that would only hold its lattice in the queue. Both sides are wall time, so the answer is the
+    // same whenever the take asks, on a fast frame or a slow one.
+    private static bool Backlogged(int queued, int awaiting) => PoolBacklog.Holds(stages: (queued + awaiting), workers: WorkerSlots.Length);
     // Called only with WorkGate held. The task's finally returns ownership of the slot after its last borrower ends.
     private static void StartWorkers() {
         foreach (var slot in WorkerSlots) {
@@ -265,7 +287,9 @@ public sealed partial class SdfMeshPathBake {
     // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
     private static void Work(WorkerSlot slot) {
         try {
-            while (TakeWork() is { } work) {
+            while (TakeWork(stage: out var stage) is { } work) {
+                var began = Stopwatch.GetTimestamp();
+
                 // A work item that throws has already settled what it owns (a group's stage fails its group; an answer
                 // returns its batch's unanswered lattices), so the line names the fault, out of memory included, and the
                 // worker carries on rather than ending silently.
@@ -274,6 +298,7 @@ public sealed partial class SdfMeshPathBake {
                 } catch (Exception exception) {
                     SdfMeshBakeReport.WorkFailed(exception: exception);
                 } finally {
+                    if (stage) { PoolBacklog.ObserveStage(seconds: Stopwatch.GetElapsedTime(startingTimestamp: began).TotalSeconds); }
                     lock (ProgressGate) {
                         ProgressCount++;
                         Monitor.PulseAll(obj: ProgressGate);
@@ -289,8 +314,10 @@ public sealed partial class SdfMeshPathBake {
         }
     }
     // Takes the earliest queued answer, else the queued work whose group has the highest priority, the earliest queued
-    // among equals, or null when none is queued. A group's priority is read as the frame thread last left it.
-    private static Action? TakeWork() {
+    // among equals, or null when none is queued; it says whether the work is a queued stage, which the backlog times.
+    // A group's priority is read as the frame thread last left it.
+    private static Action? TakeWork(out bool stage) {
+        stage = false;
         lock (WorkGate) {
             if (AnswerQueue.TryDequeue(result: out var answer)) { return answer; }
 
@@ -307,6 +334,7 @@ public sealed partial class SdfMeshPathBake {
             var work = WorkQueue[best].Work;
 
             WorkQueue.RemoveAt(index: best);
+            stage = true;
             return work;
         }
     }

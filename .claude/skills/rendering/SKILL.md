@@ -160,11 +160,19 @@ before mesh reads; zero placement words reject every triangle through the existi
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
-`world.rows check on` enables independent pack, generation-ledger, seed and quiescent device comparisons
+`SdfMeshRows.Create` returns the table and its sole writer. The dresser owns runs per host, group and own-mesh
+occurrence; allocator tickets guard frees and fresh occupancies guard history even for same-mesh reuse.
+The frame keeps its host inputs and publishes `MeshRows` separately. Claims and glass counts move inside writes.
+`SdfMeshHistory.Observe` compares table identity and occupancy; free/owed/refused rows retire in `StageMeshDraw`.
+Only start over rebuilds every owner: retry, the free share, forced packing or a noncanonical locked frame.
+Picking stamps the mesh target's row table/revision and rejects a changed row identity before resolving its owner.
+The static scene key and diagnostic comparison ignore row order.
+`world.rows check on` enables independent dress, pack, generation-ledger, seed and quiescent device comparisons
 (`sdf.rows.check`); `force limit <bytes|auto>`, `force relocate` and `force skip tables` exercise
-refusal, relocation and an expired consumer. `host.memory collect` and `gpu.faults lose` exercise
+refusal, relocation and an expired consumer. `force skip host`, `force skip scene`, `force pack` and
+`force dress-fault [<dresses>]` exercise the remaining cursor and publication paths. `host.memory collect` and `gpu.faults lose` exercise
 trim and new tables. The device-free witness is `SdfMeshArrivalLawTests`; a headless World stages
-no draws. Active portal clipping still refreshes conservatively until R1c.
+no draws. Active/ended portal clipping still visits all base rows through the writer until R1c.
 `world.residency` reports logical journal/scratch array bytes separately from
 mesh residency and the overlapping process/account/backend memory readings.
 Pending bake demand reads the same occurrence index and transformed copy boxes;
@@ -418,7 +426,8 @@ add the row you found.
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
 | Decide when a frame rebuilds and how it presents | `WorldSceneEmitter` (the composed revision), `WorldFramePresenter` (the `ISdfFrameSource` that delivers it) | `src/Puck.World.Client` |
 | Add a camera or another view of the world | the view types in `src/Puck.SdfVm/Views`, `WorldViewInstances` | [motion and views](../../../docs/rendering/sdf/handbook/motion-and-views.md) |
-| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork` | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Run GPU work off the frame (a bake, a relight) | `SdfGpuWork` and its clients, `SdfMeshBakeGpuWork`. A client's per-slot buffers come from the recording (`SdfGpuWorkRecording.HostBuffer`, `DeviceBuffer`), never the buffer factory: that door reserves them (`SdfGpuWorkHold`) | `src/Puck.SdfVm`; [the bake's dispatch](#which-dispatch-owns-the-code) |
+| Have the frame thread take work up while it waits between frames, or wake it for a GPU completion | `HostWaits.Serve` (a `WaitService`, served by `HostWaits.Pace`) and `IGpuSubmissionFence.SignalOnCompletion`; never a poll loop or a thread of your own that records | `src/Puck.Abstractions/Waiting`, `src/Puck.Abstractions/Gpu/Device` |
 | Compute irradiance, and check it on the CPU | `SdfMeshIrradiance`, whose CPU reference shares one probe lookup with the relight and the views shader | `src/Puck.SdfVm`; [mesh GI](references/mesh-gi.md) |
 | Meter a view's picture for its exposure (histogram, percentiles, dead band, cut snap) | the composite's histogram (`passes/sdf-composite.comp.hlsl`), read back by `SdfSkyRecorder`, reduced by `SdfExposure.Meter`, followed by `SdfViewExposures` | `src/Puck.SdfVm`, `src/Puck.SignedDistance`; [the decision](../../../docs/decisions/rendering.md#lights-screens-and-the-camera-are-photometric) |
 | Convert an image source's color or encode a display output | `ImageSourceConversion` and the display encode, each paired with its HLSL | `src/Puck.Abstractions/Sources`; [sync pairs](references/sync-pairs.md#image-sources) |
@@ -461,8 +470,10 @@ The mesh bake's two kernels (`sdf-mesh-bake-mask`, `sdf-mesh-bake`, the one
 `mapCore` call site) are no pass of a view: they run as the residency's
 background GPU work (`SdfGpuWork`, its bake client `SdfMeshBakeGpuWork`), a
 ring of slots each submitted on its own fence and refilled when a slot's job
-completes and its readback is released, pumped on the frame thread at the top
-of each frame and after each upload. A job binds the latest upload's World set
+completes and its readback is released, stepped on the frame thread at the top
+of each frame, after each upload, and inside the host's wait between frames
+(`HostWaits.Pace`), which a job's fence, a client's offer and the budget's
+next credit end early. A job binds the latest upload's World set
 with its own point table and runs only while the tables' uploaded program is
 the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 `world.gpu-timing` does not see it; the bake's done line carries its
@@ -1377,3 +1388,4 @@ by its fence share is GPU back-pressure, not CPU work.
 | `platform` | Native windows, display facts (VRR, colour space, display power), precision waits, camera rings that feed shared textures. |
 | `physics` | Contact against the authored field, which the drawn mesh must agree with. |
 | `verification` | The landing bar, GPU legs and how to read a failed check. |
+

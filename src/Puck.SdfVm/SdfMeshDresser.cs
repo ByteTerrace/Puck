@@ -1,438 +1,317 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.SignedDistance;
 
 namespace Puck.SdfVm;
 
-/// <summary>Retains the draws, poses, clipping and picking of one bake, independently of its mesh derivation.</summary>
-/// <param name="bake">The bake whose landed products are dressed. Dispose the dresser before retiring the bake.</param>
-public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
-    private readonly SdfMeshPathBake m_bake = (bake ?? throw new ArgumentNullException(paramName: nameof(bake)));
+/// <summary>Reconciles a bake's owners into retained row allocations, under its frame gate.</summary>
+public sealed class SdfMeshDresser : IDisposable {
+    private readonly SdfMeshPathBake m_bake;
+    private readonly SdfMeshRows m_rows;
+    private readonly SdfMeshRows.Writer m_writer;
 
-    private bool m_disposed;
-    private SdfMeshClaims? m_drawClaims;
+    private sealed class OwnerState {
+        public SdfMeshRows.Run Run;
+        public SdfMesh? Mesh;
+        public int[] Copies = [];
+        public bool Seen;
+    }
 
-    private readonly List<SdfMeshDraw> m_draws = [];
-    private SdfMeshInstance[] m_drawnCopies = [];
-    private int[] m_drawnCopyFrames = [];
-
-    private long m_revision;
-
-    private long m_copyLayoutRevision = -1;
-    private int m_drawnMeshes = -1;
-    private readonly List<DrawBinding> m_drawBindings = [];
-    // A topology rebuild's previous bindings by what each draws, so a binding the new topology names again keeps its
-    // object and its pose caches, which compare against the frame as on a frame that keeps the topology.
-    private readonly Dictionary<DrawBinding.Key, DrawBinding> m_reusableBindings = new(comparer: DrawBinding.KeyComparer.Instance);
-    // Each finished group the topology was built from, with its mesh, its run of bindings and its copies (-1 for a
-    // group drawn in place), in the bake's group order: a frame whose finished groups and meshes match it in order
-    // keeps the topology, read without hashing a group a frame.
-    private readonly List<(SdfMeshBakeGroup Group, SdfMesh Mesh, int Start, int Count, int Copies)> m_dressedGroups = [];
-    // The dressed groups a frame replaced, group or mesh, with as many pieces and copies as before, by their place in
-    // m_dressedGroups: each keeps its run of bindings, whose draws alone change (Replace).
-    private readonly List<(int At, SdfMeshBakeGroup Group, SdfMesh Mesh)> m_replaced = [];
-    // Each group's run length in the topology a rebuild replaces, which the rebuild compares its owners against.
-    private readonly Dictionary<SdfMeshBakeGroup, int> m_previousRuns = new(comparer: ReferenceEqualityComparer.Instance);
-
-    private int m_hostDrawCount;
-
-    // Reverse membership belongs to retained draw topology, not a second instance index. A changed source slot/copy
-    // names only its dependent bindings; bounded run coarsening may conservatively include unchanged bindings.
+    private readonly Dictionary<SdfMeshBakeGroup, OwnerState> m_groups = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<int, OwnerState> m_own = [];
+    private readonly List<SdfMeshBakeGroup> m_removedGroups = [];
+    private readonly List<int> m_removedOwn = [];
     private readonly GpuRowIndex<(bool Copy, int Index)> m_bindingsByOwner = new();
-
-    private int m_indexedSlots;
-
-    private readonly GpuUploadRuns m_bindingCandidates = new(capacity: GpuRegion.MaxCopyRuns);
-    // The binding indices a frame's changed slots and copies name, gathered before AddBindingKeys sorts them in.
-    private readonly List<int> m_bindingKeys = [];
-    private readonly GpuUploadRuns m_hostCandidates = new(capacity: GpuRegion.MaxCopyRuns);
-    private readonly GpuUploadRuns m_changedDraws = new(capacity: GpuRegion.MaxCopyRuns);
-    private readonly GpuUploadRuns m_changedSlots = new(capacity: GpuRegion.MaxCopyRuns);
-    private readonly GpuChangedRows m_drawChanges = new(capacity: GpuRegion.MaxCopyRuns, history: SdfMovedTransforms.History, trackReseats: false);
-    private readonly GpuRowCursor m_hostCursor = new();
+    private DrawBinding?[] m_bindings = [];
+    private readonly GpuUploadRuns m_candidates = new(GpuRegion.MaxCopyRuns);
+    private readonly GpuUploadRuns m_slots = new(GpuRegion.MaxCopyRuns);
+    private readonly GpuUploadRuns m_hostChanges = new(GpuRegion.MaxCopyRuns);
     private readonly GpuRowCursor m_slotCursor = new();
+    private readonly GpuRowCursor m_hostCursor = new();
+    private SdfMeshInstance[] m_copies = [];
+    private int[] m_copyFrames = [];
 
-    private SdfProgram? m_bindingProgram;
+    private SdfProgram? m_program;
+
+    private long m_layout = -1;
+
+    private SdfMeshRows.Run m_host;
+    private SdfMeshRows.Run m_clipCopies;
+
+    private readonly List<SdfMeshDraw> m_clipScratch = [];
+    private readonly List<(SdfMeshRows.Run Run, int Offset)> m_clipSources = [];
+    private readonly List<int> m_clipCopiedIndices = [];
+    private readonly List<(int Row, ulong Occupancy)> m_clipOccupants = [];
+
     private bool m_hadClips;
-    // A failed attempt may already have rewritten retained records; retry from canonical inputs with full provenance.
-    private bool m_publicationPending;
+    private bool m_pending;
+    private bool m_disposed;
+    private bool m_faultThisDress;
+    private SdfDressedPickMap? m_map;
+    private long m_skipHostThrough;
 
-    /// <summary>Gets logical retained array payload bytes of reverse binding indexes, copy snapshots and changed-run
-    /// scratch. Excludes the output journal, draw/pick-map storage and object/array headers; this is not a physical allocation total.</summary>
-    public long ScratchBytes => (((((((m_bindingsByOwner.StorageBytes + (((long)m_drawnCopyFrames.Length) * sizeof(int))) +
-        (((long)m_drawnCopies.Length) * IntPtr.Size)) + m_bindingCandidates.StorageBytes) + (((long)m_bindingKeys.Capacity) * sizeof(int))) + m_hostCandidates.StorageBytes) +
-        m_changedDraws.StorageBytes) + m_changedSlots.StorageBytes);
+    /// <summary>Creates a dresser and its private write capability.</summary>
+    public SdfMeshDresser(SdfMeshPathBake bake) {
+        m_bake = (bake ?? throw new ArgumentNullException(paramName: nameof(bake)));
+        (m_rows, m_writer) = SdfMeshRows.Create();
+    }
 
-    /// <summary>Returns a frame that draws the bake's meshes beside its own mesh draws, restarting the bake when the frame
-    /// carries a new program. A dynamic group draws at its slot's transform in the frame.</summary>
-    /// <param name="frame">The captured frame.</param>
-    /// <returns>The frame with the baked draws appended.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    /// <summary>Gets logical retained scratch and index bytes.</summary>
+    public long ScratchBytes => (((((m_bindingsByOwner.StorageBytes + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
+
+    /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
-        ArgumentNullException.ThrowIfNull(argument: frame);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        using (var access = m_bake.PrepareFrame(frame: frame)) {
-            var retry = m_publicationPending;
+        using var access = m_bake.PrepareFrame(frame: frame);
 
-            m_publicationPending = true;
-            // The bake's product revision is not compared: every product a frame draws is a (group, mesh) pair the
-            // walk below reads, and a pair replaced with its piece and copy counts standing keeps the topology.
-            // The first reason that fires names the rebuild (SdfMeshHistory.TopologyBuildsOf).
-            SdfMeshTopologyReason? reason = (retry
-                ? SdfMeshTopologyReason.Retry
-                : ((m_hostDrawCount != frame.MeshDraws.Count)
-                    ? SdfMeshTopologyReason.HostDraws
-                    : ((m_copyLayoutRevision != access.CopyLayoutRevision) ? SdfMeshTopologyReason.CopyLayout : null)));
-            var programChanged = !ReferenceEquals(objA: frame.Program, objB: m_bindingProgram);
-            var portalPath = (m_hadClips || (frame.SlotClips.Count > 0));
-            var finished = 0;
-            var groups = access.Groups;
+        m_faultThisDress |= SdfRowChecks.TakeDressFault();
+        var retry = m_pending;
 
-            m_replaced.Clear();
-            for (var groupIndex = 0; (groupIndex < groups.Count); groupIndex++) {
-                var group = groups[groupIndex];
+        m_pending = true;
+        var forced = SdfRowChecks.TakePack();
+        var startOver = (retry || forced || ((m_rows.Count > 0) && ((m_rows.Count - m_rows.LiveCount) > (m_rows.Count / SdfMeshRows.PackingFreeDivisor))) ||
+            (frame.TickLocked && (!m_rows.Canonical || CountsChange(access: access, frame: frame))));
 
-                if (access.MeshOf(group: group) is not { } mesh) { continue; }
-                if (finished >= m_dressedGroups.Count) {
-                    reason ??= SdfMeshTopologyReason.GroupNew;
-                } else if ((m_dressedGroups[finished] is var listed) && (!ReferenceEquals(objA: listed.Group, objB: group) || !ReferenceEquals(objA: listed.Mesh, objB: mesh))) {
-                    if ((reason is null) && (mesh.PieceCount == listed.Mesh.PieceCount) && ((access.CopiesOf(group: group)?.Count ?? -1) == listed.Copies)) {
-                        m_replaced.Add(item: (finished, group, mesh));
-                    } else {
-                        reason ??= SdfMeshTopologyReason.GroupReshaped;
-                    }
-                }
-                finished++;
-            }
-            if (finished != m_drawnMeshes) { reason ??= SdfMeshTopologyReason.GroupCount; }
-            var topologyChanged = (reason is not null);
-
-            _ = m_slotCursor.Collect(frame.MovedTransforms?.Changes, frame.MovedTransformsSerial, frame.DynamicTransforms,
-                frame.DynamicTransforms.Count, 0, m_changedSlots, force: (topologyChanged || programChanged || portalPath));
-            _ = m_hostCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, frame.MeshDraws,
-                frame.MeshDraws.Count, frame.MeshDrawsRevision, m_hostCandidates, force: (topologyChanged || portalPath));
-            m_changedDraws.Clear();
-            m_bindingCandidates.Clear();
-            var visited = 0;
-            var matrices = 0;
-            var updated = 0;
-            // The rows whose owner the frame changed, whole (SdfMeshHistory.RowsOwnedChanged).
-            var owned = 0;
-            var meshesChanged = topologyChanged;
-            var identitiesChanged = (topologyChanged || (m_replaced.Count > 0));
-
-            if (reason is { } rebuilt) {
-                BuildDrawTopology(access: access, frame: frame, matrices: ref matrices, owned: ref owned, reason: rebuilt, visited: ref visited);
-            } else {
-                // A kept group can be interpreted under another slot after a new program. Refresh reverse slot
-                // membership and visit all bindings without rebuilding geometry or assuming the moved rows reseated it.
-                if (programChanged || (m_indexedSlots != frame.DynamicTransforms.Count)) { IndexBindings(frame: frame); }
-                if (programChanged || portalPath) {
-                    m_bindingCandidates.Add(start: 0, length: m_drawBindings.Count);
-                } else {
-                    CollectSlotBindings(frame: frame);
-                    if (m_drawnCopies.Length != frame.MeshInstances.Count) {
-                        m_bindingCandidates.Add(start: 0, length: m_drawBindings.Count);
-                    } else {
-                        for (var index = 0; (index < m_drawnCopies.Length); index++) {
-                            if ((m_drawnCopies[index] != frame.MeshInstances[index]) || (m_drawnCopyFrames[index] != frame.MeshInstances[index].FrameSlot)) {
-                                AddBindings(key: (true, index));
-                            }
-                        }
-                    }
-                    AddBindingKeys();
-                }
-                // Restore unclipped base records before deriving carried copies. Active/removed clips deliberately
-                // use the complete base path until clipping itself supplies exact provenance.
-                var baseCount = (m_hostDrawCount + m_drawBindings.Count);
-
-                if (m_draws.Count > baseCount) { m_draws.RemoveRange(baseCount, (m_draws.Count - baseCount)); }
-                if (m_replaced.Count > 0) { Replace(access: access, frame: frame, matrices: ref matrices, owned: ref owned, updated: ref updated, visited: ref visited); }
-                for (var run = 0; (run < m_hostCandidates.Count); run++) {
-                    var end = (m_hostCandidates.Start(index: run) + m_hostCandidates.Length(index: run));
-
-                    for (var index = m_hostCandidates.Start(index: run); (index < end); index++) {
-                        var draw = frame.MeshDraws[index];
-                        var previous = m_draws[index];
-
-                        if (previous.SameStagedContent(other: in draw)) { continue; }
-                        if (!ReferenceEquals(objA: previous.Mesh, objB: draw.Mesh)) { meshesChanged = true; owned++; }
-                        identitiesChanged |= !Equals(objA: previous.Identity, objB: draw.Identity);
-                        m_draws[index] = draw;
-                        m_changedDraws.Add(length: 1, start: index);
-                    }
-                }
-                for (var run = 0; (run < m_bindingCandidates.Count); run++) {
-                    var end = (m_bindingCandidates.Start(index: run) + m_bindingCandidates.Length(index: run));
-
-                    for (var index = m_bindingCandidates.Start(index: run); (index < end); index++) {
-                        var destination = (m_hostDrawCount + index);
-
-                        visited++;
-                        var draw = m_drawBindings[index].Pose(frame: frame, matrices: ref matrices);
-                        var previous = m_draws[destination];
-
-                        if (previous.SameStagedContent(other: in draw)) { continue; }
-                        if (!ReferenceEquals(objA: previous.Mesh, objB: draw.Mesh)) { meshesChanged = true; owned++; }
-                        identitiesChanged |= !Equals(objA: previous.Identity, objB: draw.Identity);
-                        m_draws[destination] = draw;
-                        m_changedDraws.Add(length: 1, start: destination);
-                        updated++;
-                    }
-                }
-            }
-
-            var changed = (topologyChanged || portalPath || (m_changedDraws.Count > 0));
-
-            if (changed) {
-                SdfSlotClip.Apply(clips: frame.SlotClips, draws: m_draws);
-                if (meshesChanged) { (m_drawClaims ??= new SdfMeshClaims()).Update(draws: m_draws); }
-            }
-            if (!changed && ReferenceEquals(objA: frame, objB: m_dressedSource) && (m_dressed is { } held)) {
-                CountWork(matrices: matrices, owned: owned, updated: updated, visited: visited);
-                CommitInputs(frame: frame);
-                m_publicationPending = false;
-                access.Acknowledge();
-                return held;
-            }
-
-            var dressedMap = m_dressedMap;
-            var spareMap = m_spareMap;
-
-            if (frame.PickMap is { } hostMap) {
-                // Exact changed identities are known on the ordinary path. Motion/material changes cannot invalidate
-                // a captured pick map; clipping/topology keep the conservative complete correspondence check.
-                var retainsMap = (!identitiesChanged && !portalPath && (dressedMap is not null) &&
-                    ReferenceEquals(objA: dressedMap.Inner, objB: hostMap) && (dressedMap.HostDraws == frame.MeshDraws.Count));
-
-                if (!retainsMap && !Dresses(dressedMap, hostMap, frame.MeshDraws.Count)) {
-                    var previous = dressedMap;
-
-                    dressedMap = (Dresses(spareMap, hostMap, frame.MeshDraws.Count)
-                        ? spareMap
-                        : new SdfDressedPickMap(chunkOwners: m_chunkOwners, draws: m_draws, hostDraws: frame.MeshDraws.Count, inner: hostMap));
-                    spareMap = previous;
-                }
-            } else { dressedMap = null; spareMap = null; }
-
-            var revision = (changed ? checked((m_revision + 1L)) : m_revision);
-            // Construct the output before committing either journal or input cursor. The serial captured in the
-            // frame never follows this mutable producer when a later frame is dressed or a consumer skips frames.
-            var serial = checked((m_drawChanges.Serial + 1L));
-            var dressed = (frame with {
-                MeshDraws = m_draws,
-                MeshDrawsRevision = revision,
-                PickMap = dressedMap,
-                MeshDrawChanges = m_drawChanges.Reader,
-                MeshDrawChangesSerial = serial,
-                MeshDrawChangesCause = (topologyChanged
-                    ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild)
-                    : (portalPath ? SdfMeshStagingCause.Portal : null)),
-            });
-
-            m_drawChanges.Begin(everything: (topologyChanged || portalPath), rows: m_draws.Count);
-            for (var run = 0; (run < m_changedDraws.Count); run++) {
-                m_drawChanges.Owe(start: m_changedDraws.Start(index: run), count: m_changedDraws.Length(index: run));
-            }
-            m_dressedMap = dressedMap;
-            m_spareMap = spareMap;
-            m_dressed = dressed;
-            m_dressedSource = frame;
-            m_drawnMeshes = finished;
-            m_revision = revision;
-            m_copyLayoutRevision = access.CopyLayoutRevision;
-            CommitInputs(frame: frame);
-            CountWork(matrices: matrices, owned: owned, updated: updated, visited: visited);
-            m_publicationPending = false;
-            access.Acknowledge();
-            return dressed;
+        if (startOver) {
+            StartOver();
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.DressTopologyBuilds);
+            SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.TopologyBuildsOf(reason: (retry ? SdfMeshTopologyReason.Retry : (forced ? SdfMeshTopologyReason.Forced : (frame.TickLocked ? SdfMeshTopologyReason.Locked : SdfMeshTopologyReason.FreeShare)))));
+            SdfRowChecks.ProcessWork.Count(kind: (retry ? SdfRowChecks.Retry : (frame.TickLocked ? SdfRowChecks.Locked : SdfRowChecks.Packs)));
         }
-    }
+        var programChanged = !ReferenceEquals(objA: m_program, objB: frame.Program);
+        var portal = (m_hadClips || (frame.SlotClips.Count > 0));
+        var hostNew = (m_host.Count != frame.MeshDraws.Count);
+        var hostWhole = m_hostCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, frame.MeshDraws,
+            frame.MeshDraws.Count, frame.MeshDrawsRevision, m_hostChanges, force: (startOver || hostNew));
 
-    private void CountWork(int visited, int matrices, int updated, int owned) {
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.RowsOwnedChanged, amount: owned);
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressPoseCandidates, amount: m_drawBindings.Count);
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressBindingsVisited, amount: visited);
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressMatricesComputed, amount: matrices);
-        SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressedRecordsUpdated, amount: updated);
-    }
-    private void CommitInputs(SdfFrame frame) {
-        if (m_drawnCopies.Length != frame.MeshInstances.Count) { m_drawnCopies = new SdfMeshInstance[frame.MeshInstances.Count]; m_drawnCopyFrames = new int[frame.MeshInstances.Count]; }
-        for (var index = 0; (index < m_drawnCopies.Length); index++) { m_drawnCopies[index] = frame.MeshInstances[index]; m_drawnCopyFrames[index] = frame.MeshInstances[index].FrameSlot; }
-        m_hostCursor.Commit();
-        m_slotCursor.Commit();
-        m_bindingProgram = frame.Program;
-        m_hadClips = (frame.SlotClips.Count > 0);
-    }
-    private void CollectSlotBindings(SdfFrame frame) {
-        for (var run = 0; (run < m_changedSlots.Count); run++) {
-            var end = (m_changedSlots.Start(index: run) + m_changedSlots.Length(index: run));
+        if (hostWhole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.HostWhole); }
+        _ = m_slotCursor.Collect(frame.MovedTransforms?.Changes, frame.MovedTransformsSerial, frame.DynamicTransforms,
+            frame.DynamicTransforms.Count, 0, m_slots, force: (startOver || programChanged));
+        var matrices = 0;
+        var visited = 0;
+        var updated = 0;
 
-            for (var slot = m_changedSlots.Start(index: run); (slot < end); slot++) { AddBindings(key: (false, slot)); }
+        if (hostNew) {
+            var old = m_host;
+
+            m_host = m_writer.Allocate(count: frame.MeshDraws.Count);
+            m_writer.Free(run: old);
+
         }
-    }
-    private void AddBindings((bool Copy, int Index) key) {
-        for (var index = m_bindingsByOwner.First(key: key); (index >= 0); index = m_bindingsByOwner.Next(row: index)) {
-            m_bindingKeys.Add(item: index);
-        }
-    }
-    // Hands the collected binding indices to the candidate runs in ascending order. Slots and copies name their bindings
-    // out of binding order, and a run set takes an out-of-order index by shifting its runs.
-    private void AddBindingKeys() {
-        var keys = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_bindingKeys);
+        for (var r = 0; (r < m_hostChanges.Count); r++) {
+            for (var i = m_hostChanges.Start(index: r); (i < (m_hostChanges.Start(index: r) + m_hostChanges.Length(index: r))); i++) {
+                var draw = frame.MeshDraws[i];
 
-        keys.Sort();
-        foreach (var key in keys) {
-            m_bindingCandidates.Add(length: 1, start: key);
-        }
-        m_bindingKeys.Clear();
-    }
-    private void IndexBindings(SdfFrame frame) {
-        m_indexedSlots = frame.DynamicTransforms.Count;
-        m_bindingsByOwner.Clear();
-        // A binding belongs to exactly one copy or one dynamic slot. Prepending in reverse draw order keeps each
-        // adjacency chain ascending without allocating a list/object per slot or duplicating its membership.
-        for (var index = (m_drawBindings.Count - 1); (index >= 0); index--) {
-            var binding = m_drawBindings[index];
-
-            if (((uint)binding.CopyIndex) < ((uint)frame.MeshInstances.Count)) {
-                m_bindingsByOwner.Set(index, (true, binding.CopyIndex));
-            } else if ((binding.CopyIndex < 0) && (binding.Slot is { } slot) && (((uint)slot) < ((uint)m_indexedSlots))) {
-                m_bindingsByOwner.Set(key: (false, slot), row: index);
+                Write(m_host, i, draw, new(Host: i));
             }
         }
-    }
-    // Replaces, in their runs, the bindings of each group a frame replaced with its piece and copy counts standing
-    // (m_replaced), as a topology rebuild would list them: every other binding, draw and row stands, the journal
-    // names the rows whose staged content moved, and each such draw's claim moves with it.
-    private void Replace(SdfFrame frame, SdfMeshPathBake.FrameAccess access, ref int visited, ref int matrices, ref int updated, ref int owned) {
-        var reindex = false;
-
-        foreach (var (at, group, mesh) in m_replaced) {
-            var dressed = m_dressedGroups[at];
-
-            owned += dressed.Count;
-            var copies = access.CopiesOf(group: group);
-            var pieces = mesh.PieceCount;
-            var chunked = ((copies is null) && (mesh.Chunks.Count > 0));
-
-            if ((dressed.Copies < 0) && (dressed.Mesh.Chunks.Count > 0)) {
-                foreach (var chunk in dressed.Mesh.Chunks) { _ = m_chunkOwners.Remove(key: chunk); }
-            }
-            for (var offset = 0; (offset < dressed.Count); offset++) {
-                var index = (dressed.Start + offset);
-                var part = mesh.Piece(index: (offset % pieces));
-                var copyIndex = ((copies is null) ? -1 : copies[(offset / pieces)]);
-                var binding = new DrawBinding(chunked: chunked, copyIndex: copyIndex, group: group, mesh: part);
-                var previous = m_drawBindings[index];
-                var destination = (m_hostDrawCount + index);
-                var drawn = m_draws[destination];
-
-                reindex |= ((previous.CopyIndex != copyIndex) || (previous.Slot != binding.Slot));
-                m_drawBindings[index] = binding;
-                if (chunked) { m_chunkOwners[part] = group; }
-                visited++;
-
-                var draw = binding.Pose(frame: frame, matrices: ref matrices);
-
-                if (!ReferenceEquals(objA: drawn.Mesh, objB: draw.Mesh)) { (m_drawClaims ??= new SdfMeshClaims()).Move(from: drawn.Mesh, to: draw.Mesh); }
-                m_draws[destination] = draw;
-                if (drawn.SameStagedContent(other: in draw)) { continue; }
-                m_changedDraws.Add(length: 1, start: destination);
-                updated++;
-            }
-            m_dressedGroups[at] = (group, mesh, dressed.Start, dressed.Count, dressed.Copies);
-        }
-        if (reindex) { IndexBindings(frame: frame); }
-    }
-    private void BuildDrawTopology(SdfFrame frame, SdfMeshPathBake.FrameAccess access, SdfMeshTopologyReason reason, ref int visited, ref int matrices, ref int owned) {
-        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.DressTopologyBuilds);
-        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.TopologyBuildsOf(reason: reason));
-        // An owner keeps its rows when it draws what it drew: the host's list at its count, each host row its mesh, and a
-        // group or an instance's own mesh every binding it held, at the run length it had.
-        var host = frame.MeshDraws;
-
-        if ((host.Count != m_hostDrawCount) || (m_draws.Count < host.Count)) {
-            owned += host.Count;
-        } else {
-            for (var index = 0; (index < host.Count); index++) {
-                if (!ReferenceEquals(objA: m_draws[index].Mesh, objB: host[index].Mesh)) { owned++; }
-            }
-        }
-        m_previousRuns.Clear();
-        foreach (var dressed in m_dressedGroups) { m_previousRuns[dressed.Group] = dressed.Count; }
-        m_draws.Clear();
-        m_chunkOwners.Clear();
-        foreach (var binding in m_drawBindings) { m_reusableBindings.TryAdd(key: binding.Identity, value: binding); }
-        m_drawBindings.Clear();
-        m_dressedGroups.Clear();
-        m_hostDrawCount = host.Count;
-        m_draws.AddRange(collection: host);
+        foreach (var state in m_groups.Values) { state.Seen = false; }
         foreach (var group in access.Groups) {
             if (access.MeshOf(group: group) is not { } mesh) { continue; }
+            if (!m_groups.TryGetValue(key: group, value: out var state)) { m_groups.Add(key: group, value: state = new()); }
+            state.Seen = true;
+            var copies = access.CopiesOf(group: group);
+            var count = (mesh.PieceCount * (copies?.Count ?? 1));
+            var changed = (!ReferenceEquals(objA: mesh, objB: state.Mesh) || (state.Run.Count != count) ||
+                ((m_layout != access.CopyLayoutRevision) && !state.Copies.SequenceEqual(second: (copies ?? Array.Empty<int>()))));
 
-            var start = m_drawBindings.Count;
-            var kept = true;
+            if (!changed) { continue; }
+            var old = state.Run;
 
-            if (access.CopiesOf(group: group) is { } copies) {
-                foreach (var copy in copies) {
-                    for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-                        kept &= Bind(mesh.Piece(index: piece), group, copy, chunked: false);
-                    }
-                }
-                m_dressedGroups.Add(item: (group, mesh, start, (m_drawBindings.Count - start), copies.Count));
-                owned += OwnedChange(group: group, kept: kept, start: start);
-                continue;
+            if (old.Count != count) { state.Run = m_writer.Allocate(count: count); }
+            RemoveBindings(run: old);
+            state.Mesh = mesh;
+            state.Copies = (copies?.ToArray() ?? []);
+
+            for (var offset = 0; (offset < count); offset++) {
+                var binding = new DrawBinding(mesh.Piece(index: (offset % mesh.PieceCount)), group,
+                    ((copies is null) ? -1 : copies[(offset / mesh.PieceCount)]), ((copies is null) && (mesh.Chunks.Count > 0)));
+
+                Bind(binding: binding, frame: frame, matrices: ref matrices, offset: offset, run: state.Run);
+                visited++; updated++;
             }
-            for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-                var part = mesh.Piece(index: piece);
+            if (old != state.Run) { m_writer.Free(run: old); }
+        }
+        m_removedGroups.Clear();
+        foreach (var (group, state) in m_groups) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedGroups.Add(item: group); } }
+        foreach (var group in m_removedGroups) { _ = m_groups.Remove(key: group); }
+        foreach (var state in m_own.Values) { state.Seen = false; }
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) {
+            if (frame.MeshInstances[i].Mesh is not { } mesh) { continue; }
+            if (!m_own.TryGetValue(key: i, value: out var state)) { m_own.Add(key: i, value: state = new()); }
+            state.Seen = true;
+            if (ReferenceEquals(objA: mesh, objB: state.Mesh)) { continue; }
+            if (state.Run.Count == 0) { state.Run = m_writer.Allocate(count: 1); }
+            RemoveBindings(run: state.Run);
+            state.Mesh = mesh;
+            Bind(state.Run, 0, new DrawBinding(mesh, null, i), frame, ref matrices);
+            visited++; updated++;
+        }
+        m_removedOwn.Clear();
+        foreach (var (i, state) in m_own) { if (!state.Seen) { RemoveBindings(run: state.Run); m_writer.Free(run: state.Run); m_removedOwn.Add(item: i); } }
+        foreach (var i in m_removedOwn) { _ = m_own.Remove(key: i); }
+        m_candidates.Clear();
+        if (programChanged) {
+            for (var row = 0; (row < m_bindings.Length); row++) { if (m_bindings[row] is not null) { m_candidates.Add(length: 1, start: row); } }
+        }
+        for (var run = 0; (run < m_slots.Count); run++) {
+            for (var slot = m_slots.Start(index: run); (slot < (m_slots.Start(index: run) + m_slots.Length(index: run))); slot++) { AddCandidates(key: (false, slot)); }
+        }
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) {
+            if (programChanged || (i >= m_copies.Length) || !ReferenceEquals(objA: m_copies[i], objB: frame.MeshInstances[i]) || (m_copyFrames[i] != frame.MeshInstances[i].FrameSlot)) { AddCandidates(key: (true, i)); }
+        }
+        for (var r = 0; (r < m_candidates.Count); r++) {
+            for (var row = m_candidates.Start(index: r); (row < (m_candidates.Start(index: r) + m_candidates.Length(index: r))); row++) {
+                if ((row >= m_bindings.Length) || (m_bindings[row] is not { } binding)) { continue; }
+                var draw = binding.Pose(frame: frame, matrices: ref matrices);
 
-                kept &= Bind(part, group, -1, chunked: (mesh.Chunks.Count > 0));
-                if (mesh.Chunks.Count > 0) { m_chunkOwners[part] = group; }
+                var (run, offset) = BindingRun(row: row);
+                Write(run, offset, draw, OwnerOf(binding: binding));
+                IndexBinding(binding: binding, row: row);
+                visited++;
             }
-            m_dressedGroups.Add(item: (group, mesh, start, (m_drawBindings.Count - start), -1));
-            owned += OwnedChange(group: group, kept: kept, start: start);
         }
-        for (var index = 0; (index < frame.MeshInstances.Count); index++) {
-            if ((frame.MeshInstances[index].Mesh is { } mesh) && !Bind(mesh, null, index, chunked: false)) { owned++; }
+        if (portal) { ApplyClips(frame: frame); }
+        // Clip-copy membership is derived by the conservative portal walk in R1b. If that walk allocated or freed
+        // rows on an otherwise canonical locked frame, reconcile once from empty before publishing it.
+        if (frame.TickLocked && !startOver && (m_program is not null) && !m_rows.Canonical) {
+            m_pending = false;
+            return Dress(frame: frame);
         }
-        IndexBindings(frame: frame);
-        for (var index = 0; (index < m_drawBindings.Count); index++) {
-            visited++;
-            m_draws.Add(item: m_drawBindings[index].Pose(frame: frame, matrices: ref matrices));
-        }
-        // A binding the previous topology held for the same draw and no binding of this one took is not reused again.
-        m_reusableBindings.Clear();
-    }
-    // Lists the binding of one draw: the previous topology's for it, or a new one. Returns whether it was the previous
-    // topology's.
-    private bool Bind(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked) {
-        var reused = m_reusableBindings.Remove(key: new DrawBinding.Key(Chunked: chunked, CopyIndex: copyIndex, Group: group, Mesh: mesh), value: out var kept);
+        if (SdfRowChecks.Enabled) { CheckDress(access: access, frame: frame); }
+        m_writer.Publish();
+        if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.PickMap)) { m_map = ((frame.PickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
+        var result = frame with {
+            MeshRows = m_rows,
+            PickMap = m_map,
+            MeshDrawsRevision = m_rows.Revision,
+            MeshDrawChanges = m_rows.Changes,
+            MeshDrawChangesSerial = m_rows.Serial,
+            MeshDrawChangesCause = (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null)),
+        };
 
-        m_drawBindings.Add(item: (reused ? kept! : new DrawBinding(chunked: chunked, copyIndex: copyIndex, group: group, mesh: mesh)));
-        return reused;
-    }
-    // The rows a group's new run changed the owner of: none when every binding was the previous topology's and the run
-    // kept its length, the whole run otherwise.
-    private int OwnedChange(SdfMeshBakeGroup group, int start, bool kept) {
-        var count = (m_drawBindings.Count - start);
+        if (m_copies.Length != frame.MeshInstances.Count) { m_copies = new SdfMeshInstance[frame.MeshInstances.Count]; m_copyFrames = new int[m_copies.Length]; }
+        for (var i = 0; (i < m_copies.Length); i++) { m_copies[i] = frame.MeshInstances[i]; m_copyFrames[i] = m_copies[i].FrameSlot; }
+        if (SdfRowChecks.SkipHostRequested) { m_skipHostThrough = ((m_rows.Serial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipHostRequested = false; }
+        if (m_rows.Serial <= m_skipHostThrough) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.HostSkipped); } else { m_hostCursor.Commit(); }
+        m_slotCursor.Commit();
+        m_program = frame.Program;
+        m_layout = access.CopyLayoutRevision;
+        m_hadClips = (frame.SlotClips.Count > 0);
+        m_pending = false;
+        access.Acknowledge();
 
-        return ((kept && m_previousRuns.TryGetValue(key: group, value: out var previous) && (previous == count)) ? 0 : count);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressBindingsVisited, visited);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressMatricesComputed, matrices);
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.DressedRecordsUpdated, updated);
+        return result;
     }
+
+    private void Write(SdfMeshRows.Run run, int offset, in SdfMeshDraw draw, SdfMeshRows.Owner owner) {
+        m_writer.Set(draw: draw, offset: offset, owner: owner, run: run);
+        if (m_faultThisDress) { m_faultThisDress = false; throw new SdfDressFaultException(); }
+    }
+    private bool CountsChange(SdfFrame frame, SdfMeshPathBake.FrameAccess access) {
+        if (m_host.Count != frame.MeshDraws.Count) { return true; }
+        var finished = 0;
+
+        foreach (var group in access.Groups) {
+            if (access.MeshOf(group: group) is not { } mesh) { continue; }
+            finished++;
+            if (!m_groups.TryGetValue(key: group, value: out var state) || (state.Run.Count != (mesh.PieceCount * (access.CopiesOf(group: group)?.Count ?? 1)))) { return true; }
+        }
+        if (finished != m_groups.Count) { return true; }
+        var own = 0;
+
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is not null) { own++; if (!m_own.ContainsKey(key: i)) { return true; } } }
+        return (own != m_own.Count);
+    }
+    private void StartOver() {
+        m_writer.StartOver();
+        m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
+        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear();
+    }
+    private void RemoveBindings(SdfMeshRows.Run run) {
+        for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
+    }
+    private void Bind(SdfMeshRows.Run run, int offset, DrawBinding binding, SdfFrame frame, ref int matrices) {
+        var row = (run.Start + offset);
+
+        if (m_bindings.Length <= row) { Array.Resize(array: ref m_bindings, newSize: Math.Max(val1: (row + 1), val2: (m_bindings.Length * 2))); }
+        m_bindings[row] = binding;
+        binding.Run = run;
+        IndexBinding(binding: binding, row: row);
+        Write(run, offset, binding.Pose(frame: frame, matrices: ref matrices), OwnerOf(binding: binding));
+    }
+    private static SdfMeshRows.Owner OwnerOf(DrawBinding binding) => new(Instance: binding.FirstInstance);
+    private void IndexBinding(int row, DrawBinding binding) {
+        m_bindingsByOwner.Remove(row: row);
+        if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); }
+    }
+    private void AddCandidates((bool Copy, int Index) key) {
+        for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { m_candidates.Add(length: 1, start: row); }
+    }
+    private (SdfMeshRows.Run Run, int Offset) BindingRun(int row) => (m_bindings[row]!.Run, (row - m_bindings[row]!.Run.Start));
+    private void ApplyClips(SdfFrame frame) {
+        m_clipScratch.Clear(); m_clipSources.Clear(); m_clipCopiedIndices.Clear();
+        AddBase(run: m_host);
+        foreach (var state in m_groups.Values) { AddBase(run: state.Run); }
+        foreach (var state in m_own.Values) { AddBase(run: state.Run); }
+        var count = m_clipScratch.Count;
+
+        SdfSlotClip.Apply(m_clipScratch, frame.SlotClips, m_clipCopiedIndices);
+        var copyCount = (m_clipScratch.Count - count);
+        var copiesChanged = (m_clipCopies.Count != copyCount);
+
+        for (var i = 0; (!copiesChanged && (i < copyCount)); i++) {
+            var (run, offset) = m_clipSources[m_clipCopiedIndices[i]];
+            copiesChanged = (m_clipOccupants[i] != ((run.Start + offset), m_rows.Occupancy(row: (run.Start + offset))));
+        }
+        if (copiesChanged) { var old = m_clipCopies; m_clipCopies = m_writer.Allocate(count: copyCount); m_writer.Free(run: old); }
+        for (var i = 0; (i < count); i++) {
+            var (run, offset) = m_clipSources[i];
+            m_writer.SetStaged(run, offset, m_clipScratch[i], m_rows.OwnerOf(row: (run.Start + offset)));
+        }
+        m_clipOccupants.Clear();
+        for (var copied = 0; (copied < copyCount); copied++) {
+            var (run, offset) = m_clipSources[m_clipCopiedIndices[copied]];
+            var source = (run.Start + offset);
+
+            m_writer.Set(m_clipCopies, copied, m_clipScratch[(count + copied)], new(CopiedRow: source));
+            m_clipOccupants.Add(item: (source, m_rows.Occupancy(row: source)));
+        }
+    }
+    private void AddBase(SdfMeshRows.Run run) {
+        for (var i = 0; (i < run.Count); i++) { m_clipScratch.Add(item: m_rows.BaseAt(row: (run.Start + i))); m_clipSources.Add(item: (run, i)); }
+        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.RowsWalkedWhole, run.Count);
+    }
+    private void CheckDress(SdfFrame frame, SdfMeshPathBake.FrameAccess access) {
+        var expected = new List<SdfMeshDraw>(collection: frame.MeshDraws);
+        var matrices = 0;
+
+        foreach (var group in access.Groups) {
+            if (access.MeshOf(group: group) is not { } mesh) { continue; }
+            var copies = access.CopiesOf(group: group);
+
+            for (var c = 0; (c < (copies?.Count ?? 1)); c++) {
+                for (var p = 0; (p < mesh.PieceCount); p++) { expected.Add(item: new DrawBinding(mesh.Piece(index: p), group, ((copies is null) ? -1 : copies[c]), ((copies is null) && (mesh.Chunks.Count > 0))).Pose(frame: frame, matrices: ref matrices)); }
+            }
+        }
+        for (var i = 0; (i < frame.MeshInstances.Count); i++) { if (frame.MeshInstances[i].Mesh is { } mesh) { expected.Add(item: new DrawBinding(mesh, null, i).Pose(frame: frame, matrices: ref matrices)); } }
+        SdfSlotClip.Apply(expected, frame.SlotClips);
+        foreach (var (row, draw) in m_rows.Live()) {
+            var at = expected.FindIndex(match: candidate => candidate.SameStagedContent(other: in draw));
+
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Dress);
+            if (at < 0) { SdfRowChecks.DressFailure(message: $"unexpected row {row}, owner {m_rows.OwnerOf(row: row)}"); } else { expected.RemoveAt(index: at); }
+        }
+        if (expected.Count != 0) { SdfRowChecks.DressFailure(message: $"missing {expected.Count} rebuilt rows"); }
+    }
+
+    /// <summary>Releases the row table's mesh claims.</summary>
+    public void Dispose() { if (m_disposed) { return; } m_disposed = true; StartOver(); }
 
     private sealed class DrawBinding(SdfMesh mesh, SdfMeshBakeGroup? group, int copyIndex, bool chunked = false) {
-        // What a binding draws: its mesh or chunk and group by reference, its copy and whether its group is chunked.
-        public readonly record struct Key(SdfMesh Mesh, SdfMeshBakeGroup? Group, int CopyIndex, bool Chunked);
-        public sealed class KeyComparer : IEqualityComparer<Key> {
-            public static KeyComparer Instance { get; } = new();
-
-            public bool Equals(Key x, Key y) => (ReferenceEquals(objA: x.Mesh, objB: y.Mesh) && ReferenceEquals(objA: x.Group, objB: y.Group) && (x.CopyIndex == y.CopyIndex) && (x.Chunked == y.Chunked));
-            public int GetHashCode(Key key) => HashCode.Combine(value1: System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: key.Mesh), value2: ((key.Group is null) ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(o: key.Group)), value3: key.CopyIndex, value4: key.Chunked);
-        }
-
-        public Key Identity => new(Chunked: chunked, CopyIndex: copyIndex, Group: group, Mesh: mesh);
-
         private object? m_motionSource;
         private object? m_motionIdentity;
         private SdfMeshInstance? m_copy;
@@ -451,7 +330,10 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
             return (transform.Position, transform.Orientation, SdfMeshGeometryBuilder.UnitsOf(transform: transform));
         }
 
+        public SdfMeshRows.Run Run;
+
         public int CopyIndex => copyIndex;
+        public int FirstInstance => (group?.FirstInstance ?? -1);
         public int? Slot => ((group is { Dynamic: true }) ? group.Slot : null);
 
         public SdfMeshDraw Pose(SdfFrame frame, ref int matrices) {
@@ -502,42 +384,6 @@ public sealed class SdfMeshDresser(SdfMeshPathBake bake) : IDisposable {
         }
     }
 
-    // The frame Dress last dressed and what it returned, which a still frame source capturing the same frame takes again
-    // without a new frame.
-    private SdfFrame? m_dressedSource;
-    private SdfFrame? m_dressed;
-    private SdfDressedPickMap? m_dressedMap;
-
-    // The group each chunk of a chunked group's mesh is drawn for, as the last dressing listed them.
-    private readonly Dictionary<object, SdfMeshBakeGroup> m_chunkOwners = new(comparer: ReferenceEqualityComparer.Instance);
-
-    private SdfDressedPickMap? m_spareMap;
-
-    // Whether a pick map extends a host map over exactly the dressed draws.
-    private bool Dresses([NotNullWhen(returnValue: true)] SdfDressedPickMap? map, ISdfPickMap hostMap, int hostDraws) => (
-        (map is not null) &&
-        ReferenceEquals(objA: map.Inner, objB: hostMap) &&
-        (map.HostDraws == hostDraws) &&
-        map.Matches(draws: m_draws)
-    );
-
-    /// <summary>Releases the dresser's retained mesh claims. The bake and its library remain caller-owned.</summary>
-    public void Dispose() {
-        if (m_disposed) { return; }
-        m_disposed = true;
-        m_drawClaims?.Dispose();
-        m_drawClaims = null;
-        m_draws.Clear();
-        m_drawBindings.Clear();
-        m_bindingsByOwner.Clear();
-        m_dressedGroups.Clear();
-        m_chunkOwners.Clear();
-        m_drawnCopies = [];
-        m_drawnCopyFrames = [];
-        m_bindingProgram = null;
-        m_dressed = null;
-        m_dressedSource = null;
-        m_dressedMap = null;
-        m_spareMap = null;
-    }
 }
+
+

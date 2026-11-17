@@ -32,6 +32,11 @@ public sealed class OffscreenBoundaryLawTests {
 
             return true;
         }
+        public bool TryWait(TimeSpan duration, WaitHandle wake, out bool woken) {
+            woken = wake.WaitOne(millisecondsTimeout: 0);
+
+            return (woken || TryWait(duration: duration));
+        }
     }
     private sealed class Simulation : IFixedStepSimulation {
         public bool AwaitsFrame => false;

@@ -224,6 +224,17 @@ polls and the timer paces, until a poll sees a present displayed. The wait
 takes the swapchain under external synchronization, so it stays on the
 presenting thread and every call has a bound.
 
+The timer's wait is serviced (`HostWaits.Pace`). The pump thread sleeps on
+the pacer's deadline and one wake event together, in one operating-system
+wait on the high-resolution timer and the event (`IPrecisionWaiter.TryWait`
+with a wake), and runs the work registered for it (`HostWaits.Serve`, a
+`WaitService`) each time the event is set or the time a service asked for
+comes, then sleeps again until the deadline. The renderer's background GPU
+work registers one, so a job that completes between two frames is answered
+and the next taken then, not at the next frame; a service that asks to run
+again is run no sooner than `HostWaits.LeastServiceDelay`, so the wait never
+spins. The swap chain's own wait is a native one and is not serviced.
+
 Presents retire only as the desktop compositor composes, so a display Windows
 has powered off paces the window, not the frame. The compositor then retires
 presents on a slow fallback: the frame-latency wait runs to its 100 ms bound,

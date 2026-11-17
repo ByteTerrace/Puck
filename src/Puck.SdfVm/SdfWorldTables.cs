@@ -402,7 +402,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         }
         // The background GPU work records and submits through the device's own services: its submissions are no upload
         // of the tables' ledger.
-        m_gpuWork = scope.Own(created: new SdfGpuWork(budget: m_meshGrant.Selector.Work, device: device, name: ObjectOwner));
+        m_gpuWork = scope.Own(created: new SdfGpuWork(device: device, name: ObjectOwner, selector: m_meshGrant.Selector));
         // The mesh region's owed words land through it (SdfWorldTables.MeshLanding.cs).
         m_gpuWork.Add(client: new MeshLanding(tables: this));
         m_gpuWork.Add(client: new MeshRowsReadback(tables: this));

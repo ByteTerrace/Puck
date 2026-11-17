@@ -394,13 +394,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public SdfMeshIrradianceScene? DiagnosticScene(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
         lock (m_gate) {
-            var index = 0;
+            var counts = new Dictionary<(SdfMesh Mesh, Matrix4x4 ObjectToWorld, int Material), int>(comparer: DrawKeyComparer.Instance);
 
-            foreach (var draw in frame.MeshDraws) {
-                if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
-                if ((index >= m_diagnosticCount) || (draw != m_diagnosticDraws[index++])) { return null; }
+            for (var i = 0; (i < m_diagnosticCount); i++) {
+                var draw = m_diagnosticDraws[i];
+                var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+                counts[key] = (counts.GetValueOrDefault(key: key) + 1);
             }
-            return ((index == m_diagnosticCount) ? m_scene?.Acquire() : null);
+            var draws = frame.DrawRows;
+
+            for (var row = 0; (row < draws.Count); row++) {
+                var draw = draws[row];
+
+                if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+                var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
+
+                if (!counts.TryGetValue(key: key, value: out var left)) { return null; }
+                if (left == 1) { counts.Remove(key: key); } else { counts[key] = (left - 1); }
+            }
+            return ((counts.Count == 0) ? m_scene?.Acquire() : null);
         }
     }
 
@@ -430,9 +443,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     private int m_keyValue;
     private int m_keyStatic;
+    private int m_keyExtent;
+    private long m_skipKeyThrough;
 
     private int[] m_drawKeys = [];
     private bool[] m_drawStatic = [];
+    private readonly HashSet<int> m_staticRows = [];
     private readonly Puck.Abstractions.Gpu.GpuUploadRuns m_keyRuns = new(capacity: Puck.Abstractions.Gpu.GpuRegion.MaxCopyRuns);
 
     private Task? m_build;
@@ -1412,65 +1428,43 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         return StartSceneBuild(draws: draws, frame: frame, key: key);
     }
-    // The key of the frame's static draws, in order, and their count. The key folds each static draw's own hash (its mesh,
-    // matrix and material), and it follows the producer's draw journal: when the list is the one last folded and the
-    // journal covers every change since, only the rows it names are hashed again, and a key whose rows all hash as they
-    // did, static as they were, is the key it was. Any other frame folds the whole list.
+    // An order-independent sum, updated only for cursor-named rows; packing leaves the scene standing.
     private (int Key, int Draws) StaticKey(SdfFrame frame) {
-        var meshDraws = frame.MeshDraws;
-        var journal = frame.MeshDrawChanges;
+        var draws = frame.DrawRows;
+        var whole = m_keyCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, draws.Roster, draws.Count,
+            frame.MeshDrawsRevision, m_keyRuns);
 
-        if (
-            !m_keyCursor.Collect(journal, frame.MeshDrawChangesSerial, meshDraws, meshDraws.Count,
-                frame.MeshDrawsRevision, m_keyRuns) &&
-            JournalKeepsKey(meshDraws: meshDraws)
-        ) {
-            m_keyCursor.Commit();
-
-            return (m_keyValue, m_keyStatic);
+        if (whole) {
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneWhole);
+            m_keyValue = 17; m_keyStatic = 0;
+            Array.Clear(array: m_drawStatic); Array.Clear(array: m_drawKeys);
+            m_staticRows.Clear();
         }
-
-        var key = 17;
-        var draws = 0;
-
-        if (m_drawKeys.Length != meshDraws.Count) {
-            m_drawKeys = new int[meshDraws.Count];
-            m_drawStatic = new bool[meshDraws.Count];
+        if (m_drawKeys.Length < draws.Count) { var size = Math.Max(val1: draws.Count, val2: (2 * m_drawKeys.Length)); Array.Resize(array: ref m_drawKeys, newSize: size); Array.Resize(array: ref m_drawStatic, newSize: size); }
+        for (var row = draws.Count; (row < m_keyExtent); row++) {
+            if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
+            m_drawStatic[row] = false; m_drawKeys[row] = 0;
+            m_staticRows.Remove(item: row);
         }
-        for (var index = 0; (index < meshDraws.Count); index++) {
-            var draw = meshDraws[index];
-            var isStatic = SdfMeshIrradianceScene.IsStatic(draw: in draw);
-
-            m_drawStatic[index] = isStatic;
-            if (!isStatic) { continue; }
-            m_drawKeys[index] = DrawKey(draw: in draw);
-            key = HashCode.Combine(value1: key, value2: m_drawKeys[index]);
-            draws++;
-        }
-
-        m_keyCursor.Commit();
-        m_keyValue = key;
-        m_keyStatic = draws;
-
-        return (key, draws);
-    }
-    // Whether every row the collected journal names leaves the static key as it was: not static now nor at the last
-    // fold, or static both times with the hash it had.
-    private bool JournalKeepsKey(IReadOnlyList<SdfMeshDraw> meshDraws) {
         for (var run = 0; (run < m_keyRuns.Count); run++) {
-            var end = Math.Min(val1: meshDraws.Count, val2: (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run)));
+            for (var row = m_keyRuns.Start(index: run); (row < (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run))); row++) {
+                if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
+                var draw = draws[row];
+                var isStatic = ((draw.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in draw));
 
-            for (var index = m_keyRuns.Start(index: run); (index < end); index++) {
-                var draw = meshDraws[index];
-                var isStatic = SdfMeshIrradianceScene.IsStatic(draw: in draw);
-
-                if ((isStatic != m_drawStatic[index]) || (isStatic && (DrawKey(draw: in draw) != m_drawKeys[index]))) {
-                    return false;
-                }
+                m_drawStatic[row] = isStatic;
+                if (isStatic) { m_staticRows.Add(item: row); } else { m_staticRows.Remove(item: row); }
+                m_drawKeys[row] = (isStatic ? DrawKey(draw: in draw) : 0);
+                if (isStatic) { m_keyValue = unchecked((m_keyValue + m_drawKeys[row])); m_keyStatic++; }
             }
         }
-
-        return true;
+        m_keyExtent = draws.Count;
+        if (SdfRowChecks.SkipSceneRequested) { m_skipKeyThrough = ((frame.MeshDrawChangesSerial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipSceneRequested = false; }
+        if (frame.MeshDrawChangesSerial <= m_skipKeyThrough) {
+            SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneSkipped);
+            // Leave this consumer's cursor at its previous endpoint until its history expires.
+        } else { m_keyCursor.Commit(); }
+        return (m_keyValue, m_keyStatic);
     }
     private static int DrawKey(in SdfMeshDraw draw) => DrawKeyComparer.Instance.GetHashCode(obj: (draw.Mesh, draw.ObjectToWorld, draw.Material));
     // Apart from RefreshScene, since the build's closure is made on entry to the method holding it, and nearly every frame
@@ -1481,14 +1475,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         // The frame's static draws alone, the scene's whole input, into the spare array (indexed: an interface list's
         // enumerator is an allocation). Its tail past them is cleared, so the pooled array keeps no earlier draw's mesh.
-        var meshDraws = frame.MeshDraws;
+        var meshDraws = frame.DrawRows;
         var snapshot = ((m_snapshotDraws.Length < draws) ? RentedArrays.Grow(array: m_snapshotDraws, keep: 0, minimumLength: draws) : m_snapshotDraws);
         var count = 0;
 
-        for (var index = 0; (index < meshDraws.Count); index++) {
+        foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
-            if (!SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
             if (count == snapshot.Length) { snapshot = RentedArrays.Grow(array: snapshot, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
             snapshot[count++] = draw;
         }

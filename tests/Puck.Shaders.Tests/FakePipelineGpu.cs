@@ -906,6 +906,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public bool IsSignaled => (Abandoned ? throw new GpuSubmissionAbandonedException() : (!gpu.QueueHeld && (Number <= gpu.CompletedThrough)));
 
         public void Dispose() => created.Dispose();
+        // The fake queue has no completion to hand a signal to: it sets the signal, so whoever waits on it polls.
+        public void SignalOnCompletion(EventWaitHandle signal) => _ = signal.Set();
         public void Wait() {
             if (Abandoned) {
                 Abandoned = false;

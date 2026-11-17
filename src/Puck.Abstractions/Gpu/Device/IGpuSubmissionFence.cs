@@ -23,4 +23,14 @@ public interface IGpuSubmissionFence : IDisposable {
     /// <exception cref="GpuSubmissionAbandonedException">The submission never reached the queue, so nothing it recorded
     /// ran; the fence is drained for reuse.</exception>
     void Wait();
+    /// <summary>Asks for <paramref name="signal"/> to be set once the submission outstanding on this fence has retired,
+    /// so a thread asleep on the signal (the host's serviced pacer wait, <c>HostWaits.Pace</c>) wakes for the completion
+    /// instead of finding it at its next poll. The signal is set at once when no submission is outstanding, or the
+    /// outstanding one has retired, was abandoned or faulted, and it may be set before the submission retires (a lost
+    /// device sets it), so whoever wakes reads <see cref="IsSignaled"/>. Asked once for each armed submission, on the
+    /// thread that submits; it never blocks.</summary>
+    /// <param name="signal">The event to set. It outlives the submission: a backend may hold its native handle until
+    /// the submission retires.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="signal"/> is <see langword="null"/>.</exception>
+    void SignalOnCompletion(EventWaitHandle signal);
 }
