@@ -128,6 +128,82 @@ public sealed class HostWaitsLawTests {
         Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: Body));
     }
     [Fact]
+    public void ThePacersWaitServesWhenWokenAndWhenAServiceAsksAndEndsOnItsDeadline() {
+        OnOwnThread(body: () => {
+            var runs = 0;
+            var asked = new List<TimeSpan>();
+            TimeSpan? next = null;
+            using var service = HostWaits.Serve(reason: Reason, service: remaining => {
+                runs++;
+                asked.Add(item: remaining);
+
+                return next;
+            });
+            var time = TimeProvider.System;
+            var frequency = time.TimestampFrequency;
+
+            // With nothing waking it, the wait serves once as it begins and sleeps to the deadline.
+            var started = time.GetTimestamp();
+
+            HostWaits.Pace(deadlineTimestamp: (started + (frequency / 20L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: 1, actual: runs);
+            Assert.True(condition: (time.GetTimestamp() >= (started + (frequency / 20L))), userMessage: "the wait ended before its deadline");
+            Assert.True(condition: (asked[0] <= TimeSpan.FromMilliseconds(value: 50)), userMessage: $"the service was told {asked[0]} remained of a 50 ms wait");
+
+            // A wake from another thread runs the services again inside the wait, which still ends on its deadline.
+            runs = 0;
+            started = time.GetTimestamp();
+
+            var waker = new Thread(start: () => {
+                Thread.Sleep(millisecondsTimeout: 20);
+                service.Wake();
+            }) { IsBackground = true };
+
+            waker.Start();
+            HostWaits.Pace(deadlineTimestamp: (started + (frequency / 5L)), precisionWaiter: null, time: time);
+            waker.Join();
+            Assert.Equal(expected: 2, actual: runs);
+            Assert.True(condition: (time.GetTimestamp() >= (started + (frequency / 5L))), userMessage: "a wake ended the wait before its deadline");
+
+            // A service that asks to run again is run again without a wake, and no sooner than the least delay: a
+            // service asking for none at all cannot spin the wait.
+            runs = 0;
+            next = TimeSpan.Zero;
+            started = time.GetTimestamp();
+            HostWaits.Pace(deadlineTimestamp: (started + (frequency / 20L)), precisionWaiter: null, time: time);
+            Assert.True(condition: (runs >= 2), userMessage: $"a service that asked to run again ran {runs} time(s)");
+            Assert.True(condition: (runs <= ((int)(TimeSpan.FromMilliseconds(value: 50) / HostWaits.LeastServiceDelay) + 2)), userMessage: $"the wait ran its service {runs} times in 50 ms");
+
+            // A disposed registration is served no more, and the wait is then a plain sleep to its deadline.
+            service.Dispose();
+            runs = 0;
+            started = time.GetTimestamp();
+            HostWaits.Pace(deadlineTimestamp: (started + (frequency / 50L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: 0, actual: runs);
+        });
+    }
+    [Fact]
+    public void AWakeSetBeforeThePacersWaitIsServedNotLost() {
+        OnOwnThread(body: () => {
+            var runs = 0;
+            using var service = HostWaits.Serve(reason: Reason, service: _ => {
+                runs++;
+
+                return null;
+            });
+            var time = TimeProvider.System;
+
+            // Set while the thread was busy with its iteration: the wait serves as it begins and again for the wake.
+            service.Wake();
+            HostWaits.Pace(deadlineTimestamp: (time.GetTimestamp() + (time.TimestampFrequency / 50L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: 2, actual: runs);
+            // A wait whose deadline has passed serves nothing and returns at once.
+            runs = 0;
+            HostWaits.Pace(deadlineTimestamp: time.GetTimestamp(), precisionWaiter: null, time: time);
+            Assert.Equal(expected: 0, actual: runs);
+        });
+    }
+    [Fact]
     public void AnAdmissionThatExpiresTookNoPermit() {
         OnOwnThread(body: () => {
             using var semaphore = new SemaphoreSlim(initialCount: 0, maxCount: 1);

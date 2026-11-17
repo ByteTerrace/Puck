@@ -206,6 +206,55 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Equal(actual: jobs, expected: 1);
     }
     [Fact]
+    public void TheWorkBudgetsDebtIsBoundedWhateverAJobReports() {
+        var now = Stopwatch.Frequency;
+        var budget = new SdfGpuWorkBudget(clock: () => now);
+
+        budget.Accrue();
+        budget.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
+
+        // A timestamp pair read end before start wraps to nearly the counter's range: seconds no job in flight for a
+        // few milliseconds ran. The job is charged its estimate, and the measurement is counted.
+        var charged = budget.SettleGpu(estimate: SdfGpuWork.FrameShareSeconds, inFlight: 0.004, measured: 1.8e10);
+
+        Assert.Equal(expected: 0.004, actual: charged);
+        Assert.Contains(expectedSubstring: "clamped:1,", actualString: budget.Describe());
+        Assert.True(condition: (budget.GpuCredit > -SdfGpuWork.FrameShareSeconds));
+        // Neither is a negative measurement or one that is not a number, and a measurement within the time in flight is
+        // charged as it reads.
+        Assert.Equal(expected: 0.002, actual: SdfGpuWorkBudget.MeasuredWithin(clamped: out var clamped, estimate: 0.002, inFlight: 1.0, measured: -5.0));
+        Assert.True(condition: clamped);
+        Assert.Equal(expected: 0.002, actual: SdfGpuWorkBudget.MeasuredWithin(clamped: out clamped, estimate: 0.002, inFlight: 1.0, measured: double.NaN));
+        Assert.True(condition: clamped);
+        Assert.Equal(expected: 0.25, actual: SdfGpuWorkBudget.MeasuredWithin(clamped: out clamped, estimate: 0.002, inFlight: 1.0, measured: 0.25));
+        Assert.False(condition: clamped);
+
+        // Charges past the debt's floor are dropped and counted: jobs that honestly ran long, an estimate that is
+        // garbage, a charge that is not a number. The credit never falls below the floor.
+        for (var job = 0; (job < 8); job++) { _ = budget.SettleGpu(estimate: 0.0, inFlight: 1.0, measured: 1.0); }
+        budget.ChargeGpu(seconds: 1e30);
+        budget.ChargeGpu(seconds: double.NaN);
+        Assert.Equal(expected: -SdfGpuWorkBudget.MostDebtSeconds, actual: budget.GpuCredit);
+        Assert.DoesNotContain(expectedSubstring: "floored:0]", actualString: budget.Describe());
+
+        // So the work is held for the debt over the share at most, never for good: the budget says when it holds
+        // again, and holds then.
+        budget.Want();
+        Assert.False(condition: budget.Holds);
+
+        var wait = budget.UntilHolds;
+
+        Assert.InRange(actual: wait.TotalSeconds, high: ((SdfGpuWorkBudget.MostDebtSeconds / SdfGpuWork.GpuShare) + 0.001), low: (SdfGpuWorkBudget.MostDebtSeconds / SdfGpuWork.GpuShare));
+        // Accruals at a serviced host's pace: the credit is positive once the wait has passed.
+        for (var step = 0; ((step < 400) && !budget.Holds); step++) {
+            now += (Stopwatch.Frequency / 100);
+            budget.Accrue();
+            budget.Want();
+        }
+        Assert.True(condition: budget.Holds);
+        Assert.Equal(expected: TimeSpan.Zero, actual: budget.UntilHolds);
+    }
+    [Fact]
     public void AReportMadeBeforeTheLimitWasRestoredDoesNotRaiseTheBias() {
         var (account, _, segments) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);

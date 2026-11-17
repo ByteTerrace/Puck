@@ -21,8 +21,8 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
     private const uint KeyRead = 0x00020019u;
     private const int MaxDisplayConfigQueryAttempts = 3;
 
-    private Win32HighResolutionWaitableTimer? m_precisionTimer;
-    private bool m_precisionTimerResolved;
+    private Win32PrecisionWaiter? m_precisionWaiter;
+    private bool m_precisionWaiterResolved;
     private ulong m_displayConfigurationVersion;
     private nint m_lastMonitorHandle;
 
@@ -90,24 +90,22 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo, IPrecision
         return DisplayTimingSnapshot.Unknown;
     }
     /// <inheritdoc/>
-    public bool TryWait(TimeSpan duration) {
-        if (!m_precisionTimerResolved) {
-            m_precisionTimer = Win32HighResolutionWaitableTimer.TryCreate();
-            m_precisionTimerResolved = true;
+    public bool TryWait(TimeSpan duration) => (PrecisionWaiter()?.TryWait(duration: duration) ?? false);
+    /// <inheritdoc/>
+    public bool TryWait(TimeSpan duration, WaitHandle wake, out bool woken) {
+        woken = false;
+
+        return (PrecisionWaiter()?.TryWait(duration: duration, wake: wake, woken: out woken) ?? false);
+    }
+
+    // The window's waiter, created on its first wait; null where the platform has no high-resolution timer.
+    private Win32PrecisionWaiter? PrecisionWaiter() {
+        if (!m_precisionWaiterResolved) {
+            m_precisionWaiter = Win32PrecisionWaiter.TryCreate();
+            m_precisionWaiterResolved = true;
         }
 
-        if (m_precisionTimer is null) {
-            return false;
-        }
-
-        if (duration > TimeSpan.Zero) {
-            _ = m_precisionTimer.WaitOne(
-                cancellationWaitHandle: null,
-                dueTime: duration
-            );
-        }
-
-        return true;
+        return m_precisionWaiter;
     }
 
     private void OnDisplayConfigurationChanged() {

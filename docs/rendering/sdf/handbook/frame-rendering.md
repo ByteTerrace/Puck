@@ -1011,7 +1011,10 @@ segments from it). The work keeps a ring of slots, each submitted on its own
 fence and refilled once its job completed and its samples were copied off, and
 takes at most `SdfGpuWork.GpuShare` of the GPU's time by each job's own
 timestamps, so a cold bake samples as fast as its groups ask for lattices
-rather than one batch a rendered frame. Every lattice is chunked to
+rather than one batch a rendered frame. The work is stepped at the frame's
+pumps and inside the host's wait between frames (`HostWaits.Pace`), which a
+job's fence, a readied lattice and the budget's next credit end early, so a
+slow present does not pace it either. Every lattice is chunked to
 `SdfMeshPathBake.LatticeTaps` field evaluations (a gradient sample counting
 five), so the meshes depend on neither the chunking nor the frame rate. A take
 takes its lattices in the groups' order, not round robin, so the groups finish in
@@ -1439,7 +1442,9 @@ that failed, the tables disposed mid-bake) returns its lattices to their groups,
 which dispatch them again, and the line reports those samples as `discarded`,
 so `samples` less `discarded` counts the samples that answered. The done line's
 `gpu-work=[…]` field counts the jobs, their measured GPU time, the wall time a
-job was in flight and the share of it the GPU spent on them. Until a group's
+job was in flight and the share of it the GPU spent on them, and the steps
+taken inside the host's wait with the jobs they submitted (`services`,
+`service-jobs`). Until a group's
 first mesh lands, the group draws nothing.
 
 The walk merges the world-segment list with the selected instances' ranges and

@@ -34,7 +34,7 @@ corrected in the same change.
 | A native window, its events and its surface | `INativeWindow`, `INativeWindowFactory`, `INativeWindowBackend`; `Win32NativeWindow`, `WaylandNativeWindow`, `XcbNativeWindow`; `ConfiguredNativeWindow` as the headless stand-in | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Which display kind to open on Linux | `NativeDisplayEnvironment`, `NativeDisplayKindSelector` (environment variables only) | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Variable refresh range, display timing, colour space, keeping the display awake | `IDisplayTimingInfo` on `Win32NativeWindow` (`Win32NativeWindow.Vrr.cs`), `EdidVariableRefreshParser`, `Win32DisplayColorSpaceProbe`, the display power request in `Win32NativeWindow.DisplayPower.cs` | [host pacing](../../../docs/reference/hosting.md#host-pacing) |
-| Wait until a deadline without spinning or raising timer resolution | `IPrecisionWaiter`: `Win32HighResolutionWaitableTimer` (the window implements it; `Win32PrecisionWaiter` serves a headless host through `AddWindowsPrecisionWaiter`), consumed by `HostWaits.Until`, the wait door's pacer form | [below](#play-nice-with-the-host) |
+| Wait until a deadline without spinning or raising timer resolution, or until an event ends the wait early | `IPrecisionWaiter`: `Win32PrecisionWaiter` over `Win32HighResolutionWaitableTimer` (the window holds one; `AddWindowsPrecisionWaiter` serves a headless host), consumed by `HostWaits.Until` and by `HostWaits.Pace`, the pacer's serviced wait, which sleeps on the timer and the pump thread's wake in one operating-system wait | [below](#play-nice-with-the-host) |
 | Unmanaged memory | `IAllocator`, `MimallocAllocator`, registered by `AddPuckAllocator` | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Clipboard | `IClipboardService`: `Win32ClipboardService`; `NullClipboardService` on Linux | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Mouse, keyboard and pointer lock at the OS boundary | `Win32NativeWindow` messages, `Win32RawInput` (relative motion per mouse), `Win32PointerLock`, `WindowInputQueue` | [pointer input](../../../src/Puck.Platform.Windows/README.md#pointer-input) |
@@ -83,6 +83,13 @@ process-wide timer resolution. In this area that means:
   `HostWaits.Until` re-reads its clock after each wait and falls
   back to a one-millisecond sleep where no waiter exists. A busy loop on a
   stopwatch is a defect, however short.
+- Work the pump thread should take up while it waits between frames registers
+  with the door (`HostWaits.Serve`) and is woken through its `WaitService`;
+  the pacer's wait (`HostWaits.Pace`) then waits on the timer and that wake
+  together (`IPrecisionWaiter.TryWait` with a wake). A service that asks to
+  run again is run no sooner than `HostWaits.LeastServiceDelay`, so a serviced
+  wait sleeps between runs. Only the pacer's form services: a wait inside an
+  iteration never re-enters a service.
 - Swap-chain waits pace a windowed host ([host pacing](../../../docs/reference/hosting.md#host-pacing));
   the timer only bounds what the swap chain cannot.
 - Camera graphs own their native objects on one MTA worker thread, joined with

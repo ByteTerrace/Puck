@@ -12,4 +12,15 @@ public interface IPrecisionWaiter {
     /// <param name="duration">The relative duration to wait; non-positive returns immediately.</param>
     /// <returns><see langword="true"/> if the high-resolution wait was used; <see langword="false"/> if unsupported (the caller should fall back to a coarse sleep).</returns>
     bool TryWait(TimeSpan duration);
+    /// <summary>Blocks until <paramref name="duration"/> elapses or <paramref name="wake"/> is set, whichever comes
+    /// first: one operating-system wait on the platform's high-resolution timer and the event together, so a serviced
+    /// wait (<c>HostWaits.Pace</c>) ends early for work without giving up the timer's precision at its deadline.</summary>
+    /// <param name="duration">The relative duration to wait; non-positive returns immediately, reporting whether the
+    /// event was already set.</param>
+    /// <param name="wake">The event that ends the wait early. A set auto-reset event is consumed by the wait it
+    /// ends.</param>
+    /// <param name="woken">Whether <paramref name="wake"/> ended the wait rather than the duration.</param>
+    /// <returns><see langword="true"/> if the high-resolution wait was used; <see langword="false"/> if unsupported (the
+    /// caller falls back to a coarse wait on the event).</returns>
+    bool TryWait(TimeSpan duration, WaitHandle wake, out bool woken);
 }
