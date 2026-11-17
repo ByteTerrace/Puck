@@ -336,7 +336,9 @@ done line; a nested residency's done line is insufficient.
   switches it on.
 - The worker returns, never spins: when the budget leaves a probe's trace
   unfunded it waits for the next grant, and a lighting-converged frame asks it to yield
-  at its next batch and takes over its work (`m_yield`, the spent-budget law).
+  at its next batch and its drain takes over its work (`m_yield`, `AwaitYield`, the spent-budget law).
+  One worker task runs at a time, the drain included, so the worker's scratch
+  (`m_candidates`, `m_results`, the GPU arrays) has one owner.
 - The cube is two parts. The local part (the traced point and spot lights'
   bounce under their shadow rays, and emission) is kept per probe with the
   lighting's local version, which advances only when those lights, the gains,
@@ -572,7 +574,17 @@ done line; a nested residency's done line is insufficient.
   differ from the last drain or asynchronous work relit since. Its light is a
   function of those alone, never of bounce asynchronous frames left; the law
   `AConvergedLightingFrameRendersTheWindowTracedToTheEnd` compares a fresh volume's
-  words with a warmed one's.
+  words with a warmed one's. The scene build, the refill and the drain run on
+  the pool, and the frame waits for each through the wait door (`HostWaits`)
+  under one stall deadline, which the host loop's pump allowance clips to a
+  slice: a frame whose work outlasts it returns `Settling`, its residency
+  answers waiting with `SdfMeshIrradiance.Convergence` (the stage, and the
+  drain's pass and probes), and the loop holds the tick. A GPU trace's worker is
+  never waited for, since its jobs advance only as the frame pumps the
+  residency's GPU work. A drain stops at its next batch once anything in
+  `DrainKey` changes (`DrainStands`) and records nothing drained; the next
+  drain's first pass relights from no bounce, so the stopped one leaves nothing
+  in its light (`AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged`).
 - A record is `SdfMeshIrradianceProbe.ProbeWords` words: the key, sky shares,
   radiance cube, light bits, origin and sky-light cube before
   `SdfMeshIrradianceProbe.DepthWord`, then the packed first-hit surface words and

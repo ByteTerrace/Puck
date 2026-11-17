@@ -862,14 +862,12 @@ control plane, names what breaks that promise today, and gives waits one door.
   drains while the frame is owed.
 - **What breaks the promise is an iteration that does not come back.** The
   drain runs once an iteration, so the control plane is as late as the longest
-  iteration. The known case: a lockstep frame that converges lighting
-  (`PresentPacingControl.ConvergesLighting`) blocks inside produce on the scene
-  build and the refill (`SdfMeshIrradiance.Stage`'s converging branch). Where
-  the trace runs on the CPU (`GpuTrace` is null) it also waits for the worker
-  and then traces the window to the end on the frame thread; with a GPU trace
-  the drain runs on a worker (`StartWorker`) and the frame waits only for the
-  scene and the refill. No console line, MCP call or input sample is read until
-  produce returns.
+  iteration. A lockstep frame that converges lighting
+  (`PresentPacingControl.ConvergesLighting`) no longer is one: its scene build,
+  refill and drain run on the pool, the frame waits for each through the door
+  (`SdfMeshIrradiance.AwaitScene`, `AwaitRefill`, `AwaitYield`, `AwaitWorker`),
+  and past the pump's allowance it answers waiting with
+  `SdfMeshIrradiance.Convergence`. The waits below are the cases left.
 - **Three more waits sit in a windowed iteration.** The pacing wait asks the
   swap chain (`ISwapChainPacing.TryWaitForFrame`), which waits natively for up
   to 100 ms on Direct3D 12 (`DirectXSurfaceCompositor.FrameLatencyWaitTimeoutMilliseconds`,
@@ -1115,8 +1113,9 @@ and its operation, never of the file the wait sits in.
   and a fresh pass starts from the new versions, so a half-done pass is never
   published or mixed with another. A frame completes when its logical work
   does, which may span host iterations; sections 1 and 3 say "the same frame"
-  in that sense. Until the pool exists, the convergence drain is the same work
-  in bounded slices on the pump.
+  in that sense. Until the pool exists, the convergence drain runs on the
+  irradiance volume's one worker task and the pump waits for it a slice at a
+  time (C0.3, below).
 - **Published values need no wait.** A pump-thread wait that exists only to
   read what another thread built is replaced by a publication, not bounded:
   `PublishBuffer<T>` and `PublishArena<T>` readers never wait or retry. The
@@ -1170,7 +1169,7 @@ Reached from the pump thread inside an iteration:
 
 | Wait | Today | Under C0 |
 |---|---|---|
-| `SdfMeshIrradiance.cs:664`, `:724`, `:736` | A converging lockstep frame blocks on the scene build and the refill, and with a CPU trace on the worker, then drains on the frame thread | `FrameRender.Waiting` naming the stage and its progress; the drain runs in slices of one wait budget an iteration and the tick is held between them |
+| `SdfMeshIrradiance.Stage`'s converging branch | Built in C0.3. The scene build, the refill and the drain run on the pool; the frame waits for each through the door, clipped to the pump's allowance | `FrameRender.Waiting` naming the stage and its progress (`SdfMeshConvergence`); the tick is held between iterations |
 | `WorldFramePresenter.cs:528` (`AdoptStaticField` with `wait`) | Blocks on the static field's build | The build publishes; adoption reads the publication, and a frame that needs it answers waiting |
 | `SdfCompositionFrameSource.cs:275` (`WaitsForBuild`), `:566` (a layout change) | Blocks on the program build | The same: published program, or waiting with the reason |
 | `SdfWorldResidency.cs:434` | Waits for a reload's kernel load under a cancellation token | The door, with the caller's deadline |
@@ -1251,7 +1250,7 @@ that clears its last site; the compiler's list says which step that is.
 |---|---|---|
 | **C0.1** | Built. `HostWaits` and its forms, `WaitReason`, `WaitDeadline`, `WaitOutcome`, `WaitConsumer`, the pump allowance and the wait records, in `Puck.Abstractions`; `WAIT001` behind `PuckWaitRule`, with every managed family, method groups and delegate conversions, the completion proof and `ConfinedDirectory.AcquireLock` | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a pump-thread wait is clipped to the iteration's allowance; a consumer claim on the pump thread and a consumer used on another thread are refused; a completed wait allocates 0 B (`AllocationWindow`). Analyzer laws for a method group, a delegate conversion and the completion proof. The compiler's list for `Puck.Launcher`, `Puck.Hosting`, `Puck.Machines` and `Puck.Abstractions` against the survey's, each difference explained. |
 | **C0.2** | Built. The control phase mints the iteration (`HostIteration` a `ref struct` checked against the loop's phase); the pump allowance opened at each control phase; the pacer's sleep through `HostWaits.Until`; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap that matches the iteration interval's distribution, any excess coming from the drain's own position in its iteration (a collection before the drain adds to it), and a session's own hold holds only that session (`TextCommandSourceTests.ASessionsOwnHoldHoldsOnlyThatSession`), which is what lets a second control attachment answer while the first holds on `world.wait`; the MCP adapter runs one call at a time per World, so two attachments cannot be raced through it. |
-| **C0.3** | The convergence waits become waiting answers and the drain runs in slices, on the CPU-trace and GPU-trace paths both | At a lockstep walkthrough tour stop that converges lighting, a console verb issued during the drain answers within one iteration (the control gap stays under the wait budget plus a pacer period), and the stop's still against the build before it, compared with the tolerance above. A windowed leg on both backends. |
+| **C0.3** | Built. A converging frame's scene build, refill and drain run on the pool, on the CPU-trace and GPU-trace paths both; the frame waits for each through the door under one stall deadline counted from the convergence's first wait (`ConvergenceStall`), which the pump's allowance clips to a slice, and otherwise answers waiting with `SdfMeshConvergence` (stage and drain progress) while the loop holds the tick. A GPU trace's worker is read, never waited for, since its jobs advance only as the frame pumps the residency's GPU work. The held version rule's one test is `SdfMeshIrradiance.DrainStands`: a drain's every batch and its record of what it drained pass it, and its fresh successor's first pass relights from no bounce | The law `AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged`: with no allowance, the drain spans iterations with its waits expiring on the pump, and a lighting change mid-drain converges to a fresh volume's words. Owed, windowed (presentation `none` stages no irradiance): at a lockstep walkthrough stop that converges lighting, a console verb during the drain answers within one iteration (the control gap under the wait budget plus a pacer period), and the stop's still against the build before it, on both backends. |
 | **C0.4** | The static field, composition program and pipeline lease waits become publications or waiting answers; `world.wait`'s release names the standing reason | A `world.reload` that changes the layout: no control gap over the bound; `world.wait ready 5` issued while a build stands releases with that build's reason in its answer instead of the bare timeout. |
 | **C0.5** | The tick's waits: the drain, the producer's capacity wait and the fork join bounded; the incomplete-tick record, the read view's refusal and the stall deadline; first, the list of read paths that bypass the read view | A law over `QueuedWorkerLifecycle` and the authority with a worker held past its slice: the step answers pending within its budget; a console read, a checkpoint, an attach and a reset issued while the record stands are refused or wait with the stall's reason; the late worker completion finishes the same tick, whose hash equals an unheld run's; a completed drain allocates 0 B. A held fork the same way. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures. |
 | **C0.6** | Fences, device, present and recovery waits through the door: the native entry points in `WAIT001`; `GpuFenceBlocking`'s per-thread blocked time folded into the door's own accounting, so produce-fence reads one mechanism; `TryWaitForFrame` and `BeginFrame` on the pacing deadline; recovery as an operation; the teardown outcomes and the retirement list; the wait budget and stall deadlines set from readings | An armed device loss (`gpu.faults`) during a fence wait recovers across iterations on both backends with the console answering between attempts. A minimized or occluded window keeps the control gap under the wait budget plus a pacer period on both backends. A fence, a readback lease and a build that complete after their teardown deadline leave no device-after-dispose message in stderr and the narration lists what was kept. `host.frames` standing at the lobby: produce-fence against the build before. |
@@ -1269,8 +1268,11 @@ The remaining projects turn `WAIT001` on as J1 migrates each.
   pending operation does when the pacer's rate changes: each slice reads the
   current budget, and the stall deadline stays the one fixed at the operation's
   first slice.
-- Whether slicing the convergence drain changes a converged still beyond the
-  capture noise; C0.3's comparison reads it, and a difference there is a
+- Whether the sliced convergence changes a converged still beyond the capture
+  noise. The drain runs the same batches and passes it ran on the frame thread,
+  and on the CPU trace C0.3's law reads a sliced drain interrupted by a
+  lighting change equal, word for word, to a fresh one; the GPU trace's still
+  is C0.3's owed windowed comparison, and a difference there is a
   lighting-order question for the [illumination plan](illumination.md), not a
   reason to block. It is separate from the correctness condition, which is not
   measured but held: a pending pass keeps the versions it started from and is
