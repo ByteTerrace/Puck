@@ -51,7 +51,6 @@ public sealed partial class SdfMeshIrradiance {
     private Vector4[]? m_gpuLightingRows;
     private int[] m_gpuUpdateAt = [];
     private uint[] m_gpuUpdateData = [];
-    private bool m_gpuDraining;
     // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
     private bool m_republishOwed;
 

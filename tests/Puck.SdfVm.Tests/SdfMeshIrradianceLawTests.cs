@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Reflection;
 using Puck.Abstractions.Cameras;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Waiting;
 using Puck.SignedDistance;
 using Xunit;
 
@@ -768,6 +769,63 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
         Assert.NotEqual(actual: words, expected: landed);
         // Removing the slab retraces only the probes it reached; the rest keep hits a trace would reproduce.
         Assert.InRange(actual: (locked.Counters.Read(kind: SdfMeshIrradiance.Traced) - tracedBefore), low: 1L, high: (SdfMeshIrradiance.MaxProbes - 1L));
+    }
+    /// <summary>THE LAW: on the host loop's pump a lighting-converged frame waits only within its iteration's allowance.
+    /// With no allowance its drain spans iterations, a control phase before each, every frame returning Settling with
+    /// the drain's progress and its waits expiring on the pump through the wait door. A lighting change mid-drain stops
+    /// that pass and leaves nothing in the light the next drain converges to: the words equal those of a fresh volume
+    /// drained under the new lighting alone, off the pump, where the frame waits for its work to the end.</summary>
+    [Fact]
+    public void AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged() {
+        var frame = (Frame() with { ConvergesLighting = true });
+        var lights = new SdfLights();
+
+        lights.Set(index: 0, light: frame.Lights.Records[0] with { Weight = (0.5f * frame.Lights.Records[0].Weight) });
+        lights.Count = 1;
+        lights.ShadowSlots.Configure(fadeCapacity: 0, slots: 0);
+
+        var dimmed = (frame with { Lights = lights });
+        var expected = Array.Empty<uint>();
+
+        _ = Volume().Stage(bakePending: false, frame: dimmed, tier: SdfIndirectTier.High, write: memory => expected = memory.ToArray());
+        Assert.NotEmpty(collection: expected);
+
+        var volume = Volume();
+        var words = Array.Empty<uint>();
+        var phases = 0;
+        var stages = new HashSet<SdfMeshConvergenceStage>();
+        SdfMeshConvergence? interrupted = null;
+        var until = DateTime.UtcNow.AddSeconds(value: 120d);
+
+        try {
+            do {
+                // The control phase: a fresh allowance of nothing, so no wait the frame takes may block.
+                HostWaits.BeginPumpIteration(allowance: TimeSpan.Zero);
+                phases++;
+                _ = volume.Stage(bakePending: false, frame: ((interrupted is null) ? frame : dimmed), tier: SdfIndirectTier.High, write: memory => words = memory.ToArray());
+
+                var convergence = volume.Convergence;
+
+                _ = stages.Add(item: convergence.Stage);
+                if ((interrupted is null) && (convergence is { Stage: SdfMeshConvergenceStage.Drain, Done: > 0 })) {
+                    Assert.True(condition: volume.Settling);
+                    interrupted = convergence;
+                }
+                Thread.Sleep(millisecondsTimeout: 1);
+            } while (((interrupted is null) || volume.Settling) && (DateTime.UtcNow < until));
+        } finally {
+            HostWaits.EndPump();
+        }
+
+        var expired = new WaitRecord[16];
+        var count = HostWaits.Expired(destination: expired);
+
+        Assert.True(condition: (interrupted is { Done: > 0 } drain) && (drain.Done < drain.Total), userMessage: $"stages={string.Join(separator: ',', values: stages)} interrupted={interrupted}");
+        Assert.False(condition: volume.Settling);
+        Assert.Equal(expected: SdfMeshConvergenceStage.None, actual: volume.Convergence.Stage);
+        Assert.True(condition: (phases > 2), userMessage: $"phases={phases}");
+        Assert.Contains(collection: expired.AsSpan(start: 0, length: count).ToArray(), filter: static record => (record.Reason.Subsystem == SdfMeshIrradiance.SourceName) && record.OnPump && (record.BudgetTicks == 0L));
+        Assert.Equal(expected: expected, actual: words);
     }
     /// <summary>A lockstep frame's exposure adapts over its own presentation time since the frame staged before it, never
     /// backward and nothing for the first; any other frame over the host frame's interval.</summary>

@@ -349,8 +349,10 @@ public sealed record SdfFrame(
     /// <see cref="ConvergesLighting"/>. Default <see langword="false"/>.</summary>
     public bool TickLocked { get; init; }
     /// <summary>Whether the renderer finishes this frame's scene, irradiance-window trace and lighting feedback before
-    /// rendering it. False retains ordinary budgeted asynchronous lighting at the same quality settings. Independent of clock
-    /// pinning: a tick-locked throughput run need not synchronously drain indirect light after every tick.</summary>
+    /// rendering it: the work runs off the frame thread, and the frame is held, its residency answering waiting with where
+    /// the work stands (<see cref="SdfMeshIrradiance.Convergence"/>), until it lands. False retains ordinary budgeted
+    /// asynchronous lighting at the same quality settings. Independent of clock pinning: a tick-locked throughput run need
+    /// not hold every tick for its indirect light.</summary>
     public bool ConvergesLighting { get; init; }
 
     /// <summary>The independent origins the irradiance volume admits; the default admits all five categories.</summary>
