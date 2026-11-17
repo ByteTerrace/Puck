@@ -2319,7 +2319,7 @@ export type CreationDocument = {
     isKnownKind?: boolean;
   } | null)[] | null;
   /**
-   * Optional driver whose phase, clamped to [0, 1], uniformly scales the rendered creation about its origin. Its weight blends from the neutral size 1; zero hides it. Presentation only, never collider scale.
+   * Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1], uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.
    */
   sizeBy?: string | null;
 };

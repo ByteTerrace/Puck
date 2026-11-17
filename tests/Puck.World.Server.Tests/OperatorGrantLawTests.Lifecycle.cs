@@ -6,6 +6,36 @@ namespace Puck.World.Server.Tests;
 
 public sealed partial class OperatorGrantLawTests {
     [Fact]
+    public void PeerCommandsHideHostIdentityAndDisconnectClosesTheExistingSession() {
+        WorldAdmissionEntry entry = new(Domain: "https://issuer.test", Subject: "private-owner", Mode: WorldAdmissionTrustMode.OAuth,
+            Disclosure: WorldDisclosureTier.Replica, Grants: [new(WorldCapability.Operate, GrantSubject.All)]);
+        var document = Document();
+        using var row = HostRow.Build("operator", document with { Admission = [entry], PopulationRaw = document.Population with { CapacityRaw = 8, NetworkPlayers = 4 } });
+        var server = row.Server;
+        Assert.True(WorldAdmissionDoor.TryMatchOAuthEntry([entry], entry.Domain, entry.Subject!, out var verdict));
+        Assert.True(server.TryAdmitPeerConnection(verdict, server.Definition.Admission, out var peer, out var reason), reason);
+        IWorldConsoleAuthority authority = new FixedAuthority(row.Instance);
+        var registry = new CommandRegistry([new WorldNetworkCommandModule(authority)], authority: authority);
+        var source = new TextCommandSource(registry);
+        var result = CommandResult.None;
+        using var session = source.CreateSession(peer.Identity, onResult: (_, answer) => result = answer);
+        session.Enqueue("world.peers"); source.Collect();
+        Assert.False(result.IsError, result.Output);
+        Assert.Contains(peer.Identity.Describe(), result.Output);
+        Assert.DoesNotContain(entry.Domain, result.Output);
+        Assert.DoesNotContain(entry.Subject!, result.Output);
+        Assert.DoesNotContain("identity:", result.Output);
+        var closed = false;
+        server.PeerDisconnected += principal => closed = principal == peer.Identity;
+        session.Enqueue($"world.peer.disconnect {peer.Identity.Describe()}"); source.Collect();
+        Assert.False(result.IsError, result.Output);
+        Assert.True(closed);
+        Assert.False(server.IsLivePeer(peer.Identity));
+        session.Enqueue("world.peers"); source.Collect();
+        Assert.True(result.IsError);
+    }
+
+    [Fact]
     public void ARevocationReseedsTheDeliveryCursorWithoutAnArenaWrite() {
         using var fixture = Fixtures.FreshServer(Document());
         var server = fixture.Server;
@@ -71,6 +101,9 @@ public sealed partial class OperatorGrantLawTests {
         using var fixture = Fixtures.FreshServer(document);
         Assert.True(fixture.Server.Grants.IsOperator(Principal.Seat(1)));
         Assert.False(Apply(fixture, new WorldMutation.OfferOwnership(Seat, ownership.Subject, Seat, 100)));
+        Assert.True(Apply(fixture, new WorldMutation.OfferOwnership(Principal.Seat(1), ownership.Subject, Seat, 100)));
+        Assert.False(Apply(fixture, new WorldMutation.SettleOwnership(Seat, ownership.Subject, Reclaim: false)));
+        Assert.False(fixture.Server.Grants.IsOperator(Seat));
     }
 
     private sealed class LiveAuthority(WorldServer server) : ICommandAuthority {

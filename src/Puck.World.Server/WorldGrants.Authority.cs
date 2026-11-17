@@ -41,11 +41,7 @@ public sealed partial class WorldGrants {
     }
 
     /// <summary>Admits and installs a direct grant using the actor's authority before the change.</summary>
-    public bool TryGrant(WorldGrant grant, Principal actor, out string reason) {
-        if (!TryPrepareAuthority(actor, m_authorityDefinition, m_authorityDefinition, [grant], [], false, out var prepared, out reason)) { return false; }
-        prepared!.Install();
-        return true;
-    }
+    public bool TryGrant(WorldGrant grant, Principal actor, out string reason) => TryGrantSet([grant], actor, out reason);
 
     internal bool TryGrantSet(IReadOnlyList<WorldGrant> grants, Principal actor, out string reason) {
         if (!TryPrepareAuthority(actor, m_authorityDefinition, m_authorityDefinition, grants, [], false, out var prepared, out reason)) { return false; }

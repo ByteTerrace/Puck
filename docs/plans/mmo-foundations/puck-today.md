@@ -319,7 +319,7 @@ Every reservation decoded from the federation wire is a peer admission
 incarnation this authority minted at that slot
 (`src/Puck.World.Server/WorldServer.Crossings.cs:43-58`) **[opened]**. The
 architecture page states the consequence **[opened]**
-(`docs/architecture/worlds.md:819-821`):
+(`docs/architecture/worlds.md:841-843`):
 
 ```text
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation
@@ -551,7 +551,7 @@ subject-binding age ceiling and no replay horizon **[opened]**
 
 A live connection is re-verified when the clock second or the admission
 policy changes, swept every second, and evicted for good when it fails
-**[opened]** (`src/Puck.World.Server/WorldPeerHost.cs:2059-2061`, `:58`):
+**[opened]** (`src/Puck.World.Server/WorldPeerHost.cs:2073-2075`):
 
 ```csharp
     // Verification is repeated only when its clock second or immutable policy changes. This preserves the

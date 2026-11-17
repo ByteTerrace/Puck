@@ -247,7 +247,7 @@ public sealed class WorldNetworkCommandModule(IWorldConsoleAuthority authority, 
             bindability: CommandBindability.Unbindable,
             name: "world.peer.disconnect",
             forms: CommandForms.Of("world.peer.disconnect", "<peer>"),
-            description: "Disconnects a peer generation, closes its transports and refuses further commands from that connection.",
+            description: "world.peer.disconnect <peer> disconnects a peer generation, closes its transports and refuses further commands from that connection.",
             valueKind: CommandValueKind.Digital,
             handler: (context, args) => {
                 if (!authority.TryResolve(context, out var instance, out var refusal)) { return CommandResult.Error($"[world.peer.disconnect: {refusal}]"); }

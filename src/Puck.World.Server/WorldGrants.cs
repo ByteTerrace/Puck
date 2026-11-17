@@ -265,6 +265,12 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // human-cadence op (never the tick path), so the two scans are affordable; both are skipped entirely for the common
     // idempotent re-grant (a matching holder is the incoming principal itself).
     private bool Conflicts(WorldGrant grant, out string reason) {
+        if (m_host is not null && grant.Capability == WorldCapability.Drive &&
+            grant.Subject.Kind == GrantSubjectKind.Body && Host.Population.IsAdmittedPeer(grant.Subject.Value) &&
+            grant.Grantee != Host.Population.PeerPrincipal(grant.Subject.Value)) {
+            reason = $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it";
+            return true;
+        }
         if (grant.Capability == WorldCapability.Operate) {
             if (grant.Subject != GrantSubject.All || grant.Exclusive || grant.Budget is not null || grant.EventBudget is not null ||
                 grant.HoldCeiling is not null || grant.KindMask is not null || grant.WriteMask is not null ||

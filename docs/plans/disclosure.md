@@ -724,10 +724,10 @@ operator is.
   world (`WorldOwnedWorlds`); `ChatCommandModule` declares rows on the acting
   player's own identity document, validated alone, under generated names
   (`WorldIdentityRows`).
-- **The operator is a principal kind.** `Principal.IsAuthority` is "console or
-  world", `CommandAudienceExtensions.Admits` gives `CommandAudience.Operator` to
-  `PrincipalKind.Console` alone, and the view's authority bypass reads the same
-  kind. On a silo the console is the machine's standard input.
+- **The operator was a principal kind in this audit.** D1 replaces that
+  console-or-world shortcut with `WorldGrants.IsOperator`, shared by command
+  admission and recipient views. On a silo the console remains the machine's
+  standard input; an admitted peer can separately hold Operate.
 - **Saved rows reach a changed source by declaration.** A durable image's rows
   load through `StateArena.TryValidateLoad`, which drops a row the current
   catalog does not declare
@@ -815,7 +815,7 @@ outside the guarantee; authored quotas and key exhaustion are inside it.
   and the world's own program hold it structurally. All other holders use
   the live grant table, including group membership and peer/session generation.
   Addons cannot hold it, directly or through a group. One `WorldGrants`
-  operator predicate replaces `Principal.IsAuthority`, `IsTrusted`, the
+  operator predicate replaces the retired kind-based authority shortcuts, the
   kind-based arm of `HoldsForAdministration`, and the program-section refusal.
   A Peer operator can administer grants and author programs; an ordinary seat
   retains its own-body consent operation but gains no administration power.
@@ -1046,8 +1046,8 @@ source; none was reproduced by running.
 - **F4, the refusal text misleads on a typo.** Confirmed:
   `WorldRecipientView.Refusal` answers "is not disclosed" for a name no row
   holds. Step D2.
-- **The rule keys on the principal's kind.** Confirmed: `Principal.IsAuthority`.
-  Step D1.
+- **The rule keyed on the principal's kind.** D1 replaces it with
+  `WorldGrants.IsOperator`.
 
 #### The structural write footprint
 

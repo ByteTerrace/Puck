@@ -89,12 +89,14 @@ public sealed partial class OperatorGrantLawTests {
     [InlineData(WorldAdmissionTrustMode.SignsDirectly, "domain", "one", WorldDisclosureTier.Replica, true)]
     [InlineData(WorldAdmissionTrustMode.OAuth, "https://issuer.test", "one", WorldDisclosureTier.Replica, true)]
     [InlineData(WorldAdmissionTrustMode.Vouches, "domain", "one", WorldDisclosureTier.Replica, false)]
-    [InlineData(WorldAdmissionTrustMode.FederatedAuthority, "domain", "one", WorldDisclosureTier.Replica, false)]
-    [InlineData(WorldAdmissionTrustMode.FederatedAuthority, "*", "one", WorldDisclosureTier.Replica, false)]
+    [InlineData(WorldAdmissionTrustMode.FederatedAuthority, "domain", null, WorldDisclosureTier.Replica, false)]
+    [InlineData(WorldAdmissionTrustMode.FederatedAuthority, "*", null, WorldDisclosureTier.Replica, false)]
     [InlineData(WorldAdmissionTrustMode.SignsDirectly, "*", "one", WorldDisclosureTier.Replica, false)]
     [InlineData(WorldAdmissionTrustMode.SignsDirectly, "domain", "*", WorldDisclosureTier.Replica, false)]
     [InlineData(WorldAdmissionTrustMode.SignsDirectly, "domain", "one", WorldDisclosureTier.Frames, false)]
-    public void OperatorTemplatesRequireOneSubjectAtReplica(WorldAdmissionTrustMode mode, string domain, string subject, WorldDisclosureTier tier, bool allowed) {
+    [InlineData(WorldAdmissionTrustMode.OAuth, "https://issuer.test", "one", WorldDisclosureTier.Presentation, false)]
+    [InlineData(WorldAdmissionTrustMode.OAuth, "https://issuer.test", "*", WorldDisclosureTier.Replica, false)]
+    public void OperatorTemplatesRequireOneSubjectAtReplica(WorldAdmissionTrustMode mode, string domain, string? subject, WorldDisclosureTier tier, bool allowed) {
         var entry = new WorldAdmissionEntry(Domain: domain, Subject: subject, Mode: mode, Disclosure: tier, Grants: [new(WorldCapability.Operate, GrantSubject.All)]);
         Assert.Equal(allowed, WorldAdmissionDoor.AllowsOperatorTemplates(entry));
     }

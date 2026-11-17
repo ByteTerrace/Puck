@@ -1,8 +1,5 @@
-using Puck.Abstractions.Cameras;
-using Puck.Abstractions.Presentation;
 using Puck.Commands;
 using Puck.Testing;
-using Puck.World.Protocol;
 using Puck.World.Server;
 using Xunit;
 
@@ -10,13 +7,6 @@ namespace Puck.World.Tests;
 
 /// <summary>Recorded-history branch hashes and saved-tape replay invariants.</summary>
 public sealed class HistoryScrubLawTests {
-    private const int Height = 200;
-    private const int Width = 400;
-
-
-
-
-
     [Fact]
     public void SwitchingToAKeptBranchReproducesItsRecordedHashesAndKeepsTheDisplacedFuture() {
         using var harness = new WorldHistoryHarness(seats: 1);

@@ -158,15 +158,15 @@ and carries which rule fired — `world.why` echoes it. `AllowsAllSections`
 reports the first refusing
 section; it gates a whole-document rebuild (`world.reset`/`world.load`/
 `world.reload`) and `world.undo`. A rebuild additionally wipes and re-seeds
-the ENTIRE runtime grant table (`WorldGrants.Reset` — "runtime grants
+the ENTIRE runtime grant table (`WorldGrants.PrepareReset` admits the transition — "runtime grants
 otherwise drop; document grants re-apply as at boot"), replaying only the
 NEW candidate document's own `Grants` section plus every currently-admitted
 peer connection's re-minted admission grant; every other live
 `world.grant`/`world.revoke` acquisition is gone after a rebuild, by
 design — see [mutations.md](mutations.md).
 `HoldsForAdministration` (who may grant/revoke FOR another principal) is a
-separate door: `Console` unconditionally; a `Seat` only over its OWN body
-subject; `Addon`/`Peer` only what they themselves hold (ignoring
+separate door: live operators unconditionally; an ordinary `Seat` only over its OWN body
+subject; other recipients only what they themselves hold (ignoring
 exclusivity, so an actor can always revoke an exclusive hold it authorized).
 
 ## ONE admission predicate decides a mutation

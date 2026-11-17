@@ -25,21 +25,6 @@ public sealed partial class WorldGrants {
             return false;
         }
 
-        if (
-            (grant.Capability == WorldCapability.Drive) &&
-            (grant.Subject.Kind == GrantSubjectKind.Body) &&
-            Host.Population.IsAdmittedPeer(bodyIndex: grant.Subject.Value) &&
-            (grant.Grantee != Host.Population.PeerPrincipal(index: grant.Subject.Value))
-        ) {
-            Host.Document.DenyGrantTable(
-                denial: $"{grant.Grantee.Describe()} cannot co-drive {grant.Subject.Describe()} — no consent authorship exists for a remote-admitted body except its own peer ({Host.Population.PeerPrincipal(index: grant.Subject.Value).Describe()}); Reach ∧ Consent composes to nothing until that peer authors it",
-                connectionId: connectionId,
-                correlationId: correlationId
-            );
-
-            return false;
-        }
-
         if (TryGrant(
             actor: actor,
             grant: grant,
