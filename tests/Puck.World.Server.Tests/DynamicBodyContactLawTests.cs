@@ -118,6 +118,10 @@ public sealed class DynamicBodyContactLawTests(ITestOutputHelper output) {
 
         foreach (var (policy, expected) in new[] {
             (new WorldBodyContactPolicy(CandidateBudget: 0), "candidateBudget"),
+            (new WorldBodyContactPolicy(ContactHertz: -1f), "contactHertz"),
+            (new WorldBodyContactPolicy(ContactDampingRatio: float.NaN), "contactDampingRatio"),
+            (new WorldBodyContactPolicy(ContactSpeed: float.PositiveInfinity), "contactSpeed"),
+            (new WorldBodyContactPolicy(ContactHertz: float.MaxValue), "contactHertz"),
             (new WorldBodyContactPolicy(MaxPairsPerBody: 0), "maxPairsPerBody"),
             (new WorldBodyContactPolicy(
             CandidateBudget: 2,

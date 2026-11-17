@@ -450,7 +450,12 @@ caller: a soft-step sequential-impulse solve over temporal substeps (integrate
 velocities, warm start, biased solve, integrate positions, unbiased relax; then
 restitution and the friction store), with the softness formed at the substep
 width and a stiffer, less-damped softness for a contact with a static side. It
-owns no body or pair registry. A caller hands each `Step` the bodies to
+reads frequency, damping ratio and push-out speed from its options; the World
+compiles them from `collision.bodyContacts`, with the standard package choosing
+30 Hz, 10 and 3 m/s. A contact's authored rolling lever also serves as a patch
+radius for a torsional row about its normal. Both angular resistance bounds
+scale with the contact's normal impulse, so neither slows a body without load.
+It owns no body or pair registry. A caller hands each `Step` the bodies to
 integrate (`FixedRigidBody`, whose `Acceleration` is its own gravity) and the
 `FixedRigidManifold`s to solve, both in canonical order; a manifold names its
 two bodies (a static surface is a zero-mass `BodyA` with zero anchors), its

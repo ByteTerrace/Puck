@@ -110,6 +110,21 @@
           "description": "Below this closing speed (world units/second), a rigid contact restitutes at zero rather than its pair\u0027s coefficient, so two bodies at rest never micro-bounce. Non-negative; small enough that a real strike is unaffected.",
           "type": "number",
           "default": 0.05
+        },
+        "contactHertz": {
+          "description": "The contact spring frequency in hertz, clamped by the solver to one eighth of the substep rate. Non-negative; zero authors no soft push.",
+          "type": "number",
+          "default": 0
+        },
+        "contactDampingRatio": {
+          "description": "The contact spring\u0027s damping ratio, dimensionless and non-negative.",
+          "type": "number",
+          "default": 0
+        },
+        "contactSpeed": {
+          "description": "The maximum penetration push-out speed, in metres per second. Non-negative; zero authors no push-out bias.",
+          "type": "number",
+          "default": 0
         }
       },
       "additionalProperties": false,

@@ -50,7 +50,8 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 - [MMO foundations](mmo-foundations.md): the closed round that settled the federation register, and the records the register cites.
 - [Readable interaction](readable-interaction.md): a motion program's predicted sweep as the telegraph, certified first contact and sub-tick presses, with the fencing salle as its proving ground.
 - [Physics and kernels: lessons from Box3D and OpenBLAS](physics-and-kernels-lessons.md): what those sources teach Puck's fixed-point physics.
-- [The walkthrough](walkthrough.md): the debug world played as a benchmark, headless and windowed, and its steps to the whole world.
+- [The benchmark](benchmark.md): one route through the debug world played in real time by one command and one in-game verb, with a live overlay, a report per chapter and artifacts caught in motion; it awaits its design review.
+- [The walkthrough](walkthrough.md): the route segments and the still tour as built, and the open steps the benchmark folds in at its stage 0.
 - [Port the experimental worlds' features](port-experimental.md): what the quarantined worlds have that the debug world lacks, as port lanes.
 - [The debug world as one valley](debug-world-composition.md): where every place sits in the valley, the domain each one forces, and the seams where they compose.
 - [The valley, the moons and the flight between](valley-and-moons.md): the phases from the valley to a round trip to a moon.

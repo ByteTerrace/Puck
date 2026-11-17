@@ -175,8 +175,8 @@ public sealed partial class WorldBody {
         m_carriedByIndex = -1;
     }
     /// <summary>Derives this carried body's pose and rigid velocity from <paramref name="carrier"/>'s own frame for
-    /// the tick that just completed — called once per tick after movement, dynamic contact, and tether correction,
-    /// so it reads the carrier's final authoritative pose for that tick. The body-local carry point scales with the
+    /// current tick — called before body contacts and again after the rigid solve, so the solve sees the held pose
+    /// and the body then follows a rigid carrier's final pose. The body-local carry point scales with the
     /// carrier on the same geometric terms as its collider and reach. TANGIBLE: the carrier's frame names a desired
     /// pose, never an unconditional one — this body's own collider is swept from its previous position to that
     /// desired one against static geometry, so it is BLOCKED at a wall rather than passing through it as the carrier
@@ -258,11 +258,13 @@ public sealed partial class WorldBody {
         m_rigidVelocity = carrier.ApproximateWorldVelocity();
         m_angularVelocity = FixedVector3.Zero;
     }
+
     internal int EntityIndex => ((m_population is null) ? m_entityIndex : m_populationIndex);
+
     internal void ApplyCarryBlock(FixedVector3 correction, FixedQ4816 ceiling) {
+        if (m_sweepRefusedThisTick) { return; }
         if (ceiling > FixedQ4816.Zero) { correction = correction.ClampLength(maximum: ceiling); }
-        if (IsRigid) { ApplyRigidPositionalCorrection(correction: correction); }
-        else { ApplyDynamicContact(correction: correction); }
+        if (IsRigid) { ApplyAdmittedContactResponse(position: (m_position + correction), velocity: ApproximateWorldVelocity()); } else { ApplyDynamicContact(correction: correction); }
     }
     internal void ApplyAdmittedContactResponse(FixedVector3 position, FixedVector3 velocity) {
         if ((position == m_position) && (velocity == ApproximateWorldVelocity())) { return; }
@@ -271,6 +273,6 @@ public sealed partial class WorldBody {
         if (IsRigid) {
             m_rigidVelocity = velocity;
             InvalidateRigidRest();
-        } else { SplitVelocity(velocity: velocity, resetVerticalRemainder: true); }
+        } else { SplitVelocity(resetVerticalRemainder: true, velocity: velocity); }
     }
 }

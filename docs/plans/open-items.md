@@ -97,8 +97,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
-21. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
-    document, its next step.
+21. [high] [The benchmark](#the-benchmark): the design review of
+    [the memo](benchmark.md), then its stages 1, 2 and 4 together. It
+    replaces [the walkthrough](walkthrough.md)'s line, and the lead ranks it
+    at the next batch.
 22. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -1609,27 +1611,18 @@ collider, then the lifecycle lows as one pass.
   `SdfFieldEvaluator.CountArrayPayload` and `CreateReachScratch` take a
   `WorkCounterSet` and need a counting parameter both types satisfy, and
   `puck bench world` (`WorldBenchmarks`) lists the sets as sources.
-- [low] A curved body resting on one point has no torsional friction
-  (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
-  stone keeps spinning and stays awake. Add a row about the slot's normal,
-  clamped by the normal impulse times a patch radius.
-- [low] A carried body's tangibility push moves a rigid body positionally,
-  outside the solve (`WorldBody.ApplyRigidPositionalCorrection`), because the
-  broadphase skips carried bodies. Admit a carried body as a static side that
-  pushes with its velocity, and delete the positional door.
 - [low] A stack's base under more than about two bodies' load can settle below
   the rest band. Build three-high and four-high stack scenes, read the base's
   penetration and fix the solver's load sharing.
-- [low] The solver's contact softness (`ContactHertz`, `ContactDampingRatio`,
-  `ContactSpeed` in `FixedRigidSolverOptions`) is an engine default the World
-  never authors; give `collision.bodyContacts` the fields.
 - [low] A non-rigid sleeper still wakes on every `ContactFieldVersion` move
   (`WorldBody.TryDeferSleepingAdvance`); only parked rigid islands take the
   local wake. No live world enables non-rigid sleep yet.
 - Lifecycle lows, read from source and not run: a rigid kit with a motion
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
-  a carried body's contacts are never released, so the box beneath cannot
-  park; one refused probe drops a body's surface warm start
+  a stationary carried body's live pair contacts keep free rigid bodies in its
+  non-parking island (`WorldPopulation.Sleep.cs`, `CollectRigidIsland` traverses
+  carried rigid sides too), so those resting bodies cannot park;
+  one refused probe drops a body's surface warm start
   (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).
@@ -2895,6 +2888,33 @@ runs.
   rerun the integrated tour, standing and walking frame readings and the
   gallery and lift body patrol; history is 47 words per output pixel
   (`HistorySurfaceWords`), so measure the view and slot allocation.
+
+### The benchmark
+
+Owner: the lead until the review, then one benchmark lane per stage · high ·
+Next: a design review of [the benchmark memo](benchmark.md) by another model
+family, then [its build order](benchmark.md#the-build-order).
+
+The owner's words: "it's slow as shit and mostly just static shots that miss
+all of the issues we see while on the move". The memo owns the design and
+the stages; this packet holds what a stage does not.
+
+- [high] The same route runner is built four times: the tour's route stops
+  (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and
+  the motion scenarios, each with its own plan format and parsers. The
+  memo's stage 6 folds the first three into the benchmark.
+- [medium] `host.frames` reads the host loop's interval and never the time a
+  frame was displayed, so judder that an even interval hides is not read
+  (`HostFrameTimeline`). Stage 8 adds the displayed interval.
+- [medium] The HUD cannot show an engine reading or a graph:
+  `HudBindingVocabulary` is closed over `world.tick`, `world.fps`, seat
+  positions, state rows and history, and `WorldHudElementKind` has no plot.
+  Stage 4 adds both as generic mechanisms.
+- [low] The sweep's windowed open items
+  ([sweep and visual checks](#sweep-and-visual-checks)) that concern the
+  tour's stills, its 2% threshold and its paired tour close when stage 6
+  deletes the tour; the memory peak at the garden crossing stays, read by
+  the painting chapter.
 
 ### Agent tooling and skills
 

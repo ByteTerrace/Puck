@@ -152,9 +152,15 @@ public sealed record WorldCollisionEvents(int CandidateBudget = 32, int MaxPairs
 /// <param name="RigidPairRestitutionSpeed">Below this closing speed (world units/second), a rigid contact restitutes at
 /// zero rather than its pair's coefficient, so two bodies at rest never micro-bounce. Non-negative; small enough that a
 /// real strike is unaffected.</param>
+/// <param name="ContactHertz">The contact spring frequency in hertz, clamped by the solver to one eighth of the
+/// substep rate. Non-negative; zero authors no soft push.</param>
+/// <param name="ContactDampingRatio">The contact spring's damping ratio, dimensionless and non-negative.</param>
+/// <param name="ContactSpeed">The maximum penetration push-out speed, in metres per second. Non-negative;
+/// zero authors no push-out bias.</param>
 public sealed record WorldBodyContactPolicy(int CandidateBudget = 32, int MaxPairsPerBody = 8, int RigidSubstepCeiling = 8,
     float RigidRestSpeed = 0.05f, float RigidRestHoldSeconds = 0.25f,
-    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f) {
+    float RigidSubstepTravelFraction = 0.5f, float RigidSubstepMinimumTravel = 0.001f, float RigidPairRestitutionSpeed = 0.05f,
+    float ContactHertz = 0f, float ContactDampingRatio = 0f, float ContactSpeed = 0f) {
     /// <summary>The largest accepted candidate budget per solid body.</summary>
     public const int MaximumCandidateBudget = 256;
     /// <summary>The largest accepted contact degree per solid body.</summary>

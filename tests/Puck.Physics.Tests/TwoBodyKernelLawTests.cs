@@ -66,6 +66,7 @@ public sealed class TwoBodyKernelLawTests {
         ),
         };
     }
+
     private static readonly FixedVector3 Gravity = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -9.81d), Z: FixedQ4816.Zero);
 
     // One step of a single two-body manifold.
@@ -140,7 +141,7 @@ public sealed class TwoBodyKernelLawTests {
 
     [Fact]
     public void AsymmetricPairsMomentumStaysWithinACountedRoundingBudget() {
-        var options = new FixedRigidSolverOptions { RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
+        var options = new FixedRigidSolverOptions { ContactHertz = FixedQ4816.FromInteger(value: 30L), ContactDampingRatio = FixedQ4816.FromInteger(value: 10L), ContactSpeed = FixedQ4816.FromInteger(value: 3L), RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
 
         var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(gravity: false, options: options);
 
@@ -247,7 +248,7 @@ public sealed class TwoBodyKernelLawTests {
     }
     [Fact]
     public void MassSymmetricPairsVelocityDeltasAreExactBitwiseOpposites() {
-        var options = new FixedRigidSolverOptions { RateHz = 60, SubstepCount = 4, };
+        var options = new FixedRigidSolverOptions { ContactHertz = FixedQ4816.FromInteger(value: 30L), ContactDampingRatio = FixedQ4816.FromInteger(value: 10L), ContactSpeed = FixedQ4816.FromInteger(value: 3L), RateHz = 60, SubstepCount = 4, };
         var world = new FixedRigidWorld(options: options);
         var bodyA = MakeBox(density: 100d);
         var bodyB = MakeBox(density: 100d);
@@ -306,7 +307,7 @@ public sealed class TwoBodyKernelLawTests {
     }
     [Fact]
     public void RestoringGravityBreaksTheAsymmetricMomentumBound() {
-        var options = new FixedRigidSolverOptions { RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
+        var options = new FixedRigidSolverOptions { ContactHertz = FixedQ4816.FromInteger(value: 30L), ContactDampingRatio = FixedQ4816.FromInteger(value: 10L), ContactSpeed = FixedQ4816.FromInteger(value: 3L), RateHz = 60, RelaxIterations = 1, SolveIterations = 2, SubstepCount = 4, };
 
         var (deltaVA, deltaVB, invA, invB) = RunAsymmetricPair(gravity: true, options: options);
         var k = (((long)options.SubstepCount) * ((1 + options.SolveIterations) + options.RelaxIterations));
