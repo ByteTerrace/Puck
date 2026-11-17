@@ -98,8 +98,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
 21. [high] [The benchmark](#the-benchmark): the live overlay and the
-    command ([the memo](benchmark.md#the-build-order)'s stages 2 and 3), with
-    stage 1's windowed readings in the lead's window. It replaces
+    command ([the memo](benchmark.md#the-build-order)'s stages 2 and 3). It replaces
     [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
     next batch.
 22. Then, by ordinary priority:
@@ -2894,7 +2893,7 @@ runs.
 
 Owner: one benchmark lane per stage · high · Next: the live overlay and the
 `puck benchmark` command ([the build order](benchmark.md#the-build-order)'s
-stages 2 and 3), and stage 1's windowed fresh-run readings on both backends.
+stages 2 and 3).
 
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
