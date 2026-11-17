@@ -2489,8 +2489,8 @@ The edit loop:
   `TryValidateTouchedStateRows` narrows a state write.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
-  reload a same-catalog arena in place (`StateCatalog.HasSameShape` is
-  unused).
+  reload a same-catalog arena in place (`StateCatalog.MatchesShape` answers
+  whether the catalog survives).
 - A state-section edit builds five arenas on the debug world
   (`world.boot.arena-builds`), one not yet attributed, and an undisturbed run
   grows the counter with no edit at all.
