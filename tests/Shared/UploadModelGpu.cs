@@ -241,7 +241,17 @@ internal sealed class UploadModelGpu :
     public HashSet<string> HostVisibleFamilies { get; } = new(comparer: StringComparer.Ordinal);
 
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
+    public Func<string?, ulong, GpuBufferPages?>? DestinationPages { get; set; }
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        var buffer = Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
+        return DestinationPages?.Invoke(name.Part, sizeBytes) is { } pages ? new PagedBuffer(buffer, pages) : buffer;
+    }
+    private sealed class PagedBuffer(IGpuBuffer buffer, GpuBufferPages pages) : IGpuPagedBuffer {
+        public GpuBufferPages Pages => pages;
+        public nint BufferHandle => buffer.BufferHandle;
+        public ulong SizeBytes => buffer.SizeBytes;
+        public void Dispose() => buffer.Dispose();
+    }
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
@@ -407,6 +417,7 @@ internal sealed class UploadModelGpu :
     );
 
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_inner.Services.QueueSubmitter.Timeline;
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => m_inner.Services.QueueSubmitter.CreateSubmissionFence();
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);

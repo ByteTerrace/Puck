@@ -536,6 +536,7 @@ file sealed class CountingPipelineFactory(IGpuPipelineFactory inner, GpuWorkLedg
         );
 }
 file sealed class CountingQueueSubmitter(IGpuQueueSubmitter inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuQueueSubmitter {
+    public GpuQueueTimeline Timeline => inner.Timeline;
     public void AddExternalWait(GpuExternalWait wait) =>
         inner.AddExternalWait(wait: wait);
     public IGpuSubmissionFence CreateSubmissionFence() =>

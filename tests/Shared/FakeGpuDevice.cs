@@ -489,6 +489,23 @@ internal sealed class FakeGpuDevice :
 
         return LastCreatedFence;
     }
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline ??= new SubmissionTimeline(this);
+    private SubmissionTimeline? m_timeline;
+    private sealed class SubmissionTimeline(FakeGpuDevice gpu) : GpuQueueTimeline {
+        private readonly Queue<(ulong Value, long Order)> m_pending = new();
+        private ulong m_completed;
+        protected override void Signal(ulong value) => m_pending.Enqueue((value, gpu.m_armed));
+        protected override ulong ReadCompleted() {
+            while (m_pending.TryPeek(out var point)) {
+                foreach (var fence in gpu.SubmittedFences) {
+                    if (fence.Order <= point.Order && !fence.Abandoned && !fence.IsSignaled) { return m_completed; }
+                }
+                m_completed = m_pending.Dequeue().Value;
+            }
+            return m_completed;
+        }
+        protected override void DisposeNative() { }
+    }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         Hit(key: "IGpuQueueSubmitter.Submit");
         Submissions++;
@@ -764,6 +781,7 @@ internal sealed class FakeGpuDevice :
     /// completion no later submission implies, as one on another queue would be.</summary>
     public sealed class Fence(FakeGpuDevice gpu, Creation? creation = null) : IGpuSubmissionFence {
         private long m_order;
+        internal long Order => m_order;
         private bool m_completed;
         private EventWaitHandle? m_signal;
 

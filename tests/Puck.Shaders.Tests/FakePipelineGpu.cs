@@ -18,6 +18,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     // Where descriptor set handles start, far above every object handle the fake hands out.
     private const long SetHandleBase = 0x4000_0000;
+    public GpuQueueTimeline Timeline => throw new NotSupportedException("This graph witness does not model device timeline retirement.");
 
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];

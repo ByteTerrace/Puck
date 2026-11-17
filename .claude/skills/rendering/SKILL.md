@@ -157,6 +157,10 @@ The tables retain producer indices while meshes are owed: `StageMeshDraw` alone 
 retires its history and writes `SdfMeshRegion.WriteAbsent`. `SDF_MESH_ABSENT_FLAG` rejects selection
 before mesh reads; zero placement words reject every triangle through the existing hit door.
 `GpuRowIndex` supplies the mesh-to-row landing chains and the dresser's slot/copy chains.
+`GpuBufferPages` issues the mesh destination's writable lease. Landing completion and
+`MeshStands` require its generation unchanged; a moved mesh without one stays owed and
+its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and checks
+the proof again at recording. Native sparse mapping remains in the streaming plan.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
@@ -840,9 +844,8 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
   `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
   `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
-  `SdfMeshSlabs.IndexedRead` (`SDF_MESH_SLAB_INDEX`) switches `sdfMeshWord` to the slab views the streaming plan's
-  step 7 prices ([the prototype](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built)); the switch
-  changes no counted work and no stored mesh.
+  Both reads use the one region binding. The retired slab-index prototype is recorded with its revision in
+  [step 7](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built).
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal
