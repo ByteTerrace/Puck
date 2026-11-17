@@ -156,7 +156,7 @@ public sealed partial class SdfWorldTables {
         m_reseatedTransforms.Clear();
         m_previousTransformCopies.Clear();
         if (!seedTransforms) {
-            CopyRuns(from: m_changedTransforms, to: m_previousTransformCopies);
+            m_previousTransformCopies.Append(source: m_changedTransforms);
         }
         m_changedTransforms.Clear();
         m_seedDynamicHistory = false;
@@ -171,16 +171,11 @@ public sealed partial class SdfWorldTables {
         m_seededMeshDraws.Clear();
         m_previousMeshCopies.Clear();
         if (!seedMesh) {
-            CopyRuns(from: m_changedMeshMatrices, to: m_previousMeshCopies);
+            m_previousMeshCopies.Append(source: m_changedMeshMatrices);
         }
         m_changedMeshMatrices.Clear();
         m_seedMeshHistory = false;
         m_previousMeshDrawCount = m_meshDrawCount;
-    }
-    private static void CopyRuns(GpuUploadRuns from, GpuUploadRuns to) {
-        for (var run = 0; (run < from.Count); run++) {
-            to.Add(start: from.Start(index: run), length: from.Length(index: run));
-        }
     }
     private void CopyTransformHistory(nint commandBuffer, GpuUploadRuns copies, int slot) {
         var source = m_dynamicTransformRegion.Buffer(slot: slot);

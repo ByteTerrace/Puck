@@ -61,7 +61,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the scheduling stage's and C0.3's windowed readings, the control plane's
    step C0.4, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-   work proportional to change, steps R1h, R1a, R1b, R1c and S2 of
+   work proportional to change: R1h and R1a's windowed checks, then R1b, R1c and S2 of
    [its memo](arrival-proportional.md) in that order (R0's rule has read
    them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
@@ -522,7 +522,11 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps, R1h, R1a, R1b, R1c and S2 in that order;
+  design: R1a's producer-index staging, absent records, shared cursors and independent
+  comparisons are built and its 28 focused laws pass; its cold boot's captures,
+  forcing counts on both backends and owed-frame timing remain the lead's
+  [verification request](arrival-proportional.md#r1a-as-built), beside R1h's windowed
+  hit-door check. The remaining implementation steps are R1b, R1c and S2;
   R2 stays with the visibility plan's V1b. R0's rule has read them.
   No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
@@ -2963,6 +2967,20 @@ mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
+
+- [low] Rendering law fixtures predating R1a have stale assumptions. The saved
+  base assemblies reproduce `RootCutProducer`'s empty dress
+  (`tests/Puck.SdfVm.Tests/SdfWorldTablesUploadLawTests.RootReseats.cs`, the
+  `Library.Store` fixture), all three `SdfMeshRegionArenaLawTests`' old packing
+  expectations, and `SdfKernelSetLawTests.ARendererConstantMovesNoBakeStamp`'s
+  comparison of the full encoding against the field-only fingerprint. The
+  kernel-set run also finds a fixture that copies an incomplete kernel list
+  (`ALoadCountsOnceWithEveryByteItRead`) and an assertion requiring a reflected
+  pass block even when the compiler removes it
+  (`EveryCompiledKernelReadsItsHostsInterfaceOnBothBackends`, after its actual
+  interface mismatch check passed). These fixtures are not evidence against
+  R1a; replace their setup/expectations from the current mechanisms when next
+  working that area. R1a's direct table law and frame/header/layout laws pass.
 
 - [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
   (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`

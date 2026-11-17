@@ -328,6 +328,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         if (System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref left) || (--left > 0)) { return; }
         _ = m_named.Remove(key: old);
+        _ = m_refused.Remove(item: old);
         NamedWords -= SdfMeshRegion.WordsOf(mesh: old);
     }
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before: each holding no
@@ -397,8 +398,8 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         if (!m_ranges.TryAllocate(count: words, start: out var start)) { return false; }
         // Both the presentation grant and the diagnostic cap constrain the same lowest-run admission.
-        if ((start + words > (ulong)LimitWords) ||
-            (m_admissionBytes is { } cap && start + words > cap / sizeof(uint))) {
+        if (((start + words) > ((ulong)LimitWords)) ||
+            ((m_admissionBytes is { } cap) && ((start + words) > (cap / sizeof(uint))))) {
             _ = m_ranges.Free(start: start);
             return false;
         }

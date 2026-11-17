@@ -131,7 +131,7 @@ public sealed partial class SdfWorldTables {
         while ((cursor < order.Count) && (taken < budget) && ((job?.Slices.Count ?? 0) < LandingSlices)) {
             var mesh = order[cursor];
 
-            if (!m_meshesOwed.Contains(mesh: mesh)) { cursor++; continue; }
+            if (!m_meshesOwed.Contains(mesh: mesh) || !m_meshArena.Names(mesh: mesh)) { cursor++; continue; }
             if (!mesh.Resident) {
                 if (waiting < 0) { waiting = cursor; }
                 cursor++;
@@ -203,6 +203,7 @@ public sealed partial class SdfWorldTables {
                 Volatile.Write(location: ref m_owedWords, value: (m_owedWords - progress.Words));
             }
         }
+        AccountMeshOwed();
     }
     // A job handed back unanswered lands nothing: its meshes' words are taken again from the start.
     private void AbandonLanding(LandingJob job) {

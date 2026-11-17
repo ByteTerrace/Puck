@@ -10,24 +10,37 @@ namespace Puck.SdfVm.Tests;
 [Collection(ProcessWorkCollection.Name)]
 public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
     [Fact]
+    public void RenamingTheLastRowAwayFromARefusedMeshRemovesThatRefusal() {
+        var small = HostDraw(identity: "small", x: 1);
+        var large = small with { Mesh = new SdfMesh(positions: new Vector3[1000], indices: new uint[] { 0, 1, 2 }) };
+        var reserve = (((ulong)SdfMeshRegionArena.MinimumDrawCapacity) * SdfMeshRegion.DrawBytes);
+        using var arena = new SdfMeshRegionArena(limitBytes: (reserve + (((ulong)SdfMeshRegion.WordsOf(mesh: small.Mesh)) * sizeof(uint))));
+        arena.Plan(draws: new[] { small, large });
+        Assert.Single(collection: arena.Refused);
+        arena.Rename(index: 1, mesh: small.Mesh);
+        Assert.Empty(collection: arena.Refused);
+        Assert.Equal(SdfMeshRegion.WordsOf(mesh: small.Mesh), arena.NamedWords);
+    }
+
+    [Fact]
     public void ForcedAdmissionAndTrimShrinkAnOversizedRegionThroughTheOrdinaryRelocation() {
         SdfRowChecks.Enabled = true;
         try {
             using var rig = new Rig(slots: 1);
-            var mesh = new SdfMesh(positions: new Vector3[1 << 20], indices: new uint[] { 0, 1, 2 });
+            var mesh = new SdfMesh(positions: new Vector3[(1 << 20)], indices: new uint[] { 0, 1, 2 });
             var draw = new SdfMeshDraw(mesh, Matrix4x4.Identity, 0, "large");
-            var frame = Frame(rig.LiveProgram, 0, Transforms(1)) with { MeshDraws = new[] { draw } };
-            RenderRootCut(rig, frame);
+            var frame = Frame(program: rig.LiveProgram, time: 0, transforms: Transforms(slots: 1)) with { MeshDraws = new[] { draw } };
+            RenderRootCut(frame: frame, rig: rig);
             var held = rig.Engine.MeshRegionBytes;
-            var shrinks = SdfRowChecks.ProcessWork.Read(SdfRowChecks.Shrinks);
-            rig.Engine.ForceMeshLimit(0);
+            var shrinks = SdfRowChecks.ProcessWork.Read(kind: SdfRowChecks.Shrinks);
+            rig.Engine.ForceMeshLimit(bytes: 0);
             MemoryAccount.Shared.TrimCaches();
-            RenderRootCut(rig, frame);
-            Assert.True(rig.Engine.MeshRegionBytes < held);
-            Assert.Equal(shrinks + 1, SdfRowChecks.ProcessWork.Read(SdfRowChecks.Shrinks));
-            Assert.True(rig.Engine.DrawsAwaitMeshes);
-            Assert.Null(rig.Engine.RowCheckFailure);
-            output.WriteLine($"region-before={held} region-after={rig.Engine.MeshRegionBytes} shrinks=1");
+            RenderRootCut(frame: frame, rig: rig);
+            Assert.True(condition: (rig.Engine.MeshRegionBytes < held));
+            Assert.Equal((shrinks + 1), SdfRowChecks.ProcessWork.Read(kind: SdfRowChecks.Shrinks));
+            Assert.True(condition: rig.Engine.DrawsAwaitMeshes);
+            Assert.Null(@object: rig.Engine.RowCheckFailure);
+            output.WriteLine(message: $"region-before={held} region-after={rig.Engine.MeshRegionBytes} shrinks=1");
         } finally { SdfRowChecks.Enabled = false; }
     }
 
@@ -133,6 +146,29 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
             LandRootCut(frame: frame, rig: rig);
             Assert.Equal(1, (work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Landing)) - onePacked));
             Assert.Equal(1, (work.Read(kind: SdfMeshHistory.Seeded) - oneSeeded));
+            Check();
+
+            // Dropping the last row naming an owed mesh ends that demand without waiting for its unused payload.
+            draws[0] = HostDraw(identity: "abandoned", x: 4);
+            journal.Begin(everything: false, rows: draws.Count);
+            journal.Owe(start: 0, count: 1);
+            frame = frame with { MeshDrawsRevision = ++revision, MeshDrawChangesSerial = journal.Serial };
+            rig.Engine.Pack(frame: frame);
+            Assert.True(condition: rig.Engine.MeshesLanding);
+            Assert.Contains("owed-clock=running", rig.Engine.DescribeLanding());
+            var owedFrame = rig.Engine.DescribeLanding().Split(' ').Single(predicate: value => value.StartsWith(comparisonType: StringComparison.Ordinal, value: "owed-frames="));
+            rig.Engine.Pack(frame: frame);
+            Assert.Contains(owedFrame, rig.Engine.DescribeLanding());
+            draws[0] = newDraw;
+            journal.Begin(everything: false, rows: draws.Count);
+            journal.Owe(start: 0, count: 1);
+            frame = frame with { MeshDrawsRevision = ++revision, MeshDrawChangesSerial = journal.Serial };
+            rig.Engine.Pack(frame: frame);
+            rig.Engine.SubmitUpload();
+            Assert.False(condition: rig.Engine.MeshesLanding);
+            Assert.False(condition: rig.Engine.DrawsAwaitMeshes);
+            Assert.True(condition: rig.Engine.MeshesResident);
+            Assert.Contains("owed-clock=settled", rig.Engine.DescribeLanding());
             Check();
 
             var whole = checks.Read(kind: SdfRowChecks.TablesWhole);

@@ -348,6 +348,7 @@ public sealed partial class SdfWorldTables {
         FinishMeshStaging(frame: frame);
     }
     private void FinishMeshStaging(SdfFrame frame) {
+        AccountMeshOwed(frame: true);
         CheckMeshRows(frame: frame);
         if ((m_skipDrawThrough > 0) && (frame.MeshDrawChangesSerial <= m_skipDrawThrough)) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Skipped);
@@ -385,8 +386,8 @@ public sealed partial class SdfWorldTables {
         refused = RefusalOf(frame: frame);
         if (whole || !ReferenceEquals(objA: draws, objB: m_meshSource) || !m_meshStaged || (draws.Count != m_stagedCount)) { return false; }
 
-        CopyRuns(from: m_reseatedDraws, to: m_owedDraws);
-        CopyRuns(from: m_landedRows, to: m_owedDraws);
+        m_owedDraws.Append(source: m_reseatedDraws);
+        m_owedDraws.Append(source: m_landedRows);
         var checkedMeshes = 0;
         var renamed = 0;
 
@@ -422,9 +423,14 @@ public sealed partial class SdfWorldTables {
                 m_meshArena.Rename(index: index, mesh: mesh);
                 m_meshClaims?.Move(from: staged, to: mesh);
                 m_rowsByMesh.Set(key: mesh, row: index);
+                if ((m_rowsByMesh.First(key: staged) < 0) && m_activeOwed.Remove(item: staged)) {
+                    Volatile.Write(location: ref m_owedWords, value: (m_owedWords - SdfMeshRegion.WordsOf(mesh: staged)));
+                    if (!m_meshArena.Names(mesh: staged)) { ForgetLanding(mesh: staged); }
+                }
             }
         }
         if (renamed > 0) {
+            m_meshesOwed.Sync();
             Volatile.Write(
                 location: ref m_meshRegionNamedBytes,
                 value: ((((ulong)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes) + (((ulong)m_meshArena.NamedWords) * sizeof(uint)))
@@ -654,6 +660,7 @@ public sealed partial class SdfWorldTables {
     private long m_owedTicks;
     private long m_owedWords;
     private long m_owedSince;
+    private ulong m_owedCountedUpload = ulong.MaxValue;
     // The uploads submitted when a staging last stopped owing words; zero while none has.
     private long m_owedClearedUpload;
     // The mesh region bytes the frame uploads staged: the latest upload's, the most one upload staged, and the sum.
@@ -685,11 +692,15 @@ public sealed partial class SdfWorldTables {
             if (m_meshesOwed.Contains(mesh: mesh) && m_activeOwed.Add(item: mesh)) { words += SdfMeshRegion.WordsOf(mesh: mesh); }
         }
         Volatile.Write(location: ref m_owedWords, value: words);
-
+    }
+    // One accounting door for the owed window. Count a prepared upload once even when a held frame is staged again;
+    // completion and a row's last name leaving can close the window without another whole-list plan.
+    private void AccountMeshOwed(bool frame = false) {
+        var words = Volatile.Read(location: ref m_owedWords);
         var now = System.Diagnostics.Stopwatch.GetTimestamp();
 
         if (words > 0) {
-            m_owedFrames++;
+            if (frame && (m_owedCountedUpload != m_uploads)) { m_owedFrames++; m_owedCountedUpload = m_uploads; }
             if (m_owedSince == 0) { m_owedSince = now; }
         } else if (m_owedSince != 0) {
             m_owedTicks += (now - m_owedSince);
@@ -758,7 +769,7 @@ public sealed partial class SdfWorldTables {
         var seconds = (((double)ticks) / System.Diagnostics.Stopwatch.Frequency);
         var written = (Volatile.Read(location: ref m_meshWordsWritten) * sizeof(uint));
 
-        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} ahead={m_meshArena.Ahead.Count} ahead-refused={m_meshArena.AheadRefused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-held={MeshRegionBytes}B region-used={MeshRegionUsedBytes}B written={written}B owed={(Volatile.Read(location: ref m_owedWords) * sizeof(uint))}B owed-frames={Volatile.Read(location: ref m_owedFrames)} owed-seconds={seconds:0.000}s owed-clock={((since == 0) ? "settled" : "running")} frame-staged-last={Volatile.Read(location: ref m_frameStagedLast)}B frame-staged-most={Volatile.Read(location: ref m_frameStagedMost)}B@upload{Volatile.Read(location: ref m_frameStagedMostUpload)} frame-staged-total={Volatile.Read(location: ref m_frameStagedTotal)}B uploads={m_uploads} owed-cleared-upload={Volatile.Read(location: ref m_owedClearedUpload)} relocations={m_meshArena.Relocations} relocation=\"{m_meshArena.RelocationReason}\" moved={m_meshMoved} region-limit={MeshRegionLimitBytes}B region-named={MeshRegionNamedBytes}B refused={m_meshArena.Refused.Count} ahead={m_meshArena.Ahead.Count} ahead-refused={m_meshArena.AheadRefused.Count} refusals={Volatile.Read(location: ref m_meshRefusals)} forgotten={Volatile.Read(location: ref m_meshForgotten)} {DescribeLandingJobs()}");
     }
 
     // The mesh whose words the mesh scratch holds, which a landing slicing it over several jobs reads again.

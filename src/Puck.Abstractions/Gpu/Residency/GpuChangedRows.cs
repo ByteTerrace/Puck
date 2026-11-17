@@ -114,8 +114,8 @@ public sealed class GpuChangedRows {
             serial++;
             var slot = ((int)(serial % m_frames.Length));
 
-            if (into is not null) { Append(m_frames[slot], into); }
-            if (reseated is not null) { Append(destination: reseated, source: m_reseats?[slot]); }
+            into?.Append(source: m_frames[slot]);
+            reseated?.Append(source: m_reseats?[slot]);
         }
         return true;
     }
@@ -126,9 +126,5 @@ public sealed class GpuChangedRows {
             if ((runs.Start(index: run) < 0) || (runs.Length(index: run) > (rows - runs.Start(index: run)))) { return false; }
         }
         return true;
-    }
-    private static void Append(GpuUploadRuns? source, GpuUploadRuns destination) {
-        if (source is null) { return; }
-        for (var run = 0; (run < source.Count); run++) { destination.Add(start: source.Start(index: run), length: source.Length(index: run)); }
     }
 }

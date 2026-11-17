@@ -42,8 +42,16 @@ public sealed class GpuUploadRuns {
     /// <summary>Gets the number of runs held.</summary>
     public int Count => m_count;
 
+    /// <summary>Adds another set's represented runs, retaining this set's bounded coarsening. Null and self append
+    /// owe nothing new.</summary>
+    /// <param name="source">The runs to append, or null.</param>
+    public void Append(GpuUploadRuns? source) {
+        if ((source is null) || ReferenceEquals(objA: source, objB: this)) { return; }
+        for (var run = 0; (run < source.Count); run++) { Add(start: source.Start(index: run), length: source.Length(index: run)); }
+    }
+
     /// <summary>Gets the logical bytes in the retained integer arrays, excluding object and array headers.</summary>
-    public long StorageBytes => (((long)m_ends.Length + m_gaps.Length + m_widths.Length + m_starts.Length) * sizeof(int));
+    public long StorageBytes => ((((((long)m_ends.Length) + m_gaps.Length) + m_widths.Length) + m_starts.Length) * sizeof(int));
 
     /// <summary>Records <c>[start, start + length)</c> as owed; an empty range records nothing.</summary>
     /// <param name="start">The first unit of the range.</param>
@@ -78,13 +86,13 @@ public sealed class GpuUploadRuns {
         }
         if ((first == after) && (m_count == m_starts.Length)) {
             Coarsen();
-            Add(start: start, length: (end - start));
+            Add(length: (end - start), start: start);
             return;
         }
 
         // Absorb every touched run, not only the first: otherwise a bridging write leaves overlapping GPU copies.
-        Array.Copy(sourceArray: m_starts, sourceIndex: after, destinationArray: m_starts, destinationIndex: (first + 1), length: (m_count - after));
-        Array.Copy(sourceArray: m_ends, sourceIndex: after, destinationArray: m_ends, destinationIndex: (first + 1), length: (m_count - after));
+        Array.Copy(destinationArray: m_starts, destinationIndex: (first + 1), length: (m_count - after), sourceArray: m_starts, sourceIndex: after);
+        Array.Copy(destinationArray: m_ends, destinationIndex: (first + 1), length: (m_count - after), sourceArray: m_ends, sourceIndex: after);
         m_starts[first] = start;
         m_ends[first] = end;
         m_count += (1 - (after - first));
@@ -140,13 +148,13 @@ public sealed class GpuUploadRuns {
     /// <returns>The changed units before merging or coarsening.</returns>
     public int AddMask(ulong mask, int start = 0) {
         ArgumentOutOfRangeException.ThrowIfNegative(start);
-        var changed = System.Numerics.BitOperations.PopCount(mask);
+        var changed = System.Numerics.BitOperations.PopCount(value: mask);
         while (mask != 0) {
-            var first = System.Numerics.BitOperations.TrailingZeroCount(mask);
-            var length = System.Numerics.BitOperations.TrailingZeroCount(~(mask >> first));
-            Add(start: checked(start + first), length: length);
-            var end = first + length;
-            mask = end == 64 ? 0UL : mask & (ulong.MaxValue << end);
+            var first = System.Numerics.BitOperations.TrailingZeroCount(value: mask);
+            var length = System.Numerics.BitOperations.TrailingZeroCount(value: ~(mask >> first));
+            Add(length: length, start: checked((start + first)));
+            var end = (first + length);
+            mask = ((end == 64) ? 0UL : mask & (ulong.MaxValue << end));
         }
         return changed;
     }
@@ -171,9 +179,7 @@ public sealed class GpuUploadRuns {
 
         while (low < high) {
             var middle = (low + ((high - low) >>> 1));
-            if (value < m_starts[middle]) { high = middle; }
-            else if (value >= m_ends[middle]) { low = (middle + 1); }
-            else { return true; }
+            if (value < m_starts[middle]) { high = middle; } else if (value >= m_ends[middle]) { low = (middle + 1); } else { return true; }
         }
         return false;
     }
