@@ -16,11 +16,8 @@ namespace Puck.SdfVm.Tests;
 /// interface on both backends, stamp included; and the stamp moves with the instruction set.
 /// </summary>
 public sealed class SdfKernelSetLawTests {
-    private static readonly string[] Stems = [
-        "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
-        "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake", "sdf-mesh-pyramid",
-        "sdf-glass", "sdf-bloom-down", "sdf-bloom-up", "sdf-bloom-apply",
-    ];
+    // A kernel's file holds its enum value, once more than the value: each kernel's bytes tell it from every other's.
+    private static byte[] BytesOf(SdfKernel kernel) => Enumerable.Repeat(count: (((int)kernel) + 1), element: ((byte)kernel)).ToArray();
 
     private static WorkCounterSet Work() =>
         new(
@@ -35,14 +32,14 @@ public sealed class SdfKernelSetLawTests {
 
         var expected = 0L;
 
-        for (var index = 0; (index < Stems.Length); index++) {
-            var bytes = Enumerable.Repeat(count: (index + 1), element: ((byte)index)).ToArray();
+        foreach (var kernel in SdfKernelSet.Kernels) {
+            var bytes = BytesOf(kernel: kernel);
 
             File.WriteAllBytes(
                 bytes: bytes,
                 path: Path.Combine(
                     path1: directory,
-                    path2: $"{Stems[index]}.comp.spv"
+                    path2: $"{SdfKernelSet.StemOf(kernel: kernel)}.comp.spv"
                 )
             );
             expected += bytes.Length;
@@ -58,8 +55,8 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: 1L, actual: work.Read(kind: SdfKernelSet.Loads));
         Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
         // Passed through: each kernel is its own file's bytes.
-        Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Surface].ToArray());
-        Assert.Equal(expected: Enumerable.Repeat(count: 5, element: ((byte)4)), actual: kernels[SdfKernel.Views].ToArray());
+        Assert.Equal(expected: BytesOf(kernel: SdfKernel.Surface), actual: kernels[SdfKernel.Surface].ToArray());
+        Assert.Equal(expected: BytesOf(kernel: SdfKernel.Views), actual: kernels[SdfKernel.Views].ToArray());
 
         _ = SdfKernelSet.Load(
             target: ShaderTarget.Spirv,
@@ -106,7 +103,8 @@ public sealed class SdfKernelSetLawTests {
         Assert.DoesNotContain(collection: keys, expected: baseline.ContentKey());
     }
     // What the build compiles is what a host installs: every kernel reflects, on both backends, exactly the bindings its
-    // interface places, and its pass block under the name this host's instruction-set stamp gives it.
+    // interface places, and any pass block it keeps under the name this host's instruction-set stamp gives it (a kernel
+    // that reads none of its pass block has the compiler remove it).
     [Fact]
     public void EveryCompiledKernelReadsItsHostsInterfaceOnBothBackends() {
         using var reflector = SdfTestPipelines.Reflector();
@@ -121,9 +119,9 @@ public sealed class SdfKernelSetLawTests {
                 )));
 
                 Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
-                Assert.Contains(
-                    collection: reflected,
-                    filter: binding => (binding.Name == ("passGroup" + SdfKernelSet.LayoutOf(kernel: kernel).Interface.Stamp))
+                Assert.All(
+                    action: binding => Assert.Equal(expected: ("passGroup" + SdfKernelSet.LayoutOf(kernel: kernel).Interface.Stamp), actual: binding.Name),
+                    collection: reflected.Where(predicate: static binding => binding.Name.StartsWith(comparisonType: StringComparison.Ordinal, value: "passGroup"))
                 );
             }
         }
@@ -166,7 +164,11 @@ public sealed class SdfKernelSetLawTests {
 
         Assert.NotEqual(actual: withRenderConstant, expected: render);
         Assert.Contains(actualString: SdfRenderHlsl.Generate(), expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
-        Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: field));
+        // The field's own fingerprint reads the encoding of the field words alone.
+        Assert.Equal(
+            expected: SdfIsaFingerprint.Field,
+            actual: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(calls: SdfEncodingProbe.Calls(), wordsOf: static program => program.FieldWords.ToArray()), include: field)
+        );
         Assert.NotEqual(
             expected: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + render)),
             actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + withRenderConstant))
