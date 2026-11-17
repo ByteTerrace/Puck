@@ -1,5 +1,4 @@
 using Puck.Confinement;
-using System.Globalization;
 using Puck.Abstractions;
 
 namespace Puck.Cli.Host;
@@ -33,14 +32,17 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// The single memory-demand calculation: a start's measured peak plus the running starts' remaining growth, in private
 /// bytes for the commit headroom and in working set for free physical memory (above the pressure floor); private bytes
 /// are commit and overstate what a process holds resident, so each is judged against its own quantity.
-/// Before a kind has a measurement it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its working set,
-/// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. Observed private-byte and working-set
-/// peaks of plateaued processes, or finished processes observed for a full plateau window, replace those fallbacks,
-/// including downward, and are shared between CLI
-/// processes under the lease root (<c>host-peaks/&lt;kind&gt;</c> for private bytes, <c>host-peaks/&lt;kind&gt;.resident</c>
-/// for working set). A known measurement rises whenever a live process exceeds it, without clipping
-/// real usage. Growth tapers to zero over <see cref="Plateau"/> without a material allocation and returns when growth
-/// resumes. A World that reported ready reserves no growth. The system commit charge already includes live usage.
+/// Before a kind has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its working set,
+/// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. After, a kind's expected peak in each
+/// quantity is the high percentile of its recent distribution (<see cref="HostPeakWindow"/>: the last ten processes of the
+/// kind, each observed at a plateau or for a full plateau window), so one outlier session raises it only until a few
+/// ordinary starts follow, a sustained rise is learned, and the estimate moves down as readily as up. The windows are shared
+/// between CLI processes under the lease root (<c>host-observations/&lt;kind&gt;</c>), where the file decides: a long-lived
+/// process adds what it observed since its last write and keeps nothing else of its own. A live process above the
+/// estimate is still counted at its own usage, without clipping it. Growth tapers to zero over <see cref="Plateau"/> without
+/// a material allocation and returns when growth resumes. A World that reported ready reserves no growth. The system commit
+/// charge already includes live usage. A kind whose expected need alone exceeds the machine is named by
+/// <see cref="HostLoadThresholds.NeverFits"/>, not waited on.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -67,8 +69,7 @@ public sealed class HostStartTracker {
     public static readonly TimeSpan ReservationHold = TimeSpan.FromSeconds(seconds: 90);
 
     private readonly Lock m_gate = new();
-    private readonly Dictionary<HostStartKind, double> m_measured = [];
-    private readonly Dictionary<HostStartKind, double> m_measuredResident = [];
+    private readonly Dictionary<HostStartKind, HostPeakWindow> m_windows = [];
     private readonly List<Reservation> m_reservations = [];
     // Keyed by process id and start ticks: a recycled id is another start, and carries none of the last one's peak.
     private readonly Dictionary<(int Id, long StartTicks), Observation> m_seen = [];
@@ -76,42 +77,53 @@ public sealed class HostStartTracker {
     /// <summary>Gets the tracker of this process's host session, which the admission of a real machine reading uses.</summary>
     public static HostStartTracker Session { get; } = new(leaseRoot: CliLease.RootAsync(Environment.CurrentDirectory).GetAwaiter().GetResult());
 
-    private double Expected(HostStartKind kind) => (m_measured.TryGetValue(kind, out var measured) ? measured : HostLoadThresholds.DefaultPeakGb(kind: kind));
-    // Until the kind's working set is measured, a fixed share of its expected commit peak (itself measured when it can be).
-    private double ExpectedResident(HostStartKind kind) => (m_measuredResident.TryGetValue(kind, out var measured) ? measured : (HostLoadThresholds.ResidentFraction * Expected(kind: kind)));
+    private HostPeakWindow Window(HostStartKind kind) {
+        if (!m_windows.TryGetValue(kind, out var window)) {
+            window = new HostPeakWindow();
+            m_windows[kind] = window;
+        }
 
-    // Each kind has one private-bytes measurement file and one working-set file under the existing lease root. An
-    // exclusive guard merges concurrent observations before replacement; a lower observed peak replaces the fallback,
-    // never a measured larger peak.
-    private static void Learn(Dictionary<HostStartKind, double> store, HostStartKind kind, double peak) {
-        if (double.IsFinite(peak) && peak > 0) {
-            store[kind] = Math.Max(peak, store.GetValueOrDefault(kind));
+        return window;
+    }
+    // The one expected-peak door: the recent observations' high percentile once the kind has any, else its fallback.
+    private double Expected(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0)) ? window.PrivateGb : HostLoadThresholds.DefaultPeakGb(kind: kind));
+    // Until the kind's working set is observed, a fixed share of its expected commit peak.
+    private double ExpectedResident(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0)) ? window.ResidentGb : (HostLoadThresholds.ResidentFraction * Expected(kind: kind)));
+
+    // A process is an observation of its kind once it has been seen for a full plateau (live: its growth stopped for one;
+    // exited: it was watched for one). Before that it counts only to raise a kind that already has observations, since a
+    // short focused check says nothing of an ordinary start's peak. A process already in the window keeps its entry current.
+    private void Record(HostStartKind kind, (int Id, long StartTicks) id, double peakGb, double residentPeakGb, bool settled) {
+        var window = Window(kind: kind);
+
+        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (peakGb > Expected(kind: kind)))) {
+            window.Observe(id: id.Id, startTicks: id.StartTicks, privateGb: peakGb, residentGb: residentPeakGb);
         }
     }
-    private void Learn(HostStartKind kind, double peak, double resident) {
-        Learn(m_measured, kind, peak);
-        Learn(m_measuredResident, kind, resident);
-    }
-    private static void Synchronize(Dictionary<HostStartKind, double> store, HostStartKind kind, string path) {
+
+    // Each kind has one observation file under the lease root, the truth of its window. An exclusive guard merges it with
+    // what this process observed since its last write, so what a long-lived process remembers never outvotes the file.
+    private static void Synchronize(HostPeakWindow window, string path) {
         using var held = FileLock.TryAcquire(path + ".guard");
         if (held is null) { return; }
-        if (File.Exists(path) && double.TryParse(File.ReadAllText(path), CultureInfo.InvariantCulture, out var peak)) { Learn(store, kind, peak); }
-        if (store.TryGetValue(kind, out var measured)) {
-            var text = measured.ToString("R", CultureInfo.InvariantCulture);
-            if (!File.Exists(path) || File.ReadAllText(path) != text) { AtomicFile.WriteAllText(path, text); }
-        }
+
+        var stored = (File.Exists(path) ? File.ReadAllText(path) : null);
+        var text = window.Merge(stored: stored);
+
+        if ((text.Length > 0) && (text != stored)) { AtomicFile.WriteAllText(path, text); }
+        window.Written();
     }
     private void Measurements() {
         if (m_root is null) { return; }
-        var directory = Path.Combine(m_root, "host-peaks");
+        var directory = Path.Combine(m_root, "host-observations");
         Directory.CreateDirectory(directory);
         foreach (var kind in Enum.GetValues<HostStartKind>()) {
-            Synchronize(m_measured, kind, Path.Combine(directory, kind.ToString()));
-            Synchronize(m_measuredResident, kind, Path.Combine(directory, kind.ToString() + ".resident"));
+            Synchronize(Window(kind: kind), Path.Combine(directory, kind.ToString()));
         }
     }
 
-    /// <summary>Returns the kind's measured commit peak (private bytes), or its fallback before a measurement exists.</summary>
+    /// <summary>Returns the kind's expected commit peak (private bytes), the high percentile of its recent observations, or
+    /// its fallback before one exists.</summary>
     /// <param name="kind">The start's kind.</param>
     /// <returns>The expected peak, in gigabytes.</returns>
     public double ExpectedPeakGb(HostStartKind kind) {
@@ -120,7 +132,8 @@ public sealed class HostStartTracker {
             return Expected(kind: kind);
         }
     }
-    /// <summary>Returns the kind's measured working-set peak, or its fallback before a measurement exists.</summary>
+    /// <summary>Returns the kind's expected working-set peak, the high percentile of its recent observations, or its
+    /// fallback before one exists.</summary>
     /// <param name="kind">The start's kind.</param>
     /// <returns>The expected working-set peak, in gigabytes.</returns>
     public double ExpectedResidentPeakGb(HostStartKind kind) {
@@ -151,12 +164,10 @@ public sealed class HostStartTracker {
                 seen = seen with { PeakGb = Math.Max(start.PrivateGb, seen.PeakGb), ResidentPeakGb = Math.Max(start.ResidentGb, seen.ResidentPeakGb),
                     AnchorGb = grew ? start.PrivateGb : Math.Min(start.PrivateGb, seen.AnchorGb), GrewAt = grew ? clock.GetTimestamp() : seen.GrewAt };
                 m_seen[id] = seen;
-                if (m_measured.ContainsKey(start.Kind) || clock.GetElapsedTime(seen.GrewAt) >= Plateau) { Learn(start.Kind, seen.PeakGb, seen.ResidentPeakGb); }
+                Record(start.Kind, id, seen.PeakGb, seen.ResidentPeakGb, settled: (clock.GetElapsedTime(seen.GrewAt) >= Plateau));
             }
             foreach (var (id, seen) in m_seen.Where(predicate: pair => !liveIds.Contains(item: pair.Key)).ToArray()) {
-                // A short focused check is not a measurement of a long run's peak. It can raise an existing
-                // measurement, but replacing the fallback needs a full observation window.
-                if (m_measured.ContainsKey(seen.Kind) || clock.GetElapsedTime(seen.FirstAt) >= Plateau) { Learn(seen.Kind, seen.PeakGb, seen.ResidentPeakGb); }
+                Record(seen.Kind, id, seen.PeakGb, seen.ResidentPeakGb, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
                 _ = m_seen.Remove(key: id);
             }
             Measurements();

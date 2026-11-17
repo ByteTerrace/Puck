@@ -97,7 +97,8 @@ public static class HostCommand {
               above the pressure floor (ram-covered). Private bytes are commit and overstate residency, so each is
               judged against its own quantity. admitted= is both, the decision gate, lease and the MCP World start
               make for that kind. Each live start's kind, PID, private bytes, working set and readiness follow.
-              Peaks are measured per machine in the lease root; unused growth tapers away over
+              A kind's expected peak is the high percentile of its last ten observed starts, kept per machine in the
+              lease root, so one unusual session moves it only briefly; unused growth tapers away over
               HostStartTracker.Plateau and returns on renewed allocation.
               PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs three
               logical processors idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM
@@ -126,6 +127,7 @@ public static class HostCommand {
             thresholds: new HostLoadThresholds(
                 CapacityCpuPercent: parseResult.GetValue(option: capacityCpuOption),
                 CommitReservePercent: parseResult.GetValue(option: commitReserveOption),
+                InstalledRamGb: HostLoadThresholds.ThisMachine.InstalledRamGb,
                 PressureDiskGb: parseResult.GetValue(option: pressureDiskOption),
                 PressureRamGb: parseResult.GetValue(option: pressureRamOption)
             ),
