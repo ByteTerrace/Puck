@@ -9,6 +9,29 @@ namespace Puck.Vulkan;
 public sealed unsafe class VulkanQueueSubmitter {
     private const uint StructureTypeSubmitInfo = 4;
 
+    // Only VulkanLogicalDevice's timeline transaction calls this. It joins the graphics queue to the signal
+    // before returning, so no consumer can omit the graphics-side dependency.
+    internal void BindSparse(VulkanDeviceCommands device, VkQueue queue, nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings,
+        nint semaphore, ulong waitValue, ulong signalValue) {
+        if (device.QueueBindSparse == null) { throw new InvalidOperationException("vkQueueBindSparse is unavailable on a sparse-enabled device."); }
+        fixed (VkSparseMemoryBind* ranges = bindings) {
+            var buffers = new VkSparseBufferMemoryBindInfo { Buffer = buffer, BindCount = (uint)bindings.Length, PBinds = (nint)ranges };
+            var timeline = new VkTimelineSemaphoreSubmitInfo {
+                SType = VkTimelineSemaphoreSubmitInfo.StructureType,
+                WaitSemaphoreValueCount = 1, PWaitSemaphoreValues = (nint)(&waitValue),
+                SignalSemaphoreValueCount = 1, PSignalSemaphoreValues = (nint)(&signalValue),
+            };
+            var info = new VkBindSparseInfo {
+                SType = VkBindSparseInfo.StructureType, PNext = (nint)(&timeline),
+                WaitSemaphoreCount = 1, PWaitSemaphores = (nint)(&semaphore),
+                SignalSemaphoreCount = 1, PSignalSemaphores = (nint)(&semaphore),
+                BufferBindCount = 1, PBufferBinds = (nint)(&buffers),
+            };
+            device.QueueBindSparse(queue.Handle, 1, in info, 0).ThrowIfFailed(device: device, operation: "vkQueueBindSparse");
+            GpuQueueWork.Process.Signal();
+        }
+    }
+
     // Counts its vkQueueSubmit in GpuQueueWork: an execute when it carries command buffers, a signal when it carries a
     // fence or semaphore, under the calling thread's category.
     private static void SubmitCore(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<nint> commandBufferHandles, nint fenceHandle, ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<nint> signalSemaphores = default, ReadOnlySpan<ulong> signalValues = default, GpuQueueCause cause = GpuQueueCause.Unbatched) {

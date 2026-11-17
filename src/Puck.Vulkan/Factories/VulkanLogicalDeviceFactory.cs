@@ -88,7 +88,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // Optional storage-buffer indexing, retained as a support reading only.
     private const uint StorageBufferArrayDynamicIndexingFeatureIndex = 35u;
     // The sparse flags among VkPhysicalDeviceFeatures (sparseBinding, sparseResidencyBuffer, sparseResidencyAliased),
-    // read for the capability record and never enabled. Indices from the Vulkan SDK 1.4.363 vulkan_core.h.
+    // Binding and buffer residency are enabled together when a binding queue is available; aliasing remains a reading.
     private const int SparseBindingFeatureIndex = 44;
     private const int SparseResidencyBufferFeatureIndex = 45;
     private const int SparseResidencyAliasedFeatureIndex = 52;
@@ -176,31 +176,35 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             : "unavailable")}");
     }
     private static IReadOnlyList<VulkanDeviceQueueCreateRequest> BuildQueues(
-        VulkanQueueFamilySelection queueFamilySelection
+        VulkanQueueFamilySelection queueFamilySelection, uint? sparseFamily
     ) {
-        if (queueFamilySelection.UsesSingleQueueFamily) {
-            return [new VulkanDeviceQueueCreateRequest(
-                    FamilyIndex: queueFamilySelection.GraphicsFamilyIndex,
-                    Priority: 1.0f
-                )];
-        }
+        var families = new List<uint> { queueFamilySelection.GraphicsFamilyIndex };
+        if (!families.Contains(queueFamilySelection.PresentFamilyIndex)) { families.Add(queueFamilySelection.PresentFamilyIndex); }
+        if (sparseFamily is { } sparse && !families.Contains(sparse)) { families.Add(sparse); }
+        return families.Select(static family => new VulkanDeviceQueueCreateRequest(FamilyIndex: family, Priority: 1.0f)).ToArray();
+    }
 
-        return [
-            new VulkanDeviceQueueCreateRequest(
-                FamilyIndex: queueFamilySelection.GraphicsFamilyIndex,
-                Priority: 1.0f
-            ),
-            new VulkanDeviceQueueCreateRequest(
-                FamilyIndex: queueFamilySelection.PresentFamilyIndex,
-                Priority: 1.0f
-            ),
-        ];
+    /// <summary>Selects a sparse binding queue only when both buffer features are supported. Prefers the graphics
+    /// family, otherwise the first nonempty sparse family. Aliasing and strict non-residency are not requirements.</summary>
+    /// <param name="support">The base feature flags.</param>
+    /// <param name="families">The actual queue families.</param>
+    /// <param name="graphicsFamily">The graphics family index.</param>
+    /// <returns>The binding family, or null for contiguous backing.</returns>
+    public static uint? SparseFamilyOf(IReadOnlyList<bool> support, IReadOnlyList<VkQueueFamilyInfo> families, uint graphicsFamily) {
+        if (support.Count <= SparseResidencyBufferFeatureIndex || !support[SparseBindingFeatureIndex] || !support[SparseResidencyBufferFeatureIndex]) { return null; }
+        uint? first = null;
+        foreach (var family in families) {
+            if (family.QueueCount == 0 || (family.Flags & VkQueueFlags.SparseBinding) == 0) { continue; }
+            if (family.Index == graphicsFamily) { return family.Index; }
+            first ??= family.Index;
+        }
+        return first;
     }
     /// <summary>Returns the backing a physical device offers (<see cref="GpuBackingSupport"/>), beyond what its sparse
     /// properties already put in its capabilities: the sparse base features, a queue family that binds sparse memory,
     /// storage-buffer array indexing, and the memory priority and pageable device-local memory extensions, each present
     /// with its feature reported. These support readings enable no optional feature.</summary>
-    private GpuBackingSupport BackingOf(VulkanInstanceCommands instance, nint physicalDeviceHandle, IReadOnlyList<bool> support) {
+    private GpuBackingSupport BackingOf(VulkanInstanceCommands instance, nint physicalDeviceHandle, IReadOnlyList<bool> support, IReadOnlyList<VkQueueFamilyInfo> families) {
         bool Base(int index) => ((index < support.Count) && support[index]);
         bool Extension(string name, uint structureType) => (
             m_physicalDeviceApi.HasDeviceExtension(extensionName: name, instance: instance, physicalDeviceHandle: physicalDeviceHandle) &&
@@ -213,8 +217,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         if (Base(index: SparseResidencyBufferFeatureIndex)) { backing |= GpuBackingSupport.SparseResidencyBuffer; }
         if (Base(index: SparseResidencyAliasedFeatureIndex)) { backing |= GpuBackingSupport.SparseResidencyAliased; }
         if (Base(index: ((int)StorageBufferArrayDynamicIndexingFeatureIndex))) { backing |= GpuBackingSupport.BufferArrayDynamicIndexing; }
-        if (m_physicalDeviceApi.GetQueueFamilies(instance: instance, physicalDeviceHandle: physicalDeviceHandle)
-            .Any(predicate: static family => ((family.Flags & VkQueueFlags.SparseBinding) != 0))) {
+        if (families.Any(predicate: static family => family.QueueCount > 0 && ((family.Flags & VkQueueFlags.SparseBinding) != 0))) {
             backing |= GpuBackingSupport.SparseQueue;
         }
         if (m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle,
@@ -360,11 +363,12 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     /// optional feature the device reports.</summary>
     /// <param name="support">The device's base features, one flag per <c>VkPhysicalDeviceFeatures</c> member in
     /// declaration order.</param>
+    /// <param name="sparseBuffers">Whether a usable sparse family was selected, enabling both sparse buffer features.</param>
     /// <returns>The flag indices to enable.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="support"/> is <see langword="null"/>.</exception>
     /// <exception cref="GpuDeviceUnavailableException">The device does not report a required feature; the message names
     /// it.</exception>
-    public static IReadOnlyList<uint> FeatureIndicesOf(IReadOnlyList<bool> support) {
+    public static IReadOnlyList<uint> FeatureIndicesOf(IReadOnlyList<bool> support, bool sparseBuffers = false) {
         ArgumentNullException.ThrowIfNull(argument: support);
 
         var featureIndices = new List<uint>();
@@ -389,6 +393,13 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             }
         }
 
+        if (sparseBuffers) {
+            if (support.Count <= SparseResidencyBufferFeatureIndex || !support[SparseBindingFeatureIndex] || !support[SparseResidencyBufferFeatureIndex]) {
+                throw new ArgumentException("Sparse buffers require both sparseBinding and sparseResidencyBuffer.", nameof(support));
+            }
+            featureIndices.Add(SparseBindingFeatureIndex);
+            featureIndices.Add(SparseResidencyBufferFeatureIndex);
+        }
         return featureIndices;
     }
 
@@ -507,12 +518,15 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle
         );
-        var featureIndices = FeatureIndicesOf(support: support);
+        var queueFamilies = m_physicalDeviceApi.GetQueueFamilies(instance.Commands, physicalDevice.Handle);
+        var sparseFamily = SparseFamilyOf(support, queueFamilies, physicalDevice.QueueFamilySelection.GraphicsFamilyIndex);
+        var featureIndices = FeatureIndicesOf(support: support, sparseBuffers: sparseFamily.HasValue);
 
         capabilities = (capabilities with {
-            Backing = ((capabilities.Backing ?? GpuBackingSupport.None) | BackingOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle, support: support)),
+            Backing = ((capabilities.Backing ?? GpuBackingSupport.None) | BackingOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle, support: support, families: queueFamilies)),
         });
         Console.Error.WriteLine(value: $"[backing] {GpuDeviceCapabilities.BackingSpelling(backing: capabilities.Backing.Value)} sparse.address-space={capabilities.SparseAddressSpaceBytes} storage-buffer.offset-alignment={capabilities.StorageBufferOffsetAlignment}");
+        Console.Error.WriteLine(value: $"[backing] sparse-buffer-features={(sparseFamily.HasValue ? "enabled" : "unavailable")} binding-queue-family={sparseFamily?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
 
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
@@ -529,7 +543,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             Instance: instance.Commands,
             MemorySegments: memorySegments,
             PhysicalDevice: physicalDevice,
-            Queues: BuildQueues(queueFamilySelection: physicalDevice.QueueFamilySelection)
+            Queues: BuildQueues(queueFamilySelection: physicalDevice.QueueFamilySelection, sparseFamily: sparseFamily)
         );
         var result = m_logicalDeviceApi.CreateLogicalDevice(
             device: out var device,
@@ -576,7 +590,10 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
                 graphicsQueue: graphicsQueue,
                 logicalDeviceApi: m_logicalDeviceApi,
                 physicalDevice: physicalDevice,
-                presentQueue: presentQueue
+                presentQueue: presentQueue,
+                sparseQueue: sparseFamily is { } sparse
+                    ? (sparse == graphicsQueue.FamilyIndex ? graphicsQueue : sparse == presentQueue.FamilyIndex ? presentQueue : CreateQueue(device, sparse))
+                    : null
             ) {
                 Capabilities = capabilities,
                 Identity = identity,

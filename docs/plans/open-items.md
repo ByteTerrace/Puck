@@ -978,8 +978,10 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
-contiguous fallback, shared retirement timeline and destination page proofs:
-native mappings on both backends, page admission and pressure release.
+contiguous fallback, shared retirement timeline, destination page proofs,
+native-pool pressure trim and Vulkan's ordered binding door: native sparse
+resource ownership, Direct3D 12 tile mappings, page admission and pressure
+unmapping/compaction. Mesh regions still use contiguous storage.
 The remaining indexed-read prototype window uses frozen `e9c1d485c9`;
 current hardware qualification reads the 4070, 2060 and Deck, then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan

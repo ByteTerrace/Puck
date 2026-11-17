@@ -157,6 +157,8 @@ public sealed unsafe class GpuRegion : IDisposable {
     // The destination a staged region's copies write; replaced when the region grows.
     private IGpuBuffer? m_destination;
     private GpuBufferPages? m_pages;
+    private ulong m_pageRevision;
+    private readonly GpuUploadRuns m_deferredCopies = new(MaxCopyRuns);
     private readonly List<(int Start, int Length, GpuBufferPages.Lease Lease)> m_copyRuns = [];
 
     /// <summary>Asks this destination for proof that an entire byte range can be written. The proof stays valid
@@ -165,7 +167,24 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="bytes">The positive byte count.</param>
     /// <returns>A destination-issued lease, or null while any page is unavailable.</returns>
     public GpuBufferPages.Lease? TryLease(long offset, long bytes) =>
-        (offset >= 0 && bytes > 0 && offset <= ByteCount && bytes <= ByteCount - offset) ? m_pages?.TryLease(offset, bytes) : null;
+        (offset >= 0 && bytes > 0 && offset <= ByteCount && bytes <= ByteCount - offset) ? m_pages?.TryLease(offset + (long)m_destinationWord * sizeof(uint), bytes) : null;
+
+    /// <summary>Gets the current destination's writable-page revision; zero for a host-visible policy.</summary>
+    public ulong PageRevision => m_pages?.Revision ?? 0;
+
+    // Native paged buffers own their authority. A committed destination has no mapping transitions; this
+    // region's all-writable authority can preserve its proofs across an ordered contiguous carry.
+    private void SetDestinationPages(IGpuBuffer destination, bool carried = false) {
+        if (destination is not IGpuPagedBuffer && carried && m_pages is not null) {
+            m_pages.GrowCarried((long)destination.SizeBytes);
+            return;
+        }
+        var pages = destination is IGpuPagedBuffer paged ? paged.Pages : new GpuBufferPages((long)destination.SizeBytes);
+        if (ReferenceEquals(m_pages, pages)) { return; }
+        m_pages?.Revoke();
+        m_pages = pages;
+        m_pageRevision = pages.Revision;
+    }
 
     // The destination a grown region's next copy recording carries its bytes from, and how many; null when none is owed.
     private IGpuBuffer? m_carrySource;
@@ -484,7 +503,7 @@ public sealed unsafe class GpuRegion : IDisposable {
                     m_ownedBuffers.Add(item: m_destination);
                 }
 
-                m_pages = (m_destination is IGpuPagedBuffer paged) ? paged.Pages : new GpuBufferPages((long)m_destination!.SizeBytes);
+                SetDestinationPages(m_destination!);
 
                 // No slot's copy set is written here: RecordCopy writes a slot's set the first time that slot records a
                 // copy, inside the pass that records it, so the writes are counted where the upload's work is.
@@ -936,7 +955,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_hostBuffers = staging;
         m_ownedBuffers.AddRange(collection: staging);
         m_destination = destination;
-        m_pages = new GpuBufferPages(byteCount);
+        SetDestinationPages(m_destination!);
         m_ownedBuffers.Add(item: destination);
         m_ownedCopyPool = pool;
         m_copySets = (m_reservedCopySets ?? pool!.Region(index: 0));
@@ -1054,7 +1073,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         m_destination = replacement;
-        m_pages!.GrowCarried(byteCount);
+        SetDestinationPages(replacement, carried: replaced is not IGpuPagedBuffer);
         ByteCount = byteCount;
         m_copySets!.ForgetWriter(region: this);
 
@@ -1117,8 +1136,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_carrySource = null;
         m_carryBytes = 0;
         m_destination = replacement;
-        m_pages!.Revoke();
-        m_pages = new GpuBufferPages(byteCount);
+        SetDestinationPages(replacement);
         ByteCount = byteCount;
         // Every host-copy word is owed below, so the destination holds the host copy once the copy runs.
         m_knownWords = ((int)(shadow / sizeof(uint)));
@@ -1334,23 +1352,24 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
     }
     /// <summary>Records the staged policy's copy for <paramref name="slot"/>: one dispatch of the copy kernel covering
-    /// every owed word, after which nothing is owed until the next write. It records no barrier: the caller makes the
+    /// every writable owed word; unmapped words remain owed. It records no barrier: the caller makes the
     /// destination's writes visible to its readers. Under the other policies, or with nothing owed, it records
     /// nothing.</summary>
     /// <param name="commandBuffer">The command buffer being recorded.</param>
     /// <param name="slot">The frame slot the command buffer belongs to, flushed since the last write.</param>
     /// <param name="pipelineBound">Whether the command buffer already has the copy pipeline (<see cref="CopyPipelineHandle"/>)
     /// bound, as after an earlier region's copy in one recording, so the copy binds only its set.</param>
+    /// <returns>Whether a dispatch was recorded. Unmapped debt remains owed and records no dispatch.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is negative or not below
     /// <see cref="SlotCount"/>.</exception>
     /// <exception cref="InvalidOperationException">The staged region owes words that <paramref name="slot"/>'s staging
     /// buffer does not hold, because the slot was not flushed after the last write.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
-    public void RecordCopy(nint commandBuffer, int slot, bool pipelineBound = false) {
+    public bool RecordCopy(nint commandBuffer, int slot, bool pipelineBound = false) {
         RequireSlot(slot: slot);
 
         if (!OwesCopy) {
-            return;
+            return false;
         }
 
         var owed = m_owed[0];
@@ -1360,9 +1379,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         foreach (var run in m_copyRuns) {
-            if (!run.Lease.IsCurrent) { throw new InvalidOperationException("Destination pages changed after staging; flush again before recording."); }
+            if (!run.Lease.IsCurrent) { StageOwed(slot); break; }
         }
-        if (m_header[0] == 0) { owed.Clear(); m_stagedSlot = -1; return; }
+        if (m_header[0] == 0) { m_stagedSlot = -1; return false; }
 
         // The set is unwritten, or another region its owner's reserved sets serve wrote it since this one did; the
         // slot's last submission has retired, so the set is written before it is bound.
@@ -1376,7 +1395,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         RecordCopyDispatch(recorder: m_recorder, commandBuffer: commandBuffer, pipeline: m_copyPipeline!,
             set: m_copySets.SetOf(slot: slot), words: m_header[0], pipelineBound: pipelineBound);
         owed.Clear();
+        owed.Append(m_deferredCopies);
         m_stagedSlot = -1;
+        return true;
     }
 
     // The one dispatch door for packed-region uploads and generic strided buffer copies.
@@ -1795,14 +1816,17 @@ public sealed unsafe class GpuRegion : IDisposable {
     // thread, which is also where its words start in the block.
     private void StageOwed(int slot) {
         var owed = m_owed[0];
+        m_pages!.OweChanged(m_pageRevision, (long)m_destinationWord * sizeof(uint), (long)m_knownWords * sizeof(uint), owed);
+        m_pageRevision = m_pages.Revision;
         m_copyRuns.Clear();
+        m_deferredCopies.Clear();
         if (owed.Count == 0) {
             _ = StagingFor(slot, (ulong)CopyBlockBase * sizeof(uint));
             m_stagedSlot = slot;
             return;
         }
         for (var run = 0; run < owed.Count; run++) {
-            m_pages!.Clip(owed.Start(run), owed.Length(run), m_destinationWord, m_copyRuns);
+            m_pages!.Clip(owed.Start(run), owed.Length(run), m_destinationWord, m_copyRuns, m_deferredCopies);
         }
         var blockBase = Math.Max(CopyBlockBase, checked(CopyHeaderWords + m_copyRuns.Count * 2));
         if (m_header.Length < blockBase) { Array.Resize(ref m_header, blockBase); }

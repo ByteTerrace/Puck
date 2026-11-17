@@ -175,13 +175,31 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
         }
     }
 
+    /// <summary>Releases empty blocks and marks every held block for release when its last placement returns.
+    /// The mark survives delayed fence retirement; live placements are never reclaimed. Blocks allocated after
+    /// this request follow the ordinary empty-block policy until another request reaches them.</summary>
+    public void Trim() {
+        lock (m_gate) {
+            if (m_retired) { return; }
+            foreach (var pool in m_pools.Values) {
+                for (var index = pool.Count - 1; index >= 0; index--) {
+                    var block = pool[index];
+                    block.TrimWhenEmpty = true;
+                    if (block.Ranges.LiveRanges != 0) { continue; }
+                    pool.RemoveAt(index);
+                    m_free(block.Native, false);
+                }
+            }
+        }
+    }
+
     // Frees a placement's range, refused for a stale placement before anything changes, and frees its block when the
     // range left it empty and the block was a resource's own or its key keeps another empty one; the caller holds the lock.
     private void Give(GpuMemoryPlacement<TBlock> placement) {
         var block = placement.Block;
 
         _ = block.Ranges.Free(start: placement.Offset, ticket: placement.Ticket);
-        if ((block.Ranges.LiveRanges != 0) || (!block.Own && !HoldsAnotherEmpty(block: block))) {
+        if ((block.Ranges.LiveRanges != 0) || (!block.Own && !block.TrimWhenEmpty && !HoldsAnotherEmpty(block: block))) {
             return;
         }
 
@@ -235,6 +253,7 @@ public readonly struct GpuMemoryPlacement<TBlock> {
 /// resource's own, and the key's blocks it belongs to.</summary>
 /// <typeparam name="TBlock">A block's native memory.</typeparam>
 internal sealed class GpuMemoryBlock<TBlock>(TBlock native, bool own, object owner, List<GpuMemoryBlock<TBlock>> pool, GpuRangeAllocator ranges) {
+    public bool TrimWhenEmpty { get; set; }
     public TBlock Native { get; } = native;
     public bool Own { get; } = own;
     public object Owner { get; } = owner;

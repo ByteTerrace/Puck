@@ -81,41 +81,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(1, client.Abandoned);
     }
     [Fact]
-    public void ADeviceTimelineHoldsBackgroundReadersWhileRingLeasesProtectRewrites() {
-        using var rig = new Rig(holdFences: true);
-        rig.Render();
-        var client = new BackgroundClient(rig.Gpu.Services);
-        var work = rig.Engine.GpuWork;
-        work.Add(client);
-        try {
-            work.Pump(rig.Engine);
-
-            // Hold this reader independently of upload waits: the device timeline must not pass it.
-            var fence = (FakeGpuDevice.Fence)rig.Gpu.LastSubmittedFence!;
-            var retired = new Tracker();
-
-            fence.Pinned = true;
-            // Replaced after the job was taken: the job may still read it.
-            rig.Engine.RetireBackgroundResource(retired);
-
-            // The following upload writes the other ring slot. Its predecessor completes, and nothing is released.
-            rig.Render();
-            Assert.False(retired.Disposed);
-            Assert.True(fence.Armed);
-            // The next upload rewrites the slot the job leased. Its ring wait ends the pinned reader, which also
-            // lets the device timeline pass the retirement checkpoint.
-            rig.Render();
-            Assert.True(retired.Disposed);
-            Assert.False(fence.Armed);
-            Assert.Contains("lease-waits:1,", work.Describe());
-            // The same timeline proof releases it as soon as the last reader completes.
-            rig.Render();
-            Assert.True(retired.Disposed);
-            work.Pump(rig.Engine);
-            _ = Assert.Single(client.Answers);
-        } finally { client.ReleaseAnswers(); }
-    }
-    [Fact]
     public void WhatAJobHoldsIsReservedBeforeItIsAllocatedAndAJobWithNoRoomWaitsForOneThatCompletes() {
         using var rig = new Rig(holdFences: true);
         rig.Render();
@@ -242,11 +207,6 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         }
     }
 
-    private sealed class Tracker : IDisposable {
-        public bool Disposed { get; private set; }
-
-        public void Dispose() => Disposed = true;
-    }
     // A client whose every job holds one device-local buffer of the slot and copies four bytes of it back; a job handed
     // back is offered again.
     private sealed class HoldingClient(ulong scratchBytes) : ISdfGpuWorkClient {

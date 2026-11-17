@@ -22,6 +22,25 @@ namespace Puck.SdfVm;
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena;
     private readonly Dictionary<SdfMesh, GpuBufferPages.Lease> m_meshPages = new(comparer: ReferenceEqualityComparer.Instance);
+    private IGpuBuffer? m_meshPageDestination;
+    private ulong m_meshPageRevision;
+
+    // Mapping changes invalidate publication even when no producer row changed. Re-owe only affected meshes
+    // and revisit their rows; the ordinary whole-mesh landing door republishes them after remapping.
+    private void RefreshMeshPages() {
+        var destination = m_meshRegion.Buffer(0);
+        var revision = m_meshRegion.PageRevision;
+        if (ReferenceEquals(destination, m_meshPageDestination) && revision == m_meshPageRevision) { return; }
+        m_meshPageDestination = destination;
+        m_meshPageRevision = revision;
+        foreach (var (mesh, lease) in m_meshPages) {
+            if (lease.IsCurrent) { continue; }
+            m_meshPages.Remove(mesh);
+            m_meshesOwed.Add(mesh);
+            ForgetLanding(mesh);
+            for (var row = m_rowsByMesh.First(mesh); row >= 0; row = m_rowsByMesh.Next(row)) { m_owedDraws.Add(row, 1); }
+        }
+    }
 
     private long m_meshPlacementVersion;
 
@@ -56,6 +75,9 @@ public sealed partial class SdfWorldTables {
         try {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
             m_meshArena.TrimUnused();
+            foreach (var mesh in m_meshPages.Keys) {
+                if (!m_meshArena.Placements.ContainsKey(mesh)) { m_meshPages.Remove(mesh); }
+            }
             m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
             ForgetAllLanding();
             // The words a trim freed may hold a mesh the arena refused, so the next staging plans its list again.
@@ -366,6 +388,7 @@ public sealed partial class SdfWorldTables {
         m_meshArena.EndRows();
         m_meshGrant.Floor(bytes: (((long)m_meshArena.DrawCapacity) * SdfMeshRegion.DrawBytes));
         ApplyMeshPlacements();
+        RefreshMeshPages();
         if (m_meshArena.Relocated) { m_owedDraws.Add(0, draws.Count); } else {
             foreach (var mesh in m_meshArena.Moved) {
                 for (var row = m_rowsByMesh.First(key: mesh); (row >= 0); row = m_rowsByMesh.Next(row: row)) { m_owedDraws.Add(length: 1, start: row); }
@@ -810,6 +833,9 @@ public sealed partial class SdfWorldTables {
         }
 
         ReplacedMeshRegion(newBytes: fitted, oldBytes: held, replaced: replaced);
+        // A shrink empties storage even when a tail was forgotten without relocating any surviving address.
+        m_meshSectionWritten = false;
+        m_owedDraws.Add(0, m_currentDrawRows.Count);
         SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Shrinks);
     }
     // The region's buffer was replaced by one of another size: the next upload carries what the old one held, the old one

@@ -15,6 +15,27 @@ namespace Puck.Vulkan.Tests;
 /// portal's glass, is refused by name
 /// (<see cref="VulkanLogicalDeviceFactory.FeatureIndicesOf"/>).</summary>
 public sealed class VulkanGroupedBindingFloorLawTests {
+    [Fact]
+    public void SparseBuffersRequireBothFeaturesAndARealQueueButNeitherAliasingNorStrictResidency() {
+        var support = Enumerable.Repeat(true, 55).ToArray();
+        support[52] = false;
+        var sparse = Puck.Vulkan.Bindings.VkQueueFlags.SparseBinding;
+        Puck.Vulkan.Bindings.VkQueueFamilyInfo[] families = [new(2, sparse, 1), new(3, sparse, 1)];
+        Assert.Equal(3U, VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 3));
+        Assert.Equal(2U, VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 7));
+        Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, [new(2, sparse, 0)], 2));
+        Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, [], 2));
+        var enabled = VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true);
+        Assert.Contains(44U, enabled);
+        Assert.Contains(45U, enabled);
+        Assert.DoesNotContain(52U, enabled);
+        foreach (var missing in new[] { 44, 45 }) {
+            support[missing] = false;
+            Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 3));
+            Assert.Throws<ArgumentException>(() => VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true));
+            support[missing] = true;
+        }
+    }
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
         Backend: "vulkan",
         MaxBoundDescriptorSets: sets,
@@ -55,14 +76,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
     [InlineData(34, "shaderSampledImageArrayDynamicIndexing")]
     [InlineData(26, "fragmentStoresAndAtomics")]
     [InlineData(29, "shaderStorageImageExtendedFormats")]
-    [InlineData(35, "shaderStorageBufferArrayDynamicIndexing")]
     [InlineData(37, "shaderClipDistance")]
     [Theory]
     public void ADeviceWithoutARequiredBaseFeatureIsRefusedByName(int required, string feature) {
         const int SampledImageArrayDynamicIndexing = 34;
         const int FragmentStoresAndAtomics = 26;
         const int StorageImageExtendedFormats = 29;
-        const int StorageBufferArrayDynamicIndexing = 35;
         const int ClipDistance = 37;
         var every = Enumerable.Repeat(count: 55, element: true).ToArray();
         var without = every.ToArray();
@@ -79,12 +98,12 @@ public sealed class VulkanGroupedBindingFloorLawTests {
         }
 
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 5),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)StorageBufferArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: every).Take(count: 4),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
         Assert.Equal(
-            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or StorageBufferArrayDynamicIndexing or ClipDistance))]),
-            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)StorageBufferArrayDynamicIndexing), ((uint)ClipDistance)]
+            actual: VulkanLogicalDeviceFactory.FeatureIndicesOf(support: [.. Enumerable.Range(count: 55, start: 0).Select(selector: static index => (index is SampledImageArrayDynamicIndexing or FragmentStoresAndAtomics or StorageImageExtendedFormats or ClipDistance))]),
+            expected: [((uint)FragmentStoresAndAtomics), ((uint)StorageImageExtendedFormats), ((uint)SampledImageArrayDynamicIndexing), ((uint)ClipDistance)]
         );
     }
 }

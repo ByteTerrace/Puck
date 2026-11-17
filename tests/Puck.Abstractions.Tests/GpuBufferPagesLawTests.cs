@@ -7,6 +7,43 @@ public sealed class GpuBufferPagesLawTests {
     private const int Page = GpuBufferPages.MinimumPageBytes;
 
     [Fact]
+    public void EveryPagedReplacementUsesItsOwnAuthorityAndExternalLeasesUseTheTargetOffset() {
+        var authorities = new List<GpuBufferPages>();
+        var gpu = new UploadModelGpu { DestinationPages = (_, size) => {
+            var pages = new GpuBufferPages((long)size, Page);
+            authorities.Add(pages);
+            return pages;
+        } };
+        using var module = gpu.Services.ShaderModuleFactory.Create(GpuShaderStage.Compute, new byte[] { UploadModelGpu.RegionCopyBytecode });
+        using var pipeline = gpu.Services.PipelineFactory.Create(module, GpuRegion.CopyPipeline, default);
+        using var region = new GpuRegion(GpuResidencyPolicy.Staged, GpuHostVisibleMemory.Host, Page, 1,
+            gpu.Services.BufferFactory, gpu.Services.Bindings, gpu.Services.Recorder, pipeline, default);
+        Copy(gpu, region);
+        var old = region.TryLease(0, 4)!.Value;
+        using var grownFrom = region.Grow(Page * 2);
+        Assert.False(old.IsCurrent);
+        Copy(gpu, region);
+        authorities[^1].SetWritable(1, 1, false);
+        Assert.Null(region.TryLease(Page, 4));
+        old = region.TryLease(0, 4)!.Value;
+        using var shrunkFrom = region.Shrink(Page);
+        Assert.False(old.IsCurrent);
+        Assert.NotNull(region.TryLease(0, 4));
+
+        using var target = gpu.Services.BufferFactory.CreateDeviceLocal(Page * 3, GpuBufferUsage.Storage, default);
+        using var external = new GpuRegion(target, Page, 1, gpu.Services.BufferFactory, gpu.Services.Bindings,
+            gpu.Services.Recorder, pipeline, default);
+        Copy(gpu, external);
+        external.Target(Page / 4);
+        authorities[^1].SetWritable(1, 1, false);
+        Assert.Null(external.TryLease(0, 4));
+        authorities[^1].SetWritable(1, 1, true);
+        var lease = external.TryLease(0, 4)!.Value;
+        authorities[^1].SetWritable(0, 1, false);
+        Assert.True(lease.IsCurrent);
+    }
+
+    [Fact]
     public void ALeaseNeverSurvivesRevocationAndRemappingButUnrelatedPagesDo() {
         var pages = new GpuBufferPages(Page * 3, Page);
         var left = pages.TryLease(0, Page)!.Value;
@@ -58,7 +95,7 @@ public sealed class GpuBufferPagesLawTests {
     }
 
     [Fact]
-    public void RevocationBetweenStagingAndRecordingRefusesTheStaleWrite() {
+    public void RevocationBetweenStagingAndRecordingRestagesAndRetainsUnmappedDebt() {
         var pages = new GpuBufferPages(Page, Page);
         var gpu = new UploadModelGpu { DestinationPages = (_, _) => pages };
         using var module = gpu.Services.ShaderModuleFactory.Create(GpuShaderStage.Compute, new byte[] { UploadModelGpu.RegionCopyBytecode });
@@ -67,9 +104,19 @@ public sealed class GpuBufferPagesLawTests {
             gpu.Services.BufferFactory, gpu.Services.Bindings, gpu.Services.Recorder, pipeline, default);
         region.Flush(0);
         pages.SetWritable(0, 1, false);
+        region.RecordCopy(1, 0);
+        Assert.True(region.OwesCopy);
         pages.SetWritable(0, 1, true);
-        Assert.Throws<InvalidOperationException>(() => region.RecordCopy(1, 0));
         Copy(gpu, region);
+        Assert.False(region.OwesCopy);
+        region.Write(0, new byte[] { 7, 8, 9, 10 });
+        region.Flush(0);
+        pages.SetWritable(0, 1, false);
+        pages.SetWritable(0, 1, true);
+        gpu.Services.Recorder.MemoryBarrier(commandBufferHandle: 1, sourceStageMask: GpuStage.ComputeShader,
+            destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderRead, destinationAccessMask: GpuAccess.ShaderWrite);
+        region.RecordCopy(1, 0);
+        Assert.Equal(7, gpu.DeviceLocal(Page)[0]);
     }
 
     private static void Copy(UploadModelGpu gpu, GpuRegion region) {

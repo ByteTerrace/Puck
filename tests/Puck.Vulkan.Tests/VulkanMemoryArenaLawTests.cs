@@ -33,6 +33,29 @@ public sealed unsafe class VulkanMemoryArenaLawTests {
     [ThreadStatic] private static VulkanMemoryArena? Watched;
 
     [Fact]
+    public void PressureReturnsPhysicalBytesOnlyAfterTheLastPlacementReturns() {
+        Calls = [];
+        NextMemory = 1000;
+        var work = new GpuDeviceMemoryWork(backend: "vulkan");
+        var device = new VulkanDeviceCommands(17, Procedures(), memory: work);
+        work.BeginDevice(17, TenTypes);
+        var arena = device.Arena;
+        var requirements = new VkMemoryRequirements { Alignment = 65536, Size = 65536 };
+        _ = arena.Bind(1, false, requirements, 0, GpuMemoryRole.DeviceLocal, GpuObjectName.UnnamedFamily);
+        _ = arena.Bind(2, false, requirements, 0, GpuMemoryRole.DeviceLocal, GpuObjectName.UnnamedFamily);
+        arena.Trim();
+        Assert.Equal((long)Block, work.Held);
+        Assert.True(arena.Release(1, false));
+        Assert.Equal((long)Block, work.Held);
+        Assert.True(arena.Release(2, false));
+        Assert.Equal(0, work.Held);
+        Assert.Equal(0, arena.Blocks);
+        Assert.Contains("free 1000", Calls);
+        arena.FreeAll();
+        work.EndDevice(17);
+    }
+
+    [Fact]
     public void ResourcesShareBlocksAndGiveBackTheirRanges() {
         Calls = [];
         NextMemory = 1000;

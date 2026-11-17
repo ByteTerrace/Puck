@@ -53,10 +53,14 @@ public sealed unsafe class DirectXHeapArena {
         m_device = device;
         m_memory = memory;
         m_pool = new(allocate: Allocate, blockBytes: HeapBytes, free: (heap, _) => Free(heap: heap));
+        if (m_memory is not null) { m_memory.TrimRequested += m_pool.Trim; }
     }
 
     /// <summary>Gets the heaps the arena holds now.</summary>
     public int Heaps => m_pool.Blocks;
+
+    /// <summary>Releases empty heaps and marks held heaps for release after their last fenced placement returns.</summary>
+    public void Trim() => m_pool.Trim();
 
     /// <summary>Creates a resource placed in a heap of a type: one with room, or a new one.</summary>
     /// <param name="description">The resource's description.</param>
@@ -131,6 +135,7 @@ public sealed unsafe class DirectXHeapArena {
         if (!m_pool.FreeAll()) {
             return;
         }
+        if (m_memory is not null) { m_memory.TrimRequested -= m_pool.Trim; }
         foreach (var (token, placed) in Placed) {
             if (ReferenceEquals(objA: placed.Arena, objB: this)) { _ = Placed.TryRemove(key: token, value: out _); }
         }

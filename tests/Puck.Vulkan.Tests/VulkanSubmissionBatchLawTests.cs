@@ -21,6 +21,42 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     private const nint Last = 101;
 
     [ThreadStatic] private static List<string>? Calls;
+    [ThreadStatic] private static List<string>? SparseCalls;
+    [ThreadStatic] private static bool FailSparse;
+
+    [Theory]
+    [InlineData(31)]
+    [InlineData(32)]
+    public void SparseBindingsJoinTheDeviceTimelineBeforeFurtherGraphicsWork(int bindingQueue) {
+        Calls = [];
+        SparseCalls = [];
+        FailSparse = false;
+        var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
+        using var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi(), new VkQueue(familyIndex: 1, handle: bindingQueue));
+        var queue = new VulkanGpuQueueSubmitter(new Context(logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+        queue.BeginBatch();
+        queue.Submit([42]);
+        var mapped = logical.BindSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536, Memory = 88, MemoryOffset = 131072 }]);
+        Assert.Equal(2UL, mapped);
+        queue.Submit([43]);
+        Assert.Equal(3UL, queue.Timeline.Checkpoint());
+        Assert.Equal([
+            "submit 31 commands=1 wait=0 signal=0", "submit 31 commands=0 wait=0 signal=1",
+            $"bind {bindingQueue} wait=1 signal=2 buffer=77 range=65536+65536 memory=88+131072",
+            "submit 31 commands=0 wait=2 signal=0", "submit 31 commands=1 wait=0 signal=0",
+            "submit 31 commands=0 wait=0 signal=3",
+        ], SparseCalls);
+        SparseCalls.Clear();
+        var unmapped = logical.BindSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536 }]);
+        Assert.Equal(5UL, unmapped);
+        Assert.Contains($"bind {bindingQueue} wait=4 signal=5 buffer=77 range=65536+65536 memory=0+0", SparseCalls);
+        FailSparse = true;
+        Assert.Throws<VulkanException>(() => logical.BindSparse(77, [new VkSparseMemoryBind { Size = 65536 }]));
+        Assert.Throws<InvalidOperationException>(() => queue.Timeline.Checkpoint());
+        Assert.Throws<InvalidOperationException>(() => queue.Timeline.Completed);
+        FailSparse = false;
+        SparseCalls = null;
+    }
 
     [Fact]
     public void AnEmptySubmitAndWaitDrainsEarlierDeferredWorkAndKeepsTheBatchOpen() {
@@ -133,6 +169,9 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Resolve(nint handle, byte* name) => (Marshal.PtrToStringUTF8(ptr: ((nint)name)) switch {
         "vkQueueSubmit" => ((nint)((delegate* unmanaged[Cdecl]<nint, uint, VkSubmitInfo*, nint, VkResult>)&Submit)),
+        "vkQueueBindSparse" => (nint)(delegate* unmanaged[Cdecl]<nint, uint, VkBindSparseInfo*, nint, VkResult>)&BindSparse,
+        "vkCreateSemaphore" => (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, nint*, VkResult>)&CreateSemaphore,
+        "vkDestroySemaphore" => (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroySemaphore,
         "vkQueueWaitIdle" => ((nint)((delegate* unmanaged[Cdecl]<nint, VkResult>)&QueueIdle)),
         _ => ((nint)((delegate* unmanaged[Cdecl]<void>)&Trap)),
     });
@@ -143,11 +182,26 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         var infos = new List<string>();
 
         for (var index = 0; (index < count); index++) {
+            var info = submits[index];
+            var timeline = (VkTimelineSemaphoreSubmitInfo*)info.PNext;
+            SparseCalls?.Add($"submit {queue} commands={info.CommandBufferCount} wait={(info.WaitSemaphoreCount == 0 ? 0 : *(ulong*)timeline->PWaitSemaphoreValues)} signal={(info.SignalSemaphoreCount == 0 ? 0 : *(ulong*)timeline->PSignalSemaphoreValues)}");
             infos.Add(item: $"{submits[index].CommandBufferCount}:{((submits[index].CommandBufferCount == 0) ? 0 : ((nint*)submits[index].PCommandBuffers)[0])}");
         }
         Calls!.Add(item: $"submit fence={fence} infos={string.Join(separator: ",", values: infos)}");
 
         return VkResult.Success;
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static VkResult CreateSemaphore(nint device, nint info, nint allocator, nint* semaphore) { *semaphore = 55; return VkResult.Success; }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void DestroySemaphore(nint device, nint semaphore, nint allocator) { }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static VkResult BindSparse(nint queue, uint count, VkBindSparseInfo* info, nint fence) {
+        var timeline = (VkTimelineSemaphoreSubmitInfo*)info->PNext;
+        var buffers = (VkSparseBufferMemoryBindInfo*)info->PBufferBinds;
+        var range = (VkSparseMemoryBind*)buffers->PBinds;
+        SparseCalls!.Add($"bind {queue} wait={*(ulong*)timeline->PWaitSemaphoreValues} signal={*(ulong*)timeline->PSignalSemaphoreValues} buffer={buffers->Buffer} range={range->ResourceOffset}+{range->Size} memory={range->Memory}+{range->MemoryOffset}");
+        return FailSparse ? VkResult.ErrorOutOfDeviceMemory : VkResult.Success;
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static VkResult QueueIdle(nint queue) {

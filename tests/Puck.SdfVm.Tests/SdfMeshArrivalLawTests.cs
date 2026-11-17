@@ -9,6 +9,53 @@ namespace Puck.SdfVm.Tests;
 
 [Collection(ProcessWorkCollection.Name)]
 public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "PublishMeshIrradiance")]
+    private static extern void PublishIrradiance(SdfWorldTables tables, IGpuBuffer source, int wordCount, List<int> slots);
+
+    [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = "ServiceMemoryTrim")]
+    private static extern void ServiceTrim(SdfWorldTables tables);
+
+    [Fact]
+    public void RetiredFeedbackRegionStaysHeldUntilItsPendingIrradianceCopyIsSubmitted() {
+        using var rig = new Rig(1);
+        var services = rig.Gpu.Services;
+        using var feedback = new GpuRegion(GpuResidencyPolicy.InPlace, GpuHostVisibleMemory.Host,
+            SdfMeshIrradianceProbe.ProbeWords * 4L, 1, services.BufferFactory, services.Bindings,
+            services.Recorder, null, default);
+        PublishIrradiance(rig.Engine, feedback.Buffer(0), SdfMeshIrradianceProbe.ProbeWords, [0]);
+        rig.Engine.RetireBackgroundResource(feedback);
+        ServiceTrim(rig.Engine);
+        ServiceTrim(rig.Engine); // A hidden residency may service retirements repeatedly before its next upload.
+        Assert.NotEqual(0, feedback.Buffer(0).BufferHandle);
+        rig.Engine.SubmitUpload();
+        ServiceTrim(rig.Engine);
+        Assert.Throws<ObjectDisposedException>(() => feedback.Buffer(0));
+    }
+
+    [Fact]
+    public void ForgettingOnlyATailRelandsStandingMeshesWhenTheDestinationShrinks() {
+        using var rig = new Rig(1);
+        var small = HostDraw("standing", 1);
+        var tail = small with { Mesh = new SdfMesh(new Vector3[1 << 21], new uint[] { 0, 1, 2 }) };
+        var frame = Frame(rig.LiveProgram, 0, Transforms(1)) with { MeshDraws = new[] { small } };
+        LandRootCut(rig, frame);
+        frame = frame with { MeshDraws = new[] { small, tail }, MeshDrawsRevision = 1 };
+        rig.Engine.Pack(frame);
+        rig.Engine.SubmitUpload();
+        var held = rig.Engine.MeshRegionBytes;
+        var relocations = rig.Engine.DescribeLanding().Split(' ').Single(value => value.StartsWith("relocations=", StringComparison.Ordinal));
+        frame = frame with { MeshDraws = new[] { small }, MeshDrawsRevision = 2 };
+        rig.Engine.Pack(frame);
+        rig.Engine.SubmitUpload();
+        MemoryAccount.Shared.TrimCaches();
+        rig.Engine.Pack(frame);
+        rig.Engine.SubmitUpload();
+        LandRootCut(rig, frame);
+        Assert.True(rig.Engine.MeshRegionBytes < held);
+        Assert.True(rig.Engine.MeshStands(small.Mesh));
+        Assert.False(rig.Engine.DrawsAwaitMeshes);
+        Assert.Contains(relocations, rig.Engine.DescribeLanding());
+    }
     [Fact]
     public void LandingCompletionAndStandingRequireTheRecordedPageGeneration() {
         var pages = new GpuBufferPages(16L << 20, GpuBufferPages.MinimumPageBytes);
@@ -30,6 +77,8 @@ public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
         pages.SetWritable(0, 4096, false);
         pages.SetWritable(0, 4096, true);
         Assert.False(rig.Engine.MeshStands(draw.Mesh));
+        LandRootCut(rig, frame);
+        Assert.True(rig.Engine.MeshStands(draw.Mesh));
     }
 
     [Fact]

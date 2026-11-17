@@ -2391,13 +2391,39 @@ counting wrappers do not define a second queue. A checkpoint after retirement
 covers all preceding jobs without an extra per-job retirement counter or signal.
 The job fences remain responsible for wakeups, readbacks and ring-slot rewrites.
 
+**Piece 3: pool pressure and the Vulkan binding door.** Account trim requests
+reach both native arenas through `IGpuMemoryOwners.TrimRequested` and the
+device ledger. `GpuMemoryPool.Trim` frees empty blocks and marks every
+existing live block for release when its last placement returns. That mark
+survives delayed retirement. New blocks follow the ordinary spare-block
+policy until another request. Arena teardown removes the subscription.
+The pool and native recording-driver laws show that a live neighbour keeps
+the block held and the last return frees it, with no replacement allocation.
+The account law exercises the subscription and its removal.
+
+Vulkan enables both sparse buffer features only with an available binding
+queue, preferring the graphics family and otherwise requesting a separate
+queue. `VulkanLogicalDevice.BindSparse` is the submission-thread transaction:
+flush deferred graphics and signal N, bind waiting N and signaling N+1,
+submit a graphics wait on N+1, then return its completion value. The bind and
+graphics join share the existing device timeline. A failed bind or join
+prevents further completion proofs on that generation; backing must remain
+held until teardown. The native-call laws exercise one or two queue handles,
+an open graphics batch, null-memory unbinding and failure. They prove call
+ordering, not driver execution or physical-page lifetime. The initial join
+uses the existing conservative all-commands wait; first-access-stage
+specialization and its measurement remain with native resource integration.
+This follows the semaphore ordering in the Vulkan reference and the independent
+vkd3d-proton implementation cited in the backend contract above.
+
 **Pieces still to build, in dependency order.** Add native reserved/sparse
-resources and mapping queues, page-only
-residency admission with pool-owned slack, sparse arena placement policy, and
-unmap/empty-block trim plus physical compaction. These remain step 7 work;
-this piece claims neither a sparse path chosen nor a budget-drop physical
-release. Both backends must stay bootable at each piece, and the final hardware
-check below still gates any claim that sparse relief works.
+resource ownership, Direct3D 12 tile mapping, page-only residency admission
+with pool-owned slack (M2), sparse arena placement policy (M5), and fenced
+unmapping plus physical compaction (M6). Vulkan's binding door and both pools'
+empty-block trim exist; mesh regions still choose contiguous storage. No
+current piece claims a sparse path chosen or budget-drop sparse relief. Both
+backends must stay bootable at each piece, and the final hardware check below
+still gates any claim that sparse relief works.
 
 **Design review disposition (sm7b, e9c1d485c9).** H1's write/publication proof,
 M1's retirement proof and M3's absent-row path now have device-free laws as

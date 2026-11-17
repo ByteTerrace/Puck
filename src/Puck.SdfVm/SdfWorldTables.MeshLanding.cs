@@ -142,7 +142,8 @@ public sealed partial class SdfWorldTables {
             }
 
             if (progress.Pages is { IsCurrent: false }) {
-                ForgetLanding(mesh);
+                // Already visiting this mesh: do not rewind the whole order for every stale page lease.
+                m_landing.Remove(mesh);
                 continue;
             }
             if (progress.Pages is null) {

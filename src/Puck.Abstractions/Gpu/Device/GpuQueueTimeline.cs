@@ -10,12 +10,18 @@ public abstract class GpuQueueTimeline : IDisposable {
     /// <summary>Signals a fresh value after all work submitted so far, including an open batch. Pending commands
     /// not yet handed to the submitter are not covered; their owner must keep their resources until submission.</summary>
     /// <returns>The value successfully queued. Zero and the device-loss sentinel are never returned.</returns>
-    public ulong Checkpoint() {
+    public ulong Checkpoint() => SubmitCheckpoint(Signal);
+
+    /// <summary>Queues a backend operation that signals this timeline. The operation must order its signal after
+    /// every earlier signal and arrange a dependency before later queue work. A thrown call burns its value.</summary>
+    /// <param name="submit">The native operation, given the fresh signal value.</param>
+    /// <returns>The successfully submitted value.</returns>
+    protected ulong SubmitCheckpoint(Action<ulong> submit) {
         ObjectDisposedException.ThrowIf(m_disposed, this);
         if (m_next == ulong.MaxValue) { throw new InvalidOperationException("The device timeline is exhausted."); }
         // Burn a value even when the native call fails with an unknown outcome; it can never certify a later use.
         var value = m_next++;
-        Signal(value);
+        submit(value);
         return value;
     }
 

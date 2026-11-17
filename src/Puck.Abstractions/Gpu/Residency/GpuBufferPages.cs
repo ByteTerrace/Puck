@@ -37,6 +37,23 @@ public sealed class GpuBufferPages {
     /// <summary>Gets the mapping page size in bytes.</summary>
     public int PageBytes { get; }
 
+    /// <summary>Gets the writable-coverage revision. Consumers revisit retained leases only when it changes.</summary>
+    public ulong Revision => m_generation;
+
+    // The host shadow remains authoritative after remapping. Source-owned ranges are re-owed by their
+    // publication owner, which knows which meshes remain live.
+    internal void OweChanged(ulong after, long offset, long bytes, GpuUploadRuns owed) {
+        if (after == m_generation || bytes == 0) { return; }
+        var end = offset + bytes;
+        var last = (int)((end - 1) / PageBytes);
+        for (var page = (int)(offset / PageBytes); page <= last; page++) {
+            if (m_generations[page] <= after) { continue; }
+            var first = Math.Max(offset, (long)page * PageBytes);
+            var stop = Math.Min(end, (long)(page + 1) * PageBytes);
+            owed.Add((int)((first - offset) / 4), (int)((stop - first) / 4));
+        }
+    }
+
     /// <summary>Issues a lease only when the entire range has writable backing.</summary>
     /// <param name="offset">The first byte.</param>
     /// <param name="bytes">The positive byte count.</param>
@@ -80,7 +97,7 @@ public sealed class GpuBufferPages {
     internal void Revoke() => SetWritable(0, m_writable.Length, false);
 
     // Exact intersection after GpuUploadRuns coarsening. Never feed these runs back through its gap joining.
-    internal void Clip(int start, int length, int destinationWord, List<(int Start, int Length, Lease Lease)> output) {
+    internal void Clip(int start, int length, int destinationWord, List<(int Start, int Length, Lease Lease)> output, GpuUploadRuns deferred) {
         var end = checked(start + length);
         while (start < end) {
             var offset = ((long)destinationWord + start) * 4;
@@ -94,6 +111,8 @@ public sealed class GpuBufferPages {
                 }
                 var lease = TryLease(((long)destinationWord + first) * 4, ((long)next - first) * 4);
                 if (lease is { } issued) { output.Add((first, next - first, issued)); }
+            } else {
+                deferred.Add(start, next - start);
             }
             start = next;
         }
