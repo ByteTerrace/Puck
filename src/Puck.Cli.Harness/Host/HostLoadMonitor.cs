@@ -29,26 +29,47 @@ public readonly record struct HostSample(DateTimeOffset At, double CpuPercent, d
 /// left to reserve.</param>
 /// <param name="StartTicks">The process's UTC start ticks, which with <paramref name="Id"/> identify it: a recycled id is
 /// another process.</param>
-public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0);
+/// <param name="WorkingSetGb">The process's working set, in gigabytes: the physical memory it holds now; NaN when the
+/// reading does not report it, in which case <see cref="ResidentGb"/> is the private bytes.</param>
+public readonly record struct HostRunningStart(int Id, HostStartKind Kind, double PrivateGb, bool Ready = false, long StartTicks = 0, double WorkingSetGb = double.NaN) {
+    /// <summary>Gets the physical memory the process holds now, in gigabytes: its working set, or its private bytes when
+    /// the reading carries no working set (commit is never less than the touched part of it, so this is the conservative
+    /// stand-in).</summary>
+    public double ResidentGb => (double.IsFinite(d: WorkingSetGb) ? WorkingSetGb : PrivateGb);
+}
 /// <summary>The thresholds that turn readings into admission lines. A threshold left out is never judged, so with
-/// none the monitor reports only GPU transitions.</summary>
+/// none the monitor reports only GPU transitions. A start's need is its own expected peak (<see cref="HostStartTracker"/>),
+/// judged in two quantities that are not the same: its private bytes (commit) against the commit headroom less a reserve
+/// (<see cref="CommitCovers"/>), and its working set (physical residency) against free memory above the pressure floor
+/// (<see cref="PhysicalCovers"/>). No fixed amount of free memory or of commit gates a start.</summary>
 /// <param name="CapacityCpuPercent">CAPACITY needs the CPU mean below this.</param>
-/// <param name="CapacityRamGb">CAPACITY needs free memory above this.</param>
-/// <param name="PressureRamGb">PRESSURE when free memory is below this.</param>
+/// <param name="PressureRamGb">PRESSURE when free memory is below this; a start must also leave this much free once its
+/// own working set and the growth of the starts already running are taken.</param>
 /// <param name="PressureDiskGb">PRESSURE when free disk is below this.</param>
-/// <param name="CapacityCommitPercent">CAPACITY needs the commit charge below this share of the commit limit, when the
-/// platform reports one.</param>
-public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? CapacityRamGb, double? PressureRamGb, double? PressureDiskGb, double? CapacityCommitPercent = null) {
-    /// <summary>The share of the commit limit, in percent, a charge must stay under for the machine to take more work.
-    /// Allocation fails at the limit with physical memory still free, and one windowed World or heavy suite charges
-    /// ten gigabytes, so the margin is what keeps two of them from meeting there.</summary>
-    public const double CommitCapacityPercent = 75;
+/// <param name="CommitReservePercent">The share of the commit limit, in percent, that stays unclaimed after a start's need:
+/// the margin for processes admission does not see (a build, a hand-started suite). The commit headroom itself
+/// below this share is commit pressure and holds every start back. Not judged when the platform reports no commit limit.</param>
+public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null) {
+    /// <summary>The commit reserve, in percent of the commit limit: a start is admitted only if the headroom still holds
+    /// this much after its need. Allocation fails at the limit with physical memory still free; builds, compilers and
+    /// hand-started suites charge commit that admission does not predict, and a tenth of the limit (6.4 GB of a 64 GB
+    /// limit) absorbs a typical build.</summary>
+    public const double DefaultCommitReservePercent = 10;
+    /// <summary>The share of a kind's expected commit peak assumed resident in physical memory until this machine has
+    /// measured the kind's working set: committed memory a process has not touched holds no physical page (a windowed
+    /// World read 14 GB resident of 20.4 GB private).</summary>
+    public const double ResidentFraction = 0.7;
 
-    /// <summary>Gets whether a reading's commit charge is under <see cref="CapacityCommitPercent"/> of its limit. A
-    /// threshold left out, or a platform that reports no commit limit, never holds a reading back.</summary>
+    /// <summary>Gets the commit, in gigabytes, the reserve keeps unclaimed in a reading.</summary>
+    /// <param name="reading">The reading, whose commit limit the reserve is a share of.</param>
+    /// <returns>The reserve, or zero when none is judged or the platform reports no commit limit.</returns>
+    public double CommitReserveGb(HostSample reading) => (((CommitReservePercent is { } percent) && double.IsFinite(d: reading.CommitLimitGb)) ? (reading.CommitLimitGb * percent / 100.0) : 0);
+
+    /// <summary>Gets whether a reading's commit headroom is at or above the reserve: below it every start is held back (commit
+    /// pressure). A threshold left out, or a platform that reports no commit limit, never holds a reading back.</summary>
     /// <param name="reading">The reading.</param>
-    /// <returns><see langword="true"/> when the commit charge leaves room for more work or is not judged.</returns>
-    public bool CommitHasHeadroom(HostSample reading) => ((CapacityCommitPercent is not { } limit) || double.IsNaN(d: reading.CommitPercent) || (reading.CommitPercent < limit));
+    /// <returns><see langword="true"/> when the headroom holds the reserve or is not judged.</returns>
+    public bool CommitHasHeadroom(HostSample reading) => ((CommitReservePercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb) >= CommitReserveGb(reading: reading)));
     /// <summary>The commit, in gigabytes, a windowed World is expected to reach in a session of minutes (readings of 12 to
     /// 18 GB private on the debug world).</summary>
     public const double WindowedWorldPeakGb = 18;
@@ -72,12 +93,27 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
         HostStartKind.ReproduceReplica => ReproduceReplicaPeakGb,
         _ => StepPeakGb,
     };
-    /// <summary>Gets whether a reading's commit headroom (the limit less the charge) covers <paramref name="needGb"/>. A
-    /// threshold left out, or a platform that reports no commit limit, never holds a reading back.</summary>
+    /// <summary>Gets whether a reading's commit headroom (the limit less the charge) covers <paramref name="needGb"/> and
+    /// still holds the commit reserve afterwards. A threshold left out, or a platform that reports no commit limit, never
+    /// holds a reading back.</summary>
     /// <param name="reading">The reading.</param>
-    /// <param name="needGb">The commit, in gigabytes, the start and the growth still to come need.</param>
-    /// <returns><see langword="true"/> when the headroom covers the need or is not judged.</returns>
-    public bool CommitCovers(HostSample reading, double needGb) => ((CapacityCommitPercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb) >= needGb));
+    /// <param name="needGb">The commit, in gigabytes, the start and the growth still to come need (private bytes).</param>
+    /// <returns><see langword="true"/> when the headroom covers the need and the reserve, or is not judged.</returns>
+    public bool CommitCovers(HostSample reading, double needGb) => ((CommitReservePercent is null) || !double.IsFinite(d: reading.CommitLimitGb) || !double.IsFinite(d: reading.CommitChargeGb) || ((reading.CommitLimitGb - reading.CommitChargeGb - needGb) >= CommitReserveGb(reading: reading)));
+    /// <summary>Gets whether a start that needs <paramref name="needGb"/> of physical memory (its own expected working set
+    /// plus the working-set growth the running starts have left) still leaves free memory at or above
+    /// <see cref="PressureRamGb"/>. Free memory
+    /// here is what the operating system can hand out without writing anything to disk (Windows
+    /// <c>ullAvailPhys</c>, the sum of the standby, free and zero lists; Linux <c>MemAvailable</c>), so reclaimable cache
+    /// already counts as free. Commit is the hard limit (allocation fails at it); physical memory short of the start
+    /// makes every process page, which is why this leaves the pressure floor instead of demanding the start's whole
+    /// need in a fixed free amount. The need is a working set, not private bytes: committed memory a process never
+    /// touches holds no physical page, so private bytes overstate residency. A threshold left out, or a platform that
+    /// reports no free memory, never holds a reading back.</summary>
+    /// <param name="reading">The reading.</param>
+    /// <param name="needGb">The physical memory, in gigabytes, the start and the growth still to come take from free memory.</param>
+    /// <returns><see langword="true"/> when the start leaves the pressure floor free or is not judged.</returns>
+    public bool PhysicalCovers(HostSample reading, double needGb) => ((PressureRamGb is not { } floor) || !double.IsFinite(d: reading.FreeRamGb) || ((reading.FreeRamGb - needGb) >= floor));
     /// <summary>The free disk, in gigabytes, below which every machine is under pressure. A build and a suite write the
     /// same outputs whatever the machine's size, so this one threshold does not scale.</summary>
     public const double DiskPressureGb = 10;
@@ -94,14 +130,14 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
     /// logical processors), read once.</summary>
     public static HostLoadThresholds ThisMachine => MachineThresholds.Value;
 
-    /// <summary>Returns the thresholds for a machine of a given size. Memory thresholds are fractions of the installed
+    /// <summary>Returns the thresholds for a machine of a given size. The memory threshold is a fraction of the installed
     /// memory, rounded up to whole gigabytes because firmware reservations make the reported size slightly less than
-    /// the nominal one: CAPACITY needs more than five sixteenths of it free, and PRESSURE begins below one eighth. The
-    /// CPU threshold leaves idle logical processors for the work being admitted: three, but never fewer than 40% of the
-    /// machine nor more than half of it. Free disk under <see cref="DiskPressureGb"/> is pressure on every machine. A
-    /// 16 GB, six-thread machine gets CPU below 50%, more than 5 GB free and pressure under 2 GB; a 32 GB, 16-thread
-    /// machine gets CPU below 60%, more than 10 GB free and pressure under 4 GB. Capacity also needs the commit charge
-    /// under <see cref="CommitCapacityPercent"/> of the commit limit on every machine.</summary>
+    /// the nominal one: PRESSURE begins when free memory is below one eighth of it, and a start must leave that much
+    /// free (<see cref="PhysicalCovers"/>). The CPU threshold leaves idle logical processors for the work being
+    /// admitted: three, but never fewer than 40% of the machine nor more than half of it. Free disk under
+    /// <see cref="DiskPressureGb"/> is pressure on every machine. A 16 GB, six-thread machine gets CPU below 50% and
+    /// pressure under 2 GB; a 32 GB, 16-thread machine gets CPU below 60% and pressure under 4 GB. Every machine keeps
+    /// <see cref="DefaultCommitReservePercent"/> of its commit limit unclaimed.</summary>
     /// <param name="installedRamGb">The installed physical memory, in gigabytes.</param>
     /// <param name="logicalProcessors">The logical processors.</param>
     /// <returns>The thresholds.</returns>
@@ -118,9 +154,8 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
         var idle = Math.Clamp(max: (0.5 * logicalProcessors), min: (0.4 * logicalProcessors), value: 3.0);
 
         return new HostLoadThresholds(
-            CapacityCommitPercent: CommitCapacityPercent,
             CapacityCpuPercent: Math.Round(digits: 1, value: (100.0 * (1.0 - (idle / logicalProcessors)))),
-            CapacityRamGb: ((installed * 5.0) / 16.0),
+            CommitReservePercent: DefaultCommitReservePercent,
             PressureDiskGb: DiskPressureGb,
             PressureRamGb: (installed / 8.0)
         );
@@ -134,8 +169,8 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Capa
 /// <item><c>PRESSURE &lt;why&gt; …</c> when free memory or disk falls under its pressure threshold, and again when the
 /// reasons change;</item>
 /// <item><c>CAPACITY …</c> when, without pressure, the CPU mean over the last <c>cpuSamples</c> readings falls under its
-/// threshold, free memory is over its own and the commit charge is under its share of the commit limit, once that many
-/// readings exist;</item>
+/// threshold and the commit headroom holds its reserve, once that many readings exist (what a start
+/// itself needs of memory is judged per start by <see cref="HostStartTracker"/>, not here);</item>
 /// <item><c>LOADED …</c> when, without pressure, that window shows no capacity, so a watcher sees capacity end.</item>
 /// </list>
 /// One line per transition: a state that holds prints nothing more. PRESSURE wins over CAPACITY within one reading.
@@ -198,20 +233,19 @@ public sealed class HostLoadMonitor(HostLoadThresholds thresholds, int cpuSample
         // Capacity and its explanation come from the same decision, so quiet cannot call a cold window loaded
         // or blame an instantaneous CPU reading when it is the rolling mean that fails.
         var waits = new List<string>(pressure);
-        if (thresholds.CapacityCpuPercent is not { } cpu || thresholds.CapacityRamGb is not { } free) {
+        if (thresholds.CapacityCpuPercent is not { } cpu) {
             waits.Add("capacity thresholds unavailable");
         } else {
             if (m_cpu.Count < cpuSamples) { waits.Add($"collecting CPU samples: {m_cpu.Count} of {cpuSamples}"); }
             else if (!(mean < cpu)) { waits.Add($"cpu mean={Number(mean)}% (needs under {Number(cpu)}%)"); }
-            if (!(sample.FreeRamGb > free)) { waits.Add($"freeRAM={Number(sample.FreeRamGb)}GB (needs over {Number(free)}GB)"); }
-            if (!thresholds.CommitHasHeadroom(sample)) { waits.Add($"commit={Number(sample.CommitPercent)}% (needs under {thresholds.CapacityCommitPercent}%)"); }
+            if (!thresholds.CommitHasHeadroom(sample)) { waits.Add($"commit={Number(sample.CommitPercent)}% (needs {thresholds.CommitReservePercent}% of the limit unclaimed)"); }
         }
         HasCapacity = waits.Count == 0;
         CapacityWait = HasCapacity ? null : string.Join("; ", waits);
 
-        // Capacity is judged only with both its thresholds and a full window; until then a reading without pressure has
+        // Capacity is judged only with its CPU threshold and a full window; until then a reading without pressure has
         // no admission state, and the next one that does prints.
-        var judged = ((thresholds.CapacityCpuPercent is not null) && (thresholds.CapacityRamGb is not null) && (m_cpu.Count == cpuSamples));
+        var judged = ((thresholds.CapacityCpuPercent is not null) && (m_cpu.Count == cpuSamples));
         var admission = ((pressure.Count != 0)
             ? $"PRESSURE {string.Join(separator: ',', values: pressure)}"
             : (HasCapacity

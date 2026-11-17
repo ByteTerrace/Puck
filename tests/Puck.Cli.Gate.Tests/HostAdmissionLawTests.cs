@@ -5,22 +5,28 @@ using Xunit;
 namespace Puck.Cli.Gate.Tests;
 
 public sealed class HostAdmissionLawTests {
-    // The 16 GB, six-thread developer machine: capacity above 5 GB free, pressure below 2 GB, disk pressure below 10 GB.
-    private static readonly HostLoadThresholds Thresholds = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+    // The 16 GB, six-thread developer machine without a commit reserve, so the laws about a start's own need read the
+    // commit headroom against that need alone: pressure below 2 GB free, disk pressure below 10 GB.
+    private static readonly HostLoadThresholds Thresholds = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { CommitReservePercent = 0 });
+    // The same machine with its default commit reserve (10% of the limit).
+    private static readonly HostLoadThresholds Reserved = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
+    // The 32 GB, 16-thread machine with its defaults: pressure below 4 GB free, a tenth of the commit limit in reserve.
+    private static readonly HostLoadThresholds Desk = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
 
-    // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit.
-    private static HostSample Sample(double cpu = 0, double ram = 8, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
-    private static bool Admits(HostStartKind kind, HostSample reading, HostStartTracker tracker, GateClock clock, int boundSeconds = 25) {
+    // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit. Free memory
+    // defaults to plenty, so a law about commit is not also a law about physical memory.
+    private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
+    private static bool Admits(HostStartKind kind, HostSample reading, HostStartTracker tracker, GateClock clock, int boundSeconds = 25, HostLoadThresholds? on = null) {
         using var error = new StringWriter();
 
-        return HostAdmission.Wait("start", (kind == HostStartKind.WindowedWorld), false, () => reading, clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: boundSeconds), null, kind, tracker);
+        return HostAdmission.Wait("start", (kind == HostStartKind.WindowedWorld), false, () => reading, clock, clock.Advance, error, CancellationToken.None, (on ?? Thresholds), TimeSpan.FromSeconds(seconds: boundSeconds), null, kind, tracker);
     }
 
     [Fact]
     public void HostOptionsDefaultToTheAdmissionThresholdsAndStillAllowOverrides() {
         var load = HostCommand.Create().Subcommands.Single(predicate: command => (command.Name == "load"));
         var defaults = HostLoadThresholds.ThisMachine;
-        (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--capacity-ram", defaults.CapacityRamGb), ("--capacity-commit", defaults.CapacityCommitPercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
+        (string Name, double? Value)[] thresholds = [("--capacity-cpu", defaults.CapacityCpuPercent), ("--commit-reserve", defaults.CommitReservePercent),("--pressure-ram", defaults.PressureRamGb), ("--pressure-disk", defaults.PressureDiskGb)];
 
         foreach (var (name, value) in thresholds) {
             var option = ((Option<double?>)load.Options.Single(predicate: option => (option.Name == name)));
@@ -37,11 +43,120 @@ public sealed class HostAdmissionLawTests {
         using var small = new StringWriter();
         using var large = new StringWriter();
 
-        // 8 GB free is headroom on a 16 GB machine and not on a 32 GB one, which waits until 12 GB are free.
-        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: 8), clock, _ => Assert.Fail(message: "8 GB free must admit on a 16 GB machine"), small, CancellationToken.None, Thresholds));
-        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: ((calls++ == 0) ? 8 : 12)), clock, clock.Advance, large, CancellationToken.None, HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16)));
+        // 3 GB free is not pressure on a 16 GB machine (below 2 GB) and is on a 32 GB one (below 4 GB), which waits until
+        // 6 GB are free: pressure leaves the floor plus the step's own 2 GB peak.
+        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: 4), clock, _ => Assert.Fail(message: "4 GB free must admit a step on a 16 GB machine"), small, CancellationToken.None, Thresholds));
+        Assert.True(condition: HostAdmission.Wait("build", false, false, () => Sample(ram: ((calls++ == 0) ? 3 : 6)), clock, clock.Advance, large, CancellationToken.None, Desk));
         Assert.Equal(actual: calls, expected: 2);
-        Assert.Contains(actualString: large.ToString(), expectedSubstring: "freeRAM=8.0GB (admission needs over 10.0GB)");
+        Assert.Contains(actualString: large.ToString(), expectedSubstring: "freeRAM=3.0GB (admission needs at least 4.0GB (memory pressure))");
+    }
+    // Peaks measured on the machine this was found on (a 32 GB desk, 64 GB commit limit), written as the tracker writes
+    // them: a windowed World reaches 20.4 GB of private bytes (commit) but holds about 14 GB resident.
+    private static HostStartTracker MeasuredDesk(string root) {
+        var peaks = Path.Combine(root, "host-peaks");
+
+        Directory.CreateDirectory(peaks);
+        foreach (var (name, text) in (IEnumerable<(string, string)>)[("WindowedWorld", "20.4"), ("WindowedWorld.resident", "14"), ("HeadlessWorld", "1.5"), ("HeadlessWorld.resident", "1.2"), ("HeavySuite", "1.6"), ("HeavySuite.resident", "1.3")]) {
+            File.WriteAllText(Path.Combine(peaks, name), text);
+        }
+
+        return new HostStartTracker(root);
+    }
+    // A start is admitted by its own measured need, each quantity against its own reading: private bytes against the commit
+    // headroom less the reserve, working set against free memory above the pressure floor. On an idle 32 GB desk (21 GB
+    // free) a windowed World goes ahead although its 20.4 GB of private bytes plus the floor exceed free memory; with one
+    // running (7 GB free left, 14 GB resident) a headless World and a heavy step go ahead and a second windowed World
+    // does not; at 6 GB free the same holds; under real pressure nothing is admitted.
+    [Fact]
+    public void AStartIsAdmittedByWhatItNeedsNotByAFixedFreeMemoryFloor() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var running = new HostRunningStart(Id: 11, Kind: HostStartKind.WindowedWorld, PrivateGb: 20.4, Ready: true, StartTicks: 1, WorkingSetGb: 14);
+        var idle = Sample(commit: 40, limit: 64, ram: 21);
+        var beside = Sample(commit: 60, limit: 64, ram: 7, starts: [running]);
+        var today = Sample(commit: 60, limit: 64, ram: 6, starts: [running]);
+
+        HostStartTracker Tracker() => MeasuredDesk(directory.RootPath);
+
+        Assert.Equal(expected: 4.0, actual: Desk.PressureRamGb);
+        // 21 GB free less 14 GB resident leaves 7 GB, over the 4 GB floor; commit headroom 38.4 GB less 20.4 GB leaves 18 GB over the 6.4 GB reserve.
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: Tracker(), clock: new GateClock(), on: Desk));
+        foreach (var reading in new[] { beside, today }) {
+            Assert.True(condition: Admits(kind: HostStartKind.HeadlessWorld, reading: reading, tracker: Tracker(), clock: new GateClock(), on: Desk));
+            Assert.True(condition: Admits(kind: HostStartKind.HeavySuite, reading: reading, tracker: Tracker(), clock: new GateClock(), on: Desk));
+            Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: reading, tracker: Tracker(), clock: new GateClock(), on: Desk));
+        }
+
+        // The second windowed World fails on physical memory (7 GB free less 14 GB resident), and on commit too: 25.6 GB of
+        // headroom less 20.4 GB leaves under the 6.4 GB reserve.
+        var second = Tracker().Judge(reading: beside, kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (false, false, 14.0, 20.4), actual: (second.CommitCovered, second.PhysicalCovered, second.ResidentNeedGb, second.NeedGb));
+
+        // With the commit charge low enough for two private peaks, the working set alone still keeps the second one out.
+        var roomyCommit = Tracker().Judge(reading: Sample(commit: 20, limit: 64, ram: 7, starts: [running]), kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, false), actual: (roomyCommit.CommitCovered, roomyCommit.PhysicalCovered));
+
+        // Under real pressure (free memory below the floor) nothing is admitted, a step included.
+        var pressed = Sample(commit: 60, limit: 64, ram: 3.5, starts: [running]);
+
+        foreach (var kind in Enum.GetValues<HostStartKind>()) {
+            Assert.False(condition: Admits(kind: kind, reading: pressed, tracker: Tracker(), clock: new GateClock(), boundSeconds: 15, on: Desk), userMessage: kind.ToString());
+        }
+    }
+    // Before a kind's working set is measured the fallback is three quarters of its commit peak, so an idle 32 GB desk
+    // still admits one windowed World and not two.
+    [Fact]
+    public void AnUnmeasuredWindowedStartFallsBackToAFractionOfItsCommitPeakAsWorkingSet() {
+        var tracker = new HostStartTracker();
+        var idle = Tracker().Judge(reading: Sample(commit: 40, limit: 64, ram: 21), kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: new GateClock(), reserve: false);
+        var running = new HostRunningStart(Id: 11, Kind: HostStartKind.WindowedWorld, PrivateGb: 18, Ready: true, StartTicks: 1, WorkingSetGb: 12.6);
+        var second = Tracker().Judge(reading: Sample(commit: 40, limit: 64, ram: 7.5, starts: [running]), kind: HostStartKind.WindowedWorld, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (12.6, true), actual: (Math.Round(value: idle.ResidentNeedGb, digits: 6), idle.PhysicalCovered));
+        Assert.Equal(expected: (12.6, false), actual: (Math.Round(value: second.ResidentNeedGb, digits: 6), second.PhysicalCovered));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb * HostLoadThresholds.ResidentFraction, actual: tracker.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld));
+
+        HostStartTracker Tracker() => new();
+    }
+    // The tracker measures working-set peaks beside private-byte peaks, from the same plateaued or finished processes, and
+    // shares both under the lease root: the private-byte file keeps its name and contents, the working set goes in a sibling.
+    [Fact]
+    public void WorkingSetPeaksAreMeasuredBesideThePrivateBytePeaksAndShared() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var tracker = new HostStartTracker(directory.RootPath);
+        var process = new HostRunningStart(Id: 8, Kind: HostStartKind.WindowedWorld, PrivateGb: 20, StartTicks: 1, WorkingSetGb: 12);
+
+        _ = tracker.Judge(reading: Sample(starts: [process]), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+        clock.Advance(HostStartTracker.Plateau);
+        _ = tracker.Judge(reading: Sample(), kind: HostStartKind.Step, thresholds: Desk, clock: clock, reserve: false);
+
+        var next = new HostStartTracker(directory.RootPath);
+
+        Assert.Equal(expected: (20.0, 12.0), actual: (next.ExpectedPeakGb(kind: HostStartKind.WindowedWorld), next.ExpectedResidentPeakGb(kind: HostStartKind.WindowedWorld)));
+        Assert.Equal(expected: "20", actual: File.ReadAllText(Path.Combine(directory.RootPath, "host-peaks", "WindowedWorld")));
+        Assert.Equal(expected: "12", actual: File.ReadAllText(Path.Combine(directory.RootPath, "host-peaks", "WindowedWorld.resident")));
+    }
+    // Starts that have not finished growing hold their remaining working-set growth out of free memory too: a headless
+    // World that has not reported ready keeps the start waiting that would be admitted beside it once it has.
+    [Fact]
+    public void FreeMemoryLeavesRoomForTheGrowthOfStartsAlreadyRunning() {
+        HostRunningStart[] booting = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.5, StartTicks: 1, WorkingSetGb: 0.4)];
+        HostRunningStart[] ready = [new(Id: 9, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.5, Ready: true, StartTicks: 1, WorkingSetGb: 0.4)];
+        // A step's fallback working set is 1.4 GB (0.7 of its 2 GB); the unready headless World still has 4.2 - 0.4 GB to grow.
+        var crowded = new HostStartTracker().Judge(reading: Sample(ram: 9, starts: booting), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
+        var settled = new HostStartTracker().Judge(reading: Sample(ram: 9, starts: ready), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (5.2, false), actual: (Math.Round(value: crowded.ResidentNeedGb, digits: 6), crowded.PhysicalCovered));
+        Assert.Equal(expected: (1.4, true), actual: (Math.Round(value: settled.ResidentNeedGb, digits: 6), settled.PhysicalCovered));
+    }
+    [Fact]
+    public void AnUnreadableFreeMemoryOrAMissingFloorIsNotJudged() {
+        Assert.True(condition: Desk.PhysicalCovers(reading: Sample(ram: double.NaN), needGb: 1000));
+        Assert.True(condition: (Desk with { PressureRamGb = null }).PhysicalCovers(reading: Sample(ram: 1), needGb: 1000));
+        Assert.True(condition: Desk.PhysicalCovers(reading: Sample(ram: 22), needGb: 18));
+        Assert.False(condition: Desk.PhysicalCovers(reading: Sample(ram: 21.9), needGb: 18));
     }
     [Fact]
     public void IdleAdmissionHasNoWaitOrRefusalEvenWithReuseNodes() {
@@ -175,32 +290,36 @@ public sealed class HostAdmissionLawTests {
         return error.ToString();
     }
 
-    // A 90% commit reading holds a step back while 8 GB of RAM and 100 GB of disk are free, and says so; a 60% one admits
-    // at once. The stage a caller shows is the phrase "waiting for memory headroom: commit 90% of limit".
+    // A commit reading that leaves under the reserve (10% of the limit: 4 GB of 40) holds every start back while 64 GB of RAM
+    // and 100 GB of disk are free, and says so; a reading with room admits at once. The stage a caller shows is the phrase
+    // "waiting for memory headroom: commit headroom 2.0GB (95% of limit charged)". A fixed share of the limit gates nothing:
+    // an ordinary step is admitted at 80% charged because its 2 GB need and the reserve fit in the 8 GB of headroom.
     [Fact]
-    public void ACommitChargeOverItsShareOfTheLimitHoldsAStepBackAndIsNamedAndUnderItAdmits() {
+    public void ACommitHeadroomUnderItsReserveHoldsAStepBackAndIsNamedAndAboveItAdmits() {
         var clock = new GateClock();
         var calls = 0;
         var stages = new List<string>();
         using var error = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("puck_world_start", false, false, () => ((calls++ < 2) ? Sample(commit: 90) : Sample(commit: 60)), clock, clock.Advance, error, CancellationToken.None, Thresholds, stage: stages.Add));
+        Assert.True(condition: HostAdmission.Wait("puck_world_start", false, false, () => ((calls++ < 2) ? Sample(commit: 95) : Sample(commit: 60)), clock, clock.Advance, error, CancellationToken.None, Reserved, stage: stages.Add));
         Assert.Equal(expected: 3, actual: calls);
-        Assert.Equal(expected: ["waiting for memory headroom: commit 90% of limit", "waiting for memory headroom: commit 90% of limit"], actual: stages);
-        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%).");
+        Assert.Equal(expected: ["waiting for memory headroom: commit headroom 2.0GB (95% of limit charged)", "waiting for memory headroom: commit headroom 2.0GB (95% of limit charged)"], actual: stages);
+        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 2.0GB (95% of limit charged) (admission needs at least 4.0GB (the commit reserve, 10% of the limit)).");
         Assert.DoesNotContain(expectedSubstring: "freeRAM", actualString: error.ToString());
 
         using var idle = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("puck_world_start", false, false, () => Sample(commit: 60), clock, _ => Assert.Fail(message: "60% commit must admit"), idle, CancellationToken.None, Thresholds));
+        Assert.True(condition: HostAdmission.Wait("puck_world_start", false, false, () => Sample(commit: 80), clock, _ => Assert.Fail(message: "80% commit must admit a 2 GB step"), idle, CancellationToken.None, Reserved));
         Assert.Equal(expected: "", actual: idle.ToString());
-        // A platform that reports no commit limit is never held back by it; 75% itself is not under the share.
-        Assert.True(condition: HostAdmission.Wait("x", false, false, () => Sample(), clock, _ => Assert.Fail(message: "no commit reading must admit"), idle, CancellationToken.None, Thresholds));
+        // A platform that reports no commit limit is never held back by it.
+        Assert.True(condition: HostAdmission.Wait("x", false, false, () => Sample(), clock, _ => Assert.Fail(message: "no commit reading must admit"), idle, CancellationToken.None, Reserved));
+        // 90% leaves exactly the reserve and nothing for the step's own 2 GB: the start's need, not the charge, refuses it.
         var bounded = new GateClock();
 
-        Assert.False(condition: HostAdmission.Wait("x", false, false, () => Sample(commit: 75), bounded, bounded.Advance, idle, CancellationToken.None, Thresholds, bound: TimeSpan.FromSeconds(seconds: 25)));
+        Assert.False(condition: HostAdmission.Wait("x", false, false, () => Sample(commit: 90), bounded, bounded.Advance, idle, CancellationToken.None, Reserved, bound: TimeSpan.FromSeconds(seconds: 25)));
         Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 25), actual: bounded.GetElapsedTime(startingTimestamp: 0));
         Assert.Contains(actualString: idle.ToString(), expectedSubstring: "(at most 25 seconds)");
+        Assert.Contains(actualString: idle.ToString(), expectedSubstring: "commit headroom 4.0GB (admission needs at least 6.0GB (2.0GB expected peak of a step plus 0.0GB still to grow in 0 admitted start(s) plus the 4.0GB commit reserve))");
     }
     // The commit condition and the memory and disk conditions hold a step back together, each named with its own need.
     [Fact]
@@ -209,34 +328,45 @@ public sealed class HostAdmissionLawTests {
         var calls = 0;
         using var error = new StringWriter();
 
-        Assert.True(condition: HostAdmission.Wait("x", false, false, () => ((calls++ == 0) ? Sample(commit: 82, ram: 1, disk: 2) : Sample()), clock, clock.Advance, error, CancellationToken.None, Thresholds));
-        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 82% of limit (admission needs under 75%); freeRAM=1.0GB (admission needs over 5.0GB); freeDisk=2.0GB (admission needs at least 10.0GB).");
+        Assert.True(condition: HostAdmission.Wait("x", false, false, () => ((calls++ == 0) ? Sample(commit: 95, ram: 1, disk: 2) : Sample()), clock, clock.Advance, error, CancellationToken.None, Reserved));
+        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 2.0GB (95% of limit charged) (admission needs at least 4.0GB (the commit reserve, 10% of the limit)); freeRAM=1.0GB (admission needs at least 2.0GB (memory pressure)); freeDisk=2.0GB (admission needs at least 10.0GB).");
     }
-    [InlineData(75.0, true)]
-    [InlineData(74.9, false)]
+    [InlineData(90.0, false)]
+    [InlineData(90.5, true)]
     [InlineData(double.NaN, false)]
     [Theory]
-    public void CommitHeadroomIsAChargeUnderItsShareOfTheLimitAndAnUnreadableChargeIsNotJudged(double percent, bool held) {
+    public void CommitHeadroomIsWhatTheReserveLeavesOfTheLimitAndAnUnreadableChargeIsNotJudged(double percent, bool held) {
         var reading = (double.IsNaN(d: percent) ? Sample() : Sample(commit: percent));
 
-        Assert.Equal(expected: held, actual: !Thresholds.CommitHasHeadroom(reading: reading));
+        Assert.Equal(expected: held, actual: !Reserved.CommitHasHeadroom(reading: reading));
         Assert.Equal(expected: double.IsNaN(d: percent), actual: double.IsNaN(d: reading.CommitPercent));
-        Assert.True(condition: (Thresholds with { CapacityCommitPercent = null }).CommitHasHeadroom(reading: Sample(commit: 99)));
+        Assert.True(condition: (Reserved with { CommitReservePercent = null }).CommitHasHeadroom(reading: Sample(commit: 99)));
+        Assert.True(condition: (Reserved with { CommitReservePercent = null }).CommitCovers(reading: Sample(commit: 99), needGb: 1000));
+    }
+    // The need and the reserve are both in the commit check: 16 GB of headroom covers a 10 GB need with 4 GB in reserve, not 12.1.
+    [Fact]
+    public void CommitCoversNeedsTheStartsOwnNeedPlusTheReserve() {
+        var reading = Sample(commit: 60);
+
+        Assert.Equal(expected: 4.0, actual: Reserved.CommitReserveGb(reading: reading));
+        Assert.True(condition: Reserved.CommitCovers(reading: reading, needGb: 12));
+        Assert.False(condition: Reserved.CommitCovers(reading: reading, needGb: 12.1));
+        Assert.True(condition: Thresholds.CommitCovers(reading: reading, needGb: 16));
     }
     [Fact]
-    public void ACommitChargeOverItsShareAlsoEndsCapacityInTheMonitorAndNamesItInTheReading() {
-        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Thresholds);
+    public void ACommitHeadroomUnderItsReserveAlsoEndsCapacityInTheMonitorAndNamesItInTheReading() {
+        var monitor = new HostLoadMonitor(cpuSamples: 1, thresholds: Reserved);
 
-        Assert.Equal(expected: ["GPU idle cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=90% reuseNodes=42", "LOADED cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=90% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 90)));
+        Assert.Equal(expected: ["GPU idle cpu=0% freeRAM=64.0GB freeDisk=100.0GB commit=95% reuseNodes=42", "LOADED cpu=0% freeRAM=64.0GB freeDisk=100.0GB commit=95% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 95)));
         Assert.False(condition: monitor.HasCapacity);
-        Assert.Equal(expected: ["CAPACITY cpu=0% freeRAM=8.0GB freeDisk=100.0GB commit=60% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 60)));
+        Assert.Equal(expected: ["CAPACITY cpu=0% freeRAM=64.0GB freeDisk=100.0GB commit=60% reuseNodes=42"], actual: monitor.Observe(sample: Sample(commit: 60)));
         Assert.True(condition: monitor.HasCapacity);
     }
     // A verb below the gate admits each World start through WorldLaunch, and the installed admission is HostAdmission: the
-    // start waits at a 90% commit charge and goes ahead at 60%, each replica admitted on its own reading, and a bound that
+    // start waits at a 98% commit charge and goes ahead at 60%, each replica admitted on its own reading, and a bound that
     // passes first refuses the start by exception.
     [Fact]
-    public void AVerbsWorldStartWaitsAtNinetyPercentCommitAndRunsAtSixtyThroughTheInstalledAdmission() {
+    public void AVerbsWorldStartWaitsWithoutHeadroomForItsPeakAndRunsWithItThroughTheInstalledAdmission() {
         using var checkout = new GitScratchCheckout();
         var clock = new GateClock();
         var readings = 0;
@@ -245,7 +375,7 @@ public sealed class HostAdmissionLawTests {
         HostAdmit admit = (checkout, step, device, heavySuite, kind, bound, reserve, progress, stage, cancellationToken) => {
             asked.Add(item: (step, device, heavySuite, kind));
 
-            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 90, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, () => ((readings++ < 2) ? Sample(commit: 98, limit: 64) : Sample(commit: 60, limit: 64)), clock, clock.Advance, error, cancellationToken, Thresholds, bound, stage, kind, reserve: reserve));
         };
 
         WorldAdmission.Install(admit: admit);
@@ -256,7 +386,7 @@ public sealed class HostAdmissionLawTests {
             WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
             Assert.Equal(expected: 4, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit 90% of limit (admission needs under 75%); commit headroom 6.4GB (admission needs at least 9.0GB");
+            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 1.3GB (admission needs at least 9.0GB");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
 
             // The next replica is admitted on its own reading: 60% starts at once, as does a World booted in process.
@@ -347,7 +477,7 @@ public sealed class HostAdmissionLawTests {
         using var error = new StringWriter();
 
         Assert.False(condition: HostAdmission.Wait("puck_world_start", true, false, () => Sample(commit: 60), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.WindowedWorld, new HostStartTracker()));
-        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s)))");
+        Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s) plus the 0.0GB commit reserve))");
         Assert.DoesNotContain(expectedSubstring: "% of limit", actualString: error.ToString());
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 50), tracker: new HostStartTracker(), clock: new GateClock()));
         // The same 60% reading admits a headless World, whose peak is 6 GB.

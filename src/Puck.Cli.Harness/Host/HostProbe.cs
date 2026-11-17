@@ -63,12 +63,13 @@ public sealed partial class HostProbe(string checkoutRoot) {
 
         return null;
     }
-    // The commit a process holds now (its private bytes); zero when the platform will not say.
-    private static double PrivateGigabytes(Process process) {
+    // The commit a process holds now (its private bytes) and the physical memory it holds (its working set); zero and NaN
+    // when the platform will not say.
+    private static (double PrivateGb, double WorkingSetGb) Footprint(Process process) {
         try {
-            return (process.PrivateMemorySize64 / 1073741824.0);
+            return ((process.PrivateMemorySize64 / 1073741824.0), (process.WorkingSet64 / 1073741824.0));
         } catch (Exception exception) when ((exception is Win32Exception or InvalidOperationException or NotSupportedException)) {
-            return 0;
+            return (0, double.NaN);
         }
     }
     private static double FreeRamGb() =>
@@ -124,7 +125,7 @@ public sealed partial class HostProbe(string checkoutRoot) {
         string? heavy = null;
         var reuse = 0;
         var self = Environment.ProcessId;
-        var running = new List<(int Id, string Name, string CommandLine, double PrivateGb)>();
+        var running = new List<(int Id, string Name, string CommandLine, double PrivateGb, double WorkingSetGb)>();
         var tree = new Dictionary<int, (int Parent, DateTime Started)>();
 
         foreach (var process in Process.GetProcesses()) {
@@ -141,7 +142,9 @@ public sealed partial class HostProbe(string checkoutRoot) {
 
                 // The probe never matches itself, whatever its own command line says.
                 if (process.Id != self) {
-                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id), PrivateGigabytes(process: process)));
+                    var (privateGb, workingSetGb) = Footprint(process: process);
+
+                    running.Add(item: (process.Id, process.ProcessName, ProcessInspection.CommandLine(processId: process.Id), privateGb, workingSetGb));
                 }
             }
         }
@@ -153,13 +156,13 @@ public sealed partial class HostProbe(string checkoutRoot) {
         List<HostRunningStart> starts = [];
         var ready = ReadyWorlds(tree: tree);
 
-        foreach (var (id, name, commandLine, privateGb) in running) {
+        foreach (var (id, name, commandLine, privateGb, workingSetGb) in running) {
             var label = $"{name} {id.ToString(provider: CultureInfo.InvariantCulture)}";
 
             if (HostProcesses.RunningStart(commandLine: commandLine, name: name) is { } kind) {
                 var startTicks = tree[id].Started.ToUniversalTime().Ticks;
 
-                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks));
+                starts.Add(item: new HostRunningStart(Id: id, Kind: kind, PrivateGb: privateGb, Ready: ready.Contains(item: (id, startTicks)), StartTicks: startTicks, WorkingSetGb: workingSetGb));
             }
 
             if ((holder is null) && !own.Contains(item: id) && HostProcesses.IsGpuWork(commandLine: commandLine, name: name)) {
