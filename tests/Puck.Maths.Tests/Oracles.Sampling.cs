@@ -8,6 +8,24 @@ internal static partial class Oracles {
     private static readonly BigInteger Pcg3dLcgMultiplier = 1664525;
     private static readonly BigInteger Pcg3dLcgIncrement = 1013904223;
 
+    /// <summary>The exact selection mass an alias table must give each column index: with every column drawn by one
+    /// of <paramref name="columnCount"/> equally likely column words and a threshold word uniform over <c>2³²</c>
+    /// values, entry <c>i</c> is selected with probability <c>weight_i / total</c>, so over the common denominator
+    /// <c>columnCount · 2³² · total</c> its mass is <c>weight_i · columnCount · 2³²</c>, and a padding column's is
+    /// zero.</summary>
+    /// <param name="weights">The construction weights, in entry order.</param>
+    /// <param name="columnCount">The padded column count.</param>
+    /// <returns>The mass per column index, padding included.</returns>
+    public static BigInteger[] AliasSelectionMass(ulong[] weights, int columnCount) {
+        var mass = new BigInteger[columnCount];
+
+        for (var index = 0; (index < weights.Length); ++index) {
+            mass[index] = ((((BigInteger)weights[index]) * columnCount) << 32);
+        }
+
+        return mass;
+    }
+
     /// <summary>The fractal value noise <see cref="Pcg3dLatticeNoise.Fbm01"/> sums, formed in closed form per octave in
     /// <see cref="BigInteger"/>: octave <c>k</c> reads the noise-cell edge <c>max(1, frequency &gt;&gt; k)</c> (the
     /// subject halves it iteratively), the seed <c>seed + k·0x9E3779B9</c> reduced modulo <c>2³²</c>, and the amplitude

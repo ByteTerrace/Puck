@@ -69,8 +69,10 @@ public enum GeneratorSource : byte {
     UniformRange,
 
     /// <summary>One alias-table draw over <see cref="StateGenerator.Weighted"/>'s numeric outcomes — reads that field
-    /// and <see cref="StateGenerator.Mode"/>, writes an int or fixed value. Exactly two advances per draw, the same
-    /// fixed alias-table cost the Markov walk pays per token; under an exhausting mode the outcomes are drawn through
+    /// and <see cref="StateGenerator.Mode"/>, writes an int or fixed value. Each outcome's probability is exactly its
+    /// weight over the total. A draw takes two advances, plus the raw words of one exact wide draw on the one word in
+    /// 2³² that lands on a column's threshold; the result reports the advances consumed, and the Markov walk pays the
+    /// same per token. Under an exhausting mode the outcomes are drawn through
     /// the site's one <see cref="StateRow.DrawnMasks"/> mask, which is the numeric shuffle bag.</summary>
     WeightedNumeric,
 
@@ -85,7 +87,7 @@ public enum GeneratorSource : byte {
     /// writes the node index in the site's displayed unit (a fixed site stores <c>node.0</c>, the phase a cycle trait
     /// reads). The units are the orbit's nodes in walk order, equally weighted, drawn under
     /// an exhausting mode through the site's one <see cref="StateRow.DrawnMasks"/> mask exactly as a weighted numeric
-    /// source is; exactly two advances per draw.</summary>
+    /// source is; two advances per draw, plus the rare exact wide draw a weighted numeric source takes.</summary>
     SymmetryOrbit,
 }
 /// <summary>One numeric outcome of a <see cref="GeneratorSource.WeightedNumeric"/> source: the raw value it

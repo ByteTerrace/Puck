@@ -150,7 +150,7 @@ for the detailed contract.
 | A curve authored by knot curvature rather than control points | `CurvatureSpline.Compile`—knots declare position, tangent direction, and signed curvature; the compiled tangent lengths and a Simpson arc-length table come out exactly. `CompiledCurvatureSpline.Evaluate(arcLength)` samples position, tangent, and curvature per tick | [FixedPoint](../../src/Puck.Maths/FixedPoint/README.md#curvaturespline) |
 | A seeded RNG you can snapshot and resume | `Pcg32XshRr`—one stream per system | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg32xshrr) |
 | To shuffle a list reproducibly | `Pcg32XshRr.Shuffle`—in-place Fisher–Yates from the high end down | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg32xshrr) |
-| A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` in constant time with two generator advances | [Sampling](../../src/Puck.Maths/Sampling/README.md#weightedsampler-and-aliastabletelement) |
+| A weighted pick | `WeightedSampler.Create` once at load, then `AliasTable<T>.Sample` in constant time with two generator advances and the exact count reported | [Sampling](../../src/Puck.Maths/Sampling/README.md#weightedsampler-and-aliastabletelement) |
 | Smooth spatial noise or a scattered point | `Pcg3dLatticeNoise`—a pure function of `(seed, cell)`, nothing to persist | [Sampling](../../src/Puck.Maths/Sampling/README.md#pcg3dlatticenoise) |
 | Points that spread out without clumping | `LowDiscrepancy.R1`/`R2` for an even-looking spread; `DigitalNetSampler` when supported subdivisions must contain an exact share of the samples | [Sampling](../../src/Puck.Maths/Sampling/README.md#choosing-a-primitive) |
 | Cryptographic randomness | `SecureRandom`—and never in simulation state; it is not reproducible | [Sampling](../../src/Puck.Maths/Sampling/README.md#securerandom) |
@@ -221,12 +221,12 @@ const ulong masterSeed = 0xC0FFEEUL;
 var loot = Pcg32XshRr.Create(state: masterSeed, stream: 3UL);
 
 // Build the distribution once at load; each sample takes constant time and
-// advances the generator exactly twice.
+// reports the advances it consumed (two, or more on a one-in-2^32 word).
 ReadOnlySpan<(string Element, ulong Weight)> drops =
     [("common", 70UL), ("rare", 25UL), ("epic", 5UL)];
 var table = WeightedSampler.Create(entries: drops);
 
-var drop = table.Sample(generator: ref loot);
+var drop = table.Sample(advances: out var advances, generator: ref loot);
 
 // Generator state IS simulation state. Persist all three words with the world…
 var (increment, multiplier, state) = (loot.Increment, loot.Multiplier, loot.State);

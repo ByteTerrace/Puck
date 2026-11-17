@@ -2076,10 +2076,11 @@ effect succeeded.
 
 Each rule binding owns its reproducible random state. Other decisions and
 their evaluation order do not consume its draws. A weighted choice with
-multiple positive options uses one 64-bit ticket (two PCG32 draws); this bounds
-work without a rejection loop, with probability quantization below 2^-64 per
-option. A deterministic choice, no choice, or one positive option consumes no
-draws. Numeric aliases of the same `forEach` key evaluate once. A rule's
+multiple positive options draws one exact ticket below the total weight
+(`BoundedRandomSampling.TrySampleWide`), so each option's probability is exactly
+its weight over the total; its words are counted, rejected ones included, and a
+ticket that exhausts the shared attempt budget keeps the standing choice. A
+deterministic choice, no choice, or one positive option consumes no draws. Numeric aliases of the same `forEach` key evaluate once. A rule's
 `forEach` iterates any keyed row: an integer key also binds the `each` body,
 a non-integer key (a card or piece token) binds `$each` alone. Removing a
 binding, replacing a body generation, or changing the source policy starts a

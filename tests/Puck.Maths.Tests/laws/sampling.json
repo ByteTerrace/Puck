@@ -274,8 +274,37 @@
       {
         "Kind": "Structural",
         "Flavor": "None",
-        "Subject": "the sampling contract read off the same 4096 draws: every selected index is within [0, Count), no zero-weight entry is ever selected \u2014 the padding columns and the three zero rows both \u2014 Count is the construction length and not the padded column count, and Sample and SampleIndex consume the identical two advances, checked by comparing the two generators\u0027 State after each draw rather than by counting calls",
+        "Subject": "the sampling contract read off the same 4096 draws: every selected index is within [0, Count), no zero-weight entry is ever selected \u2014 the padding columns and the three zero rows both \u2014 Count is the construction length and not the padded column count, and Sample and SampleIndex report and consume the identical advances, checked by comparing the two generators\u0027 State after each draw rather than by counting calls",
         "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "sampling.alias-exact-selection-mass",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "Create"
+      },
+      {
+        "Type": "Puck.Maths.WeightedSampler",
+        "Name": "SampleOnce"
+      },
+      {
+        "Type": "Puck.Maths.AliasTable`1",
+        "Name": "SampleIndex"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "AliasTable.SampleIndex and WeightedSampler.SampleOnce over twelve weight sets (equal thirds, powers of two, primes, interleaved zeros, a singleton, totals one below, at and above 2³², one-to-2⁴⁰, and a three-word total past 2⁶⁴), driven by scripted words rather than a seed so the one word in 2³² that lands on a column's threshold is reached on purpose: per column the claim measures the floored threshold word by bisection, the alias, and, at that word, the number of the exact wide draw's values that keep the column (bisection over the ticket, each ticket built into the words that map to it), then sums every column's mass",
+        "Against": "weight times column count times 2³² formed in BigInteger for every entry and zero for every padding column (Oracles.AliasSelectionMass), compared for exact equality, so a threshold rounded to 2⁻³² steps, or a wide branch that keeps the column with the wrong probability, fails by name. The reported advances must equal the words consumed (two on every word but the threshold word, two plus the wide draw's words there), and the table and SampleOnce must agree on pick, advances and position. ENVELOPE: the wide draw's uniformity over its bound is BoundedRandomSampling.TrySampleWide's own claim, not restated here",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

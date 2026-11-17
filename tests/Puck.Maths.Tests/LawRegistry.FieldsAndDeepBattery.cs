@@ -355,6 +355,10 @@ internal static partial class LawRegistry {
             claim: Subjects.AliasTableRefusalsAndFixedTwins,
             id: "sampling.alias-refusal-and-fixed-twins"
         ),
+        ClaimCase(
+            claim: Subjects.AliasTableExactSelectionMass,
+            id: "sampling.alias-exact-selection-mass"
+        ),
         // The cone table is the wing's one same-machine-replay type, and its contract was written about the double
         // pair it discards rather than the float pair it stores. This case states the surviving property.
         ClaimCase(

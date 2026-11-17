@@ -107,7 +107,7 @@ pairwise operations.
 | You need | Use | State? |
 |---|---|---|
 | Sequential draws over time — rolls, wander, decisions | `Pcg32XshRr` | **Yes** — it is simulation state |
-| A weighted pick | `WeightedSampler.Create` once at load → `AliasTable<T>.Sample` (O(1), exactly two advances) | Immutable table |
+| A weighted pick | `WeightedSampler.Create` once at load → `AliasTable<T>.Sample` (O(1), two advances plus an exact wide draw on a rare word; reports `advances`) | Immutable table |
 | Spatial randomness — terrain, wind, per-cell decisions, a scattered point | `Pcg3dLatticeNoise` (`ValueNoise01`, `ScatterPoint`, `Pcg3d`) | None |
 | Points that merely spread out — scatter, placement | `LowDiscrepancy.R1` / `R2` | None |
 | Stratification as a **theorem** — Monte Carlo, area lights, anything averaged | `DigitalNetSampler` | None |

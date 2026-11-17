@@ -104,11 +104,11 @@ refuses fields that belong to another shape.
 
 | Source | Fields | Writes | Advances per sample | Can exhaust |
 |---|---|---|---|---|
-| `Markov` | `start`, `bound`, `contexts`, `mode` | `Text` | 2 per token | Yes, per context |
+| `Markov` | `start`, `bound`, `contexts`, `mode` | `Text` | 2 per token, rarely more | Yes, per context |
 | `UniformRange` | `rangeMin`, `rangeMax` | `Int` or `Fixed` | 1 to 64; refuses if every word rejects | No |
-| `WeightedNumeric` | `weighted`, `mode` | `Int` or `Fixed` | 2 | Yes |
+| `WeightedNumeric` | `weighted`, `mode` | `Int` or `Fixed` | 2, rarely more | Yes |
 | `StreamDraw` | none | `Int` or `Fixed` | 1 | No |
-| `SymmetryOrbit` | `ring`, or `node` with optional `word`; `mode` | `Int` or `Fixed` | 2 | Yes |
+| `SymmetryOrbit` | `ring`, or `node` with optional `word`; `mode` | `Int` or `Fixed` | 2, rarely more | Yes |
 
 A Markov source writes a `Text` site, and every other source writes an `Int` or
 `Fixed` site. `GeneratorEngine.TryCheckTargetKind` makes that check, and
@@ -171,8 +171,9 @@ joined with single spaces, so this source writes text such as `Oh friend.` into
 a `Text` site. The current context is all the walk remembers, so a chain that
 needs more history encodes it in its context keys.
 
-Each token consumes two raw words, so an emission of three tokens advances the cursor by
-six. A walk that has emitted `bound` tokens (1 to 256) without reaching a
+Each token consumes two raw words (more only on the 2^-32 threshold word, which
+adds an exact wide draw), so an emission of three tokens normally advances the
+cursor by six. A walk that has emitted `bound` tokens (1 to 256) without reaching a
 terminal context refuses the whole emission rather than truncating it. A source
 holds at most 64 contexts, a context at most 256 alternatives, and a token at
 most 64 characters; the joined text is bounded by the row's text ceiling.
@@ -230,8 +231,10 @@ its cost doesn't depend on how long either string is.
 including rejected words. A resume jumps directly to `skip + cursor`; earlier
 results are never replayed. `skip` is an authored non-negative raw-word offset
 and never changes the persisted cursor. After a successful draw, add the
-reported `FireResult.Advances`, rather than a result or token count. Weighted
-and orbit results use two words; Markov emissions use two per token.
+reported `FireResult.Advances`, rather than a result or token count. A weighted
+or orbit result uses two words, and a Markov emission two per token, plus the
+raw words of one exact wide draw whenever a draw's second word equals its
+column's threshold (probability 2^-32); the reported count includes them.
 
 ## Decide what exhaustion means
 
@@ -254,8 +257,9 @@ possible next draws. Persist the masks with the cursor and the value; the arena
 does this for you. A site that reserves fewer masks than its source
 needs refuses to draw.
 
-An exhausting draw still costs two advances, whether it draws from the
-full set or from the undrawn remainder, so seeking stays exact.
+An exhausting draw costs the same as any other, whether it draws from the
+full set or from the undrawn remainder, and reports its advances the same way,
+so the cursor stays exact.
 
 ## Choose when a site draws
 
