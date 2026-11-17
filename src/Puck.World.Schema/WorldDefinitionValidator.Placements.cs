@@ -449,6 +449,9 @@ public static partial class WorldDefinitionValidator {
     // The animation facets that reach outside the creation: a curve waveform names a row of this world's curves, a
     // state signal names a numeric row of its state — neither is knowable to the portable document alone.
     private static void ValidateCreationBindings(WorldDefinition definition, Puck.World.Authoring.CreationDocument document, List<string> errors, string path) {
+        if (document.SizeBy is { } sizeBy) {
+            RequireNumericStateReference(definition: definition, errors: errors, path: $"{path}.sizeBy", reference: sizeBy, subject: "a size");
+        }
         var drivers = (document.Drivers ?? []);
 
         for (var index = 0; (index < drivers.Count); index++) {
@@ -1709,10 +1712,6 @@ public static partial class WorldDefinitionValidator {
                             row: out var variantCreation
                         )) {
                             continue;
-                        }
-
-                        if (variantCreation.Document.SizeBy is not null) {
-                            errors.Add(item: $"{path}.solid names creation '{variantId}' with sizeBy — its driver scales presentation only and cannot move a deterministic contact surface; author the contact scale in the placement instead.");
                         }
 
                         var variantColliders = 0L;

@@ -175,9 +175,9 @@ with part owners; validation reports the same boundary, including look part foll
 `sizeBy` keep one composed field through `WorldPlacementStamper.EmitRootSurface`, shared with rigid body assets.
 It bakes in creation units with the relief's detail spacing; only the root matrix changes with size or pose.
 Opaque relief follows shapes and text in their field scope; glass keeps its own surface, as static emission does.
-Amplitude and wavelength scale with the creation in both render and fixed contact emission. `sizeBy` remains
-presentation-only and is refused on solid placements; static placement scale and rigid attached contact use
-the relieved fixed-point field. Never feed a presentation driver's phase into collision.
+Amplitude and wavelength scale with the creation in both render and fixed contact emission. `sizeBy` reads
+authoritative state; solid roots draw the contact-sampled scale published in the tick snapshot, interpolated beside
+their bodies. Never feed a presentation driver's phase into collision.
 
 `CreationMotion.Envelope` bounds each cross-owner smooth seam; `CreationMotionPlan.RenderDocument`
 is the pooled emitter's partition. A rejected seam partitions its authored group by actual motion owner.

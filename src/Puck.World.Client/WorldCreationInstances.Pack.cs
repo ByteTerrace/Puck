@@ -292,6 +292,7 @@ public sealed partial class WorldCreationInstances {
                     WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Posed);
                     WorldCreationWork.ProcessWork.Add(amount: packedSlots, kind: WorldCreationWork.SlotsPosed);
                     var elapsedSeconds = (live.RateSeconds + deltaSeconds);
+
                     slotsMoved = PackRegistration(
                         client: client,
                         deltaSeconds: (unseen ? deltaSeconds : (live.RateSeconds + deltaSeconds)),
@@ -428,6 +429,10 @@ public sealed partial class WorldCreationInstances {
         }
     }
 
+    private static float SizeOf(Registration live, IWorldStampSource client) =>
+        ((live.Row is { Solid: not null } solidRow)
+            ? (client.SolidScale(placementId: solidRow.Id.ToString()) ?? 0f)
+            : (float)WorldCreationSize.Of(value: live.Reads.Sample(slot: live.Reads.Slot(live.Creation.EngineDocument.SizeBy!, truth: true)).Value));
     // Records one pool entry's draw, noting whether it changed.
     private void SetMeshDraw(int index, SdfMeshDraw? draw) {
         if (m_meshDraws[index] != draw) {
@@ -480,7 +485,7 @@ public sealed partial class WorldCreationInstances {
         );
 
         // Owner output equality cannot cancel an authored clock or a follower's remaining motion.
-        return (wake || ((deltaSeconds > 0f) && live.DriverActivity.Continues));
+        return (wake || ((live.Creation.EngineDocument.SizeBy is not null) && (SizeOf(client: client, live: live) != live.PackedSize)) || ((deltaSeconds > 0f) && live.DriverActivity.Continues));
     }
     // Carries everything a body-rooted registration latched in world space through an in-place crossing's rigid
     // motion: the root and part followers, the drivers' last pose and eased world velocity, and every effector's
@@ -642,15 +647,11 @@ public sealed partial class WorldCreationInstances {
             if (activity.Continues) { WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.DriverContinuations); }
         }
 
-        if (document.SizeBy is { } sizeBy && WorldGaitDrivers.TryDriver(
-            rows: drivers ?? [], driver: sizeBy, phases: live.DriverPhase, weights: live.DriverWeight,
-            phase: out var sizePhase, weight: out var sizeWeight)) {
-            var size = float.Lerp(1f, Math.Clamp(sizePhase, 0f, 1f), sizeWeight);
-            if (size == 0f) {
-                rootPosition = parkPosition;
-            } else {
-                placementScale *= size;
-            }
+        if (document.SizeBy is not null) {
+            var size = SizeOf(client: client, live: live);
+
+            live.PackedSize = size;
+            if (size == 0f) { rootPosition = parkPosition; } else { placementScale *= size; }
         }
         var slotsMoved = SdfMovedTransforms.Write(slot: rootSlot, table: transforms, value: new DynamicTransform(Lanes: lanes, Orientation: rootRotation, Position: rootPosition) { Scale = placementScale });
 

@@ -824,10 +824,10 @@ public sealed partial class WorldPopulation {
 
         AutonomyStatistics = default;
 
-        if (m_baseContactField is WorldColliderSet attached) { attached.RefreshAttached(population: this); }
+        if (MovingSolids is { } attached) { attached.RefreshAttached(definition: m_adjacencyDefinition!, engineTick: stepStartEngineTick, population: this, tick: tick); }
         var stepBodies = PrepareBodyStep();
 
-        if (m_baseContactField is WorldColliderSet colliders) {
+        if (MovingSolids is { } colliders) {
             // Every body standing on a moving attached solid rides it before any body advances, seats included.
             foreach (var index in stepBodies) {
                 if (
@@ -1102,7 +1102,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Applies entity-directed effect outputs after every body has advanced, then exposes player-keyed durable
     /// writes for the completed tick.</summary>
     public void CompleteStep(ulong tick) {
-        m_adjacencyTick = tick + 1;
+        m_adjacencyTick = (tick + 1);
         foreach (var output in m_effectOutputs) {
             if (
                 (((uint)output.TargetIndex) < ((uint)m_entries.Length)) &&

@@ -21,11 +21,11 @@ public static partial class CreationMotion {
     /// <returns>Whether the creation's composed field changes in its own frame.</returns>
     public static bool HasPartMotion(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(document);
-        var parents = new int[document.Shapes?.Count ?? 0];
+        var parents = new int[(document.Shapes?.Count ?? 0)];
 
-        ResolveParents(document.Shapes ?? [], parents);
-        for (var index = 0; index < parents.Length; index++) {
-            if (Owner(document, parents, index) >= 0) { return true; }
+        ResolveParents((document.Shapes ?? []), parents);
+        for (var index = 0; (index < parents.Length); index++) {
+            if (Owner(document: document, index: index, parents: parents) >= 0) { return true; }
         }
         return false;
     }
@@ -38,7 +38,7 @@ public static partial class CreationMotion {
     public static bool Animates(CreationDocument document) {
         ArgumentNullException.ThrowIfNull(argument: document);
 
-        if ((document.Drivers is { Count: > 0 }) || (document.Effectors is { Count: > 0 })) { return true; }
+        if ((document.SizeBy is not null) || (document.Drivers is { Count: > 0 }) || (document.Effectors is { Count: > 0 })) { return true; }
 
         var shapes = (document.Shapes ?? []);
 
@@ -222,7 +222,7 @@ public static partial class CreationMotion {
     // them apart, and otherwise every timeline frame must carry both sides by one rigid motion.
     private static bool OwnersMoveApart(CreationDocument document, int[] parents, int first, int second) {
         if (first == second) { return false; }
-        var (firstPath, secondPath) = Paths(parents: parents, first: first, second: second);
+        var (firstPath, secondPath) = Paths(first: first, parents: parents, second: second);
 
         if (firstPath.Concat(second: secondPath).Any(predicate: index => Driven(document: document, index: index))) { return true; }
         const float Tolerance = 1.0e-4f;
@@ -250,8 +250,8 @@ public static partial class CreationMotion {
         var firstPath = new List<int>();
         var secondPath = new List<int>();
 
-        for (var at = first; (at >= 0) && (at != common); at = parents[at]) { firstPath.Add(item: at); }
-        for (var at = second; (at >= 0) && (at != common); at = parents[at]) { secondPath.Add(item: at); }
+        for (var at = first; ((at >= 0) && (at != common)); at = parents[at]) { firstPath.Add(item: at); }
+        for (var at = second; ((at >= 0) && (at != common)); at = parents[at]) { secondPath.Add(item: at); }
 
         return (firstPath, secondPath);
     }

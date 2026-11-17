@@ -360,9 +360,6 @@ public static partial class CreationCanonicalizer {
         }
     }
     private static void ValidateDrivers(CreationDocument document, List<DocumentValidationError> errors) {
-        if (document.SizeBy is { } sizeBy && !(document.Drivers ?? []).Any(driver => driver.Name == sizeBy)) {
-            errors.Add(item: new(Message: $"names no declared driver '{sizeBy}'.", Path: "sizeBy"));
-        }
         if (document.Drivers is not { Count: > 0 } drivers) {
             return;
         }
@@ -1469,6 +1466,7 @@ public static partial class CreationCanonicalizer {
             }
         }
     }
+
     /// <summary>Validates surface materials and their optional shape-parented paints.</summary>
     /// <param name="palette">The material entries.</param>
     /// <param name="shapes">Available paint parents; empty for a field surface.</param>
@@ -1573,6 +1571,7 @@ public static partial class CreationCanonicalizer {
             );
         }
     }
+
     private static void ValidateUnitRange(float? value, string name, List<DocumentValidationError> errors, string path) {
         if (value is not { } authored) {
             return;

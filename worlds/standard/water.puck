@@ -251,10 +251,9 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
       schema: "puck.creation.v1"
       name: id
       palette [flowed(palette[0] with { glass: glass }, flow, coverageLane: coverageLane, glass: 1)]
-      sizeBy: "visible"
+      sizeBy: $"state.{visible}"
       drivers [
         { name: "fold", signal: $"state.{gauge}", cadence: -1, blendInSeconds: 0, blendOutSeconds: 0 }
-        { name: "visible", signal: $"state.{visible}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
       ]
       for j in range(0, length(profile) - 1) {
         shape Box $"sheet-{j}" {
@@ -279,18 +278,15 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
     }
   }
 }
-// Ice shrinks uniformly about the authored origin; its driver reads the same linear fraction that sets melt volume.
-// Zero parks the creation through the ordinary presentation path, leaving no crowns above the cradle.
+// Ice shrinks uniformly about the authored origin; sizeBy reads the authority state that sets melt volume.
+// Zero parks the creation and removes its contact, leaving no crowns above the cradle.
 template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
-      sizeBy: "melt"
-      drivers [
-        { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
-      ]
+      sizeBy: $"state.{gauge}"
       for (lump, i) in lumps {
         shape Superellipsoid $"ice-{i}" {
           material: i % 2
@@ -375,10 +371,7 @@ template impactSpray(id, gauge = "fallsFlow", extent = [7, 4, 5]) {
     document {
       schema: "puck.creation.v1"
       name: id
-      sizeBy: "discharge"
-      drivers [
-        { name: "discharge", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
-      ]
+      sizeBy: $"state.{gauge}"
       volumes [
         {
           kind: "cloud"

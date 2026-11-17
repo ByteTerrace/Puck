@@ -326,6 +326,7 @@ public static partial class WorldFederationCodec {
         var catalogRig = reader.ReadByte();
         var identity = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var remoteHuman = reader.ReadBoolean();
+
         var (memberId, companion) = WorldWireLeaves.ReadMemberIdentity(reader: ref reader);
 
         if (reader.Failed) {
@@ -737,7 +738,7 @@ public static partial class WorldFederationCodec {
             items: reply.Refusals,
             writeItem: static (w, refusal) => {
                 w.WriteInt32(value: refusal.MemberId);
-                w.WriteByte(value: (byte)refusal.Reason);
+                w.WriteByte(value: ((byte)refusal.Reason));
                 w.WriteString(value: refusal.Detail);
             }
         );
@@ -861,8 +862,8 @@ public static partial class WorldFederationCodec {
             writer.WriteInt32(value: delta.Row);
             writer.WriteString(value: delta.Region);
             writer.WriteString(value: delta.FieldName);
-            writer.WriteBlock(value: delta.Observation is { } observation
-                ? JsonSerializer.SerializeToUtf8Bytes(new[] { observation }, WorldJsonContext.Default.WorldObservedRowArray) : []);
+            writer.WriteBlock(value: ((delta.Observation is { } observation)
+                ? JsonSerializer.SerializeToUtf8Bytes(new[] { observation }, WorldJsonContext.Default.WorldObservedRowArray) : []));
             if ((delta.Row >= 0) && (delta.Cell >= 0)) {
                 writer.WriteString(value: delta.Image.Key.Value);
                 var value = delta.Image.Value;
@@ -882,6 +883,8 @@ public static partial class WorldFederationCodec {
         }
 
         writer.WriteUInt64(value: snapshot.EngineTick);
+        writer.WriteInt32(value: snapshot.SolidScales.Length);
+        foreach (var size in snapshot.SolidScales.Span) { writer.WriteString(value: size.Placement); writer.WriteInt64(value: size.Scale.Value); }
         if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException(message: "snapshot input publication exceeds wire bounds", paramName: nameof(snapshot)); }
 
         return writer.ToArray();
@@ -1390,7 +1393,7 @@ public static partial class WorldFederationCodec {
                 var memberId = r.ReadInt32();
                 var why = r.ReadByte();
 
-                if (!r.Failed && !Enum.IsDefined(value: (WorldCompanionRefusal)why)) {
+                if (!r.Failed && !Enum.IsDefined(value: ((WorldCompanionRefusal)why))) {
                     r.Fail(
                         detail: $"companion refusal {why} is not declared",
                         refusal: WireRefusal.EnumValueUnknown
@@ -1400,7 +1403,7 @@ public static partial class WorldFederationCodec {
                 return new WorldMemberRefusal(
                     Detail: r.ReadString(field: "companion refusal detail"),
                     MemberId: memberId,
-                    Reason: (WorldCompanionRefusal)why
+                    Reason: ((WorldCompanionRefusal)why)
                 );
             },
             maximum: WorldBodiesLimits.CapacityCeiling
@@ -1445,10 +1448,10 @@ public static partial class WorldFederationCodec {
             Accepted: accepted,
             AcceptedMembers: acceptedMembers,
             BodyIndices: slots,
-            Refusals: refusals,
             DeadlineDestinationTick: deadline,
             DestinationDefinition: definition,
-            Reason: reason
+            Reason: reason,
+            Refusals: refusals
         ) {
             Transient = transient,
         };
@@ -1646,11 +1649,12 @@ public static partial class WorldFederationCodec {
             var fieldName = reader.ReadString(field: "snapshot field identity");
             var observationBytes = reader.ReadBlock(field: "snapshot row observation", maxBytes: WorldFieldCapacity.MaxSnapshotBytes);
             WorldObservedRow? observation = null;
+
             if (observationBytes.Length != 0) {
                 try {
                     var observations = JsonSerializer.Deserialize(observationBytes, WorldJsonContext.Untrusted.WorldObservedRowArray);
-                    if (observations is not { Length: 1 } || row < 0 || cell != -1) { reader.Fail(detail: "invalid snapshot row observation", refusal: WireRefusal.PayloadMalformed); }
-                    else { observation = observations[0]; }
+
+                    if ((observations is not { Length: 1 }) || (row < 0) || (cell != -1)) { reader.Fail(detail: "invalid snapshot row observation", refusal: WireRefusal.PayloadMalformed); } else { observation = observations[0]; }
                 } catch (JsonException) { reader.Fail(detail: "invalid snapshot row observation", refusal: WireRefusal.PayloadMalformed); }
             }
             var image = default(ArenaCellImage);
@@ -1685,10 +1689,12 @@ public static partial class WorldFederationCodec {
                 }
                 image = new ArenaCellImage(Behavior: behavior, Clock: clock, Key: key, Value: value);
             }
-            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, FieldName: fieldName, Image: image, Raw: raw, Region: region, Row: row, Observation: observation);
+            deltas[index] = new FieldCellDelta(Cell: cell, Field: field, FieldName: fieldName, Image: image, Observation: observation, Raw: raw, Region: region, Row: row);
         }
 
         var engineTick = reader.ReadUInt64();
+        var sizes = reader.ReadArray(field: "solid sizes", maximum: (WireLimits.MaxDocumentBytes / 12),
+            readItem: static (ref WireReader r) => new WorldSolidScale(Placement: r.ReadString(field: "solid placement"), Scale: Puck.Maths.FixedQ4816.FromRawBits(value: r.ReadInt64())));
         var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
 
         snapshot = new WorldSnapshot(
@@ -1699,6 +1705,7 @@ public static partial class WorldFederationCodec {
             FieldsFull: fieldsFull,
             Inputs: inputs,
             Revision: revision,
+            SolidScales: sizes,
             StepTicks: stepTicks,
             Tick: tick
         );

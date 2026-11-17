@@ -707,6 +707,19 @@ public sealed partial class SdfFieldEvaluator {
             Z: Intersect(first: stepwise.Z, second: ((((rotation.M20 * p.X) + (rotation.M21 * p.Y)) + (rotation.M22 * p.Z)) + LinearRotationSlack))
         );
     }
+
+    /// <summary>Encloses the rounded inverse quaternion transform used by field-collider point reads.</summary>
+    public static bool TryInverseRotationBounds(FixedQuaternion rotation, FixedVector3 lower, FixedVector3 upper, out FixedAabb box) {
+        if (rotation == FixedQuaternion.Identity) { box = new FixedAabb(Maximum: upper, Minimum: lower); return true; }
+        var constants = RotationBounds.Of(quaternion: rotation);
+        var result = RotateBoundsByInverseQuaternion(p: new IntervalVector3(X: new(lower: lower.X, upper: upper.X), Y: new(lower: lower.Y, upper: upper.Y), Z: new(lower: lower.Z, upper: upper.Z)), rotation: in constants);
+
+        box = FixedAabb.Everywhere;
+        if (result.X.IsUnbounded || result.Y.IsUnbounded || result.Z.IsUnbounded) { return false; }
+        box = new FixedAabb(new FixedVector3(X: result.X.Lower, Y: result.Y.Lower, Z: result.Z.Lower), new FixedVector3(X: result.X.Upper, Y: result.Y.Upper, Z: result.Z.Upper));
+        return true;
+    }
+
     // A faithful enclosure meets a tighter one that holds the point answer only where no point step wrapped. An unbounded
     // first stays unbounded: it is the proof that a point step may have wrapped, and the second, which assumes none did,
     // cannot bound what a wrap produced. An unbounded second, or an empty meet no point answer could produce, defers to
@@ -1248,7 +1261,6 @@ public sealed partial class SdfFieldEvaluator {
             2 => (this with { Z = value }),
             _ => throw new ArgumentOutOfRangeException(paramName: nameof(axis)),
         };
-
         public IntervalVector3 Abs() => new(
             X: FixedInterval.Abs(value: X),
             Y: FixedInterval.Abs(value: Y),
@@ -1289,11 +1301,12 @@ public sealed partial class SdfFieldEvaluator {
         FixedInterval M10, FixedInterval M11, FixedInterval M12,
         FixedInterval M20, FixedInterval M21, FixedInterval M22
     ) {
-        public static RotationBounds Of(in CompiledInstruction instruction) {
-            var ux = Point(value: -instruction.Data0X);
-            var uy = Point(value: -instruction.Data0Y);
-            var uz = Point(value: -instruction.Data0Z);
-            var w = Point(value: instruction.Data0W);
+        public static RotationBounds Of(in CompiledInstruction instruction) => Of(quaternion: new FixedQuaternion(instruction.Data0X, instruction.Data0Y, instruction.Data0Z, instruction.Data0W));
+        public static RotationBounds Of(FixedQuaternion quaternion) {
+            var ux = Point(value: -quaternion.X);
+            var uy = Point(value: -quaternion.Y);
+            var uz = Point(value: -quaternion.Z);
+            var w = Point(value: quaternion.W);
             var two = Point(value: Two);
             var usq = (((ux * ux) + (uy * uy)) + (uz * uz));
             var diagonal = (Point(value: FixedQ4816.One) - (two * usq));
