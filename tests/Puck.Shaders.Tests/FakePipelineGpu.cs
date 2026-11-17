@@ -18,6 +18,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     // Where descriptor set handles start, far above every object handle the fake hands out.
     private const long SetHandleBase = 0x4000_0000;
+    public GpuQueueTimeline Timeline => throw new NotSupportedException("This graph witness does not model device timeline retirement.");
 
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
@@ -698,8 +699,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         }
     }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
-
-    public bool CanDrawIndirectCount => false;
 
     public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
         throw new NotSupportedException();

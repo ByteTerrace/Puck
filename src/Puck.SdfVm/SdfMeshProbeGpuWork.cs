@@ -350,7 +350,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         if (relight) { recording.CopyRegion(m_feedback!, 0, GpuStage.ComputeShader); }
         Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
-        m_tables.WriteMeshSlabs(bindings: m_gpu.Bindings, layout: layout, region: query.Meshes!, set: set);
         Bind(SdfKernelInterfaces.ProbeOrigins, originTable, 16);
         Bind(SdfKernelInterfaces.ProbeDirections, m_directions, 16);
         Bind(SdfKernelInterfaces.ProbeHitsWritten, hits, 4, written: true);

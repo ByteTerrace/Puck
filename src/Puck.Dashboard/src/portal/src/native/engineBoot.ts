@@ -19,7 +19,7 @@ import { generatorCommit, type OfficialLoad } from "../official/officialClient";
 import { OfficialRefusal } from "../official/verify";
 import type { WorldEngine } from "./engineTypes";
 import { bootEngineFromOfficialFiles, type FetchLike } from "./workerBoot";
-import { createInlineWorldEngine, dynamicImport } from "./inlineHost";
+import { createInlineWorldEngine, dynamicImport, nodeFileUrl } from "./inlineHost";
 import { withLanguageServer } from "./languagePump";
 
 export interface EngineBootOptions {
@@ -82,8 +82,7 @@ export async function bootEngineFromOfficial(official: OfficialLoad, options: En
  */
 export async function bootEngineFromLocalBundle(appBundleDir: string): Promise<WorldEngine> {
   const path: any = await dynamicImport("node:path");
-  const { pathToFileURL }: any = await dynamicImport("node:url");
 
   const mainMjs = path.join(appBundleDir, "main.mjs");
-  return withLanguageServer(await createInlineWorldEngine({ mode: "inline", engineEntryUrl: pathToFileURL(mainMjs).href as string }));
+  return withLanguageServer(await createInlineWorldEngine({ mode: "inline", engineEntryUrl: await nodeFileUrl(mainMjs) }));
 }

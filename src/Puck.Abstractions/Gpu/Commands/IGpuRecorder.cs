@@ -108,12 +108,6 @@ public interface IGpuRecorder {
     /// <param name="argumentBufferOffset">The byte offset of the three group counts.</param>
     void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset);
 
-    /// <summary>Gets whether the device records <see cref="DrawIndirectCount"/>: always on Direct3D 12, and on Vulkan
-    /// when the device enables <c>multiDrawIndirect</c>, <c>drawIndirectFirstInstance</c> and
-    /// <c>VK_KHR_draw_indirect_count</c>. Otherwise <see cref="DrawIndirectCount"/> issues fixed records from the same
-    /// GPU-written argument buffer; rejected records have zero vertex and instance counts.</summary>
-    bool CanDrawIndirectCount { get; }
-
     /// <summary>Records a counted indirect draw: up to <paramref name="maxDrawCount"/> non-indexed draws whose arguments
     /// the GPU reads from consecutive <see cref="GpuDrawIndirectCommand"/> records of an argument buffer, as many as the
     /// <see langword="uint"/> at <paramref name="countBufferOffset"/> of a count buffer holds. Each record's identity

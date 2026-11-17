@@ -10,6 +10,59 @@ namespace Puck.SdfVm.Tests;
 [Collection(ProcessWorkCollection.Name)]
 public sealed class SdfMeshArrivalLawTests(ITestOutputHelper output) {
     [Fact]
+    public void LandingCompletionAndStandingRequireTheRecordedPageGeneration() {
+        var pages = new GpuBufferPages(16L << 20, GpuBufferPages.MinimumPageBytes);
+        using var rig = new Rig(1, meshPages: pages);
+        var draw = HostDraw("page-generation", 1);
+        var frame = Frame(rig.LiveProgram, 0, Transforms(1)) with { MeshDraws = new[] { draw } };
+        rig.Engine.Pack(frame);
+        rig.Engine.SubmitUpload();
+        rig.Engine.GpuWork.Pump(rig.Engine);
+        Assert.True(rig.Engine.GpuWork.InFlight > 0);
+        Assert.False(rig.Engine.MeshStands(draw.Mesh));
+        pages.SetWritable(0, 4096, false);
+        pages.SetWritable(0, 4096, true);
+        rig.Engine.GpuWork.Pump(rig.Engine);
+        Assert.False(rig.Engine.MeshStands(draw.Mesh));
+        Assert.Contains("landing-stale=1", rig.Engine.DescribeLanding());
+        LandRootCut(rig, frame);
+        Assert.True(rig.Engine.MeshStands(draw.Mesh));
+        pages.SetWritable(0, 4096, false);
+        pages.SetWritable(0, 4096, true);
+        Assert.False(rig.Engine.MeshStands(draw.Mesh));
+    }
+
+    [Fact]
+    public void AMovedMeshWithoutWritablePagesIsOwedAndItsRowsAreAbsentUntilItLands() {
+        var pages = new GpuBufferPages(16L << 20, GpuBufferPages.MinimumPageBytes);
+        using var rig = new Rig(1, meshPages: pages);
+        var draw = HostDraw("moved-page", 1);
+        var frame = Frame(rig.LiveProgram, 0, Transforms(1)) with { MeshDraws = new[] { draw } };
+        LandRootCut(rig, frame);
+        var draws = Enumerable.Repeat(draw, SdfMeshRegionArena.MinimumDrawCapacity + 1).ToArray();
+        using var arena = new SdfMeshRegionArena();
+        arena.Plan(new[] { draw });
+        arena.Plan(draws);
+        Assert.Contains(draw.Mesh, arena.Moved);
+        var first = (int)((long)arena.Placements[draw.Mesh].VertexWord * sizeof(uint) / pages.PageBytes);
+        pages.SetWritable(first, 1, false);
+        frame = frame with { MeshDraws = draws, MeshDrawsRevision = 1 };
+        rig.Engine.Pack(frame);
+        Assert.True(rig.Engine.DrawsAwaitMeshes);
+        Assert.True(rig.Engine.MeshesLanding);
+        Assert.False(rig.Engine.MeshStands(draw.Mesh));
+        rig.Engine.SubmitUpload();
+        var records = MemoryMarshal.Cast<byte, uint>(rig.Gpu.DeviceLocal(rig.Engine.MeshRegionBytes, "mesh-region"));
+        for (var row = 0; row < draws.Length; row++) {
+            Assert.NotEqual(0u, records[row * SdfMeshRecord.DrawWords + SdfMeshRecord.SelectionWord + 3] & SdfMeshRecord.AbsentFlag);
+        }
+        pages.SetWritable(first, 1, true);
+        LandRootCut(rig, frame);
+        Assert.True(rig.Engine.MeshStands(draw.Mesh));
+        Assert.False(rig.Engine.DrawsAwaitMeshes);
+    }
+
+    [Fact]
     public void RenamingTheLastRowAwayFromARefusedMeshRemovesThatRefusal() {
         var small = HostDraw(identity: "small", x: 1);
         var large = small with { Mesh = new SdfMesh(positions: new Vector3[1000], indices: new uint[] { 0, 1, 2 }) };

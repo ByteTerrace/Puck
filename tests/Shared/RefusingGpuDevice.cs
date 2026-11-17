@@ -81,8 +81,6 @@ internal sealed class RefusingGpuDevice :
     void IGpuRecorder.Dispatch(nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) => throw Reach(member: "IGpuRecorder.Dispatch");
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => throw Reach(member: "IGpuRecorder.DispatchIndirect");
 
-    bool IGpuRecorder.CanDrawIndirectCount => throw Reach(member: "IGpuRecorder.CanDrawIndirectCount");
-
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => throw Reach(member: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => throw Reach(member: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) => throw Reach(member: "IGpuRecorder.ClearStorageBuffer");
@@ -119,6 +117,7 @@ internal sealed class RefusingGpuDevice :
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => throw Reach(member: "IGpuBindings.WriteSampler");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reach(member: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => throw Reach(member: "IGpuQueueSubmitter.CreateSubmissionFence");
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => throw Reach(member: "IGpuQueueSubmitter.Timeline");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.Submit");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reach(member: "IGpuQueueSubmitter.Submit(fence)");
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.SubmitAndWait");
