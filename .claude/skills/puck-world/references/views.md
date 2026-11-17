@@ -560,7 +560,12 @@ becomes what the seat perceives, sees, and hears through. Its view resolves
 through `views.cameraRig` — the same compiler and evaluator every other program
 uses — and leaving the state disengages, restoring the seat's own body. A
 document authoring a camera-targeting state without a `views.cameraRig` or
-without an inhabited `camera-seat-` placement is refused by name.
+without an inhabited `camera-seat-` placement is refused by name. The camera
+body's intent source must be `Live`: an `Idle` body masks the submitted channels
+the possessing seat's passthrough arrives as (`WorldBody.NextIntent`), so it holds
+still. The standard's `freeCamera(...)` template (`worlds/standard/free-camera.puck`)
+authors the whole set (family, rig, body, flying kit, key), and the debug world
+expands it in `worlds/debug/free-camera.puck`.
 
 `player.camera [seat]` is the bindable no-token toggle a wheel sector or a pad
 chord fires: it resolves the seat's own camera-targeting family/state from the
