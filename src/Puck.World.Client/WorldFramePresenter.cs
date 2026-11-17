@@ -461,8 +461,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // program cannot be queried directly because its avatar catalog carries TransformDynamic instructions;
     // reconstructing only the static placements/screens/adjacency geometry also keeps a body from treating itself, or
     // the avatar a camera follows, as an obstacle. The program is emitted here, from the frame's own state; the
-    // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and a
-    // tick-locked frame waits for it (AdoptStaticField), so a still of one tick reads the field that tick delivered.
+    // evaluator it compiles to is built on the thread pool while the field it replaces stays published, and the first
+    // frame dressed after it finishes publishes it (AdoptStaticField). Until then a tick-locked or converging frame
+    // answers waiting (Waiting), so a still of one tick reads the field that tick delivered.
     private void RebuildStaticField() {
         SdfProgramBuilder builder;
 
@@ -509,28 +510,38 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         // The program and its evaluator build off the frame thread; a refusal from either reaches AdoptStaticField.
         m_staticFieldBuild = Task.Run(function: () => new SdfFieldEvaluator(program: builder.Build()));
-        AdoptStaticField(wait: TickLocked);
+        AdoptStaticField();
     }
     private void ReportFieldExclusion(WorldPlacement placement, string reason) {
         if (m_reportedFieldExclusions.Add(item: (placement.Id, reason))) {
             WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"excluded placement '{placement.Id}': {reason}");
         }
     }
-    // Publishes the presentation field's evaluator once its build has finished, or waits for it.
-    private void AdoptStaticField(bool wait) {
-        if ((m_staticFieldBuild is not { } build) || (!wait && !build.IsCompleted)) {
-            return;
-        }
+    // Publishes the presentation field's evaluator once its build has finished; a build still running is never waited for.
+    private void AdoptStaticField() {
+        if ((m_staticFieldBuild is { } build) && build.IsCompleted) {
+            m_staticFieldBuild = null;
 
-        m_staticFieldBuild = null;
-
-        try {
-            m_client.PublishStaticField(field: build.GetAwaiter().GetResult());
-        } catch (ArgumentException exception) {
-            m_client.PublishStaticField(field: null);
-            ReportStaticFieldUnavailable(exception: exception);
+            try {
+                m_client.PublishStaticField(field: build.GetAwaiter().GetResult());
+            } catch (ArgumentException exception) {
+                m_client.PublishStaticField(field: null);
+                ReportStaticFieldUnavailable(exception: exception);
+            }
         }
     }
+    /// <summary>The <see cref="Waiting"/> reason of a tick-locked or converging frame dressed while the presentation query
+    /// field its cameras and limb probes read is still building.</summary>
+    public const string StaticFieldWaiting = "the presentation query field is building, and a tick-locked or converging frame shows only the field its content calls for";
+    /// <inheritdoc/>
+    /// <remarks>The composition's (<see cref="SdfCompositionFrameSource.Waiting"/>), then, for a tick-locked or converging
+    /// frame, <see cref="StaticFieldWaiting"/> while the field the frame was dressed against still builds.</remarks>
+    public string? Waiting => (m_composed.Waiting ?? ((HoldsForBuilds && m_dressedBeforeField) ? StaticFieldWaiting : null));
+    // Whether the frame shows only what its content calls for, never a program or field before it.
+    private bool HoldsForBuilds => (TickLocked || (m_convergence is { Completion.IsCompleted: false }));
+    // Whether the latest dressed frame read the field before the one its content calls for: latched as the dress ends, so
+    // a build finishing after it cannot make that frame read as complete.
+    private bool m_dressedBeforeField;
     // Placement admission isolates unsupported props. A failure in the remaining combined scene still leaves no field;
     // name it so missing surface targets cannot be mistaken for a probe or rig problem.
     private static void ReportStaticFieldUnavailable(ArgumentException exception) => WorldClientDiagnostics.Report(channel: "world.presentation-field", text: $"unavailable; camera clearance and surface effectors have no query field: {exception.Message.ReplaceLineEndings(replacementText: " ")}");
@@ -1634,7 +1645,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         ArgumentNullException.ThrowIfNull(argument: transforms);
 
         m_transforms = transforms;
-        AdoptStaticField(wait: TickLocked);
+        AdoptStaticField();
 
         // A rebuilt program is a NEW instance (the host hands back the previous one whenever the composed revision
         // held), so reference inequality IS the re-upload signal — and it covers the first frame, whose program has
@@ -2194,6 +2205,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
         // The next pack holds no body a shadow of this frame's views and lights may show.
         m_animator.ShadowBy(shadows: RateShadows(frame: m_dressedFrame, height: height, width: width));
+        m_dressedBeforeField = (m_staticFieldBuild is not null);
 
         return m_dressedFrame;
     }

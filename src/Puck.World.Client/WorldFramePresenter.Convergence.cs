@@ -35,7 +35,9 @@ public sealed partial class WorldFramePresenter {
         }
     }
     /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    /// <remarks>A frame the composition films nothing for (<see cref="SdfCompositionFrameSource.CaptureFrame"/>) places
+    /// the retained composition's views, as a held frame does, and films nothing.</remarks>
+    public SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         // deltaSeconds is the launcher's clamped presentation interval, distinct from its whole-step simulation delta.
         // It may drive visual-only animation and the FPS witness, but never feeds authoritative world state.
         var tickedSeconds = TickedSeconds();
@@ -96,6 +98,12 @@ public sealed partial class WorldFramePresenter {
                 width: width
             );
 
+            if (frame is null) {
+                PlaceComposedFrame();
+
+                return null;
+            }
+
             // The camera views film this frame, with the transforms and route choices its dress reads.
             m_binder.PresentFrame(
                 authoritativeTick: m_client.Tick,
@@ -106,7 +114,8 @@ public sealed partial class WorldFramePresenter {
             PresentationProbe?.Observer?.Record(tick: m_client.Tick, frame: frame, deltaSeconds: deltaSeconds,
                 interpolationAlpha: interpolationAlpha, scope: m_client.Authority, documentId: m_client.Definition.DocumentId,
                 width: width, height: height);
-            if (m_convergence is { Completion.IsCompleted: false }) {
+            // A frame that does not yet show what its content calls for is never the one a capture holds.
+            if ((m_convergence is { Completion.IsCompleted: false }) && (Waiting is null)) {
                 m_convergedFrame = frame;
             }
             return frame;

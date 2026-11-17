@@ -26,11 +26,14 @@ public sealed class WorldConsoleWaitGate {
     /// passed first.</summary>
     /// <param name="session">The issuing text session. Other sessions keep draining.</param>
     /// <param name="ticks">The number of ticks to wait, counted from the last completed tick.</param>
+    /// <param name="standing">Names what stands while the ticks have not completed (a frame the host holds its tick for,
+    /// a wait through the door), read once if the answer deadline passes first; <see langword="null"/> names
+    /// nothing.</param>
     /// <returns>The earliest host-work tick that releases the session.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The tick count is zero.</exception>
     /// <exception cref="OverflowException">The release tick exceeds the clock range.</exception>
-    public ulong Arm(TextCommandSession session, ulong ticks) {
+    public ulong Arm(TextCommandSession session, ulong ticks, Func<string?>? standing = null) {
         ArgumentNullException.ThrowIfNull(argument: session);
         ArgumentOutOfRangeException.ThrowIfZero(ticks);
         var from = Tick;
@@ -41,9 +44,13 @@ public sealed class WorldConsoleWaitGate {
             hold: () => ((m_epoch == epoch) && (Tick < release)),
             released: deadlinePassed => {
                 if (deadlinePassed) {
+                    var cause = ((standing?.Invoke() is { } stands)
+                        ? $"standing: {stands}"
+                        : "the world is completing ticks slower than its rate");
+
                     return CommandResult.Error(output: string.Create(
                         provider: CultureInfo.InvariantCulture,
-                        handler: $"[world.wait: this call's answer was due at tick {Tick}, before release tick {release}, so the session stopped waiting; the world is completing ticks slower than its rate — wait in shorter steps or give the call a longer deadline]"
+                        handler: $"[world.wait: this call's answer was due at tick {Tick}, before release tick {release}, so the session stopped waiting; {cause} — wait in shorter steps or give the call a longer deadline]"
                     ));
                 }
 

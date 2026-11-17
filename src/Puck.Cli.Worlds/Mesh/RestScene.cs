@@ -127,7 +127,7 @@ public sealed class RestScene {
         // Two frames: the first registers the bodies' stamps, the second packs their poses.
         for (var frame = 0; (frame < 2); frame++) {
             emitter.Tick(deltaSeconds: 0f);
-            captured = frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64);
+            captured = (frames.CaptureFrame(deltaSeconds: 0f, height: 64, interpolationAlpha: 1f, width: 64) ?? throw new InvalidOperationException(message: $"the rest scene's composition filmed nothing: {frames.Waiting}"));
             picks = captured.PickMap;
         }
 

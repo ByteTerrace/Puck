@@ -100,7 +100,7 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
         var travel = 0f;
 
         for (var frame = 0; (frame < 120); frame++) {
-            scene.Frame();
+            _ = scene.Frame();
 
             foreach (var (shapeId, slot) in (((int, int)[])[(0, (ArmSlot - 1)), (1, ArmSlot)])) {
                 Assert.True(condition: scene.Pool.TryShapePosition(client: scene.Client, placementId: Seat, position: out var read, shapeId: shapeId));
@@ -191,15 +191,18 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
             definition: CreationDomainParentLawTests.Definition(creation: creation),
             version: new WorldDocumentVersion(Activation: m_activation, Sequence: ++m_sequence)
         );
-        // Runs two seconds of frames and returns the slot's furthest travel from where the first of them drew it.
+        // Runs two seconds of frames and returns the slot's furthest travel from where the first of them drew it. A
+        // background composition films nothing until its first program lands, so the frames start once one is filmed.
         public float Travel(int slot) {
-            Frame();
+            for (var attempt = 0; (!Frame() && (attempt < 5000)); attempt++) {
+                Thread.Sleep(millisecondsTimeout: 1);
+            }
 
             var start = Drawn(slot);
             var travel = 0f;
 
             for (var frame = 0; (frame < 120); frame++) {
-                Frame();
+                _ = Frame();
                 travel = MathF.Max(x: travel, y: Vector3.Distance(value1: start, value2: Drawn(slot)));
             }
 
@@ -210,7 +213,8 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
 
         // The position the last frame drew the slot at.
         public Vector3 Drawn(int slot) => Pool.BodyShapePose(0, slot).Position;
-        public void Frame() {
+        // Takes one frame, returning whether the composition filmed it.
+        public bool Frame() {
             m_client.DeliverSnapshot(snapshot: new WorldSnapshot(
                 Authority: "a",
                 Entries: ((EntitySnapshot[])[new EntitySnapshot(
@@ -233,12 +237,12 @@ public sealed class WorldCreationInstancesLiveRigEditLawTests {
             m_client.UpdateRenderPoses(alpha: 1f);
             m_emitter.Tick(deltaSeconds: FrameSeconds);
             Pool.Tick(deltaSeconds: FrameSeconds);
-            _ = m_frames.CaptureFrame(
+            return (m_frames.CaptureFrame(
                 deltaSeconds: FrameSeconds,
                 height: 64,
                 interpolationAlpha: 0f,
                 width: 64
-            );
+            ) is not null);
         }
     }
     // Keeps the transforms each frame hands it.

@@ -310,7 +310,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public string? NotReadyReason => (IsReady
         ? null
         : ((m_frame is null)
-            ? $"residency '{Name}' has captured no frame"
+            ? ((SourceWaiting is { } waiting) ? $"residency '{Name}' has captured no frame: {waiting}" : $"residency '{Name}' has captured no frame")
             : (((m_tables is { } tables) && (m_pipelineWaiting is { } views))
                 ? ((tables.PipelineRefusal(kernel: views) is { } refusal)
                     ? $"residency '{Name}' holds its frame: the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
@@ -644,7 +644,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public bool IsUnchanged(in FrameContext context, int view) {
         if (
             !Prepare(context: in context) ||
-            MeshPathBake.DrawsPending || MeshIrradiance.Settling ||
+            MeshPathBake.DrawsPending || MeshIrradiance.Settling || (SourceWaiting is not null) ||
             (m_frame is not { } frame) ||
             (view >= frame.Views.Count) ||
             (view >= m_renderedSignatures.Length) ||
@@ -853,6 +853,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// that work at the GPU's pace (<see cref="SdfGpuWork.Drive"/>) instead of pumping it under the budgets that protect a
     /// presented frame.</summary>
     public bool FrameWithheld => (MeshesPending || LightingPending);
+    /// <summary>Gets why the frame source's latest capture filmed nothing, or a frame that does not yet show what its
+    /// content calls for (<see cref="ISdfFrameSource.Waiting"/>), or <see langword="null"/>. While it stands the graph
+    /// withholds the residency's views and answers waiting with it (<see cref="SdfWorldPasses.WithheldOf"/>), so a
+    /// lockstep host holds its tick; a frame the source films nothing for leaves the frame captured before
+    /// standing.</summary>
+    public string? SourceWaiting { get; private set; }
 
     // The frame the tables last packed, which a frame that films nothing leaves standing, and whether a frame captured
     // since the tables last uploaded a program carries another one.
@@ -907,20 +913,29 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         if (converging && (m_frozenFrame is { } frozen)) {
             frame = frozen with { ProgramChanged = false };
+            SourceWaiting = null;
             m_frameSource.PresentHeldFrame();
         } else {
             if (!converging) {
                 m_frozenFrame = null;
             }
 
-            frame = m_frameSource.CaptureFrame(
+            var captured = m_frameSource.CaptureFrame(
                 width: m_width,
                 height: m_height,
                 deltaSeconds: (converging ? 0f : ((float)context.FrameDeltaSeconds)),
                 interpolationAlpha: ((float)context.InterpolationAlpha)
             );
-            if (converging) {
-                // Freeze the authored frame, while derived meshes can still finish under the capture's hold.
+
+            SourceWaiting = m_frameSource.Waiting;
+            // A source that films nothing leaves the frame captured last standing, packed or pending as it was.
+            if (captured is null) {
+                return;
+            }
+            frame = captured;
+            if (converging && (SourceWaiting is null)) {
+                // Freeze the authored frame, while derived meshes can still finish under the capture's hold. A frame the
+                // source says is incomplete is never frozen; a later one is.
                 m_frozenFrame = frame;
             }
         }
