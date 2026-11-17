@@ -9,8 +9,8 @@
 #ifndef IMAGE_SOURCE_HLSLI
 #define IMAGE_SOURCE_HLSLI
 
-#include "../Shared/transfer.hlsli"
-#include "../Shared/luma.hlsli"
+#include "Shared/transfer.hlsli"
+#include "Shared/luma.hlsli"
 
 // ImagePixelFormat codes.
 #define IMAGE_FORMAT_R8G8B8A8 1u

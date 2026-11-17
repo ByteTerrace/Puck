@@ -180,6 +180,70 @@ public sealed class GpuSubmissionBatchLawTests {
         Assert.Throws<DeviceLostException>(() => alias.Wait());
     }
 
+    [Fact]
+    public void ARefusedRegistrationIsWatchedUntilTheSubmissionCompletes() {
+        using var fence = new Fence { RefuseRegistration = true };
+        using var signal = new AutoResetEvent(initialState: false);
+
+        fence.Arm();
+        fence.SignalOnCompletion(signal: signal);
+        Assert.Empty(collection: fence.NativeSignals);
+        // Past several of the watcher's slices the submission is still running: no wake yet, and none lost.
+        Assert.False(condition: signal.WaitOne(timeout: (GpuFenceWatchSlice * 3)), userMessage: "the waiter was woken before its submission completed");
+        fence.Complete();
+        Assert.True(condition: signal.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)), userMessage: "the completion never woke the waiter");
+        Assert.True(condition: fence.IsSignaled);
+        fence.Wait();
+        // Re-armed, the next submission is watched afresh.
+        fence.Arm();
+        fence.SignalOnCompletion(signal: signal);
+        fence.Complete();
+        Assert.True(condition: signal.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)), userMessage: "the re-armed submission's completion never woke the waiter");
+        fence.Wait();
+    }
+    [Fact]
+    public void AWatchedFenceThatCompletesWakesItsWaiterWhileAnEarlierWatchedFenceStaysPending() {
+        // Two queues' fences, watched in this order; the later queue's submission completes first.
+        using var early = new Fence { RefuseRegistration = true };
+        using var late = new Fence { RefuseRegistration = true };
+        using var earlySignal = new AutoResetEvent(initialState: false);
+        using var lateSignal = new AutoResetEvent(initialState: false);
+
+        early.Arm();
+        early.SignalOnCompletion(signal: earlySignal);
+        late.Arm();
+        late.SignalOnCompletion(signal: lateSignal);
+        late.Complete();
+        Assert.True(condition: lateSignal.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)), userMessage: "the earlier fence's pending submission hid the later fence's completion");
+        Assert.False(condition: earlySignal.WaitOne(millisecondsTimeout: 0));
+        late.Wait();
+        // A second watch of the still-pending fence joins the first; both are set by its completion.
+        using var again = new AutoResetEvent(initialState: false);
+        early.SignalOnCompletion(signal: again);
+        early.Complete();
+        Assert.True(condition: earlySignal.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)));
+        Assert.True(condition: again.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)));
+        early.Wait();
+    }
+    [Fact]
+    public void AWatchedFenceThatNeverCompletesIsWithdrawnBeforeItsNativeFenceIsReleased() {
+        var fence = new Fence { RefuseRegistration = true };
+        using var signal = new AutoResetEvent(initialState: false);
+
+        fence.Arm();
+        fence.SignalOnCompletion(signal: signal);
+        Assert.False(condition: signal.WaitOne(millisecondsTimeout: 50));
+        // The device is lost with the submission outstanding: disposal's wait fails, and the watcher, still inside its
+        // wait on a submission that will never complete, is withdrawn before the release, which throws if it is not.
+        fence.Lost = true;
+        fence.Dispose();
+        Assert.Equal(expected: 1, actual: fence.Disposals);
+        Assert.True(condition: signal.WaitOne(timeout: TimeSpan.FromSeconds(value: 10)));
+    }
+
+    // The shared watcher's slice (GpuFenceWatch.Slice), which the laws wait past to show a watch outlives it.
+    private static readonly TimeSpan GpuFenceWatchSlice = TimeSpan.FromMilliseconds(value: 100);
+
     private sealed class Batch : GpuSubmissionBatch<int> {
         public bool FailBeforeArm { get; set; }
         public bool FailAfterArm { get; init; }
@@ -206,12 +270,17 @@ public sealed class GpuSubmissionBatchLawTests {
     }
 
     private sealed class Fence : GpuBatchedSubmissionFence {
+        // Set once the armed submission completes; the watcher thread reads it, the test thread completes it.
+        private readonly ManualResetEventSlim m_done = new(initialState: false);
         private bool m_pending;
-        private bool m_complete;
         public bool Lost { get; set; }
         public int Waits { get; private set; }
         public int Disposals { get; private set; }
-        public void Arm() { CheckLive(); MarkArmed(); m_pending = true; }
+        // A backend with no completion registration (Vulkan's), or whose device refuses one (Direct3D 12's refusal).
+        public bool RefuseRegistration { get; init; }
+        public void Arm() { CheckLive(); m_pending = true; MarkArmed(); }
+        // The GPU reaching the armed submission's signal.
+        public void Complete() => m_done.Set();
         // A backend whose signal call is refused after its entries reached the queue, as Direct3D 12's Arm handles it.
         public void ArmRefused(Action drain) =>
             ArmBehind(drainQueue: drain, queueSignal: static (string _) => throw new InvalidOperationException("signal refused"), state: "");
@@ -222,21 +291,42 @@ public sealed class GpuSubmissionBatchLawTests {
         protected override bool NativeSignaled() {
             CheckLive();
             if (!m_pending) { throw new InvalidOperationException("Unsubmitted signal queried."); }
-            return m_complete;
+            return m_done.IsSet;
         }
         protected override void WaitNative() {
             CheckLive();
             if (!m_pending) { throw new InvalidOperationException("Unsubmitted signal waited."); }
             Waits++;
-            m_complete = true;
+            m_done.Set();
         }
-        protected override void DrainNative() { m_pending = false; m_complete = false; }
-        protected override void DisposeNative() => Disposals++;
-        // The signals the backend was asked to set, each when its armed submission completes.
+        protected override void DrainNative() {
+            if (Volatile.Read(ref m_watching) != 0) { throw new InvalidOperationException("Native fence reset while the watcher waits it."); }
+            m_pending = false;
+            m_done.Reset();
+        }
+        protected override void DisposeNative() {
+            if (Volatile.Read(ref m_watching) != 0) { throw new InvalidOperationException("Native fence released while the watcher waits it."); }
+            Disposals++;
+            m_done.Dispose();
+        }
+        // The signals the backend registered, each set by the device when its armed submission completes.
         public List<EventWaitHandle> NativeSignals { get; } = [];
-        protected override void SignalNative(EventWaitHandle signal) {
+        protected override bool TrySignalNative(EventWaitHandle signal) {
             CheckLive();
+            if (RefuseRegistration) { return false; }
             NativeSignals.Add(signal);
+            return true;
+        }
+        // How many watcher threads are inside WaitNativeFor now.
+        private int m_watching;
+        protected override bool WaitNativeFor(TimeSpan slice) {
+            Interlocked.Increment(ref m_watching);
+            try {
+                if (!m_pending) { throw new InvalidOperationException("Unsubmitted signal watched."); }
+                return m_done.Wait(slice);
+            } finally {
+                Interlocked.Decrement(ref m_watching);
+            }
         }
     }
 }

@@ -30,8 +30,10 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     /// <summary>Gets the world the World boots (<c>--world</c>), or <see langword="null"/> when the verb's own arguments
     /// name what it runs.</summary>
     public string? World { get; init; }
+
     /// <summary>Gets how the World presents.</summary>
     public WorldShape Shape { get; init; } = WorldShape.Headless;
+
     /// <summary>Gets the backend the World boots on (<c>--backend</c>), or <see langword="null"/> to let the document
     /// decide.</summary>
     public WorldBackendPreference? Backend { get; init; }
@@ -44,8 +46,10 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     /// <summary>Gets whether the World opens the machine's physical input devices (<c>--devices all</c>), which only a
     /// World the owner asked to play in does; every other World passes <c>--devices none</c>.</summary>
     public bool OwnerDevices { get; init; }
+
     /// <summary>Gets the verb's own further arguments, after the shared ones.</summary>
     public IReadOnlyList<string> Arguments { get; init; } = [];
+
     /// <summary>Gets the environment entries the World gets over this process's: a value sets a variable,
     /// <see langword="null"/> removes it.</summary>
     public IReadOnlyDictionary<string, string?>? Environment { get; init; }
@@ -62,7 +66,6 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     /// <summary>Gets the checkout whose shared lease directory holds the GPU lease, or <see langword="null"/> for the
     /// repository this process runs in.</summary>
     public string? Checkout { get; init; }
-
     /// <summary>Gets whether the World opens a GPU device, and so starts only under the GPU lease.</summary>
     public bool OpensDevice => (Shape is WorldShape.Windowed or WorldShape.Document);
     /// <summary>Gets what the World is to the host admission, which sets the commit it is expected to peak at.</summary>
@@ -149,9 +152,10 @@ public sealed class WorldLaunch : IDisposable {
     /// <param name="spirv">Whether the checkout's build must carry Vulkan SPIR-V.</param>
     /// <param name="build">The resolved build, which the caller disposes after its last World has exited.</param>
     /// <param name="error">Why no build is available, or empty.</param>
+    /// <param name="cancellationToken">Cancels the build and its waits.</param>
     /// <returns><see langword="true"/> when a build is available.</returns>
-    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, string? named, bool spirv, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldBuild? build, out string error) {
-        if (!WorldArtifactBuild.TryResolveNamed(error: out error, lease: out var lease, logDirectory: logDirectory, named: named, path: out var path, repositoryRoot: repositoryRoot, spirv: spirv, timeout: WorldArtifactBuild.BuildTimeout, verb: verb)) {
+    public static bool TryResolve(string verb, string repositoryRoot, string logDirectory, string? named, bool spirv, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldBuild? build, out string error, CancellationToken cancellationToken = default) {
+        if (!WorldArtifactBuild.TryResolveNamed(cancellationToken: cancellationToken, error: out error, lease: out var lease, logDirectory: logDirectory, named: named, path: out var path, repositoryRoot: repositoryRoot, spirv: spirv, timeout: WorldArtifactBuild.BuildTimeout, verb: verb)) {
             build = null;
 
             return false;
@@ -218,22 +222,23 @@ public sealed class WorldLaunch : IDisposable {
 
         if (!request.OpensDevice && !request.HeavySuite) {
             stage?.Invoke(obj: "host-admission");
-            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, request: request, reserve: true, stage: stage, refuse: true).ConfigureAwait(continueOnCapturedContext: false);
+            await AdmitHostAsync(bound: null, cancellationToken: cancellationToken, refuse: true, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
 
             return new WorldLaunch(gpu: null, request: request);
         }
 
         var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
 
-        var name = request.OpensDevice ? "gpu" : "heavy";
-        var holder = request.Holder ?? request.Step;
-        var lane = request.Lane ?? CliLease.LaneOf(checkout);
+        var name = (request.OpensDevice ? "gpu" : "heavy");
+        var holder = (request.Holder ?? request.Step);
+        var lane = (request.Lane ?? CliLease.LaneOf(checkout: checkout));
         var gpu = await WorldWorkHold.AcquireAsync(checkout, name, holder, lane,
             (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
-                (place, step, device, heavy, kind, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(step, device, heavy, kind, bound, reserve, phase, cancel, place),
+                (place, step, device, heavy, kind, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: kind, reserve: reserve, stage: phase, step: step),
                 checkout, request.Step, request.OpensDevice, request.HeavySuite, request.Kind, TimeProvider.System,
                 CliLease.DefaultWait, Console.Error, stage, token),
-            token => AdmitHostAsync(request, TimeSpan.Zero, true, false, stage, token), cancellationToken).ConfigureAwait(false);
+            token => AdmitHostAsync(bound: TimeSpan.Zero, cancellationToken: token, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
         return new WorldLaunch(gpu: gpu, request: request);
     }
 
@@ -342,6 +347,7 @@ public sealed class WorldLaunch : IDisposable {
             Dispose();
         }
     }
+
     /// <summary>Adds a just-started World to the job that ends it with this process; a World that cannot join is killed,
     /// so no World runs outside the job.</summary>
     /// <param name="process">The started World.</param>
@@ -359,6 +365,7 @@ public sealed class WorldLaunch : IDisposable {
             throw;
         }
     }
+
     /// <summary>Releases the GPU lease of a launch whose World never started, or that has finished its captured run.</summary>
     public void Dispose() => Interlocked.Exchange(location1: ref m_gpu, value: null)?.Dispose();
 

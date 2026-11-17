@@ -42,6 +42,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private GpuRegion? m_feedback;
     private IGpuBuffer? m_hitCache;
     private IGpuBuffer? m_meterCache;
+    // Whether a new hit cache's clear, or a new meter cache's fill, is still owed: set as the cache is made and
+    // discharged only by the completion of a job that recorded it.
+    private bool m_hitCacheOwed;
+    private bool m_meterCacheOwed;
     private int m_feedbackWords;
     private SdfMeshIrradianceScene? m_scene;
     private IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> m_scenePlacements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
@@ -326,35 +330,43 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         // A relight's slices write their partial sums behind the results and the fault word, where the readback never
         // reaches (sdf-probe-relight, sdf-probe-combine).
         var partialBytes = relight ? (ulong)query.Origins.Length * SdfMeshProbeRelight.Slices * SdfMeshProbeRelight.PartialWords * 4 : 0UL;
-        // The slot's buffers are the service's, which reserves them: every one the job holds is asked for here, before
-        // anything is written or recorded, so a job the device has no room for is handed back whole.
+        // The slot's buffers are the service's, which reserves them: every one the job holds, its readback included, is
+        // asked for here, then the client's own caches, before anything consumes state (the feedback region's copy), so a
+        // job the device has no room for is handed back whole.
         var originTable = recording.HostBuffer(part: "origins", bytes: (ulong)query.Origins.Length * 16, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Exact);
         var hits = recording.DeviceBuffer(part: "hits", bytes: bytes + 4 + partialBytes, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit);
         var identities = recording.DeviceBuffer(part: "identities", bytes: 8, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit);
         var input = compute ? recording.HostBuffer(part: "input", bytes: (ulong)MemoryMarshal.AsBytes(query.Input.Span).Length, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit) : null;
         var lighting = compute ? recording.HostBuffer(part: "lighting", bytes: (ulong)MemoryMarshal.AsBytes(query.Lighting.AsSpan()).Length, usage: GpuBufferUsage.Storage, sizing: SdfGpuWorkSizing.Fit) : null;
         var work = compute ? recording.DeviceBuffer(part: "work", bytes: (ulong)(query.Origins.Length + 3) * 4, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect, sizing: SdfGpuWorkSizing.Fit) : null;
+        recording.ReserveReadback(bytes: bytes + 4);
+        var command = recording.CommandBuffer;
         if (query.Meter) {
             var cacheBytes = (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
             if (m_meterCache is null || m_meterCache.SizeBytes < cacheBytes) {
                 m_meterCache?.Dispose();
+                m_meterCache = null;
                 m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "meter-cache"), sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
+                m_meterCacheOwed = true;
+            }
+            // A new cache holds nothing until a meter job that fills it completes (Complete), so until then every job
+            // fills it: one handed back unsubmitted leaves the fill owed.
+            if (m_meterCacheOwed) {
                 var origins = query.Origins.Span;
                 for (var i = 0; i < origins.Length; i++) { origins[i].W = 1; }
+                query.FillsMeterCache = true;
             }
         }
+        if (query.HitCapacity != 0) { FitHitCache(query, query.HitCapacity, command); }
         originTable.Write<Vector4>(query.Origins.Span);
-        var command = recording.CommandBuffer;
         // TryTake admits one query until Complete observes its fence. These shared regions therefore need
         // one upload slot; the service slots still independently own outputs and held readback tokens.
         if (relight) { recording.CopyRegion(m_feedback!, 0, GpuStage.ComputeShader); }
         Bind(SdfKernelInterfaces.ProbeScene, m_sceneRegion!.Buffer(0), 4);
         Bind(SdfWorldPackage.MeshRegion, query.Meshes!, 4);
-        m_tables.WriteMeshSlabs(bindings: m_gpu.Bindings, layout: layout, region: query.Meshes!, set: set);
         Bind(SdfKernelInterfaces.ProbeOrigins, originTable, 16);
         Bind(SdfKernelInterfaces.ProbeDirections, m_directions, 16);
         Bind(SdfKernelInterfaces.ProbeHitsWritten, hits, 4, written: true);
-        if (query.HitCapacity != 0) { FitHitCache(query.HitCapacity, command); }
         if (compute) {
             input!.Write<byte>(MemoryMarshal.AsBytes(query.Input.Span));
             lighting!.Write<byte>(MemoryMarshal.AsBytes(query.Lighting.AsSpan()));
@@ -451,12 +463,18 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
     // Sizes the hit cache to the volume's tier (SdfMeshIrradiance.GpuHitCapacity). Jobs are admitted one at a time and
     // the last one's fence has signaled, so no recorded work reads the cache it replaces. A new cache is cleared, so its
-    // token words match no allocation token, and left readable by compute.
-    private void FitHitCache(uint capacity, nint command) {
+    // token words match no allocation token, and left readable by compute. The clear stays owed until a job that
+    // recorded it completes (Complete): a job handed back unsubmitted discarded it, and the next job clears again.
+    private void FitHitCache(Job query, uint capacity, nint command) {
         var bytes = (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
-        if (m_hitCache?.SizeBytes == bytes) { return; }
-        m_hitCache?.Dispose();
-        m_hitCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hit-cache"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+        if (m_hitCache?.SizeBytes != bytes) {
+            m_hitCache?.Dispose();
+            m_hitCache = null;
+            m_hitCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "hit-cache"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+            m_hitCacheOwed = true;
+        }
+        if (!m_hitCacheOwed) { return; }
+        query.ClearsHitCache = true;
         var recorder = m_gpu.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_hitCache.BufferHandle,
             sourceAccessMask: GpuAccess.None, sourceStageMask: GpuStage.TopOfPipe,
@@ -492,6 +510,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     public void Complete(object job, SdfGpuWorkReadback readback) {
         if (job is SceneChunk chunk) { CompleteSceneUpload(chunk, readback); return; }
         var query = (Job)job;
+        // The job ran: what it initialized stands.
+        if (query.ClearsHitCache) { m_hitCacheOwed = false; }
+        if (query.FillsMeterCache) { m_meterCacheOwed = false; }
         var words = readback.Length / 4;
         var readWords = (words == 0) ? [] : (query.Reuse is { } reuse && (reuse.Length >= words)) ? reuse : new uint[words];
         var holdsOutput = query.Lighting is not null && !query.Selection && !query.Meter;
@@ -659,6 +680,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public long Rays;
         public long Tests;
         public uint HitCapacity;
+        // Whether the job recorded the meter cache's fill or the hit cache's clear, which its completion discharges.
+        public bool FillsMeterCache;
+        public bool ClearsHitCache;
         public int Geometry;
         public int Window;
     }

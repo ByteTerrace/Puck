@@ -118,6 +118,7 @@ public static partial class CountersCommand {
             right: rightReport
         ));
     }
+
     private static int Report(IReadOnlyList<string> differences) {
         foreach (var difference in differences) {
             Console.Out.WriteLine(value: $"{Verb}: {difference}");
@@ -128,7 +129,8 @@ public static partial class CountersCommand {
             : CliExit.Failed
         );
     }
-    private static int Run(string? output, string? world, string? scriptPath) {
+    private static int Run(string? output, string? world, string? scriptPath, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -174,6 +176,7 @@ public static partial class CountersCommand {
 
         if (!WorldOffscreenLeg.TryResolveWorld(
             build: out var artifact,
+            cancellationToken: cancellationToken,
             repositoryRoot: repositoryRoot,
             runDirectory: runDirectory,
             verb: Verb
@@ -192,6 +195,7 @@ public static partial class CountersCommand {
 
             CountersPipelineCache.Seed(backend: backend, root: CountersPipelineCache.DefaultRoot, stateDirectory: stateDirectory);
             var leg = WorldOffscreenLeg.Run(
+                cancellationToken: cancellationToken,
                 arguments: [],
                 artifact: artifact.Path,
                 backend: backend,
@@ -295,14 +299,16 @@ public static partial class CountersCommand {
             reading refusal (a missing device or shader tool included).
             """);
         command.Subcommands.Add(item: CreateCompare());
-        command.SetAction(action: parseResult => Run(
+        command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Run(
+            cancellationToken: cancellationToken,
             output: parseResult.GetValue(option: outputOption),
             scriptPath: parseResult.GetValue(option: scriptOption),
             world: parseResult.GetValue(option: worldOption)
-        ));
+        )));
 
         return command;
     }
+
     private static Command CreateCompare() {
         var leftArgument = new Argument<string>(name: "left") { Description = $"The first {WorldCountersReport.SchemaVersion} report." };
         var rightArgument = new Argument<string>(name: "right") { Description = "The second report, compared backend by backend against the first." };

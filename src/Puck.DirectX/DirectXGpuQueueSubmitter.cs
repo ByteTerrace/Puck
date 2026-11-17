@@ -27,6 +27,16 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
     private readonly Batch m_batch;
     // The drain a fence whose signal was refused runs behind the lists already executed (DirectXGpuSubmissionFence.Arm).
     private readonly Action m_drainQueue;
+    private DirectXQueueTimeline? m_timeline;
+
+    /// <inheritdoc/>
+    public GpuQueueTimeline Timeline => (m_timeline ??= new DirectXQueueTimeline(m_deviceContext));
+
+    // A recreated context must never reuse its previous device's completion values.
+    internal void ReleaseTimeline() {
+        m_timeline?.Dispose();
+        m_timeline = null;
+    }
 
     /// <summary>Initializes a new instance of the <see cref="DirectXGpuQueueSubmitter"/> class, submitting to the
     /// context's direct command queue.</summary>
@@ -163,33 +173,48 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
     // The device the fence is on; the context owns it, and a removal is read from it.
     private readonly nint m_device;
 
+    /// <summary>How long the shared watcher sleeps between reads of the fence while the device refuses to register its
+    /// watch event: a millisecond, the system timer's granularity.</summary>
+    private static readonly TimeSpan RefusedWatchPoll = TimeSpan.FromMilliseconds(value: 1);
+
     private nint m_fence;
     private HANDLE m_fenceEvent;
+    // The shared watcher's own event (WaitNativeFor), apart from the one the submitting thread's Wait blocks on, so the
+    // two never consume each other's set. Only the watcher reads it while the fence is watched.
+    private HANDLE m_watchEvent;
     private ulong m_nextValue = 1UL;
     private ulong m_pendingValue; // 0 = no submission outstanding
+    // The pending value the watch event is registered for, or 0. Written by the watcher; reset at drain, after the
+    // watcher was withdrawn.
+    private ulong m_watchedValue;
 
     /// <summary>Creates a reusable submission fence on the caller-owned device.</summary>
     /// <param name="device">The device, retained by the caller until the fence is disposed.</param>
+    /// <exception cref="DirectXException">An event could not be created.</exception>
     public DirectXGpuSubmissionFence(ID3D12Device* device) {
         m_device = ((nint)device);
         Renew();
-        m_fenceEvent = PInvoke.CreateEvent(
-            bInitialState: false,
-            bManualReset: false,
-            lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
-            lpName: default(PCWSTR)
-        );
+        m_fenceEvent = CreateAutoResetEvent();
+        m_watchEvent = CreateAutoResetEvent();
 
-        if (m_fenceEvent.IsNull) {
-            _ = ((IUnknown*)m_fence)->Release();
-            m_fence = 0;
+        if (m_fenceEvent.IsNull || m_watchEvent.IsNull) {
+            var result = Marshal.GetHRForLastWin32Error();
+
+            DisposeNative();
 
             throw new DirectXException(
                 operation: "CreateEventW",
-                result: Marshal.GetHRForLastWin32Error()
+                result: result
             );
         }
     }
+
+    private static HANDLE CreateAutoResetEvent() => PInvoke.CreateEvent(
+        bInitialState: false,
+        bManualReset: false,
+        lpEventAttributes: ((SECURITY_ATTRIBUTES*)null),
+        lpName: default(PCWSTR)
+    );
 
     /// <summary>Queues a signal for the just-executed submission, and arms the fence only once the signal is on the queue;
     /// the caller must have drained any prior one first, or the submission is the one its batch deferred. The lists are
@@ -251,20 +276,45 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
     );
     /// <inheritdoc/>
     /// <remarks>Asks <c>ID3D12Fence::SetEventOnCompletion</c> with the event's own handle, which the fence sets when it
-    /// reaches the pending value, at once when it already has, and when the device is removed. A refused call sets the
-    /// event here, so the waiter polls.</remarks>
-    protected override void SignalNative(EventWaitHandle signal) {
-        var armed = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).SetEventOnCompletion(
+    /// reaches the pending value, at once when it already has, and when the device is removed. A refused call leaves
+    /// the fence to the shared watcher.</remarks>
+    protected override bool TrySignalNative(EventWaitHandle signal) =>
+        new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).SetEventOnCompletion(
             fence: ((ID3D12Fence*)m_fence),
             fenceEvent: ((HANDLE)signal.SafeWaitHandle.DangerousGetHandle()),
             value: m_pendingValue
-        );
+        ).Succeeded;
+    /// <inheritdoc/>
+    /// <remarks>Reads <c>ID3D12Fence::GetCompletedValue</c>, which is free-threaded, and otherwise registers the fence's
+    /// watch event for the pending value (once per value) and sleeps on it for the slice. While the device keeps refusing
+    /// the registration it sleeps <see cref="RefusedWatchPoll"/> instead and reads the value again: a bounded poll at the
+    /// timer's granularity, only while registration fails.</remarks>
+    protected override bool WaitNativeFor(TimeSpan slice) {
+        if (NativeSignaled()) {
+            return true;
+        }
 
-        if (armed.Failed) { _ = signal.Set(); }
+        var sleep = RefusedWatchPoll;
+
+        if (m_watchedValue == m_pendingValue) {
+            sleep = slice;
+        } else if (new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).SetEventOnCompletion(
+            fence: ((ID3D12Fence*)m_fence),
+            fenceEvent: m_watchEvent,
+            value: m_pendingValue
+        ).Succeeded) {
+            m_watchedValue = m_pendingValue;
+            sleep = slice;
+        }
+
+        _ = PInvoke.WaitForSingleObject(dwMilliseconds: ((uint)Math.Max(val1: 1.0, val2: Math.Ceiling(a: sleep.TotalMilliseconds))), hHandle: m_watchEvent);
+
+        return NativeSignaled();
     }
     /// <inheritdoc/>
     protected override void DrainNative() {
         m_pendingValue = 0UL;
+        m_watchedValue = 0UL;
         if (m_nextValue == ulong.MaxValue) { Renew(); }
     }
     /// <inheritdoc/>
@@ -278,8 +328,13 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
             _ = PInvoke.CloseHandle(hObject: m_fenceEvent);
             m_fenceEvent = HANDLE.Null;
         }
+        if (!m_watchEvent.IsNull) {
+            _ = PInvoke.CloseHandle(hObject: m_watchEvent);
+            m_watchEvent = HANDLE.Null;
+        }
 
         m_pendingValue = 0UL;
+        m_watchedValue = 0UL;
     }
 
     // Only called with no submission outstanding. Create before releasing the old fence, so failed allocation leaves

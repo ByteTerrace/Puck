@@ -23,6 +23,7 @@ public sealed class SdfShadeKernels {
     private readonly SdfShadeProgram[] m_programs;
     private readonly HashSet<string> m_identities;
     private readonly SdfKernelSource?[] m_sources;
+    private readonly string?[] m_sourceRefusals;
 
     /// <summary>Initializes a new instance of the <see cref="SdfShadeKernels"/> class.</summary>
     /// <param name="programs">The admitted programs; duplicates by identity are ignored.</param>
@@ -37,6 +38,7 @@ public sealed class SdfShadeKernels {
         m_programs = SdfShadeHlsl.Canonical(programs: programs);
         m_identities = new HashSet<string>(collection: m_programs.Select(selector: static p => p.Identity), comparer: StringComparer.Ordinal);
         m_sources = [.. Specialized.Select(selector: kernels.SourceOf)];
+        m_sourceRefusals = [.. Specialized.Select(selector: kernels.SourceRefusalOf)];
         Interpreter = InterpreterOf(kernels: kernels);
         Identity = Convert.ToHexStringLower(inArray: SHA256.HashData(source: Encoding.UTF8.GetBytes(
             s: $"{Interpreter}\n{SdfShadeOps.Fingerprint}\n{string.Join(separator: '\n', values: m_identities.Order(comparer: StringComparer.Ordinal))}")));
@@ -150,7 +152,9 @@ public sealed class SdfShadeKernels {
     /// <exception cref="InvalidDataException">A kernel does not compile; the message names each error.</exception>
     public Task<(SdfKernel Kernel, ReadOnlyMemory<byte> Bytecode)[]> CompileAsync(ShaderCompiler compiler, ShaderTarget target, CancellationToken cancellationToken = default) {
         if (Array.IndexOf(array: m_sources, value: null) is var missing and >= 0) {
-            throw new InvalidOperationException(message: $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' was installed without its source, so no specialization can describe it; it stays interpreted.");
+            throw new InvalidOperationException(message: ((m_sourceRefusals[missing] is { } refusal)
+                ? $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' source was refused when its kernels loaded, so no specialization can describe it; it stays interpreted: {refusal}"
+                : $"The running '{SdfKernelSet.StemOf(kernel: Specialized[missing])}' was installed without its source, so no specialization can describe it; it stays interpreted."));
         }
 
         return CompileAsync(compiler: compiler, plans: Plan(compiler: compiler, programs: m_programs, sources: [.. m_sources.Select(selector: static source => source!)], target: target), cancellationToken: cancellationToken);

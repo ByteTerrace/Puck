@@ -1693,19 +1693,9 @@ public static partial class WorldDefinitionValidator {
                     // runtime — the ceiling counts the WORST CASE across every variant (the row's own base plus each
                     // response entry's target), never just the authored one, so a swap can never push live collision
                     // past what validation admitted.
-                    var solidVariantIds = new List<string> { placement.PrototypeId };
-
-                    if (placement.Respond is { Count: > 0 } solidResponses) {
-                        foreach (var solidResponse in solidResponses) {
-                            if (solidResponse?.PrototypeId is { } responsePrototypeId) {
-                                solidVariantIds.Add(item: responsePrototypeId);
-                            }
-                        }
-                    }
-
                     var shapeColliders = 0L;
 
-                    foreach (var variantId in solidVariantIds) {
+                    foreach (var variantId in SolidVariantIds(placement: placement)) {
                         if (!TryFindRow(
                             key: variantId,
                             map: creationsById,
@@ -1717,32 +1707,12 @@ public static partial class WorldDefinitionValidator {
                         if ((StateBinding.Parse(token: variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey }) && (placement.Attach is null)) {
                             errors.Add(item: $"{path}.solid creation '{variantId}' sizeBy needs an attached body for '$body'.");
                         }
-                        var variantColliders = 0L;
-
-                        foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
-                            // A detail shape never reaches either contact compiler, so it
-                            // contributes no collider and none of this shape's own admission rules apply to it.
-                            if (solidShape.Detail == true) {
-                                continue;
-                            }
-
-                            foreach (var shapeRefusal in CreationShapeLaws.SolidRefusals(shape: solidShape)) {
-                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} {shapeRefusal}");
-                            }
-
-                            if (!ShapeDomainOps.TryExpand(
-                                domain: solidShape.Domain,
-                                subject: solidShape.Position,
-                                frames: out var solidFrames,
-                                refusal: out var solidRefusal
-                            )) {
-                                errors.Add(item: $"{path}.solid names creation '{variantId}', whose shape {solidShape.Id} carries {solidRefusal} — a solid row needs contact geometry for every copy its fold draws.");
-
-                                continue;
-                            }
-
-                            variantColliders += solidFrames.Length;
-                        }
+                        var variantColliders = RefuseSolidVariantShapes(
+                            creation: variantCreation,
+                            errors: errors,
+                            path: path,
+                            variantId: variantId
+                        );
 
                         shapeColliders = Math.Max(val1: shapeColliders, val2: variantColliders);
                     }

@@ -155,7 +155,6 @@ public sealed class SdfKernelInterfaces {
         ProbeTrace = new ShaderInterface(name: "sdf-probe-trace", members: [
             Read(element: ShaderValueType.Uint, name: ProbeScene),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
-            MeshSlabsRead,
             Read(element: ShaderValueType.Float4, name: ProbeOrigins),
             Read(element: ShaderValueType.Float4, name: ProbeDirections),
             Written(element: ShaderValueType.Uint, name: ProbeHitsWritten),
@@ -164,7 +163,6 @@ public sealed class SdfKernelInterfaces {
         ProbeRelight = new ShaderInterface(name: "sdf-probe-relight", members: [
             Read(element: ShaderValueType.Uint, name: ProbeScene),
             Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
-            MeshSlabsRead,
             Read(element: ShaderValueType.Float4, name: ProbeOrigins),
             Read(element: ShaderValueType.Float4, name: ProbeDirections),
             Read(element: ShaderValueType.Float4, name: ProbeLighting),
@@ -226,7 +224,6 @@ public sealed class SdfKernelInterfaces {
                     member.IsBlockMember
                 )),
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.MeshRegion),
-                MeshSlabsRead,
                 Read(element: ShaderValueType.Float4, name: SdfWorldPackage.DynamicTransforms),
                 // The heights a height field's draw is displaced by (frame/sdf-mesh.hlsli, sdfMeshDisplaced).
                 Read(element: ShaderValueType.Uint, name: SdfWorldPackage.FrameSampled),
@@ -357,14 +354,6 @@ public sealed class SdfKernelInterfaces {
             group: ShaderInterfaceGroup.Pass,
             name: name
         );
-    // The mesh region's slab views in a pass group, beside the region a mesh or probe pass binds there
-    // (SdfMeshSlabs, frame/sdf-mesh-words.hlsli).
-    private static ShaderInterfaceMember MeshSlabsRead { get; } = ShaderInterfaceMember.ReadOnlyBuffer(
-        element: ShaderValueType.Uint,
-        group: ShaderInterfaceGroup.Pass,
-        length: SdfMeshSlabs.Count,
-        name: SdfWorldPackage.MeshSlabs
-    );
     private static ShaderInterfaceMember Written(string name, ShaderValueType element) =>
         ShaderInterfaceMember.ReadWriteBuffer(
             element: element,

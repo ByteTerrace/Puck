@@ -147,11 +147,6 @@
 #define SDF_MESH_WORLD_MATERIAL_FLAG    0x00000008u
 #define SDF_MESH_DISPLACEMENT_WORD      63u
 
-// The mesh words' slab read (SdfMeshSlabs, frame/sdf-mesh-words.hlsli): whether mesh words are read through the slab views, a slab's words as a shift, and the views.
-#define SDF_MESH_SLAB_INDEX      0u
-#define SDF_MESH_SLAB_WORD_SHIFT 24u
-#define SDF_MESH_SLABS           64u
-
 // The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.
 #define SDF_FRAME_SAMPLED_NONE            0xFFFFFFFFu
 #define SDF_FRAME_SAMPLED_HEADER_WORDS    6u

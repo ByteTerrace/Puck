@@ -181,6 +181,141 @@ public sealed class WorkCountingLawTests {
         );
     }
 
+    [Fact]
+    public void AShardedSetKeepsExactTotalsAcrossThreadsAndNeverReadsDownWhileTheyRun() {
+        var work = Sharded(peak: out var peak, total: out var total, other: out var other);
+        const int Writers = 8;
+        const int PerWriter = 100_000;
+        var running = true;
+        var regression = string.Empty;
+        var threads = new Thread[Writers];
+        var reader = new Thread(start: () => {
+            var last = 0L;
+
+            while (Volatile.Read(location: ref running)) {
+                var read = work.Read(kind: total);
+
+                if (read < last) {
+                    regression = $"A read of {read} followed one of {last}.";
+                }
+
+                last = read;
+            }
+        });
+
+        reader.Start();
+
+        for (var index = 0; (index < Writers); index++) {
+            threads[index] = new Thread(start: () => {
+                for (var step = 0; (step < PerWriter); step++) {
+                    work.Count(kind: total);
+                    work.ThreadShard.Add(amount: 2L, kind: other);
+                }
+            });
+            threads[index].Start();
+        }
+
+        foreach (var thread in threads) {
+            thread.Join();
+        }
+
+        Volatile.Write(location: ref running, value: false);
+        reader.Join();
+        Assert.Equal(expected: string.Empty, actual: regression);
+        Assert.Equal(expected: (((long)Writers) * PerWriter), actual: work.Read(kind: total));
+        Assert.Equal(expected: (((long)Writers) * PerWriter * 2L), actual: work.Read(kind: other));
+        Assert.Equal(expected: 0, actual: work.ShardCount);
+        Assert.True(condition: work.TryRead(kind: peak, value: out _));
+    }
+    [Fact]
+    public void AShardedSetKeepsTheCountsOfAThreadThatHasExitedAndBoundsItsShardsUnderChurn() {
+        var work = Sharded(peak: out _, total: out var total, other: out _);
+        const int Churn = 2_000;
+        var maximum = 0;
+
+        for (var index = 0; (index < Churn); index++) {
+            var thread = new Thread(start: () => work.Count(kind: total));
+
+            thread.Start();
+            thread.Join();
+            maximum = Math.Max(val1: maximum, val2: work.ShardCount);
+        }
+
+        Assert.True(condition: (maximum <= 1), userMessage: $"{maximum} shards were held at once by one thread at a time.");
+        Assert.Equal(expected: ((long)Churn), actual: work.Read(kind: total));
+        Assert.Equal(expected: 0, actual: work.ShardCount);
+
+        using var counted = new ManualResetEvent(initialState: false);
+        using var release = new ManualResetEvent(initialState: false);
+        var held = new Thread(start: () => {
+            work.Count(kind: total);
+            _ = counted.Set();
+            _ = release.WaitOne();
+        });
+
+        held.Start();
+        _ = counted.WaitOne();
+        Assert.Equal(expected: (((long)Churn) + 1L), actual: work.Read(kind: total));
+        Assert.Equal(expected: 1, actual: work.ShardCount);
+        _ = release.Set();
+        held.Join();
+        Assert.Equal(expected: (((long)Churn) + 1L), actual: work.Read(kind: total));
+        Assert.Equal(expected: 0, actual: work.ShardCount);
+    }
+    [Fact]
+    public void AShardedSetReadsAPeakAsTheLargestOfItsShardsUntilCleared() {
+        var work = Sharded(peak: out var peak, total: out _, other: out _);
+        var threads = new Thread[3];
+
+        for (var index = 0; (index < threads.Length); index++) {
+            var value = ((index + 1) * 10L);
+
+            threads[index] = new Thread(start: () => work.Raise(kind: peak, value: value));
+            threads[index].Start();
+            threads[index].Join();
+        }
+
+        Assert.Equal(expected: 30L, actual: work.Read(kind: peak));
+        work.ClearPeaks();
+        Assert.Equal(expected: 0L, actual: work.Read(kind: peak));
+        work.Raise(kind: peak, value: 4L);
+        Assert.Equal(expected: 4L, actual: work.Read(kind: peak));
+    }
+    [Fact]
+    public void AShardedSetCountsAllocateNothingAndRefuseAForeignKind() {
+        var work = Sharded(peak: out var peak, total: out var total, other: out _);
+
+        work.Count(kind: total);
+
+        var runs = 0L;
+
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
+            runs++;
+
+            var shard = work.ThreadShard;
+
+            for (var step = 0; (step < 1_000); step++) {
+                shard.Count(kind: total);
+                work.Add(amount: 2L, kind: total);
+            }
+        }));
+        Assert.Equal(expected: (1L + (runs * 3_000L)), actual: work.Read(kind: total));
+        _ = Assert.Throws<ArgumentException>(testCode: () => work.Count(kind: new WorkKind(name: "test.sharded.total", unit: "count", workClass: WorkClass.Deterministic)));
+        _ = Assert.Throws<ArgumentException>(testCode: () => work.Count(kind: peak));
+        _ = Assert.Throws<ArgumentException>(testCode: () => work.Read(kind: new WorkKind(name: "test.sharded.total", unit: "count", workClass: WorkClass.Deterministic)));
+    }
+
+    private static ShardedWorkCounterSet Sharded(out WorkKind peak, out WorkKind total, out WorkKind other) {
+        peak = new WorkKind(name: "test.sharded.peak", unit: "count", workClass: WorkClass.Deterministic, peak: true);
+        total = new WorkKind(name: "test.sharded.total", unit: "count", workClass: WorkClass.Deterministic);
+        other = new WorkKind(name: "test.sharded.other", unit: "count", workClass: WorkClass.Deterministic);
+
+        return new ShardedWorkCounterSet(
+            kinds: [total, peak, other],
+            name: "test.sharded"
+        );
+    }
+
     // A count is a mutable field of its owner, never a local copied into a closure.
     private sealed class CountHolder {
         public WorkCount Count;

@@ -69,11 +69,11 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
             return;
         }
 
-        region.RecordCopy(
+        if (!region.RecordCopy(
             commandBuffer: m_commandBuffer,
             pipelineBound: (region.CopyPipelineHandle == m_boundPipeline),
             slot: slot
-        );
+        )) { return; }
         m_boundPipeline = region.CopyPipelineHandle;
         if (handsToReaders) {
             m_copied.Add(item: region.Buffer(slot: slot));

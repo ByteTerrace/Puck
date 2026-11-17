@@ -318,7 +318,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             groupCountY: groupCountY,
             groupCountZ: groupCountZ
         );
-    /// <inheritdoc/>
+    /// <summary>Gets whether the device enabled <c>VK_KHR_draw_indirect_count</c>, so <see cref="DrawIndirectCount"/>
+    /// records one native counted call. Otherwise it issues fixed records from the same GPU-written argument buffer,
+    /// in one <c>vkCmdDrawIndirect</c> when <c>multiDrawIndirect</c> is enabled and one per record when not; rejected
+    /// records have zero vertex and instance counts.</summary>
     public unsafe bool CanDrawIndirectCount => (Device.CmdDrawIndirectCountKhr is not null);
     /// <inheritdoc/>
     /// <remarks>Vulkan reads each record from its vertex count on (<see cref="GpuDrawIndirectCommand.VertexCountWord"/>).

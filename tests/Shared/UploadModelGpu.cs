@@ -48,6 +48,9 @@ internal sealed class UploadModelGpu :
     // orders the same way in one command buffer; a copy recorded under neither is refused.
     private readonly HashSet<nint> m_readsOrdered = [];
     private readonly HashSet<(nint CommandBuffer, nint Buffer)> m_bufferReadsOrdered = [];
+    // The predicate that drops a reset command buffer's reads is made once, so recording allocates none.
+    private Predicate<(nint CommandBuffer, nint Buffer)>? m_ofResetCommandBuffer;
+    private nint m_resetCommandBuffer;
     private readonly nint[] m_boundSets = new nint[8];
 
     private nint m_boundPipeline;
@@ -241,7 +244,17 @@ internal sealed class UploadModelGpu :
     public HashSet<string> HostVisibleFamilies { get; } = new(comparer: StringComparer.Ordinal);
 
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
-    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
+    public Func<string?, ulong, GpuBufferPages?>? DestinationPages { get; set; }
+    IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        var buffer = Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
+        return DestinationPages?.Invoke(name.Part, sizeBytes) is { } pages ? new PagedBuffer(buffer, pages) : buffer;
+    }
+    private sealed class PagedBuffer(IGpuBuffer buffer, GpuBufferPages pages) : IGpuPagedBuffer {
+        public GpuBufferPages Pages => pages;
+        public nint BufferHandle => buffer.BufferHandle;
+        public ulong SizeBytes => buffer.SizeBytes;
+        public void Dispose() => buffer.Dispose();
+    }
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();
     IGpuReadbackBuffer IGpuBufferFactory.CreateReadback(ulong sizeBytes, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes);
     IGpuPipeline IGpuPipelineFactory.Create(IGpuRenderPass renderPass, IGpuShaderModule vertexShaderModule, IGpuShaderModule fragmentShaderModule, GpuGraphicsPipelineDescription description, in GpuObjectName name) =>
@@ -271,8 +284,8 @@ internal sealed class UploadModelGpu :
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) { }
     void IGpuRecorder.BeginCommandBuffer(nint commandBufferHandle) {
         _ = m_readsOrdered.Remove(item: commandBufferHandle);
-        _ = m_bufferReadsOrdered.RemoveWhere(match: entry => (entry.CommandBuffer == commandBufferHandle));
-
+        m_resetCommandBuffer = commandBufferHandle;
+        _ = m_bufferReadsOrdered.RemoveWhere(match: (m_ofResetCommandBuffer ??= (entry => (entry.CommandBuffer == m_resetCommandBuffer))));
     }
     void IGpuRecorder.EndCommandBuffer(nint commandBufferHandle) { }
     void IGpuRecorder.BeginDebugGroup(nint commandBufferHandle, string label) { }
@@ -286,10 +299,7 @@ internal sealed class UploadModelGpu :
     void IGpuRecorder.DrawIndexed(nint commandBufferHandle, uint indexCount) { }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
 
-    // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does; every raster pass records one
-    // (SdfMeshOcclusion.RecordDraws) whatever the device counts natively.
-    bool IGpuRecorder.CanDrawIndirectCount => false;
-
+    // The model rasterizes nothing, so a counted indirect draw records nothing, as Draw does.
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) { }
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) { }
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
@@ -410,6 +420,7 @@ internal sealed class UploadModelGpu :
     );
 
     void IGpuQueueSubmitter.AddExternalWait(GpuExternalWait wait) => m_inner.Services.QueueSubmitter.AddExternalWait(wait: wait);
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_inner.Services.QueueSubmitter.Timeline;
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => m_inner.Services.QueueSubmitter.CreateSubmissionFence();
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
         m_inner.Services.QueueSubmitter.Submit(commandBufferHandles: commandBufferHandles);

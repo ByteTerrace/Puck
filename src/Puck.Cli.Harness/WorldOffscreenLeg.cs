@@ -25,11 +25,13 @@ public static class WorldOffscreenLeg {
     /// <param name="repositoryRoot">The checkout whose sources are built.</param>
     /// <param name="runDirectory">The run's scratch directory.</param>
     /// <param name="build">The resolved build, which the caller disposes after its last leg.</param>
+    /// <param name="cancellationToken">Cancels the build and its waits.</param>
     /// <returns><see langword="true"/> when a build is available; otherwise the refusal is already on standard
     /// error.</returns>
-    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, [NotNullWhen(returnValue: true)] out WorldBuild? build) {
+    public static bool TryResolveWorld(string verb, string repositoryRoot, string runDirectory, [NotNullWhen(returnValue: true)] out WorldBuild? build, CancellationToken cancellationToken = default) {
         var built = WorldLaunch.TryResolve(
             build: out build,
+            cancellationToken: cancellationToken,
             error: out var buildError,
             logDirectory: runDirectory,
             named: null,
@@ -68,10 +70,12 @@ public static class WorldOffscreenLeg {
     /// <param name="budget">The whole suite's budget.</param>
     /// <param name="suiteClock">The clock the budget runs on.</param>
     /// <param name="process">The finished leg, or <see langword="null"/> when it could not run.</param>
+    /// <param name="cancellationToken">Cancels admission and the running process.</param>
     /// <returns><see cref="CliExit.Success"/> when the leg exited 0 with every command accepted; otherwise
     /// <see cref="CliExit.Refused"/>, with the reason already on standard error.</returns>
-    public static int Run(string verb, string artifact, string world, string backend, string script, IReadOnlyList<string> arguments, string runDirectory, int exitAfterSeconds, TimeSpan budget, Stopwatch suiteClock, out CliProcessResult? process) {
+    public static int Run(string verb, string artifact, string world, string backend, string script, IReadOnlyList<string> arguments, string runDirectory, int exitAfterSeconds, TimeSpan budget, Stopwatch suiteClock, out CliProcessResult? process, CancellationToken cancellationToken = default) {
         var leg = Launch(
+            cancellationToken: cancellationToken,
             arguments: arguments,
             artifact: artifact,
             backend: backend,
@@ -111,10 +115,11 @@ public static class WorldOffscreenLeg {
     /// <c>wire.errors</c> must report exactly this many.</param>
     /// <param name="environment">The environment entries the World process gets over this one's: a value sets a
     /// variable, <see langword="null"/> removes it.</param>
+    /// <param name="cancellationToken">Cancels admission and the running process.</param>
     /// <returns>How the leg ended, with one line of detail for every status but
     /// <see cref="WorldOffscreenLegStatus.Completed"/>, and the finished process when it ran.</returns>
-    public static WorldOffscreenLegResult Launch(string verb, string artifact, string world, string backend, string script, IReadOnlyList<string> arguments, string runDirectory, int exitAfterSeconds, TimeSpan budget, Stopwatch suiteClock, int expectedRejections = 0, IReadOnlyDictionary<string, string?>? environment = null) {
-        using var suiteBudget = new SuiteBudget(total: budget, clock: suiteClock);
+    public static WorldOffscreenLegResult Launch(string verb, string artifact, string world, string backend, string script, IReadOnlyList<string> arguments, string runDirectory, int exitAfterSeconds, TimeSpan budget, Stopwatch suiteClock, int expectedRejections = 0, IReadOnlyDictionary<string, string?>? environment = null, CancellationToken cancellationToken = default) {
+        using var suiteBudget = new SuiteBudget(caller: cancellationToken, clock: suiteClock, total: budget);
         var remaining = suiteBudget.Remaining;
 
         if (remaining <= TimeSpan.FromSeconds(value: 1)) {
@@ -132,6 +137,7 @@ public static class WorldOffscreenLeg {
         try {
             // The GPU lease and the host's headroom are other runs' time, so the suite's clock stands still for them.
             using var launch = WorldLaunch.Admit(
+                cancellationToken: cancellationToken,
                 queue: suiteBudget.Pause,
                 request: new WorldLaunchRequest(Artifact: artifact, Step: verb) {
                     Arguments = arguments,
@@ -145,6 +151,7 @@ public static class WorldOffscreenLeg {
             );
 
             process = launch.Run(
+                cancellationToken: cancellationToken,
                 // quit ends the leg the moment the script has run instead of idling out the exit backstop.
                 input: $"{script}wire.errors\nquit\n",
                 timeout: remaining

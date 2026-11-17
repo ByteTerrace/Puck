@@ -147,7 +147,6 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.DrawIndexed"] = (rig => rig.Services.Recorder.DrawIndexed(commandBufferHandle: 2, indexCount: 6), [(GpuWork.Draws, 1L), (GpuWork.Vertices, 6L)]),
             ["IGpuRecorder.Dispatch"] = (rig => rig.Services.Recorder.Dispatch(commandBufferHandle: 2, groupCountX: 8, groupCountY: 8, groupCountZ: 1), [(GpuWork.Dispatches, 1L)]),
             ["IGpuRecorder.DispatchIndirect"] = (rig => rig.Services.Recorder.DispatchIndirect(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2), [(GpuWork.IndirectDispatches, 1L)]),
-            ["IGpuRecorder.CanDrawIndirectCount"] = (rig => _ = rig.Services.Recorder.CanDrawIndirectCount, none),
             // The commands' draws and vertices are the GPU's to count; the host counts the call.
             ["IGpuRecorder.DrawIndirectCount"] = (rig => rig.Services.Recorder.DrawIndirectCount(argumentBufferHandle: 3, argumentBufferOffset: 0UL, commandBufferHandle: 2, countBufferHandle: 4, countBufferOffset: 0UL, maxDrawCount: 8, pipelineLayoutHandle: 5), [(GpuWork.IndirectDraws, 1L)]),
             ["IGpuRecorder.ClearStorageImage"] = (rig => rig.Services.Recorder.ClearStorageImage(commandBufferHandle: 2, format: GpuPixelFormat.R8G8B8A8Unorm, imageHandle: 3), [(GpuWork.Clears, 1L)]),
@@ -184,6 +183,7 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuQueueSubmitter.Submit"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: []), none),
             ["IGpuQueueSubmitter.Submit(fence)"] = (rig => rig.Services.QueueSubmitter.Submit(commandBufferHandles: [], fence: rig.Services.QueueSubmitter.CreateSubmissionFence()), none),
             ["IGpuQueueSubmitter.SubmitAndWait"] = (_ => { }, none),
+            ["IGpuQueueSubmitter.Timeline"] = (rig => _ = rig.Services.QueueSubmitter.Timeline, none),
             ["IGpuShaderModuleFactory.Create"] = (rig => rig.Services.ShaderModuleFactory.Create(bytecode: ReadOnlyMemory<byte>.Empty, stage: GpuShaderStage.Compute).Dispose(), [(GpuWork.ShaderModulesCreated, 1L)]),
             ["IGpuStorageBuffer.Write"] = (rig => rig.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage).Write<float>(data: [1f, 2f, 3f]), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 12L)]),
             ["IGpuStorageBuffer.Write(offset)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect).Write<uint>(data: [1u, 2u], destinationOffsetBytes: 8UL), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 8L)]),
@@ -198,6 +198,11 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
             ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
             ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),
+            ["IGpuSubmissionFence.SignalOnCompletion"] = (rig => {
+                using var signal = new AutoResetEvent(initialState: false);
+
+                rig.Services.QueueSubmitter.CreateSubmissionFence().SignalOnCompletion(signal: signal);
+            }, none),
         };
     }
     private static long Expected((WorkKind Kind, long Amount)[] expected, WorkKind kind) {

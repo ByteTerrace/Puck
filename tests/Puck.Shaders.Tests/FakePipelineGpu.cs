@@ -18,6 +18,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     IGpuBufferFactory, IGpuImageFactory, IGpuSurfaceTransferFactory, IGpuRenderPassFactory {
     // Where descriptor set handles start, far above every object handle the fake hands out.
     private const long SetHandleBase = 0x4000_0000;
+    public GpuQueueTimeline Timeline => throw new NotSupportedException("This graph witness does not model device timeline retirement.");
 
     private readonly Dictionary<nint, Created> m_byHandle = [];
     private readonly Dictionary<nint, GpuDescriptorAdmission> m_poolRanges = [];
@@ -699,8 +700,6 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     }
     public void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) { }
 
-    public bool CanDrawIndirectCount => false;
-
     public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) =>
         throw new NotSupportedException();
     public void Draw(nint commandBufferHandle, in GpuDrawParameters parameters) => RecordGraphics(command: "draw", buffer: 0, offsetBytes: 0, sizeBytes: 0, count: parameters.VertexCount);
@@ -908,6 +907,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public void Dispose() => created.Dispose();
         // The fake queue has no completion to hand a signal to: it sets the signal, so whoever waits on it polls.
         public void SignalOnCompletion(EventWaitHandle signal) => _ = signal.Set();
+        // The fake queue defers nothing.
+        public void HandOff() { }
         public void Wait() {
             if (Abandoned) {
                 Abandoned = false;

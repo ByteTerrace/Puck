@@ -141,6 +141,21 @@ public sealed partial class SdfWorldTables {
                 m_landing.Add(key: mesh, value: progress);
             }
 
+            if (progress.Pages is { IsCurrent: false }) {
+                // Already visiting this mesh: do not rewind the whole order for every stale page lease.
+                m_landing.Remove(key: mesh);
+                continue;
+            }
+            if (progress.Pages is null) {
+                var placement = m_meshArena.Placements[mesh];
+
+                progress.Pages = m_meshRegion.TryLease((((long)placement.VertexWord) * sizeof(uint)), (((long)progress.Words) * sizeof(uint)));
+                if (progress.Pages is null) {
+                    if (waiting < 0) { waiting = cursor; }
+                    cursor++;
+                    continue;
+                }
+            }
             var take = Math.Min(val1: (progress.Words - progress.Taken), val2: (budget - taken));
 
             if (take > 0) {
@@ -159,9 +174,12 @@ public sealed partial class SdfWorldTables {
         if (!ReferenceEquals(objA: recording.Queue, objB: m_deviceContext.Services.QueueSubmitter)) {
             throw new InvalidOperationException(message: "Mesh landing must submit on the tables' frame queue; row reuse requires its order.");
         }
-        foreach (var slice in job.Slices) {
+        for (var index = 0; (index < job.Slices.Count); index++) {
+            var slice = job.Slices[index];
+
             if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
-                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement)) { continue; }
+                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement) || (progress.Pages is not { IsCurrent: true })) { continue; }
+            job.Slices[index] = slice with { Recorded = true };
 
             m_meshRegion.OweSourced(
                 length: (((long)slice.Count) * sizeof(uint)),
@@ -189,8 +207,14 @@ public sealed partial class SdfWorldTables {
                 m_landingStale++;
                 continue;
             }
+            if (!slice.Recorded || (progress.Pages is not { IsCurrent: true } pages)) {
+                m_landingStale++;
+                ForgetLanding(mesh: slice.Mesh);
+                continue;
+            }
             progress.Landed += slice.Count;
             if (progress.Landed < progress.Words) { continue; }
+            m_meshPages[slice.Mesh] = pages;
             _ = m_landing.Remove(key: slice.Mesh);
             // The staged list's owed words fall as its meshes land, so a residency whose view is held (no staging
             // until it renders again) reads resident once they have; any render stages the landed draws first.
@@ -280,10 +304,13 @@ public sealed partial class SdfWorldTables {
     }
     private sealed class LandingProgress(int words) {
         public int Landed { get; set; }
+        public GpuBufferPages.Lease? Pages { get; set; }
         public int Taken { get; set; }
         public int Words { get; } = words;
     }
-    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count);
+    private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count) {
+        public bool Recorded { get; init; }
+    }
     private sealed class LandingJob {
         public List<LandingSlice> Slices { get; } = [];
         public int Words { get; set; }

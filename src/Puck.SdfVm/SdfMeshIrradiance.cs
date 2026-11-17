@@ -1431,8 +1431,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // An order-independent sum, updated only for cursor-named rows; packing leaves the scene standing.
     private (int Key, int Draws) StaticKey(SdfFrame frame) {
         var draws = frame.DrawRows;
-        var whole = m_keyCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, draws.Roster, draws.Count,
-            frame.MeshDrawsRevision, m_keyRuns);
+        var whole = m_keyCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
+            draws.Revision, m_keyRuns);
 
         if (whole) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneWhole);
@@ -1459,8 +1459,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
         }
         m_keyExtent = draws.Count;
-        if (SdfRowChecks.SkipSceneRequested) { m_skipKeyThrough = ((frame.MeshDrawChangesSerial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipSceneRequested = false; }
-        if (frame.MeshDrawChangesSerial <= m_skipKeyThrough) {
+        if (SdfRowChecks.SkipSceneRequested) { m_skipKeyThrough = ((draws.Serial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipSceneRequested = false; }
+        if (draws.Serial <= m_skipKeyThrough) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneSkipped);
             // Leave this consumer's cursor at its previous endpoint until its history expires.
         } else { m_keyCursor.Commit(); }
@@ -1655,12 +1655,21 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             (cell.Z >= low.Z) && (cell.Z < (low.Z + dims.Z)));
     }
     // Each level's window's first cell, as the worker reads them outside the gate.
+    // The array is never written after it is returned, so a worker may hold it while a later call replaces it; a window
+    // that has not moved answers the array it answered last.
     private (int X, int Y, int Z)[] Lows() {
+        var held = m_lows;
+        var same = (held.Length == m_levels.Length);
+
+        for (var level = 0; (same && (level < m_levels.Length)); level++) { same = (held[level] == m_levels[level].Low); }
+        if (same) { return held; }
+
         var lows = new (int X, int Y, int Z)[m_levels.Length];
 
         for (var level = 0; (level < m_levels.Length); level++) { lows[level] = m_levels[level].Low; }
-        return lows;
+        return (m_lows = lows);
     }
+    private (int X, int Y, int Z)[] m_lows = [];
     // Owes the refill of the windows the volume just moved: no level publishes until it lands, and it runs on the thread
     // pool (Refill), since a window that jumps far re-stores every slot; a lighting-converged frame waits for it.
     private void OweRefill() {

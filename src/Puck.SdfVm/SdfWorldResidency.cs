@@ -204,7 +204,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             (m_tables?.DescribeFixedCost() ?? "fixed-cost=none"),
             $"{(m_tables?.GpuWork.DescribeBytes() ?? "gpu-work=none")} late-stagings={LateStagings}{(m_tables?.GpuWork.Describe() ?? string.Empty)}",
             (m_tables?.DescribeFrameSampled() ?? "frame-sampled=none"),
-            $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.MeshDrawChanges?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
+            $"change-history-logical-bytes transforms={(m_frame?.MovedTransforms?.StorageBytes ?? 0)} draws={(m_frame?.DrawRows.Changes?.StorageBytes ?? 0)} dresser-scratch={m_meshDresser.ScratchBytes} staging-runs={(m_tables?.DrawChangeScratchBytes ?? 0)} (array payload; headers excluded)",
             string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"program-instances={(program?.Instances.Count ?? 0)} program-words={(program?.Words.Length ?? 0)} program-builds={(composition?.ProgramBuilds ?? 0)} emit-ms={(composition?.EmitMilliseconds ?? 0d):0.0} build-ms={(composition?.BuildMilliseconds ?? 0d):0.0}"),
             MeshIrradiance.DescribeCache(),
             .. MeshPathBake.DescribeDemand(),
@@ -662,7 +662,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Stages the frame: prepares it (<see cref="Prepare"/>), then submits its upload and pumps the tables'
     /// background GPU work against it (<see cref="PumpGpuWork"/>), or drives it while the graph withholds the frame
     /// (<see cref="FrameWithheld"/>, <see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
-    /// preparation asks for every scheduled render that reads the residency, before the frame's batch opens and before any
+    /// preparation asks for every scheduled render that reads the residency, inside the frame's open batch and before any
     /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
     /// This is the one place the frame's upload is submitted.</summary>
     /// <param name="context">The host's frame context.</param>
@@ -706,11 +706,13 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public long LateStagings { get; private set; }
 
     /// <summary>Pumps the tables' background GPU work (<see cref="SdfGpuWork.Pump"/>): answers the jobs that completed and
-    /// submits the next while the budget allows, among them the bake's sampling. Called on the frame thread at the top of
-    /// each frame, before any residency prepares, and after each upload; a residency with no tables pumps nothing.</summary>
+    /// submits the next while the budget allows, among them the bake's sampling; the work of a frame the residency
+    /// withholds (<see cref="FrameWithheld"/>) is that frame's own, which the budget does not meter. Called on the frame
+    /// thread at the top of each frame, before any residency prepares, and after each upload; a residency with no tables
+    /// pumps nothing.</summary>
     public void PumpGpuWork() {
         if (m_disposed || (m_tables is not { } tables)) { return; }
-        tables.GpuWork.Pump(tables: tables);
+        tables.GpuWork.Pump(tables: tables, withheld: FrameWithheld);
     }
     /// <summary>Records that a view rendered the frame the residency holds, whose signature it stands for until one it
     /// renders from changes.</summary>

@@ -195,6 +195,13 @@ public readonly ref struct SdfGpuWorkRecording {
     /// <exception cref="SdfGpuWorkDeferredException">The device has no room for the readback; the service hands the job
     /// back.</exception>
     public void CopyToReadback(IGpuBuffer source, ulong bytes) => m_owner.CopyToReadback(bytes: bytes, commandBuffer: CommandBuffer, slot: m_slot, source: source);
+    /// <summary>Reserves the slot's readback for a copy of <paramref name="bytes"/> that the job records later
+    /// (<see cref="CopyToReadback"/>), so a job whose readback the device has no room for is handed back before it
+    /// records anything that consumes state (<see cref="CopyRegion"/>).</summary>
+    /// <param name="bytes">The bytes the job will copy back.</param>
+    /// <exception cref="SdfGpuWorkDeferredException">The device has no room for the readback; the service hands the job
+    /// back.</exception>
+    public void ReserveReadback(ulong bytes) => _ = m_owner.ReserveReadback(bytes: bytes, slot: m_slot);
     /// <summary>Records the copy of what a staged region owes into the slot's command buffer: flushes the region's
     /// <paramref name="regionSlot"/>, records a grown region's carry and the copy, and hands the region's buffer to
     /// <paramref name="readers"/>, which read it in this or any later submission. A region that owes nothing records
@@ -203,7 +210,14 @@ public readonly ref struct SdfGpuWorkRecording {
     /// <param name="regionSlot">The region's slot whose staging buffer the job stages into: one that no submission in
     /// flight still reads, which a slot of this service is once its job completed.</param>
     /// <param name="readers">The shader stages that read the region's buffer.</param>
+    /// <remarks>The copy takes the region's owed words: once it is recorded the job can no longer be handed back
+    /// without losing them, so the slot refuses any buffer it would still have to create for the job (an
+    /// <see cref="InvalidOperationException"/> from <see cref="HostBuffer"/>, <see cref="DeviceBuffer"/> or
+    /// <see cref="CopyToReadback"/>). A job asks for every buffer, and reserves its readback
+    /// (<see cref="ReserveReadback"/>), before it copies a region.</remarks>
     public void CopyRegion(GpuRegion region, int regionSlot, GpuStage readers) {
+        m_owner.Consume(slot: m_slot);
+
         var command = CommandBuffer;
         var copies = new GpuRegionCopyRecording(recorder: Recorder, readers: readers, begin: () => command);
 
@@ -241,13 +255,10 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// asks the slot's fence for the wake as it does, so a job cannot be in flight without one; the wake may come early or
 /// twice, and a step reads the fences either way. It stops at the host: a thread that never paces (a host with no
 /// pacer wait, a swap chain's own wait or a blocked present) steps the work at its frame's pumps alone.</para>
-/// <para>Invariant: what a job reads is neither rewritten nor released before its fence. A job leases the tables'
-/// generation as it is taken (<see cref="SdfWorldTables.BackgroundGeneration"/>, the uploads submitted, and the ring
-/// slot the latest wrote), and the tables' two doors read the leases: the retirement door releases nothing retired at
-/// or after the oldest lease in flight (<see cref="OldestLease"/>), and the upload waits out every lease on the ring
-/// slot it rewrites (<see cref="EndLeases"/>). A lease ends when its job's fence has signaled. The lease holds on any
-/// queue; on the frame's own queue the upload's wait for its predecessor already implies it, so the doors never
-/// wait and the count of waits (<c>lease-waits</c>) stays zero.</para>
+/// <para>Invariant: a job's resources retire only after the device timeline passes their last use. Admission
+/// requires the tables' frame queue, so its checkpoint covers every background submission too. Pending copies remain
+/// explicit holds in the tables' retirement door. Ring-slot rewrites independently wait the jobs reading that slot
+/// (<see cref="EndLeases"/>); submission fences also wake the host and complete readbacks.</para>
 /// <para>Invariant: what a job holds on the device is reserved before it is allocated. A slot's buffers, its readback
 /// among them, come from one door (<see cref="SdfGpuWorkRecording.HostBuffer"/>,
 /// <see cref="SdfGpuWorkRecording.DeviceBuffer"/>, <see cref="SdfGpuWorkRecording.CopyToReadback"/>), which raises the
@@ -430,21 +441,6 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>Gets the jobs in flight now.</summary>
     public int InFlight => m_inFlight;
 
-    /// <summary>Returns the oldest generation a job in flight leased (<see cref="SdfWorldTables.BackgroundGeneration"/>
-    /// as it was taken), or <see cref="ulong.MaxValue"/> when no lease stands: nothing the tables retired at or after
-    /// it may be released. A lease ends when its job's fence has signaled, read here; a job that never reached the
-    /// queue reads nothing and holds none.</summary>
-    /// <returns>The generation.</returns>
-    /// <exception cref="DeviceLostException">The device was lost.</exception>
-    public ulong OldestLease() {
-        var oldest = ulong.MaxValue;
-
-        foreach (var slot in m_slots) {
-            if ((slot.Job is not null) && (slot.Generation < oldest) && Reads(slot: slot)) { oldest = slot.Generation; }
-        }
-        return oldest;
-    }
-
     /// <summary>Adds a job source the service takes jobs from in turn and disposes with itself.</summary>
     /// <param name="client">The source, called only on the recording thread.</param>
     public void Add(ISdfGpuWorkClient client) {
@@ -458,18 +454,24 @@ public sealed class SdfGpuWork : IDisposable {
     /// upload and the next frame's preparation, and never blocks. Between this pump and the next, the host's wait steps
     /// the work the same way against the same tables.</summary>
     /// <param name="tables">The tables whose World set the jobs bind.</param>
+    /// <param name="withheld">Whether the residency withholds its frame until this work lands (its meshes or its
+    /// lighting): the work is then the held frame's own, which the budgets do not meter, here or in the host's wait
+    /// until the next pump. <see langword="false"/> meters it as background work.</param>
     /// <exception cref="ObjectDisposedException">The service is disposed.</exception>
-    public void Pump(SdfWorldTables tables) {
-        Enter(driven: false, tables: tables);
-        try { _ = Step(budgeted: true, tables: tables, within: null); } catch (Exception exception) {
+    public void Pump(SdfWorldTables tables, bool withheld = false) {
+        Enter(driven: withheld, tables: tables);
+        try { _ = Step(tables: tables, within: null); } catch (Exception exception) {
             Fault(exception: exception);
             throw;
         }
     }
     /// <summary>Drives the work for a frame that is held rather than presented (one whose meshes must land or whose
-    /// lighting must converge before it shows): answers and refills as <see cref="Pump"/> does, repeatedly for up to
-    /// <see cref="DriveSlice"/>, waiting on the host between steps for a job in flight to complete, a client to offer its
-    /// next job or a slot to come back (<see cref="Wake"/>). The GPU, upload and recording budgets protect the frame
+    /// lighting must converge before it shows): answers and refills as <see cref="Pump"/> does, repeatedly until
+    /// <see cref="DriveSlice"/> has passed, waiting on the host between steps for a job in flight to complete, a client
+    /// to offer its next job or a slot to come back (<see cref="Wake"/>). No step starts after the slice, and each
+    /// records only within what is left of it. Before each wait the jobs it submitted reach the queue
+    /// (<see cref="IGpuSubmissionFence.HandOff"/>): a drive inside the frame's open batch would otherwise sleep on
+    /// completions that cannot come until the batch's flush. The GPU, upload and recording budgets protect the frame
     /// queued behind background work; a held frame queues none, so a drive takes jobs outside them and charges them
     /// nothing, and the work proceeds at the GPU's pace rather than a job a host iteration. Runs on the device's
     /// recording thread, and returns at once when no client is added or the tables' World set may not be bound.</summary>
@@ -484,14 +486,14 @@ public sealed class SdfGpuWork : IDisposable {
             while (true) {
                 var stepped = Stopwatch.GetTimestamp();
 
-                _ = Step(budgeted: false, tables: tables, within: null);
+                _ = Step(tables: tables, within: deadline.Remaining);
 
                 var waiting = Stopwatch.GetTimestamp();
 
                 m_driveStepTicks += (waiting - stepped);
-                if ((m_clients.Count == 0) || !tables.BindsBackgroundWork) { return; }
+                if ((m_clients.Count == 0) || !tables.BindsBackgroundWork || deadline.HasPassed) { return; }
 
-                var flying = (m_inFlight > 0);
+                var flying = HandOff();
                 // One wait for both: a job's fence and a client's offer set the same signal, and one set while the step
                 // above ran is still set here.
                 var outcome = HostWaits.Wait(deadline: deadline, handle: m_service!.Signal, reason: ServiceReason);
@@ -503,6 +505,14 @@ public sealed class SdfGpuWork : IDisposable {
             Fault(exception: exception);
             throw;
         }
+    }
+    // Hands every job in flight still deferred in an open batch to the queue, so its completion can wake the wait that
+    // follows; answers whether any job is in flight. The first hand-off splits the whole batch, in order.
+    private bool HandOff() {
+        foreach (var slot in m_slots) {
+            if (slot.Job is not null) { slot.Fence.HandOff(); }
+        }
+        return (m_inFlight > 0);
     }
     /// <summary>Tells the service that a client has a job to take, or gave a slot back: the recording thread, asleep in
     /// the host's wait or in a <see cref="Drive"/>, steps the work at once rather than at its next frame. Callable on
@@ -531,6 +541,9 @@ public sealed class SdfGpuWork : IDisposable {
     private void Enter(SdfWorldTables tables, bool driven) {
         ArgumentNullException.ThrowIfNull(argument: tables);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (!ReferenceEquals(Queue, tables.BackgroundQueue)) {
+            throw new InvalidOperationException("Background work must submit on the tables' device queue.");
+        }
         if (m_failure is { } failure) {
             m_failure = null;
             failure.Throw();
@@ -552,7 +565,7 @@ public sealed class SdfGpuWork : IDisposable {
         if (m_disposed || m_faulted || (m_tables is not { } tables) || (m_clients.Count == 0)) { return null; }
         try {
             var submitted = m_submitted;
-            var stop = Step(budgeted: !m_driven, tables: tables, within: remaining);
+            var stop = Step(tables: tables, within: remaining);
 
             m_services++;
             m_serviceJobs += (m_submitted - submitted);
@@ -569,14 +582,17 @@ public sealed class SdfGpuWork : IDisposable {
             return null;
         }
     }
-    private Stop Step(SdfWorldTables tables, bool budgeted, TimeSpan? within) {
+    // One step at a pump, a drive or the host's wait. Whether the budgets meter it is decided here alone, from whether the
+    // latest pump or drive named a withheld frame (m_driven): a held frame's own work is never metered, and background
+    // work always is.
+    private Stop Step(SdfWorldTables tables, TimeSpan? within) {
         m_pumps++;
         Poll();
         if (m_clients.Count == 0) { return Stop.None; }
 
         var stop = Stop.None;
 
-        if (tables.BindsBackgroundWork) { stop = Refill(budgeted: budgeted, tables: tables, within: within); } else { m_unbound++; }
+        if (tables.BindsBackgroundWork) { stop = Refill(budgeted: !m_driven, tables: tables, within: within); } else { m_unbound++; }
         ReleaseIdle();
         return stop;
     }
@@ -741,7 +757,7 @@ public sealed class SdfGpuWork : IDisposable {
             var inFlight = Stopwatch.GetElapsedTime(startingTimestamp: slot.SubmittedAt).TotalSeconds;
 
             seconds = (slot.Charged
-                ? m_budget.SettleGpu(estimate: slot.Estimate, inFlight: inFlight, measured: measured)
+                ? m_budget.SettleGpu(debited: slot.Debited, estimate: slot.Estimate, inFlight: inFlight, measured: measured)
                 : SdfGpuWorkBudget.MeasuredWithin(clamped: out _, estimate: slot.Estimate, inFlight: inFlight, measured: measured));
         }
         m_gpuSeconds += seconds;
@@ -820,7 +836,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // Records a job into its slot between its timestamps and submits it armed with the slot's fence, which is asked to
     // wake the host's wait when the job completes. The one door a job reaches the queue through: it stamps the job's
-    // lease before the job binds anything. False when the device had no room for what the job holds: the job is handed
+    // ring slot before the job binds anything. False when the device had no room for what the job holds: the job is handed
     // back to its client, and nothing reached the queue.
     private bool Submit(ISdfGpuWorkClient client, object job, double estimate, int index, Slot slot, bool charged, SdfWorldTables tables) {
         var recorder = m_gpu.Recorder;
@@ -830,7 +846,7 @@ public sealed class SdfGpuWork : IDisposable {
         slot.ReadbackBytes = 0;
         slot.Readback = null;
         slot.Copied = false;
-        slot.Generation = tables.BackgroundGeneration;
+        slot.Consumed = false;
         slot.RingSlot = tables.CurrentSlot;
         try {
             recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
@@ -840,8 +856,9 @@ public sealed class SdfGpuWork : IDisposable {
             try {
                 m_recording = client;
                 client.Record(job: job, recording: new SdfGpuWorkRecording(client: client, commandBuffer: commandBuffer, owner: this, recorder: recorder, slot: index));
-            } catch (Exception refusal) when ((refusal is SdfGpuWorkDeferredException or GpuMemoryRefusedException)) {
-                // Closed and never submitted: the slot's next job begins the command buffer again.
+            } catch (Exception refusal) when ((refusal is SdfGpuWorkDeferredException or GpuMemoryRefusedException) && !slot.Consumed) {
+                // Closed and never submitted: the slot's next job begins the command buffer again. Only a job that consumed
+                // nothing is handed back; a refusal after it consumed state faults the service instead of losing that.
                 recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
                 recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
                 client.Abandon(job: job);
@@ -878,7 +895,7 @@ public sealed class SdfGpuWork : IDisposable {
         slot.SubmittedAt = Stopwatch.GetTimestamp();
         slot.Estimate = estimate;
         slot.Charged = charged;
-        if (charged) { m_budget.ChargeGpu(seconds: estimate); }
+        slot.Debited = (charged ? m_budget.ChargeGpu(seconds: estimate) : 0.0);
         m_submitted++;
         if (m_inFlight++ == 0) { m_busySince = slot.SubmittedAt; }
         m_mostInFlight = Math.Max(val1: m_mostInFlight, val2: m_inFlight);
@@ -893,8 +910,10 @@ public sealed class SdfGpuWork : IDisposable {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bytes, other: source.SizeBytes);
         if (bytes > int.MaxValue) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: "A background GPU job copies back at most 2 GiB."); }
 
-        var readback = ((IGpuReadbackBuffer)Hold(bytes: bytes, client: null, hostVisible: true, part: ReadbackPart, readback: true, sizing: SdfGpuWorkSizing.Granule, slot: slot, usage: default));
+        var readback = ReserveReadback(bytes: bytes, slot: slot);
         var recorder = m_gpu.Recorder;
+
+        target.Consumed = true;
 
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: source.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
@@ -908,10 +927,20 @@ public sealed class SdfGpuWork : IDisposable {
         target.ReadbackBytes = bytes;
         target.Copied = true;
     }
+    // The slot's readback, held at a granule's size for a copy of the bytes: what CopyToReadback copies into, reserved
+    // ahead by a job that consumes state before its copy.
+    internal IGpuReadbackBuffer ReserveReadback(int slot, ulong bytes) =>
+        ((IGpuReadbackBuffer)Hold(bytes: bytes, client: null, hostVisible: true, part: ReadbackPart, readback: true, sizing: SdfGpuWorkSizing.Granule, slot: slot, usage: default));
+    // Marks that the slot's job recorded something that consumes state (a region's owed words), after which handing the
+    // job back would lose it.
+    internal void Consume(int slot) => m_slots[slot].Consumed = true;
     // The one door a slot's buffer is created through: returns the buffer the slot holds for a client's part when it
     // still fits the job, and otherwise replaces it, reserving the growth before the device is asked and giving the
     // old buffer's bytes back first, so the slot never holds both. A refusal leaves the slot without the part, which
     // its next job creates.
+    // Invariant: a refusal hands back a job that has consumed nothing. A slot whose job consumed state refuses to create
+    // any buffer for it (an InvalidOperationException, which faults the service rather than discarding the recording):
+    // only a buffer the slot already holds at the size asked comes back.
     internal IGpuBuffer Hold(int slot, ISdfGpuWorkClient? client, string part, ulong bytes, bool hostVisible, bool readback, GpuBufferUsage usage, SdfGpuWorkSizing sizing) {
         var held = m_slots[slot].Held;
         var now = Stopwatch.GetTimestamp();
@@ -923,6 +952,9 @@ public sealed class SdfGpuWork : IDisposable {
         if ((at >= 0) && ((sizing == SdfGpuWorkSizing.Exact) ? (held[at].Buffer.SizeBytes == bytes) : (held[at].Buffer.SizeBytes >= bytes))) {
             held[at].WindowBytes = Math.Max(val1: held[at].WindowBytes, val2: Math.Max(val1: bytes, val2: 1UL));
             return held[at].Buffer;
+        }
+        if (m_slots[slot].Consumed) {
+            throw new InvalidOperationException(message: $"A background GPU job asked for its {part} after it consumed state: it reserves every buffer, its readback included, before it copies a region.");
         }
         if (at >= 0) {
             Release(held: held[at]);
@@ -1032,7 +1064,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // One slot: its command buffer, fence and timestamp readback, the job in it and its client, the buffers it holds,
     // the readback its job copied into and how many bytes, the GPU seconds the job was charged and when it was
-    // submitted, and the tables' generation and ring slot the job leased.
+    // submitted, and the tables' ring slot the job leased.
     private sealed class Slot(IGpuCommandPool Commands, IGpuSubmissionFence Fence, IGpuReadbackBuffer Times) {
         public IGpuCommandPool Commands { get; } = Commands;
         public IGpuSubmissionFence Fence { get; } = Fence;
@@ -1049,12 +1081,15 @@ public sealed class SdfGpuWork : IDisposable {
         public bool IsFree => ((Job is null) && (Lease is null or { Released: true }));
         public ISdfGpuWorkClient? Client { get; set; }
         public bool Copied { get; set; }
+        // Whether the job being recorded consumed state (SdfGpuWork.Consume), so no buffer may be created for it.
+        public bool Consumed { get; set; }
         public double Estimate { get; set; }
         public object? Job { get; set; }
         public long SubmittedAt { get; set; }
-        public ulong Generation { get; set; }
         public int RingSlot { get; set; }
-        // Whether the job's estimate was charged to the GPU budget, which its measured time then settles.
+        // Whether the job was charged to the GPU budget, and the seconds the charge debited, which its measured time
+        // then replaces.
         public bool Charged { get; set; }
+        public double Debited { get; set; }
     }
 }

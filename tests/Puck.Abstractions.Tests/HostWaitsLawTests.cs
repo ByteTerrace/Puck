@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Waiting;
 
@@ -201,6 +202,53 @@ public sealed class HostWaitsLawTests {
             runs = 0;
             HostWaits.Pace(deadlineTimestamp: time.GetTimestamp(), precisionWaiter: null, time: time);
             Assert.Equal(expected: 0, actual: runs);
+        });
+    }
+    [Fact]
+    public void ServicesShareThePacersRemainderAndStopAtItsDeadline() {
+        OnOwnThread(body: () => {
+            var order = new List<string>();
+            var handed = new Dictionary<string, TimeSpan>();
+            var spentByFirst = TimeSpan.Zero;
+            var firstSpends = TimeSpan.FromMilliseconds(value: 15);
+            using var first = HostWaits.Serve(reason: Reason, service: remaining => {
+                var start = Stopwatch.GetTimestamp();
+
+                order.Add(item: "first");
+                handed["first"] = remaining;
+                Thread.Sleep(timeout: firstSpends);
+                spentByFirst = Stopwatch.GetElapsedTime(startingTimestamp: start);
+
+                return null;
+            });
+            using var second = HostWaits.Serve(reason: Reason, service: remaining => {
+                order.Add(item: "second");
+                handed["second"] = remaining;
+
+                return null;
+            });
+            var time = TimeProvider.System;
+            var frequency = time.TimestampFrequency;
+
+            // The second service is handed what the first left, not the remainder the turn began with.
+            HostWaits.Pace(deadlineTimestamp: (time.GetTimestamp() + (frequency / 4L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: ["first", "second"], actual: order);
+            Assert.True(
+                condition: (handed["second"] <= ((handed["first"] - spentByFirst) + TimeSpan.FromMicroseconds(value: 1))),
+                userMessage: $"the second service was handed {handed["second"]} after the first, handed {handed["first"]}, spent {spentByFirst}"
+            );
+
+            // A first service that spends past the deadline ends the turn: the second is not run in this wait...
+            order.Clear();
+            firstSpends = TimeSpan.FromMilliseconds(value: 40);
+            HostWaits.Pace(deadlineTimestamp: (time.GetTimestamp() + (frequency / 50L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: ["first"], actual: order);
+
+            // ...and the next wait's turn starts with it, so the long service cannot starve it.
+            order.Clear();
+            firstSpends = TimeSpan.Zero;
+            HostWaits.Pace(deadlineTimestamp: (time.GetTimestamp() + (frequency / 50L)), precisionWaiter: null, time: time);
+            Assert.Equal(expected: ["second", "first"], actual: order);
         });
     }
     [Fact]

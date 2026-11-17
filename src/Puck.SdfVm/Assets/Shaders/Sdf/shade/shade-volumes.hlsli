@@ -6,7 +6,7 @@
 // (sdf-atmosphere.hlsli), as the haze does.
 #ifndef SDF_SHADE_VOLUMES_HLSLI
 #define SDF_SHADE_VOLUMES_HLSLI
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/low-discrepancy.hlsli"
+#include "Shared/low-discrepancy.hlsli"
 #include "../field/sdf-noise.hlsli"
 #include "../field/sdf-quaternion.hlsli"
 #include "sdf-atmosphere.hlsli"
