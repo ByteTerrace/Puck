@@ -46,6 +46,7 @@ public sealed class HostFrameTimeline {
     private readonly long[] m_produceBlocked = new long[Capacity];
     private readonly long[] m_open = new long[PhaseCount];
     private readonly long[] m_tickCosts = new long[Capacity];
+    private readonly long[] m_controlGaps = new long[Capacity];
 
     private long m_tickCount;
     private long m_shedSteps;
@@ -65,6 +66,8 @@ public sealed class HostFrameTimeline {
     private long m_openProduceBlocked;
     private int m_openSteps;
     private long m_openLate;
+    private long m_openControlGap;
+    private long m_lastControl;
 
     /// <summary>Creates a timeline over the given clock.</summary>
     /// <param name="time">The host loop's clock.</param>
@@ -98,6 +101,7 @@ public sealed class HostFrameTimeline {
             m_produceBlocked[slot] = m_openProduceBlocked;
             m_steps[slot] = m_openSteps;
             m_late[slot] = m_openLate;
+            m_controlGaps[slot] = m_openControlGap;
             m_collections[(slot * 3)] = (gen0 - m_gen0);
             m_collections[((slot * 3) + 1)] = (gen1 - m_gen1);
             m_collections[((slot * 3) + 2)] = (gen2 - m_gen2);
@@ -114,6 +118,7 @@ public sealed class HostFrameTimeline {
         Array.Clear(array: m_open);
         m_openSteps = 0;
         m_openLate = 0L;
+        m_openControlGap = 0L;
         m_openProduceBlocked = 0L;
         m_iterationStart = now;
         m_phaseStart = now;
@@ -139,6 +144,17 @@ public sealed class HostFrameTimeline {
         }
         m_phaseStart = now;
         m_blockedAtMark = blocked;
+    }
+    /// <summary>Records one control phase (a console drain): the gap since the previous one is charged to the iteration
+    /// it ends in, which keeps its longest. The control gap bounds how late a console line, an MCP call or an input
+    /// sample is read, whatever held the loop.</summary>
+    public void NoteControlPhase() {
+        var now = Time.GetTimestamp();
+
+        if (m_lastControl != 0L) {
+            m_openControlGap = Math.Max(val1: m_openControlGap, val2: (now - m_lastControl));
+        }
+        m_lastControl = now;
     }
     /// <summary>Records the fixed steps the iteration ran.</summary>
     /// <param name="steps">The step count.</param>
@@ -213,6 +229,7 @@ public sealed class HostFrameTimeline {
     public void Reset() {
         m_count = 0L;
         m_iterationStart = 0L;
+        m_lastControl = 0L;
         Interlocked.Exchange(location1: ref m_tickCount, value: 0L);
     }
     /// <summary>Describes the latest iterations: the interval's distribution, the count whose work is over a budget, the
@@ -295,6 +312,8 @@ public sealed class HostFrameTimeline {
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce-work", second: null, lessBlocked: true);
         AppendSeries(builder: builder, indices: indices, label: "produce-fence", values: m_produceBlocked);
+        // The longest time between two control phases ending in each iteration: the control plane's latency bound.
+        AppendSeries(builder: builder, indices: indices, label: "control-gap", values: m_controlGaps);
         AppendPhases(builder: builder, first: HostFramePhase.Simulate, indices: indices, label: "simulate", second: null);
         AppendPhases(builder: builder, first: HostFramePhase.Produce, indices: indices, label: "produce+simulate", second: HostFramePhase.Simulate);
         // Produce split by whether the iteration ran a step, where presentation work a frame carries beside a tick shows.

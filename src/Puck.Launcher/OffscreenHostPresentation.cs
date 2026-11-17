@@ -2,6 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
+using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 
 namespace Puck.Launcher;
@@ -96,7 +97,7 @@ public sealed class OffscreenHostPresentation {
                 logger: m_logger,
                 root: m_root,
                 rootHostContext: m_rootHostContext,
-                sleep: duration => LauncherHostLoop.WaitUntil(
+                sleep: duration => HostWaits.Until(
                     deadlineTimestamp: (time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
                     precisionWaiter: m_precisionWaiter,
                     time: time

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Waiting;
 
@@ -29,7 +30,7 @@ public readonly record struct WaitDeadline {
     /// <summary>Returns the deadline <paramref name="budget"/> from now.</summary>
     /// <param name="budget">How long the wait may take; zero or less has already passed.</param>
     /// <returns>The deadline.</returns>
-    public static WaitDeadline In(TimeSpan budget) => new(timestamp: Saturate(start: Stopwatch.GetTimestamp(), ticks: TicksOf(budget: budget)));
+    public static WaitDeadline In(TimeSpan budget) => new(timestamp: Stopwatch.GetTimestamp().AddSaturating(right: TicksOf(budget: budget)));
 
     /// <summary>Converts a duration to <see cref="Stopwatch"/> ticks, saturating instead of overflowing.</summary>
     /// <param name="budget">The duration; zero or less converts to zero.</param>
@@ -43,5 +44,4 @@ public readonly record struct WaitDeadline {
 
         return ((ticks >= long.MaxValue) ? long.MaxValue : (long)ticks);
     }
-    private static long Saturate(long start, long ticks) => ((ticks > (long.MaxValue - start)) ? long.MaxValue : (start + ticks));
 }

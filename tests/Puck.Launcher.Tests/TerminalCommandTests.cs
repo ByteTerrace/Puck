@@ -33,12 +33,10 @@ public sealed class TerminalCommandTests {
         Assert.True(condition: sessions.LastVisible);
     }
     [Fact]
-    public void LauncherTextSourceMirrorsAdministrativeResultsAndHonorsContributedHoldGates() {
-        var gate = new TestHoldGate { Holding = true, };
+    public void LauncherTextSourceMirrorsAdministrativeResults() {
         var invocations = 0;
         var services = new ServiceCollection();
 
-        services.AddSingleton<ITextCommandHoldGate>(implementationInstance: gate);
         services.AddSingleton<ICommandModule>(implementationInstance: new ProbeModule(onInvoke: () => invocations++));
         services.AddLauncherTerminal();
 
@@ -47,14 +45,6 @@ public sealed class TerminalCommandTests {
         var terminalSessions = provider.GetRequiredService<TerminalConsoleSessions>();
 
         source.Enqueue(line: "probe");
-        source.Collect();
-
-        Assert.Equal(
-            actual: invocations,
-            expected: 0
-        );
-
-        gate.Holding = false;
         source.Collect();
 
         Assert.Equal(
@@ -72,11 +62,6 @@ public sealed class TerminalCommandTests {
         );
     }
 
-    private sealed class TestHoldGate : ITextCommandHoldGate {
-        public bool Holding { get; set; }
-
-        public bool IsHolding() => Holding;
-    }
     private sealed class ProbeModule(Action onInvoke) : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
             yield return CommandDefinition.Verb(

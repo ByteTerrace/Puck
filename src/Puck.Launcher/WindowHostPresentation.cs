@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Pacing;
 using Puck.Abstractions.Presentation;
+using Puck.Abstractions.Waiting;
 using Puck.Abstractions.Windowing;
 using Puck.Commands;
 using Puck.Hosting;
@@ -311,7 +312,7 @@ public sealed class WindowHostPresentation {
                     logger: m_logger,
                     root: m_root,
                     rootHostContext: m_rootHostContext,
-                    sleep: duration => LauncherHostLoop.WaitUntil(
+                    sleep: duration => HostWaits.Until(
                         deadlineTimestamp: (m_time.GetTimestamp() + ((long)(duration.TotalSeconds * frequency))),
                         precisionWaiter: precisionWaiter,
                         time: m_time
@@ -698,7 +699,7 @@ public sealed class WindowHostPresentation {
                             if ((nowTimestamp - nextRenderDeadline) > renderPeriod) {
                                 nextRenderDeadline = nowTimestamp;
                             } else {
-                                LauncherHostLoop.WaitUntil(
+                                HostWaits.Until(
                                     deadlineTimestamp: nextRenderDeadline,
                                     precisionWaiter: precisionWaiter,
                                     time: m_time

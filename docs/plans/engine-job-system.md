@@ -880,11 +880,7 @@ control plane, names what breaks that promise today, and gives waits one door.
   branch calls `SdfGpuWork.Drive`). Device-loss recovery retries its rebuild
   inside one iteration, sleeping `DeviceLossRecovery.ReacquireBackoff` (250 ms)
   between tries for up to `ReacquireBudget` (10 s), through a sleep delegate
-  the windowed and offscreen hosts bind to `LauncherHostLoop.WaitUntil`.
-- **A host-wide hold exists with no deadline and no user.** `TextCommandSource.HoldGate`
-  stops every session's drain while it returns true. Nothing implements
-  `ITextCommandHoldGate` in `src/` (the search for the interface finds only its
-  declaration and its registration in `LauncherServiceRegistration`).
+  the windowed and offscreen hosts bind to the pacer's `HostWaits.Until`.
 
 ### The invariant
 
@@ -1186,7 +1182,7 @@ Reached from the pump thread inside an iteration:
 | `DeviceLossRecovery.TryRecover` (`:212`) | Up to 10 s of 250 ms backoff sleeps inside one iteration, through a delegate | An operation polled across iterations; the frame answers waiting between attempts |
 | `GpuWorkCountingFence.cs:37`, `GpuBatchedSubmissionFence` (`Wait`), `VulkanFrameSynchronization.cs:111`, `VulkanGpuQueueSubmitter.cs:216`, `DirectXGpuQueueSubmitter.cs:246`, `DirectXSurfaceCompositor.cs:490` and `:511` | The fence implementations and the two backends' native waits | Take the deadline and return the outcome; the native call receives the remainder as its timeout, and the stall deadline keeps the 30-second watchdog |
 | `VulkanQueueSubmitter.cs:221` (`vkQueueWaitIdle`), `VulkanLogicalDevice.cs:152` (`vkDeviceWaitIdle`) | Queue and device idle waits outside the fence wrappers | Replaced by fence-based progress where a deadline applies, or named as native teardown and loss-path waits in C0.6 |
-| `LauncherHostLoop.cs:54` | The pacer's one-millisecond sleep where no precision waiter exists | `HostWaits.Until`, the pacer's own form |
+| The pacer's sleep (`HostWaits.Until`) | A one-millisecond sleep where no precision waiter exists | Built in C0.2: the door's pacer form, bounded by the pacer's deadline |
 | `SdfMeshProbeGpuWork.cs:194`, `ShaderCompiler.cs:92`, `ShaderPackager.cs:358`, `ShaderPackager.Store.cs:310`, `ShaderPipelineLoader.cs:200` | Synchronous waits on asynchronous work; which thread calls each was not read for this design | C0.8 reads each caller: on the pump they become waiting answers, on a worker a run-after edge (J1) |
 
 The tick's waits (C0.5):
@@ -1253,8 +1249,8 @@ that clears its last site; the compiler's list says which step that is.
 
 | Step | Lands | Check |
 |---|---|---|
-| **C0.1** | `HostWaits` and its forms, `WaitReason`, `WaitDeadline`, `WaitOutcome`, `WaitConsumer`, the pump allowance and the wait records, in `Puck.Abstractions`; `WAIT001` behind `PuckWaitRule`, with every managed family, method groups and delegate conversions, the completion proof and `ConfinedDirectory.AcquireLock` | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a pump-thread wait is clipped to the iteration's allowance; a consumer claim on the pump thread and a consumer used on another thread are refused; a completed wait allocates 0 B (`AllocationWindow`). Analyzer laws for a method group, a delegate conversion and the completion proof. The compiler's list for `Puck.Launcher`, `Puck.Hosting`, `Puck.Machines` and `Puck.Abstractions` against the survey's, each difference explained. |
-| **C0.2** | The control phase mints the iteration (`HostIteration` a `ref struct` checked against the loop's phase); the pump allowance opened at each control phase; the pacer's sleep through `HostWaits.Until`; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap no longer than its longest iteration, and a `world.status` issued through a second attachment while the first holds on `world.wait 300` answers at once. |
+| **C0.1** | Built. `HostWaits` and its forms, `WaitReason`, `WaitDeadline`, `WaitOutcome`, `WaitConsumer`, the pump allowance and the wait records, in `Puck.Abstractions`; `WAIT001` behind `PuckWaitRule`, with every managed family, method groups and delegate conversions, the completion proof and `ConfinedDirectory.AcquireLock` | A law: a wait on a handle nobody signals returns deadline passed within its budget and the door lists its reason; a pump-thread wait is clipped to the iteration's allowance; a consumer claim on the pump thread and a consumer used on another thread are refused; a completed wait allocates 0 B (`AllocationWindow`). Analyzer laws for a method group, a delegate conversion and the completion proof. The compiler's list for `Puck.Launcher`, `Puck.Hosting`, `Puck.Machines` and `Puck.Abstractions` against the survey's, each difference explained. |
+| **C0.2** | Built. The control phase mints the iteration (`HostIteration` a `ref struct` checked against the loop's phase); the pump allowance opened at each control phase; the pacer's sleep through `HostWaits.Until`; the control gap in `host.frames`; `HoldGate` and `ITextCommandHoldGate` deleted | A headless debug World: `host.frames 600` reads a control gap no longer than its longest iteration, and a session's own hold holds only that session (`TextCommandSourceTests.ASessionsOwnHoldHoldsOnlyThatSession`), which is what lets a second control attachment answer while the first holds on `world.wait`; the MCP adapter runs one call at a time per World, so two attachments cannot be raced through it. |
 | **C0.3** | The convergence waits become waiting answers and the drain runs in slices, on the CPU-trace and GPU-trace paths both | At a lockstep walkthrough tour stop that converges lighting, a console verb issued during the drain answers within one iteration (the control gap stays under the wait budget plus a pacer period), and the stop's still against the build before it, compared with the tolerance above. A windowed leg on both backends. |
 | **C0.4** | The static field, composition program and pipeline lease waits become publications or waiting answers; `world.wait`'s release names the standing reason | A `world.reload` that changes the layout: no control gap over the bound; `world.wait ready 5` issued while a build stands releases with that build's reason in its answer instead of the bare timeout. |
 | **C0.5** | The tick's waits: the drain, the producer's capacity wait and the fork join bounded; the incomplete-tick record, the read view's refusal and the stall deadline; first, the list of read paths that bypass the read view | A law over `QueuedWorkerLifecycle` and the authority with a worker held past its slice: the step answers pending within its budget; a console read, a checkpoint, an attach and a reset issued while the record stands are refused or wait with the stall's reason; the late worker completion finishes the same tick, whose hash equals an unheld run's; a completed drain allocates 0 B. A held fork the same way. `puck test --reproduce` and `--workers 1,2,0` on the machine and snapshot fixtures. |
@@ -1308,7 +1304,7 @@ how it composes (point 4).
 Small steps, each landing on its own and checked on the debug world. Test
 requirements are lifted for the campaign (AGENTS.md); each step is verified by
 building what it touched and running the check named, and each check is chosen
-to fail when the step's main risk is real. Built: the scheduling stage (S1),
+to fail when the step's main risk is real. Built: the scheduling stage (S1), C0.1 and C0.2,
 the memory account, native movers 1 and 2, the worker-count harness (`--workers` and
 `puck test --workers`), snapshot partitions and GPU culling in the indirect
 path.

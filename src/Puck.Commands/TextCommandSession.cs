@@ -57,8 +57,8 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;
     internal bool SettlesResults => (m_onSettled is not null);
-    // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; the
-    // source-wide HoldGate is reserved for host-wide holds). While it returns true, Collect rotates this session to the
+    // This session's own hold predicate, or null for a session nothing suspends on its own (the ordinary case; nothing
+    // holds every session at once). While it returns true, Collect rotates this session to the
     // tail exactly like a read-after-write-blocked one, leaving every other session's drain unaffected.
     internal Func<bool>? Hold { get; }
     // Entered around this session's own dispatch of an Immediate line (Collect's synchronous call into the

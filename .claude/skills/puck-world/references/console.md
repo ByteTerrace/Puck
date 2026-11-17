@@ -290,7 +290,6 @@ the explicit wait: Immediate, 1..144000 ticks, clocked by completed host-work
 ticks through `WorldConsoleWaitGate.PublishTick`, independent of replay
 rewinds and wall time. It holds only `CommandContext.TextSession`; each
 session has its own deadline even when sessions share the same row clock.
-Do not wire this gate to the source-wide `ITextCommandHoldGate`.
 Direct registry submissions without a text session are refused. Echo:
 `[world.wait: N ticks from T — releasing at tick R]`. Being Immediate, the
 barrier holds `world.wait` itself until a preceding mutation lands, so its

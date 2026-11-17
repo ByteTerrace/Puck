@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Puck.Abstractions.Pacing;
+using Puck.Maths;
 
 namespace Puck.Abstractions.Waiting;
 
@@ -287,9 +288,7 @@ public static class HostWaits {
         var end = deadline.Timestamp;
 
         if (slot.IsPump) {
-            var allowed = ((slot.AllowanceTicks > (long.MaxValue - start)) ? long.MaxValue : (start + slot.AllowanceTicks));
-
-            end = Math.Min(val1: end, val2: allowed);
+            end = Math.Min(val1: end, val2: start.AddSaturating(right: slot.AllowanceTicks));
         }
 
         var record = new WaitRecord(

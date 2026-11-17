@@ -53,9 +53,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
 4. [high] [Engine job system](#engine-job-system): the memo's next step:
-   the scheduling stage's windowed reading, another family's review of the
-   control plane's phase and bounded waits and its first step, then the
-   pool's design.
+   the scheduling stage's windowed reading, the control plane's step C0.3,
+   then the pool's design.
 5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
@@ -311,9 +310,10 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's windowed reading, another family's review
-of [the control plane's design](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-and then its step C0.1, then the pool's design (J1). The garbage-collection cuts
+order once: the scheduling stage's windowed reading, then
+[the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
+step C0.3 (its review is answered and C0.1 and C0.2 are built), then the pool's
+design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -2823,6 +2823,16 @@ owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
 
+- [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
+  (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
+  (`Puck.Abstractions`, path-based) each try, test a timeout and sleep on the
+  token's wait handle. One loop over an opener delegate belongs in
+  `Puck.Confinement`, beneath both; `WAIT001` already treats
+  `ConfinedDirectory.AcquireLock` as a blocking member, so the merged loop is
+  answered at its callers.
+- [low] `Puck.World.Console` references `Puck.Launcher` and no code in it uses
+  the reference; drop it, re-record the lock files (`puck locks`) and narrow its
+  profile in `build/Architecture.props`.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events

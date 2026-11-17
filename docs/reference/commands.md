@@ -579,9 +579,8 @@ issuing `CommandContext.TextSession` on both text parsing paths. It can call
 `HoldWhile` to hold only that session's later work; other sessions continue
 draining. The drain reads every armed hold once per drain, whether or not a
 line waits behind it, so a hold's release report runs as the hold ends.
-Direct registry calls and replayed snapshots have no text session.
-The optional `TextCommandSource.HoldGate` remains a host-wide stop and must
-not be used for one caller's wait.
+Direct registry calls and replayed snapshots have no text session. Nothing
+holds every session at once: a hold always belongs to one session.
 
 `TextCommandSession.InvokeAsync` queues a short host operation behind that
 session's preceding commands, mutation barriers, and holds. The operation

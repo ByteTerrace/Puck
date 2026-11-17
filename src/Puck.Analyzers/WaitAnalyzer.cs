@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Operations;
+using static Puck.Analyzers.NamedTypes;
 
 namespace Puck.Analyzers;
 
@@ -111,7 +112,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         if (
             (property.Name != "Result") ||
-            !(IsType(type: property.ContainingType, @namespace: "System.Threading.Tasks", name: "Task") || IsType(type: property.ContainingType, @namespace: "System.Threading.Tasks", name: "ValueTask")) ||
+            !(Is(type: property.ContainingType, @namespace: "System.Threading.Tasks", name: "Task") || Is(type: property.ContainingType, @namespace: "System.Threading.Tasks", name: "ValueTask")) ||
             InsideTheDoor(symbol: context.ContainingSymbol) ||
             ProvenComplete(node: reference.Syntax, receiver: reference.Instance)
         ) {
@@ -146,27 +147,27 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         return name switch {
             "Wait" => (
-                IsType(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
-                IsType(type: type, @namespace: "System.Threading", name: "ManualResetEventSlim") ||
-                IsType(type: type, @namespace: "System.Threading", name: "SemaphoreSlim") ||
-                IsType(type: type, @namespace: "System.Threading", name: "CountdownEvent") ||
-                IsType(type: type, @namespace: "System.Threading", name: "Monitor")
+                Is(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
+                Is(type: type, @namespace: "System.Threading", name: "ManualResetEventSlim") ||
+                Is(type: type, @namespace: "System.Threading", name: "SemaphoreSlim") ||
+                Is(type: type, @namespace: "System.Threading", name: "CountdownEvent") ||
+                Is(type: type, @namespace: "System.Threading", name: "Monitor")
             ),
             "WaitAll" or "WaitAny" => (
-                IsType(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
-                IsType(type: type, @namespace: "System.Threading", name: "WaitHandle")
+                Is(type: type, @namespace: "System.Threading.Tasks", name: "Task") ||
+                Is(type: type, @namespace: "System.Threading", name: "WaitHandle")
             ),
-            "WaitOne" => IsType(type: type, @namespace: "System.Threading", name: "WaitHandle"),
+            "WaitOne" => Is(type: type, @namespace: "System.Threading", name: "WaitHandle"),
             "SignalAndWait" => (
-                IsType(type: type, @namespace: "System.Threading", name: "WaitHandle") ||
-                IsType(type: type, @namespace: "System.Threading", name: "Barrier")
+                Is(type: type, @namespace: "System.Threading", name: "WaitHandle") ||
+                Is(type: type, @namespace: "System.Threading", name: "Barrier")
             ),
-            "Join" or "Sleep" => IsType(type: type, @namespace: "System.Threading", name: "Thread"),
-            "SpinWait" => IsType(type: type, @namespace: "System.Threading", name: "Thread"),
-            "SpinUntil" or "SpinOnce" => IsType(type: type, @namespace: "System.Threading", name: "SpinWait"),
-            "Take" => IsType(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection"),
-            "TryTake" => (IsType(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection") && (method.Parameters.Length > 1)),
-            "AcquireLock" => IsType(type: type, @namespace: "Puck.Confinement", name: "ConfinedDirectory"),
+            "Join" or "Sleep" => Is(type: type, @namespace: "System.Threading", name: "Thread"),
+            "SpinWait" => Is(type: type, @namespace: "System.Threading", name: "Thread"),
+            "SpinUntil" or "SpinOnce" => Is(type: type, @namespace: "System.Threading", name: "SpinWait"),
+            "Take" => Is(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection"),
+            "TryTake" => (Is(type: type, @namespace: "System.Collections.Concurrent", name: "BlockingCollection") && (method.Parameters.Length > 1)),
+            "AcquireLock" => Is(type: type, @namespace: "Puck.Confinement", name: "ConfinedDirectory"),
             _ => false,
         };
     }
@@ -182,14 +183,9 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
 
         return type;
     }
-    private static bool IsType(INamedTypeSymbol? type, string @namespace, string name) =>
-        (type is not null) &&
-        (type.OriginalDefinition.Name == name) &&
-        (type.OriginalDefinition.ContainingType is null) &&
-        (type.OriginalDefinition.ContainingNamespace?.ToDisplayString() == @namespace);
     private static bool InsideTheDoor(ISymbol? symbol) {
         for (var type = symbol as INamedTypeSymbol ?? symbol?.ContainingType; (type is not null); type = type.ContainingType) {
-            if (IsType(type: type, @namespace: DoorNamespace, name: DoorType)) {
+            if (Is(type: type, @namespace: DoorNamespace, name: DoorType)) {
                 return true;
             }
         }
@@ -210,7 +206,7 @@ public sealed class WaitAnalyzer : DiagnosticAnalyzer {
             if (value.ConstantValue is { HasValue: true, Value: int zero } && (zero == 0)) {
                 return true;
             }
-            if ((value is IFieldReferenceOperation { Field.Name: "Zero" } field) && IsType(type: field.Field.ContainingType, @namespace: "System", name: "TimeSpan")) {
+            if ((value is IFieldReferenceOperation { Field.Name: "Zero" } field) && Is(type: field.Field.ContainingType, @namespace: "System", name: "TimeSpan")) {
                 return true;
             }
         }

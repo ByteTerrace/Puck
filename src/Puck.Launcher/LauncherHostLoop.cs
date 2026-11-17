@@ -1,4 +1,3 @@
-using Puck.Abstractions.Pacing;
 using Puck.Hosting;
 
 namespace Puck.Launcher;
@@ -32,28 +31,6 @@ internal static class LauncherHostLoop {
         }
 
         return item;
-    }
-    // Waits until the host clock reads the deadline by sleeping on the host: the precision waiter (a high-resolution
-    // waitable timer) for the whole remainder, or a one-millisecond sleep where the host offers none. The loop re-reads
-    // the clock after each wait, so a wait that wakes early waits again and one that wakes late ends it. Every read is of
-    // `time`, the host loop's own clock, so the wait and the deadline share one clock.
-    public static void WaitUntil(TimeProvider time, long deadlineTimestamp, IPrecisionWaiter? precisionWaiter) {
-        var frequency = time.TimestampFrequency;
-
-        while (true) {
-            var remaining = (deadlineTimestamp - time.GetTimestamp());
-
-            if (remaining <= 0L) {
-                break;
-            }
-
-            if (
-                (precisionWaiter is null) ||
-                !precisionWaiter.TryWait(duration: TimeSpan.FromSeconds(value: (((double)remaining) / frequency)))
-            ) {
-                Thread.Sleep(millisecondsTimeout: 1);
-            }
-        }
     }
     public static uint ResolveRatePerSecond(IFixedStepSimulation? simulation) {
         var simRatePerSecond = (simulation?.RatePerSecond ?? DefaultUpdateRate);

@@ -145,7 +145,7 @@ public sealed class FixedStepPumpStepGateTests {
                 inputBacklog: Backlog,
                 inputClock: new NowClock(),
                 inputRouter: Router,
-                output: m_output,
+                controlPhase: () => HostConsoleDrain.Collect(output: m_output, source: source),
                 registry: registry,
                 simulation: Simulation,
                 terminal: new TerminalControl(),
