@@ -121,9 +121,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
     // The origins one trace job holds at most: those whose measured cost fits background work's share of a frame.
     private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
-    // The predicted rays one relight job holds at most (SdfMeshIrradiance.RelightRaysPerJob bounds it whatever the rate):
-    // those whose measured cost fits background work's share of a frame. A probe predicted past it goes alone.
-    internal long RelightRaysWithinShare => m_rates[(int)JobKind.Relight].UnitsWithin(most: SdfMeshIrradiance.RelightRaysPerJob, seconds: SdfGpuWork.FrameShareSeconds);
+    // The predicted rays one relight job holds at most: those whose measured cost fits background work's share of a frame,
+    // within SdfMeshIrradiance.RelightRaysCeiling, and within SdfMeshIrradiance.RelightRaysPerJob until a relight's
+    // timestamps have measured the rate (on a queue without timestamps, always). A probe predicted past it goes alone.
+    internal long RelightRaysWithinShare {
+        get {
+            var rate = m_rates[(int)JobKind.Relight];
+
+            return rate.UnitsWithin(most: (rate.Measured ? SdfMeshIrradiance.RelightRaysCeiling : SdfMeshIrradiance.RelightRaysPerJob), seconds: SdfGpuWork.FrameShareSeconds);
+        }
+    }
     // The origins and input are read before this returns, so a caller may overwrite the arrays its memories view at once.
     // `rays` is the job's predicted ray count (RelightRaysWithinShare bounds it), which its GPU time is estimated from at
     // the measured rate until its timestamps measure it.
@@ -208,6 +215,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private Task<uint[]> SubmitAsync(Job job) {
         lock (m_gate) {
             if (m_stopping || m_disposed) { job.Scene.Dispose(); throw new OperationCanceledException(); }
+            job.SubmittedAt = Stopwatch.GetTimestamp();
             m_pending.Enqueue(job);
         }
         m_tables.GpuWork.Wake();
@@ -543,6 +551,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 _ => SdfMeshIrradiance.GpuRelightNanoseconds,
             }, (long)(seconds * 1e9));
         }
+        CountAnswered(query: query);
         if (query.Meter) {
             for (var i = SdfMeshProbeRelight.MeterOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.MeterOutputWords) {
                 if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
@@ -561,6 +570,32 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         query.Answer.TrySetCanceled();
     }
     public GpuQueueCategory Category => GpuQueueCategory.Probe;
+    // The answered jobs of each kind, their units (UnitsOf) and the wall time from their submission by a worker to their
+    // answer, in Stopwatch ticks: what DescribeMemory prints, so a reader sees whether the volume's work is bound by its
+    // jobs' count and round trips or by their GPU time. Written on the recording thread, read by a describer.
+    private readonly long[] m_kindJobs = new long[5];
+    private readonly long[] m_kindUnits = new long[5];
+    private readonly long[] m_kindTicks = new long[5];
+    private void CountAnswered(Job query) {
+        var kind = (int)KindOf(query);
+
+        _ = Interlocked.Increment(location: ref m_kindJobs[kind]);
+        _ = Interlocked.Add(location1: ref m_kindUnits[kind], value: UnitsOf(query));
+        if (query.SubmittedAt != 0L) { _ = Interlocked.Add(location1: ref m_kindTicks[kind], value: (Stopwatch.GetTimestamp() - query.SubmittedAt)); }
+    }
+    private string DescribeJobs() {
+        var text = new System.Text.StringBuilder(capacity: 160);
+
+        _ = text.Append(value: "trace-jobs=[");
+        for (var kind = 0; (kind < m_kindJobs.Length); kind++) {
+            var jobs = Interlocked.Read(location: ref m_kindJobs[kind]);
+            var milliseconds = ((jobs == 0L) ? 0.0 : ((Interlocked.Read(location: ref m_kindTicks[kind]) * 1000.0) / (Stopwatch.Frequency * (double)jobs)));
+
+            _ = text.Append(provider: System.Globalization.CultureInfo.InvariantCulture,
+                handler: $"{((kind == 0) ? string.Empty : ",")}{((JobKind)kind).ToString().ToLowerInvariant()}:{jobs}/{Interlocked.Read(location: ref m_kindUnits[kind])}u/{milliseconds:0.0}ms");
+        }
+        return text.Append(value: ']').ToString();
+    }
     // The kinds of probe job, each with its own measured rate (m_rates, in this order).
     private enum JobKind { Trace, Relight, Select, Meter, Commit }
     private static JobKind KindOf(Job query) => (query.CommitSource is not null) ? JobKind.Commit : query.Meter ? JobKind.Meter :
@@ -632,7 +667,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     internal string DescribeMemory() {
         var scene = m_sceneRegion?.OwnedBytes ?? default;
         var feedback = m_feedback?.OwnedBytes ?? default;
-        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0}");
+        return FormattableString.Invariant($"trace-scene-device-bytes={scene.DeviceLocal} trace-scene-upload-bytes={scene.HostVisible} trace-scene-shadow-bytes={m_sceneRegion?.ShadowBytes ?? 0} trace-scene-changes={m_sceneUploads} trace-scene-adoptions={m_sceneAdoptions} trace-scene-written-bytes={m_sceneWrittenBytes} trace-scene-last-change-bytes={m_sceneLastBytes} trace-hits-device-bytes={m_hitCache?.SizeBytes ?? 0} trace-feedback-device-bytes={feedback.DeviceLocal} trace-feedback-upload-bytes={feedback.HostVisible} trace-feedback-shadow-bytes={m_feedback?.ShadowBytes ?? 0} {DescribeJobs()}");
     }
     public void Stop() {
         lock (m_gate) {
@@ -683,6 +718,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         // Whether the job recorded the meter cache's fill or the hit cache's clear, which its completion discharges.
         public bool FillsMeterCache;
         public bool ClearsHitCache;
+        // When a worker submitted the job (SubmitAsync), in Stopwatch ticks; zero for one never submitted.
+        public long SubmittedAt;
         public int Geometry;
         public int Window;
     }
