@@ -3370,14 +3370,13 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
-- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
-  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
-  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
-  before reaching the repaired Drive grant. Wire the standard authored camera
-  mode, body and rig into the debug world, then verify its entry, movement and
-  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
-  the grant without making the seat an operator; a temporary authored snapshot
-  is only a runtime probe, not the missing standard-package design.
+- [medium] Free Cam has no entry handoff: the camera body rests where it was left
+  (`worlds/standard/free-camera.puck`'s `rest`, 40 m over the debug stage at first),
+  because a rule's `pose` effect takes a literal position and nothing copies the
+  seat's eye to the camera body on entry. Add a pose-from-body effect or let the
+  camera application start the body at the perceiving pose. The play wheel's four
+  rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
+  ring or a page entry.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged
