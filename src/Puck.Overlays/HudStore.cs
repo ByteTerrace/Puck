@@ -1,4 +1,6 @@
 
+using Puck.Abstractions.Presentation;
+
 namespace Puck.Overlays;
 
 /// <summary>Which band an <see cref="OverlayHudPanel"/> draws in relative to the five first-party overlay writers —
@@ -26,6 +28,9 @@ public enum OverlayHudElementKind : byte {
 
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value.</summary>
     Gauge,
+
+    /// <summary>A scrolling recent series with an authored range and optional reference line.</summary>
+    Plot,
 
     /// <summary>A sampled frame: the element rect shows the live content <see cref="OverlayHudElement.FrameSource"/>
     /// names, drawn through <see cref="OverlayFrameSlots"/>.</summary>
@@ -82,6 +87,11 @@ public readonly record struct OverlayHudTemplateSegment(bool IsPlaceholder, stri
 /// <paramref name="FrameSourceB"/> alone, 1 shows <paramref name="FrameSource"/> alone, so a fade runs 0 to 1 from
 /// the outgoing B to the incoming A. Ignored when <paramref name="FrameSourceB"/> is -1 or cannot be bound: the
 /// winner then draws at full weight.</param>
+/// <param name="PlotSamples">The requested recent-series window.</param>
+/// <param name="PlotMin">The lower plot bound, in source units.</param>
+/// <param name="PlotMax">The upper plot bound.</param>
+/// <param name="PlotReference">An optional constant reference line.</param>
+/// <param name="PlotReferenceBinding">An optional live reference reading.</param>
 public readonly record struct OverlayHudElement(
     OverlayHudElementKind Kind,
     OverlayHudRect Rect,
@@ -95,7 +105,12 @@ public readonly record struct OverlayHudElement(
     float Radius = 0f,
     float Opacity = 1f,
     int FrameSourceB = -1,
-    float FrameMix = 0f
+    float FrameMix = 0f,
+    int PlotSamples = 60,
+    float PlotMin = 0f,
+    float PlotMax = 1f,
+    float? PlotReference = null,
+    string? PlotReferenceBinding = null
 );
 /// <summary>One HUD panel the writer resolves and draws — the presentation-side twin of
 /// <c>Puck.World.WorldHudPanel</c>.</summary>
@@ -145,6 +160,18 @@ public readonly record struct OverlayHudFrame(
 /// keeps binding resolution out of Puck.Overlays (which cannot know what <c>world.tick</c> or a seat position means)
 /// while keeping the actual per-frame resolve inside the writer (presentation float; no document round-trip).</summary>
 public interface IHudBindingResolver {
+    /// <summary>Reads a named-reading binding as raw data, including its availability and sample index.</summary>
+    /// <param name="binding">The binding token.</param>
+    /// <param name="seat">The panel's seat, or -1 at world scope.</param>
+    /// <returns>The reading, absent when the binding has no reading source.</returns>
+    PresentationReading ReadReading(string binding, int seat) => default;
+
+    /// <summary>Copies a recent-series binding's newest samples, in chronological order.</summary>
+    /// <param name="binding">The recent-series token.</param>
+    /// <param name="seat">The panel's seat, or -1 at world scope.</param>
+    /// <param name="destination">The requested window.</param>
+    /// <returns>The entries written, at most the destination length.</returns>
+    int CopyRecent(string binding, int seat, Span<PresentationReading> destination) => 0;
     /// <summary>Resolves a binding token for a panel's scope.</summary>
     /// <param name="binding">The token (e.g. <c>world.tick</c>).</param>
     /// <param name="seat">The 0-based local roster slot whose player-scope panel the token is on, which reads the

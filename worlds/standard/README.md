@@ -1,5 +1,11 @@
 # Puck standard
 
+[`benchmark.puck`](benchmark.puck) is an optional HUD panel imported by the
+debug world. `world.benchmark overlay on|off|auto` shows it on demand, hides
+it, or shows it during a run. It authors the interval/work plots, budget
+reference, chapter, tick and current figures over generic presentation
+readings; importing worlds can override its `benchmark` panel by id.
+
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 

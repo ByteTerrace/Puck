@@ -1055,7 +1055,8 @@ of `player.bind` and `player.bindings` documents the console surface.
 `WorldHud.cs` holds the `hud` section: panels of elements, each element bound
 to a value through `HudBindingVocabulary`—a closed vocabulary (`world.tick`,
 `world.fps`, `seat.<n>.position.*`, `population.active`, `history.cursor`,
-`history.window`, `state.<row>`, `state.<row>.<key>`), refused by name outside
+`history.window`, `state.<row>`, `state.<row>.<key>`, `reading.<name>`,
+`recent.<name>`), refused by name outside
 it—and each panel carrying its
 draw band (`WorldHudLayer`: under, over, or replace) as a document property.
 `state.<row>` binds the row's own SLOT cell (unchanged); `state.<row>.<key>`
@@ -1067,6 +1068,18 @@ gates capacities, ids, and—for a `state.*` binding—that the named row (and,
 for the cell form, the named cell) actually exists in the document's own
 `state` section. An owned identity world may carry the same HUD and binding
 primitives as any other world.
+
+`reading.<name>` resolves a registered `PresentationReadings` source and
+`recent.<name>` exposes its recent values. Unknown runtime names are absent;
+registered sources without a measurement are unmeasured, distinct from a
+present zero. A `Plot` element requires a recent binding and authors its
+`plotSamples`, `plotMin`/`plotMax`, and optional `plotReference` or
+`plotReferenceBinding` (a reading binding). `HudRowValidation.ValidateElements`
+bounds the sum of requested samples per panel by
+`WorldHudCapacity.MaxPlotSamplesPerPanel`; `WorldOverlayCapacity.FromSchema`
+passes that reservation to the renderer independently of ordinary element
+costs. The plot draws recent samples oldest to newest, right-aligned in a
+partially filled window, and clips values to its authored range.
 
 A `Text` element may carry a `Template` instead of a `Binding`—literal text
 interleaved with `{token}` placeholders, each token the SAME closed

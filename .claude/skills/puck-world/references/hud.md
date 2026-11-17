@@ -73,7 +73,7 @@ units and articulation; `worlds/debug/guide.puck` authors the synthesized guide
 and sampled map sign. `WorldVoiceSampleLoader` loads six vowel/consonant WAV
 classes relative to their set; both sources share `TextSpeechSource`'s schedule.
 
-`WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 4`,
+`WorldHudCapacity` (the DOCUMENT contract): `MaxWorldPanels = 5`,
 `MaxElementsPerPanel = 24`, `MaxSeatPanels = 1`, `MaxElementsPerSeatPanel =
 12`, and `MaxFrameSources = 8` structurally unique `Frame` sources per HUD
 document (repeated elements naming the same source share one slot). World and
@@ -118,6 +118,32 @@ binding the renderer silently treats as unbound; `StateBinding.TryParse` is its
 `state.*` arm, the one parse every bindable token (`BindableScalar`,
 `BindableColor`, `WorldColor`, overlay and binding-bar cells) goes through, and a
 bindable stores the parsed `StateBinding` rather than re-parsing per read.
+
+The generic `reading.<name>` and `recent.<name>` arms resolve registered
+`PresentationReadings` sources. `HostFrameTimeline.RegisterReadings` publishes
+`host.frames.interval` and `host.frames.work` in milliseconds straight from
+its closed-iteration ring, including the same zero-based sample indices
+`host.frames` reports. `WorldBenchmarkCommandModule` publishes its chapter,
+tick, state, budget and visibility through that registry. Unknown runtime
+sources are **absent**, registered sources awaiting samples are **unmeasured**,
+and measured zero is **present**; text and plot status labels preserve those
+distinctions. There is no HUD sampling ring.
+
+`WorldHudElementKind.Plot` requires a `recent.<name>` binding. Its authored
+`plotSamples` window, `plotMin`/`plotMax` range and optional constant
+`plotReference` or live `plotReferenceBinding` drive `HudWriter.EmitPlot`.
+The shared `HudRowValidation.ValidateElements` bounds total plot samples per
+panel by `WorldHudCapacity.MaxPlotSamplesPerPanel`. `WorldOverlayCapacity`
+transports that bound to `OverlayChannels`, which reserves each bar's
+`HudWriter.PlotSampleElementCost` separately from ordinary element records.
+The writer also bounds emission by that per-panel reservation.
+
+The optional standard panel is `worlds/standard/benchmark.puck`, imported by
+the debug world. `world.benchmark overlay on|off|auto` controls its visibility
+reading; `auto` follows a playing run. Its predicate is generic
+`{ $type: "reading", name: "benchmark.visible" }`, which holds only for a
+present nonzero value or nonempty text. `world.hud` echoes visibility, reading
+state, sample index, plot window and reference through the render resolver.
 
 Either `state.*` form may carry a trailing `.$target` facet —
 `state.<row>.$target` or `state.<row>.<key>.$target` — reading the addressed

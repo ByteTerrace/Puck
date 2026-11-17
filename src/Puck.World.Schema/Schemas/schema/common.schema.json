@@ -4232,6 +4232,23 @@
       "additionalProperties": false,
       "title": "OverlayPredicateState"
     },
+    "OverlayPredicateReading": {
+      "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+      "properties": {
+        "$type": {
+          "const": "reading"
+        },
+        "name": {
+          "description": "The registered source name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "title": "OverlayPredicateReading"
+    },
     "OverlayPredicate": {
       "description": "An overlay element\u0027s visibility condition \u2014 the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.",
       "type": "object",
@@ -4262,6 +4279,9 @@
         },
         {
           "$ref": "#/$defs/OverlayPredicateState"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateReading"
         }
       ],
       "title": "OverlayPredicate"
@@ -4299,6 +4319,9 @@
         },
         {
           "$ref": "#/$defs/OverlayPredicateState"
+        },
+        {
+          "$ref": "#/$defs/OverlayPredicateReading"
         }
       ],
       "title": "OverlayPredicate"
@@ -7512,6 +7535,7 @@
         "Rect",
         "Text",
         "Gauge",
+        "Plot",
         "Frame"
       ],
       "title": "WorldHudElementKind"
@@ -7738,6 +7762,37 @@
         "voice": {
           "$ref": "#/$defs/WorldVoiceProfile",
           "description": "Optional Text voice. Speaks the resolved literal, binding or template once on visible arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.",
+          "default": null
+        },
+        "plotSamples": {
+          "description": "The recent samples a Plot requests; counted against the panel\u0027s bar reservation.",
+          "type": "integer",
+          "default": 60
+        },
+        "plotMin": {
+          "description": "The plot\u0027s lower bound, in the reading\u0027s units.",
+          "type": "number",
+          "default": 0
+        },
+        "plotMax": {
+          "description": "The plot\u0027s upper bound, strictly above PlotMin.",
+          "type": "number",
+          "default": 1
+        },
+        "plotReference": {
+          "description": "An optional constant reference line in the reading\u0027s units.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "plotReferenceBinding": {
+          "description": "An optional reading binding for a live reference line, instead of PlotReference.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         }
       },

@@ -1,0 +1,58 @@
+// Optional benchmark instrumentation. Each plot shows the newest closed host iterations, oldest at the left.
+// Values above 50 ms clip at the top; the current numeric reading retains their full value.
+hud {
+  panels [
+    {
+      id: "benchmark"
+      rect { x: 0.56, y: 0.025, width: 0.42, height: 0.32 }
+      layer: Over
+      style: Panel
+      visible { $type: "reading", name: "benchmark.visible" }
+      elements [
+        {
+          id: "title", kind: Text, style: Primary
+          rect { x: 0.03, y: 0.025, width: 0.94, height: 0.055 }
+          template: "Benchmark: {reading.benchmark.state} | tick {reading.benchmark.tick}"
+        }
+        {
+          id: "chapter", kind: Text, style: Dim
+          rect { x: 0.03, y: 0.1, width: 0.94, height: 0.05 }
+          binding: "reading.benchmark.chapter"
+        }
+        {
+          id: "interval-value", kind: Text, style: Accent
+          rect { x: 0.03, y: 0.19, width: 0.94, height: 0.055 }
+          template: "Interval {reading.host.frames.interval} ms | budget {reading.benchmark.budget}"
+        }
+        {
+          id: "interval", kind: Plot, style: Accent
+          rect { x: 0.03, y: 0.27, width: 0.94, height: 0.235 }
+          binding: "recent.host.frames.interval"
+          plotSamples: 60
+          plotMin: 0
+          plotMax: 50
+          plotReferenceBinding: "reading.benchmark.budget"
+        }
+        {
+          id: "work-value", kind: Text, style: Positive
+          rect { x: 0.03, y: 0.55, width: 0.94, height: 0.055 }
+          template: "Work {reading.host.frames.work} ms (interval less wait)"
+        }
+        {
+          id: "work", kind: Plot, style: Positive
+          rect { x: 0.03, y: 0.63, width: 0.94, height: 0.235 }
+          binding: "recent.host.frames.work"
+          plotSamples: 60
+          plotMin: 0
+          plotMax: 50
+          plotReferenceBinding: "reading.benchmark.budget"
+        }
+        {
+          id: "legend", kind: Text, style: Dim
+          rect { x: 0.03, y: 0.91, width: 0.94, height: 0.045 }
+          text: "60 iterations | 0..50 ms | white: budget | tops clipped"
+        }
+      ]
+    }
+  ]
+}

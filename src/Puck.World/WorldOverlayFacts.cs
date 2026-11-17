@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.World.Client;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
 
@@ -22,6 +23,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
     private readonly PlayerRoster m_roster;
     private readonly Func<InputRouter> m_router;
     private readonly WorldSeatBindings m_seatBindings;
+    private readonly PresentationReadings? m_readings;
     private readonly WorldSpeechClock m_speech;
     private readonly WorldCreationInstances m_stamps;
     private readonly Func<WorldWheelFeed?> m_wheel;
@@ -34,7 +36,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
 
     /// <summary>Initializes the evaluator over the fact owners. Presentation-only owners are optional: a headless
     /// composition has no pointer, wheel, or console, and their facts read false there.</summary>
-    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldCreationInstances stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles) {
+    public WorldOverlayFacts(WorldClient client, PlayerRoster roster, WorldSeatBindings seatBindings, WorldPerceptionAnchor perception, WorldCreationInstances stamps, WorldSpeechClock speech, Func<InputRouter> router, Func<WorldWheelFeed?> wheel, WorldPointer? pointer, IConsoleSessions? consoles, PresentationReadings? readings = null) {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(roster);
         ArgumentNullException.ThrowIfNull(seatBindings);
@@ -53,6 +55,7 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
         m_wheel = wheel;
         m_pointer = pointer;
         m_consoles = consoles;
+        m_readings = readings;
     }
 
     /// <summary>The body that most recently spoke, or -1 when nothing has.</summary>
@@ -389,6 +392,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     mirror: m_client.StateMirror,
                     state: state
                 );
+            case OverlayPredicate.Reading reading:
+                return m_readings?.Read(reading.Name).Holds == true;
             default:
                 return true;
         }
@@ -517,6 +522,8 @@ internal sealed class WorldOverlayFacts : IOverlayPredicateEvaluator {
                     ? 1f
                     : 0f
                 );
+            case OverlayPredicate.Reading reading:
+                return m_readings?.Read(reading.Name).Holds == true ? 1f : 0f;
             default:
                 return 1f;
         }

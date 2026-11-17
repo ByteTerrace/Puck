@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.Launcher;
 
@@ -83,6 +84,28 @@ public sealed class HostFrameTimeline {
     public TimeProvider Time { get; }
     /// <summary>Gets the recording every closing iteration is also written to, or <see langword="null"/>.</summary>
     public HostFrameRecording? Recording => m_recording;
+
+    /// <summary>Registers interval and work readings over this timeline's closed iterations. Both the latest value
+    /// and the recent series use the same ring and units as <c>host.frames</c>; reading never resets it.</summary>
+    /// <param name="readings">The host's presentation registry.</param>
+    public void RegisterReadings(PresentationReadings readings) {
+        readings.Register("host.frames.interval", () => ReadIteration(m_count - 1, false), destination => CopyRecent(destination, false));
+        readings.Register("host.frames.work", () => ReadIteration(m_count - 1, true), destination => CopyRecent(destination, true));
+    }
+
+    private PresentationReading ReadIteration(long index, bool work) {
+        if (index < 0) { return new(PresentationReadingState.Unmeasured); }
+        var slot = (int)(index % Capacity);
+        return new(PresentationReadingState.Present, work ? WorkOf(slot) : Milliseconds(m_intervals[slot]), Sequence: index);
+    }
+
+    private int CopyRecent(Span<PresentationReading> destination, bool work) {
+        var count = (int)Math.Min(Math.Min(m_count, Capacity), destination.Length);
+        for (var index = 0; index < count; index++) {
+            destination[index] = ReadIteration(m_count - count + index, work);
+        }
+        return count;
+    }
 
     /// <summary>Starts writing every iteration that closes from now on to a recording as well as the ring. The ring
     /// and <see cref="Reset"/> are unaffected, so a reader of <c>host.frames</c> sees what it saw before.</summary>
