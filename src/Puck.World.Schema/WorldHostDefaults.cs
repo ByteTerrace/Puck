@@ -147,10 +147,10 @@ public sealed record WorldPlacementPolicyDefaults(
 /// <see cref="WorldDefinition.UnauthoredSimulationRateHz"/> — the distinct rate-0 resident world is reached only
 /// by authoring <c>rateHz</c> 0 by name.
 /// <para><b>The derived-floor seam.</b> This record is deliberately the one place a follow-on validation pass adds
-/// the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived
-/// contact clamp (<c>contactHertz &lt;= RateHz * n / 8</c> at substep count <c>n</c> — it coincides with
-/// <c>RateHz / 4</c> only at <c>n</c> = 2), and the representable band — none of which is built yet. The clamp's
-/// <c>n</c> is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived
+/// the physics floor (from body size/speed), the interactivity floor (from input latency), and the representable
+/// band; these floors are not built yet. The rigid solver already clamps authored contact frequency to
+/// <c>RateHz * n / 8</c> at substep count <c>n</c>, supplied by <c>collision.bodyContacts.rigidSubstepCeiling</c>.
+/// It coincides with <c>RateHz / 4</c> only at <c>n</c> = 2. A derived
 /// floor belongs here, beside the rate it constrains, never as a second section.</para></param>
 public sealed record WorldSimulationDefaults(
     int RateHz

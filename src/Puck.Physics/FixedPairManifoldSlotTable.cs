@@ -69,12 +69,17 @@ public struct FixedPairManifoldSlot : IManifoldSlot<FixedTwoBodyContact> {
     public long RollingMass1Raw;
     /// <summary>The effective angular mass raw about <see cref="Tangent2"/>, at <see cref="FixedRigidScales.EffectiveMass"/>.</summary>
     public long RollingMass2Raw;
+    /// <summary>The effective angular mass raw about <see cref="Normal"/>, at
+    /// <see cref="FixedRigidScales.EffectiveMass"/>; zero disables torsional resistance this step.</summary>
+    public long TorsionalMassRaw;
     /// <summary>The accumulated rolling-resistance angular impulse raw about <see cref="Tangent1"/> (metres times an
     /// impulse raw at <see cref="FixedRigidScales.Impulse"/>) for the current step; it starts each step at zero.</summary>
     public long RollingImpulse1Raw;
     /// <summary>The accumulated rolling-resistance angular impulse raw about <see cref="Tangent2"/> for the current
     /// step.</summary>
     public long RollingImpulse2Raw;
+    /// <summary>The accumulated angular impulse raw about <see cref="Normal"/> for this step; starts at zero.</summary>
+    public long TorsionalImpulseRaw;
     /// <summary>What the slot is doing this step.</summary>
     public FixedPairManifoldSlotDisposition Disposition;
 

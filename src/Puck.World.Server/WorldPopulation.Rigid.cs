@@ -17,12 +17,14 @@ public sealed partial class WorldPopulation {
     /// <see cref="WorldBodyContactPolicy.MaximumPairsPerBody"/> body contacts, each of
     /// <see cref="FixedPairManifoldSlotTable.Capacity"/> slots.</summary>
     public const int MaximumRigidContactSlotsPerBody = ((WorldBodyContactPolicy.MaximumPairsPerBody + 1) * FixedPairManifoldSlotTable.Capacity);
+
     // How far a box face corner may lie outside the other box and still be clamped onto it as a contact point.
     private static readonly FixedQ4816 RigidPairClipMargin = FixedQ4816.FromDouble(value: 0.001d);
 
     /// <summary>Gets the rigid solver's rest offset (<see cref="FixedRigidSolverOptions.RestOffset"/>): the separation, in
     /// metres past a surface's contact skin or a body's own surface, a rigid contact settles at.</summary>
     public static FixedQ4816 RigidRestOffset { get; } = new FixedRigidSolverOptions().RestOffset;
+
     /// <summary>Gets the rest band, twice <see cref="RigidRestOffset"/>: a resting rigid body lies within this of its
     /// support's skin, and body pairs within it of each other keep their contact.</summary>
     public static FixedQ4816 RigidRestBand => (RigidRestOffset + RigidRestOffset);
@@ -36,6 +38,7 @@ public sealed partial class WorldPopulation {
     private readonly List<FixedTwoBodyContact> m_rigidCandidates = [];
     private readonly List<RigidPairHit> m_rigidPairHits = [];
     private List<int>?[] m_rigidContactReferrers = [];
+
     private FixedRigidWorld? m_rigidWorld;
     private ulong m_rigidTickStepTicks;
 
@@ -96,9 +99,15 @@ public sealed partial class WorldPopulation {
             (m_rigidWorld is not { } world) ||
             (world.Options.RateHz != rateHz) ||
             (world.Options.SubstepCount != m_rigidContactPolicy.SubstepCeiling) ||
-            (world.Options.RestitutionThreshold != m_rigidContactPolicy.PairRestitutionThreshold)
+            (world.Options.RestitutionThreshold != m_rigidContactPolicy.PairRestitutionThreshold) ||
+            (world.Options.ContactHertz != m_rigidContactPolicy.ContactHertz) ||
+            (world.Options.ContactDampingRatio != m_rigidContactPolicy.ContactDampingRatio) ||
+            (world.Options.ContactSpeed != m_rigidContactPolicy.ContactSpeed)
         ) {
             m_rigidWorld = world = new FixedRigidWorld(options: new FixedRigidSolverOptions {
+                ContactDampingRatio = m_rigidContactPolicy.ContactDampingRatio,
+                ContactHertz = m_rigidContactPolicy.ContactHertz,
+                ContactSpeed = m_rigidContactPolicy.ContactSpeed,
                 RateHz = rateHz,
                 RestOffset = RigidRestOffset,
                 RestitutionThreshold = m_rigidContactPolicy.PairRestitutionThreshold,
@@ -172,7 +181,7 @@ public sealed partial class WorldPopulation {
             }
 
             if (m_rigidCandidates.Count > 0) {
-                Associate(contact: body.RigidContact(partner: WorldRigidContacts.Surface, created: out _));
+                Associate(contact: body.RigidContact(created: out _, partner: WorldRigidContacts.Surface));
             }
         }
 
@@ -217,7 +226,7 @@ public sealed partial class WorldPopulation {
                 continue;
             }
 
-            var contact = ownerBody.RigidContact(partner: partner, created: out var created);
+            var contact = ownerBody.RigidContact(created: out var created, partner: partner);
 
             if (created) {
                 AddRigidReferrer(owner: owner, partner: partner);
@@ -241,6 +250,12 @@ public sealed partial class WorldPopulation {
         for (var surfaces = 0; (surfaces < 2); surfaces++) {
             foreach (var index in m_rigidRoster) {
                 AddRigidStepManifolds(index: index, surfaces: (surfaces == 1));
+            }
+            if (surfaces == 0) {
+                // A carried lower-index body can own the pair, but is never an integrated member of the roster.
+                for (var carry = 0; (carry < m_activeCarryCount); carry++) {
+                    AddRigidStepManifolds(index: m_activeCarries[carry].TargetIndex, surfaces: false);
+                }
             }
         }
 
@@ -277,6 +292,9 @@ public sealed partial class WorldPopulation {
         foreach (var index in m_rigidRoster) {
             ReleaseUntouchedRigidContacts(index: index);
         }
+        for (var carry = 0; (carry < m_activeCarryCount); carry++) {
+            ReleaseUntouchedRigidContacts(index: m_activeCarries[carry].TargetIndex);
+        }
     }
     // Adds one body's touched manifolds of one kind (its surface contact, or its body contacts) to the step, each with
     // its solver views and the pair's coefficients.
@@ -297,7 +315,7 @@ public sealed partial class WorldPopulation {
                 manifold.Restitution = body.RigidRestitution;
                 manifold.RollingResistance = body.RigidRollingResistance;
             } else if (m_entries[contact.Partner].Body is { IsRigid: true } other) {
-                if (!other.RigidStepPrepared) {
+                if (!other.RigidStepPrepared && (other.CarriedBy is null)) {
                     continue;
                 }
 
@@ -320,6 +338,12 @@ public sealed partial class WorldPopulation {
     // Whether a pair with a sleeper is the resting contact the sleeper was parked in: an occupied contact between them
     // whose overlap reaches no deeper than the contact reach plus the rigid support travel (FieldWakeMargin).
     private bool RestingContactHolds(int left, int right, FixedQ4816 depth) {
+        if (((m_entries[left].Body is { CarriedBy: not null } heldLeft) &&
+                ((heldLeft.FixedPosition != heldLeft.FixedPreviousPosition) || (heldLeft.ApproximateWorldVelocity() != FixedVector3.Zero))) ||
+            ((m_entries[right].Body is { CarriedBy: not null } heldRight) &&
+                ((heldRight.FixedPosition != heldRight.FixedPreviousPosition) || (heldRight.ApproximateWorldVelocity() != FixedVector3.Zero)))) {
+            return false;
+        }
         var (owner, partner) = WorldRigidContacts.Owner(left: left, leftRigid: m_entries[left].Body!.IsRigid, right: right, rightRigid: m_entries[right].Body!.IsRigid);
 
         return (
@@ -348,7 +372,7 @@ public sealed partial class WorldPopulation {
             }
         }
 
-        if (index < m_rigidContactReferrers.Length && (m_rigidContactReferrers[index] is { } referrers)) {
+        if ((index < m_rigidContactReferrers.Length) && (m_rigidContactReferrers[index] is { } referrers)) {
             foreach (var owner in referrers) {
                 if (
                     (m_entries[owner].Body is { } ownerBody) &&
@@ -535,13 +559,14 @@ public sealed partial class WorldPopulation {
             slot.IdleSteps = image.IdleSteps;
         }
     }
+
     /// <summary>Restores one live body's owned contacts from its captured image: the scoped replay's restore of a body
     /// continuation.</summary>
     /// <param name="index">The body's population index.</param>
     /// <param name="images">The captured contact slots.</param>
     internal void RestoreRigidContacts(int index, ReadOnlySpan<WorldRigidContactSlotImage> images) {
         ForgetRigidContacts(index: index, keepReferred: true);
-        ApplyRigidContactImages(index: index, images: images);
+        ApplyRigidContactImages(images: images, index: index);
 
         foreach (var contact in m_entries[index].Body!.RigidContacts) {
             if (contact.Partner >= 0) {
@@ -549,6 +574,7 @@ public sealed partial class WorldPopulation {
             }
         }
     }
+
     // A captured contact image names valid slots in ascending (partner, slot) order, on a rigid body, with partners the
     // owner rule (WorldRigidContacts.Owner) gives this body: the static field, a kit body, or a rigid body of higher index.
     private void ValidateRigidContactImages(in WorldPopulationEntryCheckpoint captured, WorldPopulationEntryCheckpoint?[] restored, byte seatKit) {

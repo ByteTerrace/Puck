@@ -427,6 +427,13 @@ public static partial class WorldDefinitionValidator {
 
         var bodyContacts = collision.BodyContacts;
 
+        RequireRange(value: bodyContacts.ContactHertz, min: 0f, max: ((float)FixedQ4816.MaxValue),
+            maxExclusive: true, name: "collision.bodyContacts.contactHertz", errors: errors);
+        RequireRange(value: bodyContacts.ContactDampingRatio, min: 0f, max: ((float)FixedQ4816.MaxValue),
+            maxExclusive: true, name: "collision.bodyContacts.contactDampingRatio", errors: errors);
+        RequireRange(value: bodyContacts.ContactSpeed, min: 0f, max: ((float)FixedQ4816.MaxValue),
+            maxExclusive: true, name: "collision.bodyContacts.contactSpeed", errors: errors);
+
         RequireIntRange(
             value: bodyContacts.CandidateBudget,
             min: 1,

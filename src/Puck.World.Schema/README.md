@@ -2810,7 +2810,12 @@ contacts plus its surface contact. Saturation omits later stable-index pairs, so
 even a fully coincident 4096-body stadium has linear, authored work rather than an
 accidental all-pairs frame. `rigidSubstepCeiling` (default 8, maximum 32) is the
 rigid solver's substeps a tick; the contact softness is formed at that substep
-width. `rigidSubstepTravelFraction` (default 0.5, strictly positive) is the
+width. `contactHertz`, `contactDampingRatio` and `contactSpeed` author its spring
+frequency in hertz, dimensionless damping ratio and maximum push-out speed in
+metres per second. All are non-negative, with neutral zero defaults; the standard
+package chooses 30 Hz, 10 and 3 m/s. Frequency is clamped to one eighth of the
+substep rate. A live retune rebuilds the solver's coefficients.
+`rigidSubstepTravelFraction` (default 0.5, strictly positive) is the
 fraction of a body's bounding radius its solved motion may depart from its
 predicted motion before a guard sweep re-certifies it, floored by
 `rigidSubstepMinimumTravel` (default 0.001 world units, strictly positive).
@@ -2887,7 +2892,8 @@ facet's presence alone is the switch.
 bounded by 1)—the SAME meaning against the static world and, as the pair's
 average, against another rigid body; `rollingResistance` is a non-negative
 lever in metres at scale one (each contact point resists rolling with a torque
-of at most the lever times its normal force); `linearDamping`/`angularDamping`
+of at most the lever times its normal force, and uses the lever as the patch
+radius for torsional resistance about the contact normal); `linearDamping`/`angularDamping`
 are non-negative per-second decay RATES (applied as `1 - rate·dt`, never a
 flat per-tick fraction, so the same authored value decays identically at any
 simulation rate). A rigid kit REQUIRES `collider` with one sphere, capsule,

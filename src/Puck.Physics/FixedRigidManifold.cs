@@ -20,8 +20,8 @@ public sealed class FixedRigidManifold {
     /// <summary>Gets or sets the pair's coefficient of restitution, in <c>[0, 1]</c>.</summary>
     public FixedQ4816 Restitution { get; set; }
     /// <summary>Gets or sets the pair's rolling-resistance lever, in metres and non-negative: each contact point resists
-    /// the bodies' relative rolling (angular velocity about the axes tangent to its surface) with an angular impulse of
-    /// at most this lever times the point's normal impulse.</summary>
+    /// the bodies' relative rolling about the tangent axes and spin about the normal. The tangent impulse and the
+    /// torsional impulse are each bounded by this lever (the patch radius for spin) times the point's normal impulse.</summary>
     public FixedQ4816 RollingResistance { get; set; }
     /// <summary>Gets the effective mass raw, at <see cref="FixedRigidScales.EffectiveMass"/>, of the step's points' common
     /// mode: one impulse at their centroid along their shared normal, which equal increments at every point apply. Zero

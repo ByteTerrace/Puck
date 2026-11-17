@@ -7,13 +7,20 @@ namespace Puck.Physics.Tests;
 /// is independent of the order the candidates were generated in.</summary>
 public sealed class FixedRigidWorldLawTests {
     private const int FloorId = -1;
+
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.1d);
     private static readonly FixedVector3 Up = FixedVector3.UnitY;
     private static readonly FixedVector3 Gravity = new(X: FixedQ4816.Zero, Y: FixedQ4816.FromDouble(value: -9.81d), Z: FixedQ4816.Zero);
 
     // A box world over a floor at y = 0: absolute poses here, solver views in the world, one contact query a pair a step.
     private sealed class BoxWorld(double halfX = 0.1d, double halfY = 0.1d, double halfZ = 0.1d, double mass = 1d, int rateHz = 60, int substeps = 4) {
-        private readonly FixedRigidWorld m_world = new(options: new FixedRigidSolverOptions { RateHz = rateHz, SubstepCount = substeps });
+        private readonly FixedRigidWorld m_world = new(options: new FixedRigidSolverOptions {
+            ContactHertz = FixedQ4816.FromInteger(value: 30L),
+            ContactDampingRatio = FixedQ4816.FromInteger(value: 10L),
+            ContactSpeed = FixedQ4816.FromInteger(value: 3L),
+            RateHz = rateHz,
+            SubstepCount = substeps,
+        });
         private readonly FixedRigidBody m_floor = new();
         private readonly FixedVector3 m_half = new(X: FixedQ4816.FromDouble(value: halfX), Y: FixedQ4816.FromDouble(value: halfY), Z: FixedQ4816.FromDouble(value: halfZ));
 
@@ -25,6 +32,7 @@ public sealed class FixedRigidWorldLawTests {
         internal FixedQ4816 Friction = FixedQ4816.FromDouble(value: 0.6d);
         internal FixedQ4816 Restitution = FixedQ4816.Zero;
 
+        internal int RefusalCount => m_world.RefusalCount;
         internal FixedBodyColliderVolume Volume => new(
             Kind: FixedBodyColliderKind.Box,
             Center: FixedVector3.Zero,
@@ -34,8 +42,6 @@ public sealed class FixedRigidWorldLawTests {
             Radius: FixedQ4816.Zero
         );
 
-        internal int RefusalCount => m_world.RefusalCount;
-
         internal int Add(FixedVector3 position) {
             // A uniform box of half extents (x, y, z): I = m (b^2 + c^2) / 3 about each axis.
             static double Inertia(double mass, double b, double c) => ((mass * ((b * b) + (c * c))) / 3d);
@@ -44,10 +50,10 @@ public sealed class FixedRigidWorldLawTests {
             Orientations.Add(item: FixedQuaternion.Identity);
             Bodies.Add(item: new FixedRigidBody {
                 Acceleration = Gravity,
-                InverseMassRaw = Raw(value: (1d / mass), bits: 40),
-                InverseInertiaXX = Raw(value: (1d / Inertia(mass: mass, b: halfY, c: halfZ)), bits: 40),
-                InverseInertiaYY = Raw(value: (1d / Inertia(mass: mass, b: halfX, c: halfZ)), bits: 40),
-                InverseInertiaZZ = Raw(value: (1d / Inertia(mass: mass, b: halfX, c: halfY)), bits: 40),
+                InverseMassRaw = Raw(bits: 40, value: (1d / mass)),
+                InverseInertiaXX = Raw(value: (1d / Inertia(b: halfY, c: halfZ, mass: mass)), bits: 40),
+                InverseInertiaYY = Raw(value: (1d / Inertia(b: halfX, c: halfZ, mass: mass)), bits: 40),
+                InverseInertiaZZ = Raw(value: (1d / Inertia(b: halfX, c: halfY, mass: mass)), bits: 40),
             });
             FloorManifolds.Add(item: new FixedRigidManifold());
 
@@ -80,7 +86,7 @@ public sealed class FixedRigidWorldLawTests {
                 }
 
                 // A probe of the step's predicted fall: the floor is a candidate once the step could reach it.
-                var reach = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.02d), y: (-Bodies[id].LinearVelocity.Y / FixedQ4816.FromInteger(value: rateHz)) + FixedQ4816.FromDouble(value: 0.02d));
+                var reach = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.02d), y: ((-Bodies[id].LinearVelocity.Y / FixedQ4816.FromInteger(value: rateHz)) + FixedQ4816.FromDouble(value: 0.02d)));
 
                 if (lowest <= reach) {
                     _ = FixedRigidContacts.AppendSurface(body: Shape(id: id), candidates: candidates, normal: Up, separation: lowest,
@@ -104,7 +110,7 @@ public sealed class FixedRigidWorldLawTests {
                 for (var upper = (lower + 1); (upper < Bodies.Count); upper++) {
                     if (!FixedDynamicBodyContacts.TryCorrection(leftPosition: Positions[upper], leftOrientation: Orientations[upper],
                         leftVolumes: [Volume], rightPosition: Positions[lower], rightOrientation: Orientations[lower],
-                        rightVolumes: [Volume], tieBreaker: (lower ^ upper), correction: out var correction)) {
+                        rightVolumes: [Volume], tieBreaker: lower ^ upper, correction: out var correction)) {
                         continue;
                     }
 
@@ -137,6 +143,43 @@ public sealed class FixedRigidWorldLawTests {
     private static FixedVector3 At(double x, double y, double z) => new(X: FixedQ4816.FromDouble(value: x), Y: FixedQ4816.FromDouble(value: y), Z: FixedQ4816.FromDouble(value: z));
 
     [Fact]
+    public void ACurvedPointStopsSpinningOnlyWithALoadedContactPatch() {
+        static FixedQ4816 Spin(double patch, bool loaded) {
+            var body = new FixedRigidBody {
+                Acceleration = (loaded ? Gravity : FixedVector3.Zero),
+                AngularVelocity = At(x: 0d, y: 4d, z: 0d),
+                InverseMassRaw = Raw(bits: 40, value: 1d),
+                InverseInertiaXX = Raw(bits: 40, value: 250d),
+                InverseInertiaYY = Raw(bits: 40, value: 250d),
+                InverseInertiaZZ = Raw(bits: 40, value: 250d),
+            };
+            var floor = new FixedRigidBody();
+            var manifold = new FixedRigidManifold { BodyA = floor, BodyB = body, RollingResistance = FixedQ4816.FromDouble(value: patch) };
+            var world = new FixedRigidWorld(options: new FixedRigidSolverOptions());
+            var point = new FixedTwoBodyContact(AnchorA: FixedVector3.Zero, AnchorB: At(x: 0d, y: -0.1d, z: 0d),
+                BodyIdA: FloorId, BodyIdB: 0, FeatureId: 0, Normal: Up, Separation: FixedQ4816.Zero, SourceId: 0);
+
+            for (var step = 0; (step < 120); step++) {
+                manifold.Associate(candidates: [point]);
+                world.Step(bodies: [body], manifolds: [manifold]);
+                Assert.Equal(expected: 1, actual: manifold.Slots.ActiveCount);
+                for (var slot = 0; (slot < FixedPairManifoldSlotTable.Capacity); slot++) {
+                    if (!manifold.Slots[slot].Occupied) { continue; }
+                    ref readonly var state = ref manifold.Slots[slot];
+                    var limit = ((long)((((Int128)state.NormalImpulseRaw) * manifold.RollingResistance.Value) >> FixedQ4816.FractionBitCount));
+
+                    Assert.True(condition: (Math.Abs(value: state.TorsionalImpulseRaw) <= limit));
+                }
+            }
+            Assert.Equal(expected: 0, actual: world.RefusalCount);
+            return body.AngularVelocity.Y;
+        }
+
+        Assert.True(condition: (FixedQ4816.Abs(value: Spin(loaded: true, patch: 0.001d)) <= FixedQ4816.Epsilon));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 4L), actual: Spin(loaded: true, patch: 0d));
+        Assert.Equal(expected: FixedQ4816.FromInteger(value: 4L), actual: Spin(loaded: false, patch: 0.001d));
+    }
+    [Fact]
     public void ABoxRestingFlatHoldsFourSlotsWithStableFeatureIds() {
         var world = new BoxWorld();
         var box = world.Add(position: At(x: 0d, y: 0.1d, z: 0d));
@@ -154,14 +197,14 @@ public sealed class FixedRigidWorldLawTests {
 
             Assert.Equal(expected: 4, actual: slots.ActiveCount);
             first ??= features;
-            Assert.Equal(expected: first, actual: features);
+            Assert.Equal(actual: features, expected: first);
         }
 
         // The four bottom corners of a cube resting on its -Y face: the corner ids with the Y bit clear.
         Assert.Equal(expected: [0, 1, 4, 5], actual: first!.Where(predicate: static feature => (feature >= 0)).Order());
         Assert.Equal(expected: 0, actual: world.RefusalCount);
         Assert.True(condition: (FixedQ4816.Abs(value: (world.Positions[box].Y - Half)) < FixedQ4816.FromDouble(value: 0.005d)),
-            userMessage: $"the box rests at y={(double)world.Positions[box].Y}");
+            userMessage: $"the box rests at y={((double)world.Positions[box].Y)}");
         Assert.True(condition: (world.Bodies[box].LinearVelocity.Length < FixedQ4816.FromDouble(value: 0.01d)));
     }
     [Fact]
@@ -181,7 +224,7 @@ public sealed class FixedRigidWorldLawTests {
         Assert.True(condition: (world.Orientations[piece].W > FixedQ4816.FromDouble(value: 0.999d)),
             userMessage: $"the piece tipped to {world.Orientations[piece]}");
         Assert.True(condition: (FixedQ4816.Abs(value: (world.Positions[piece].Y - FixedQ4816.FromDouble(value: 0.12d))) < FixedQ4816.FromDouble(value: 0.01d)),
-            userMessage: $"the piece stands at y={(double)world.Positions[piece].Y}");
+            userMessage: $"the piece stands at y={((double)world.Positions[piece].Y)}");
     }
     [Fact]
     public void AStackOfThreeBoxesStandsForSixHundredSteps() {
@@ -201,9 +244,9 @@ public sealed class FixedRigidWorldLawTests {
             var position = world.Positions[level];
 
             Assert.True(condition: (FixedQ4816.Abs(value: (position.Y - FixedQ4816.FromDouble(value: (0.1d + (0.2d * level))))) < FixedQ4816.FromDouble(value: 0.01d)),
-                userMessage: $"box {level} stands at y={(double)position.Y}");
+                userMessage: $"box {level} stands at y={((double)position.Y)}");
             Assert.True(condition: (FixedQ4816.Abs(value: (position.X - FixedQ4816.FromDouble(value: (0.01d * level)))) < FixedQ4816.FromDouble(value: 0.01d)),
-                userMessage: $"box {level} drifted to x={(double)position.X}");
+                userMessage: $"box {level} drifted to x={((double)position.X)}");
             Assert.True(condition: (world.Orientations[level].W > FixedQ4816.FromDouble(value: 0.999d)), userMessage: $"box {level} tipped");
         }
     }
@@ -235,7 +278,7 @@ public sealed class FixedRigidWorldLawTests {
             world.Bodies[1].AngularVelocity = At(x: 0.5d, y: 0.2d, z: -0.4d);
 
             for (var step = 0; (step < 90); step++) {
-                world.Step(order: reverse ? (static candidates => { candidates.Reverse(); return candidates; }) : null);
+                world.Step(order: (reverse ? (static candidates => { candidates.Reverse(); return candidates; }) : null));
             }
 
             return ([.. world.Positions], [.. world.Orientations]);
@@ -244,7 +287,7 @@ public sealed class FixedRigidWorldLawTests {
         var forward = Run(reverse: false);
         var backward = Run(reverse: true);
 
-        Assert.Equal(expected: forward.Positions, actual: backward.Positions);
-        Assert.Equal(expected: forward.Orientations, actual: backward.Orientations);
+        Assert.Equal(actual: backward.Positions, expected: forward.Positions);
+        Assert.Equal(actual: backward.Orientations, expected: forward.Orientations);
     }
 }

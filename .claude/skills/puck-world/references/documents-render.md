@@ -418,7 +418,11 @@ cadence phase, cached steering, and overlap latches through checkpoint/hash.
 (defaults 32/8). Dense saturation omits later stable-index pairs. Do not couple
 these budgets to `collision.events`; sensing and physical correction are
 independent authored costs. `rigidSubstepCeiling` (default 8, maximum 32)
-is the rigid solver's substeps a tick. `rigidSubstepTravelFraction`/`rigidSubstepMinimumTravel`
+is the rigid solver's substeps a tick. `contactHertz`/`contactDampingRatio`/`contactSpeed`
+author spring frequency (Hz), damping ratio and maximum push-out speed (m/s),
+all non-negative with zero defaults. The standard package chooses 30/10/3.
+Frequency is clamped to one eighth of the substep rate.
+`rigidSubstepTravelFraction`/`rigidSubstepMinimumTravel`
 (defaults 0.5/0.001) bound how far a body's solved motion may depart from its
 predicted motion before a guard sweep re-certifies it. `rigidRestSpeed`/`rigidRestHoldSeconds`
 (defaults 0.05/0.25) are the threshold on the fastest point's speed (linear plus

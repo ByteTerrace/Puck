@@ -535,21 +535,16 @@ The population asks a body for a contact and writes the manifold it gets back
 (`WorldBody.RigidContact`), and the solver writes every manifold it is handed
 (`FixedRigidWorld.Step`). Of two rigid bodies the lower index owns the pair
 (`WorldRigidContacts.Owner`), and the pair loop writes the owner's manifold
-when only the partner stepped **[opened]**
-(`src/Puck.World.Server/WorldPopulation.Rigid.cs:216`):
+when only the partner stepped (`WorldPopulation.SolveRigidContacts`)
+**[opened]**.
 
-```csharp
-            if (!ownerBody.RigidStepPrepared && !m_entries[partner].Body!.RigidStepPrepared) {
-                continue;
-            }
-```
-
-By this memo's reading no unprepared rigid owner reaches that line today: the
-contact set leaves out carried bodies, a sleeper is woken before its hit is
-recorded, and the roster prepares every awake rigid body that has a collider
-(`WorldPopulation.ResolveDynamicContacts`, `WorldPopulation.SolveRigidContacts`)
-**[inference]**. A write to a contact whose owner is not stepping does happen
-today by another path: a body that teleports or leaves its slot releases the
+An unprepared rigid owner takes that path when a carried body owns a pair
+with a higher-index free rigid body. Carried bodies enter the contact set as
+static solver sides, and their owned manifolds join the solve without putting
+them in the integration roster (`WorldPopulation.ResolveDynamicContacts`,
+`WorldPopulation.SolveRigidContacts`; the server law
+`ACarriedBodyPushesWithItsVelocityThroughTheSolveInEitherIndexOrder` exercises
+both owner orders). A body that teleports or leaves its slot also releases the
 contacts other bodies own with it (`WorldPopulation.ForgetRigidContacts`), and
 a restore writes slots through the same objects
 (`WorldPopulation.ApplyRigidContactImages`).
@@ -558,10 +553,10 @@ So a contact's state is written from outside its owner, for an owner that may
 not be stepping, through an object graph `ref readonly` does not reach. A slot
 also mixes two kinds of field: nine that persist and a checkpoint carries
 (occupancy, source and feature identity, both anchors, the normal, normal
-and friction impulses, and the idle count), and sixteen the
+and friction impulses, and the idle count), and eighteen the
 solver derives again each step. Whether a contact was touched this step is a
-third kind: a flag on the object that only a stepping owner's release pass
-clears (`WorldPopulation.ReleaseUntouchedRigidContacts`) and that no
+third kind: a flag on the object that the free and carried owners' release passes
+clear (`WorldPopulation.ReleaseUntouchedRigidContacts`) and that no
 checkpoint carries.
 
 **Options.**
@@ -569,7 +564,7 @@ checkpoint carries.
 | Option | Cost | Fails at | Closes |
 |---|---|---|---|
 | C1. Keep the objects; the population takes the writable manifolds once a step for the bodies it solves | None | The unprepared owner above, and a restore's or a release's write to another body's contact: the door is a convention | Nothing the compiler holds |
-| C2. Store whole slots as values behind the body's holder; the solver writes them in place through an accessor it calls per pass | A solver generic over a slot source; a door call per manifold per pass | The body stores the solver's sixteen derived fields for good, and the encoder must skip them, which is a list of exemptions where an omitted field hides (F4) | F5 for contacts, by the compiler |
+| C2. Store whole slots as values behind the body's holder; the solver writes them in place through an accessor it calls per pass | A solver generic over a slot source; a door call per manifold per pass | The body stores the solver's eighteen derived fields for good, and the encoder must skip them, which is a list of exemptions where an omitted field hides (F4) | F5 for contacts, by the compiler |
 | C3. Split the slot. The body stores the persistent state as values behind its holder; the solver works on step scratch; each associated contact is loaded from its owner's read side and stored back through its owner's door | A `Puck.Physics` change: the state struct, a step that takes spans, load and store; two copies of sixteen small structs per associated contact per step | A store that is forgotten loses a warm start (F3, visible in the solve), never a digest | F5 for contacts, by the compiler; no exemption list, because the stored type is exactly the continuation |
 
 **Favoured: C3.** It is the shape the rigid body's own motion already has (a

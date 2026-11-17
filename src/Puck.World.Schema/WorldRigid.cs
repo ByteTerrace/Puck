@@ -27,7 +27,8 @@ namespace Puck.World;
 /// body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a
 /// torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of
 /// rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid
-/// body the pair's average applies, and it never resists spin about the contact normal. Non-negative; zero (the default)
+/// body the pair's average applies. It is also the patch radius bounding torsional resistance about the contact normal,
+/// so a body spun on a curved point settles too. Non-negative; zero (the default)
 /// applies none.</param>
 /// <param name="LinearDamping">The linear-velocity decay rate, per second — applied as <c>(1 - rate·dt)</c> each
 /// tick, so the same authored value decays velocity the same way whatever the world's simulation rate. Non-negative;
