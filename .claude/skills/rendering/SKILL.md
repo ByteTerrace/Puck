@@ -149,10 +149,22 @@ group/copy topology and immutable per-surface picking metadata across pose chang
 Its flat reverse binding indexes consume the frame's captured transform changes;
 the output draw journal and GPU tables retain independent consumer cursors. Keep
 the source identity, captured serial, roster and row count together. Never use a
-later producer serial for a borrowed frame, map landing-filtered indices back to
-the full roster, or skip the final GPU history settle because no draw changed.
-`GpuChangedRows` owns the bounded history for both transform and draw changes;
-missing/full/expired history and active portal clipping refresh conservatively.
+later producer serial for a borrowed frame or skip the final GPU history settle because no draw changed.
+`GpuChangedRows` owns both journals and publishes only its `GpuRowChanges` reader.
+Every consumer uses `GpuRowCursor`, which validates reader, roster, extent, revision and captured endpoint,
+returns bounded runs (a whole-table run on refusal), and commits only after consumption.
+The tables retain producer indices while meshes are owed: `StageMeshDraw` alone packs a live row or
+retires its history and writes `SdfMeshRegion.WriteAbsent`. `SDF_MESH_ABSENT_FLAG` rejects selection
+before mesh reads; zero placement words reject every triangle through the existing hit door.
+`GpuRowIndex` supplies the mesh-to-row landing chains and the dresser's slot/copy chains.
+Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
+The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
+queue to be the device's frame queue before it owes any words.
+`world.rows check on` enables independent pack, generation-ledger, seed and quiescent device comparisons
+(`sdf.rows.check`); `force limit <bytes|auto>`, `force relocate` and `force skip tables` exercise
+refusal, relocation and an expired consumer. `host.memory collect` and `gpu.faults lose` exercise
+trim and new tables. The device-free witness is `SdfMeshArrivalLawTests`; a headless World stages
+no draws. Active portal clipping still refreshes conservatively until R1c.
 `world.residency` reports logical journal/scratch array bytes separately from
 mesh residency and the overlapping process/account/backend memory readings.
 Pending bake demand reads the same occurrence index and transformed copy boxes;

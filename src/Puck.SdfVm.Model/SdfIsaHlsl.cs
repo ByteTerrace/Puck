@@ -385,6 +385,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_CLIP_PLANE_WORD", value: SdfMeshRecord.ClipPlaneWord);
         declarations.Count(name: "SDF_MESH_LEVEL_TABLE_WORD", value: SdfMeshRecord.LevelTableWord);
         declarations.Count(name: "SDF_MESH_SELECTION_WORD", value: SdfMeshRecord.SelectionWord);
+        declarations.Count(name: "SDF_MESH_ABSENT_FLAG", value: SdfMeshRecord.AbsentFlag);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);
         declarations.Count(name: "SDF_MESH_MEMBER_WORDS", value: SdfMeshRecord.MemberWords);
         declarations.Bits(name: "SDF_MESH_NORMALS_FLAG", value: SdfMeshRecord.NormalsFlag);

@@ -146,6 +146,8 @@ public readonly ref struct SdfGpuWorkRecording {
     public nint CommandBuffer { get; }
     /// <summary>Gets the recorder the job records with.</summary>
     public IGpuRecorder Recorder { get; }
+    /// <summary>Gets the actual queue the service submits this recording on.</summary>
+    public IGpuQueueSubmitter Queue => m_owner.Queue;
 
     /// <summary>Records a copy of a buffer's first bytes, which a compute shader wrote, into the slot's readback, which
     /// <see cref="ISdfGpuWorkClient.Complete"/> answers with. A job copies at most once.</summary>
@@ -197,6 +199,8 @@ public readonly ref struct SdfGpuWorkRecording {
 /// the share delays that frame by its length whatever the average share.</para>
 /// </summary>
 public sealed class SdfGpuWork : IDisposable {
+    internal IGpuQueueSubmitter Queue => m_gpu.QueueSubmitter;
+
     /// <summary>The jobs in flight at most.</summary>
     public const int SlotCount = 4;
     /// <summary>The share of the GPU's time background work takes at most, measured over each job's GPU time.</summary>
@@ -673,7 +677,8 @@ public sealed class SdfGpuWork : IDisposable {
         var recorder = m_gpu.Recorder;
 
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: source.BufferHandle,
-            sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite,
+            sourceStageMask: GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer,
             destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer);
         recorder.CopyBuffer(commandBufferHandle: commandBuffer, destinationBufferHandle: readback.BufferHandle, sizeBytes: bytes, sourceBufferHandle: source.BufferHandle);
         recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: readback.BufferHandle,

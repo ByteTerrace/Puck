@@ -63,6 +63,10 @@ steps and run beside them.
 
 ## What exists
 
+This inventory records the design's pre-R1a reading. R1a has replaced the landing
+filter and the hand-written journal consumers; [its built state](#r1a-as-built)
+names the current doors and evidence. The row table and its writer remain R1b.
+
 ### The draw list and its staging
 
 `SdfMeshDresser.Dress` returns the frame with a dense list **[opened]**: the
@@ -116,7 +120,7 @@ clip `SdfCompositionFrameSource.ComposeSlotClips` adds for that slot. The
 dresser's reverse index (`SdfMeshDresser.IndexBindings`) lists by slot only the
 bindings drawn in place; a copy's bindings are listed by copy, and a host draw
 by nothing. So only the portal path's visit of every host draw
-(`SdfMeshDresser.CollectHostDraws`) and every binding puts back a host row or a
+(the former host-draw collector, replaced by `GpuRowCursor` in R1a) and every binding puts back a host row or a
 copy row once its clip ends or moves.
 
 A new program makes the dresser visit every binding, since a kept group can be
@@ -175,7 +179,7 @@ kept by convention too: the frame publishes the producer's own journal object,
 whose `GpuChangedRows.Begin` and `GpuChangedRows.Owe` are public, the dressed
 list is a `List` a holder can downcast, and each consumer wrote its own "collect
 since my serial, or refresh" guard (`SdfWorldTables.TryStageDrawChanges`,
-`SdfMeshIrradiance.StaticKey`, `SdfMeshDresser.CollectHostDraws`, which alone
+`SdfMeshIrradiance.StaticKey`, the former dresser host-draw collector, which alone
 checks that the runs fit the table, and for the transform journal
 `SdfMeshDresser.CollectSlotBindings`, `SdfWorldTables.PrepareMeshTransformCuts`
 and `SdfWorldTables.PackDynamicTransforms`) **[opened]**.
@@ -915,6 +919,163 @@ A frame that must repeat across Worlds is drawn from
 lockstep byte comparison of two fresh Worlds at one tick that the rendering
 skill already describes, taken across a hand-over that changes a count.
 
+### R1a as built
+
+`SdfWorldTables.StageMeshDraw` is the one record-writing door, on full and
+incremental staging. It asks `MeshStands`: a standing row observes and packs
+the arena's current placement; an owed or refused row calls
+`SdfMeshHistory.Retire` and `SdfMeshRegion.WriteAbsent`. The absent record has
+only `SdfMeshRecord.AbsentFlag` set, in the selection flags. Its generation and
+every placement word are zero. `sdf-mesh-occlusion.comp.hlsl` resets its state
+and emits empty commands before any other selection metadata or mesh read;
+R1h's `sdfMeshResolveHit` rejects every triangle through its existing empty
+index-range test. The table extent is the producer count throughout landing.
+
+`GpuRowIndex` keeps the tables' mesh-to-row chains and replaces the dresser's
+separate slot/copy chain implementation. Completion marks just the landed
+mesh's rows for the next staging. `StageChangedDraws` compares standing versus
+absent as well as draw content, so a returning row gets a new generation and
+seed even if its identity did not change. The draw journal remains usable
+while other meshes are owed. The staging door also maintains the live glass
+row set; `GlassMaySee` walks it without a mesh-revision refresh.
+
+The compiler separates `GpuChangedRows`' producer from the frame's
+`GpuRowChanges` reader. Only `GpuRowCursor` collects it. All six consumers use
+that type: dynamic transforms, mesh transform cuts, tables' draws, dresser's
+slots and host draws, and the irradiance static key. The cursor owns reader
+and roster identity, extent, revision, captured serial, retained-window and
+run-bound checks, and returns runs on both incremental and whole-table
+answers. Consumers commit the endpoint they consumed. This guarantee stops
+at a consumer committing without consuming; R1a does not yet give the
+producer's dense draw list R1b's write door or occupancy tokens.
+
+`SdfGpuWorkRecording.Queue` reports its service's actual submitter.
+`RecordLanding` refuses a queue other than the tables' device frame queue
+before owing or copying anything. The tables' counted wrapper forwards to
+that same device queue. The merged memory-admission work keeps ownership of
+buffer replacement and reservations; the diagnostic cap is checked beside
+the presentation grant in the arena's one `TryPlace`.
+
+`world.rows check on` enables `SdfRowChecks` across replacement tables.
+`SdfWorldTables.CheckMeshRows` reads every producer row and arena placement,
+packs scratch without observing, owns a field-by-field identity/absence
+ledger independent of `SdfMeshHistory`, and checks pending previous-matrix
+seeds. `MeshRowsReadback` uses the existing background readback service to
+compare device bytes to host bytes captured at recording, only with no owed
+region copy or carry and no landing in flight. `world.rows status` names the
+first differing row and identity. The `sdf.rows.check` source exposes compared
+and mismatched counts for pack, ledger, seeds and device, plus the forcing
+witnesses. Occupancy joins the ledger in R1b; undisclosed transform cuts and
+device bytes outside a sampled job remain outside this check.
+
+The implemented forcing forms are `world.rows force limit <bytes|auto>`,
+`world.rows force relocate`, and `world.rows force skip tables`. The last
+holds the cursor across more producer serials than the journal retains,
+including repeated staging of the same serial. Existing `host.memory collect`
+and `gpu.faults lose` cover trim and replacement tables.
+
+**Device-free evidence.** The Release run of `SdfMeshArrivalLawTests`,
+`GpuChangedRowsLawTests`, `SdfMeshStagingCauseLawTests`,
+`SdfFrameBlockLawTests`, `SdfLightAndSkyLayoutLawTests` and
+`SdfKernelHeaderReadLawTests` passed all 28 cases after merging the integration
+tip. The arrival law's 33-row boot packed and seeded 33 landing rows. A later
+one-row mesh landing packed and seeded one, while the standing edit made
+with that mesh still owed packed one. The same run compared 2,840 pack and
+ledger rows, 101 seeds and 297 modeled device rows with zero mismatches;
+counted 34 refused absent rows, 101 returns live, two serviced trims, 12
+whole-table answers and 66 skipped cursor commits. These aggregate forcing
+counts include the second law: its forced relocation shrank a region from
+33,554,432 to 16,777,216 bytes, with one shrink counted. No timing is inferred
+from this CPU upload model.
+
+The extended law also stages the same owed frame twice without counting it
+twice, then renames its last owed row to a standing mesh. The current demand
+settles without uploading the abandoned payload; `AccountMeshOwed` closes
+the clock at completion or that last-name change, independently of a plan.
+`DescribeLanding` exposes `owed-clock=running|settled` beside its counts.
+The arena's `Rename` also removes a refusal when its last draw name leaves;
+a direct arena witness covers that case.
+
+The additional requested `SdfKernelSetLawTests` run passed six of nine cases;
+three fixture failures remain in the [refactoring packet](open-items.md#refactoring-campaign).
+The full-encoding versus field-only fingerprint failure also reproduces
+against the saved pre-change assemblies. `puck shaders generate --check`
+reports every generated declaration and both fingerprints current. This is
+not a clean kernel-set suite result, and the windowed backend check remains owed.
+
+**Windowed verification request.** On a fresh debug World process on each
+backend, enable the check before its first completed presentation, retain a
+boot capture burst, then use the boot waits and counter reads below, adding
+`world.counters sdf.rows.check --json` and `world.rows status`. Expect nonzero
+pack, ledger, seed and device comparisons, zero mismatches, zero unforced
+hit rejections and stale targets, and captures filling in the same places as
+before. Read deltas around `force limit 0`, `host.memory collect`,
+`force relocate`, `force limit auto`, `force skip tables` followed by more
+than `SdfMovedTransforms.History` produced frames, and `gpu.faults lose`.
+Refused-absent, returns-live, trims, shrink (after the oversized region is
+relocated under the cap), skipped commits and new tables' whole answers must
+all have nonzero witnesses. Read `world.wait residency` under the cap: it
+must name the refusal; with the cap restored it must settle. The lead's quiet
+`puck measure` window compares frozen pre-R1a and R1a cold boots, the owed
+frames' `host.frames` p99/worst `produce-work`, collections and allocated
+bytes, beside packed rows, seeds and `DescribeLanding`'s owed counts. The
+headless World stages no draws and supplies no windowed comparison or timing.
+
+File the timing question against the integration base and this lane's final
+head, which freezes both input trees and builds, then drain the returned
+request ids in the lead's quiet window. These commands retain the shared
+mesh store and each process's initial frame history; the boot metrics are
+read beside the owed interval, not claimed to filter it automatically.
+
+```text
+puck measure request --name r1a-boot-directx --before-commit lead/authoring --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend directx --ticks 120 --samples 1
+puck measure request --name r1a-boot-vulkan --before-commit lead/authoring --after-commit lane/r1a --metric /metrics/boot.frames.p99/median --metric /metrics/boot.frames.max/median --decides "Report paired cold-boot p99/max in ms beside owed-frame produce-work, collections, allocation, packed rows and seeds; investigate any increase." -- bench frames worlds/debug --backend vulkan --ticks 120 --samples 1
+puck measure run <request-ids> --repeats 5 --window-seconds 1200
+```
+
+The headless debug World booted through the Operator and stopped with exit 0.
+Its `sdf.instances` and `sdf.rows.check` counts were all zero. This host
+registers no `world.rows` verb, and `world.wait ready` and `world.wait residency`
+refused with their explicit no-renderer reasons. The nonzero witnesses above
+come from real tables on the CPU upload model, not from that headless boot.
+
+#### R1a systems considered
+
+The owning rendering map, its C#/HLSL sync pairs, and the .NET performance
+measurement guidance routed this change. The rendering skill's stale landing
+filter and cursor description was corrected; this is a code-map update, with
+no agent behavior evaluation claimed.
+
+`puck search -M 0 'intrusive|m_nextBindings|TryCollect' src/Puck.Abstractions src/Puck.SdfVm`
+found the bounded journal and the dresser's slot/copy chains. R1a reuses the
+journal, splits off its reader and replaces those chains with `GpuRowIndex`;
+it does not keep another chain implementation beside the new mesh index.
+The memo's table frame-slot index was a lead, not a current reusable type.
+
+The branch duplicate check's real overlap was the journal's run-append loop
+and the tables' run-copy loop. The technique search
+`puck search -M 0 'void Append|CopyRuns|source.Start' src/Puck.Abstractions/Gpu/Residency src/Puck.SdfVm/SdfWorldTables.Motion.cs`
+found those two implementations. They now use the shared
+`GpuUploadRuns.Append`, in the type that owns coarsening and merging.
+The other neighbour records are type-specific identity equality and hashing,
+command registration through `CommandDefinition.WithWireArgs`, dictionary
+lookups, array clears, resource disposal and the two different background
+completion/abandon actions; none provides another row index, cursor or packer.
+
+Both helper flags were read. `SdfMeshIrradiance.StaticKey` is the existing
+static-row fold and journal consumer, not a new hash primitive. The search
+`puck search -M 0 'Fnv1aHash|HashCode.Combine' src/Puck.Maths/Fnv1aHash.cs src/Puck.SdfVm/SdfMeshIrradiance.cs`
+found the stable integer FNV accumulator and this presentation key's existing
+`HashCode.Combine` calls; R1a changes only its journal consumer.
+`SdfWorldTables.ServiceMemoryTrim` is the existing account callback servicing
+the arena. Searching `TrimUnused|TrimCaches|Lru` in that file, the arena and
+`MemoryAccount` found `MemoryAccount.TrimCaches` and
+`SdfMeshRegionArena.TrimUnused`; no cache or retry mechanism was added.
+The pure pack comparison reuses `SdfMeshRegion.WriteDraw` and
+`WriteAbsent`; the independent ledger deliberately repeats only the identity
+predicate it checks, as F14 requires. Device comparison reuses
+`SdfGpuWorkRecording.CopyToReadback` and the existing slot/fence lifetime.
+
 ## R0: the counts and the rule
 
 R0's counts are built and decide nothing by time. Every staging passes
@@ -1125,7 +1286,7 @@ is a verification request to the lead.
 | Step | Size | Lands | Door | Check |
 |---|---|---|---|---|
 | R1h. The hit door's checks | Owed | The resolver is built (`sdfMeshResolveHit`, the kernel kind `gpu.mesh-hits.rejected`, `sdf.instances.targets.stale`, `world.rows force hit-bound`). What remains is its windowed check | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation |
-| R1a. The staged table is the producer's | Medium to large | The absent bit and its kernel branch; the staging function's two branches and the per-row retire; rows by mesh and a landing staging them; the journal taken while meshes are owed; the reader and the one cursor in every consumer; the tables' glass row set; the queue precondition; the pack, ledger, seed and device comparisons; the levers for refusal, relocation, trim, a skipping consumer and new tables | The tables' one staging function; the cursor | The cross-check over a cold boot with its forcing counts; the law's part without a row table; a boot's captures fill in as before; `world.wait residency` still names what is owed |
+| R1a. The staged table is the producer's | Built; windowed check owed | [The implemented doors, levers and device-free evidence](#r1a-as-built) | `StageMeshDraw`; `GpuRowCursor`; the compiler's reader-only frame | 28 focused laws pass; the cold boot's captures, device counts and owed-frame timing on both backends remain the lead's request |
 | R1b. Rows | Large | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
 | R1c. Clips are derived | Small to medium | The slot index over every row, the staged draw computed from base and clips, a clip's copies as a run; the portal path's "everything" and the list rewrite deleted | The table's staging of a row | The cross-check through a crossing by a host-drawn body and by a rigid copy, with clipped rows of each owner kind and ended clips counted; a straddling body clipped on both sides and whole again after it withdraws |
 | R2. Piece rows | Large | With the visibility plan's V1b | That plan's | That plan's, and a hand-over's packed records |

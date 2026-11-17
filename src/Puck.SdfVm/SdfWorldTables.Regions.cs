@@ -48,11 +48,7 @@ public sealed partial class SdfWorldTables {
     // The moved set these tables last consumed transforms from, the serial of that frame, and the scratch the rows owed
     // since then are unioned into.
     private readonly GpuUploadRuns m_owedTransforms = new(capacity: GpuRegion.MaxCopyRuns);
-
-    private SdfMovedTransforms? m_movedTransformsSource;
-    private long m_movedTransformsSerial;
-    private IReadOnlyList<DynamicTransform>? m_movedTransformsTable;
-
+    private readonly GpuRowCursor m_dynamicCursor = new();
     // Names the regions' host copies, native storage outside the allocator, in the process account; each region reports
     // its own changes, and the owner outlives them (DisposeRegions).
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_regionHostCopies = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(name: "sdf.world.region-host-copies");

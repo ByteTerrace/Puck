@@ -182,6 +182,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldCreationWork.ProcessWork);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: WorldFieldQueryWork.Process);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfMeshHistory.ProcessWork);
+        services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationInstance: Puck.SdfVm.SdfRowChecks.ProcessWork);
 
         // The owned-world catalog (files under the state root; the storage.* verbs sync it to the per-user cloud
         // container): loaded once at startup, malformed documents refused by name — the roster and the settings verbs
@@ -897,7 +898,7 @@ public static class WorldBootComposition {
 
         // The desktop's IWorldConsoleAuthority — every moved console module resolves its target row through this
         // seam instead of an injected WorldServer singleton (see WorldBootConsoleAuthority's own remarks).
-        services.AddSingleton<ICommandAuthority>(sp => sp.GetRequiredService<IWorldConsoleAuthority>());
+        services.AddSingleton<ICommandAuthority>(implementationFactory: sp => sp.GetRequiredService<IWorldConsoleAuthority>());
         services.AddSingleton<IWorldConsoleAuthority>(implementationFactory: static sp => new WorldBootConsoleAuthority(instances: sp.GetRequiredService<WorldInstanceHost>()));
 
         // The adjacency runtime source — CORE (not presentation-only): body contact consumes it regardless of boot

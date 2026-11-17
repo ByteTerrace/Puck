@@ -24,6 +24,9 @@ public static class SdfMeshRecord {
     /// <summary>The first of four four-word rows used by GPU draw selection: center and flags; half X and stretch;
     /// half Y and staged instance generation; half Z and level count.</summary>
     public const int SelectionWord = 47;
+    /// <summary>The selection flag for a row with no standing mesh. Its other words, including generation and
+    /// placement, are zero; selection rejects it before reading them and the hit resolver rejects its empty indices.</summary>
+    public const uint AbsentFlag = 8u;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
     public const int LevelTableWord = 45;

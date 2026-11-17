@@ -1362,8 +1362,8 @@ residency's background GPU work (`SdfWorldTables.MeshLanding.cs`, a client of
 service's byte, host-time and GPU-share budgets, each a rate of wall time
 (`SdfGpuWork.UploadBytesPerSecond`), so a slow or throttled frame lands as many
 bytes a second as a fast one, the meshes the views see largest
-first (`SdfMeshDemand`). A draw whose mesh is still owed waits out of the staged
-records until its last job has completed, so a boot, a relocation or a body whose
+first (`SdfMeshDemand`). A draw whose mesh is still owed keeps its producer row as an absent
+record until its last job has completed, so a boot, a relocation or a body whose
 meshes all arrive at once fills in from the cameras outward over several frames
 rather than staging every word in one upload. A mesh that replaces one a draw
 already reads never makes its draw wait: the bake names it to the tables ahead
@@ -1611,13 +1611,14 @@ frame thread; any other upload compares the program with the live one. Mesh draw
 once. A new list or revision requires staging. `SdfMeshDresser` retains binding
 topology, indexes its dependencies by source slot or occurrence, and publishes
 changed draw rows through `SdfFrame.MeshDrawChanges` with a captured endpoint.
-The shared `GpuChangedRows` journal also backs `SdfMovedTransforms`: every consumer
-collects its own skipped-frame union, and missing, expired or full history requires
-a complete refresh. Runs can conservatively include unchanged gaps.
+The shared `GpuChangedRows` journal also backs `SdfMovedTransforms`. Frames publish only its
+read-only `GpuRowChanges`; every consumer uses `GpuRowCursor` to collect its own skipped-frame
+union at a captured endpoint. Reader, roster, extent, revision or history refusal returns one
+whole-table run. Runs can conservatively include unchanged gaps. A cursor commits after consumption.
 
 A complete staged roster with unchanged mesh references keeps its placement plan
-and mesh claims; the tables compare and pack only its changed runs. Landing-filtered
-rosters, changed geometry and unknown provenance use ordinary planning. Producers
+and mesh claims; the tables compare and pack only its changed runs, even while other meshes are owed.
+Changed geometry and unknown provenance use ordinary planning. Producers
 without a draw journal still supply a different list or move its revision, and the
 tables compare that revised list. `SdfMeshDraw.SameStagedContent` supplies the one
 exact comparison for both dressing and staging, including float bits and motion
@@ -1629,8 +1630,24 @@ A cut to a draw's root slot or a skin member actually named by a vertex starts a
 new surface generation and seeds its current compact previous matrix. Equal pose
 bytes do not suppress a cut. The mesh consumer collects only reseats through its
 own captured endpoint; ordinary movement adds no cut-driven roster walk. Missing
-history conservatively cuts dependent draws, and landing filters use the actual
-staged draw's dependencies rather than producer indices.
+history conservatively cuts dependent draws. Staged indices always equal producer indices.
+
+`SdfWorldTables.StageMeshDraw` is the one record-writing door. A standing mesh is observed
+and packed at its arena placement. An owed or refused mesh retires that row's history and
+packs an absent record with zero placement and generation words. Selection resets and emits
+empty commands for its absent bit, and the hit resolver rejects its zero index range.
+`GpuRowIndex` indexes each mesh's rows, so a landing revisits only those rows and each seeds
+when it returns from absence. The door also maintains the live glass row set.
+Landing copies require the background recording's actual queue to be the device's frame queue;
+row reuse relies on that queue's order.
+
+The operator's `world.rows check on` compares every producer row against pure packing,
+an independent identity/absence generation ledger and pending history seeds. A background readback
+compares device records to a host snapshot only when the region owes no copies or carry and
+no landing is in flight. `world.counters sdf.rows.check` reports comparisons, mismatches and
+forcing counts; `world.rows status` names the first differing row and identity.
+`world.rows force limit <bytes|auto>`, `force relocate` and `force skip tables` exercise admission,
+relocation and expired history. `host.memory collect` and `gpu.faults lose` exercise trim and new tables.
 
 The region starts with one draw record when the tables are built
 and grows to the need plus an eighth when a list outgrows it. The mesh pass reads its triangles,

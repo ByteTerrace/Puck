@@ -20,10 +20,12 @@ public sealed partial record SdfMesh {
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
     /// <summary>Gets how many independently drawn meshes the mesh is: its <see cref="Chunks"/>, or one, itself.</summary>
     public int PieceCount => Math.Max(val1: 1, val2: Chunks.Count);
+
     /// <summary>Returns one independently drawn mesh of the mesh: a chunk, or the mesh itself when it has none.</summary>
     /// <param name="index">The piece, below <see cref="PieceCount"/>.</param>
     /// <returns>The piece.</returns>
     public SdfMesh Piece(int index) => ((Chunks.Count == 0) ? this : Chunks[index]);
+
     /// <summary>Gets whether the triangles are outward-wound pieces of closed surfaces, so a face turned from a light is
     /// where that light leaves a solid: true for every baked mesh, and for an authored mesh whose triangles close a volume
     /// (<c>WorldPlacementStamper.MeshOf</c>); false for an authored sheet or soup, which is drawn in both windings and
@@ -445,6 +447,13 @@ public readonly record struct SdfMeshDrawPacking(int PackedWords, bool NormalCom
 /// </para>
 /// </summary>
 public static class SdfMeshRegion {
+    /// <summary>Packs a row that has no standing geometry: zero placement and generation, with only the selection
+    /// absent bit set. The selection and hit doors can reject it without reading any mesh words.</summary>
+    /// <param name="record">Exactly one draw record.</param>
+    public static void WriteAbsent(Span<uint> record) {
+        record.Clear();
+        record[(SdfMeshRecord.SelectionWord + 3)] = SdfMeshRecord.AbsentFlag;
+    }
     /// <summary>Reads the mesh placement already encoded in a complete draw record.</summary>
     /// <param name="record">The retained draw's words.</param>
     /// <returns>The placement used to pack the draw.</returns>

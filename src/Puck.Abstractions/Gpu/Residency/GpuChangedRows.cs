@@ -8,7 +8,9 @@ public sealed class GpuChangedRows {
     private readonly GpuUploadRuns?[] m_frames;
     private readonly GpuUploadRuns?[]? m_reseats;
     private readonly long[] m_serials;
+    private readonly int[] m_rows;
     private readonly int m_capacity;
+
     private int m_slot;
 
     /// <summary>Initializes a bounded row journal. Run storage is allocated only when a frame first owes rows, then
@@ -24,8 +26,12 @@ public sealed class GpuChangedRows {
         m_frames = new GpuUploadRuns?[history];
         m_reseats = (trackReseats ? new GpuUploadRuns?[history] : null);
         m_serials = new long[history];
+        m_rows = new int[history];
+        Reader = new(owner: this);
     }
 
+    /// <summary>Gets the stable read-only face to publish to consumers.</summary>
+    public GpuRowChanges Reader { get; }
     /// <summary>Gets the latest produced serial, starting at one; zero before the first frame.</summary>
     public long Serial { get; private set; }
     /// <summary>Gets the latest frame's table row count.</summary>
@@ -36,9 +42,10 @@ public sealed class GpuChangedRows {
     /// array headers. This is storage attribution, not a physical allocation claim.</summary>
     public long StorageBytes {
         get {
-            var bytes = (((long)m_everything.Length * sizeof(bool)) + ((long)m_serials.Length * sizeof(long)) +
-                ((long)m_frames.Length * IntPtr.Size) + ((long)(m_reseats?.Length ?? 0) * IntPtr.Size));
-            for (var index = 0; index < m_frames.Length; index++) {
+            var bytes = (((((((long)m_everything.Length) * sizeof(bool)) + (((long)m_serials.Length) * sizeof(long))) +
+                (((long)m_frames.Length) * IntPtr.Size)) + (((long)m_rows.Length) * sizeof(int))) + (((long)(m_reseats?.Length ?? 0)) * IntPtr.Size));
+
+            for (var index = 0; (index < m_frames.Length); index++) {
                 bytes += (m_frames[index]?.StorageBytes ?? 0L);
                 bytes += (m_reseats?[index]?.StorageBytes ?? 0L);
             }
@@ -51,15 +58,15 @@ public sealed class GpuChangedRows {
     /// <param name="rows">The table's current row count.</param>
     public void Begin(bool everything, int rows) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: rows);
-        Serial = checked(Serial + 1L);
+        Serial = checked((Serial + 1L));
         m_slot = ((int)(Serial % m_frames.Length));
         m_everything[m_slot] = everything;
         m_frames[m_slot]?.Clear();
         m_reseats?[m_slot]?.Clear();
         m_serials[m_slot] = Serial;
+        m_rows[m_slot] = rows;
         RowCount = rows;
     }
-
     /// <summary>Owes rows of the current frame, optionally reseating their previous interpretation. A frame already
     /// owing everything needs no run storage.</summary>
     /// <param name="start">The first row.</param>
@@ -74,8 +81,8 @@ public sealed class GpuChangedRows {
         if (count > (RowCount - start)) { throw new ArgumentOutOfRangeException(paramName: nameof(count), message: "An owed range must lie inside the current table."); }
         if (Everything) { return; }
 
-        (m_frames[m_slot] ??= new GpuUploadRuns(capacity: m_capacity)).Add(start: start, length: count);
-        if (reseat) { (m_reseats![m_slot] ??= new GpuUploadRuns(capacity: m_capacity)).Add(start: start, length: count); }
+        (m_frames[m_slot] ??= new GpuUploadRuns(capacity: m_capacity)).Add(length: count, start: start);
+        if (reseat) { (m_reseats![m_slot] ??= new GpuUploadRuns(capacity: m_capacity)).Add(length: count, start: start); }
     }
 
     /// <summary>Collects the conservative union of rows changed in <c>(since, through]</c>. Clears the supplied changed output,
@@ -83,33 +90,41 @@ public sealed class GpuChangedRows {
     /// empty and reseats are untouched: the consumer must refresh the complete table.</summary>
     /// <param name="since">The serial the consumer last consumed.</param>
     /// <param name="through">The serial captured with the table being consumed.</param>
+    /// <param name="rows">The captured table extent; every returned run must fit it.</param>
     /// <param name="into">The changed-row output, cleared on entry, or null when only reseats are needed.</param>
     /// <param name="reseated">Optional reseat output, appended on success.</param>
     /// <returns>Whether the entire requested window is retained and incremental.</returns>
-    public bool TryCollect(long since, long through, GpuUploadRuns? into, GpuUploadRuns? reseated = null) {
+    internal bool TryCollect(long since, long through, int rows, GpuUploadRuns? into, GpuUploadRuns? reseated = null) {
         into?.Clear();
         if ((since < 0L) || (through < since) || (through > Serial)) { return false; }
         if (Serial == 0L) { return ((since == 0L) && (through == 0L)); }
         if ((since <= 0L) || ((Serial - since) >= m_frames.Length)) { return false; }
         if (m_serials[((int)(through % m_frames.Length))] != through) { return false; }
+        if (m_rows[((int)(through % m_frames.Length))] != rows) { return false; }
 
         // Validate first: a later full or missing frame must not append partial reseats to the caller's live set.
         for (var serial = since; (serial < through);) {
             serial++;
             var slot = ((int)(serial % m_frames.Length));
+
             if ((m_serials[slot] != serial) || m_everything[slot]) { return false; }
+            if (!Fits(m_frames[slot], rows) || !Fits(rows: rows, runs: m_reseats?[slot])) { return false; }
         }
         for (var serial = since; (serial < through);) {
             serial++;
             var slot = ((int)(serial % m_frames.Length));
-            if (into is not null) { Append(m_frames[slot], into); }
-            if (reseated is not null) { Append(m_reseats?[slot], reseated); }
+
+            into?.Append(source: m_frames[slot]);
+            reseated?.Append(source: m_reseats?[slot]);
         }
         return true;
     }
 
-    private static void Append(GpuUploadRuns? source, GpuUploadRuns destination) {
-        if (source is null) { return; }
-        for (var run = 0; run < source.Count; run++) { destination.Add(start: source.Start(index: run), length: source.Length(index: run)); }
+    private static bool Fits(GpuUploadRuns? runs, int rows) {
+        if (runs is null) { return true; }
+        for (var run = 0; (run < runs.Count); run++) {
+            if ((runs.Start(index: run) < 0) || (runs.Length(index: run) > (rows - runs.Start(index: run)))) { return false; }
+        }
+        return true;
     }
 }

@@ -138,6 +138,7 @@
 #define SDF_MESH_CLIP_PLANE_WORD        41u
 #define SDF_MESH_LEVEL_TABLE_WORD       45u
 #define SDF_MESH_SELECTION_WORD         47u
+#define SDF_MESH_ABSENT_FLAG            8u
 #define SDF_MESH_VERTEX_WORDS           6u
 #define SDF_MESH_MEMBER_WORDS           8u
 #define SDF_MESH_NORMALS_FLAG           0x00000001u

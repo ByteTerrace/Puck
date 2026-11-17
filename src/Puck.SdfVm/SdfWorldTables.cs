@@ -405,6 +405,7 @@ public sealed partial class SdfWorldTables : IDisposable {
         m_gpuWork = scope.Own(created: new SdfGpuWork(budget: m_meshGrant.Selector.Work, device: device, name: ObjectOwner));
         // The mesh region's owed words land through it (SdfWorldTables.MeshLanding.cs).
         m_gpuWork.Add(client: new MeshLanding(tables: this));
+        m_gpuWork.Add(client: new MeshRowsReadback(tables: this));
 
         // The sky's environment, which the World sets bind and the graph's shared producer renders after upload.
         // Its constructor joins each object it creates to the scope, which releases them should a later step throw.

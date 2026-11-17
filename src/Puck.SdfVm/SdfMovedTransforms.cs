@@ -234,6 +234,7 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         m_changes.Owe(count: count, start: start);
         m_owedRows.Add(amount: count);
     }
+
     // A repack's byte diff cannot discover equal-pose ownership cuts, so explicit reseats remain in its journal.
     // Only a genuinely full frame can omit them: its consumers already seed every row.
     private void Reseat(int start, int count) {
@@ -244,9 +245,10 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
             return;
         }
 
-        m_changes.Owe(count: count, start: start, reseat: true);
+        m_changes.Owe(count: count, reseat: true, start: start);
         m_owedRows.Add(amount: count);
     }
+
     /// <inheritdoc/>
     public bool TryRead(WorkKind kind, out long value) {
         if (ReferenceEquals(
@@ -281,7 +283,6 @@ public sealed class SdfMovedTransforms : IWorkCounterSource {
         return false;
     }
 
-    // Captured frames collect through their own serial, never through a later producer frame.
-    internal bool TryCollect(long since, long through, GpuUploadRuns? into, GpuUploadRuns? reseated = null) =>
-        m_changes.TryCollect(since: since, through: through, into: into, reseated: reseated);
+    /// <summary>Gets the journal's read-only face; consumers collect captured endpoints through their own cursor.</summary>
+    public GpuRowChanges Changes => m_changes.Reader;
 }

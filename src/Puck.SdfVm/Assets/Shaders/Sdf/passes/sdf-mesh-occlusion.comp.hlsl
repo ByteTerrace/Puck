@@ -231,6 +231,15 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         uint draw = id.x;
         uint record = sdfMeshRecord(draw);
         uint4 a = sdfSelectionRow(record, 0u);
+        if ((a.w & SDF_MESH_ABSENT_FLAG) != 0u) {
+            sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u);
+            sdfOcclusionEmit(step == SDF_OCCLUSION_LATE_STEP ? 1u : 0u, draw, draw, 0u, false);
+            if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
+                sdfOcclusionEmit(2u, draw, draw, 0u, false);
+                sdfOcclusionEmit(3u, draw, draw, 0u, false);
+                if (optical) { sdfOcclusionEmit(4u, draw, draw, 0u, false); }
+            }
+        } else {
         uint4 b = sdfSelectionRow(record, 1u);
         uint4 c = sdfSelectionRow(record, 2u);
         uint4 d = sdfSelectionRow(record, 3u);
@@ -291,6 +300,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
         emit = opaqueEmit && depthLayer;
         draws += emit ? 1u : 0u;
         vertices += emit ? count : 0u;
+        }
     }
 
     sdfOcclusionCount(draws, vertices);

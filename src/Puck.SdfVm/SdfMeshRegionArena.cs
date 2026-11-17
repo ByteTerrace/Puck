@@ -59,6 +59,15 @@ public sealed class SdfMeshRegionArena : IDisposable {
     private int m_drawCapacity;
     // Whether a trim forgot a mesh since the latest full plan, so a list naming a refused mesh is planned again.
     private bool m_trimmed;
+    private bool m_forceRelocation;
+    private ulong? m_admissionBytes;
+
+    /// <summary>Sets the diagnostic admission cap and requests a relocation so already placed meshes pass through
+    /// the same placing function. Null restores the device limit.</summary>
+    /// <param name="bytes">The cap in bytes, or null.</param>
+    public void ForceLimit(ulong? bytes) { m_admissionBytes = bytes; ForceRelocation(); }
+    /// <summary>Requests that the next plan pack its meshes regardless of the normal slack threshold.</summary>
+    public void ForceRelocation() => m_forceRelocation = true;
 
     // The meshes the latest full plan's list named, in its order.
     private SdfMesh?[] m_latestMeshes = [];
@@ -191,7 +200,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         // A list naming the meshes the latest plan's list named, in its order, finds every mesh where that plan left it
         // and the reserve large enough, so it neither places, moves nor relocates: the plan of a frame whose draws only
         // moved. A refused mesh is tried again only once a trim has freed words.
-        if (NamesLatestMeshes(draws: draws) && !(m_trimmed && (m_refused.Count > 0))) {
+        if (!m_forceRelocation && NamesLatestMeshes(draws: draws) && !(m_trimmed && (m_refused.Count > 0))) {
             m_placed.Clear();
             m_moved.Clear();
             Relocated = false;
@@ -262,7 +271,12 @@ public sealed class SdfMeshRegionArena : IDisposable {
         // A first list with no draw reserves nothing, and the next list is the first again.
         var relocate = (first && (m_drawCapacity > 0));
 
-        if (relocate) {
+        if (m_forceRelocation) {
+            m_forceRelocation = false;
+            RelocationReason = "forced relocation";
+            relocate = true;
+            Pack(draws: draws);
+        } else if (relocate) {
             RelocationReason = "first plan";
         } else if ((m_refused.Count > 0) && ((reserveWords + namedWords) <= LimitWords)) {
             RelocationReason = $"no free run holds a named mesh, and the {(namedWords * sizeof(uint))}B named fit packed";
@@ -314,6 +328,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         if (System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref left) || (--left > 0)) { return; }
         _ = m_named.Remove(key: old);
+        _ = m_refused.Remove(item: old);
         NamedWords -= SdfMeshRegion.WordsOf(mesh: old);
     }
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before: each holding no
@@ -382,11 +397,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
         var words = ((ulong)Math.Max(val1: 1, val2: SdfMeshRegion.WordsOf(mesh: mesh)));
 
         if (!m_ranges.TryAllocate(count: words, start: out var start)) { return false; }
-        // The allocator hands out the lowest run that holds the words, so one that ends past the limit means no run
-        // under the limit holds them.
-        if ((((long)start) + ((long)words)) > LimitWords) {
+        // Both the presentation grant and the diagnostic cap constrain the same lowest-run admission.
+        if (((start + words) > ((ulong)LimitWords)) ||
+            ((m_admissionBytes is { } cap) && ((start + words) > (cap / sizeof(uint))))) {
             _ = m_ranges.Free(start: start);
-
             return false;
         }
 
