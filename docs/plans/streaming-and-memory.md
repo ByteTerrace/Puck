@@ -1978,8 +1978,9 @@ and the switch stay, so the comparison can be read again.
 
 #### Sparse backing design for review
 
-**Status and scope.** The sm7b continuation answers the review below and lands
-the first, contiguous-fallback piece. No sparse backend is enabled yet. The
+**Status and scope.** The sm7b continuations answer the review below and land
+the contiguous fallback, one device retirement timeline and destination page
+generation proofs (pieces 1 and 2 below). No sparse backend is enabled yet. The
 capabilities are support
 readings, not an enabled allocation path: `VulkanLogicalDeviceFactory.BackingOf`
 reads sparse features, but `FeatureIndicesOf` does not enable them and
@@ -2398,8 +2399,10 @@ this piece claims neither a sparse path chosen nor a budget-drop physical
 release. Both backends must stay bootable at each piece, and the final hardware
 check below still gates any claim that sparse relief works.
 
-**Design review disposition (sm7b, e9c1d485c9).** These are design closures;
-the implementation status below distinguishes them from enforced code.
+**Design review disposition (sm7b, e9c1d485c9).** H1's write/publication proof,
+M1's retirement proof and M3's absent-row path now have device-free laws as
+described above. Their native mapping/reuse qualification remains open. The
+other rows are design closures, not claims of implemented sparse backing.
 
 | Finding | Answer and enforcement to build |
 |---|---|
