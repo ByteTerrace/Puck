@@ -96,6 +96,13 @@ orders, verifying a change by building and running it, and fixing a defect at it
 
 ## Finish
 
+- A new refusal of something an author, player or addon could write before (a validator error, an
+  admission refusal, a door that now answers "no") removes a capability, even when it closes a real
+  defect (AGENTS.md "Unreached is not unwanted"). Fix the cause so the capability keeps working; if
+  that is out of your scope, land the refusal only with an open item for the cause fix, and name it
+  first under **Needs you** with the author or player case it blocks. Two lanes in one batch closed
+  defects this way (non-operator row declaration, a solid creation's `sizeBy`), each noted only in
+  passing, and the owner had to ask.
 - Done is a state: every job you started has exited, its watcher is stopped, your Worlds are stopped,
   your leases are released and the output that must survive is preserved. A pending run is in
   progress or blocked, never done. Every hand-back reaches this state, a blocked one and one a stop

@@ -52,47 +52,50 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-4. [high] [Engine job system](#engine-job-system): the memo's next step:
+4. [high] [Collision versus drawn mesh](#collision-versus-drawn-mesh): a solid
+   creation that grows or shrinks, refused since the moving-root relief
+   change; contact that follows a simulated `sizeBy`, then the refusal goes.
+5. [high] [Engine job system](#engine-job-system): the memo's next step:
    the scheduling stage's windowed reading, the control plane's step C0.3,
    then the pool's design.
-5. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
+6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
-6. [high] [Refactoring campaign](#refactoring-campaign): the duplication
+7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-7. [high] [The visual bar](#the-visual-bar): the caldera water as its first
+8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
    proof, built by [Water](#water)'s lanes A2 to A5.
-8. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
+9. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
-9. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
+10. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
    under a moving sun, then a cold area lit the moment a view arrives.
-10. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
+11. [medium] [Vulkan regressions and GPU robustness](#vulkan-regressions-and-gpu-robustness):
    one draw identity, then [visibility](visibility.md)'s V2a and V2b ahead of
    V1a, with `lane/g5` landed beside them.
-11. [high] [Transmission](transmission.md): its implementation lanes in order;
+12. [high] [Transmission](transmission.md): its implementation lanes in order;
     the defects it closes are in [Lighting and GI](#lighting-and-gi).
-12. [high] [Bake proportional to change](#bake-proportional-to-change): one
+13. [high] [Bake proportional to change](#bake-proportional-to-change): one
     store for both backends, then the collapse's acceptance search.
-13. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
+14. [high, before `main`] [Disclosure](disclosure.md#the-build-order): steps 5
     and 6, with step 0's fuzzer and step 0b's principals.
-14. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
+15. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-15. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
+16. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
     release's three causes and the production deploy, which a push to `main`
     needs.
-16. [high] [Transfers, federation and server](#transfers-federation-and-server):
+17. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
-17. [high] [Test runner and replay](#test-runner-and-replay): the body's write
+18. [high] [Test runner and replay](#test-runner-and-replay): the body's write
     door from step D5.
-18. [medium] [Certified field contact](#certified-field-contact): box and
+19. [medium] [Certified field contact](#certified-field-contact): box and
     ellipsoid bodies, then clearance close to a slope.
-19. [medium] [Language and authoring](#language-and-authoring) and
+20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the spelling pairs, the overlay text advance.
-20. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
+21. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
-21. Then, by ordinary priority:
+22. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
@@ -1435,6 +1438,22 @@ colliders and the field provider read one certified surface solve
 Owner: next geometry and bake lane · ordinary · Next: the groups sharp boxes
 left worse, then the valley sectors' buried colliders.
 
+- [high] A solid creation cannot grow or shrink: `WorldDefinitionValidator`
+  refuses a `solid` placement whose creation has `sizeBy` ("its driver scales
+  presentation only and cannot move a deterministic contact surface"), added
+  with the moving-root relief change. Before it, such a creation compiled and
+  its contact stayed at the unscaled size while the picture scaled, so the
+  refusal surfaced a silent mismatch by removing a capability: a rising
+  platform, a melting ice shelf a player stands on, an inflating balloon that
+  pushes a body. Fix at the cause: drive `sizeBy`'s phase from the simulation
+  (fixed-point, from the authority's tick and state, rule 4), scale the
+  contact field by the same factor (the relief change already scales a fixed
+  placement's amplitude, blend radii and contact bounds together), and give a
+  body standing on or pushed by a growing solid the step-up, snap and
+  depenetration a moving solid gets; then delete the refusal. Check: a scratch
+  world whose solid grows under a standing body and shrinks away from it,
+  with contact and drawn surface agreeing at sampled points per tick, and
+  `puck test --reproduce` bit-identical.
 - [medium] Sub-cell features draw badly where boxes touch or a thin layer sits
   inside a union. `puck mesh audit --cpu` reads these worse since boxes became
   sharp: `goTable` (its flush face prisms' seams), `hall-floor-2` and `-3` (a
