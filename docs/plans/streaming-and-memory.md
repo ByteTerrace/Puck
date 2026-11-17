@@ -1794,8 +1794,12 @@ counted draws: `surface` about a fifth slower, `shadow-far` and `resolve`
 several percent slower, `views` slightly slower, against a boot-to-boot spread
 near one percent. By the rule above, sparse backing of the one buffer is the
 direction on devices that allow it, and slabs do not land their kernel path.
-The Vulkan pair and the meadow stop are still owed before step 7's backing is
-built; the door and the switch stay, so the comparison can be read again.
+On Vulkan at the meadow the pair did not hold its counted work equal (the
+residency settles differently after the arrival, so the two boots drew a fifth
+apart); where the work was close, `surface` and `views` showed no cost and
+`resolve` a few percent. A Vulkan reading with the draws held equal (a stop
+whose residency settles the same, or a frozen frame) is still owed; the door
+and the switch stay, so the comparison can be read again.
 
 ### Step 5: the floor and eviction
 
