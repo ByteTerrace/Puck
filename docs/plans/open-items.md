@@ -2848,9 +2848,13 @@ runs.
   completes only as two attached runs. Find what the crossing holds twice, and
   stop the store's cap from evicting the live identity's meshes
   ([memory](#memory-on-the-deck-tier)).
-- [medium] `world.debug-view report colliders --json` throws
-  `DivideByZeroException` on the debug world, headless and windowed, so the
-  sweep's colliders signal is red on a refusal.
+- [low] A windowed `world.debug-view report colliders --json` on the debug
+  world has not been read since the report moved to a deferred worker: a
+  headless reading completes with no exception (463664 witnesses tested,
+  complete coverage), but the earlier `DivideByZeroException` was seen on a
+  windowed World, which adds the rendered-mesh comparisons. Read it once in a
+  windowed window; if it still throws, the answer's text carries no stack, so
+  catch it in `WorldDiagnostics` with the exception's `ToString()`.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
@@ -2860,11 +2864,6 @@ runs.
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
   comparison cannot separate a change from lighting history. The paired tour
   on one attached World confirms whether the remainder is the probe cache's.
-- [medium] Baseline status comparisons can perpetuate a prior comparison
-  failure after its metrics match: `SweepBaseline.Changes` compares the
-  stored, comparison-adjusted status with the current intrinsic one, and
-  `SweepRun` makes each such change red again. Keep the intrinsic verdict
-  apart from comparison failures.
 - [medium] A windowed sweep's convergence is unproven under load: the case
   that once starved it (frames held for minutes, the attachment dropping) has
   not been retried beside a build or a test run.
@@ -3372,8 +3371,6 @@ reversal brake, then a sitting.
 - [low] `dashPose`, `airPose`, `airWings` and `bootBoost` are each one cell
   keyed `"0"`, so only body 0's dash drives the lean and flare. Key them per
   body together.
-- [low] `player.binding-bar model <value>` stores any text, and every value
-  but `single` stacks. Refuse an unknown model by name.
 - [low] A requested boom distance replaces the orbit op's distance outright
   (`SdfCameraProgram`'s `Evaluate`), and `WorldSeatViewState.AuthoredDistance`
   reads the first orbit op's literal, so a scalar-bound orbit distance stops
@@ -3385,14 +3382,13 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
-- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
-  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
-  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
-  before reaching the repaired Drive grant. Wire the standard authored camera
-  mode, body and rig into the debug world, then verify its entry, movement and
-  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
-  the grant without making the seat an operator; a temporary authored snapshot
-  is only a runtime probe, not the missing standard-package design.
+- [medium] Free Cam has no entry handoff: the camera body rests where it was left
+  (`worlds/standard/free-camera.puck`'s `rest`, 40 m over the debug stage at first),
+  because a rule's `pose` effect takes a literal position and nothing copies the
+  seat's eye to the camera body on entry. Add a pose-from-body effect or let the
+  camera application start the body at the perceiving pose. The play wheel's four
+  rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
+  ring or a page entry.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged

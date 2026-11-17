@@ -945,10 +945,10 @@ bindingOverlays [
 commands [
   {
     name: "controls.bar"
-    help: "Selects this seat's bar layout and model (single or wings); preferences save with identity.bindings.save."
+    help: "Selects this seat's bar layout and model (single or stacked); preferences save with identity.bindings.save."
     parameters [
       { name: "layout", kind: Choice, values ["wings", "sidebars"] }
-      { name: "model", kind: Choice, values ["single", "wings"], default: "single" }
+      { name: "model", kind: Choice, values ["single", "stacked"], default: "single" }
     ]
     lines ["player.binding-bar layout {layout}", "player.binding-bar model {model}"]
   }
