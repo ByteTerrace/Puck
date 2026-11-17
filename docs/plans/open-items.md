@@ -2712,6 +2712,13 @@ that stops compiling.
   (`gh run view --log-failed` on the latest `main` run).
 - Red on the integration tip, each to update to the behaviour it now meets or
   delete:
+  - SdfVm: eight `SdfMeshPathBakeLawTests` cases (`ACachedReplacement…`,
+    `ADynamicSlotRefines…`, `AFrameTakesTheLattices…`,
+    `AGroupWhoseShapesRideTwoSlots…`, `AKeptSeparateGeometry…`,
+    `AMovedIdentity…`, `AStaticCopyBakesItsUnion…`, `AStaticCopyOfThinPlates…`)
+    and `SdfMeshPathBakeSampledLawTests.AReferenceRepublishedEveryFrame…`,
+    red before the tap-spacing change too; read each for a real bake
+    regression before updating or deleting it.
   - Server: `HoldLawTests` (two checkpoint cases) and
     `TetherLawTests.TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically`
     compare `WorldBody.CaptureIntegrationResidue` records whole, which differ
