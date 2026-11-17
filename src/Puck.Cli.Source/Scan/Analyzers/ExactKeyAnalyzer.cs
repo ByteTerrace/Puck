@@ -15,6 +15,7 @@ namespace Puck.Cli.Scan.Analyzers;
 //                    type of a dictionary or set declared under a cache's name; or its name ends in Key and it declares a
 //                    Matches) that holds continuous members and compares them exactly: a record, or a type that
 //                    declares Equals, Matches or operator ==.
+//   collection-key — a cache collection keyed directly by a continuous value or a tuple containing one.
 //   bit-equality   — an equality between two BitConverter bit patterns of floats (SingleToInt32Bits and its kin), the
 //                    spelling of "exactly the inputs it was computed for", in a method named for matching (Matches,
 //                    Equals, Same, Bits) or a type named as a key; a law's bit-exact assertion is not listed.
@@ -42,7 +43,7 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
     // A name that says cache key on its own; a bare `Key` suffix also names keyframes and input keys, so it counts only
     // with a cache that keys by it or a Matches of its own.
     private static readonly Regex KeyName = new(pattern: "(Query|Memo|Cache|Cached|Signature)$");
-    private static readonly Regex RememberedName = new(pattern: "^(m_|s_|_)?(cached|last|previous|prev|memo)[A-Z_]", options: RegexOptions.IgnoreCase);
+    private static readonly Regex RememberedName = new(options: RegexOptions.IgnoreCase, pattern: "^(m_|s_|_)?(cached|last|previous|prev|memo)[A-Z_]");
 
     private static string Simple(TypeSyntax type) {
         var name = type switch {
@@ -56,19 +57,27 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
 
         return name;
     }
+    private static bool IsContinuous(TypeSyntax type) => type switch {
+        NullableTypeSyntax nullable => IsContinuous(type: nullable.ElementType),
+        TupleTypeSyntax tuple => tuple.Elements.Any(predicate: static element => IsContinuous(type: element.Type)),
+        QualifiedNameSyntax qualified => IsContinuous(type: qualified.Right),
+        AliasQualifiedNameSyntax alias => IsContinuous(type: alias.Name),
+        GenericNameSyntax { Identifier.ValueText: "ValueTuple" } tuple => tuple.TypeArgumentList.Arguments.Any(predicate: IsContinuous),
+        _ => ContinuousTypes.Contains(item: Simple(type: type)),
+    };
     // The continuous members a type declares: fields, auto-properties and a record's positional parameters.
     private static List<string> ContinuousMembers(TypeDeclarationSyntax type) {
         var members = new List<string>();
 
         if (type.ParameterList is { } parameters) {
-            members.AddRange(collection: parameters.Parameters.Where(predicate: static parameter => (parameter.Type is { } spelled) && ContinuousTypes.Contains(item: Simple(type: spelled))).Select(selector: static parameter => parameter.Identifier.ValueText));
+            members.AddRange(collection: parameters.Parameters.Where(predicate: static parameter => ((parameter.Type is { } spelled) && IsContinuous(type: spelled))).Select(selector: static parameter => parameter.Identifier.ValueText));
         }
         foreach (var member in type.Members) {
             switch (member) {
-                case FieldDeclarationSyntax field when !field.Modifiers.Any(kind: SyntaxKind.ConstKeyword) && !field.Modifiers.Any(kind: SyntaxKind.StaticKeyword) && ContinuousTypes.Contains(item: Simple(type: field.Declaration.Type)):
+                case FieldDeclarationSyntax field when (!field.Modifiers.Any(kind: SyntaxKind.ConstKeyword) && !field.Modifiers.Any(kind: SyntaxKind.StaticKeyword) && IsContinuous(type: field.Declaration.Type)):
                     members.AddRange(collection: field.Declaration.Variables.Select(selector: static variable => variable.Identifier.ValueText));
                     break;
-                case PropertyDeclarationSyntax property when !property.Modifiers.Any(kind: SyntaxKind.StaticKeyword) && (property.AccessorList?.Accessors.All(predicate: static accessor => (accessor.Body is null) && (accessor.ExpressionBody is null)) ?? false) && ContinuousTypes.Contains(item: Simple(type: property.Type)):
+                case PropertyDeclarationSyntax property when (!property.Modifiers.Any(kind: SyntaxKind.StaticKeyword) && (property.AccessorList?.Accessors.All(predicate: static accessor => ((accessor.Body is null) && (accessor.ExpressionBody is null))) ?? false) && IsContinuous(type: property.Type)):
                     members.Add(item: property.Identifier.ValueText);
                     break;
             }
@@ -77,34 +86,34 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
         return members;
     }
     // The name a collection type is declared under: the field, property or local it types.
-    private static string DeclaredName(TypeSyntax type) => type.Ancestors().FirstOrDefault(predicate: static node => node is VariableDeclarationSyntax or PropertyDeclarationSyntax) switch {
+    private static string DeclaredName(TypeSyntax type) => type.Ancestors().FirstOrDefault(predicate: static node => (node is VariableDeclarationSyntax or PropertyDeclarationSyntax)) switch {
         VariableDeclarationSyntax variable => string.Join(separator: ",", values: variable.Variables.Select(selector: static declarator => declarator.Identifier.ValueText)),
         PropertyDeclarationSyntax property => property.Identifier.ValueText,
         _ => "",
     };
     private static bool HasMatches(TypeDeclarationSyntax type) =>
-        type.Members.OfType<MethodDeclarationSyntax>().Any(predicate: static method => method.Identifier.ValueText is "Matches" or "SameAs" or "Same");
+        type.Members.OfType<MethodDeclarationSyntax>().Any(predicate: static method => (method.Identifier.ValueText is "Matches" or "SameAs" or "Same"));
     private static bool ComparesItself(TypeDeclarationSyntax type) =>
-        (type is RecordDeclarationSyntax) ||
+        ((type is RecordDeclarationSyntax) ||
         type.Members.Any(predicate: static member => member switch {
-            MethodDeclarationSyntax method => method.Identifier.ValueText is "Equals" or "Matches" or "SameAs" or "Same",
+            MethodDeclarationSyntax method => (method.Identifier.ValueText is "Equals" or "Matches" or "SameAs" or "Same"),
             OperatorDeclarationSyntax op => op.OperatorToken.IsKind(kind: SyntaxKind.EqualsEqualsToken),
             _ => false,
-        });
+        }));
     // Whether a comparison decides whether something is reused: it sits in a method named for matching (Matches, Equals,
     // Same, Bits) or in a type named as a cache key. A bit-exact assertion in a law or a conversion check decides
     // nothing about reuse.
     private static bool DecidesReuse(SyntaxNode node) =>
-        ((node.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } method) && ((method is "Bits") || method.Contains(value: "Match", comparisonType: StringComparison.Ordinal) || method.Contains(value: "Same", comparisonType: StringComparison.Ordinal) || method.Contains(value: "Equal", comparisonType: StringComparison.Ordinal))) ||
-        ((node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } type) && (KeyName.IsMatch(input: type) || type.EndsWith(value: "Key", comparisonType: StringComparison.Ordinal)));
+        (((node.Ancestors().OfType<MethodDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } method) && ((method is "Bits") || method.Contains(comparisonType: StringComparison.Ordinal, value: "Match") || method.Contains(comparisonType: StringComparison.Ordinal, value: "Same") || method.Contains(comparisonType: StringComparison.Ordinal, value: "Equal"))) ||
+        ((node.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault()?.Identifier.ValueText is { } type) && (KeyName.IsMatch(input: type) || type.EndsWith(comparisonType: StringComparison.Ordinal, value: "Key"))));
     private static bool IsBitPattern(ExpressionSyntax expression) =>
-        (expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: var name } }) && BitPatterns.Contains(item: name);
+        ((expression is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Name.Identifier.ValueText: var name } }) && BitPatterns.Contains(item: name));
     // The continuous fields each type declares, by name, for the cached-compare check.
     private static Dictionary<string, string> ContinuousFields(TypeDeclarationSyntax type) {
         var fields = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
 
         foreach (var field in type.Members.OfType<FieldDeclarationSyntax>()) {
-            if (!ContinuousTypes.Contains(item: Simple(type: field.Declaration.Type))) {
+            if (!IsContinuous(type: field.Declaration.Type)) {
                 continue;
             }
             foreach (var variable in field.Declaration.Variables) {
@@ -122,21 +131,31 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
 
     public (string Jsonl, string Grouped) Analyze(SourceCorpus corpus, ScanOptions options) {
         var keyed = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var sites = new ScanSites();
+        var collections = new HashSet<(string File, int Declaration, string Key)>();
 
         foreach (var parsed in corpus.Files) {
             foreach (var generic in parsed.Root.DescendantNodes().OfType<GenericNameSyntax>()) {
                 if (KeyedCollections.Contains(item: generic.Identifier.ValueText) && (generic.TypeArgumentList.Arguments.Count > 0) && CacheName.IsMatch(input: DeclaredName(type: generic))) {
-                    _ = keyed.Add(item: Simple(type: generic.TypeArgumentList.Arguments[0]));
+                    var key = generic.TypeArgumentList.Arguments[0];
+
+                    _ = keyed.Add(item: Simple(type: key));
+                    var declaration = generic.Ancestors().First(predicate: node => (node is VariableDeclarationSyntax or PropertyDeclarationSyntax));
+
+                    if (IsContinuous(type: key) && collections.Add(item: (parsed.Relative, declaration.SpanStart, key.ToString()))) {
+                        var (line, endLine) = ScanJsonl.LineRange(location: declaration.GetLocation());
+
+                        sites.Add(endLine: endLine, file: parsed.Relative, kind: "collection-key", line: line,
+                            text: $"{DeclaredName(type: generic)} keys a cache by {key} and compares it exactly");
+                    }
                 }
             }
         }
 
-        var sites = new ScanSites();
-
         foreach (var parsed in corpus.Files) {
             foreach (var node in parsed.Root.DescendantNodes()) {
                 switch (node) {
-                    case TypeDeclarationSyntax type when (KeyName.IsMatch(input: type.Identifier.ValueText) || keyed.Contains(item: type.Identifier.ValueText) || (type.Identifier.ValueText.EndsWith(value: "Key", comparisonType: StringComparison.Ordinal) && HasMatches(type: type))) && ComparesItself(type: type): {
+                    case TypeDeclarationSyntax type when ((KeyName.IsMatch(input: type.Identifier.ValueText) || keyed.Contains(item: type.Identifier.ValueText) || (type.Identifier.ValueText.EndsWith(comparisonType: StringComparison.Ordinal, value: "Key") && HasMatches(type: type))) && ComparesItself(type: type)): {
                             var continuous = ContinuousMembers(type: type);
 
                             if (continuous.Count == 0) {
@@ -156,7 +175,7 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
 
                             break;
                         }
-                    case BinaryExpressionSyntax { RawKind: (int)SyntaxKind.EqualsExpression or (int)SyntaxKind.NotEqualsExpression } binary: {
+                    case BinaryExpressionSyntax { RawKind: ((int)SyntaxKind.EqualsExpression) or ((int)SyntaxKind.NotEqualsExpression) } binary: {
                             var (line, endLine) = ScanJsonl.LineRange(location: binary.GetLocation());
 
                             if (IsBitPattern(expression: binary.Left) && IsBitPattern(expression: binary.Right) && DecidesReuse(node: binary)) {
@@ -167,7 +186,7 @@ internal sealed class ExactKeyAnalyzer : ISourceAnalyzer {
                             var fields = ((binary.Ancestors().OfType<TypeDeclarationSyntax>().FirstOrDefault() is { } holder) ? ContinuousFields(type: holder) : []);
                             var remembered = new[] { binary.Left, binary.Right }
                                 .Select(selector: OperandName)
-                                .FirstOrDefault(predicate: name => (name is not null) && RememberedName.IsMatch(input: name) && fields.ContainsKey(key: name));
+                                .FirstOrDefault(predicate: name => ((name is not null) && RememberedName.IsMatch(input: name) && fields.ContainsKey(key: name)));
 
                             if (remembered is not null) {
                                 sites.Add(endLine: endLine, file: parsed.Relative, kind: "cached-compare", line: line, text: $"{binary} ({remembered} is {fields[remembered]})");

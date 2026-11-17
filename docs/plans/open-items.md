@@ -2354,6 +2354,8 @@ retirement.
   references outside a `<PuckProvider>` project; and the WebAssembly publish's
   trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
   (`Activator.CreateInstance` on an unannotated type).
+  After the trim fix, re-run the browser AOT publish and Node harness; the
+  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -2889,9 +2891,8 @@ validation that makes the skill suites believable.
   an async replacement is attributed to the call that starts it; STALE002
   ignores inherited root accessors; `[Replaces(typeof(object))]` and stale
   marks are never checked; `IdentityCounterAnalyzer` matches project paths
-  relative to the scan root and drops namespace and arity from type keys;
-  `ExactKeyAnalyzer` misses `Dictionary` keys of `Vector3`, `float` and
-  tuples. Low: mentioning a counter counts as persisting it, and a tolerant
+  relative to the scan root and drops namespace and arity from type keys.
+  Low: mentioning a counter counts as persisting it, and a tolerant
   `Matches` reads as exact. Fix each or list it on the page.
 - [high] The skill-eval programme
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill)),
@@ -2939,10 +2940,6 @@ validation that makes the skill suites believable.
   `records-and-pools.md` sections 1 to 4 to `docs/reference/state`,
   `updater-policy.md`, editor E5 and E9, the demand tiers' invariants, and
   water's "as built" sections.
-- [low] Pages still cite canaries that moved to
-  `experimental/tests/Puck.World.Canaries` (`docs/reference/audio.md`,
-  `src/Puck.World/Audio/README.md`, `docs/reference/physics.md`,
-  `docs/reference/state/testing.md`).
 - [low] The hazard detectors' follow-ups: mark the next replaceable family (a
   GPU device lost and recreated is the likely one); triage `puck scan --only
   clones` below its heaviest thirty clusters; a C# and HLSL formula pair has
@@ -2986,16 +2983,6 @@ proves itself with `puck compile` lowering to the same document.
   R1a; replace their setup/expectations from the current mechanisms when next
   working that area. R1a's direct table law and frame/header/layout laws pass.
 
-- [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
-  (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
-  (`Puck.Abstractions`, path-based) each try, test a timeout and sleep on the
-  token's wait handle. One loop over an opener delegate belongs in
-  `Puck.Confinement`, beneath both; `WAIT001` already treats
-  `ConfinedDirectory.AcquireLock` as a blocking member, so the merged loop is
-  answered at its callers.
-- [low] `Puck.World.Console` references `Puck.Launcher` and no code in it uses
-  the reference; drop it, re-record the lock files (`puck locks`, minding the item below) and narrow its
-  profile in `build/Architecture.props`.
 - [low] `LockFiles.RecordArguments(update: false)` runs an unlocked restore with `--force`,
   which can re-resolve unrelated transitive packages after a project-reference change.
   The verb's promise to keep every other pinned version needs an enforcing mechanism:
@@ -3003,6 +2990,12 @@ proves itself with `puck compile` lowering to the same document.
   and FSharp.Core without `--update`. The experiment was backed up and reverted;
   rf2's final project graph needs no lock changes. Fix the non-update path in
   `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
+  Removing Console's launcher reference also left orphan project entries when
+  `puck locks` reported no changes; `--force-evaluate` pruned them but upgraded
+  unrelated packages. Regeneration must derive the current project closure
+  while retaining pinned package versions. A local feed containing only the
+  prior closure's pinned packages allowed that reference removal to regenerate
+  without upgrades.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events
@@ -3017,11 +3010,6 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-- Recursive `Directory.Delete` remains in assemblies the browser payload
-  links: `CacheRetention` (`Puck.Abstractions`) and `ConsoleControlSession`
-  (`Puck.Hosting`). Route them through `ConfinedDirectory.RemoveTree`, after
-  one `browser.yml` AOT publish shows the payload still boots with
-  `Puck.Confinement` in its closure.
 - [low] The rule VM's latch keeps a binding in two dictionaries,
   `RuleLatch.RuleState.Held` and `RuleLatch.RuleState.Scheduling`, both walked
   by `RuleLatch.EndSweep`. One binding entry holding the edge bit and the

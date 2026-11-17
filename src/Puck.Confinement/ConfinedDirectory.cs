@@ -220,17 +220,13 @@ public sealed partial class ConfinedDirectory : IDisposable {
     /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> fired.</exception>
     public FileStream AcquireLock(string name, TimeSpan timeout, CancellationToken cancellationToken) {
         var started = Environment.TickCount64;
-        var delay = 1;
 
-        while (true) {
-            cancellationToken.ThrowIfCancellationRequested();
-            if (TryAcquireLock(name: name) is { } held) { return held; }
-            if ((timeout != Timeout.InfiniteTimeSpan) && ((Environment.TickCount64 - started) >= ((long)timeout.TotalMilliseconds))) {
-                throw new IOException(message: $"'{name}' stayed locked by another holder for {timeout.TotalSeconds:0.#} s.");
-            }
-            _ = cancellationToken.WaitHandle.WaitOne(millisecondsTimeout: delay);
-            delay = Math.Min(val1: 50, val2: (delay * 2));
-        }
+        return (FileLockWait.Acquire(
+            open: () => TryAcquireLock(name: name),
+            expired: () => ((timeout != Timeout.InfiniteTimeSpan) && ((Environment.TickCount64 - started) >= ((long)timeout.TotalMilliseconds))),
+            cancellationToken: cancellationToken,
+            initialDelayMilliseconds: 1
+        ) ?? throw new IOException(message: $"'{name}' stayed locked by another holder for {timeout.TotalSeconds:0.#} s."));
     }
     /// <summary>Lists this directory's entries through its handle, never through a path.</summary>
     /// <returns>Each entry and what it was when listed.</returns>
@@ -346,6 +342,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         }
         return existed;
     }
+
     /// <summary>Gets or sets this directory's Unix permission bits, through its handle.</summary>
     /// <exception cref="IOException">The mode cannot be read or changed.</exception>
     [System.Runtime.Versioning.UnsupportedOSPlatform(platformName: "windows")]
@@ -353,6 +350,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         get => File.GetUnixFileMode(fileHandle: Handle);
         set => File.SetUnixFileMode(fileHandle: Handle, mode: value);
     }
+
     /// <summary>Atomically and durably replaces <paramref name="name"/> with the file <paramref name="temporary"/>, both
     /// directly in this directory: when it returns, a power loss leaves the replacement; when it throws the replaced file
     /// is as it was. The temporary's content must already be flushed by its writer (<see cref="FileStream.Flush(bool)"/>
@@ -379,7 +377,7 @@ public sealed partial class ConfinedDirectory : IDisposable {
         if (OperatingSystem.IsWindows()) {
             // Verified here, held across the move: the share mode lets the move open the same file for its own rename.
             using var source = (Windows.Open(access: Windows.ReadAttributes, busyIsNull: false, create: false, directory: false, name: temporary, newFile: false,
-                parent: Handle, share: (Windows.ShareRead | Windows.ShareWrite | Windows.ShareDelete)) ?? throw new FileNotFoundException(message: $"'{temporary}' does not exist."));
+                parent: Handle, share: Windows.ShareRead | Windows.ShareWrite | Windows.ShareDelete) ?? throw new FileNotFoundException(message: $"'{temporary}' does not exist."));
 
             Windows.MoveDurably(destination: System.IO.Path.Combine(path1: m_path, path2: name), source: System.IO.Path.Combine(path1: m_path, path2: temporary));
         } else {
@@ -476,7 +474,6 @@ public sealed partial class ConfinedDirectory : IDisposable {
             _ = Linux.Unlink(directory: true, name: name, parent: parent.Handle);
         }
     }
-
     /// <summary>Removes the directory at <paramref name="path"/> and everything below it, the one way the repository
     /// deletes a tree it owns. The directory is reached as the operating system resolves its path (links in the path
     /// itself are followed), then removed by <see cref="DeleteTree"/>: iteratively, one open handle per level, so a

@@ -196,12 +196,13 @@ closure above); `dotnet test tests/Puck.Audio.Tests` for the mixer/synth and
 the real windowed `Puck.World` and reads
 `audio.state`/`audio.emitters`/`speaker.state`/`voice.state`/`music.state`
 over stdin—there is no build-only gate for a world-audio feature.
-`tests/Puck.World.Canaries/voice-babble` proves the playback wiring end to
+The quarantined script `experimental/tests/Puck.World.Canaries/voice-babble`
+describes a check of the playback wiring end to
 end: triggering an identity's babble fires four DISTINCT syllable triggers
 (never collapsing to one) and the mix produces measurable signal
 (`audio.state`'s `peak`); the discriminating leg (no trigger) proves neither
 ever happens on its own.
-It declares the `audio-output` capability, so on a machine with no default
+It is not selected by `puck canary`. It declares the `audio-output` capability, so on a machine with no default
 render endpoint (`audio.state` reports `device=silent` with an endpoint fault, or
 `device=unsupported` where no platform backend exists) the leg is reported
 unsupported rather than failed; a device that opens but produces no signal still
@@ -211,7 +212,8 @@ A region crossing fires one segment transition, and the transition fires the
 `WorldAudioDirector.SubmitCue` in `WorldPostBuildWiring`)—the crossing a
 world's `audio.cues` table binds a stinger patch to. No canary or test proves
 that crossing end to end.
-`tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` proves a
+The quarantined script
+`experimental/tests/Puck.World.Canaries/music-conditional-layer-and-embellishment` checks that a
 director embellishment fires exactly once off a matching sense edge (the
 `music.embellishment` cue token, keyed by the embellishment's own authored
 patch id—never an `audio.cues` row, since that table can only bind one

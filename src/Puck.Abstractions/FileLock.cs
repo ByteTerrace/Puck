@@ -10,8 +10,6 @@ namespace Puck.Abstractions;
 /// not another holder, and surfaces at once as the exception that names it rather than waiting out a deadline.</para>
 /// </summary>
 public static class FileLock {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(value: 50);
-
     /// <summary>Whether an exception from opening a lock file means another holder has it.</summary>
     /// <param name="exception">The failure from opening the file.</param>
     /// <returns><see langword="true"/> for ERROR_SHARING_VIOLATION on Windows, which reports it as an HRESULT, and
@@ -52,8 +50,8 @@ public static class FileLock {
         try {
             return new FileStream(
                 access: FileAccess.ReadWrite,
-                mode: FileMode.Open,
                 bufferSize: 1,
+                mode: FileMode.Open,
                 options: FileOptions.DeleteOnClose,
                 path: path,
                 share: FileShare.None
@@ -93,26 +91,8 @@ public static class FileLock {
     /// <exception cref="IOException">The lock file cannot be opened for a reason other than another holder.</exception>
     /// <exception cref="UnauthorizedAccessException">The lock file or its directory cannot be created or opened for
     /// writing.</exception>
-    public static FileStream? Acquire(string path, Func<bool>? expired = null, Action? waiting = null, CancellationToken cancellationToken = default) {
-        var announced = false;
-
-        while (true) {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (TryAcquire(path: path) is { } held) {
-                return held;
-            }
-            if (!announced) {
-                announced = true;
-                waiting?.Invoke();
-            }
-            if (expired?.Invoke() ?? false) {
-                return null;
-            }
-
-            _ = cancellationToken.WaitHandle.WaitOne(timeout: PollInterval);
-        }
-    }
+    public static FileStream? Acquire(string path, Func<bool>? expired = null, Action? waiting = null, CancellationToken cancellationToken = default) =>
+        Puck.Confinement.FileLockWait.Acquire(open: () => TryAcquire(path: path), expired: expired, waiting: waiting, cancellationToken: cancellationToken);
     /// <summary>Waits, without blocking a thread, for the exclusive lock on <paramref name="path"/>.</summary>
     /// <param name="path">The lock file.</param>
     /// <param name="expired">Whether the wait has run out, asked before each wait; <see langword="null"/> waits until
@@ -126,29 +106,8 @@ public static class FileLock {
     /// <exception cref="IOException">The lock file cannot be opened for a reason other than another holder.</exception>
     /// <exception cref="UnauthorizedAccessException">The lock file or its directory cannot be created or opened for
     /// writing.</exception>
-    public static async Task<FileStream?> AcquireAsync(string path, Func<bool>? expired = null, Action? waiting = null, CancellationToken cancellationToken = default) {
-        var announced = false;
-
-        while (true) {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (TryAcquire(path: path) is { } held) {
-                return held;
-            }
-            if (!announced) {
-                announced = true;
-                waiting?.Invoke();
-            }
-            if (expired?.Invoke() ?? false) {
-                return null;
-            }
-
-            await Task.Delay(
-                cancellationToken: cancellationToken,
-                delay: PollInterval
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        }
-    }
+    public static Task<FileStream?> AcquireAsync(string path, Func<bool>? expired = null, Action? waiting = null, CancellationToken cancellationToken = default) =>
+        Puck.Confinement.FileLockWait.AcquireAsync(open: () => TryAcquire(path: path), expired: expired, waiting: waiting, cancellationToken: cancellationToken);
 
     private static FileStream? Open(string path, FileAccess access, FileShare share) {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
