@@ -767,7 +767,9 @@ single-parent basis chain. Composition order is the basis chain first, then each
 resolved and folded left to right in list order, then the file's own body last.
 Within either step, authored members override, omitted members inherit, an
 authored `null` clears, `$type`-changed union objects replace wholesale, and
-identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
+an object carrying `"$replace": true` replaces wholesale with its member order and literal nulls preserved
+(the marker is consumed). The inverse diff uses this when merging cannot reproduce an object's key order.
+Identity-keyed row lists (the first of `id`/`name`/`key`/`index` on every row of
 both sides—`key` covers a state row's own `cells`—or a grant row's
 `grantee`+`capability`+`subject` triple) merge by key with
 `{"…", "$drop": true}` tombstones and a leading `{"$replace": true}` marker for
@@ -2076,10 +2078,11 @@ effect succeeded.
 
 Each rule binding owns its reproducible random state. Other decisions and
 their evaluation order do not consume its draws. A weighted choice with
-multiple positive options uses one 64-bit ticket (two PCG32 draws); this bounds
-work without a rejection loop, with probability quantization below 2^-64 per
-option. A deterministic choice, no choice, or one positive option consumes no
-draws. Numeric aliases of the same `forEach` key evaluate once. A rule's
+multiple positive options draws one exact ticket below the total weight
+(`BoundedRandomSampling.TrySampleWide`), so each option's probability is exactly
+its weight over the total; its words are counted, rejected ones included, and a
+ticket that exhausts the shared attempt budget keeps the standing choice. A
+deterministic choice, no choice, or one positive option consumes no draws. Numeric aliases of the same `forEach` key evaluate once. A rule's
 `forEach` iterates any keyed row: an integer key also binds the `each` body,
 a non-integer key (a card or piece token) binds `$each` alone. Removing a
 binding, replacing a body generation, or changing the source policy starts a

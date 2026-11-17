@@ -148,7 +148,9 @@ public sealed class SurfaceEncoder : IDisposable {
     /// <returns>Tightly packed <see cref="CaptureFormat"/> pixels, four bytes each.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="layout"/> is none of the layouts a node publishes
     /// in.</exception>
-    /// <exception cref="InvalidOperationException">The device's descriptor heaps cannot admit the encoder's pool.</exception>
+    /// <exception cref="InvalidOperationException">The encode's pipeline is still building (<see cref="IsReady"/> is
+    /// false; a reader polls it and reads on a later frame), or the device's descriptor heaps cannot admit the encoder's
+    /// pool.</exception>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
     public ReadOnlyMemory<byte> ReadSdr(nint image, nint imageView, uint width, uint height, GpuImageLayout layout) {
         if (layout is not (GpuImageLayout.ShaderReadOnly or GpuImageLayout.General or GpuImageLayout.External)) {
@@ -159,7 +161,7 @@ public sealed class SurfaceEncoder : IDisposable {
             );
         }
 
-        var pass = (m_lease.Poll() ?? m_lease.Wait(cancellationToken: CancellationToken.None));
+        var pass = (m_lease.Poll() ?? throw new InvalidOperationException(message: "The display encode's pipeline is still building; a read waits for IsReady, frame by frame."));
         var gpu = m_device.Services;
 
         EnsureObjects(
@@ -266,7 +268,9 @@ public sealed class SurfaceEncoder : IDisposable {
     /// presented surface is in <see cref="GpuImageLayout.ShaderReadOnly"/>, the layout a compositor samples it
     /// in.</summary>
     /// <param name="surface">The surface; a same-device image or CPU pixels in working values.</param>
-    /// <returns>A CPU-pixel surface of the same extent in <see cref="CaptureFormat"/>.</returns>
+    /// <returns>A CPU-pixel surface of the same extent in <see cref="CaptureFormat"/>, or an empty surface while the
+    /// encode's pipeline is still building (<see cref="IsReady"/>), which reads nothing and leaves the frame
+    /// uncaptured.</returns>
     /// <exception cref="ArgumentException"><paramref name="surface"/> is neither a same-device image nor CPU pixels.</exception>
     /// <exception cref="InvalidOperationException">The device's descriptor heaps cannot admit the encoder's pool.</exception>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
@@ -276,6 +280,9 @@ public sealed class SurfaceEncoder : IDisposable {
                 message: "Only a same-device image or CPU-pixel surface is encoded.",
                 paramName: nameof(surface)
             );
+        }
+        if (!IsReady) {
+            return default;
         }
 
         var imageView = surface.ImageViewHandle;

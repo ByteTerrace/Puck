@@ -287,14 +287,13 @@
              IWorldConsoleAuthority and the server-only console modules moved out of Puck.World (world.grant/
              .revoke/.grants/.why, world.groups/.ownership, world.looks/.population.spawn, world.market, world.peers,
              world.row.*/world.kits/world.assign, world.state.*/world.generate, world.update, world.wait). Everything
-             Puck.World.Server's profile carries (Console references Server directly), plus Puck.Launcher (referenced, though
-             no code in the project uses it) and Puck.Input (Launcher's own dependency,
-             not otherwise in Server's closure). No emulator cores and no Puck.SdfVm: those moved from Server to
+             Puck.World.Server's profile carries (Console references Server directly). No launcher or input dependency.
+             No emulator cores and no Puck.SdfVm: those moved from Server to
              Puck.World.Addons with the screen-machine host, and this row never referenced them directly. Same
              absence this profile enforces: no Backends row, no Presentation row, no Puck.Overlays, no
              Puck.World.Addons — a module touching WorldClient/PlayerRoster/the seat
              surface/views/HUD/editor/screens/audio/recording stays in Puck.World instead of moving here. -->
-        <PuckArchitectureProfile Include="Puck.World.Console" Forbid="Backends;Presentation;Puck.Overlays;Puck.SdfVm;Puck.World.Addons;Puck.Machines;Puck.HumbleGamingBrick;Puck.AdvancedGamingBrick" />
+        <PuckArchitectureProfile Include="Puck.World.Console" Forbid="Backends;Presentation;Puck.Launcher;Puck.Input;Puck.Overlays;Puck.SdfVm;Puck.World.Addons;Puck.Machines;Puck.HumbleGamingBrick;Puck.AdvancedGamingBrick" />
         <!-- The Linux platform split (docs/project-map.md's Puck.Platform.Linux row). PUCKARCH002 clause (a)
              already lets any Presentation-or-Composition-roots project hold a Backends assembly, so nothing stops
              a stray Puck.DirectX* reference from compiling here by rank alone — this profile is

@@ -46,6 +46,8 @@ public sealed class SurfaceCompositor : IDisposable {
     // until that device's resources are released.
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_encodeLease;
     private AssetContentHash m_encodePipelineId;
+    // Whether the presentation resources hold the encode's pool, sets and draw commands, built once its pipeline landed.
+    private bool m_encodeReady;
     private Dictionary<AssetContentHash, IGpuPipeline>? m_graphicsPipelines;
     private bool m_initialized;
     private nint m_lastWrittenImageView;
@@ -166,6 +168,7 @@ public sealed class SurfaceCompositor : IDisposable {
         Array.Clear(array: m_descriptorSets);
         m_drawCommandsPerSet = null;
         m_graphicsPipelines = null;
+        m_encodeReady = false;
     }
     private void OnPresentationResourcesRecreated() {
         var device = m_renderer.Device;
@@ -203,8 +206,21 @@ public sealed class SurfaceCompositor : IDisposable {
         );
         previousLease?.Release();
         m_encodePipelineId = AssetContentHash.Compute(content: key.Secondary.Span);
+        m_encodeReady = false;
+    }
+    // Builds the encode's block, pool, sets and draw commands for the presentation resources once the encode's pipeline
+    // has built, which the pool builds on the thread pool: a present never waits for it, and until it lands there is
+    // nothing to encode with.
+    private bool EnsureEncode() {
+        if (m_encodeReady) {
+            return true;
+        }
+        if (m_encodeLease?.Poll()?.Graphics is not { } encodePipeline) {
+            return false;
+        }
 
-        var encodePipeline = m_encodeLease.Wait(cancellationToken: CancellationToken.None).Graphics!;
+        var device = m_renderer.Device;
+        var output = m_renderer.Swapchain.Output;
         Span<byte> block = stackalloc byte[DisplayEncodeLayout.BlockBytes];
 
         DisplayEncodeLayout.WriteBlock(
@@ -281,17 +297,20 @@ public sealed class SurfaceCompositor : IDisposable {
         m_graphicsPipelines = new Dictionary<AssetContentHash, IGpuPipeline> {
             [m_encodePipelineId] = encodePipeline,
         };
+        m_encodeReady = true;
+
+        return true;
     }
 
-    /// <summary>Encodes the surface fullscreen onto the swapchain. A no-op until presentation resources exist or when the
-    /// surface is empty (a skipped frame).</summary>
+    /// <summary>Encodes the surface fullscreen onto the swapchain. A no-op until presentation resources exist and the
+    /// display encode's pipeline has built, or when the surface is empty (a skipped frame); the swapchain then keeps the
+    /// image it shows.</summary>
     /// <param name="surface">The surface the root render node produced this frame.</param>
     public void Blit(Surface surface) {
         if (
             !m_initialized ||
-            (m_graphicsPipelines is null) ||
-            (0 == m_descriptorSets[0]) ||
-            surface.IsEmpty
+            surface.IsEmpty ||
+            !EnsureEncode()
         ) {
             return;
         }

@@ -1,0 +1,146 @@
+// The standard free camera, a library. `freeCamera(...)` authors what a seat needs to leave its body and fly a camera of its
+// own: the `camera` seat-mode family whose `free` state targets the camera control application, the first-person camera
+// program that application resolves through (`views.cameraRig`), a camera body per local seat (`camera-seat-<slot>`, an
+// inhabited placement the engine's camera application possesses), the kit that body flies by, and the key that toggles it
+// (`player.camera`). The engine's part is the possession (`player.mode camera free`, `player.camera`): the seat's own body
+// idles, the camera body's pose is what the seat sees and hears through, and its movement channels fly it. Everything a
+// world might want different (the speed, the lens, where the camera rests, the key) is a parameter or a row it refines by id.
+//
+// It lives in a document of the importing world, which also owns the population: the camera bodies are inhabitants, so the
+// world's `bodies.capacity` grows by `freeCameraBodies`, and the document that expands this template is imported ahead of
+// the world's other inhabited placements so the camera takes the population's highest slot and every other body keeps its
+// index (the debug world's `free-camera.puck`):
+//
+//   import "../standard/free-camera"
+//   freeCamera(seats: freeCameraBodies)
+//
+// `rest` is where an idle camera body waits and so where a seat's camera first appears: the engine hands the seat's pose to
+// no camera body on entry, and the camera resumes where it was left.
+
+import "kits"
+
+let freeCameraBodies = 1
+
+template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "free-camera", rig = "free-camera", flySpeed = 8, runMultiplier = 4, fieldOfView = 1.1, toggleSources = [
+  "keyboard.f9"
+]) {
+  seatModes [
+    {
+      name: "camera"
+      defaultState: "seat"
+      states [{ name: "seat" }, { name: "free", target: "camera" }]
+    }
+  ]
+
+  views {
+    cameraRig {
+      name: rig
+      version: "puck.camera.program.v1"
+      operations [
+        lookAt(focusDistance: 1, subject: reference(), worldAxes: false)
+        fieldOfView(fieldOfViewRadians: fieldOfView)
+      ]
+    }
+  }
+
+  // A camera has no volume to collide with and nothing to stand on: free flight, one hold cancelling gravity whole, so it
+  // hovers where it is left. The movement channels fly it along where it looks and the rise channel climbs and sinks.
+  kits [
+    {
+      bodyMotionProgram: "walk"
+      mass: 0
+      name: kit
+      motion {
+        facingSnap: false
+        holds [
+          {
+            name: "free"
+            bond: Free
+            hold: Lift
+            forward: Heading
+            lift: 1
+            speed: flySpeed
+            gravity: standardGravity
+            thrust: 1
+          }
+        ]
+        moveFrame: World
+        shaping [{ along { engage: 40, release: 50 }, turnScale: 1 }]
+        speed { value: flySpeed, held { channel: "run", multiplier: runMultiplier } }
+        stepHeight: 0
+        turn { falloff: 1, maxPitch: 1.5, pitchRate: 0, rate: 2.5 }
+      }
+    }
+  ]
+
+  // The camera body's look: a small lens bead, which only another seat's view of this world ever draws.
+  prototypes {
+    prototype $"{bead}" {
+      document {
+        name: "free camera"
+        schema: "puck.creation.v1"
+        palette [{ color: "#8FD9FF", roughness: 0.3, specular: 0.2 }]
+        shape Sphere "lens" {
+          material: 0
+          position [0, 0, 0]
+          scale [0.08, 0.08, 0.08]
+        }
+      }
+    }
+  }
+
+  looks [
+    {
+      name: bead
+      scale: 1
+      source: creation(prototypeId: bead)
+      motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    }
+  ]
+
+  // The camera body's source is Live: an Idle body masks the submitted input a possessing seat's channels arrive as, so it
+  // would hold still under its pilot.
+  placements {
+    for slot in range(0, seats) {
+      placement $"camera-seat-{slot}" {
+        prototype: bead
+        position: rest
+        inhabit {
+          count: 1
+          distribution {
+            fill {
+              name: "additive"
+              offset: 0
+              step: 0.001
+            }
+            region: disc(radius: 0.01)
+          }
+          kit: kit
+          look: bead
+          source: "Live"
+        }
+      }
+    }
+  }
+
+  // The same key leaves the camera: while it flies, the seat's page is still the play page.
+  bindingOverlays [
+    {
+      id: "free-camera"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        chords [
+          {
+            chord []
+            group: "play"
+            page {
+              id: "base"
+              entries [{ command: "player.camera", id: "freeCamera", label: "Free camera", sources: toggleSources }]
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -21,8 +21,12 @@ internal static unsafe class SdfMeshStoreCodec {
     // renderer's visibility record's, so a change to either leaves the other's bytes alone.
     private const int OctahedralBits = 16;
 
-    internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
-        var pieces = ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
+    // The grid an entry stores a mesh's positions on: the box of every piece and the width the encoder's budget allows.
+    internal readonly record struct PositionGrid(Vector3 Low, Vector3 High, int Width);
+
+    private static IReadOnlyList<SdfMesh> PiecesOf(SdfMesh? mesh) => ((mesh is null) ? Array.Empty<SdfMesh>() : ((mesh.Chunks.Count == 0) ? new[] { mesh } : mesh.Chunks));
+    // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
+    private static PositionGrid GridOf(IReadOnlyList<SdfMesh> pieces) {
         var low = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionLow);
         var high = ((pieces.Count == 0) ? Vector3.Zero : pieces[0].PositionHigh);
 
@@ -30,8 +34,45 @@ internal static unsafe class SdfMeshStoreCodec {
             low = Vector3.Min(value1: low, value2: piece.PositionLow);
             high = Vector3.Max(value1: high, value2: piece.PositionHigh);
         }
-        // Every shared seam vertex uses exactly the same grid, including its width. A per-piece grid opens cracks.
-        var width = ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces));
+
+        return new PositionGrid(Low: low, High: high, Width: ((pieces.Count == 0) ? 4 : PositionWidth(high: high, low: low, pieces: pieces)));
+    }
+    // Whether a piece's normals are stored as octahedral words: every one is a unit vector.
+    private static bool IsOctahedral(ReadOnlySpan<Vector3> normals) {
+        var oct = true;
+
+        foreach (var normal in normals) { oct &= (MathF.Abs(x: (normal.LengthSquared() - 1f)) <= 0.00001f); }
+
+        return oct;
+    }
+    /// <summary>Returns the grid an entry of a mesh stores its positions on, which <see cref="Conform"/> reads again.</summary>
+    /// <param name="mesh">The mesh, whole or chunked.</param>
+    /// <returns>The grid.</returns>
+    internal static PositionGrid GridOf(SdfMesh mesh) => GridOf(pieces: PiecesOf(mesh: mesh));
+    /// <summary>Writes a piece's planes as a decode of the mesh's entry would: positions on the entry's grid and unit
+    /// normals through their octahedral words, the two planes the format stores lossily. The planes are the copy's own,
+    /// written from the mesh and not yet read by anything, so the published mesh is what the store answers without the
+    /// store being read back (<see cref="SdfMeshLibrary.Store"/>).</summary>
+    /// <param name="grid">The mesh's grid (<see cref="GridOf(SdfMesh)"/>).</param>
+    /// <param name="normals">The piece's normals, as copied.</param>
+    /// <param name="positions">The piece's positions, as copied.</param>
+    internal static void Conform(in PositionGrid grid, Span<Vector3> positions, Span<Vector3> normals) {
+        if (grid.Width != 4) {
+            for (var index = 0; (index < positions.Length); index++) { positions[index] = OnGrid(grid: in grid, position: positions[index]); }
+        }
+        if (IsOctahedral(normals: normals)) {
+            for (var index = 0; (index < normals.Length); index++) {
+                var normal = normals[index];
+                var unpacked = SdfOctahedral.UnpackSigned(bits: OctahedralBits, word: SdfOctahedral.PackSigned(bits: OctahedralBits, direction: new Double3(X: normal.X, Y: normal.Y, Z: normal.Z)));
+
+                normals[index] = new Vector3(x: ((float)unpacked.X), y: ((float)unpacked.Y), z: ((float)unpacked.Z));
+            }
+        }
+    }
+
+    internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
+        var pieces = PiecesOf(mesh: mesh);
+        var (low, high, width) = GridOf(pieces: pieces);
         var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
         using var payload = new MemoryStream();
 
@@ -171,9 +212,8 @@ internal static unsafe class SdfMeshStoreCodec {
             }
             WritePlane(width: width, words: words, writer: writer);
         }
-        var oct = true;
+        var oct = IsOctahedral(normals: mesh.Normals.Span);
 
-        foreach (var normal in mesh.Normals.Span) { oct &= (MathF.Abs(x: (normal.LengthSquared() - 1f)) <= 0.00001f); }
         writer.Write(value: oct);
         if (oct) {
             var words = new uint[mesh.Normals.Length];
@@ -493,19 +533,23 @@ internal static unsafe class SdfMeshStoreCodec {
         var budget = (mesh.BakeCell.Length() / 1024f);
 
         if (!(budget > 0) || !float.IsFinite(f: budget)) { return false; }
-        var divisor = Steps(width: width);
-        var extentX = (((double)high.X) - low.X);
-        var extentY = (((double)high.Y) - low.Y);
-        var extentZ = (((double)high.Z) - low.Z);
+        var grid = new PositionGrid(Low: low, High: high, Width: width);
 
         foreach (var position in mesh.Positions.Span) {
-            var decoded = new Vector3(x: Expand(divisor: divisor, extent: extentX, low: low.X, value: Quantize(high: high.X, low: low.X, value: position.X, width: width)),
-                y: Expand(divisor: divisor, extent: extentY, low: low.Y, value: Quantize(high: high.Y, low: low.Y, value: position.Y, width: width)),
-                z: Expand(divisor: divisor, extent: extentZ, low: low.Z, value: Quantize(high: high.Z, low: low.Z, value: position.Z, width: width)));
-
-            if (Vector3.Distance(value1: position, value2: decoded) > budget) { return false; }
+            if (Vector3.Distance(value1: position, value2: OnGrid(grid: in grid, position: position)) > budget) { return false; }
         }
         return true;
+    }
+    // The position a decode of the grid's entry answers for one the encoder was given: the one quantize and expansion the
+    // encoder's fit check and Conform both run, so the budget the encoder holds is the error a published mesh carries.
+    private static Vector3 OnGrid(in PositionGrid grid, Vector3 position) {
+        var (low, high, width) = (grid.Low, grid.High, grid.Width);
+        var divisor = Steps(width: width);
+
+        return new Vector3(
+            x: Expand(divisor: divisor, extent: (((double)high.X) - low.X), low: low.X, value: Quantize(high: high.X, low: low.X, value: position.X, width: width)),
+            y: Expand(divisor: divisor, extent: (((double)high.Y) - low.Y), low: low.Y, value: Quantize(high: high.Y, low: low.Y, value: position.Y, width: width)),
+            z: Expand(divisor: divisor, extent: (((double)high.Z) - low.Z), low: low.Z, value: Quantize(high: high.Z, low: low.Z, value: position.Z, width: width)));
     }
     // The largest quantized value of a position width, which spans its axis's low to high.
     private static double Steps(int width) => ((1u << (width * 8)) - 1);

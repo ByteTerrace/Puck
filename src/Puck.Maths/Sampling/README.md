@@ -72,7 +72,7 @@ to meet them here than to discover them later.
 |------|------|---------------|
 | `Pcg32XshRr` | `struct` | The seeded sequential generator: each draw hands back a value and moves the generator on to its next state. Reference-exact PCG32 XSH-RR, one sequence per stream, logarithmic seek and distance, state inversion (`Preimage`/`Seeking`), uniform / bounded / fraction / standard-normal draws, and an in-place shuffle. |
 | `Pcg32Extended` | `struct` | O'Neill's extended PCG32: a `Pcg32XshRr` base XOR'd with a `k`-word extension table for k-dimensional equidistribution. Same seek/bounded/fraction shape as the base type, over its own draw. |
-| `WeightedSampler` / `AliasTable<TElement>` | `static` / `sealed class` | Weighted choice, where some outcomes are meant to come up more often than others. Exact-integer Walker/Vose construction from ordered entries; constant-time sampling at exactly two generator advances per draw. |
+| `WeightedSampler` / `AliasTable<TElement>` | `static` / `sealed class` | Weighted choice, where some outcomes are meant to come up more often than others. Exact-integer Walker/Vose construction from ordered entries; constant-time sampling at two generator advances per draw (a draw reports the advances it consumed; the exact threshold takes extra words on one word in 2³²). |
 | `Pcg3dLatticeNoise` | `static` | PCG3D hash-lattice value noise over a cell index, in `[0, 1)`, and the jittered scatter point of a block. The shared kernel behind a world's field-lattice Noise/Scatter fills and a placement distribution's own Noise/Scatter regions, so both agree bit for bit on what a seed means; its public constants are the source the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `LowDiscrepancy` | `static` | Even coverage by additive recurrence—keep adding a fixed step and read off the fractional part. Golden-ratio (`R1`) and plastic-number (`R2`) index-to-point maps: one multiply per component, no state. |
 | `DigitalNetSampler` | `static` | Even coverage by theorem. Digital `(0, m, 2)`-nets over the two-element field—the number system whose only values are 0 and 1, where addition is exclusive-or—in which a point is the exclusive-or of the direction vectors its index's set bits select. It offers only those randomizations that provably preserve stratification (the guarantee that every equal-sized box receives its exact share of the points): a digital shift of the coordinate, and a net-safe re-indexing. |
@@ -272,14 +272,21 @@ compare.
 identical tables on every machine, including through the `double` overload's
 quantization.
 
-**Advance cost.** Exactly two generator advances per draw, with no rejection:
-the column count is rounded up to a power of two, so the column index is a mask
-of one draw rather than a bounded draw.
+**Advance cost.** Two generator advances per draw, reported by every draw
+(`advances`): the column count is rounded up to a power of two, so the column
+index is a mask of one draw rather than a bounded draw. One draw in `2³²` (the
+second word equals the column's floored threshold, where the column's
+fraction is not a whole number of `2⁻³²` steps) also takes an exact wide draw
+below the total weight through `BoundedRandomSampling.TrySampleWide`, and
+reports its raw words in `advances`. A caller that seeks a generator adds the
+reported count, never a constant.
 
-**Exactness and rounding.** Thresholds are UQ0.32 column fractions—unsigned,
-no integer bits, 32 fraction bits, so a value in `[0, 1)`—rounded to nearest,
-which places each entry's sampled probability within `2⁻³³` per column of
-`weight / total`. The `ulong`, `FixedQ4816`, and `UFixedQ4816` overloads are
+**Exactness.** A column's threshold is its UQ0.32 column fraction—unsigned,
+no integer bits, 32 fraction bits, so a value in `[0, 1)`—floored, and its
+remainder over the total weight is kept as an exact integer. A draw word below
+the threshold keeps the column, a word above it takes the alias, and the word
+equal to the threshold keeps the column with probability `remainder / total`,
+so each entry's sampled probability is exactly `weight / total`. The `ulong`, `FixedQ4816`, and `UFixedQ4816` overloads are
 exact: the fixed-point overloads pass raw bits straight through—a fixed-point
 value's raw bits are the plain integer it is stored in, sometimes called its
 carrier—and the signed overload rejects a negative weight. The `double`
@@ -305,20 +312,19 @@ API promises.
 | `Create(entries)` with `double` weights | Quantized against the largest weight; this is the crossing point where authored document weights arrive. |
 | `Create(entries)` with `FixedQ4816` / `UFixedQ4816` weights | Exact, no quantization. |
 | `AliasTable.Count` | The construction entry count, excluding padding. |
-| `AliasTable.SampleIndex(ref generator)` | The sampled entry's index in the construction span, always below `Count`. |
-| `AliasTable.Sample(ref generator)` | The element at that index. |
-| `SampleOnce(weights, ref generator)` | One pick over `ulong` weights with the same partition, rounding, padding and two advances as a table built from them, over stack storage (pooled above sixty-four padded columns) and discarded: the pick a search makes once per node. |
+| `AliasTable.SampleIndex(ref generator, out advances)` | The sampled entry's index in the construction span, always below `Count`, and the advances consumed. |
+| `AliasTable.Sample(ref generator, out advances)` | The element at that index, and the advances consumed. |
+| `SampleOnce(weights, ref generator, out advances)` | One pick over `ulong` weights with the same partition, exact thresholds, padding and draws as a table built from them, reporting the same advances, over stack storage (pooled above sixty-four padded columns) and discarded: the pick a search makes once per node. |
 
 Construction rejects an empty span, more than `2³⁰` entries, an all-zero weight
 set, a negative weight, and—for the `double` overload—a non-finite one.
 
-One construction detail is load-bearing rather than incidental. Rounding a
-column's threshold to nearest can reach exactly `2³²` even where the column's
-scaled weight is strictly below the total. Such a column always selects itself,
-so its otherwise-dead alias is set to itself and the packed threshold saturates
-at `uint.MaxValue`—saturating means clamping to the largest representable
-value instead of wrapping round to zero—which preserves every `uint` draw's
-outcome instead of letting one draw fall through to an unrelated alias.
+One construction detail is load-bearing rather than incidental. A column that
+always selects itself (the Vose worklists' leftover large columns) gets its own
+index as its alias, a threshold of `uint.MaxValue` and a zero remainder, so the
+one word equal to its threshold falls to an alias that is itself and takes no
+wide draw. A column with a zero remainder never takes the wide draw: its
+probability is exactly its threshold over `2³²`.
 
 ---
 
@@ -344,7 +350,7 @@ arguments.
 | Operation | Semantics |
 |---|---|
 | `Pcg3d(x, y, z)` | The raw three-lane mix. |
-| `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus the matching `Pcg3d` lane modulo the inset `max(0, spacing − 2·radius)`. |
+| `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus an offset uniform in `[0, inset)` for the inset `max(0, spacing − 2·radius)`: the matching `Pcg3d` lane through `BoundedRandomSampling.TryMap`, and an axis whose word is rejected redraws the same lane of `Pcg3d(blockX, blockZ, seed + attempt·HashStreamA)`. |
 | `PcgMultiplier` / `PcgIncrement` / `HashStreamA` / `HashStreamB` / `HashTumble` / `NoiseSeedStreamY` / `NoiseSeedStreamZ` | The published constants the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. `Fbm01` sums its octaves. |
 | `Fbm01(cellX, cellZ, frequency, octaves, seed)` | The fractal sum `FieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both read: octave `k` is `ValueNoise01` over the noise-cell edge `frequency` halved `k` times (floored at one cell), seeded `seed + k·HashStreamA`, weighing the amplitude halved `k` times by a raw shift; the sum is divided by the weights' sum, so the answer stays in `[0, 1)`. A caller folds the world seed into `seed` with `PackedIntPair.FoldXor`. Refuses fewer than one octave. |
@@ -729,9 +735,10 @@ dependency in the sources rather than a resemblance.
   `DigitalNetSampler.PlaneDirectionNumberCount` words at offset zero. A change
   to the shipped plane's direction numbers changes every baked cone table.
 - **`AliasTable` is the only type here that consumes the generator**, and it
-  takes it `by ref`—`Sample(ref Pcg32XshRr)` and `SampleIndex(ref Pcg32XshRr)`
-  advance the caller's own generator by exactly two steps rather than copying
-  it. A by-value pass would silently discard the advance and repeat the draw.
+  takes it `by ref`—`Sample(ref Pcg32XshRr, out advances)` and
+  `SampleIndex(ref Pcg32XshRr, out advances)` advance the caller's own generator
+  by the reported steps rather than copying it. A by-value pass would silently
+  discard the advance and repeat the draw.
 - **`DigitalNetSampler` consumes `BinaryPolynomial`** for its generator
   representation and for the primitivity decision that gates
   `BuildDirectionNumbers`.
@@ -822,8 +829,9 @@ by whole-state advances. A bounded draw may reject, consuming extra advances—
 deterministically, since the same state always rejects identically—so a
 shuffle of `n` elements consumes `n − 1` *calls* and an unpredictable number of
 *advances*. Any code that seeks a generator to a known offset must be built on
-the fixed-cost operations: one advance per raw draw or fraction draw, two per
-Gaussian pair, and two per alias-table draw.
+the fixed-cost operations (one advance per raw draw or fraction draw, two per
+Gaussian pair) or on a reported count: an alias-table draw takes two advances and
+reports them, plus the extra raw words of an exact wide draw on the rare word.
 
 ---
 
@@ -846,12 +854,13 @@ of; the ones that bear on a single type are argued at that type above.
   exact sequence. `Pcg3dLatticeNoise`, `LowDiscrepancy` and `DigitalNetSampler` carry
   no state and need nothing persisted.
 - **Seek arithmetic counts advances rather than calls.** `NextUInt32`, both
-  fraction draws, `NextGaussianPair` (two, `NextGaussian` included) and an
-  alias-table sample (two) consume a fixed number of state advances, so
-  `Advance`-based seeking is exact against them. A bounded
-  `NextUInt32(minimum, maximum)` may consume extra advances on rejection, as
-  does `Shuffle`—one bounded draw per element from the high end down—so a
-  seek must not be built on those.
+  fraction draws and `NextGaussianPair` (two, `NextGaussian` included) consume
+  a fixed number of state advances, so `Advance`-based seeking is exact against
+  them. A bounded `NextUInt32(minimum, maximum)` may consume extra advances on
+  rejection, as does `Shuffle`—one bounded draw per element from the high end
+  down—so a seek must not be built on those. An alias-table sample reports the
+  advances it consumed (two, plus an exact wide draw on a rare word), and a
+  caller that seeks past one adds the reported count.
 - **Alias tables are order-sensitive.** Entry order is part of the table's
   identity, so build from deterministically ordered data. Weights may be
   `ulong` (exact), `double` (quantized deterministically at `2⁵³` resolution,

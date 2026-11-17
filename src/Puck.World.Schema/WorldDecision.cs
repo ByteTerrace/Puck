@@ -24,8 +24,9 @@ public enum WorldDecisionMode : byte {
 /// <remarks>Common rule effects precede selected-option effects, only on a selection transition. Staying with an option
 /// neither repeats its effects nor renews commitment. Closing the enclosing gate clears the choice but preserves the
 /// local random stream. Effects retain normal rule refusal/transaction semantics: selection is intent, not proof that
-/// every effect succeeded. A weighted reconsideration with multiple positive options consumes exactly two PCG32 draws;
-/// its 64-bit ticket quantizes each ideal probability with absolute error below 2^-64. No eligible option means no choice,
+/// every effect succeeded. A weighted reconsideration with multiple positive options draws one exact ticket below the
+/// total weight through the shared bounded wide draw, so each option's probability is exactly its weight over the
+/// total; it consumes at least one PCG32 draw and counts every raw word, rejected words included. No eligible option means no choice,
 /// never an unchecked fallback. These policies are independent of render-frame timing.</remarks>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDecision(

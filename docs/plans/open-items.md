@@ -58,8 +58,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
    seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
-   the scheduling stage's and C0.3's windowed readings, the control plane's
-   step C0.4, then the pool's design.
+   the scheduling stage's, C0.3's and C0.4's windowed readings, the control plane's
+   step C0.5, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change: R1h and R1a's windowed checks, then R1b, R1c and S2 of
    [its memo](arrival-proportional.md) in that order (R0's rule has read
@@ -95,7 +95,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     ellipsoid bodies, then clearance close to a slope.
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
-    console command hang, the spelling pairs, the overlay text advance.
+    console command hang, the cost corpus, the overlay text advance.
 21. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
 22. Then, by ordinary priority:
@@ -130,6 +130,13 @@ head, each named by the lane whose landing waits on it:
   whole, on both backends.
 - c03: the converged still at a lockstep stop against the build before c03,
   on both backends (the control gap is read on both).
+- c04: a `world.reload` that changes the slot layout (an edit that adds an
+  animated placement, unverified as the shortest one), windowed on both backends, plain and under
+  `world.lockstep on`: `host.frames 300` around it reads the control gap under
+  the wait budget plus a pacer period, `world.wait ready 5` issued right after
+  the reload either reports ready or names the composition's build, and the
+  first boot shows the window's first image after the encode builds, with no
+  error line.
 - sm7p: the indexed slab read's paired cost on Vulkan with the counted draws
   held equal (Direct3D 12 is read; see
   [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
@@ -337,9 +344,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's windowed reading and C0.3's, then
+order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.4 (C0.1 to C0.3 are built), then the pool's design (J1). The garbage-collection cuts
+step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -347,8 +354,17 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   control gap reads p99 119 ms and max 247 ms over 300 iterations, made of
   simulation (`simulate` p99 93 ms, max 116 ms) and produce work (max 70 ms),
   not waits; Direct3D 12 read `simulate` at 0 over the same kind of window.
-  Find what the Vulkan run's ticks do in those iterations and whether a held
-  tick catches up in a burst, which C0.5's tick waits should bound.
+  No held tick catches up in a burst: under lockstep the loop takes at most one
+  step an iteration (`FixedStepPump.TryStep`) and spends a held interval
+  without stepping (`FixedStepPump.Hold`), and a paced burst sheds what is due
+  once its steps spend one step's period (`FixedStepPump.Advance`). So each
+  93 to 116 ms `simulate` is one step, and the Vulkan run stepped where
+  Direct3D 12 held: its frames answered rendered between converging frames
+  (inference, from the code; the reading has no per-iteration render
+  completion). C0.5 owns the step's joins and drains, which bound the control
+  gap once they run through the door; what the step does for 100 ms on Vulkan
+  is a measurement: `host.frames` with the tick lane and a `dotnet-trace` of the
+  pump over a stepping iteration during a convergence on Vulkan.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period
@@ -764,10 +780,6 @@ says how one is reproduced and profiled.
   its first minute, and its allocation is a frame cost too (hundreds of
   collections while it bakes). Splitting the bake into its stages needs a cold
   bake that stays under the machine's memory.
-- [medium] `SdfMeshLibrary.Store` publishes a baked mesh by decoding its store
-  entry back (`TryLoad`), which more than doubled the cold bake's store stage.
-  Publish the encoded mesh's own native form without the round trip, keeping
-  the one publication door.
 - [medium] Every view renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` answers false on `MeshPathBake.Pending`),
   which the frame-paced bake needed and the background GPU work does not. Let
@@ -916,10 +928,6 @@ the tour's remaining reds and the Moth's shin groups share, then
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
   it.
-- [high] The material cut's lists are outside the memory account:
-  `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
-  that does not end takes the process. Give the lists a bound the account
-  enforces, and fail the group by name (`SdfMeshBakeReport.Failed`).
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
   lanes across a blended seam, then retiring the settle rebake for dynamic
   groups that are not rest skins, with the quiet-window cost of a skinned
@@ -1574,17 +1582,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `FixedDynamicBodyContacts.ClosestDelta` forms carrier-rounded
-  Q48.16 dot products before its segment-pair divisions: a sphere core at
-  `(0.001, 0, 0)` against a capsule core from the origin to `(0.002, 0, 0)`
-  returns `(66, 0, 0)` raws instead of zero, so overlap can miss the pair.
-  Replace the whole segment-pair solve with full-width arithmetic and verify
-  short, crossing, parallel and extreme-coordinate pairs against exact
-  geometry.
-- [medium] `physics.contact` adds three or four shared `CompareExchange`
-  updates to every surviving convex query whether or not a reader exists
-  (`FixedStaticContactWork`). Count per thread or per tick and publish on
-  read.
+- [medium] `physics.contact` still counts through the shared atomic
+  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
+  a surviving convex query adds three or four `WorkCount.AddShared` CAS
+  updates, even without a reader. The cause is shared counter storage, not
+  the physics wrapper. Add single-writer shards in the common counting home
+  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
+  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
+  handling rather than making physics carry a second aggregator. Preserve
+  totals when a writer thread exits, and bound retained shard state under
+  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
+  Check concurrent writers, reads and retirement for exact monotonic totals,
+  then physics ordering/friction laws and `world.counters physics.contact`.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -1606,10 +1615,7 @@ collider, then the lifecycle lows as one pass.
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
   a carried body's contacts are never released, so the box beneath cannot
   park; one refused probe drops a body's surface warm start
-  (`ReleaseUntouchedRigidContacts`); the rest latch's hold counter grows
-  unclamped past `policy.RestHoldTicks`, so a still body's replay hash can
-  move; `FixedPairManifoldSlot.IsPersistentStateEqual` and
-  `FixedPairManifoldSlotTable.Fold` have no caller; a lattice spill into an
+  (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).
 
@@ -1966,9 +1972,6 @@ State and server:
   `PeerAdmitted` and so no default peer control grant (`SelectCensus`'s
   `reports` flag in `WorldPopulation.Reconcile.cs`). Decide whether a moved
   census body keeps its grant.
-- [low] `WorldDisclosureImages` reads `m_windowVersions[row]` unchecked; it
-  would throw if an arena grew rows mid-window. `StateArena.TryRelayout` has
-  no caller, so it is latent: guard it.
 - Findings read from the code and not reproduced; confirm each with a failing
   case before fixing: `WorldServer.WriteStateCell` throws on a stale `CellKey`
   instead of returning `StaleAddress`; `ResolveDevelopmentRequest` and
@@ -2185,10 +2188,6 @@ lane's.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.
-- [low] `Fixtures.FreshServer` deserializes without
-  `WorldStateSettlement.SettleBeforeAdmission`, so a boot from a raw document
-  with a seeded responsive placement can show one prototype and collide as
-  another. Settle in the fixture as the loader does.
 - [low] `--cache-dir` redirects only the `puck test` workers: the process
   itself still persists compiles to the per-user directory (`WorldsRoot`).
   Make it cover the compile cache, or narrow its wording.
@@ -2213,35 +2212,17 @@ lane's.
 ### Language and authoring
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
-hang, then the spelling pairs, then the unreproduced language findings.
+hang, then the cost corpus, then the unreproduced language findings.
 
 - [medium] A scratch test with `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed minutes of CPU in preparation with no diagnostic; the
   command and the closing brace on separate lines compiled in seconds.
   Reproduce it and bound or repair the compile.
-- [medium] Spelling pairs the compiler does not yet hold
-  (`SpellingEquivalenceCorpusTests.Open`), each fixed by one canonical form in
-  lowering:
-  - `float-spelling`: `30.24` and `30.240000000000002` are one float32 but two
-    documents. Round a creation's scalars to the shortest float32 round-trip
-    spelling, or keep doubles and say so.
-  - `profile-start`: a closed profile listed from another start vertex is one
-    polygon, two documents and two bake keys. Start the ring at its least
-    vertex.
-  - `chamfer-default`: a zero `chamfer` and none are one program but two
-    creation hashes (`CreationCanonicalizer.Normalize`;
-    [G13](state-and-language.md#designs-chosen)).
-  - `ternary-fold`: a compile-time constant condition in a gate is not folded,
-    so it lowers to a dearer rule program
-    ([G14](state-and-language.md#designs-chosen)).
-  - A literal `rotation` is lowered in one sign on shape rows only; the
-    [modeling plan's S2](modeling-authoring.md#5-implementation-slices)
-    applies the one helper to text runs, placements and animation frames.
-  - The cost pairs two documents cannot share (static placements against one
-    creation, `wall - opening` against its box tiling, a mirrored pair against
-    a `symmetry` fold, union shape order, `x += 3` against `x = x + 3`) need a
-    cost corpus over bake groups and the work sheet beside the document
-    corpus.
+- [medium] The cost pairs two documents cannot share (static placements
+  against one creation, `wall - opening` against its box tiling, a mirrored
+  pair against a `symmetry` fold, union shape order, `x += 3` against
+  `x = x + 3`) need a cost corpus over bake groups and the work sheet beside
+  the document corpus.
 - [medium] A rule `local` costs more than the expression it names:
   `local k = a + 1` then `cards[k]` prices one unit above `cards[a + 1]`,
   because the key program reads the local (`world.budget.rules --why`). Lower
@@ -2270,16 +2251,6 @@ hang, then the spelling pairs, then the unreproduced language findings.
   so a world wanting the standard's `celStyle` as a default that boots off
   copies all eleven values (`worlds/debug/debug.puck`'s `render.toon`). Add an
   object update over a `let`, or a merge builtin beside `concat`.
-- [medium] A literal read from an initially empty ordered pile is refused even
-  when its key belongs to the declared `KeysOf` token domain:
-  `RuleCompileContext` admits authored cells and `CellsOf` topology cells
-  only. Admit literal keys from the declared domain; reproduce by adding
-  `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
-  transfer.
-- [medium] A solid creation shape without `position` in a hand-written JSON
-  document throws `NullReferenceException` in the validator
-  (`WorldDefinitionValidator.Placements.cs`, through `DocumentSpatialValues`).
-  Default or refuse it before the domain-expansion walk.
 - [medium] No log of author walls exists, though "Ergonomic is optimal"
   (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
   sdf-authoring skill's evals: start the one page those link to.
@@ -2310,9 +2281,6 @@ hang, then the spelling pairs, then the unreproduced language findings.
 - [low] A `Capsule` scaled `[0.05, 0.18, 0.05]` stopped about 9 cm short of
   where an author expected (`motion-nod`'s first neck); check what a Capsule's
   half-length means under scale and say so in the shapes reference.
-- [low] `prototypes.schema.json` says a trim is "authored as one shape against
-  the per-stamp shape budget", but no budget exists. Correct the XML docs on
-  `ShapeTrimDocument` and its siblings and regenerate through `puck schema`.
 - [unreproduced] A string literal on the left of a relational gate is not
   flipped (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's
   `local` report PUCK012; `not` loses its source span and recursion depth
@@ -2354,13 +2322,8 @@ the wire, then the float duration fields' schema migration.
 - Classify the public Maths surface with no law or waiver (algebra wrappers,
   coordinates, continued-fraction certificates, research APIs): bind existing
   evidence, give precise category waivers, delete unreachable code.
-- [low] `Pcg3dLatticeNoise.ScatterPoint` reduces a stateless hash with
-  `hash % inset`, a bias of inset/2^32, and a lattice's boot-time paint throws
-  on draw exhaustion where compose refuses.
-- [low] The alias table rounds each threshold to 32 fractional bits
-  (`WeightedSampler`), so `weightedNumeric`, `symmetryOrbit` and Markov draws
-  keep a small bias. Exact thresholds with a bounded rejection through
-  `BoundedRandomSampling` remove it.
+- [low] A lattice's boot-time paint throws on draw exhaustion where compose
+  refuses.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
@@ -2404,6 +2367,8 @@ retirement.
   references outside a `<PuckProvider>` project; and the WebAssembly publish's
   trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
   (`Activator.CreateInstance` on an unannotated type).
+  After the trim fix, re-run the browser AOT publish and Node harness; the
+  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -2479,6 +2444,15 @@ the windowed C# loop and the cold and warm builds timed on a quiet machine.
 
 The edit loop:
 
+- [low] Staging unchanged source bytes invalidates a pending World build:
+  `WorldArtifactKey` hashes `CheckoutContent.Change.Entry`, including Git's
+  index/worktree status. An easy-b2 headless start was refused after its
+  build-lease wait with "sources changed while waiting" when only `git add`
+  changed that status. Key the effective source content independently of
+  staging, preserving additions, deletions and paths. Check that staging and
+  unstaging identical bytes retain the key and a queued build, while changing
+  a source byte still invalidates it.
+
 - [high] A fresh landscape World artifact builds for minutes before boot,
   against the 30-second bar. A live compiler stack sat in ILLink's data-flow
   analysis and in `StaleCaptureAnalyzer.CompilationState.Collect`; every
@@ -2494,13 +2468,14 @@ The edit loop:
   Zig's incremental compiler as the design
   ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
   per-declaration units, recorded dependencies, early cutoff.
-- [medium] Reload deltas cannot express key order: the sender proves its delta
-  with `JsonNode.DeepEquals`, which ignores key order, and the diff and merge
-  keep old order and append new keys, so fields that serialize in key order
-  (kit `actions`, `pad`, `producers`; machine, probe and view configurations)
-  rebuild differently on the server, which refuses
-  `world.reload.target-mismatch` on every retry. Sort keys canonically in the
-  serializer, or let a delta replace an object whole.
+- [high] A headless debug-world `world.reload` of the unchanged document
+  applies inside one tick on the pump: `host.frames` read that iteration's
+  `simulate` as its whole cost, with 4656926544 bytes allocated on the frame
+  thread and 58/47/10 collections, and the four ticks after it allocating
+  about 200 MB each. It is work, not a wait, so the control plane's door
+  cannot bound it ([where the guarantee stops](engine-job-system.md#where-the-guarantee-stops));
+  attribute the allocation (`dotnet-trace --profile gc-verbose`) and move the
+  install's preparation off the tick, as a build the tick adopts.
 - A shading edit still runs the whole validator over its candidate and
   canonicalizes and digests the edited creation twice; reload's sender
   serializes and diffs whole trees and the server validates the whole
@@ -2627,10 +2602,16 @@ its lifecycle an explicit state.
 - [medium] `puck_world_start` discards a build when any file under the
   checkout changes mid-build, documentation and `worlds/` edits included. Key
   the source state on what the World's build reads.
-- [medium] `Puck.World`'s `--workers` validator reads a value whose parse
-  already failed (`src/Puck.World/Program.cs`), so `--workers abc` crashes
-  with a stack trace. Skip the check when the parse failed, as `CliOptions`'
-  validators do.
+- [low] A cancelled or expired `puck_world_start` abandons its isolated build
+  rather than stopping it (`src/Puck.Cli.Release/Mcp/McpCommand.cs`,
+  `StartWorldAsync`: `Task.Run` uses `CancellationToken.None`, and cancellation
+  only arranges disposal of a future result). A headless start's deadline
+  returned refusal and left no pending start or owned World, while its
+  adapter-owned `dotnet build` and compiler children still ran and needed
+  manual termination. Give the build an explicit lifetime: cancel and reap it
+  when its last requester leaves, while preserving another requester's live
+  shared build. Check by cancelling during compilation and inspecting both
+  adapter jobs and child processes, including two callers sharing one build.
 - [medium] `puck measure` cannot time `bench world` across builds whose
   in-process types differ: the bench loads the frozen build's assemblies
   under the requesting checkout's CLI. Run each side's bench from that side's
@@ -2653,9 +2634,22 @@ its lifecycle an explicit state.
     from it;
   - a failed after side leaves a half-frozen request directory with no
     `request.json` (`MeasureCommand`); stage and rename, or delete it.
-- [low] `puck locks` re-resolves floating packages throughout an affected lock
-  file after a reference change, even without `--update` (`LockFiles`).
-  Preserve resolved versions and reserve upgrades for `--update`.
+- [medium] `puck locks` re-resolves floating packages throughout an affected
+  lock file after a reference change, even without `--update`
+  (`src/Puck.Cli.Gate/Locks/LockFiles.cs`, `RecordArguments` and `Record`).
+  A local-feed reproduction pins `1.*` at `1.0.0`, publishes `1.1.0`, then adds
+  only a project reference: the non-update restore records `1.1.0` as well as
+  the new project entry. `--force` differs from `--force-evaluate`, but an
+  invalidated graph still re-evaluates its floating dependencies. Preserve
+  existing resolutions during graph repair, without retaining a version that
+  a changed constraint excludes, and reserve upgrades for `--update`. This
+  needs a restore-resolution design, not a switch-only fix: cover direct and
+  transitive floating dependencies, multiple target frameworks, changed
+  constraints and removed references. Check with an isolated local feed whose
+  newer package appears between the initial restore and the reference edit;
+  non-update must retain the admissible old version, update must take the new
+  one, and a subsequent locked restore must pass. Do not rewrite resolved
+  versions in the output lock file without resolving their dependency graph.
 - [low] `puck format --check` reports thousands of files drifted, mostly from
   its whitespace phase: the phase or its settings disagree with
   `.editorconfig`. Fix it at the cause and sweep once.
@@ -2670,9 +2664,6 @@ its lifecycle an explicit state.
   starved, or nothing once stdin closes.
 - [low] An old-protocol CLI that already holds a lease keeps it:
   `HostAdmission.Wait` does not read `CliLease.RecordedProtocol`.
-- [low] `puck test` strands temporary run directories that contain links
-  (`build/RunDirectory.cs`'s sweep never removes one). Remove a link without
-  following it, or create none.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion` deletes a
   lock file while it holds it, and the artifact store deletes keyed locks, so
   two builders can lock different inodes at one path
@@ -2712,12 +2703,8 @@ CLI maturity remainders, each a [low]:
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck bundle verify` dereferences null on a
-  `release.json` with no `files`; `puck official build --channel` goes
+  line on the same output; `puck official build --channel` goes
   unvalidated into `Path.Combine`.
-- `puck compile --validate` does not run the binding compiler, so a page
-  binding an Axis1D source to a digital command passes it and is refused at
-  boot.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,
@@ -2857,9 +2844,13 @@ runs.
   completes only as two attached runs. Find what the crossing holds twice, and
   stop the store's cap from evicting the live identity's meshes
   ([memory](#memory-on-the-deck-tier)).
-- [medium] `world.debug-view report colliders --json` throws
-  `DivideByZeroException` on the debug world, headless and windowed, so the
-  sweep's colliders signal is red on a refusal.
+- [low] A windowed `world.debug-view report colliders --json` on the debug
+  world has not been read since the report moved to a deferred worker: a
+  headless reading completes with no exception (463664 witnesses tested,
+  complete coverage), but the earlier `DivideByZeroException` was seen on a
+  windowed World, which adds the rendered-mesh comparisons. Read it once in a
+  windowed window; if it still throws, the answer's text carries no stack, so
+  catch it in `WorldDiagnostics` with the exception's `ToString()`.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
@@ -2869,11 +2860,6 @@ runs.
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
   comparison cannot separate a change from lighting history. The paired tour
   on one attached World confirms whether the remainder is the probe cache's.
-- [medium] Baseline status comparisons can perpetuate a prior comparison
-  failure after its metrics match: `SweepBaseline.Changes` compares the
-  stored, comparison-adjusted status with the current intrinsic one, and
-  `SweepRun` makes each such change red again. Keep the intrinsic verdict
-  apart from comparison failures.
 - [medium] A windowed sweep's convergence is unproven under load: the case
   that once starved it (frames held for minutes, the attachment dropping) has
   not been retried beside a build or a test run.
@@ -2913,9 +2899,8 @@ validation that makes the skill suites believable.
   an async replacement is attributed to the call that starts it; STALE002
   ignores inherited root accessors; `[Replaces(typeof(object))]` and stale
   marks are never checked; `IdentityCounterAnalyzer` matches project paths
-  relative to the scan root and drops namespace and arity from type keys;
-  `ExactKeyAnalyzer` misses `Dictionary` keys of `Vector3`, `float` and
-  tuples. Low: mentioning a counter counts as persisting it, and a tolerant
+  relative to the scan root and drops namespace and arity from type keys.
+  Low: mentioning a counter counts as persisting it, and a tolerant
   `Matches` reads as exact. Fix each or list it on the page.
 - [high] The skill-eval programme
   ([evaluate an agent skill](../development/documentation.md#evaluate-an-agent-skill)),
@@ -2963,10 +2948,6 @@ validation that makes the skill suites believable.
   `records-and-pools.md` sections 1 to 4 to `docs/reference/state`,
   `updater-policy.md`, editor E5 and E9, the demand tiers' invariants, and
   water's "as built" sections.
-- [low] Pages still cite canaries that moved to
-  `experimental/tests/Puck.World.Canaries` (`docs/reference/audio.md`,
-  `src/Puck.World/Audio/README.md`, `docs/reference/physics.md`,
-  `docs/reference/state/testing.md`).
 - [low] The hazard detectors' follow-ups: mark the next replaceable family (a
   GPU device lost and recreated is the likely one); triage `puck scan --only
   clones` below its heaviest thirty clusters; a C# and HLSL formula pair has
@@ -3013,6 +2994,12 @@ proves itself with `puck compile` lowering to the same document.
   and FSharp.Core without `--update`. The experiment was backed up and reverted;
   rf2's final project graph needs no lock changes. Fix the non-update path in
   `src/Puck.Cli.Gate/Locks/LockFiles.cs`.
+  Removing Console's launcher reference also left orphan project entries when
+  `puck locks` reported no changes; `--force-evaluate` pruned them but upgraded
+  unrelated packages. Regeneration must derive the current project closure
+  while retaining pinned package versions. A local feed containing only the
+  prior closure's pinned packages allowed that reference removal to regenerate
+  without upgrades.
 - [medium] `host.memory heap` (`ManagedHeapWalk`) brings
   `Microsoft.Diagnostics.Tracing.TraceEvent` into `Puck.World`, the executable
   players run, for one diagnostic verb. Read the runtime's heap-dump events
@@ -3027,11 +3014,6 @@ proves itself with `puck compile` lowering to the same document.
   (`WorldOutputHub`, `WorldSessionSink`, `WorldFederationProjectionSink`).
   They go with the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
-- Recursive `Directory.Delete` remains in assemblies the browser payload
-  links: `CacheRetention` (`Puck.Abstractions`) and `ConsoleControlSession`
-  (`Puck.Hosting`). Route them through `ConfinedDirectory.RemoveTree`, after
-  one `browser.yml` AOT publish shows the payload still boots with
-  `Puck.Confinement` in its closure.
 - [low] The rule VM's latch keeps a binding in two dictionaries,
   `RuleLatch.RuleState.Held` and `RuleLatch.RuleState.Scheduling`, both walked
   by `RuleLatch.EndSweep`. One binding entry holding the edge bit and the
@@ -3367,8 +3349,6 @@ reversal brake, then a sitting.
 - [low] `dashPose`, `airPose`, `airWings` and `bootBoost` are each one cell
   keyed `"0"`, so only body 0's dash drives the lean and flare. Key them per
   body together.
-- [low] `player.binding-bar model <value>` stores any text, and every value
-  but `single` stacks. Refuse an unknown model by name.
 - [low] A requested boom distance replaces the orbit op's distance outright
   (`SdfCameraProgram`'s `Evaluate`), and `WorldSeatViewState.AuthoredDistance`
   reads the first orbit op's literal, so a scalar-bound orbit distance stops
@@ -3380,14 +3360,13 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
-- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
-  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
-  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
-  before reaching the repaired Drive grant. Wire the standard authored camera
-  mode, body and rig into the debug world, then verify its entry, movement and
-  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
-  the grant without making the seat an operator; a temporary authored snapshot
-  is only a runtime probe, not the missing standard-package design.
+- [medium] Free Cam has no entry handoff: the camera body rests where it was left
+  (`worlds/standard/free-camera.puck`'s `rest`, 40 m over the debug stage at first),
+  because a rule's `pose` effect takes a literal position and nothing copies the
+  seat's eye to the camera body on entry. Add a pose-from-body effect or let the
+  camera application start the body at the perceiving pose. The play wheel's four
+  rings are full (`debugRings`), so Free Cam is F9 only; a pad control needs a
+  ring or a page entry.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged

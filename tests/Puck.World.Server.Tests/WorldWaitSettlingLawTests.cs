@@ -16,7 +16,8 @@ public sealed class WorldWaitSettlingLawTests {
     private sealed class FlagReadiness : IWorldEngineReadiness {
         public bool CapturesSettled { get; set; }
         public bool IsReady { get; set; }
-        public string? NotReadyReason => (IsReady ? null : "the pipeline set is building");
+        public string Reason { get; set; } = "the pipeline set is building";
+        public string? NotReadyReason => (IsReady ? null : Reason);
     }
     private sealed class ProbeModule : ICommandModule {
         public IEnumerable<CommandDefinition> GetCommands() {
@@ -190,6 +191,33 @@ public sealed class WorldWaitSettlingLawTests {
             expected: [
                 ("world.wait ready 600", true, "[engine: not ready when this call's answer was due, so world.wait released: the pipeline set is building]"),
                 ("probe", false, "[probe]"),
+            ]
+        );
+    }
+    // THE LAW (C0.4): a wait that releases before its condition holds names what stands, never the bare timeout: while a
+    // frame is withheld for a program build, the ready and captures forms release with that build's reason, and a tick
+    // wait the held tick cannot reach releases naming it as what stands.
+    [Fact]
+    public void AWaitReleasedWhileABuildStandsNamesThatBuild() {
+        const string Build = "the instance 'world' produced no output: residency 'world' holds its frame while the composition's program for its changed slot layout is building";
+        var readiness = new FlagReadiness { Reason = Build };
+        using var console = new SettlingConsole(readiness: readiness);
+        var budget = TimeSpan.FromSeconds(seconds: 5);
+
+        foreach (var line in ((string[])["world.wait ready 5", "world.wait captures 5", "world.wait 2"])) {
+            console.Due(budget: budget);
+            console.Session.Enqueue(line: line);
+            console.Source.Collect();
+            console.Clock.Advance(by: budget);
+            console.Source.Collect();
+        }
+
+        Assert.Equal(
+            actual: console.Answered,
+            expected: [
+                ("world.wait ready 5", true, $"[engine: not ready when this call's answer was due, so world.wait released: {Build}]"),
+                ("world.wait captures 5", true, $"[captures: not settled when this call's answer was due, so world.wait released: {Build}]"),
+                ("world.wait 2", true, $"[world.wait: this call's answer was due at tick 0, before release tick 2, so the session stopped waiting; standing: {Build} — wait in shorter steps or give the call a longer deadline]"),
             ]
         );
     }

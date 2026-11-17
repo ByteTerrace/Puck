@@ -427,8 +427,8 @@ frame, the capsule core and its piece ceiling, a compound body whose cores'
 fractions agree on the Q16 grid, the lattice's bounds out to the carrier's ends,
 and a lattice step refused at them with its state unchanged;
 `CapsuleSweepCeilingLawTests` holds the validation refusal; the
-`thin-wall-sweep` canary
-holds it in the running World.
+quarantined `experimental/tests/Puck.World.Canaries/thin-wall-sweep` script
+describes the running-World check but is not selected by `puck canary`.
 
 `FixedSurfaceQuery` is the nearest-surface-point primitive over the same
 collider vocabulary—the analytic anchor query climbing (surface attach) and

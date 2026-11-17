@@ -971,7 +971,7 @@
         "Flavor": "SharedExactKernel",
         "Subject": "WeightedSampler.SampleOnce over ten weight sets (one entry, a zero weight, equal weights, a single non-zero, eight, 63, 64, 65 and a thousand entries with zeros, and two maximal weights) at 64 draws each",
         "Against": "AliasTable.SampleIndex over the same weights from the same generator state",
-        "Shared": "WeightedSampler.BuildColumns and SampleColumn, the IDENTICAL members both entry points call: the leg pins that the one-shot pick builds the same partition over stack or pooled storage and draws from it the same way, and that it consumes exactly two advances",
+        "Shared": "WeightedSampler.BuildColumns and SampleColumn, the IDENTICAL members both entry points call: the leg pins that the one-shot pick builds the same partition over stack or pooled storage and draws from it the same way, and that it consumes the advances it reports",
         "Citation": "the partition's own distribution is pinned at sampling.alias-table-frequency-distribution and its refusals at sampling.alias-refusal-and-fixed-twins",
         "Absolute": ""
       },
@@ -1048,8 +1048,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "Pcg3dLatticeNoise.ScatterPoint at the swept block, seed, spacing and radius and at seven hand-chosen parameter pairs over five block pairs including the int extremes",
-        "Against": "Oracles.ScatterPointReference: the block formula formed in BigInteger over Oracles.Pcg3dReference, the PCG3D mix with every carrier reduction explicit, compared modulo 2^32 where the subject's int arithmetic wraps",
+        "Subject": "Pcg3dLatticeNoise.ScatterPoint at the swept block, seed, spacing and radius and at eight hand-chosen parameter pairs over five block pairs including the int extremes; the pair (0x60000000, 0) has a quarter of its words rejected, so the redraw under the decorrelated seed is walked",
+        "Against": "Oracles.ScatterPointReference: the block formula formed in BigInteger over Oracles.Pcg3dReference, the PCG3D mix with every carrier reduction explicit and Lemire's rejection stated in arbitrary width, compared modulo 2^32 where the subject's int arithmetic wraps",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

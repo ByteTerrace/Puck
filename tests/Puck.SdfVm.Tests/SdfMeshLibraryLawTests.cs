@@ -406,35 +406,69 @@ public sealed class SdfMeshLibraryLawTests {
 
         Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var native, refusal: out _));
         Assert.NotNull(@object: native);
-        Assert.Equal(expected: arrays.Chunks.Count, actual: native.Chunks.Count);
-        Assert.Equal(expected: arrays.Positions.ToArray(), actual: native.Positions.ToArray());
-        Assert.Equal(expected: arrays.Normals.ToArray(), actual: native.Normals.ToArray());
-        Assert.Equal(expected: arrays.TriangleMaterials.ToArray(), actual: native.TriangleMaterials.ToArray());
-        Assert.Equal(expected: arrays.PositionLow, actual: native.PositionLow);
-        Assert.Equal(expected: arrays.PositionHigh, actual: native.PositionHigh);
-        Assert.Equal(expected: arrays.TriangleCount, actual: native.TriangleCount);
-        for (var index = 0; (index < arrays.PieceCount); index++) {
-            var expected = arrays.Piece(index: index);
-            var actual = native.Piece(index: index);
+        AssertSamePlanes(expected: arrays, actual: native);
+        AssertARestoreWritesTheSameWords(native: native);
+        native.Release();
+    }
+    // A mesh the library stores is published as its entry answers, written from the baked mesh with no read of the entry:
+    // every plane equals the decode's, the quantized positions and octahedral normals included, and a restore from the
+    // entry writes the words a region first wrote.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStoredMeshIsWhatItsEntryAnswersWithoutTheEntryBeingRead(bool chunked) {
+        using var scratch = new Puck.Testing.TemporaryDirectory(prefix: "puck-mesh-library-stored-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0003ul);
+        UInt128 identity = 5;
+        // The entry numbers materials by place, so a group whose ids are its places reads back the ids it stored.
+        var source = (chunked ? SdfMeshChunks.Join(chunks: [Piece(offset: 0f, skinned: false, first: 0u, second: 1u), Piece(offset: 3f, skinned: false, first: 0u, second: 1u)]) : Piece(offset: 0f, skinned: true, first: 0u, second: 1u));
 
-            Assert.Equal(expected: expected.Positions.ToArray(), actual: actual.Positions.ToArray());
-            Assert.Equal(expected: expected.Normals.ToArray(), actual: actual.Normals.ToArray());
-            Assert.Equal(expected: expected.Indices.ToArray(), actual: actual.Indices.ToArray());
-            Assert.Equal(expected: expected.TriangleMaterials.ToArray(), actual: actual.TriangleMaterials.ToArray());
-            Assert.Equal(expected: expected.Members.ToArray(), actual: actual.Members.ToArray());
-            Assert.Equal(expected: expected.VertexMembers.ToArray(), actual: actual.VertexMembers.ToArray());
-            Assert.Equal(expected: expected.Influences.ToArray(), actual: actual.Influences.ToArray());
-            Assert.Equal(expected: expected.BakeCell, actual: actual.BakeCell);
-            Assert.Equal(expected: expected.Levels.Count, actual: actual.Levels.Count);
-            for (var level = 0; (level < expected.Levels.Count); level++) {
-                Assert.Equal(expected: expected.Levels[level].Indices.ToArray(), actual: actual.Levels[level].Indices.ToArray());
-                Assert.Equal(expected: expected.Levels[level].TriangleMaterials.ToArray(), actual: actual.Levels[level].TriangleMaterials.ToArray());
-                Assert.Equal(expected: expected.Levels[level].Error, actual: actual.Levels[level].Error);
+        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+
+        var stored = library.Store(geometry: geometry, identity: identity, materials: [0, 1], mesh: source);
+
+        Assert.True(condition: store.TryRead(geometry: geometry, identity: identity, materials: out _, mesh: out var arrays, refusal: out _));
+        Assert.NotNull(@object: arrays);
+        Assert.NotEqual(expected: source.Normals.ToArray(), actual: stored.Normals.ToArray());
+        AssertSamePlanes(expected: arrays, actual: stored);
+        Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [0, 1], mesh: out var taken));
+        AssertSamePlanes(expected: arrays, actual: taken);
+        AssertARestoreWritesTheSameWords(native: stored);
+        taken.Release();
+        stored.Release();
+    }
+    private static void AssertSamePlanes(SdfMesh expected, SdfMesh actual) {
+        Assert.Equal(expected: expected.Chunks.Count, actual: actual.Chunks.Count);
+        Assert.Equal(expected: expected.Positions.ToArray(), actual: actual.Positions.ToArray());
+        Assert.Equal(expected: expected.Normals.ToArray(), actual: actual.Normals.ToArray());
+        Assert.Equal(expected: expected.TriangleMaterials.ToArray(), actual: actual.TriangleMaterials.ToArray());
+        Assert.Equal(expected: expected.PositionLow, actual: actual.PositionLow);
+        Assert.Equal(expected: expected.PositionHigh, actual: actual.PositionHigh);
+        Assert.Equal(expected: expected.TriangleCount, actual: actual.TriangleCount);
+        for (var index = 0; (index < expected.PieceCount); index++) {
+            var wanted = expected.Piece(index: index);
+            var got = actual.Piece(index: index);
+
+            Assert.Equal(expected: wanted.Positions.ToArray(), actual: got.Positions.ToArray());
+            Assert.Equal(expected: wanted.Normals.ToArray(), actual: got.Normals.ToArray());
+            Assert.Equal(expected: wanted.Indices.ToArray(), actual: got.Indices.ToArray());
+            Assert.Equal(expected: wanted.TriangleMaterials.ToArray(), actual: got.TriangleMaterials.ToArray());
+            Assert.Equal(expected: wanted.Members.ToArray(), actual: got.Members.ToArray());
+            Assert.Equal(expected: wanted.VertexMembers.ToArray(), actual: got.VertexMembers.ToArray());
+            Assert.Equal(expected: wanted.Influences.ToArray(), actual: got.Influences.ToArray());
+            Assert.Equal(expected: wanted.BakeCell, actual: got.BakeCell);
+            Assert.Equal(expected: wanted.Levels.Count, actual: got.Levels.Count);
+            for (var level = 0; (level < wanted.Levels.Count); level++) {
+                Assert.Equal(expected: wanted.Levels[level].Indices.ToArray(), actual: got.Levels[level].Indices.ToArray());
+                Assert.Equal(expected: wanted.Levels[level].TriangleMaterials.ToArray(), actual: got.Levels[level].TriangleMaterials.ToArray());
+                Assert.Equal(expected: wanted.Levels[level].Error, actual: got.Levels[level].Error);
             }
         }
-
-        // A region write holds the mesh, so its normals and coarser levels are resident for it, and let go after it. The
-        // next one finds them let go and restores them from the entry's normals and level indices alone.
+    }
+    // A region write holds the mesh, so its normals and coarser levels are resident for it, and let go after it. The next
+    // one finds them let go and restores them from the entry's normals and level indices alone.
+    private static void AssertARestoreWritesTheSameWords(SdfMesh native) {
         var meshes = new Dictionary<SdfMesh, SdfMeshRegionMesh>(comparer: ReferenceEqualityComparer.Instance);
         var words = 0;
 
@@ -454,19 +488,18 @@ public sealed class SdfMeshLibraryLawTests {
         SdfMeshRegion.WriteMeshes(meshes: meshes, layout: default, destination: again);
         Assert.Equal(expected: first, actual: again);
         Assert.Contains(expectedSubstring: "mesh-restore-misses=0", actualString: SdfMesh.DescribeRestores());
-        native.Release();
     }
     // A mesh of two triangles, two materials, a coarser level, and, when it is skinned, a member and a blended vertex.
-    private static SdfMesh Piece(float offset, bool skinned) => new(
+    private static SdfMesh Piece(float offset, bool skinned, uint first = 10u, uint second = 20u) => new(
         indices: new uint[] { 0, 1, 2, 2, 1, 3 },
         influences: (skinned ? new SdfMeshInfluence[] { SdfMeshInfluence.Rigid, SdfMeshSkinTuple.Of(first: 0, second: 1, share: 0x4000, gradient: new Vector3(x: 1f, y: 0f, z: 2f)).Influence, SdfMeshInfluence.Rigid, SdfMeshInfluence.Rigid } : default),
         members: (skinned ? new SdfMeshMember[] { new(SlotOffset: 1, Position: Vector3.UnitX, Orientation: Quaternion.Identity), new(SlotOffset: 2, Position: Vector3.UnitY, Orientation: Quaternion.Identity) } : default),
         normals: new Vector3[] { Vector3.UnitZ, Vector3.UnitZ, Vector3.Normalize(value: Vector3.One), Vector3.UnitX },
         positions: new Vector3[] { new(x: offset, y: 0f, z: 0f), new(x: (offset + 1f), y: 0f, z: 0f), new(x: offset, y: 1f, z: 0f), new(x: (offset + 1f), y: 1f, z: 0.5f) },
-        triangleMaterials: new uint[] { 10u, 20u },
+        triangleMaterials: new uint[] { first, second },
         vertexMembers: (skinned ? new byte[] { 0, 0, SdfMesh.NoMember, SdfMesh.NoMember } : default)) {
         BakeCell = new Vector3(value: 0.05f),
-        Levels = [new SdfMeshLevel(new uint[] { 0, 1, 3 }, new uint[] { 20u }, 0.1f)],
+        Levels = [new SdfMeshLevel(new uint[] { 0, 1, 3 }, new uint[] { second }, 0.1f)],
     };
     private sealed unsafe class HeapAllocator : Puck.Abstractions.Memory.IAllocator {
         public void* Allocate(nuint size, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedAlloc(byteCount: Math.Max(val1: size, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));

@@ -1304,7 +1304,7 @@ internal static class SharedKernelClaims {
     // ---- WeightedSampler.SampleOnce ----
 
     /// <summary>SampleOnce picks the index an AliasTable built from the same weights picks from the same generator
-    /// state, consuming exactly two advances, across the stack-storage and pooled-storage column counts, the
+    /// state, reporting and consuming the same advances, across the stack-storage and pooled-storage column counts, the
     /// zero-weight and single-entry shapes; it refuses an empty span and all-zero weights by the entries name.</summary>
     /// <param name="deep">Whether to draw sixty-four times as often and add a 2^14-entry set.</param>
     public static string? SampleOnceMatchesAliasTable(bool deep) {
@@ -1336,8 +1336,12 @@ internal static class SharedKernelClaims {
             for (var draw = 0; (draw < drawsPerSet); ++draw) {
                 var tableGenerator = generator;
                 var onceGenerator = generator;
-                var expected = table.SampleIndex(generator: ref tableGenerator);
+                var expected = table.SampleIndex(
+                    advances: out var tableAdvances,
+                    generator: ref tableGenerator
+                );
                 var actual = WeightedSampler.SampleOnce(
+                    advances: out var onceAdvances,
                     generator: ref onceGenerator,
                     weights: weights
                 );
@@ -1345,10 +1349,11 @@ internal static class SharedKernelClaims {
                 if (actual != expected) { return $"SampleOnce over {weights.Length} weights picked {actual} where the table picked {expected} at draw {draw}"; }
                 if (weights[actual] == 0UL) { return $"SampleOnce picked the zero-weight entry {actual}"; }
                 if (onceGenerator.State != tableGenerator.State) { return $"SampleOnce left the generator in a different state than the table at draw {draw}"; }
+                if (onceAdvances != tableAdvances) { return $"SampleOnce reported {onceAdvances} advances where the table reported {tableAdvances} at draw {draw}"; }
 
-                generator.Advance(count: 2UL);
+                generator.Advance(count: ((ulong)onceAdvances));
 
-                if (onceGenerator.State != generator.State) { return $"SampleOnce did not consume exactly two advances at draw {draw}"; }
+                if (onceGenerator.State != generator.State) { return $"SampleOnce did not consume the {onceAdvances} advances it reported at draw {draw}"; }
             }
         }
 
@@ -1359,6 +1364,7 @@ internal static class SharedKernelClaims {
 
         try {
             _ = WeightedSampler.SampleOnce(
+                advances: out _,
                 generator: ref probe,
                 weights: ReadOnlySpan<ulong>.Empty
             );
@@ -1369,6 +1375,7 @@ internal static class SharedKernelClaims {
 
         try {
             _ = WeightedSampler.SampleOnce(
+                advances: out _,
                 generator: ref probe,
                 weights: [0UL, 0UL]
             );
@@ -1394,7 +1401,7 @@ internal static class SharedKernelClaims {
         var seed = unchecked((uint)left[2]);
         var spacing = ((int)(unchecked((uint)right[0]) % 4096U));
         var radius = ((int)(unchecked((uint)right[1]) % 2048U));
-        List<(int Spacing, int Radius)> parameters = [(spacing, radius), (2, 1), (8, 1), (8, 4), (8, 5), (1, 0), (0, 0), (100, 3)];
+        List<(int Spacing, int Radius)> parameters = [(spacing, radius), (2, 1), (8, 1), (8, 4), (8, 5), (1, 0), (0, 0), (100, 3), (0x60000000, 0)];
 
         if (deep) {
             for (var s = 0; (s <= 64); ++s) {

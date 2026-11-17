@@ -88,7 +88,7 @@ internal static class SamplingClaims {
             );
             var counts = new long[weights.Length];
 
-            for (var draw = 0; (draw < draws); ++draw) { ++counts[table.SampleIndex(generator: ref generator)]; }
+            for (var draw = 0; (draw < draws); ++draw) { ++counts[table.SampleIndex(advances: out _, generator: ref generator)]; }
 
             var total = BigInteger.Zero;
 

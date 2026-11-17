@@ -33,7 +33,11 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
     public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => ((ISdfFrameSource)inner).ScreenSurfaceTransforms;
 
     /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    /// <remarks>The composition's (<see cref="SdfCompositionFrameSource.Waiting"/>).</remarks>
+    public string? Waiting => inner.Waiting;
+
+    /// <inheritdoc/>
+    public SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         captureHostFirst();
 
         var timestamp = Stopwatch.GetTimestamp();
@@ -54,7 +58,7 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
             width: ((uint)(resolution?.Width ?? ((int)width)))
         );
 
-        if (resolveResolution is null) {
+        if ((frame is null) || (resolveResolution is null)) {
             return frame;
         }
         m_views.Clear();

@@ -79,7 +79,7 @@ internal static class SamplingDistributionClaims {
             var counts = new long[weights.Length];
 
             for (var draw = 0; (draw < draws); ++draw) {
-                var index = table.SampleIndex(generator: ref generator);
+                var index = table.SampleIndex(advances: out _, generator: ref generator);
 
                 if (
                     (index < 0) ||
@@ -129,7 +129,7 @@ internal static class SamplingDistributionClaims {
             );
 
             for (var draw = 0; (draw < 10_000); ++draw) {
-                if (table.SampleIndex(generator: ref probe) != tableTwin.SampleIndex(generator: ref probeTwin)) {
+                if (table.SampleIndex(advances: out _, generator: ref probe) != tableTwin.SampleIndex(advances: out _, generator: ref probeTwin)) {
                     return $"{label}: two independently constructed tables diverged at draw {draw}";
                 }
             }

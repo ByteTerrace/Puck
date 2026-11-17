@@ -115,7 +115,7 @@ public sealed class SdfAppliedCodeUpdateLawTests {
         height: 8,
         interpolationAlpha: 0f,
         width: 8
-    ).Program;
+    )!.Program;
 
     // One sphere, whose revision never moves; it counts its emissions.
     private sealed class CountingEmitter : ISdfSceneEmitter, ISdfFrameDresser {

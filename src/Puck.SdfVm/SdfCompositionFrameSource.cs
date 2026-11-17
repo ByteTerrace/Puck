@@ -98,6 +98,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private readonly int[] m_buildingRevisions;
 
     private Task<(SdfProgram Program, SdfProgramDelta? Delta)>? m_building;
+    // The slot layout: it moves whenever a change of an emitter's dynamic slot count moves a slot base or the total, and
+    // the layouts the held program and the build in flight were emitted under. A frame packs and dresses only under a
+    // program emitted with the current layout (CaptureFrame), since the program addresses the slots by those bases.
+    private int m_layout;
+    private int m_programLayout;
+    private int m_buildingLayout;
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
@@ -113,12 +119,29 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
     private DynamicTransform[] m_builtTransforms = [];
 
-    /// <summary>Gets whether a rebuild after the first builds its program on the thread pool: the frame that finds the
-    /// content moved emits the program, and every frame until the build finishes renders the program held before it, with
-    /// its transforms, mesh draws and dress live; the first frame after the build finishes adopts it. A converging capture
-    /// (<see cref="BeginConvergence"/>) or tick-locked dresser waits for the build instead. <see langword="false"/>, the default, builds every
-    /// program in the frame that finds the content moved.</summary>
+    /// <summary>Gets whether every program builds on the thread pool, so no frame waits for a build: the frame that finds
+    /// the content moved emits the program, and every frame until the build finishes renders the program held before it,
+    /// with its transforms, mesh draws and dress live; the first frame after the build finishes adopts it. A frame with no
+    /// program it can pack under (the first, or one after a change of the slot layout) films nothing
+    /// (<see cref="CaptureFrame"/> returns <see langword="null"/>), and a converging capture (<see cref="BeginConvergence"/>)
+    /// or tick-locked dresser carries the held program while a build stands; both name the build in
+    /// <see cref="Waiting"/>. <see langword="false"/>, the default, builds every program in the frame that finds the
+    /// content moved.</summary>
     public bool BuildsInBackground { get; init; }
+    /// <summary>Gets why the latest <see cref="CaptureFrame"/> filmed nothing or a frame that does not yet show what its
+    /// content calls for: one of <see cref="FirstProgramWaiting"/>, <see cref="LayoutWaiting"/> or
+    /// <see cref="LockedWaiting"/>; <see langword="null"/> when the frame shows the program its content calls for, or
+    /// ordinary presentation holds the program before a build. Read on the frame's thread.</summary>
+    public string? Waiting { get; private set; }
+
+    /// <summary>The <see cref="Waiting"/> reason of a frame that films nothing while the first program builds.</summary>
+    public const string FirstProgramWaiting = "the composition's first program is building";
+    /// <summary>The <see cref="Waiting"/> reason of a frame that films nothing while the program for a changed slot
+    /// layout builds: the held program addresses the slots by the bases before the change.</summary>
+    public const string LayoutWaiting = "the composition's program for its changed slot layout is building";
+    /// <summary>The <see cref="Waiting"/> reason of a tick-locked or converging frame that carries the held program
+    /// while the program its content calls for builds.</summary>
+    public const string LockedWaiting = "the composition's program is building, and a tick-locked or converging frame shows only the program its content calls for";
     /// <summary>Gets whether a background build is in flight (<see cref="BuildsInBackground"/>).</summary>
     public bool Building => (m_building is not null);
     /// <summary>Gets how many frames <see cref="CaptureFrame"/> has captured. A frame captured after a reading of it has
@@ -134,8 +157,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private bool WaitsForBuild => (Converging || m_dresser.TickLocked);
 
     /// <inheritdoc/>
-    /// <remarks>Until the request completes, a frame adopts a background build in flight, waiting for it, and builds a
-    /// moved program in the frame itself.</remarks>
+    /// <remarks>Until the request completes, a frame carries the held program only with <see cref="LockedWaiting"/>
+    /// while a build stands.</remarks>
     public void BeginConvergence(Puck.Abstractions.Presentation.FrameCaptureRequest request) {
         ArgumentNullException.ThrowIfNull(argument: request);
         m_convergence = request;
@@ -262,26 +285,27 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// validating and analysing the emitted builder.</summary>
     public double BuildMilliseconds => Volatile.Read(location: ref m_buildMilliseconds);
 
-    // Adopts the program a background build finished, or waits for it in a converging or tick-locked frame, so that frame
-    // never holds a program its source has moved past. The adopted program was built from m_buildingRevisions, which
-    // become the built record; whether this frame's revisions moved is judged against them afresh. A build that threw
-    // throws here and leaves the built record describing the program still held, so the next frame emits again.
+    // Adopts the program a background build finished; a build still running is never waited for. The adopted program was
+    // built from m_buildingRevisions under m_buildingLayout, which become the built record; whether this frame's revisions
+    // moved is judged against them afresh. A build that threw throws here and leaves the built record describing the
+    // program still held, so the next frame emits again.
     private bool AdoptBuild(ref bool moved) {
-        if ((m_building is not { } building) || (!building.IsCompleted && !WaitsForBuild)) {
-            return false;
+        if ((m_building is { } building) && building.IsCompleted) {
+            m_building = null;
+            (m_program, m_programDelta) = building.GetAwaiter().GetResult();
+            ProgramBuilds++;
+            m_programLayout = m_buildingLayout;
+            Array.Copy(
+                sourceArray: m_buildingRevisions,
+                destinationArray: m_builtRevisions,
+                length: m_builtRevisions.Length
+            );
+            moved = !m_pendingRevisions.AsSpan().SequenceEqual(other: m_builtRevisions);
+
+            return true;
         }
 
-        m_building = null;
-        (m_program, m_programDelta) = building.GetAwaiter().GetResult();
-        ProgramBuilds++;
-        Array.Copy(
-            sourceArray: m_buildingRevisions,
-            destinationArray: m_builtRevisions,
-            length: m_builtRevisions.Length
-        );
-        moved = !m_pendingRevisions.AsSpan().SequenceEqual(other: m_builtRevisions);
-
-        return true;
+        return false;
     }
     // Shared by construction's probe and every live rebuild: every emitter's Emit in list order, wrapped in a material
     // scope for any OwnsMaterialScope emitter (the only behavior difference from calling Emit directly; see
@@ -522,7 +546,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     }
 
     /// <inheritdoc/>
-    public SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+    /// <remarks>Never waits for a build (<see cref="BuildsInBackground"/>): a frame with no program emitted under the
+    /// current slot layout films nothing and packs nothing, so the frame a residency holds keeps its transforms and the
+    /// moved set loses no row; <see cref="Waiting"/> names why.</remarks>
+    public SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         m_time += MathF.Max(
             x: deltaSeconds,
             y: 0f
@@ -555,20 +582,19 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
         layoutChanged |= (slots != m_programSlots);
         m_programSlots = slots;
+        if (layoutChanged) { m_layout++; }
         var roots = m_emitters.Sum(selector: emitter => emitter.MeshInstances.Count);
 
+        // A resize allocates a new table, so a frame captured before it keeps the one it carries.
         if (m_transforms.Length != (slots + roots)) {
             Array.Resize(array: ref m_transforms, newSize: (slots + roots));
             m_transformsPacked = false;
         }
-        var moved = (CaptureRevisions() || layoutChanged);
-
-        if (layoutChanged && (m_building is { } pending)) { pending.GetAwaiter().GetResult(); }
+        var moved = CaptureRevisions();
         var rebuilt = AdoptBuild(moved: ref moved);
+        var fits = ((m_program is not null) && (m_programLayout == m_layout));
 
-        moved |= layoutChanged;
-
-        if ((m_building is null) && ((m_program is null) || moved)) {
+        if ((m_building is null) && (!fits || moved)) {
             var emitted = System.Diagnostics.Stopwatch.GetTimestamp();
             var builder = EmitProgram(
                 context: new SdfEmitContext(
@@ -587,17 +613,20 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 destinationArray: m_buildingRevisions,
                 length: m_buildingRevisions.Length
             );
+            m_buildingLayout = m_layout;
 
-            if ((m_program is null) || !BuildsInBackground || WaitsForBuild || layoutChanged) {
+            if (!BuildsInBackground) {
                 m_program = Build(builder: builder);
                 ProgramBuilds++;
                 m_programDelta = null;
+                m_programLayout = m_buildingLayout;
                 Array.Copy(
                     sourceArray: m_buildingRevisions,
                     destinationArray: m_builtRevisions,
                     length: m_builtRevisions.Length
                 );
                 rebuilt = true;
+                fits = true;
             } else {
                 var held = m_program;
                 var observer = Volatile.Read(location: ref m_built);
@@ -617,7 +646,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
                 // observer before the frame that adopts it.
                 m_building = Task.Run(function: () => {
                     var built = Build(builder: builder);
-                    var delta = ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built));
+                    var delta = ((held is null) ? null : ((SdfProgramDelta?)SdfProgramDelta.Between(from: held, to: built)));
 
                     observer?.Invoke(arg1: built, arg2: emittedUnder);
 
@@ -626,6 +655,14 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             }
         }
 
+        // The one door every frame passes before packing: no program emitted under the current layout, no frame.
+        if (!fits) {
+            Waiting = ((m_program is null) ? FirstProgramWaiting : LayoutWaiting);
+
+            return null;
+        }
+
+        Waiting = ((WaitsForBuild && (m_building is not null)) ? LockedWaiting : null);
         PackTransforms(rebuilt: rebuilt);
         ComposeMeshDraws();
 
