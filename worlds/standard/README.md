@@ -115,13 +115,13 @@ The standard authors two bar layouts; every page fills the same twelve pad
 slots (the d-pad, LB, L3, the face buttons, RB and R3) in both. `wings` is the
 default, drawn with the `single` model: the mirrored six-slot diamonds (45/600
 plates, a 60/600 central gap, 24/45 badges offset by 0.4375 plates) showing the
-active page alone. Full wings (`wings wings`) draws every page at once: View
+active page alone. Full wings (`wings stacked`) draws every page at once: View
 and Debug nest above the primary pair, one pitch inward and two outward, two
 pitches up, after the
 [GamePadActionBars](https://github.com/ByteTerrace/WorldOfWarcraft.Addons.GamePadActionBars)
 addon; inactive banks draw at half alpha. `sidebars` is straight bars at the
 wings plate size, likewise single (the active page in the bottom strip) or full
-(`sidebars wings`: the Move strip along the bottom edge, the View/Debug columns
+(`sidebars stacked`: the Move strip along the bottom edge, the View/Debug columns
 at the left/right edges), with the modifier row and page name clear above the
 strip. The debug refinement adds Go and Tour to both (below the primary in
 full wings, inside the side columns) without putting its places or pages in
@@ -129,8 +129,8 @@ the standard.
 
 A player swaps live from the play wheel's Bar ring (Wings, Full wings,
 Sidebars, Full sidebars, Compact, Full size) or the console: `run controls.bar
-wings`, `run controls.bar wings wings`, `run controls.bar sidebars` and
-`run controls.bar sidebars wings`.
+wings`, `run controls.bar wings stacked`, `run controls.bar sidebars` and
+`run controls.bar sidebars stacked`.
 `run controls.bar.compact` applies a 0.72 plate multiplier and
 `run controls.bar.full` restores 1. These are per-seat preferences; a wheel
 sector acts on the seat that opened it. They join session rebindings when
@@ -138,7 +138,7 @@ sector acts on the seat that opened it. They join session rebindings when
 reads the resolved layout name, model, scale and placed slots.
 
 The engine's `player.binding-bar layout|model|scale <value> [seat]` is the
-generic setter those commands compose. `auto` clears one session preference.
+generic setter those commands compose; its `model` takes `single` or `stacked`, and refuses any other name. `auto` clears one session preference.
 Without a seat preference, the authored `LayoutCell` and `ModelCell` still
 select the world design, with `single` displaying one bank and any other
 model displaying every bank placed by the selected layout.

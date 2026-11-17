@@ -366,6 +366,14 @@ public sealed record WorldBindingBarAuthoring(
 ) {
     /// <summary>The <see cref="ModelCell"/> value that draws one swapping bar; every other value stacks.</summary>
     public const string SingleModel = "single";
+    /// <summary>The model that draws every bank the live layout places; the name the console accepts beside
+    /// <see cref="SingleModel"/> (a state cell's own value is the author's, and any value but <see cref="SingleModel"/> draws it).</summary>
+    public const string StackedModel = "stacked";
+
+    /// <summary>Gets whether a console preference names a bar model the engine draws.</summary>
+    /// <param name="name">The model name.</param>
+    /// <returns><see langword="true"/> for <see cref="SingleModel"/> or <see cref="StackedModel"/>.</returns>
+    public static bool IsModel(string name) => (string.Equals(a: name, b: SingleModel, comparisonType: StringComparison.Ordinal) || string.Equals(a: name, b: StackedModel, comparisonType: StringComparison.Ordinal));
 
     /// <summary>Gets the policy applied when NEITHER an identity nor the world authors a binding-bar row — absence
     /// draws no bar at all, never a baked-in look.</summary>
