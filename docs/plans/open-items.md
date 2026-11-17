@@ -764,10 +764,6 @@ says how one is reproduced and profiled.
   its first minute, and its allocation is a frame cost too (hundreds of
   collections while it bakes). Splitting the bake into its stages needs a cold
   bake that stays under the machine's memory.
-- [medium] `SdfMeshLibrary.Store` publishes a baked mesh by decoding its store
-  entry back (`TryLoad`), which more than doubled the cold bake's store stage.
-  Publish the encoded mesh's own native form without the round trip, keeping
-  the one publication door.
 - [medium] Every view renders every frame while a bake is pending
   (`SdfWorldResidency.IsUnchanged` answers false on `MeshPathBake.Pending`),
   which the frame-paced bake needed and the background GPU work does not. Let
@@ -920,10 +916,6 @@ the tour's remaining reds and the Moth's shin groups share, then
   sheet, or refine it), and the non-manifold edges on the shins' soles sit on
   the same edges. The one detail rule exposes the defect and does not cause
   it.
-- [high] The material cut's lists are outside the memory account:
-  `SdfMeshMaterialCut.Build` grows managed lists with no reservation, so a cut
-  that does not end takes the process. Give the lists a bound the account
-  enforces, and fail the group by name (`SdfMeshBakeReport.Failed`).
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
   lanes across a blended seam, then retiring the settle rebake for dynamic
   groups that are not rest skins, with the quiet-window cost of a skinned
