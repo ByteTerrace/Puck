@@ -2370,6 +2370,8 @@ retirement.
   references outside a `<PuckProvider>` project; and the WebAssembly publish's
   trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
   (`Activator.CreateInstance` on an unannotated type).
+  After the trim fix, re-run the browser AOT publish and Node harness; the
+  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
