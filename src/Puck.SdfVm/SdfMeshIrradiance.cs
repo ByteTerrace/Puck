@@ -1367,7 +1367,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         }
         return string.Join(separator: ' ', values: descriptions);
 
-        static float Median(List<float> values) => ((values.Count == 0) ? 0 : values[(values.Count / 2)]);
+        static float Median(List<float> values) => ((values.Count == 0) ? 0 : OrderStatistics.Quantile(ascending: CollectionsMarshal.AsSpan(list: values), fraction: 0.5));
         static float Oldest(List<float> values) => ((values.Count == 0) ? 0 : values[^1]);
     }
     private void CaptureViewCameras(SdfFrame frame) {
@@ -2117,7 +2117,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         if (ages.Count > 0) {
             ages.Sort();
-            m_ageMedian = ages[(ages.Count / 2)];
+            m_ageMedian = OrderStatistics.Quantile(ascending: CollectionsMarshal.AsSpan(list: ages), fraction: 0.5);
             m_ageMax = ages[^1];
         } else {
             m_ageMedian = m_ageMax = 0f;

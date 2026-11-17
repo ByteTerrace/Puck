@@ -62,6 +62,7 @@ carrier can diverge in rounding, overflow or floor and ceiling convention.
 | Floor or ceiling division, low masks, alignment, PDEP/PEXT, Morton codes | `BinaryIntegerFunctions` (`FloorDivide`, `CeilingDivide`, `LowMask`, `AlignUp`, `ParallelBitDeposit`, `BitwisePair`) | `/` on a negative dividend, `(1 << n) - 1`, a `Bmi2` call |
 | Exact GF(2^k), mod p, a primality decision | `BinaryField<T>`, `PrimeField64`, `PrimeExtensions.IsPrime` | Floats; a rounded product |
 | The Nth prime or a prime count within `uint` | `PrimeExtensions.NthPrime(uint)` / `PrimeCountingFunction(uint)` | A second sieve or counting implementation |
+| A median, percentile or quantile of a measured sample (frame times, bench samples, mesh audit shares; outside the determinism contract) | `OrderStatistics.Quantile` (linear interpolation, the rule that describes a sample) or `OrderStatistics.NearestRank` (an observed sample by integer rank, such as an expected peak) | `samples[count / 2]`, `(int)((n - 1) * 0.99)` or a private percentile helper: each is a third rule |
 | A graph, lattice, language or finite structure | The `Oracle/` presented algebra | A bespoke solver |
 
 `FixedQ3232`, `FixedInterval`, `FixedMassProperties`,

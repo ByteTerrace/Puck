@@ -1307,7 +1307,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
         slopes.Sort();
 
-        return ((slopes.Count > 0) ? slopes[(slopes.Count / 2)] : 1f);
+        return ((slopes.Count > 0) ? OrderStatistics.Quantile(ascending: CollectionsMarshal.AsSpan(list: slopes), fraction: 0.5) : 1f);
     }
     /// <summary>Answers a run of the fine samples <see cref="Refine"/> named.</summary>
     /// <param name="first">The first sample the run answers, in <see cref="Refine"/>'s order.</param>

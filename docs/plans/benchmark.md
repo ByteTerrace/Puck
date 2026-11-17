@@ -628,9 +628,21 @@ the address that opens.
   `WorldLaunch`, `SuiteBudget`, `BenchReport`, `BenchHostRecorder`) and
   `puck measure`'s pointer reader; it adds no fifth route runner, because the
   World plays the route.
-- **`OrderStatistics.Quantile`** (`Puck.Maths`) is the one order statistic:
-  it replaces `HostFrameTimeline.Percentile`, `BenchMetric.Quantile` and the
-  mesh audit's private `Quantile`, and its law pins hand-computed values.
+- **`OrderStatistics`** (`Puck.Maths`) is the one home of order statistics, with
+  each rule named once: `Quantile` interpolates linearly between samples and is
+  the rule for a reading that describes a sample (the frame percentiles, the
+  bench metrics and `puck measure`'s quartiles, the mesh audit's percentiles and
+  median edge, the lattice's median slope, the irradiance age medians and the
+  bench lane's medians), and `NearestRank` returns an observed sample by integer
+  rank and is the rule for a number that must be one of them (the host's
+  expected peak, `HostPeakWindow`). It replaces `HostFrameTimeline`'s percentile
+  helper, the bench metric's quantile and the mesh command's private one, and
+  its law pins hand-computed values. `puck bench`'s exact-rational median in
+  `ReferenceCapture` stays: it is exact over `Rational` and no float rule
+  describes it. Puck.Maths is the right home for float statistics because
+  every assembly that reads a sample already reaches it and it is the one place
+  a numeric rule is reviewed; the determinism boundary is stated on the class
+  (outside it).
 - **`puck motion --route`** records a tape once and drives it in two Worlds
   under lockstep with budgeted lighting. Its statement that simulation replay
   alone does not restore a camera is why the route is a controller program.

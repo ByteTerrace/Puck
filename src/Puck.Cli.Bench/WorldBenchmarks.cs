@@ -1,5 +1,6 @@
 using Puck.Cli.Determinism;
 using System.Diagnostics;
+using System.Numerics;
 
 using Puck.Abstractions;
 using Puck.Abstractions.Counting;
@@ -94,8 +95,8 @@ internal static class WorldBenchmarks {
         Array.Sort(array: allocationSamples);
         Array.Sort(array: elapsedTicksSamples);
 
-        var medianAllocation = allocationSamples[(allocationSamples.Length / 2)];
-        var medianElapsedMs = ((elapsedTicksSamples[(elapsedTicksSamples.Length / 2)] * 1000.0) / Stopwatch.Frequency);
+        var medianAllocation = Median(allocationSamples);
+        var medianElapsedMs = ((Median(elapsedTicksSamples) * 1000.0) / Stopwatch.Frequency);
 
         rows.Add(item: ("world: idle tick (median)", $"{medianElapsedMs:F3} ms"));
         rows.Metric(name: "idle-tick", unit: "ms", value: medianElapsedMs);
@@ -156,7 +157,7 @@ internal static class WorldBenchmarks {
             standing[tick] = AllocationWindow.Total(window: advance);
         }
         Array.Sort(array: standing);
-        rows.Add(item: ("world: addons standing tick allocation (median / mean)", $"{standing[(standing.Length / 2)]:N0} / {standing.Average():N0} bytes"));
+        rows.Add(item: ("world: addons standing tick allocation (median / mean)", $"{Median(standing):N0} / {standing.Average():N0} bytes"));
         // player.move 1 0 is camera-relative in the live host. With the recipe's 90-degree heading and the
         // chase camera's zero orbit, right is world -Z: the wire carries forward=1 and faceZ=-1.
         var roles = server.Population.Channels.RoleOrdinals;
@@ -180,7 +181,7 @@ internal static class WorldBenchmarks {
                 samples[tick] = AllocationWindow.Total(window: advance);
             }
             Array.Sort(array: samples);
-            rows.Add(item: ($"world: addons gallery walk {(walk + 1)} tick allocation (median / mean)", $"{samples[(samples.Length / 2)]:N0} / {samples.Average():N0} bytes"));
+            rows.Add(item: ($"world: addons gallery walk {(walk + 1)} tick allocation (median / mean)", $"{Median(samples):N0} / {samples.Average():N0} bytes"));
         }
         rows.Add(item: ("world: measured addons", string.Join(separator: ", ", values: addons.Receipts.Select(selector: receipt => receipt.Name))));
     }
@@ -234,7 +235,7 @@ internal static class WorldBenchmarks {
         Array.Sort(array: allocations);
         rows.Add(item: ("world: 13-cell guest burst tick (median)", $"{MedianMilliseconds(samples: samples):F3} ms"));
         rows.Metric(name: "cell-burst-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
-        rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{allocations[(SampleTicks / 2)]:N0} bytes"));
+        rows.Add(item: ("world: 13-cell guest burst tick allocation (median)", $"{Median(allocations):N0} bytes"));
     }
     // gallery.lights.all: every hall light cell written in one tick, which moves the hall's responding rows (floors,
     // roof, switches) to their lit or dark creations in that tick. The tick is timed and metered beside the population
@@ -297,8 +298,8 @@ internal static class WorldBenchmarks {
         Array.Sort(array: revisions);
         rows.Add(item: ("world: response change tick (median, gallery.lights.all)", $"{MedianMilliseconds(samples: samples):F3} ms"));
         rows.Metric(name: "response-change-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
-        rows.Add(item: ("world: response change tick allocation (median)", $"{allocations[(Changes / 2)]:N0} bytes"));
-        rows.Add(item: ("world: response change population revisions moved (median)", $"{revisions[(Changes / 2)]}"));
+        rows.Add(item: ("world: response change tick allocation (median)", $"{Median(allocations):N0} bytes"));
+        rows.Add(item: ("world: response change population revisions moved (median)", $"{Median(revisions)}"));
     }
     // The program a client composes on the frame thread (WorldSceneEmitter.Emit, the work SdfCompositionFrameSource
     // hands its background build): composed again with nothing changed, and after each hall light change delivers the
@@ -363,8 +364,8 @@ internal static class WorldBenchmarks {
         }
         Array.Sort(array: steadyBytes);
         Array.Sort(array: changedBytes);
-        rows.Add(item: ("world: scene emission, nothing changed (median)", $"{MedianMilliseconds(samples: steady):F3} ms, {steadyBytes[(Samples / 2)]:N0} bytes"));
-        rows.Add(item: ("world: scene emission after a hall light change (median)", $"{MedianMilliseconds(samples: changed):F3} ms, {changedBytes[(Samples / 2)]:N0} bytes"));
+        rows.Add(item: ("world: scene emission, nothing changed (median)", $"{MedianMilliseconds(samples: steady):F3} ms, {Median(steadyBytes):N0} bytes"));
+        rows.Add(item: ("world: scene emission after a hall light change (median)", $"{MedianMilliseconds(samples: changed):F3} ms, {Median(changedBytes):N0} bytes"));
         rows.Metric(name: "scene-emission-steady", unit: "ms", value: MedianMilliseconds(samples: steady));
         rows.Metric(name: "scene-emission-changed", unit: "ms", value: MedianMilliseconds(samples: changed));
     }
@@ -414,8 +415,8 @@ internal static class WorldBenchmarks {
         Array.Sort(array: allocationSamples);
         rows.Add(item: ($"world: shading edit tick (median, creation '{creation.Id.Value}')", $"{MedianMilliseconds(samples: elapsedTicksSamples):F3} ms"));
         rows.Metric(name: "shading-edit-tick", unit: "ms", value: MedianMilliseconds(samples: elapsedTicksSamples));
-        rows.Add(item: ("world: shading edit tick allocation (median)", $"{allocationSamples[(allocationSamples.Length / 2)]:N0} bytes"));
-        rows.Metric(name: "shading-edit-allocation", unit: "bytes", value: allocationSamples[(allocationSamples.Length / 2)]);
+        rows.Add(item: ("world: shading edit tick allocation (median)", $"{Median(allocationSamples):N0} bytes"));
+        rows.Metric(name: "shading-edit-allocation", unit: "bytes", value: Median(allocationSamples));
     }
     // An authored whole-row edit that moves one cell's value: the tick that drains it, timed and metered beside
     // the arena versions and installed rows it replaces. Bound addon writes use the separate typed burst above.
@@ -493,8 +494,8 @@ internal static class WorldBenchmarks {
         Array.Sort(array: rowsReplaced);
         rows.Add(item: ($"world: state value write tick (median, row '{row.Name.Value}')", $"{MedianMilliseconds(samples: elapsedTicksSamples):F3} ms"));
         rows.Metric(name: "value-write-tick", unit: "ms", value: MedianMilliseconds(samples: elapsedTicksSamples));
-        rows.Add(item: ("world: state value write tick allocation (median)", $"{allocationSamples[(allocationSamples.Length / 2)]:N0} bytes"));
-        rows.Add(item: ("world: state value write tick rows moved (median)", $"{versionsMoved[(versionsMoved.Length / 2)]} arena versions, {rowsReplaced[(rowsReplaced.Length / 2)]} installed rows of {server.Definition.State.Count}"));
+        rows.Add(item: ("world: state value write tick allocation (median)", $"{Median(allocationSamples):N0} bytes"));
+        rows.Add(item: ("world: state value write tick rows moved (median)", $"{Median(versionsMoved)} arena versions, {Median(rowsReplaced)} installed rows of {server.Definition.State.Count}"));
     }
     // The screen machines emulate on worker threads the tick only submits to; a tick waits on one only when that
     // machine's pending window is full. The back-to-back window above is bounded by the slowest machine once the
@@ -554,10 +555,12 @@ internal static class WorldBenchmarks {
             rows.Metric(name: $"machine-{screen}-tick", unit: "ms", value: MedianMilliseconds(samples: samples));
         }
     }
+    // The median of ascending counts or ticks, by the one order statistic every measurement reads.
+    private static double Median<T>(T[] ascending) where T : INumber<T> => OrderStatistics.Quantile(ascending: Array.ConvertAll(array: ascending, converter: static value => double.CreateChecked(value: value)), fraction: 0.5);
     private static double MedianMilliseconds(long[] samples) {
         Array.Sort(array: samples);
 
-        return ((samples[(samples.Length / 2)] * 1000.0) / Stopwatch.Frequency);
+        return ((Median(samples) * 1000.0) / Stopwatch.Frequency);
     }
 
     // The deterministic work behind a tick, in report order: the bodies the population steps and the parked ones a field
