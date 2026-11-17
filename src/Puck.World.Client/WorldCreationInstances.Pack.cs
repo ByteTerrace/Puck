@@ -48,7 +48,7 @@ public sealed partial class WorldCreationInstances {
         }
 
         for (var index = 0; (index < packed.Count); index++) {
-            if (held[index] != packed[index]) {
+            if (!held[index].SameStagedContent(other: packed[index])) {
                 return false;
             }
         }
@@ -376,7 +376,7 @@ public sealed partial class WorldCreationInstances {
                         origin: transforms[rootSlot].Position,
                         rotation: transforms[rootSlot].Orientation,
                         scale: placementScale
-                    ) with { IsDynamic = true }
+                    ) with { IsDynamic = true, FrameSlot = rootSlot, UsesRootMaterialFrame = false }
                     : null),
                 index: index
             );
@@ -386,8 +386,7 @@ public sealed partial class WorldCreationInstances {
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
 
-        // The list is replaced only when a run changed: the mesh dressing redraws and reuploads every draw record when it
-        // sees a new list, so a body holding still across a door keeps the one it was first clipped by.
+        // Keep unchanged runs by value; the row writer compares them in order and visits only changed slots.
         if (!SameRuns(held: SlotClips, packed: m_slotClipRun)) {
             // A body drawn clipped at a door shows only past the glass, so every change is logged: a body that vanishes
             // away from any door is a straddle test that should not have matched.

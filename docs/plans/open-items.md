@@ -62,7 +62,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the scheduling stage's, C0.3's and C0.4's windowed readings, the control plane's
    step C0.5, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-   work proportional to change: R1h and R1a's windowed checks, then R1b, R1c and S2 of
+   work proportional to change: R1h through R1c's windowed checks, then S2 of
    [its memo](arrival-proportional.md) in that order (R0's rule has read
    them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
@@ -546,9 +546,21 @@ What an arrival and a hand-over still cost the frame:
   [The exact R1b request](arrival-proportional.md#windowed-r1b-verification-request)
   names the commands, forcing counts and what decides each. R1a and R1h retain
   their outstanding windowed requests there too. Count-changing arrivals keep
-  unrelated owner runs; only a start over rebuilds them. Indexed clipping (R1c)
-  still replaces the conservative portal visit, and clustered trace scenes (S2)
+  unrelated owner runs; only a start over rebuilds them. Indexed clip derivation
+  now covers every owner kind; [the R1c request](arrival-proportional.md#windowed-r1c-verification-request)
+  holds and withdraws the host-mesh witness and the rigid stand-in at the linked
+  gallery paintings on both backends. Its straddle, picks and appearance remain
+  unconfirmed until those counters and captures hold. Clustered trace scenes (S2)
   remain next; R2 stays with the visibility plan's V1b.
+- [medium] Portal straddle bounds omit authored mesh triangles outside the
+  creation's field bounds. `WorldCreationInstances.ReachOf` and `PartSpheres`
+  read the field shapes, while `WorldRigidAssets.Metadata` derives its reach
+  from the creation document; neither includes `WorldPrototype.Mesh`. A mesh
+  extending past its field can therefore reach the glass before the detector
+  publishes a clip. Include mesh bounds in those shared reach/sphere paths and
+  verify host and rigid bodies whose triangles reach beyond their fields. The
+  row-writer straddle witness keeps its triangles inside the keel's bounding
+  sphere, so its owner-kind check does not settle this separate detector gap.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
   produce and simulate both inflated as if the frame thread were starved,
   which steady readings do not show. A stop's window can also still hold part
