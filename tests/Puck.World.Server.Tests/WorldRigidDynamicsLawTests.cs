@@ -864,8 +864,13 @@ public sealed class WorldRigidDynamicsLawTests {
             actual: box.FixedPosition
         );
 
+        var frozenHold = box.RigidRestingHoldTicks;
+        var frozenHash = WorldReplaySnapshot.HashBodies(fixture.Server.Population, [0]);
+
         for (var tick = 0; (tick < 15); tick++) {
             fixture.Step();
+            Assert.Equal(frozenHold, box.RigidRestingHoldTicks);
+            Assert.Equal(frozenHash, WorldReplaySnapshot.HashBodies(fixture.Server.Population, [0]));
         }
 
         Assert.True(condition: box.Resting);

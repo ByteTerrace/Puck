@@ -1556,17 +1556,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `FixedDynamicBodyContacts.ClosestDelta` forms carrier-rounded
-  Q48.16 dot products before its segment-pair divisions: a sphere core at
-  `(0.001, 0, 0)` against a capsule core from the origin to `(0.002, 0, 0)`
-  returns `(66, 0, 0)` raws instead of zero, so overlap can miss the pair.
-  Replace the whole segment-pair solve with full-width arithmetic and verify
-  short, crossing, parallel and extreme-coordinate pairs against exact
-  geometry.
-- [medium] `physics.contact` adds three or four shared `CompareExchange`
-  updates to every surviving convex query whether or not a reader exists
-  (`FixedStaticContactWork`). Count per thread or per tick and publish on
-  read.
+- [medium] `physics.contact` still counts through the shared atomic
+  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
+  a surviving convex query adds three or four `WorkCount.AddShared` CAS
+  updates, even without a reader. The cause is shared counter storage, not
+  the physics wrapper. Add single-writer shards in the common counting home
+  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
+  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
+  handling rather than making physics carry a second aggregator. Preserve
+  totals when a writer thread exits, and bound retained shard state under
+  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
+  Check concurrent writers, reads and retirement for exact monotonic totals,
+  then physics ordering/friction laws and `world.counters physics.contact`.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -1588,10 +1589,7 @@ collider, then the lifecycle lows as one pass.
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
   a carried body's contacts are never released, so the box beneath cannot
   park; one refused probe drops a body's surface warm start
-  (`ReleaseUntouchedRigidContacts`); the rest latch's hold counter grows
-  unclamped past `policy.RestHoldTicks`, so a still body's replay hash can
-  move; `FixedPairManifoldSlot.IsPersistentStateEqual` and
-  `FixedPairManifoldSlotTable.Fold` have no caller; a lattice spill into an
+  (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).
 
@@ -2428,6 +2426,15 @@ edit still allocates, then a reboot for an edit outside `PuckHotReload`, then
 the windowed C# loop and the cold and warm builds timed on a quiet machine.
 
 The edit loop:
+
+- [low] Staging unchanged source bytes invalidates a pending World build:
+  `WorldArtifactKey` hashes `CheckoutContent.Change.Entry`, including Git's
+  index/worktree status. An easy-b2 headless start was refused after its
+  build-lease wait with "sources changed while waiting" when only `git add`
+  changed that status. Key the effective source content independently of
+  staging, preserving additions, deletions and paths. Check that staging and
+  unstaging identical bytes retain the key and a queued build, while changing
+  a source byte still invalidates it.
 
 - [high] A fresh landscape World artifact builds for minutes before boot,
   against the 30-second bar. A live compiler stack sat in ILLink's data-flow
