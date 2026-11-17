@@ -160,11 +160,19 @@ before mesh reads; zero placement words reject every triangle through the existi
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
-`world.rows check on` enables independent pack, generation-ledger, seed and quiescent device comparisons
+`SdfMeshRows.Create` returns the table and its sole writer. The dresser owns runs per host, group and own-mesh
+occurrence; allocator tickets guard frees and fresh occupancies guard history even for same-mesh reuse.
+The frame keeps its host inputs and publishes `MeshRows` separately. Claims and glass counts move inside writes.
+`SdfMeshHistory.Observe` compares table identity and occupancy; free/owed/refused rows retire in `StageMeshDraw`.
+Only start over rebuilds every owner: retry, the free share, forced packing or a noncanonical locked frame.
+Picking stamps the mesh target's row table/revision and rejects a changed row identity before resolving its owner.
+The static scene key and diagnostic comparison ignore row order.
+`world.rows check on` enables independent dress, pack, generation-ledger, seed and quiescent device comparisons
 (`sdf.rows.check`); `force limit <bytes|auto>`, `force relocate` and `force skip tables` exercise
-refusal, relocation and an expired consumer. `host.memory collect` and `gpu.faults lose` exercise
+refusal, relocation and an expired consumer. `force skip host`, `force skip scene`, `force pack` and
+`force dress-fault [<dresses>]` exercise the remaining cursor and publication paths. `host.memory collect` and `gpu.faults lose` exercise
 trim and new tables. The device-free witness is `SdfMeshArrivalLawTests`; a headless World stages
-no draws. Active portal clipping still refreshes conservatively until R1c.
+no draws. Active/ended portal clipping still visits all base rows through the writer until R1c.
 `world.residency` reports logical journal/scratch array bytes separately from
 mesh residency and the overlapping process/account/backend memory readings.
 Pending bake demand reads the same occurrence index and transformed copy boxes;
@@ -1380,3 +1388,4 @@ by its fence share is GPU back-pressure, not CPU work.
 | `platform` | Native windows, display facts (VRR, colour space, display power), precision waits, camera rings that feed shared textures. |
 | `physics` | Contact against the authored field, which the drawn mesh must agree with. |
 | `verification` | The landing bar, GPU legs and how to read a failed check. |
+

@@ -83,7 +83,7 @@ public sealed class SdfWorldPicker {
     /// <param name="request">The identity <see cref="Request"/> returned.</param>
     /// <returns>The answer, or null while it has not landed, was already taken or was discarded.</returns>
     public SdfPickResult? TakeAnswer(long request) {
-        if (m_unclaimed is { } answer && (answer.Request == request)) {
+        if ((m_unclaimed is { } answer) && (answer.Request == request)) {
             m_unclaimed = null;
             return answer;
         }
@@ -156,7 +156,7 @@ public sealed class SdfWorldPicker {
             Clear();
         }
     }
-    internal bool Take(SdfWorldPickReadback readback, uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, out SdfPickResult request) {
+    internal bool Take(SdfWorldPickReadback readback, uint width, uint height, SdfFrame frame, SdfReprojectionView sample, long cut, out SdfPickResult request, SdfMeshRowStamp rowStamp = default) {
         if (!Pending) {
             request = default;
             return false;
@@ -165,7 +165,7 @@ public sealed class SdfWorldPicker {
         m_flight = readback;
         request = new SdfPickResult(Request: m_request,
             X: Math.Min(val1: ((uint)(m_x * width)), val2: (width - 1)), Y: Math.Min(val1: ((uint)(m_y * height)), val2: (height - 1)),
-            Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.MeshDrawsRevision, Map: frame.PickMap) { CutRevision = cut, Sample = (m_surface ? sample : null) };
+            Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.MeshDrawsRevision, Map: frame.PickMap) { CutRevision = cut, RowStamp = rowStamp, Sample = (m_surface ? sample : null) };
         return true;
     }
     // Ends the copy in flight: an answer once its node proved the copy's slot complete, or null when its recording was
@@ -200,6 +200,13 @@ public sealed class SdfWorldPicker {
         m_queued = true;
         return ++m_request;
     }
-    private bool Current(SdfPickResult result) => ((m_view?.Residency.Frame is { } frame) &&
-        (result.CutRevision == m_cut) && ReferenceEquals(objA: result.Program, objB: frame.Program) && ReferenceEquals(objA: result.Map, objB: frame.PickMap));
+    private bool Current(SdfPickResult result) {
+        if ((m_view?.Residency.Frame is not { } frame) || (result.CutRevision != m_cut) || !ReferenceEquals(objA: result.Program, objB: frame.Program) || !ReferenceEquals(objA: result.Map, objB: frame.PickMap)) { return false; }
+        if (result.Kind != SdfVisibilityKind.Mesh) { return true; }
+        var valid = (ReferenceEquals(objA: result.RowStamp.Rows, objB: frame.MeshRows) &&
+            ((frame.MeshRows is null) || frame.MeshRows.IdentityStands(((int)result.Source), result.RowStamp.Revision)));
+
+        if (!valid) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.PicksDiscarded); }
+        return valid;
+    }
 }

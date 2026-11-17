@@ -897,7 +897,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Render(meshDraws: [small, large], time: 0f);
         rig.Render(meshDraws: [small, large], time: 0f);
         Assert.Equal(expected: (held, held, 1), actual: (rig.Engine.MeshRegionBytes, rig.Engine.MeshRegionLimitBytes, rig.Engine.MeshRegionRefused));
-        Assert.Equal(expected: 1U, actual: rig.Engine.MeshDrawCount);
+        Assert.Equal(expected: 2U, actual: rig.Engine.MeshDrawCount);
         Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).OverLimitGrants);
         // With room again the next list places the refused mesh and the region grows under its reservation.
         account.SetBudget(bytes: null, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);

@@ -942,21 +942,20 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         // Every view draws the program's baked meshes, landed first where its views stand.
         MeshDemand.Observe(frame: frame, height: m_height);
-        frame = m_meshDresser.Dress(frame: frame);
+        try { frame = m_meshDresser.Dress(frame: frame); } catch (SdfDressFaultException) {
+            // The diagnostic deliberately leaves a partial publication. Retry through the ordinary pending door
+            // before any consumer sees it; that door starts over, including an ownerless allocation.
+            frame = m_meshDresser.Dress(frame: frame);
+        }
 
         m_frame = frame;
         m_pendingFrame = null;
         m_programPending |= frame.ProgramChanged;
 
-        var glass = 0;
+        var glass = (frame.MeshRows?.GlassCount ?? 0);
 
-        for (var index = 0; (index < frame.MeshDraws.Count); index++) {
-            if (frame.MeshDraws[index].Glass) { glass++; }
-        }
-        Volatile.Write(
-            location: ref m_meshDrawCount,
-            value: frame.MeshDraws.Count
-        );
+        if (frame.MeshRows is null) { foreach (var draw in frame.MeshDraws) { if (draw.Glass) { glass++; } } }
+        Volatile.Write(location: ref m_meshDrawCount, value: (frame.MeshRows?.LiveCount ?? frame.MeshDraws.Count));
         Volatile.Write(location: ref m_glassDrawCount, value: glass);
     }
     // Builds the tables once the pipelines are ready. The first call starts the pipeline build on the thread pool; until

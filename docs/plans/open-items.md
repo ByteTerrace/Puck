@@ -537,21 +537,16 @@ carries the tick.
 
 What an arrival and a hand-over still cost the frame:
 
-- [high] A hand-over's own frame: a replacement that changes a group's piece
-  or copy count, and a group's first mesh, rebuild the dresser's whole draw
-  list (`SdfMeshDresser.BuildDrawTopology`) and stage every row
-  (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
-  body straddling a portal journals every row each frame.
-  [Arrival work proportional to change](arrival-proportional.md) holds the
-  design: R1a's producer-index staging, absent records, shared cursors and independent
-  comparisons are built and its 28 focused laws pass; its cold boot's captures,
-  forcing counts on both backends and owed-frame timing remain the lead's
-  [verification request](arrival-proportional.md#r1a-as-built), beside R1h's windowed
-  hit-door check. The remaining implementation steps are R1b, R1c and S2;
-  R2 stays with the visibility plan's V1b. R0's rule has read them.
-  No capture has yet shown a hand-over frame by frame;
-  read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
-  only a burst it moved across.
+- [high] The arrival row implementation owes windowed verification and the
+  lifetime fix pass: the tour and meadow cross-check on both backends, a
+  presented burst retaining its group across a hand-over, delayed picks through
+  a hand-over and the gallery portal, and two Worlds' canonical lockstep stills.
+  [The exact R1b request](arrival-proportional.md#windowed-r1b-verification-request)
+  names the commands, forcing counts and what decides each. R1a and R1h retain
+  their outstanding windowed requests there too. Count-changing arrivals keep
+  unrelated owner runs; only a start over rebuilds them. Indexed clipping (R1c)
+  still replaces the conservative portal visit, and clustered trace scenes (S2)
+  remain next; R2 stays with the visibility plan's V1b.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
   produce and simulate both inflated as if the frame thread were starved,
   which steady readings do not show. A stop's window can also still hold part
@@ -3663,3 +3658,4 @@ reviews it and says so (the owner's ruling).
   automating their gameplay with Puck, identifying the game from a catalog
   and judging through the addon system's observation grants. The catalog is
   external data outside simulation state, and the addon is opt-in.
+

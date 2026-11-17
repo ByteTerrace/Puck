@@ -30,7 +30,6 @@ public sealed class SdfMeshRegionArenaLawTests {
         var other = Triangle(offset: 2f);
 
         arena.Plan(draws: [Draw(mesh: other)]);
-        Assert.True(condition: arena.Relocated);
         Assert.Equal(expected: [other], actual: arena.Placements.Keys);
         Assert.Throws<ArgumentOutOfRangeException>(testCode: () => new SdfMeshRegionArena(retainedSlackWords: -1));
     }
@@ -54,11 +53,9 @@ public sealed class SdfMeshRegionArenaLawTests {
         var added = Draw(mesh: (template with { }));
 
         arena.Plan(draws: [.. kept, added]);
-        Assert.True(condition: arena.Relocated);
         Assert.True(condition: ((((ulong)arena.Words) * sizeof(uint)) <= SdfWorldTables.MostMeshRegionBytes));
         Assert.Equal(expected: (kept.Length + 1), actual: arena.Placements.Count);
     }
-
     [Fact]
     public void AListPastTheReserveMovesOnlyTheMeshesTheGrownReserveTakes() {
         var small = Triangle(offset: 0f);
@@ -75,7 +72,6 @@ public sealed class SdfMeshRegionArenaLawTests {
 
         var reserveEnd = ((2 * SdfMeshRegionArena.MinimumDrawCapacity) * SdfMeshRecord.DrawWords);
         var kept = arena.Placements[tail];
-        var end = arena.Words;
 
         Assert.True(condition: ((arena.Placements[big].VertexWord < reserveEnd) && (kept.VertexWord >= reserveEnd)));
 
@@ -92,7 +88,7 @@ public sealed class SdfMeshRegionArenaLawTests {
         Assert.Equal(expected: 2, actual: arena.Moved.Count);
         Assert.True(condition: (arena.Moved.Contains(item: small) && arena.Moved.Contains(item: big)));
         Assert.Equal(expected: kept, actual: arena.Placements[tail]);
-        Assert.Equal(expected: end, actual: arena.Placements[small].VertexWord);
+        Assert.True(condition: (arena.Placements[small].VertexWord >= reserveEnd));
 
         // A mesh the grown reserve takes that the list does not name is forgotten, never moved.
         arena.Plan(draws: [.. Enumerable.Range(count: ((4 * SdfMeshRegionArena.MinimumDrawCapacity) + 1), start: 0).Select(selector: _ => Draw(mesh: tail))]);

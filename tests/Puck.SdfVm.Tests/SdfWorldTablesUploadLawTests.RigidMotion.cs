@@ -13,45 +13,45 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 });
         var builder = new SdfProgramBuilder();
 
-        builder.AddMaterial(new SdfMaterial(Vector3.One));
-        builder.BeginInstanceDynamic(0, Vector3.Zero, 2).ResetPoint().TransformDynamic(0).Sphere(1, 0).EndInstance();
+        builder.AddMaterial(material: new SdfMaterial(Vector3.One));
+        builder.BeginInstanceDynamic(0, Vector3.Zero, 2).ResetPoint().TransformDynamic(slot: 0).Sphere(1, 0).EndInstance();
         var program = builder.Build();
         var poses = new[] { new DynamicTransform(Vector3.Zero, Quaternion.Identity) };
-        var group = Assert.Single(SdfMeshBakeGroup.Plan(program, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)));
+        var group = Assert.Single(collection: SdfMeshBakeGroup.Plan(program, poses, 40, static (selector, dynamic) => new SdfMeshBakeGroup(dynamic: dynamic, selector: selector)));
         using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = static _ => 0 }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
         SdfMeshDraw Draw(float x, int epoch = 0) {
-            var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x, 0, 0), Quaternion.Identity), 1, IsDynamic: true) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
+            var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x: x, y: 0, z: 0), Quaternion.Identity), 1, IsDynamic: true) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
             var frame = new SdfFrame(Program: program, ProgramChanged: false, Time: x, Views: []) { DynamicTransforms = poses, MeshAssetSlots = [0], MeshInstances = [copy] };
 
-            return dresser.Dress(frame).MeshDraws[(authoredMesh ? 1 : 0)];
+            return dresser.Dress(frame: frame).DressedDraws()[(authoredMesh ? 1 : 0)];
         }
         var first = Draw(1);
 
-        rig.Land(time: 0, meshDraws: [first]);
+        rig.Land(meshDraws: [first], time: 0);
         var moved = Draw(2);
 
         Assert.Equal(first.MotionIdentity, moved.MotionIdentity);
         Assert.Equal(first.Identity, moved.Identity);
         rig.Render(time: 0, meshDraws: [moved]);
-        Assert.Equal(first.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
+        Assert.Equal(first.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(source: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
         rig.Render(time: 0, meshDraws: [moved]);
-        Assert.Equal(moved.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
+        Assert.Equal(moved.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(source: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
 
         var teleported = Draw(50, epoch: 1);
 
         Assert.NotEqual(moved.MotionIdentity, teleported.MotionIdentity);
         rig.Render(time: 0, meshDraws: [teleported]);
-        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
+        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(source: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
         var continued = Draw(51, epoch: 1);
 
         rig.Render(time: 0, meshDraws: [continued]);
-        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
+        Assert.Equal(teleported.ObjectToWorld, System.Runtime.InteropServices.MemoryMarshal.Read<Matrix4x4>(source: rig.Gpu.DeviceLocal(part: "previous-mesh-transforms", sizeBytes: ((ulong)(SdfMeshRecord.MatrixWords * sizeof(uint))))));
 
         // Growing the list takes the whole-list staging path rather than changed-record staging.
         var reseated = Draw(100, epoch: 2);
