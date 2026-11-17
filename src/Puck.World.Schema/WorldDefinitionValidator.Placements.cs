@@ -1796,13 +1796,6 @@ public static partial class WorldDefinitionValidator {
                 ) {
                     errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames or drivers) — distribution/mirror facets are static-stamp-only.");
                 }
-            } else if (placement.Attach is not null) {
-                // An ATTACHED row renders through the SAME reserved stamp pool (rooted on its body instead of a static
-                // transform — Client.WorldCreationInstances), so it charges the same ceiling. Counted in the `else` because an
-                // attached row of a FRAMED creation is one registration, not two.
-
-
-
             }
 
             // The INHABIT facet: a placement's binding to live population bodies (Arc 7). Resolve its kit, gate its
