@@ -1304,9 +1304,9 @@ itself. Restitution, friction and both damping rates are dimensionless or
 per-second coefficients, unaffected by `Scale`. `RigidCenterOfMass` (`body.where`'s
 `com=`) is `root + orientation·(CenterOffset × Scale)`. Restitution below
 `collision.bodyContacts.rigidPairRestitutionSpeed` is zero, so bodies at rest
-never micro-bounce. A carried body's tangibility push on a rigid body it
-overlaps stays positional (`WorldBody.ApplyRigidPositionalCorrection`), since the
-carried body is posed by its carrier outside the solve.
+never micro-bounce. A carried body is posed by its carrier and enters the solve
+as a static side with that carrier's velocity; a rigid body it overlaps receives
+the contact impulse through the same solver as every other rigid contact.
 
 A body settles to `Puck.Physics.Motion.ActionFact.Resting` (`BodyFacts.Resting`,
 published by `WorldBody.FactHolds`) after its fastest point (linear speed plus

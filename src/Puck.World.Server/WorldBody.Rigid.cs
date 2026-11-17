@@ -424,8 +424,8 @@ public sealed partial class WorldBody {
 
     /// <summary>Builds (or refreshes) this body's persistent <see cref="FixedRigidBody"/> handle — the vehicle
     /// <see cref="Puck.Physics.FixedTwoBodyKernel"/> reads/writes for dynamic-vs-dynamic contact
-    /// (<see cref="WorldPopulation.ResolveDynamicContacts"/>). A rigid body's handle is dynamic (its own mass/inertia,
-    /// contributing and receiving impulse); a locomotion body's handle is STATIC (zero inverse mass/inertia) but
+    /// (<see cref="WorldPopulation.ResolveDynamicContacts"/>). A free rigid body's handle is dynamic (its own mass/inertia,
+    /// contributing and receiving impulse); a carried or locomotion body's handle is static (zero inverse mass/inertia) but
     /// carries its live <see cref="ApproximateWorldVelocity"/> so it still contributes its own closing speed to the
     /// relative-velocity term without ever receiving an impulse back — the "a kinematic character contributes its
     /// velocity; it is never pushed by them" rule, enforced by construction (<see cref="FixedRigidBody.IsDynamic"/>

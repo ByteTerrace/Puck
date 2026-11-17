@@ -1605,6 +1605,9 @@ collider, then the lifecycle lows as one pass.
   local wake. No live world enables non-rigid sleep yet.
 - Lifecycle lows, read from source and not run: a rigid kit with a motion
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
+  a stationary carried body's live pair contacts keep free rigid bodies in its
+  non-parking island (`WorldPopulation.Sleep.cs`, `CollectRigidIsland` traverses
+  carried rigid sides too), so those resting bodies cannot park;
   one refused probe drops a body's surface warm start
   (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
