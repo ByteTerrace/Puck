@@ -59,7 +59,7 @@ public sealed partial class SdfWorldTables {
     // Orders the owed meshes the draw list names for landing: those the demand points see largest first, a draw no host
     // box bounds (a skinned body) before any, then the list's order, and after them the owed meshes named ahead
     // (OrderLandingAhead). Any other placed mesh no draw names stays owed until a list names it again.
-    private void OrderLanding(IReadOnlyList<SdfMeshDraw> draws) {
+    private void OrderLanding(SdfMeshDraws draws) {
         m_landingOrder.Clear();
         m_landingOrdered.Clear();
         m_landingCursor = 0;
@@ -70,13 +70,11 @@ public sealed partial class SdfWorldTables {
         var demand = ((MeshDemand is { Count: > 0 } points) ? points : null);
 
         m_owedOrder.Clear();
-        for (var index = 0; (index < draws.Count); index++) {
-            var draw = draws[index];
-
-            if (!m_meshesOwed.Contains(mesh: draw.Mesh)) { continue; }
-            m_owedOrder.Add(item: (((demand is null)
-                ? 0f
-                : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
+        foreach (var mesh in m_meshesOwed.Set) {
+            for (var index = m_rowsByMesh.First(mesh); index >= 0; index = m_rowsByMesh.Next(index)) {
+                var draw = draws[index];
+                m_owedOrder.Add(((demand is null) ? 0f : SdfMeshDemand.BoxOf(in draw, out var center, out var half) ? demand.Priority(center, half) : float.PositiveInfinity, index));
+            }
         }
         System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
         foreach (var (_, index) in m_owedOrder) {
@@ -317,3 +315,4 @@ public sealed partial class SdfWorldTables {
         public void Dispose() { }
     }
 }
+

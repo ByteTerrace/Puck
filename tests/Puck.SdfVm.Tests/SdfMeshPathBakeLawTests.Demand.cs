@@ -50,8 +50,8 @@ public sealed partial class SdfMeshPathBakeLawTests {
         near.Demand.Observe(frame: frame, height: 1080);
         Drive(bake: near, dresser: nearDresser, frame: frame, materials: materials, shapes: Shapes);
 
-        var expected = m_baked.Value.Run.Dresser.Dress(frame: m_baked.Value.Frame).MeshDraws;
-        var actual = nearDresser.Dress(frame: frame).MeshDraws;
+        var expected = m_baked.Value.Run.Dresser.Dress(frame: m_baked.Value.Frame).DressedDraws();
+        var actual = nearDresser.Dress(frame: frame).DressedDraws();
 
         Assert.Equal(expected: expected.Count, actual: actual.Count);
         Assert.All(collection: expected, action: draw => Assert.Contains(collection: actual, filter: other => other.Mesh.Indices.Span.SequenceEqual(other: draw.Mesh.Indices.Span) && other.Mesh.Positions.Span.SequenceEqual(other: draw.Mesh.Positions.Span)));
@@ -95,3 +95,4 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: new Vector3(x: 1f, y: 1f, z: 0f), actual: half);
     }
 }
+

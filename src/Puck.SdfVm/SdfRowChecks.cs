@@ -9,6 +9,37 @@ public static class SdfRowChecks {
 
     /// <summary>Gets or sets whether all tables run the independent pack, generation, seed and device comparisons.</summary>
     public static bool Enabled { get; set; }
+    /// <summary>Requests one canonical start over.</summary>
+    public static bool PackRequested { get; set; }
+    /// <summary>Requests an expired host cursor.</summary>
+    public static bool SkipHostRequested { get; set; }
+    /// <summary>Requests an expired irradiance-key cursor.</summary>
+    public static bool SkipSceneRequested { get; set; }
+    /// <summary>Number of row writes before the forced publication failure; zero disables it.</summary>
+    public static int DressFaultAfter { get; set; }
+    internal static bool TakePack() { var take = PackRequested; PackRequested = false; return take; }
+    internal static bool TakeDressFault() { if (DressFaultAfter <= 0) { return false; } return --DressFaultAfter == 0; }
+    internal static void DressFailure(string message) { ProcessWork.Count(DressMismatch); throw new InvalidOperationException($"Dress comparison: {message}"); }
+    /// <summary>Counts live rows compared to the canonical rebuild.</summary>
+    public static WorkKind Dress { get; } = Declare("dress.compared");
+    /// <summary>Counts dress multiset mismatches.</summary>
+    public static WorkKind DressMismatch { get; } = Declare("dress.mismatched");
+    /// <summary>Counts starts over requested by packing or the free share.</summary>
+    public static WorkKind Packs { get; } = Declare("start-over.pack");
+    /// <summary>Counts starts over after a failed publication.</summary>
+    public static WorkKind Retry { get; } = Declare("start-over.retry");
+    /// <summary>Counts starts over to restore canonical locked ordering.</summary>
+    public static WorkKind Locked { get; } = Declare("start-over.locked");
+    /// <summary>Counts deliberately skipped host-cursor commits.</summary>
+    public static WorkKind HostSkipped { get; } = Declare("cursor.host.skipped");
+    /// <summary>Counts host cursor whole answers.</summary>
+    public static WorkKind HostWhole { get; } = Declare("cursor.host.whole");
+    /// <summary>Counts scene-key cursor whole answers.</summary>
+    public static WorkKind SceneWhole { get; } = Declare("cursor.scene.whole");
+    /// <summary>Counts deliberately skipped scene-key commits.</summary>
+    public static WorkKind SceneSkipped { get; } = Declare("cursor.scene.skipped");
+    /// <summary>Counts picks discarded after row reuse or replacement.</summary>
+    public static WorkKind PicksDiscarded { get; } = Declare("picks.discarded");
 
     /// <summary>Counts records compared to a pure packing of the producer row.</summary>
     public static WorkKind Packed { get; } = Declare(name: "pack.compared");

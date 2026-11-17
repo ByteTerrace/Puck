@@ -62,7 +62,7 @@ public sealed partial class SdfWorldTables {
 
         // A roster walk is needed only on a cut, never for ordinary continuous movement. These indices are used only
         // with the producer roster, whose row indices are also the staged indices.
-        var draws = frame.MeshDraws;
+        var draws = frame.DrawRows;
 
         SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.ReseatDrawsScanned, draws.Count);
         for (var index = 0; (index < draws.Count); index++) {
@@ -242,7 +242,7 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging.
     private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
-        var absent = !MeshStands(mesh: draw.Mesh);
+        var absent = draw.Mesh is null || !MeshStands(mesh: draw.Mesh);
         var wasAbsent = m_absentRows.Contains(item: index);
         Span<uint> before = stackalloc uint[SdfMeshRecord.DrawWords];
 
@@ -254,17 +254,17 @@ public sealed partial class SdfWorldTables {
         if (absent) {
             m_meshHistory.Retire(index: index);
             SdfMeshRegion.WriteAbsent(record: record);
-            _ = m_absentRows.Add(item: index);
-            if (m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
+            if (draw.Mesh is not null) { _ = m_absentRows.Add(item: index); } else { _ = m_absentRows.Remove(index); }
+            if (draw.Mesh is not null && m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
         } else {
             var reseat = MeshTransformWasReseated(draw: in draw);
 
             if (reseat) { _ = m_namedRowCuts.Add(item: index); }
-            observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat);
+            observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat, occupancy: m_currentDrawRows.Occupancy(index), table: m_currentDrawRows.Rows);
             _ = m_absentRows.Remove(item: index);
             if (incremental && !wasAbsent) {
                 // Both ordinary edits and landing use the arena's current placement, never an absent record's zeros.
-                var placement = m_meshArena.Placements[draw.Mesh];
+                var placement = m_meshArena.Placements[draw.Mesh!];
                 var work = SdfMeshRegion.WriteDrawIncremental(draw: in draw, previous: in m_stagedDraws[index],
                     placement: placement, generation: observation.Generation, record: record);
 
@@ -273,7 +273,7 @@ public sealed partial class SdfWorldTables {
                 if (work.NormalComputed) { tally.Normals++; }
                 if (work.SelectionComputed) { tally.Selections++; }
             } else {
-                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh], generation: observation.Generation, record: record);
+                SdfMeshRegion.WriteDraw(draw: in draw, placement: m_meshArena.Placements[draw.Mesh!], generation: observation.Generation, record: record);
                 tally.Normals++;
                 tally.Selections++;
             }
@@ -339,25 +339,8 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // Packs a complete newly staged list and retires vanished cells while retaining their generation lifetimes.
-    private void StageMeshMotion(Span<uint> words, IReadOnlyList<SdfMeshDraw> draws) {
-        var old = m_meshRegion.ContentsAt(
-            length: ((int)Math.Min(val1: m_meshRegion.ByteCount, val2: (((long)draws.Count) * SdfMeshRegion.DrawBytes))),
-            offset: 0
-        );
-
-        var tally = new StagingTally(cause: m_stagingCause);
-
-        for (var index = 0; (index < draws.Count); index++) {
-            var draw = draws[index];
-
-            StageMeshDraw(index: index, draw: in draw, record: words.Slice(length: SdfMeshRecord.DrawWords, start: (index * SdfMeshRecord.DrawWords)), old: old, tally: ref tally);
-        }
-        tally.Publish();
-        m_meshHistory.RetireAfter(count: draws.Count);
-
-        var bytes = (((ulong)Math.Max(val1: 1, val2: draws.Count)) * MeshMatrixBytes);
-
+    private void EnsurePreviousMeshCapacity(int count) {
+        var bytes = (ulong)Math.Max(1, count) * MeshMatrixBytes;
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;
         }
@@ -371,3 +354,4 @@ public sealed partial class SdfWorldTables {
         m_seedMeshHistory = true;
     }
 }
+

@@ -15,7 +15,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         rig.Engine.UploadProgram(producer.Program);
         var first = producer.Publish(rootX: 1, memberY: 1, unusedZ: 1);
         LandRootCut(rig, first);
-        var firstDraw = Assert.Single(first.MeshDraws);
+        var firstDraw = Assert.Single(first.DressedDraws());
         var moving = producer.Publish(rootX: 2, memberY: 1, unusedZ: 1);
         if (!skipMotion) { RenderRootCut(rig, moving); }
         var generation = RootCutGeneration(rig);
@@ -25,9 +25,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         RenderRootCut(rig, cut);
 
         Assert.Same(first.Program, cut.Program);
-        Assert.Same(firstDraw.Mesh, Assert.Single(cut.MeshDraws).Mesh);
-        Assert.Equal(firstDraw.Identity, cut.MeshDraws[0].Identity);
-        Assert.Equal(0, cut.MeshDraws[0].FrameSlot);
+        Assert.Same(firstDraw.Mesh, Assert.Single(cut.DressedDraws()).Mesh);
+        Assert.Equal(firstDraw.Identity, cut.DressedDraws()[0].Identity);
+        Assert.Equal(0, cut.DressedDraws()[0].FrameSlot);
         AssertRootCutPrevious(rig, destination);
         Assert.True(RootCutGeneration(rig) > generation);
     }
@@ -122,9 +122,9 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var mesh = new SdfMesh(positions: new Vector3[] { Vector3.Zero, Vector3.UnitX, Vector3.UnitY }, indices: new uint[] { 0, 1, 2 },
                 members: skinned ? new[] { new SdfMeshMember(1, Vector3.Zero, Quaternion.Identity), new SdfMeshMember(2, Vector3.Zero, Quaternion.Identity) } : default,
                 vertexMembers: skinned ? new byte[] { 0, 0, SdfMesh.NoMember } : default);
-            m_run = new MeshBakeTestRun(new SdfMeshPathBake());
+            m_run = new MeshBakeTestRun(new SdfMeshPathBake { PlannedTier = static _ => 0 });
             foreach (var group in SdfMeshBakeGroup.Plan(Program, m_poses, 40, static (slot, dynamic) => new SdfMeshBakeGroup(slot, dynamic))) {
-                m_run.Bake.Library.Store(group.Sealed, mesh, group.MaterialOrder);
+                m_run.Bake.Library.Store(group.Sealed, mesh, group.MaterialOrder, form: group.Form);
             }
         }
 
@@ -150,3 +150,4 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         public void Dispose() => m_run.Dispose();
     }
 }
+

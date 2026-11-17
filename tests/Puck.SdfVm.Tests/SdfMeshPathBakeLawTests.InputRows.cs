@@ -47,3 +47,4 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.False(condition: grid.WritePoints(table: Span<Vector4>.Empty));
     }
 }
+

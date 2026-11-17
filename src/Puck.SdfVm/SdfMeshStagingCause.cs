@@ -28,16 +28,12 @@ public enum SdfMeshStagingCause : byte {
 public enum SdfMeshTopologyReason : byte {
     /// <summary>The publication before the frame failed, so it retries from the inputs.</summary>
     Retry = 0,
-    /// <summary>The host's draw count changed.</summary>
-    HostDraws = 1,
-    /// <summary>The bake's copy layout revision moved.</summary>
-    CopyLayout = 2,
-    /// <summary>A group finished that the last dressing did not hold.</summary>
-    GroupNew = 3,
-    /// <summary>A group's mesh was replaced by one with another piece count or another copy count.</summary>
-    GroupReshaped = 4,
-    /// <summary>The count of finished groups changed.</summary>
-    GroupCount = 5,
+    /// <summary>Free rows passed one third of the extent.</summary>
+    FreeShare = 1,
+    /// <summary>A locked frame required canonical row order.</summary>
+    Locked = 2,
+    /// <summary>The operator requested a canonical start over.</summary>
+    Forced = 3,
 }
 
 /// <summary>The names <see cref="SdfMeshStagingCause"/>'s members take in work kind names.</summary>

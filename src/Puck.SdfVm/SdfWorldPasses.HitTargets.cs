@@ -12,6 +12,13 @@ namespace Puck.SdfVm;
 // (sdfMeshResolveHit) bounds such a read whatever its cause, but cannot tell an occupant that is in bounds from the one
 // the target named; this count can.
 public sealed partial class SdfWorldPasses {
+    internal SdfMeshRowStamp MeshRowsOf(string instance) => Refresh(instance).MeshRows;
+    internal SdfMeshRowStamp NoteMeshRows(string instance, SdfMeshRowStamp stamp) {
+        var entry = Refresh(instance);
+        var previous = entry.MeshRows;
+        entry.MeshRows = stamp;
+        return previous;
+    }
     // The hit-holding outputs of a view's passes: the mesh target, the visibility records the surface pass writes from
     // it, and the glass target.
     private enum HitTarget : byte {
@@ -58,6 +65,7 @@ public sealed partial class SdfWorldPasses {
         Refresh(instance: instance).Note(target: HitTarget.Mesh, tables: tables);
 
     private sealed partial class Entry {
+        public SdfMeshRowStamp MeshRows;
         private readonly (SdfWorldTables? Tables, long Revision)[] m_hitTargets = new (SdfWorldTables?, long)[3];
 
         public void Note(HitTarget target, SdfWorldTables tables) =>

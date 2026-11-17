@@ -484,7 +484,10 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_view.Residency.Frame?.RateCounts?.Count(SdfUpdateRateCounts.ShadowFarHeld);
         }
     }
+    private SdfMeshRowStamp m_previousMeshRows;
+    private bool m_notedMeshRows;
     public void Submitted() {
+        m_notedMeshRows = false;
         if (m_recordedClear is { } recorded) {
             if (recorded.Depth is { } depth) { m_targetsClear[recorded.Index] = depth; }
             if (recorded.Exit is { } exit) { m_exitsClear[recorded.Index] = exit; }
@@ -507,6 +510,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_owner.Begin(residency: residency);
 
         var tables = residency.Staged(context: recording.Context);
+
+        if (m_part == SdfWorldPackage.Parts.Mesh) {
+            m_previousMeshRows = m_owner.NoteMeshRows(m_context.Instance, tables.RowStamp);
+            m_notedMeshRows = true;
+        }
 
         m_owner.RecordHits(instance: m_context.Instance, part: m_part, tables: tables);
         // The glass clear zeroes the glass sums, its one output, ahead of the glass pass's accumulation.
@@ -562,11 +570,11 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
             m_pick.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
                 visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
-                cut: frame.Views[view].CutRevision);
+                cut: frame.Views[view].CutRevision, rowStamp: m_owner.MeshRowsOf(m_context.Instance));
             m_diagnosticPick?.Prepare(slot: recording.Slot, width: width, height: height, frame: frame,
                 visibility: recording.Inputs[InputIndexOf(member: SdfWorldPackage.VisibilityRecords)].Version,
                 sample: new SdfReprojectionView(Camera: frame.Views[view].Camera, Jitter: temporal.Jitter, Width: width, Height: height),
-                cut: frame.Views[view].CutRevision);
+                cut: frame.Views[view].CutRevision, rowStamp: m_owner.MeshRowsOf(m_context.Instance));
         }
 
         SdfFrameBlock.WriteMeshIrradiance(block: recording.PassBlock, volume: residency.MeshIrradianceParameters);
@@ -652,6 +660,7 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         m_occlusion?.Completed(slot: slot);
     }
     public void Abandoned(int slot) {
+        if (m_notedMeshRows) { _ = m_owner.NoteMeshRows(m_context.Instance, m_previousMeshRows); m_notedMeshRows = false; }
         m_shade.Abandoned(slot: slot);
         m_pick?.Abandoned(slot: slot);
         m_diagnosticPick?.Abandoned(slot: slot);
@@ -1183,3 +1192,4 @@ internal sealed class SdfWorldPassRecorder : IRenderGraphPackageRecorder, IRende
         _ => null,
     };
 }
+

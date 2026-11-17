@@ -175,7 +175,7 @@ public sealed class SdfMeshLibraryLawTests {
 
         Assert.False(condition: bake.Pending);
 
-        var draw = Assert.Single(collection: dressed.MeshDraws);
+        var draw = Assert.Single(collection: dressed.DressedDraws());
 
         Assert.Equal(expected: 7, actual: draw.FrameSlot);
         Assert.Equal(expected: [0u, 1u, 1u], actual: draw.Mesh.TriangleMaterials.ToArray());
@@ -470,3 +470,4 @@ public sealed class SdfMeshLibraryLawTests {
         triangleMaterials: materials
     );
 }
+

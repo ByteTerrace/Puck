@@ -18,6 +18,8 @@ namespace Puck.SdfVm;
 /// <param name="MeshRevision">The mesh draw revision rendered by this request.</param>
 /// <param name="Map">The immutable host identity table captured with the frame.</param>
 public readonly record struct SdfPickResult(long Request, uint X, uint Y, uint Width, uint Height, uint Identity, float Distance, int Material, SdfProgram Program, long MeshRevision, ISdfPickMap? Map = null) {
+    /// <summary>The table and identity revision actually rendered by the mesh target.</summary>
+    public SdfMeshRowStamp RowStamp { get; init; }
     /// <summary>Gets the host identity from the table captured by this request.</summary>
     public object? Target => Map?.Resolve(identity: Identity);
     /// <summary>Gets the host material name captured beside the rendered program.</summary>

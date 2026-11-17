@@ -59,7 +59,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         // The run of two shapes is one group, the lone block another.
         Assert.Contains(expectedSubstring: "groups=2 meshes=2", actualString: bake.Describe());
 
-        var meshes = dresser.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).ToArray();
+        var meshes = dresser.Dress(frame: frame).DressedDraws().Select(selector: static draw => draw.Mesh).ToArray();
         var copies = meshes.Where(static mesh => mesh.Positions.ToArray().Any(static point => (MathF.Abs(point.X) < 1f))).ToArray();
 
         Assert.NotEmpty(copies);
@@ -95,7 +95,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: plates);
 
-        var positions = dresser.Dress(frame: frame).MeshDraws.SelectMany(static draw => draw.Mesh.Positions.ToArray()).ToArray();
+        var positions = dresser.Dress(frame: frame).DressedDraws().SelectMany(static draw => draw.Mesh.Positions.ToArray()).ToArray();
 
         foreach (var plate in plates) {
             var own = positions.Count(predicate: point => (MathF.Abs(x: Field(shape: plate, point: point)) < 0.001f));
@@ -126,7 +126,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: slabs);
 
-        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh;
+        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws()).Mesh;
         var positions = mesh.Positions.ToArray();
         var indices = mesh.Indices.ToArray();
         var triangleMaterials = mesh.TriangleMaterials.ToArray();
@@ -172,7 +172,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: slabs);
 
-        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh;
+        var mesh = Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws()).Mesh;
         var positions = mesh.Positions.ToArray();
         var indices = mesh.Indices.ToArray();
         var triangleMaterials = mesh.TriangleMaterials.ToArray();
@@ -207,7 +207,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         Drive(bake: bake, dresser: dresser, frame: frame, materials: materials, shapes: boxes);
 
-        var positions = Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray();
+        var positions = Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws()).Mesh.Positions.ToArray();
         var worst = positions.Max(selector: point => MathF.Abs(x: Field(shape: boxes[0], point: point)));
 
         Assert.True(condition: (worst < 0.00055f), userMessage: $"a vertex lies {worst} from the rounded box");
@@ -217,7 +217,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var (run, frame) = m_baked.Value;
         var bake = run.Bake;
         var dresser = run.Dresser;
-        var lone = dresser.Dress(frame: frame).MeshDraws.Select(selector: static draw => draw.Mesh).Single(predicate: static mesh => (mesh.Positions.Span[0].X > 6f));
+        var lone = dresser.Dress(frame: frame).DressedDraws().Select(selector: static draw => draw.Mesh).Single(predicate: static mesh => (mesh.Positions.Span[0].X > 6f));
         var positions = lone.Positions.ToArray();
         var normals = lone.Normals.ToArray();
 
@@ -259,7 +259,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
-        float Reach(SdfFrame frame) => Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.Positions.ToArray().Max(selector: static point => point.X);
+        float Reach(SdfFrame frame) => Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws()).Mesh.Positions.ToArray().Max(selector: static point => point.X);
 
         var (first, firstMaterials) = Program(shapes: before);
         var firstFrame = new SdfFrame(Program: first, ProgramChanged: true, Time: 0f, Views: []) { FarDistance = 100f };
@@ -295,8 +295,8 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
             } catch { bakeRun.Dispose(); throw; }
         }
         void SameMeshes(MeshBakeTestRun expected, MeshBakeTestRun actual) {
-            var first = expected.Dresser.Dress(frame: frame).MeshDraws;
-            var second = actual.Dresser.Dress(frame: frame).MeshDraws;
+            var first = expected.Dresser.Dress(frame: frame).DressedDraws();
+            var second = actual.Dresser.Dress(frame: frame).DressedDraws();
 
             Assert.Equal(first.Count, second.Count);
             for (var draw = 0; (draw < first.Count); draw++) {
@@ -469,7 +469,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         }
 
         using var baked = Run(name: "first");
-        var draw = Assert.Single(collection: baked.Dresser.Dress(frame: frame).MeshDraws);
+        var draw = Assert.Single(collection: baked.Dresser.Dress(frame: frame).DressedDraws());
         var mesh = draw.Mesh;
         var member = Assert.Single(collection: mesh.Members.ToArray());
         var positions = mesh.Positions.ToArray();
@@ -510,7 +510,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         // Another run loads the group from the store with its members.
         using var loaded = Run(name: "second");
-        var reloaded = Assert.Single(collection: loaded.Dresser.Dress(frame: frame).MeshDraws).Mesh;
+        var reloaded = Assert.Single(collection: loaded.Dresser.Dress(frame: frame).DressedDraws()).Mesh;
 
         Assert.Contains(expectedSubstring: "loaded=1", actualString: loaded.Bake.Describe());
         Assert.Equal(expected: mesh.Members.ToArray(), actual: reloaded.Members.ToArray());
@@ -561,7 +561,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
                 Assert.Same(expected: program, actual: bake.Program);
 
-                return (bakeRun, group, Assert.Single(collection: dresser.Dress(frame: frame).MeshDraws).Mesh.TriangleCount);
+                return (bakeRun, group, Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws()).Mesh.TriangleCount);
             } catch { bakeRun.Dispose(); throw; }
         }
         static long Refined(SdfMeshPathBake bake) {
@@ -678,3 +678,4 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         return bytes;
     }
 }
+

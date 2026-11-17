@@ -5,11 +5,12 @@ using Puck.Abstractions.Gpu;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfWorldTables {
-    private readonly record struct RowLedger(SdfMeshDraw Draw, bool Absent, uint Generation);
+    private readonly record struct RowLedger(SdfMeshDraw Draw, ulong Occupancy, bool Absent, uint Generation);
 
     private RowLedger[] m_rowLedger = [];
     private int m_ledgerExtent;
     private bool m_ledgerEnabled;
+    private object? m_ledgerRoster;
     private long m_skipDrawThrough;
 
     private readonly HashSet<int> m_namedRowCuts = [];
@@ -30,7 +31,7 @@ public sealed partial class SdfWorldTables {
             if (m_ledgerEnabled) { m_rowLedger = []; m_ledgerExtent = 0; m_ledgerEnabled = false; }
             return;
         }
-        var draws = frame.MeshDraws;
+        var draws = frame.DrawRows;
         var extent = draws.Count;
 
         if (!m_ledgerEnabled) { m_rowLedger = []; m_ledgerExtent = 0; m_ledgerEnabled = true; }
@@ -40,13 +41,13 @@ public sealed partial class SdfWorldTables {
 
         for (var row = 0; (row < extent); row++) {
             var draw = draws[row];
-            var absent = !MeshStands(mesh: draw.Mesh);
+            var absent = draw.Mesh is null || !MeshStands(mesh: draw.Mesh);
             var record = words.Slice(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords));
             var generation = record[(SdfMeshRecord.SelectionWord + 11)];
 
             if (absent) { SdfMeshRegion.WriteAbsent(record: expected); } else {
                 // The packer admits only live tokens; a corrupt zero is still diagnosed by the ledger below.
-                SdfMeshRegion.WriteDraw(draw, m_meshArena.Placements[draw.Mesh], Math.Max(val1: 1u, val2: generation), expected);
+                SdfMeshRegion.WriteDraw(draw, m_meshArena.Placements[draw.Mesh!], Math.Max(val1: 1u, val2: generation), expected);
                 expected[(SdfMeshRecord.SelectionWord + 11)] = generation;
             }
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Packed);
@@ -56,7 +57,7 @@ public sealed partial class SdfWorldTables {
             var known = (row < m_ledgerExtent);
             // Deliberately independent of Observe's identity predicate and of its cells. Ordinary matrix, material,
             // bounds and displacement changes are not incarnation changes.
-            var changed = (known && (last.Absent ||
+            var changed = (known && (last.Absent || !ReferenceEquals(m_ledgerRoster, draws.Rows) || last.Occupancy != draws.Occupancy(row) ||
                 !Equals(objA: (last.Draw.MotionIdentity ?? last.Draw.Identity), objB: (draw.MotionIdentity ?? draw.Identity)) ||
                 !ReferenceEquals(objA: last.Draw.Mesh, objB: draw.Mesh) || (last.Draw.FrameSlot != draw.FrameSlot) ||
                 (last.Draw.IsDynamic != draw.IsDynamic) || (last.Draw.Glass != draw.Glass) ||
@@ -72,11 +73,12 @@ public sealed partial class SdfWorldTables {
                 SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Seeds);
                 if (!m_seedMeshHistory && !m_seededMeshDraws.Contains(value: row)) { RowMismatch(SdfRowChecks.SeedMismatch, row, draw.Identity, "seed"); }
             }
-            m_rowLedger[row] = new(Absent: absent, Draw: draw, Generation: generation);
+            m_rowLedger[row] = new(Absent: absent, Draw: draw, Occupancy: draws.Occupancy(row), Generation: generation);
         }
         // A removed suffix is absent to a subsequent grow, even when the returning identity is unchanged.
-        for (var row = extent; (row < m_ledgerExtent); row++) { m_rowLedger[row] = new(Absent: true, Draw: default, Generation: 0); }
+        for (var row = extent; (row < m_ledgerExtent); row++) { m_rowLedger[row] = new(Absent: true, Draw: default, Occupancy: 0, Generation: 0); }
         m_ledgerExtent = extent;
+        m_ledgerRoster = draws.Rows;
     }
     private void RowMismatch(WorkKind kind, int row, object? owner, string comparison) {
         SdfRowChecks.ProcessWork.Count(kind: kind);
@@ -141,3 +143,4 @@ public sealed partial class SdfWorldTables {
         public void Dispose() { }
     }
 }
+

@@ -65,7 +65,6 @@ public sealed class SdfMeshStagingCauseLawTests {
         Assert.True(byCause[(int)SdfMeshStagingCause.Pose] > 0, "pose");
         Assert.True(byCause[(int)SdfMeshStagingCause.Retry] > 0, "retry");
         Assert.Equal(expected: (work.Read(kind: SdfMeshHistory.DressTopologyBuilds) - buildsBefore), actual: byReason.Sum());
-        Assert.True(byReason[(int)SdfMeshTopologyReason.HostDraws] > 0, "host-draws");
         Assert.True(byReason[(int)SdfMeshTopologyReason.Retry] > 0, "retry rebuild");
         // No staging of this small list packs past one upload chunk of records, and each cause's peak is one staging's.
         Assert.All(causes, cause => Assert.True(work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause: cause)) <= SdfMeshHistory.ChunkRecords));
@@ -74,7 +73,7 @@ public sealed class SdfMeshStagingCauseLawTests {
     }
 
     [Fact]
-    public void AnotherDressersSameSerialStillStatesItsRebuildCause() {
+    public void AnotherDressersSameSerialSeedsItsRowsWithoutClaimingARebuild() {
         var work = SdfMeshHistory.ProcessWork;
         using var rig = new Rig(slots: 1);
         using var first = new MeshBakeTestRun(new SdfMeshPathBake());
@@ -91,7 +90,7 @@ public sealed class SdfMeshStagingCauseLawTests {
         Assert.Equal(original.MeshDrawChangesSerial, replacement.MeshDrawChangesSerial);
         RenderRootCut(rig, replacement);
 
-        Assert.Equal(1L, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild)) - before);
+        Assert.Equal(0L, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild)) - before);
         Assert.Equal(cursorBefore, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Cursor)));
     }
 

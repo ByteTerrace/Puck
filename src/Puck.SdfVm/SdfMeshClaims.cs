@@ -38,18 +38,21 @@ internal sealed class SdfMeshClaims : IDisposable {
         if (ReferenceEquals(objA: from, objB: to)) { return; }
         Claim(mesh: to);
 
-        ref var named = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_meshes, key: from);
+        Release(mesh: from);
+    }
+    public void Release(SdfMesh mesh) {
+        ref var named = ref CollectionsMarshal.GetValueRefOrNullRef(dictionary: m_meshes, key: mesh);
 
         if (System.Runtime.CompilerServices.Unsafe.IsNullRef(source: ref named) || (--named > 0)) { return; }
-        _ = m_meshes.Remove(key: from);
-        from.Release(cached: m_cached);
+        _ = m_meshes.Remove(key: mesh);
+        mesh.Release(cached: m_cached);
     }
     public void Dispose() {
         foreach (var mesh in m_meshes.Keys) { mesh.Release(cached: m_cached); }
         m_meshes.Clear();
     }
 
-    private void Claim(SdfMesh mesh) {
+    public void Claim(SdfMesh mesh) {
         ref var named = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_meshes, key: mesh, exists: out var exists);
 
         named++;

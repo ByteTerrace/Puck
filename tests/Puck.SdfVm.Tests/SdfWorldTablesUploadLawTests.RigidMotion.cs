@@ -21,7 +21,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         using var library = new SdfMeshLibrary();
 
         library.Store(group.Sealed, mesh, group.MaterialOrder);
-        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library }, ownsLibrary: false);
+        using var bakeRun = new MeshBakeTestRun(new SdfMeshPathBake { Library = library, PlannedTier = static _ => 0 }, ownsLibrary: false);
         var bake = bakeRun.Bake;
         var dresser = bakeRun.Dresser;
 
@@ -29,7 +29,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             var copy = new SdfMeshInstance(0, "body", new DynamicTransform(new Vector3(x, 0, 0), Quaternion.Identity), 1, IsDynamic: true) { Mesh = (authoredMesh ? mesh : null), MotionIdentity = ("body", epoch) };
             var frame = new SdfFrame(Program: program, ProgramChanged: false, Time: x, Views: []) { DynamicTransforms = poses, MeshAssetSlots = [0], MeshInstances = [copy] };
 
-            return dresser.Dress(frame).MeshDraws[(authoredMesh ? 1 : 0)];
+            return dresser.Dress(frame).DressedDraws()[(authoredMesh ? 1 : 0)];
         }
         var first = Draw(1);
 
@@ -60,3 +60,4 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(new[] { reseated.ObjectToWorld, moved.ObjectToWorld }, PreviousMatrices(rig, draws: 2));
     }
 }
+

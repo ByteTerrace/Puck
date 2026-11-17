@@ -16,11 +16,7 @@ namespace Puck.SdfVm.Tests;
 /// interface on both backends, stamp included; and the stamp moves with the instruction set.
 /// </summary>
 public sealed class SdfKernelSetLawTests {
-    private static readonly string[] Stems = [
-        "sdf-world-surface", "sdf-mesh-bake-mask", "sdf-sky-runs", "sdf-world-views", "sdf-resolve",
-        "sdf-composite", "sdf-sky-environment", "sdf-sky-environment-reduce", "sdf-screen-emission", "sdf-mesh-bake", "sdf-mesh-pyramid",
-        "sdf-glass", "sdf-bloom-down", "sdf-bloom-up", "sdf-bloom-apply",
-    ];
+    private static readonly string[] Stems = SdfKernelSet.Kernels.Select(SdfKernelSet.StemOf).ToArray();
 
     private static WorkCounterSet Work() =>
         new(
@@ -59,7 +55,7 @@ public sealed class SdfKernelSetLawTests {
         Assert.Equal(expected: expected, actual: work.Read(kind: SdfKernelSet.BytecodeBytes));
         // Passed through: each kernel is its own file's bytes.
         Assert.Equal(expected: new byte[] { 0 }, actual: kernels[SdfKernel.Surface].ToArray());
-        Assert.Equal(expected: Enumerable.Repeat(count: 5, element: ((byte)4)), actual: kernels[SdfKernel.Views].ToArray());
+        Assert.Equal(expected: Enumerable.Repeat(count: (int)SdfKernel.Views + 1, element: (byte)SdfKernel.Views), actual: kernels[SdfKernel.Views].ToArray());
 
         _ = SdfKernelSet.Load(
             target: ShaderTarget.Spirv,
@@ -123,7 +119,7 @@ public sealed class SdfKernelSetLawTests {
                 Assert.Null(@object: SdfKernelSet.InterfaceMismatch(kernel: kernel, reflected: reflected));
                 Assert.Contains(
                     collection: reflected,
-                    filter: binding => (binding.Name == ("passGroup" + SdfKernelSet.LayoutOf(kernel: kernel).Interface.Stamp))
+                    filter: binding => binding.Name == SdfKernelSet.LayoutOf(kernel).Groups.Single(group => group.Group == ShaderInterfaceGroup.Pass).BlockVariableName
                 );
             }
         }
@@ -166,7 +162,7 @@ public sealed class SdfKernelSetLawTests {
 
         Assert.NotEqual(actual: withRenderConstant, expected: render);
         Assert.Contains(actualString: SdfRenderHlsl.Generate(), expectedSubstring: $"#include \"{SdfIsaHlsl.FileName}\"");
-        Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: field));
+        Assert.Equal(expected: SdfIsaFingerprint.Field, actual: SdfIsaHlsl.FingerprintOf(encoding: SdfEncodingProbe.Describe(SdfEncodingProbe.Calls(), static program => program.FieldWords.ToArray()), include: field));
         Assert.NotEqual(
             expected: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + render)),
             actual: SdfIsaHlsl.FingerprintOf(encoding: encoding, include: (field + withRenderConstant))

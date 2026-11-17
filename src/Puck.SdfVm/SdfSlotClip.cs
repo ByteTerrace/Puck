@@ -22,9 +22,10 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
     /// copy. A draw in no run is left as it is.</summary>
     /// <param name="draws">The draws, clipped in place and extended with the copies.</param>
     /// <param name="clips">The runs.</param>
+    /// <param name="copiedRows">Optional source indices of appended copies, in append order.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="clips"/> is
     /// <see langword="null"/>.</exception>
-    public static void Apply(List<SdfMeshDraw> draws, IReadOnlyList<SdfSlotClip> clips) {
+    public static void Apply(List<SdfMeshDraw> draws, IReadOnlyList<SdfSlotClip> clips, List<int>? copiedRows = null) {
         ArgumentNullException.ThrowIfNull(argument: draws);
         ArgumentNullException.ThrowIfNull(argument: clips);
 
@@ -52,6 +53,7 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
                 }
 
                 draws[index] = (draw with { ClipPlane = clip.Plane });
+                copiedRows?.Add(index);
                 draws.Add(item: (draw with {
                     CarryRotation = clip.CopyRotation,
                     CarryScale = clip.CopyScale,

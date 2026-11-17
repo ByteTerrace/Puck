@@ -29,7 +29,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var dresser = bakeRun.Dresser;
 
         dresser.Dress(new SdfFrame(Program: first, ProgramChanged: true, Time: 0, Views: []) { DynamicTransforms = poses });
-        var draw = Assert.Single(dresser.Dress(new SdfFrame(Program: second, ProgramChanged: true, Time: 1, Views: []) { DynamicTransforms = poses }).MeshDraws);
+        var draw = Assert.Single(dresser.Dress(new SdfFrame(Program: second, ProgramChanged: true, Time: 1, Views: []) { DynamicTransforms = poses }).DressedDraws());
 
         Assert.Same(mesh, draw.Mesh);
         Assert.Equal(1, draw.FrameSlot);
@@ -37,3 +37,4 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.False(bake.Pending);
     }
 }
+

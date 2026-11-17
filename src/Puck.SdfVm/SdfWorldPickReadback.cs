@@ -39,7 +39,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         picker.Attach(readback: this);
     }
 
-    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, SdfReprojectionView sample, long cut) {
+    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, SdfReprojectionView sample, long cut, SdfMeshRowStamp rowStamp) {
         var target = m_slots[slot];
 
         if (target.Prepared) {
@@ -47,7 +47,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             target.Prepared = false;
             m_picker.Complete(readback: this, result: null);
         }
-        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
+        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width, rowStamp: rowStamp)) {
             return;
         }
         if (request.Sample is not null) {
