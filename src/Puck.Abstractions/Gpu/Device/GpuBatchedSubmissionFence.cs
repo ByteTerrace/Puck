@@ -88,6 +88,15 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_generation++;
     }
     /// <inheritdoc/>
+    /// <remarks>Splits the batch (<see cref="GpuSubmissionBatch.Split"/>) under <see cref="GpuQueueCause.FenceWait"/>, as
+    /// a wait on the deferred fence does, so the hand-off arms this fence or answers it from the batch's owner and settles
+    /// a completion signal it owed. A split that fails before this fence's submission reaches the queue leaves it
+    /// abandoned, which its next <see cref="IsSignaled"/> or <see cref="Wait"/> reports.</remarks>
+    public void HandOff() {
+        m_failure?.Throw();
+        m_deferred?.Split(cause: GpuQueueCause.FenceWait);
+    }
+    /// <inheritdoc/>
     /// <remarks>A fence deferred in an open batch keeps the signal until the batch's hand-off arms it or answers it from
     /// the batch's owner.</remarks>
     public void SignalOnCompletion(EventWaitHandle signal) {

@@ -93,6 +93,21 @@ internal sealed class FakeGpuDevice :
     private int m_distinctImages;
 
     public long AdapterLuid { get; init; }
+    /// <summary>Gets or sets whether an open batch defers its fenced submissions as the backends' batches do: a deferred
+    /// fence reads unsignaled and holds the completion signal it was asked for until the batch's flush, a wait on it or
+    /// its hand-off (<see cref="IGpuSubmissionFence.HandOff"/>) puts it on the queue.</summary>
+    public bool DefersBatches { get; set; }
+    /// <summary>Gets how often an open batch was handed to the queue before its flush.</summary>
+    public int BatchSplits { get; private set; }
+    private bool m_batchOpen;
+    private readonly List<Fence> m_deferred = [];
+    // Puts every deferred submission on the queue, in order, setting the signals their completions owe.
+    private void HandOffBatch(bool split) {
+        if (m_deferred.Count == 0) { return; }
+        if (split) { BatchSplits++; }
+        foreach (var fence in m_deferred) { fence.Undefer(); }
+        m_deferred.Clear();
+    }
     public Action<ulong, ulong>? OnBufferCopy { get; set; }
     /// <summary>Gets or sets optional observations of the actual direct dispatch group counts.</summary>
     public Action<uint, uint, uint>? OnDispatch { get; set; }
@@ -547,6 +562,10 @@ internal sealed class FakeGpuDevice :
             return;
         }
         ((Fence)fence).Arm();
+        if (DefersBatches && m_batchOpen) {
+            ((Fence)fence).Deferred = true;
+            m_deferred.Add(item: ((Fence)fence));
+        }
         _ = SubmittedFences.Add(item: ((Fence)fence));
         Submissions++;
         CarryWaits(
@@ -567,9 +586,17 @@ internal sealed class FakeGpuDevice :
             fenced: false
         );
     }
-    // The fake submits at once, so a batch only records that it was opened and flushed.
-    void IGpuQueueSubmitter.BeginBatch() => Hit(key: "IGpuQueueSubmitter.BeginBatch");
-    void IGpuQueueSubmitter.FlushBatch() => Hit(key: "IGpuQueueSubmitter.FlushBatch");
+    // The fake submits at once unless it defers batches (DefersBatches); otherwise a batch only records that it was
+    // opened and flushed.
+    void IGpuQueueSubmitter.BeginBatch() {
+        Hit(key: "IGpuQueueSubmitter.BeginBatch");
+        m_batchOpen = true;
+    }
+    void IGpuQueueSubmitter.FlushBatch() {
+        Hit(key: "IGpuQueueSubmitter.FlushBatch");
+        m_batchOpen = false;
+        HandOffBatch(split: false);
+    }
     IGpuRenderPass IGpuRenderPassFactory.Create(GpuRenderPassDescription description, in GpuObjectName name) {
         Hit(key: "IGpuRenderPassFactory.Create");
 
@@ -801,7 +828,7 @@ internal sealed class FakeGpuDevice :
             get => m_completed;
             set {
                 m_completed = value;
-                if (value) { _ = m_signal?.Set(); }
+                if (value && !Deferred) { _ = m_signal?.Set(); }
             }
         }
         /// <summary>Gets or sets whether the fence's submission never reached the queue.</summary>
@@ -820,12 +847,23 @@ internal sealed class FakeGpuDevice :
             }
         }
 
-        private bool Retired => (!gpu.m_holdFences || !Armed || Completed || (!Pinned && (m_order <= gpu.m_waitedThrough)));
+        /// <summary>Gets whether an open batch still defers the fence's submission (<see cref="DefersBatches"/>).</summary>
+        public bool Deferred { get; internal set; }
+
+        private bool Retired => (!Deferred && (!gpu.m_holdFences || !Armed || Completed || (!Pinned && (m_order <= gpu.m_waitedThrough))));
 
         public void SignalOnCompletion(EventWaitHandle signal) {
             gpu.Hit(key: "IGpuSubmissionFence.SignalOnCompletion");
             m_signal = signal;
-            if (Abandoned || Retired) { _ = signal.Set(); }
+            if (!Deferred && (Abandoned || Retired)) { _ = signal.Set(); }
+        }
+        public void HandOff() {
+            gpu.Hit(key: "IGpuSubmissionFence.HandOff");
+            if (Deferred) { gpu.HandOffBatch(split: true); }
+        }
+        internal void Undefer() {
+            Deferred = false;
+            if (Retired) { _ = m_signal?.Set(); }
         }
 
         public void Dispose() {
@@ -834,6 +872,7 @@ internal sealed class FakeGpuDevice :
         }
         public void Wait() {
             gpu.Hit(key: "IGpuSubmissionFence.Wait");
+            if (Deferred) { gpu.HandOffBatch(split: true); }
 
             if (Abandoned) {
                 Abandoned = false;
