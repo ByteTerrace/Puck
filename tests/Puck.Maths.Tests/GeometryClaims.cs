@@ -250,11 +250,6 @@ internal static class GeometryClaims {
             Low: (left.Low - right.High),
             High: (left.High - right.Low)
         );
-    private static FixedVector3 Vector3Of(long[] lanes) => new(
-        X: Raw(value: lanes[0]),
-        Y: Raw(value: lanes[1]),
-        Z: Raw(value: lanes[2])
-    );
     // Widens an enclosure by a flat additive tolerance on both sides — the standard way an ADDITIONAL rounding (a
     // kernel's own ULP envelope, or one more fixed-point operation's single rounding) enters a propagated bound.
     private static Oracles.Enclosure WidenEnclosure(Oracles.Enclosure enclosure, BigInteger toleranceUnits) =>
@@ -527,7 +522,7 @@ internal static class GeometryClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? NormalizeFullWidthOracleSurface() {
         foreach (var triple in Vector3EdgeTriples) {
-            var vector = Vector3Of(lanes: triple).Normalize();
+            var vector = RawVectors.Of(lanes: triple).Normalize();
             var expected = NormalizeOracle(values: triple);
 
             if (Math.Abs(value: (vector.X.Value - expected[0])) > 1L) { return $"X of Normalize([{triple[0]},{triple[1]},{triple[2]}]) is {vector.X.Value}, expected {expected[0]}"; }
@@ -581,7 +576,7 @@ internal static class GeometryClaims {
     public static string? QuaternionAlgebraicSanitySurface() {
         foreach (var (axis, angleRaw) in AxisAngleLadder) {
             var q = FixedQuaternion.FromAxisAngle(
-                axis: Vector3Of(lanes: axis),
+                axis: RawVectors.Of(lanes: axis),
                 angle: Raw(value: angleRaw)
             );
             var idProbe = (q * q.Conjugate());
@@ -600,7 +595,7 @@ internal static class GeometryClaims {
 
         // All three arms of the least-aligned-axis antiparallel fallback, reached rather than believed reachable.
         foreach (var axis in Vector3EdgeTriples) {
-            var start = Vector3Of(lanes: axis);
+            var start = RawVectors.Of(lanes: axis);
             var startDirection = start.Normalize();
 
             if (startDirection == FixedVector3.Zero) { continue; }
@@ -679,7 +674,7 @@ internal static class GeometryClaims {
                 raw: ((long)idealMagnitude)
             );
             var idealAxis = NormalizeOracle(values: bivector);
-            var value = FixedQuaternion.Exp(bivector: Vector3Of(lanes: bivector));
+            var value = FixedQuaternion.Exp(bivector: RawVectors.Of(lanes: bivector));
 
             // W is cos(magnitude) directly, with no further rounding, so it stands against the kernel's own
             // committed SinCos envelope alone.
@@ -805,7 +800,7 @@ internal static class GeometryClaims {
                 raw: half
             );
             var value = FixedQuaternion.FromAxisAngle(
-                axis: Vector3Of(lanes: axis),
+                axis: RawVectors.Of(lanes: axis),
                 angle: Raw(value: angleRaw)
             );
 
@@ -846,7 +841,7 @@ internal static class GeometryClaims {
             }
 
             if (FixedQuaternion.FromAxisAngle(
-                axis: Vector3Of(lanes: axis),
+                axis: RawVectors.Of(lanes: axis),
                 angle: FixedQ4816.Zero
             ) != FixedQuaternion.Identity) {
                 return $"a zero angle about [{axis[0]},{axis[1]},{axis[2]}] is not the identity";
@@ -862,8 +857,8 @@ internal static class GeometryClaims {
     public static string? QuaternionFromToAlignmentSurface() {
         foreach (var from in Vector3EdgeTriples) {
             foreach (var to in Vector3EdgeTriples) {
-                var fromVector = Vector3Of(lanes: from);
-                var toVector = Vector3Of(lanes: to);
+                var fromVector = RawVectors.Of(lanes: from);
+                var toVector = RawVectors.Of(lanes: to);
                 var fromDirection = fromVector.Normalize();
                 var toDirection = toVector.Normalize();
 
@@ -983,7 +978,7 @@ internal static class GeometryClaims {
                 var (lx, ly, lz, lw) = (left[0], left[1], left[2], left[3]);
                 var (rx, ry, rz) = (right[0], right[1], right[2]);
                 var rotor = Subjects.QuaternionOf(lanes: left);
-                var vector = Vector3Of(lanes: right);
+                var vector = RawVectors.Of(lanes: right);
                 var tx = RoundProductSumOracle(sum: (((((BigInteger)ly) * rz) - (((BigInteger)lz) * ry)) + (((BigInteger)lw) * rx)));
                 var ty = RoundProductSumOracle(sum: (((((BigInteger)lz) * rx) - (((BigInteger)lx) * rz)) + (((BigInteger)lw) * ry)));
                 var tz = RoundProductSumOracle(sum: (((((BigInteger)lx) * ry) - (((BigInteger)ly) * rx)) + (((BigInteger)lw) * rz)));
@@ -1020,7 +1015,7 @@ internal static class GeometryClaims {
             var conjugateQ = new[] { -q[0], -q[1], -q[2], q[3] };
 
             foreach (var right in Vector3ModerateEdgeTriples) {
-                var vector = Vector3Of(lanes: right);
+                var vector = RawVectors.Of(lanes: right);
                 var vectorAsQuaternion = new[] { right[0], right[1], right[2], 0L };
                 // q⊗(0,v)⊗conj(q): two Hamilton products, EACH independently transcribed by HamiltonProductOracle
                 // (already established elsewhere in this file as classical evidence for the Hamilton product itself,
@@ -1302,10 +1297,10 @@ internal static class GeometryClaims {
         for (var i = 0; (i < RigidLadderRotations.Length); ++i) {
             var (axis, angleRaw) = RigidLadderRotations[i];
             var rotation = FixedQuaternion.FromAxisAngle(
-                axis: Vector3Of(lanes: axis),
+                axis: RawVectors.Of(lanes: axis),
                 angle: Raw(value: angleRaw)
             );
-            var translation = Vector3Of(lanes: RigidLadderTranslations[i]);
+            var translation = RawVectors.Of(lanes: RigidLadderTranslations[i]);
 
             transforms[i] = FixedRigidTransform.FromRotationTranslation(
                 rotation: rotation,
@@ -1501,8 +1496,8 @@ internal static class GeometryClaims {
     public static string? Vector3DotCrossOracleSurface() {
         foreach (var a in Vector3EdgeTriples) {
             foreach (var b in Vector3EdgeTriples) {
-                var av = Vector3Of(lanes: a);
-                var bv = Vector3Of(lanes: b);
+                var av = RawVectors.Of(lanes: a);
+                var bv = RawVectors.Of(lanes: b);
                 var expectedDot = RoundProductSumOracle(sum: (((((BigInteger)a[0]) * b[0]) + (((BigInteger)a[1]) * b[1])) + (((BigInteger)a[2]) * b[2])));
                 var expectedCross = new FixedVector3(
                     X: Raw(value: RoundProductSumOracle(sum: ((((BigInteger)a[1]) * b[2]) - (((BigInteger)a[2]) * b[1])))),

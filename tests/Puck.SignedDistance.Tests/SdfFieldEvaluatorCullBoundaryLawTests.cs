@@ -2,6 +2,7 @@ using System.Numerics;
 
 using Puck.Maths;
 using Puck.SignedDistance.Queries;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -318,11 +319,7 @@ public sealed partial class SdfFieldEvaluatorCullBoundaryLawTests {
         Y: FixedQ4816.FromInteger(value: y),
         Z: FixedQ4816.Zero
     ));
-    private static FixedPosition Position(double x, double y, double z) => FixedPosition.FromLocal(local: new FixedVector3(
-        X: FixedQ4816.FromDouble(value: x),
-        Y: FixedQ4816.FromDouble(value: y),
-        Z: FixedQ4816.FromDouble(value: z)
-    ));
+    private static FixedPosition Position(double x, double y, double z) => FixedTestValues.Position(x: x, y: y, z: z);
     // The culled walk answers the reference's distance and material, which is the expected material, and its point box
     // is the reference's.
     private static void AssertSameAnswer(SdfFieldEvaluator culled, SdfFieldEvaluator reference, FixedPosition position) {

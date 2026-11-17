@@ -427,7 +427,7 @@ internal static partial class Subjects {
         var scalarZ = new FixedRateAccumulator(ticksPerSecond: ticksPerSecond);
 
         for (var step = 0; (step < steps); ++step) {
-            var rate = Space(
+            var rate = RawVectors.Of(
                 x: rateRaws[0][step],
                 y: rateRaws[1][step],
                 z: rateRaws[2][step]
@@ -490,7 +490,7 @@ internal static partial class Subjects {
             var solo = new FixedVector3RateAccumulator(ticksPerSecond: ticksPerSecond);
 
             for (var step = 0; (step < steps); ++step) {
-                var rate = Space(
+                var rate = RawVectors.Of(
                     x: ((0 == driven)
                     ? rateRaws[0][step]
                     : 0L),
@@ -589,7 +589,7 @@ internal static partial class Subjects {
 
         if (!RateVectorIntegrateThrows(
             accumulator: ref atomic,
-            ratePerSecond: Space(
+            ratePerSecond: RawVectors.Of(
                 x: 0L,
                 y: 0L,
                 z: long.MaxValue
@@ -748,7 +748,7 @@ internal static partial class Subjects {
         return null;
     }
     private static FixedVector3 RateVectorRate(int scale) =>
-        Space(
+        RawVectors.Of(
             x: (100000L * scale),
             y: (-70001L * scale),
             z: (3L * scale)

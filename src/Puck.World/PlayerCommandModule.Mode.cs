@@ -10,77 +10,6 @@ internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms PlayerModeForms = CommandForms.Of(verb: ModeCommand, "<family> <state> [seat]", "<family> [seat]");
     private static readonly CommandForms PlayerCameraForms = CommandForms.Of(verb: CameraCommand, SeatForm);
 
-    // The population placement id backing seat <paramref name="slot"/>'s camera body. A camera-capable world
-    // authors one inhabited placement per local seat it wants Free Cam over; WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
-    // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
-    // ReconcileInhabitants placed it this boot.
-    private static string CameraPlacementId(int slot) => $"{WorldSeatModeState.CameraPlacementIdPrefix}{slot}";
-    // Composes the camera control application: possesses the seat's designated camera body through the SAME
-    // ComposeControl/Control(+per-tick Drive) gated path any other possession target uses (Server.WorldEngagement) — never a
-    // bespoke authority check. Exclusive composition drops the seat's own-body application for the duration, exactly like an ordinary
-    // possession of a driven body; WorldPerceptionAnchor then swaps the seat's camera eye/audio listener/HUD bindings onto the
-    // camera body as a side effect of the SAME application set, not a second mechanism. Refuses (mutating nothing) when the
-    // world declares no camera body for this seat, or the server's own Control check denies the actor — the ModeHandler
-    // caller has already checked Drive over the target SEAT's own body; this is the separate Control check the route
-    // itself requires.
-    private bool ActivateCameraApplication(Principal actingPrincipal, int slot) {
-        if (!m_client.TryInhabitantBody(
-            index: out var cameraBody,
-            placementId: CameraPlacementId(slot: slot)
-        )) {
-            return false;
-        }
-
-        var target = GrantSubject.Body(index: cameraBody);
-
-        if (m_server.Engagement.CheckEngage(
-            actingPrincipal: actingPrincipal,
-            target: target
-        ) is { IsAllowed: false }) {
-            return false;
-        }
-
-        // The seat's own Drive grant over its camera body — minted here rather than authored in the document,
-        // because an inhabited placement's entity index is resolved at runtime (ReconcileInhabitants places it),
-        // never a fixed body:<n> a document `grants` row could name. A seat cannot grant a subject that is not its
-        // own body (HoldsForAdministration), so this rides under Console, exactly as an admission's own Drive
-        // template does. Idempotent — re-entering camera mode re-grants the identical row.
-        m_link.SubmitGrant(
-            actor: Principal.Console,
-            grant: new WorldGrant(
-                Grantee: Principal.Seat(slot: slot),
-                Capability: WorldCapability.Drive,
-                Subject: target,
-                Budget: ushort.MaxValue,
-                Exclusive: false
-            )
-        );
-
-        m_link.SubmitCommand(command: new WorldCommand.ComposeControl(
-            EntityIndex: slot,
-            Exclusive: true,
-            Principal: actingPrincipal,
-            Target: target,
-            TargetPrincipal: Principal.Seat(slot: slot)
-        ));
-
-        return true;
-    }
-    // Dissolves the camera control application through the ordinary DissolveControl door — the avatar resumes driving
-    // itself and the perceived body/camera eye/audio listener fall back to it the instant WorldEngagement restores the
-    // own-body application, mirroring ActivateCameraApplication's own single mechanism.
-    private void DeactivateCameraApplication(Principal actingPrincipal, int slot) {
-        WorldCameraApplication.Deactivate(
-            actingPrincipal: actingPrincipal,
-            link: m_link,
-            slot: slot
-        );
-    }
-    private static bool IsCameraTarget(WorldSeatModeState? state) => string.Equals(
-        a: state?.Target,
-        b: WorldSeatModeState.CameraTarget,
-        comparisonType: StringComparison.Ordinal
-    );
     private CommandResult ModeHandler(CommandContext context, WireArgs args) {
         if (args.Count is (< 1 or > 3)) {
             return PlayerModeForms.Refuse(args: in args);
@@ -182,62 +111,14 @@ internal sealed partial class PlayerCommandModule {
     private CommandResult ApplyMode(CommandContext context, WorldSeatModeFamily modeFamily, WorldSeatModeState targetState, int slot, string verb) {
         var family = modeFamily.Name;
 
-        if ((seatRouter.TryRoute(slot: slot) is { } inputRoute) && (inputRoute.Endpoint.Definition.InputModes?.Families.Any(predicate: row =>
-            ((row.Selector.Kind == WorldInputModeSelectorKind.SeatState) && (row.Selector.Name == family))) == true)) {
+        var authoritative = m_seatBindings.IsAuthoritativeMode(slot, family);
+        if (authoritative && seatRouter.TryRoute(slot: slot) is { } inputRoute) {
             inputRoute.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SelectInputState(context.Principal,
                 inputRoute.EntityIndex, m_roster.PrincipalOf(slot: slot), family, targetState.Name, context.Activation));
             return SeatCommandArgs.Echo(detail: $"'{family}' requested '{targetState.Name}'", slot: slot, verb: verb);
         }
-        var previousStateName = m_seatBindings.ModeState(
-            family: family,
-            slot: slot
-        );
-        WorldSeatModeState? previousState = null;
-
-        if (previousStateName is not null) {
-            foreach (var candidate in modeFamily.States) {
-                if (string.Equals(
-                    a: candidate.Name,
-                    b: previousStateName,
-                    comparisonType: StringComparison.Ordinal
-                )) {
-                    previousState = candidate;
-
-                    break;
-                }
-            }
-        }
-
-        var wasCamera = IsCameraTarget(state: previousState);
-        var isCamera = IsCameraTarget(state: targetState);
-
-        // Composing or dissolving the camera control application possesses/releases the TARGET body — a Drive
-        // authority act. Gate it on the ACTOR's Drive over the target body (the same grant the server's own
-        // possession door checks), so a session holding Drive over only its own body cannot idle another seat's
-        // body or hijack its camera application by naming a trailing [seat]. A pure non-camera flip is presentation
-        // only and needs no such authority.
-        if (wasCamera != isCamera) {
-            var actingPrincipal = context.Principal;
-
-            if (!m_server.Grants.Allows(
-                principal: actingPrincipal,
-                capability: WorldCapability.Drive,
-                subject: GrantSubject.Body(index: slot)
-            ).IsAllowed) {
-                return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} — {actingPrincipal.Describe()} cannot drive body:{slot} to compose the camera control application]");
-            }
-
-            if (wasCamera) {
-                DeactivateCameraApplication(
-                    actingPrincipal: actingPrincipal,
-                    slot: slot
-                );
-            } else if (!ActivateCameraApplication(
-                actingPrincipal: actingPrincipal,
-                slot: slot
-            )) {
-                return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} — no camera body available (declare a '{CameraPlacementId(slot: slot)}' inhabited placement, or {actingPrincipal.Describe()} lacks Control over it — see world.why)]");
-            }
+        if (authoritative) {
+            return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no authority route]");
         }
 
         m_seatBindings.SetContextState(

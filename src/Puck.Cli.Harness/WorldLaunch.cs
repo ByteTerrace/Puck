@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.Diagnostics;
-using System.Globalization;
 using Puck.World;
 
 namespace Puck.Cli;
@@ -84,19 +83,17 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
         var arguments = new List<string>();
 
         if (Executable is null) { arguments.Add(item: Artifact); }
-        if (World is { } world) { arguments.AddRange(collection: ["--world", world]); }
-        arguments.AddRange(collection: ["--devices", (OwnerDevices ? "all" : "none")]);
-        switch (Shape) {
-            case WorldShape.Headless:
-                arguments.AddRange(collection: ["--headless", "true"]);
-                break;
-            case WorldShape.Windowed:
-                arguments.AddRange(collection: ["--headless", "false"]);
-                break;
-        }
-        if (Backend is { } backend) { arguments.AddRange(collection: ["--backend", WorldBackendTokens.Token(backend: backend)]); }
-        if (StateDirectory is { } state) { arguments.AddRange(collection: ["--state-dir", state]); }
-        if (ExitAfterSeconds is { } seconds) { arguments.AddRange(collection: ["--exit-after-seconds", seconds.ToString(provider: CultureInfo.InvariantCulture)]); }
+        arguments.AddRange(collection: new WorldBootArguments(World: World) {
+            Backend = Backend,
+            ExitAfterSeconds = ExitAfterSeconds,
+            Headless = (Shape switch {
+                WorldShape.Headless => true,
+                WorldShape.Windowed => false,
+                _ => ((bool?)null),
+            }),
+            OwnerDevices = OwnerDevices,
+            StateDirectory = StateDirectory,
+        }.Build());
         arguments.AddRange(collection: Arguments);
 
         return arguments;

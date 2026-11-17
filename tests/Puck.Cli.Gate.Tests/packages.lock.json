@@ -75,6 +75,14 @@
         "resolved": "0.2.607501",
         "contentHash": "17Yxzao41A1oZZ5lCCAnnXOy9up5i/GVEGazBjJAUZ4UISsNAotUt6h7zvCDgfKIC46CD7jszgLzLZoscSIJQA=="
       },
+      "Microsoft.Diagnostics.Tracing.TraceEvent": {
+        "type": "Transitive",
+        "resolved": "3.1.21",
+        "contentHash": "/OrJFKaojSR6TkUKtwh8/qA9XWNtxLrXMqvEb89dBSKCWjaGVTbKMYodIUgF5deCEtmd6GXuRerciXGl5bhZ7Q==",
+        "dependencies": {
+          "Microsoft.Diagnostics.NETCore.Client": "0.2.510501"
+        }
+      },
       "Microsoft.DiaSymReader": {
         "type": "Transitive",
         "resolved": "2.2.10",
@@ -572,6 +580,7 @@
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.Diagnostics.Tracing.TraceEvent": "[3.1.*, )",
           "Microsoft.Extensions.FileSystemGlobbing": "[10.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",

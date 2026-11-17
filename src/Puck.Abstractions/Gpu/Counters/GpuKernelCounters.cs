@@ -191,30 +191,14 @@ public sealed partial class GpuKernelCounters : IGpuWorkReadback, IDisposable {
     /// <param name="commandBuffer">The frame's command buffer, after its last pass.</param>
     /// <param name="slot">The frame slot.</param>
     public void RecordCopy(IGpuRecorder recorder, nint commandBuffer, int slot) {
-        var counter = m_counters[slot].BufferHandle;
-        var readback = m_readbacks[slot].BufferHandle;
-
-        recorder.TransitionBuffer(
-            bufferHandle: counter,
-            commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.TransferRead,
-            destinationStageMask: GpuStage.Transfer,
-            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite,
-            sourceStageMask: CountingStages
-        );
-        recorder.CopyBuffer(
-            commandBufferHandle: commandBuffer,
-            destinationBufferHandle: readback,
+        GpuReadbackCopy.Record(
+            commandBuffer: commandBuffer,
+            destination: m_readbacks[slot],
+            recorder: recorder,
             sizeBytes: m_counters[slot].SizeBytes,
-            sourceBufferHandle: counter
-        );
-        recorder.TransitionBuffer(
-            bufferHandle: readback,
-            commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.HostRead,
-            destinationStageMask: GpuStage.Host,
-            sourceAccessMask: GpuAccess.CopyWrite,
-            sourceStageMask: GpuStage.Transfer
+            source: m_counters[slot],
+            sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite),
+            sourceStage: CountingStages
         );
     }
     /// <inheritdoc/>

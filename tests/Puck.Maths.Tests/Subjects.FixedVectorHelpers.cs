@@ -54,12 +54,12 @@ internal static partial class Subjects {
     /// <param name="right">The second operand's four lanes: the second vector and the clamp's second bound.</param>
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? VectorComponentwiseHelpersMatchOracle(long[] left, long[] right) {
-        var a = Space(
+        var a = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
         );
-        var b = Space(
+        var b = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -67,7 +67,7 @@ internal static partial class Subjects {
         var scaleRaw = left[3];
         var boundRaw = right[3];
         var scale = Raw(value: scaleRaw);
-        var divisor = Space(
+        var divisor = RawVectors.Of(
             x: NonZeroDivisor(b: right[0]),
             y: NonZeroDivisor(b: right[1]),
             z: NonZeroDivisor(b: right[2])
@@ -101,12 +101,12 @@ internal static partial class Subjects {
             ) << FixedQ4816.FractionBitCount);
         }
 
-        var minimum = Space(
+        var minimum = RawVectors.Of(
             x: lower[0],
             y: lower[1],
             z: lower[2]
         );
-        var maximum = Space(
+        var maximum = RawVectors.Of(
             x: upper[0],
             y: upper[1],
             z: upper[2]

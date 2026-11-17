@@ -54,10 +54,7 @@ public static class PuckPaths {
     /// <see cref="Normalize"/> is the form that also makes the path full.</summary>
     /// <param name="path">A path spelled with either separator.</param>
     /// <returns>The same path with <c>/</c> as its only separator.</returns>
-    public static string Slashed(string path) => path.Replace(
-        newChar: '/',
-        oldChar: '\\'
-    );
+    public static string Slashed(string path) => Puck.Confinement.PortablePath.Slashed(path: path);
     /// <summary>Returns <paramref name="path"/> relative to <paramref name="relativeTo"/>, spelled with <c>/</c>:
     /// <see cref="Path.GetRelativePath(string, string)"/> in Puck's path form. Either path may be relative to the
     /// current directory; a path on another root or volume stays full.</summary>

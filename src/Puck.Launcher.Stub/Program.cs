@@ -76,7 +76,7 @@ foreach (var argument in args) {
     startInfo.ArgumentList.Add(item: argument);
 }
 using var process = (Process.Start(startInfo: startInfo) ?? throw new InvalidOperationException(message: $"failed to start '{executablePath}'"));
-Console.Error.WriteLine(value: $"[stub: launched version {launchVersion} pid={process.Id} executable={executablePath.Replace(newChar: '/', oldChar: '\\')}]");
+Console.Error.WriteLine(value: $"[stub: launched version {launchVersion} pid={process.Id} executable={PortablePath.Slashed(path: executablePath)}]");
 // Redirected handles are not reliably inherited through Process.Start on Windows. Forward bytes explicitly so
 // piped consoles and stdio protocols reach the selected application just as an interactive terminal does.
 using var inputLifetime = new CancellationTokenSource();

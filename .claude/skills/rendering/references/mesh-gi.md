@@ -176,7 +176,7 @@ done line; a nested residency's done line is insufficient.
 |---|---|
 | Static scene and ray visibility | `SdfMeshIrradianceScene` |
 | Volume coordination, CPU reference and bounce lookup | `SdfMeshIrradiance` |
-| Device trace, hit cache, relight, selection and camera sample (`sdf-probe-meter`) | `SdfMeshProbeGpuWork` |
+| Device trace, hit cache, relight, selection and camera sample (`sdf-probe-camera-sample`) | `SdfMeshProbeGpuWork` |
 | Probe record and generated shader constants | `SdfMeshIrradianceProbe`, `SdfIsaHlsl.DeclareRender` |
 | Pixel gather, indirect light, reflections and traced-light visibility | `shade/sdf-mesh-irradiance.hlsli` |
 
@@ -518,7 +518,7 @@ done line; a nested residency's done line is insufficient.
   position, so the sample after a teleport depends on where the camera stands,
   not where it stood. `SdfViewExposures` keeps a cut owed until a sample
   arrives. The runtime samples on the GPU
-  asynchronously (`ScheduleGpuMeters`, at most every `LightingInterval`, at once
+  asynchronously (`ScheduleGpuCameraSamples`, at most every `LightingInterval`, at once
   after a cut): each view reads its own latest row wherever its camera now
   stands, so a moving camera stays `probes` or `camera-trace`, never `held`; a
   `fresh` read answers only from a row asked after the view's cut revision.
@@ -536,7 +536,7 @@ done line; a nested residency's done line is insufficient.
   the previous sample's light and sky visibility. `world.exposure` names the sample's source as
   `camera=probes`, `camera-trace`, `held` or `none`, and for `held` or `none` what it
   waits for (`wait=`, `SdfMeshIrradiance.CameraSampleWait`: `scene-build`, `scene`,
-  `scene-upload`, `unpublished`, `meter`, `unasked`, `cut`).
+  `scene-upload`, `unpublished`, `camera-sample`, `unasked`, `cut`).
 - A settled frame with no opaque static draws installs an empty scene and
   retraces its probes against open space. Empty is known geometry, distinct from
   a scene not built yet; removing the last draw must discard its occlusion and

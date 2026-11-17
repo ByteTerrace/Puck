@@ -1557,6 +1557,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         NoteWaited(fence: fence);
         CompletePackageReadbacks(slot: slot);
+        m_completedSubmissions = Math.Max(m_completedSubmissions, m_slots[slot].Submission);
     }
 
     /// <summary>Binds a host-owned buffer for a named external resource other than a host buffer port, which binds a

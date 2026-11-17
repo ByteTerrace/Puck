@@ -18,8 +18,7 @@ namespace Puck.World;
 /// apart from native, mapped and driver memory, then the process uptime and what the JIT has compiled so far (methods,
 /// IL bytes, compilation time), which read at boot give its first-use JIT cost. Between them it measures the process
 /// account and prints each pool's physical rows, which alone add, with the parts their owners name and their residuals
-/// (<see cref="MemoryAccount.ReadPools"/>), and the device memory the owner families hold. <c>host.memory heap</c> names
-/// the large object heap's tenants from a suspended walk (<see cref="ManagedHeapWalk"/>). <c>host.memory collect</c> first runs a
+/// (<see cref="MemoryAccount.ReadPools"/>), and the device memory the owner families hold. <c>host.memory collect</c> first runs a
 /// full blocking collection that compacts the large object heap, so the heap it reports is what is still reachable.
 /// Presentation-independent; it reads the process, never the simulation.
 /// </summary>
@@ -139,22 +138,6 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
 
         return text.ToString();
     }
-    // The large object heap's tenants of at least minimumMebibytes, from a suspended walk of the managed heap.
-    private static string DescribeHeap(int minimumMebibytes) {
-        var minimum = (((long)minimumMebibytes) << 20);
-        var clock = Stopwatch.StartNew();
-        var walk = ManagedHeapWalk.Run(minimumBytes: minimum);
-        var text = new StringBuilder();
-        var named = walk.Tenants.Sum(selector: static tenant => tenant.Bytes);
-
-        text.Append(CultureInfo.InvariantCulture, $"[host.memory heap: collection={walk.Collection} live-objects={walk.Nodes} | large objects (at least {ManagedHeapWalk.LargeObjectBytes} bytes) objects={walk.Objects} bytes={walk.Bytes} | tenants of at least {minimumMebibytes} MiB: {walk.Tenants.Count} holding {named} bytes | walk-ms={clock.ElapsedMilliseconds}\n");
-        foreach (var tenant in walk.Tenants) {
-            text.Append(CultureInfo.InvariantCulture, $"tenant {JsonSerializer.Serialize(tenant.Type)} held-by={JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes}\n");
-        }
-        text.Append(value: "The runtime wrote the heap during one blocking full collection with every managed thread suspended; the holder is the type of the first referrer found, or the kind of root.]");
-
-        return text.ToString();
-    }
     // One line: the process, then the managed heap as the last collection left it, in MiB.
     private string Describe() {
         using var process = Process.GetCurrentProcess();
@@ -179,27 +162,16 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         );
     }
 
-    private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "heap [min-mib]", "collect", "budget [host|device] <bytes|auto>");
-
-    // The size, in MiB, past which a large-object-heap tenant is named when host.memory heap is not given one.
-    private const int HeapTenantMebibytes = 4;
+    private static readonly CommandForms HostMemoryForms = CommandForms.Of("host.memory", "owners [limit]", "collect", "budget [host|device] <bytes|auto>");
 
     /// <inheritdoc/>
     public IEnumerable<CommandDefinition> GetCommands() {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
-            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then measures the account (the allocator's committed bytes, the collector's and a page walk of the process, which also reads every sampled owner) and prints each pool by physical memory (host always; a discrete adapter's device memory, named absent on unified memory or without a device) with its physical total, budget, spend limit, the bytes it holds (held, their peak, and the part replaced objects still hold until their readers finish), the bytes it has promised, its room, what stands past the limit, the forced job's bytes and count, the allocations admitted past the limit because their class cannot give way, the refusals, the device's own refusals and the trims pressure fired, then its held and promised bytes by class (fixed, workspace, floors, support, elastic, caches), and its physical rows, which alone add: device-blocks (the ledgers' blocks placed in the pool), and in host memory native-allocator, native-direct (native storage outside the allocator, such as region host copies), managed, and runtime-and-driver (the walk's private bytes less the other host rows), each with the bytes its owners name and its residual; then the sample's age, the collection the managed figure describes and the residuals sampling skew made negative, then the walk's private, mapped and image bytes, the device memory reading the account last recorded (state, serial, whether estimated) and for each segment its API budget, usage and reservation figures beside the bytes the backend ledger placed in it, then each ledger segment's admission (its limit, the limit a device refusal left, and its held, peak and promised bytes; retired bytes are stated by their holders, which name a pool, so they read on the pool), then each ledger segment row with its held bytes, the part the owner families name and the residual, its peak, allocated and released bytes and placement disagreements, then the {FamilyRows} families holding most device memory (owner without its instance, then the part) per segment with their held, peak, allocated and released bytes and the rest summed, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, the rows each owner names, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes. heap pauses the process while the operating system snapshots it, then walks the snapshot's managed heap and lists the large object heap's totals and its tenants of at least min-mib MiB (default {HeapTenantMebibytes}) by type and first holder (the referring type and field, or the root kind); it reads every reference on the heap, so it takes seconds on a large heap and the World waits for it. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers a pool's budget or restores the derived one with auto: host memory when no pool is named, and device stands a figure in for the sum of the device segments' spend limits; a lowered budget trims the caches, nothing held is released, an admission that gives way is refused past it, and a bake group that does not fit waits while others of its bake are admitted and is admitted alone, as the process's one forced job, once none is, so a bake always settles.",
+            description: $"Reads process working set/private bytes, uptime and managed heap generations in MiB, the bytes every thread has allocated so far (a reader diffs two reads), then the process account's live, reserved, cached, retirement and metadata bytes, budget/headroom, and allocator committed/reserved bytes, then measures the account (the allocator's committed bytes, the collector's and a page walk of the process, which also reads every sampled owner) and prints each pool by physical memory (host always; a discrete adapter's device memory, named absent on unified memory or without a device) with its physical total, budget, spend limit, the bytes it holds (held, their peak, and the part replaced objects still hold until their readers finish), the bytes it has promised, its room, what stands past the limit, the forced job's bytes and count, the allocations admitted past the limit because their class cannot give way, the refusals, the device's own refusals and the trims pressure fired, then its held and promised bytes by class (fixed, workspace, floors, support, elastic, caches), and its physical rows, which alone add: device-blocks (the ledgers' blocks placed in the pool), and in host memory native-allocator, native-direct (native storage outside the allocator, such as region host copies), managed, and runtime-and-driver (the walk's private bytes less the other host rows), each with the bytes its owners name and its residual; then the sample's age, the collection the managed figure describes and the residuals sampling skew made negative, then the walk's private, mapped and image bytes, the device memory reading the account last recorded (state, serial, whether estimated) and for each segment its API budget, usage and reservation figures beside the bytes the backend ledger placed in it, then each ledger segment's admission (its limit, the limit a device refusal left, and its held, peak and promised bytes; retired bytes are stated by their holders, which name a pool, so they read on the pool), then each ledger segment row with its held bytes, the part the owner families name and the residual, its peak, allocated and released bytes and placement disagreements, then the {FamilyRows} families holding most device memory (owner without its instance, then the part) per segment with their held, peak, allocated and released bytes and the rest summed, then the JIT's compiled-method count, IL bytes and compilation time so far; with an argument it takes the forms {HostMemoryForms.Spelling}. Reservations are future admission promises, not allocated bytes. owners reads one atomic charged/reserved-owner census (default 20 largest rows, 0 all), including categories, the rows each owner names, actual peaks, future promises and disposed owners whose storage is still held; omitted totals reconcile the displayed rows. Registered memory.* backend counters follow as separate observations, with aperture bytes already included in device-local bytes. collect trims cache claims, compacts the LOH and asks the native allocator to collect (under --debug-allocator, checking every quarantined block first); active consumers retain their storage, and deferred-trims counts cache trims still waiting for their owner thread (a residency services its own on its next frame), so a reading taken right after collect can still hold their storage. budget lowers a pool's budget or restores the derived one with auto: host memory when no pool is named, and device stands a figure in for the sum of the device segments' spend limits; a lowered budget trims the caches, nothing held is released, an admission that gives way is refused past it, and a bake group that does not fit waits while others of its bake are admitted and is admitted alone, as the process's one forced job, once none is, so a bake always settles.",
             forms: HostMemoryForms,
             handler: (_, args) => {
-                if ((args.Count is 1 or 2) && args.Is(index: 0, value: "heap")) {
-                    var minimum = HeapTenantMebibytes;
-
-                    if ((args.Count == 2) && (!args.TryInt(index: 1, value: out minimum) || (minimum < 0))) {
-                        return CommandResult.Error(output: "[host.memory: heap expects an optional nonnegative tenant size in MiB]");
-                    }
-                    return new CommandResult(Output: DescribeHeap(minimumMebibytes: minimum));
-                }
                 if ((args.Count is 1 or 2) && args.Is(index: 0, value: "owners")) {
                     var limit = 20;
 

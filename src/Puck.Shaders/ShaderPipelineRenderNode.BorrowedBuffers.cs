@@ -30,9 +30,10 @@ public sealed partial class ShaderPipelineRenderNode {
                 // The same retirement door handles submitted commands and named-publication consumers. Borrowed
                 // ownership has zero node-owned bytes; the allocation remains charged to its package owner.
                 var published = IsPublishedBuffer(handle: previous.BufferHandle);
-                m_retired.Add(item: new RetiredGraph(passes: [], resources: [], preview: null, allocation: ownership,
-                    bytes: 0, fence: (published ? null : m_lastSubmissionFence), afterSubmission: m_submissions,
-                    publishedBorrowedBuffers: (published ? [previous] : [])));
+                var retired = new RetiredGraph(passes: [], resources: [], preview: null, allocation: ownership,
+                    bytes: 0, afterSubmission: m_submissions, publishedBorrowedBuffers: (published ? [previous] : []));
+                if (published) { m_retiredPublications.Add(retired); }
+                else { QueueRetirement(retired); }
             }
         }
     }

@@ -26,7 +26,12 @@ and each lease retires exactly once.
   `ShaderPipelineRenderNode.Retirement.cs`) is disposed at the fence of the
   submission made `RetirementLag` (2) submissions after it stopped being
   published. A replaced graph is retired once the queue finishes the node's
-  latest submission, never through a device drain. An instance a
+  latest submission, never through a device drain. `GpuRetirementQueue` keys those
+  objects on the node's submission count; `WaitSlot` advances its completed count
+  before a slot fence can be reused. Publications wait separately: an installed
+  borrowed owner can take over the exact allocation, or a displaced publication
+  waits for the reader lag or a completion notification held by the frame's final
+  submitter. Retired graphs never retain reusable fences. An instance a
   reconfiguration retires, and the graph of an instance nothing names, wait for
   the latest submission of the first frame rendered after they left, which the
   frame's last submitter holds a notification for

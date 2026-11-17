@@ -1402,12 +1402,13 @@ residual.
 - **Fixed cost.** `world.residency` prints each residency's fixed cost
   (`SdfWorldTables.DescribeFixedCost`): its tables' bytes and region host
   copies less the mesh region, beside the mesh region's own.
-- **Heap walk.** `host.memory heap [min-mib]` asks the runtime for its own heap
-  dump over an EventPipe session the process opens on itself
-  (`ManagedHeapWalk`): one blocking full collection with every managed thread
-  suspended, during which the runtime writes every live object and root. It
-  lists the large objects' totals and each tenant of at least the stated size
-  (4 MiB by default) by type and first holder.
+- **Heap walk.** `puck host heap --pid <pid> [--min-mib]` asks the runtime of
+  another process for its own heap dump over an EventPipe session the CLI opens
+  on its diagnostics port (`ManagedHeapWalk`): one blocking full collection with
+  every managed thread suspended, during which the runtime writes every live
+  object and root. It lists the large objects' totals and each tenant of at
+  least the stated size (4 MiB by default) by type and first holder. The walk
+  runs in the CLI, so no World carries the trace-parsing package.
 
 **Invariant.** Per pool, the rows are disjoint and each byte a ledger or owner
 counts lies in exactly one; an owner names a part of exactly one row per

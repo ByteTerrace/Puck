@@ -111,7 +111,7 @@ public sealed class SdfKernelSet {
         SdfKernel.ProbeRelight => "sdf-probe-relight",
         SdfKernel.ProbeCombine => "sdf-probe-combine",
         SdfKernel.ProbeSelect => "sdf-probe-select",
-        SdfKernel.ProbeMeter => "sdf-probe-meter",
+        SdfKernel.ProbeCameraSample => "sdf-probe-camera-sample",
         SdfKernel.ProbeCache => "sdf-probe-cache",
         SdfKernel.ProbeCompact => "sdf-probe-compact",
         SdfKernel.MeshBakeMask => "sdf-mesh-bake-mask",
@@ -150,7 +150,7 @@ public sealed class SdfKernelSet {
         kernel switch {
             SdfKernel.ProbeTrace => SdfWorldInterfaces.ProbeTraceLayout,
             SdfKernel.ProbeRelight => SdfWorldInterfaces.ProbeRelightLayout,
-            SdfKernel.ProbeMeter or SdfKernel.ProbeSelect or SdfKernel.ProbeCompact or SdfKernel.ProbeCache or SdfKernel.ProbeCombine => SdfWorldInterfaces.ProbeRelightLayout,
+            SdfKernel.ProbeCameraSample or SdfKernel.ProbeSelect or SdfKernel.ProbeCompact or SdfKernel.ProbeCache or SdfKernel.ProbeCombine => SdfWorldInterfaces.ProbeRelightLayout,
             SdfKernel.MeshBakeMask or SdfKernel.MeshBake => SdfWorldInterfaces.MeshBakeLayout,
             SdfKernel.Resolve => SdfWorldInterfaces.ResolveParameters.Layout,
             SdfKernel.Sky or SdfKernel.Composite => SdfWorldInterfaces.SkyParameters.Layout,

@@ -315,6 +315,11 @@
           "Microsoft.Extensions.Configuration.Binder": "10.0.14"
         }
       },
+      "Microsoft.NET.StringTools": {
+        "type": "Transitive",
+        "resolved": "18.11.0",
+        "contentHash": "46dxu08YSKeHQXbBlz/HYfVnSMJnfF1nM4v3tmfHVqIdBaz5eF8GrxWz6nl8mM3fGHZIOcp/Pr8I2zZCdb6CLA=="
+      },
       "Microsoft.Testing.Extensions.Telemetry": {
         "type": "Transitive",
         "resolved": "2.5.1",
