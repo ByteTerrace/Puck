@@ -7,10 +7,9 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// THE LAW: a creation's noise-relief facet is admitted only where every consumer can honour it — a static stamp,
+/// THE LAW: a creation's noise-relief facet is admitted only where every consumer can honour it — one composed field,
 /// inside the creation's own field scope. Bake work is measured rather than refused by an interpreter march budget.
-/// An animated creation cannot carry one (the
-/// dynamic stamp pool emits per-shape instances a creation-level field op cannot span), and a noise-free document
+/// Independently moving parts cannot carry one, and a noise-free document
 /// round-trips byte-identically.
 /// <para>Each arm pairs a denial with a control differing in exactly one authored number.</para>
 /// </summary>
@@ -86,7 +85,7 @@ public sealed class CreationNoiseLawTests {
         );
     }
     [Fact]
-    public void AnAnimatedCreationRefusesNoiseByName() {
+    public void AFrameMovingAPartRefusesNoiseByName() {
         Assert.False(condition: WorldDefinitionValidator.TryValidateLocally(
             definition: World(
                 frames: [
@@ -95,7 +94,7 @@ public sealed class CreationNoiseLawTests {
                         Transforms: [
                             new FrameTransformDocument(
                                 Id: 0,
-                                Position: Vector3.Zero,
+                                Position: Vector3.UnitY,
                                 Rotation: Quaternion.Identity
                             ),
                         ]

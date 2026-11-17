@@ -256,7 +256,11 @@ are the authored ones. Strands closer than twice their radius fuse.
   per stamped copy instead of its primitives' colliders. Its field is the
   copy's contact shapes in one scope with the relief over their union, the
   program the field provider reads too (`NoiseDisplace` is a contact op), so
-  contact and the bake read one field. The narrowphase is the certified
+  contact and the bake read one field. Noise amplitude and wavelength are creation units:
+  a placement of scale `s` has amplitude `s * amplitude` and wavelength `s / frequency`.
+  Rigid attached rows carry a cached local field in their sampled fixed-point frame.
+  `sizeBy` uses a presentation driver's phase, so solid placements refuse it; it never scales contact.
+  The narrowphase is the certified
   surface solve the field provider reads too (`FixedFieldColliderContact.Solve`):
   the field's certified box bounds (its evaluator's interval walk, the relief
   charged at the most its own arithmetic can move the field) prove a body clear,

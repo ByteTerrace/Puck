@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.World.Authoring;
 
 namespace Puck.World.Server;
@@ -35,7 +36,17 @@ public sealed partial class WorldColliderSet {
         var (placement, creation) = m_attachedRows[row];
         m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true;
         m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin); m_refreshRow = row;
+        if (CollidesAsField(creation.EngineDocument)) {
+            if (PosedAttachedField(row, origin, rotation) is { } field) { RecordAttachedCollider(field); }
+            return;
+        }
         CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument,
             transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation).Transform, visitor: m_attachedVisitor);
     }
+
+    private FixedStaticCollider? PosedAttachedField(int row, FixedVector3 origin, FixedQuaternion rotation) =>
+        (m_attachedFields[row] is { } field) ? field with {
+            Center = (origin + rotation.Rotate(field.Center)),
+            Rotation = rotation,
+        } : null;
 }

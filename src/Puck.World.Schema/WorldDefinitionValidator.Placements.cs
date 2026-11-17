@@ -717,13 +717,12 @@ public static partial class WorldDefinitionValidator {
 
 
 
-            // A creation-level field op cannot span the per-shape dynamic instances the stamp pool emits for an animated
-            // creation — noise is a static-stamp facet.
+            // Relief spans one composed field. Root motion preserves it; independently posed shapes do not.
             if (
                 (creation.Document.Noise is not null) &&
-                ((creation.Document.Frames is { Count: > 0 }) || (creation.Document.Drivers is { Count: > 0 }))
+                CreationMotion.HasPartMotion(document: creation.Document)
             ) {
-                errors.Add(item: $"{path}.doc.noise is refused on an animated creation — noise relief is a static-stamp facet.");
+                errors.Add(item: $"{path}.doc.noise requires motion of the creation as a whole — frames, shape drivers or effectors that move its parts cannot share one relief field.");
             }
 
             foreach (var run in (creation.Document.TextRuns ?? [])) {
@@ -1217,8 +1216,8 @@ public static partial class WorldDefinitionValidator {
                             id: creation.PrototypeId
                         );
 
-                        if (resolvedCreation is { Document.Noise: not null }) {
-                            errors.Add(item: $"{path}.source.prototypeId '{creation.PrototypeId}' carries noise relief — a static-stamp facet the body stamp pool cannot render.");
+                        if ((resolvedCreation is { Document.Noise: not null }) && (look.Motion.PartDynamics is { Count: > 0 })) {
+                            errors.Add(item: $"{path}.motion.partDynamics cannot move parts of a creation carrying noise relief — its composed field must ride one root.");
                         }
                     }
 
@@ -1712,6 +1711,10 @@ public static partial class WorldDefinitionValidator {
                             continue;
                         }
 
+                        if (variantCreation.Document.SizeBy is not null) {
+                            errors.Add(item: $"{path}.solid names creation '{variantId}' with sizeBy — its driver scales presentation only and cannot move a deterministic contact surface; author the contact scale in the placement instead.");
+                        }
+
                         var variantColliders = 0L;
 
                         foreach (var solidShape in (variantCreation.Document.Shapes ?? [])) {
@@ -1793,16 +1796,6 @@ public static partial class WorldDefinitionValidator {
                 ) {
                     errors.Add(item: $"{path} is ANIMATED (its creation carries timeline frames or drivers) — distribution/mirror facets are static-stamp-only.");
                 }
-            } else if (placement.Attach is not null) {
-                // An ATTACHED row renders through the SAME reserved stamp pool (rooted on its body instead of a static
-                // transform — Client.WorldCreationInstances), so it charges the same ceiling. Counted in the `else` because an
-                // attached row of a FRAMED creation is one registration, not two.
-
-
-
-                if (animatedCreation is { Document.Noise: not null }) {
-                    errors.Add(item: $"{path} ATTACHES — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
-                }
             }
 
             // The INHABIT facet: a placement's binding to live population bodies (Arc 7). Resolve its kit, gate its
@@ -1827,9 +1820,6 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{path} INHABITS — placement distribution/mirror facets are incompatible with a live body.");
                 }
 
-                if (animatedCreation is { Document.Noise: not null }) {
-                    errors.Add(item: $"{path} INHABITS — its creation's noise relief is a static-stamp facet the stamp pool cannot render.");
-                }
 
                 var inhabitMax = inhabit.DeclaredMax(peerCapacity: Math.Max(val1: 0, val2: (definition.Population.Capacity - definition.Population.LocalSeats)));
 

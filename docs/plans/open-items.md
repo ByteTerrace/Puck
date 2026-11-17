@@ -811,6 +811,15 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
+- [medium] A small relieved union retains contour defects in both its static
+  and root-moving forms: the relief1 CPU audit finds 6 folds, 2 flipped
+  triangles and 16 slivers, with no open edges or uncovered crossings, in
+  19,424 triangles. Reproduce with two Sphere shapes at `[-0.22, 0, 0]` and
+  `[0.22, 0, 0]`, scales `[0.42, 0.32, 0.38]` and `[0.4, 0.36, 0.32]`, the
+  second joining by SmoothUnion of radius 0.12, and creation noise frequency
+  2, amplitude 0.12, octaves 3, seed 11. The static and moving audits agree
+  in counted work and error; carrying the relief did not introduce these
+  defects. Inspect the contour's narrow triangles before changing its detail.
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
   triangles on six of the fourteen blend exhibits (`shape-groove-union` and
