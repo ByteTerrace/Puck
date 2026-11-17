@@ -1,3 +1,4 @@
+using System.Numerics;
 using Puck.Maths;
 
 namespace Puck.Physics;
@@ -36,8 +37,8 @@ public static class FixedDynamicBodyContacts {
             var moving = (ellipsoidIsLeft ? right : left);
             var movingPosition = (ellipsoidIsLeft ? rightPosition : leftPosition);
             var movingOrientation = (ellipsoidIsLeft ? rightOrientation : leftOrientation);
-            var found = FixedConvexContact.TryPush(in ellipsoidCollider, movingPosition, in movingOrientation,
-                in moving, margin, out var ellipsoidPush);
+            var found = FixedConvexContact.TryPush(collider: in ellipsoidCollider, orientation: in movingOrientation, position: movingPosition,
+                push: out var ellipsoidPush, skin: margin, volume: in moving);
 
             correction = (found ? (ellipsoidPush.Normal * (ellipsoidIsLeft ? -ellipsoidPush.Penetration : ellipsoidPush.Penetration)) : FixedVector3.Zero);
             return found;
@@ -106,7 +107,7 @@ public static class FixedDynamicBodyContacts {
             rotation: (boxOrientation * box.Rotation).Normalize(),
             innerHalfExtents: box.HalfExtents, radius: FixedQ4816.Zero);
 
-        if (FixedRoundedBoxContact.TryPush(collider, roundPosition, roundOrientation, round, margin, out var push)) {
+        if (FixedRoundedBoxContact.TryPush(box: collider, orientation: roundOrientation, position: roundPosition, push: out var push, skin: margin, volume: round)) {
             correction = (push.Normal * (roundIsLeft ? push.Penetration : -push.Penetration));
             return true;
         }
@@ -163,87 +164,96 @@ public static class FixedDynamicBodyContacts {
     /// <param name="q1">The first segment's end (equal to <paramref name="p1"/> for a sphere).</param>
     /// <param name="p2">The second segment's start.</param>
     /// <param name="q2">The second segment's end (equal to <paramref name="p2"/> for a sphere).</param>
-    /// <returns>The closest-point delta, first segment minus second.</returns>
+    /// <returns>The exact closest-point delta, first segment minus second, rounded once per component to nearest,
+    /// ties to even. Parameters and endpoint differences retain full precision.</returns>
+    /// <exception cref="OverflowException">A component of the rounded delta cannot fit Q48.16.</exception>
     public static FixedVector3 ClosestDelta(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2) {
-        var d1 = (q1 - p1);
-        var d2 = (q2 - p2);
-        var r = (p1 - p2);
-        var a = FixedVector3.Dot(
-            left: d1,
-            right: d1
-        );
-        var e = FixedVector3.Dot(
-            left: d2,
-            right: d2
-        );
-        var f = FixedVector3.Dot(
-            left: d2,
-            right: r
-        );
-        FixedQ4816 s;
-        FixedQ4816 t;
-
-        if (
-            (a <= FixedQ4816.Zero) &&
-            (e <= FixedQ4816.Zero)
-        ) {
-            return r;
+        try {
+            return ClosestDelta<Int128>(p1: p1, p2: p2, q1: q1, q2: q2);
+        } catch (OverflowException) {
+            // The same solve, widened rather than rescaled: extreme endpoints must not lose low bits.
+            return ClosestDelta<BigInteger>(p1: p1, p2: p2, q1: q1, q2: q2);
         }
-        if (a <= FixedQ4816.Zero) {
-            s = FixedQ4816.Zero;
-            t = FixedQ4816.Clamp(
-                value: (f / e),
-                minimum: FixedQ4816.Zero,
-                maximum: FixedQ4816.One
-            );
-        } else {
-            var c = FixedVector3.Dot(
-                left: d1,
-                right: r
-            );
+    }
 
-            if (e <= FixedQ4816.Zero) {
-                t = FixedQ4816.Zero;
-                s = FixedQ4816.Clamp(
-                    value: (-c / a),
-                    minimum: FixedQ4816.Zero,
-                    maximum: FixedQ4816.One
-                );
+    private static FixedVector3 ClosestDelta<T>(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2)
+        where T : IBinaryInteger<T> {
+        checked {
+            // Widen BEFORE subtracting, including for a degenerate segment at an extreme coordinate.
+            var ux = (T.CreateChecked(value: q1.X.Value) - T.CreateChecked(value: p1.X.Value));
+            var uy = (T.CreateChecked(value: q1.Y.Value) - T.CreateChecked(value: p1.Y.Value));
+            var uz = (T.CreateChecked(value: q1.Z.Value) - T.CreateChecked(value: p1.Z.Value));
+            var vx = (T.CreateChecked(value: q2.X.Value) - T.CreateChecked(value: p2.X.Value));
+            var vy = (T.CreateChecked(value: q2.Y.Value) - T.CreateChecked(value: p2.Y.Value));
+            var vz = (T.CreateChecked(value: q2.Z.Value) - T.CreateChecked(value: p2.Z.Value));
+            var rx = (T.CreateChecked(value: p1.X.Value) - T.CreateChecked(value: p2.X.Value));
+            var ry = (T.CreateChecked(value: p1.Y.Value) - T.CreateChecked(value: p2.Y.Value));
+            var rz = (T.CreateChecked(value: p1.Z.Value) - T.CreateChecked(value: p2.Z.Value));
+            var a = (((ux * ux) + (uy * uy)) + (uz * uz));
+            var e = (((vx * vx) + (vy * vy)) + (vz * vz));
+            var b = (((ux * vx) + (uy * vy)) + (uz * vz));
+            var c = (((ux * rx) + (uy * ry)) + (uz * rz));
+            var f = (((vx * rx) + (vy * ry)) + (vz * rz));
+            // Both parameters share a positive denominator. Nothing rounds until the final delta.
+            var denominator = T.One;
+            var s = T.Zero;
+            var t = T.Zero;
+
+            if (a == T.Zero) {
+                if (e > T.Zero) {
+                    denominator = e;
+                    t = T.Clamp(f, T.Zero, e);
+                }
+            } else if (e == T.Zero) {
+                denominator = a;
+                s = T.Clamp(-c, T.Zero, a);
             } else {
-                var b = FixedVector3.Dot(
-                    left: d1,
-                    right: d2
-                );
-                var denominator = ((a * e) - (b * b));
+                var determinant = ((a * e) - (b * b));
+                var sDenominator = ((determinant > T.Zero) ? determinant : T.One);
+                var sNumerator = ((determinant > T.Zero) ? T.Clamp(((b * f) - (c * e)), T.Zero, determinant) : T.Zero);
+                // At an endpoint t projects onto the second segment; in the interior use the other
+                // determinant numerator directly, avoiding an unnecessary sixth-degree product.
+                var tNumerator = ((sNumerator == T.Zero) ? f : ((sNumerator == sDenominator) ? (b + f) : ((a * f) - (b * c))));
+                var tDenominator = (((sNumerator == T.Zero) || (sNumerator == sDenominator)) ? e : determinant);
 
-                s = ((denominator > FixedQ4816.Zero)
-                    ? FixedQ4816.Clamp(
-                        value: (((b * f) - (c * e)) / denominator),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    )
-                    : FixedQ4816.Zero
-                );
-                t = (((b * s) + f) / e);
-                if (t < FixedQ4816.Zero) {
-                    t = FixedQ4816.Zero;
-                    s = FixedQ4816.Clamp(
-                        value: (-c / a),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    );
-                } else if (t > FixedQ4816.One) {
-                    t = FixedQ4816.One;
-                    s = FixedQ4816.Clamp(
-                        value: ((b - c) / a),
-                        minimum: FixedQ4816.Zero,
-                        maximum: FixedQ4816.One
-                    );
+                if (tNumerator < T.Zero) {
+                    denominator = a;
+                    s = T.Clamp(-c, T.Zero, a);
+                } else if (tNumerator > tDenominator) {
+                    denominator = a;
+                    s = T.Clamp((b - c), T.Zero, a);
+                    t = a;
+                } else if (sNumerator == T.Zero) {
+                    denominator = e;
+                    t = f;
+                } else if (sNumerator == sDenominator) {
+                    denominator = e;
+                    s = e;
+                    t = (b + f);
+                } else {
+                    denominator = determinant;
+                    s = sNumerator;
+                    t = ((a * f) - (b * c));
                 }
             }
+            // Form the displacement directly, rather than rounding two world-space witnesses separately.
+            var x = (((rx * denominator) + (ux * s)) - (vx * t));
+            var y = (((ry * denominator) + (uy * s)) - (vy * t));
+            var z = (((rz * denominator) + (uz * s)) - (vz * t));
+
+            var (qx, remx) = T.DivRem(left: T.Abs(value: x), right: denominator);
+            var (qy, remy) = T.DivRem(left: T.Abs(value: y), right: denominator);
+            var (qz, remz) = T.DivRem(left: T.Abs(value: z), right: denominator);
+            qx = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (denominator - remx), distanceToTruncated: remx, truncated: qx);
+            qy = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (denominator - remy), distanceToTruncated: remy, truncated: qy);
+            qz = FixedPointRounding.RoundToNearestTiesToEven(distanceToNext: (denominator - remz), distanceToTruncated: remz, truncated: qz);
+            return new FixedVector3(
+                X: FixedQ4816.FromRawBits(value: long.CreateChecked(value: ((x < T.Zero) ? -qx : qx))),
+                Y: FixedQ4816.FromRawBits(value: long.CreateChecked(value: ((y < T.Zero) ? -qy : qy))),
+                Z: FixedQ4816.FromRawBits(value: long.CreateChecked(value: ((z < T.Zero) ? -qz : qz))));
         }
-        return ((p1 + (d1 * s)) - (p2 + (d2 * t)));
     }
+
     /// <summary>Separates two round cores (a capsule's segment, or a sphere's center given as a degenerate segment),
     /// each grown by its radius: the one round-pair contact rule static spheres, dynamic sphere/capsule pairs and the
     /// event feed's overlap sense all answer through.</summary>
@@ -261,7 +271,7 @@ public static class FixedDynamicBodyContacts {
     /// <paramref name="tieNormal"/> at the whole radius.</returns>
     internal static bool TryRoundPush(FixedVector3 p1, FixedVector3 q1, FixedVector3 p2, FixedVector3 q2, FixedQ4816 radius,
         FixedVector3 tieNormal, out FixedContactPush push) {
-        var delta = ClosestDelta(p1: p1, q1: q1, p2: p2, q2: q2);
+        var delta = ClosestDelta(p1: p1, p2: p2, q1: q1, q2: q2);
 
         if (delta == FixedVector3.Zero) {
             push = new FixedContactPush(Normal: tieNormal, Penetration: radius);
@@ -278,6 +288,7 @@ public static class FixedDynamicBodyContacts {
         push = new FixedContactPush(Normal: delta.Normalize(), Penetration: (radius - distance));
         return true;
     }
+
     /// <summary>Returns whether any volume pair of two compound colliders overlaps: exactly the pairs
     /// <see cref="TryCorrection"/> depenetrates at zero margin, so overlap sense and contact can never disagree.</summary>
     /// <param name="leftPosition">The left body's world position.</param>
