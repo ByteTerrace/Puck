@@ -123,7 +123,7 @@ public sealed partial class WorldColliderSet : IContactField {
             if (movingOnly || CollidesAsField(document: creation.EngineDocument)) {
                 m_attachedFields[row] = ReliefCollider(creation.EngineDocument,
                     new FixedCreationStampTransform(FixedVector3.Zero, FixedQuaternion.Identity, FixedQ4816.FromDouble(value: placement.Scale), ((reflection is { } normal) ? rotation.RotateInverse(vector: normal) : null)),
-                    placement.Solid!.Margin);
+                    placement.Solid!.Margin, partitioned: false);
             }
         }
         m_attachedVisitor = RecordAttachedCopy;
@@ -983,10 +983,14 @@ public sealed partial class WorldColliderSet : IContactField {
                 }
                 found = true;
                 bestDepth = push.Penetration;
-                var local = m_previousAttachedRotations[row].RotateInverse(vector: (position - m_previousAttachedOrigins[row]));
-
-                local = (local * (m_attachedScales[row] / m_previousAttachedScales[row]));
-                displacement = ((m_attachedOrigins[row] + m_attachedRotations[row].Rotate(vector: local)) - position);
+                var offset = position - m_previousAttachedOrigins[row];
+                var sameRotation = m_attachedRotations[row] == m_previousAttachedRotations[row];
+                var local = sameRotation ? offset : m_previousAttachedRotations[row].RotateInverse(offset);
+                local = new FixedVector3(
+                    FusedArithmetic.MultiplyDivide(local.X, m_attachedScales[row], m_previousAttachedScales[row]),
+                    FusedArithmetic.MultiplyDivide(local.Y, m_attachedScales[row], m_previousAttachedScales[row]),
+                    FusedArithmetic.MultiplyDivide(local.Z, m_attachedScales[row], m_previousAttachedScales[row]));
+                displacement = m_attachedOrigins[row] + (sameRotation ? local : m_attachedRotations[row].Rotate(local)) - position;
             }
         }
         return (found && (displacement != FixedVector3.Zero));

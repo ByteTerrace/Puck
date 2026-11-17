@@ -12,6 +12,21 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>Size is sampled once by authority; contact, carrier motion and snapshot agree on that sample.</summary>
 public sealed class SolidSizeLawTests {
+    [Fact]
+    public void StationaryYawedSupportHasNoDriftOver600Ticks() {
+        var definition = GrowingDocument(field: false, carved: false);
+        definition = definition with { PlacementRowsRaw = [definition.Placements[0] with { YawDegrees = 30 }],
+            StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot(name: "growth", rawBits: FixedQ4816.One.Value)]) };
+        using var fixture = Fixtures.FreshServer(definition: definition);
+        var body = fixture.JoinSeat(slot: 0);
+        body.Pose(pitchRadians: 0, rollRadians: 0, x: 22.7f, y: 2.04f, yawRadians: 0, z: 0.25f);
+        for (var tick = 0; tick < 30 && !body.Grounded; tick++) { fixture.Step(); }
+        Assert.True(body.Grounded);
+        var start = body.FixedPosition;
+        for (var tick = 0; tick < 600; tick++) { fixture.Step(); }
+        Assert.Equal(start.X, body.FixedPosition.X);
+        Assert.Equal(start.Z, body.FixedPosition.Z);
+    }
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
@@ -102,7 +117,7 @@ public sealed class SolidSizeLawTests {
         body.Pose(pitchRadians: 0, rollRadians: 0, x: 20, y: 1.04f, yawRadians: 0, z: 0);
         for (var i = 0; (i < 15); i++) { fixture.Step(); }
         Assert.True(condition: body.Grounded);
-        foreach (var numerator in Enumerable.Range(count: 15, start: 17).Concat(second: Enumerable.Range(count: 28, start: 4).Reverse())) {
+        foreach (var numerator in Enumerable.Range(count: 16, start: 17).Concat(second: Enumerable.Range(count: 29, start: 4).Reverse())) {
             var scale = (FixedQ4816.FromInteger(value: numerator) / FixedQ4816.FromInteger(value: 32));
 
             fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateCell(Principal.Console, "growth", WorldStateRow.SlotKey.Value,
@@ -115,11 +130,14 @@ public sealed class SolidSizeLawTests {
             Assert.Equal(scale, sampled.Scale);
         }
     }
-    private static WorldDefinition GrowingDocument(bool field) {
+    private static WorldDefinition GrowingDocument(bool field, bool carved = true) {
         var source = Fixtures.BuildGradientUpDocument(gradientUp: false);
         var creation = CreationCanonicalizer.Canonicalize(document: new CreationDocument(CreationDocument.CurrentSchema, "growing", null,
             [new ShapeDocument(0, "platform", SdfSolidPrimitive.Box, new Vector3(x: 0, y: 1, z: 0), Quaternion.Identity,
-                new Vector3(x: 3, y: 1, z: 3), 0, SdfBlendOp.Union, 0, 0)], null, SizeBy: "state.growth"), source: "growing");
+                new Vector3(x: 3, y: 1, z: 3), 0, SdfBlendOp.Union, 0, 0),
+             new ShapeDocument(1, "carve", SdfSolidPrimitive.Box, new Vector3(2, 1, 2), Quaternion.Identity,
+                new Vector3(0.25f, 2, 0.25f), 0, SdfBlendOp.Subtraction, 0, 0)], null, SizeBy: "state.growth"), source: "growing");
+        if (!carved) { creation = CreationCanonicalizer.Canonicalize(creation.Document with { Shapes = [creation.Document.Shapes![0]] }, "growing"); }
         return source with {
             CollisionRaw = source.Collision with { Requirements = (field ? [WorldContactRequirement.SmoothUnionContact] : []) },
             StateRaw = new WorldStateSection(World: [StateFixtures.FixedSlot(name: "growth", rawBits: (FixedQ4816.One.Value / 2))]),
@@ -128,3 +146,5 @@ public sealed class SolidSizeLawTests {
         };
     }
 }
+
+
