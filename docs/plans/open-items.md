@@ -515,8 +515,13 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R0's owed windows, R1a to R1c, R2, and S2's
-  conditional measure). No capture has yet shown a hand-over frame by frame;
+  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
+  R0's counting is built, including producer-local serial attribution and the
+  device-free partition, threshold and steady-window laws. Its
+  [windowed verification request](arrival-proportional.md#windowed-verification-request)
+  still owns the boot, arrival, crossing and steady readings that select the
+  later steps; headless presentation stages no draw records.
+  No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,

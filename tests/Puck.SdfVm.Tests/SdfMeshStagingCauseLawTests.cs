@@ -72,4 +72,70 @@ public sealed class SdfMeshStagingCauseLawTests {
         Assert.True(work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause: SdfMeshStagingCause.Pose)) > 0);
         Assert.True(work.Read(kind: SdfMeshHistory.PeakRowsExtent) > 0);
     }
+
+    [Fact]
+    public void AnotherDressersSameSerialStillStatesItsRebuildCause() {
+        var work = SdfMeshHistory.ProcessWork;
+        using var rig = new Rig(slots: 1);
+        using var first = new MeshBakeTestRun(new SdfMeshPathBake());
+        using var second = new MeshBakeTestRun(new SdfMeshPathBake());
+        var draws = new List<SdfMeshDraw> { HostDraw(identity: "a", x: 1) };
+        var input = Frame(program: rig.LiveProgram, time: 0f, transforms: Transforms(slots: 1)) with { MeshDraws = draws };
+        var original = first.Dresser.Dress(input);
+        LandRootCut(rig, original);
+        var before = work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild));
+        var cursorBefore = work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Cursor));
+
+        draws[0] = draws[0] with { ObjectToWorld = Matrix4x4.CreateTranslation(5, 0, 0) };
+        var replacement = second.Dresser.Dress(input);
+        Assert.Equal(original.MeshDrawChangesSerial, replacement.MeshDrawChangesSerial);
+        RenderRootCut(rig, replacement);
+
+        Assert.Equal(1L, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Rebuild)) - before);
+        Assert.Equal(cursorBefore, work.Read(kind: SdfMeshHistory.RowsPackedOf(cause: SdfMeshStagingCause.Cursor)));
+    }
+
+    [Fact]
+    public void OneChunkIsNotOverAndASteadyWindowAddsNoOverChunkFrames() {
+        var work = SdfMeshHistory.ProcessWork;
+        var causes = Enum.GetValues<SdfMeshStagingCause>();
+        var pose = SdfMeshStagingCause.Pose;
+        using var rig = new Rig(slots: 1);
+        using var run = new MeshBakeTestRun(new SdfMeshPathBake());
+        var draw = HostDraw(identity: "shared", x: 1);
+        var draws = Enumerable.Repeat(draw, SdfMeshHistory.ChunkRecords + 1).ToList();
+        var input = Frame(program: rig.LiveProgram, time: 0f, transforms: Transforms(slots: 1)) with { MeshDraws = draws };
+        var packedBefore = work.Read(kind: SdfMeshHistory.RecordsPacked);
+        var causesBefore = causes.Sum(cause => work.Read(kind: SdfMeshHistory.RowsPackedOf(cause)));
+        var landingBefore = work.Read(kind: SdfMeshHistory.FramesOverChunkOf(SdfMeshStagingCause.Landing));
+        LandRootCut(rig, run.Dresser.Dress(input));
+        Assert.True(work.Read(kind: SdfMeshHistory.FramesOverChunkOf(SdfMeshStagingCause.Landing)) > landingBefore);
+
+        work.ClearPeaks();
+        var overBefore = work.Read(kind: SdfMeshHistory.FramesOverChunkOf(pose));
+        for (var index = 0; index < SdfMeshHistory.ChunkRecords; index++) {
+            draws[index] = draw with { ObjectToWorld = Matrix4x4.CreateTranslation(2, 0, 0) };
+        }
+        RenderRootCut(rig, run.Dresser.Dress(input with { MeshDrawsRevision = 1 }));
+        Assert.Equal(SdfMeshHistory.ChunkRecords, work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(pose)));
+        Assert.Equal(overBefore, work.Read(kind: SdfMeshHistory.FramesOverChunkOf(pose)));
+
+        for (var index = 0; index < draws.Count; index++) {
+            draws[index] = draw with { ObjectToWorld = Matrix4x4.CreateTranslation(3, 0, 0) };
+        }
+        var settled = run.Dresser.Dress(input with { MeshDrawsRevision = 2 });
+        RenderRootCut(rig, settled);
+        Assert.Equal(overBefore + 1, work.Read(kind: SdfMeshHistory.FramesOverChunkOf(pose)));
+        Assert.Equal(draws.Count, work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(pose)));
+        Assert.Equal(work.Read(kind: SdfMeshHistory.RecordsPacked) - packedBefore,
+            causes.Sum(cause => work.Read(kind: SdfMeshHistory.RowsPackedOf(cause))) - causesBefore);
+
+        var overAtRest = causes.Select(cause => work.Read(kind: SdfMeshHistory.FramesOverChunkOf(cause))).ToArray();
+        var packedAtRest = work.Read(kind: SdfMeshHistory.RecordsPacked);
+        work.ClearPeaks();
+        for (var frame = 0; frame < SdfWorldTables.FrameRingSize + 1; frame++) { RenderRootCut(rig, settled); }
+        Assert.Equal(overAtRest, causes.Select(cause => work.Read(kind: SdfMeshHistory.FramesOverChunkOf(cause))).ToArray());
+        Assert.Equal(packedAtRest, work.Read(kind: SdfMeshHistory.RecordsPacked));
+        Assert.All(causes, cause => Assert.Equal(0L, work.Read(kind: SdfMeshHistory.PeakRowsPackedOf(cause))));
+    }
 }
