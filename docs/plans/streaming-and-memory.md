@@ -1443,7 +1443,11 @@ the fixed shares are gone.
   `GpuDeviceMemoryWork.CountAllocated` takes only the `GpuMemoryGrant` that
   answer made. The account answers for the segment's pool and the segment's
   own limit (`IGpuMemoryOwners.Admit`). A grant stands as a promise until it
-  is counted, returned or refused.
+  is counted, returned or refused. What a grant takes from its payer's
+  reservation it takes under the account's lock and holds until the
+  allocation is counted, so two grants made before either is counted cannot
+  spend one reservation twice; a grant that is returned or refused gives it
+  back.
 - **Classes.** Every owner states a `MemoryClass`. A class that gives way
   (`MemoryClasses.GivesWay`: workspace, support, elastic, caches) is refused
   when its pool or segment has no room, and the creation door throws
@@ -1452,6 +1456,13 @@ the fixed shares are gone.
   (`MemoryAdmissionReading.OverLimitGrants`), which is the presentation whose
   least does not fit; a holder states its floor with its reservation, and a
   mesh region's draw records are one (`SdfResidencyGrant.ReserveFloorGrowth`).
+  A holder marks the allocations of a replacement it can do without
+  (`GpuMemoryAdmissionScope`): inside the scope a fixed owner's allocation
+  that finds no room is refused too. A mesh region's staging is named for an
+  owner of its own (`SdfResidencySelector.RegionStagingOwner`), outside the
+  region's reservation and its class: on unified memory, where both lie in
+  one pool, a flush that stages more than any before it is admitted and
+  counted, never refused, so an upload does not throw for want of room.
 - **Reservations.** A holder reserves the peak its resources hold before it
   allocates (`MemoryAccount.ReserveDevice`, `MemoryAccount.DeviceReservation`),
   under the owner its objects are named for (`GpuObjectName.MemoryOwnerOf`).
@@ -1460,14 +1471,24 @@ the fixed shares are gone.
   together before the plan that asks for the growth
   (`SdfResidencyGrant.ReserveGrowth`) and lowers the reservation when the old
   buffer's readers finish (`SdfResidencyGrant.Released`). A shader pipeline
-  reserves its replacement peak, and a refused reservation is
+  reserves what a candidate adds before its build starts and keeps that
+  promise until the build is taken, whether it installs, fails or is
+  discarded; its reservation is always what it owns and what it has been
+  promised, so releasing an earlier graph never lowers it under a running
+  build's promise. A refused reservation is
   `ShaderPipelineMemoryAccount.RefusalCode`, with the installed graph still
-  running.
+  running, and so is a candidate's allocation the pool cannot hold: the
+  device allocates more than the objects hold, and the candidate's storage is
+  created inside the scope above.
 - **The device's own refusal.** A native allocation that fails for want of
   memory hands its grant back (`GpuMemoryGrant.Refuse`): the segment's limit
-  falls to what it holds until its budget is read differently, the reading is
-  refreshed at once (`GpuDeviceMemoryWork.DeviceRefusals`), and the caller
-  keeps what it had.
+  falls to what it holds until its budget is read differently or the refusal
+  has stood its wait, the reading is refreshed at once
+  (`GpuDeviceMemoryWork.DeviceRefusals`), and the caller keeps what it had.
+  After the wait (`MemoryAccount.RefusalProbeInterval`) the next allocation is
+  admitted on the reading and probes the device; a probe the device refuses
+  doubles the wait, up to `MemoryAccount.MostRefusalProbeInterval`, and one
+  it makes ends the refusal.
 - **The selector.** `SdfResidencySelector`, one for a device's residencies,
   holds the one detail bias, grants each bake its budget
   (`SdfResidencyGrant.Budget`: what the residency fills and an equal part of
@@ -1476,17 +1497,32 @@ the fixed shares are gone.
   leaves the regions, less room for the largest one's replacement. The bias
   rises when the budget has pressed with no residency holding detail it can
   give up and falls once every residency fits half a rung finer
-  (`SdfResidencyGrant.Decide`).
+  (`SdfResidencyGrant.Decide`). Whether the budget presses is read at the
+  decision, from the limit as it stands, what every residency names and the
+  deciding residency's own report: another residency's report was made
+  against the limit of its own last decision, so a limit that has been
+  restored raises nothing.
 - **Forced progress.** One owner in the process holds the forced allowance at a
   time (`MemoryAccount.Owner.TryReserveForced`); a bake that finds it taken
   waits as it waits for room.
 - **The host pool.** Its limit is the budget, or the machine's free memory with
-  what the pool holds when that is smaller, less the headroom; the account
-  reads the free memory itself (`MemoryAccount.AvailableInterval`), and the
-  bake's own reading is gone.
-- **Pressure.** A limit that falls under what its pool holds, a device refusal
-  or storage admitted past a limit fires one trim on the frame thread
-  (`MemoryAccount.ServicePressure`, from `DeviceMemoryReadings.Refresh`).
+  what the pool held when that was read, when that is smaller, less the
+  headroom: what the pool takes after a reading comes out of it, so one
+  reading is spent once. The account reads the free memory itself
+  (`MemoryAccount.AvailableInterval`), and the bake's own reading is gone. A
+  mesh store read reserves the scratch it reads and expands an entry in
+  before it allocates it, under one owner
+  (`MemoryAccount.Owner.TryReserveWithin`): admitted with room or as the
+  forced job, and otherwise after a wait no longer than
+  `SdfMeshStore.WorkspacePatience`. A read that is not admitted is a miss
+  that keeps its entry (`SdfMeshStore.WorkspaceRefusal`), and the mesh is
+  derived or read again.
+- **Pressure.** A pool that passes its limit by more than it did at the last
+  reading, a device refusal or storage admitted past a limit fires one trim
+  on the frame thread (`MemoryAccount.ServicePressure`, from
+  `DeviceMemoryReadings.Refresh`). A pool that stands over a limit it cannot
+  get back under asks once, not at every reading, and an owner that asks
+  again for the peak it was refused is one refusal.
 - **The OS reservation.** The draw records of every residency are the floors
   the selector records (`MemoryAccount.RecordFloor`), and the host passes
   them to `IGpuDeviceContext.ReserveMemory`, which on Direct3D 12 is
@@ -1516,6 +1552,11 @@ the fixed shares are gone.
   and nothing else adds a promise past. A limit that falls leaves what is held
   standing, read as `MemoryAdmissionReading.OverLimit`.
 - *A grant is settled once.* `GpuMemoryGrant` refuses a second settlement.
+- *A reservation's bytes are spent once.* A grant's credit and the promise it
+  comes out of change together under the account's lock.
+- *A pipeline's promise ends with its build.* The reservation is one sum of
+  what the instance owns and its promises, set at every event; the build's
+  promise is cleared where the build is taken, on each of its three ways out.
 - *One forced job at a time.* One field in the account, taken and released
   under its lock.
 - *A region's buffers are allocated only under its reservation.* The tables
@@ -1555,13 +1596,18 @@ mesh region's growth; the observed owner that stood outside admission.
   shared equally and first come.
 
 **Check.** The laws: `MemoryAdmissionLawTests` (held plus promised along a
-falling budget, a covered allocation, the floor, the device's refusal, the one
-forced job, the host's free memory, the pressure trim),
-`SdfResidencySelectorLawTests` (four residencies' grants under the limit at
-every step of a falling budget, the one bias, a region's growth under its
-reservation, the work budget's rate), the tables' law that a region with no
-room keeps its buffer and refuses the meshes past it without throwing, and
-the pipeline's refusal by the account. The windowed readings are verification requests to the lead: the
+falling budget, a covered allocation, two grants before either is counted,
+the floor, the device's refusal and its probe, the one forced job, the host's
+free memory spent once, transient work that waits for room, the pressure trim
+fired once), `SdfResidencySelectorLawTests` (four residencies' grants under
+the limit at every step of a falling budget, the one bias, a report made
+before the limit was restored, a region's growth under its reservation, its
+staging on unified memory, the work budget's rate), the tables' law that a
+region with no room keeps its buffer and refuses the meshes past it without
+throwing, the store's law that a read with no workspace is a miss that keeps
+the entry, and the pipeline's laws: the refusal by the account, a failed
+candidate's promise, an earlier graph released under a running build, and a
+candidate whose allocations the pool cannot hold. The windowed readings are verification requests to the lead: the
 lowered-budget path (`host.memory budget device` in steps at the meadow, on
 both backends: `over-limit`, `detail-bias`, `refusals` and `growth-refusals`
 at each step, with captures), and the slow-present reading above.

@@ -90,7 +90,9 @@ internal sealed class UploadModelGpu :
     /// region.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+
     public void RefreshMemoryReading() { }
+
     /// <summary>Gets or sets the gate every compute pipeline named <see cref="ComputePipelineGateName"/> waits on before it
     /// is created, or <see langword="null"/> for none. Pipelines build on pool threads, never on the frame thread.</summary>
     public ManualResetEventSlim? ComputePipelineGate { get; set; }
@@ -229,7 +231,15 @@ internal sealed class UploadModelGpu :
 
         return module;
     }
-    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+    IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        _ = HostVisibleFamilies.Add(item: name.MemoryFamily());
+
+        return Buffer(hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
+    }
+
+    /// <summary>Gets the families every host-visible buffer was created under.</summary>
+    public HashSet<string> HostVisibleFamilies { get; } = new(comparer: StringComparer.Ordinal);
+
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisibleDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(aperture: true, hostVisible: true, sizeBytes: sizeBytes, uniform: usage.HasFlag(flag: GpuBufferUsage.Uniform));
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) => Buffer(hostVisible: false, sizeBytes: sizeBytes, part: name.Part);
     IGpuStorageBuffer IGpuBufferFactory.CreateHostVisible(ReadOnlySpan<byte> data, GpuBufferUsage usage, in GpuObjectName name) => throw new NotSupportedException();

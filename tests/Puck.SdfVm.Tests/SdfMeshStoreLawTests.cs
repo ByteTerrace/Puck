@@ -23,28 +23,31 @@ public sealed class SdfMeshStoreLawTests {
 
         foreach (var chunked in new[] { false, true }) {
             byte[]? first = null;
+
             foreach (var palette in new[] { new[] { 4, 9 }, new[] { 900, 300 }, new[] { 1, 2 } }) {
                 // Zero is deliberately outside the palette. It must not collide with canonical place zero.
                 var original = Mesh();
-                var piece = new SdfMesh(positions: original.Positions, indices: original.Indices, normals: original.Normals, triangleMaterials: new uint[] { (uint)palette[0], 0 }) {
-                    Levels = [Level() with { TriangleMaterials = new uint[] { (uint)palette[1] } }],
+                var piece = new SdfMesh(positions: original.Positions, indices: original.Indices, normals: original.Normals, triangleMaterials: new uint[] { ((uint)palette[0]), 0 }) {
+                    Levels = [Level() with { TriangleMaterials = new uint[] { ((uint)palette[1]) } }],
                 };
                 var source = (chunked ? SdfMeshChunks.Join(chunks: [piece, piece]) : piece);
 
-                Assert.True(store.Write(Identity, Geometry, source, palette));
-                var bytes = File.ReadAllBytes(Assert.Single(store.EntryPaths()));
-                if (first is null) { first = bytes; } else { Assert.Equal(first, bytes); }
+                Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: palette, mesh: source));
+                var bytes = File.ReadAllBytes(path: Assert.Single(collection: store.EntryPaths()));
+
+                if (first is null) { first = bytes; } else { Assert.Equal(actual: bytes, expected: first); }
                 using var library = new SdfMeshLibrary(store: store);
-                Assert.True(library.TryLoad(Identity, Geometry, palette, out var loaded, out _));
-                Assert.NotNull(loaded);
+
+                Assert.True(condition: library.TryLoad(Identity, Geometry, palette, out var loaded, out _));
+                Assert.NotNull(@object: loaded);
                 Assert.Equal(source.TriangleMaterials.ToArray(), loaded.TriangleMaterials.ToArray());
                 var read = (chunked ? loaded.Chunks[0] : loaded);
+
                 Assert.Equal(piece.Levels[0].TriangleMaterials.ToArray(), read.Levels[0].TriangleMaterials.ToArray());
                 loaded.Release();
             }
         }
     }
-
     [Fact]
     public void AnEmptyBakeSurvivesAFreshLibraryWithoutBakingAgain() {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
@@ -113,6 +116,30 @@ public sealed class SdfMeshStoreLawTests {
         Assert.False(condition: store.Contains(geometry: Geometry, identity: (Identity + 1)));
         Assert.False(condition: store.Contains(geometry: (Geometry with { Hash = (Geometry.Hash + 1) }), identity: Identity));
         Assert.False(condition: store.Contains(geometry: (Geometry with { Dynamic = true }), identity: Identity));
+    }
+    [Fact]
+    public void AReadTheAccountHasNoWorkspaceForIsAMissThatKeepsTheEntry() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes")) { Account = account, WorkspacePatience = TimeSpan.FromMilliseconds(milliseconds: 50) };
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [4, 9], mesh: Mesh()));
+
+        // The host pool has no room and another job holds the forced allowance: the read reserves nothing, so it
+        // allocates nothing, misses and says why, and the sound entry stays where it was.
+        account.SetBudget(bytes: account.Headroom);
+
+        using (var forced = account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "bake")) {
+            Assert.True(condition: forced.TryReserveForced(peak: (1L << 20)));
+            Assert.False(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out _, refusal: out var refusal));
+            Assert.EndsWith(actualString: refusal, expectedEndString: SdfMeshStore.WorkspaceRefusal);
+            Assert.Equal(expected: ((1L << 20), 0L), actual: (account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Promised, account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Held));
+            Assert.True(condition: File.Exists(path: Entry(geometry: Geometry, store: store)));
+        }
+        // With the forced job gone the same read is admitted, as the forced job, and takes the mesh.
+        Assert.True(condition: store.TryRead(geometry: Geometry, identity: Identity, materials: out _, mesh: out var mesh, refusal: out _));
+        Assert.Equal(expected: Mesh().Positions.ToArray(), actual: mesh!.Positions.ToArray());
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Promised);
     }
     [Fact]
     public void ADamagedEntryIsRefusedByNameAndDeleted() {

@@ -19,8 +19,8 @@ public sealed class MemoryAdmissionLawTests {
     private const string RegionOwner = "sdf.mesh-region";
 
     // A discrete adapter's ledger reporting to an account that reads no free memory, so the host pool is its budget.
-    private static (MemoryAccount Account, GpuDeviceMemoryWork Ledger, GpuMemorySegments Segments) Discrete(long installedBytes = (64L * Gibibyte)) {
-        var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: installedBytes);
+    private static (MemoryAccount Account, GpuDeviceMemoryWork Ledger, GpuMemorySegments Segments) Discrete(long installedBytes = (64L * Gibibyte), Func<long>? clock = null) {
+        var account = new MemoryAccount(availablePhysicalBytes: static () => null, clock: clock, installedPhysicalBytes: installedBytes);
         var ledger = new GpuDeviceMemoryWork(backend: "law", owners: account.DeviceOwners(backend: "law"));
         var segments = GpuMemorySegments.FromDirectX(profile: default);
 
@@ -160,7 +160,8 @@ public sealed class MemoryAdmissionLawTests {
     }
     [Fact]
     public void ADeviceRefusalLowersTheSegmentsLimitToWhatItHoldsUntilItsBudgetChanges() {
-        var (account, ledger, segments) = Discrete();
+        // The clock stands still, so the refusal's probe never comes due and only the budget can lift it.
+        var (account, ledger, segments) = Discrete(clock: static () => 1L);
 
         Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
         Assert.True(condition: Allocate(allocation: 0x10, bytes: Gibibyte, family: "view/targets", ledger: ledger));
@@ -255,5 +256,149 @@ public sealed class MemoryAdmissionLawTests {
         Assert.Equal(expected: Gibibyte, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
         account.SetBudget(bytes: null, pool: PhysicalMemory.Device);
         Assert.Equal(expected: read, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+    }
+    [Fact]
+    public void TwoGrantsMadeBeforeEitherIsCountedCannotSpendOneReservationTwice() {
+        var (account, ledger, segments) = Discrete();
+
+        // The segment has room to spare; the pool holds exactly the reservation.
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        account.SetBudget(bytes: (100L * Mebibyte), pool: PhysicalMemory.Device);
+
+        using var region = account.ReserveDevice(memoryClass: MemoryClass.Elastic, owner: RegionOwner, pool: PhysicalMemory.Device);
+
+        Assert.True(condition: region.TryReserve(peak: (100L * Mebibyte)));
+        Assert.True(condition: ledger.TryAdmit(bytes: (100L * Mebibyte), device: Device, family: RegionFamily, grant: out var first, payer: RegionFamily, payerBytes: (100L * Mebibyte), role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        // The first grant drew the whole reservation under the account's lock: a second, made before the first is
+        // counted, finds none of it left and no room, and is refused.
+        Assert.False(condition: ledger.TryAdmit(bytes: (100L * Mebibyte), device: Device, family: RegionFamily, grant: out _, payer: RegionFamily, payerBytes: (100L * Mebibyte), role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        Assert.Equal(expected: (0L, (100L * Mebibyte)), actual: (account.ReadAdmission(pool: PhysicalMemory.Device).Held, account.ReadAdmission(pool: PhysicalMemory.Device).Promised));
+        // A grant handed back gives the reservation its credit again, once.
+        first.Return();
+        Assert.Equal(expected: (100L * Mebibyte), actual: account.ReadAdmission(pool: PhysicalMemory.Device).Promised);
+        Assert.True(condition: ledger.TryAdmit(bytes: (100L * Mebibyte), device: Device, family: RegionFamily, grant: out var again, payer: RegionFamily, payerBytes: (100L * Mebibyte), role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        ledger.CountAllocated(allocation: 0x10, grant: again);
+        Assert.Equal(expected: ((100L * Mebibyte), 0L, 0L), actual: (account.ReadAdmission(pool: PhysicalMemory.Device).Held, account.ReadAdmission(pool: PhysicalMemory.Device).Promised, account.ReadAdmission(pool: PhysicalMemory.Device).OverLimit));
+    }
+    [Fact]
+    public void TheFreeMemoryReadingIsSpentOnceHoweverLongItStands() {
+        // One reading of a gibibyte free, which the clock never lets the account take again.
+        var account = new MemoryAccount(availablePhysicalBytes: static () => Gibibyte, clock: static () => 1L, installedPhysicalBytes: (64L * Gibibyte));
+        using var first = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "first");
+        using var second = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "second");
+        var allowance = (Gibibyte - account.Headroom);
+
+        Assert.Equal(expected: allowance, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Limit!.Value);
+        Assert.True(condition: first.TryReserve(peak: allowance));
+        first.Change(backing: MemoryBacking.NativeDirect, bytes: allowance);
+        // What the first owner took came out of the reading: holding it does not make it free again.
+        Assert.Equal(expected: allowance, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Limit!.Value);
+        Assert.False(condition: second.TryReserve(peak: Mebibyte));
+        first.Change(backing: MemoryBacking.NativeDirect, bytes: -allowance);
+        first.ReleaseReservation();
+        Assert.True(condition: second.TryReserve(peak: allowance));
+    }
+    [Fact]
+    public void ARefusedSegmentIsProbedAgainAfterItsWaitWhichDoublesWhileRefusalsFollow() {
+        var now = 1L;
+
+        var (account, ledger, segments) = Discrete(clock: () => now);
+        using var region = account.ReserveDevice(memoryClass: MemoryClass.Elastic, owner: RegionOwner, pool: PhysicalMemory.Device);
+
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+
+        var read = account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value;
+
+        void Refuse() {
+            Assert.True(condition: ledger.TryAdmit(bytes: Mebibyte, device: Device, family: "view/targets", grant: out var grant, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+            _ = grant.Refuse();
+        }
+
+        // Refused while it holds nothing, the segment's limit is nothing: no elastic byte is admitted.
+        Refuse();
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        Assert.False(condition: region.TryReserve(peak: Mebibyte));
+        // The same budget read again does not lift it, and the first wait does: the next allocation probes the device.
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        now += (MemoryAccount.RefusalProbeInterval - 1L);
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        now += 1L;
+        Assert.Equal(expected: read, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        // A probe the device refuses puts the limit back for twice as long.
+        Refuse();
+        now += MemoryAccount.RefusalProbeInterval;
+        Assert.Equal(expected: 0L, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        now += MemoryAccount.RefusalProbeInterval;
+        Assert.Equal(expected: read, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        // A probe the device makes ends the refusal: the storage grows again, and a later refusal waits the first
+        // interval.
+        Assert.True(condition: Allocate(allocation: 0x10, bytes: Mebibyte, family: "view/targets", ledger: ledger));
+        Assert.True(condition: region.TryReserve(peak: Mebibyte));
+        Refuse();
+        now += MemoryAccount.RefusalProbeInterval;
+        Assert.Equal(expected: read, actual: account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value);
+        Assert.Equal(expected: 3L, actual: account.ReadAdmission(pool: PhysicalMemory.Device).DeviceRefusals);
+    }
+    [Fact]
+    public void APoolStandingOverItsLimitAsksForOneTrimNotOneAtEveryReading() {
+        var now = 1L;
+
+        var (account, ledger, segments) = Discrete(clock: () => now);
+        var trims = 0;
+
+        account.TrimRequested += () => trims++;
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        Assert.True(condition: Allocate(allocation: 0x10, bytes: (4L * Gibibyte), family: "view/targets", ledger: ledger));
+        Budget(account: account, localBudget: (2L * Gibibyte), segments: segments, serial: 2UL);
+        Assert.True(condition: account.ServicePressure());
+        // The same budget read again and again, each a reading later, with the pool still over it: nothing new to trim.
+        for (var reading = 0; (reading < 4); reading++) {
+            now += (2L * MemoryAccount.PressureInterval);
+            Budget(account: account, localBudget: (2L * Gibibyte), segments: segments, serial: 2UL);
+            Assert.False(condition: account.ServicePressure());
+        }
+        // The excess growing is pressure again.
+        Budget(account: account, localBudget: Gibibyte, segments: segments, serial: 3UL);
+        Assert.True(condition: account.ServicePressure());
+        Assert.Equal(actual: trims, expected: 2);
+    }
+    [Fact]
+    public void AnOwnerThatAsksAgainWhileItWaitsIsOneRefusal() {
+        var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L * Gibibyte));
+
+        account.SetBudget(bytes: account.Headroom);
+
+        using var owner = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "waiting");
+
+        for (var ask = 0; (ask < 100); ask++) { Assert.False(condition: owner.TryReserve(peak: Gibibyte)); }
+        Assert.Equal(expected: 1L, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Refusals);
+        Assert.False(condition: owner.TryReserve(peak: (2L * Gibibyte)));
+        Assert.Equal(expected: 2L, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Refusals);
+    }
+    [Fact]
+    public async Task TransientWorkWaitsForRoomAndDoesWithoutWhenItsPatienceRunsOut() {
+        var account = new MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L * Gibibyte));
+        var reason = new Puck.Abstractions.Waiting.WaitReason(Subsystem: "law", WaitsFor: "room");
+
+        account.SetBudget(bytes: account.Headroom);
+
+        using var forced = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "forced");
+        using var scratch = account.CreateOwner(memoryClass: MemoryClass.Workspace, name: "scratch");
+
+        // With no room and the forced allowance held by another job, transient work is not admitted: it holds nothing,
+        // and what the pool has promised is the forced job's alone.
+        Assert.True(condition: forced.TryReserveForced(peak: Gibibyte));
+        Assert.False(condition: scratch.TryReserveWithin(patience: TimeSpan.FromMilliseconds(milliseconds: 100), peak: Mebibyte, reason: in reason));
+        Assert.Equal(expected: Gibibyte, actual: account.ReadAdmission(pool: PhysicalMemory.Host).Promised);
+
+        // Once the forced job ends while it waits, it is admitted, as the one forced job.
+        var release = Task.Run(action: () => {
+            Thread.Sleep(millisecondsTimeout: 50);
+            forced.ReleaseReservation();
+        }, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.True(condition: scratch.TryReserveWithin(patience: TimeSpan.FromSeconds(seconds: 30), peak: Mebibyte, reason: in reason));
+        await release;
+        Assert.Equal(expected: (Mebibyte, 2L), actual: (account.ReadAdmission(pool: PhysicalMemory.Host).Forced, account.ReadAdmission(pool: PhysicalMemory.Host).ForcedJobs));
     }
 }

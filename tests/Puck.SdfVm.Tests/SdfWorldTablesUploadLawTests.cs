@@ -905,6 +905,10 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: (0, 2U), actual: (rig.Engine.MeshRegionRefused, rig.Engine.MeshDrawCount));
         Assert.True(condition: (rig.Engine.MeshRegionBytes > (40UL << 20)));
         Assert.Contains(expectedSubstring: "residencies=1", actualString: selector.Describe());
+        // The region's staging is created under the staging owner, apart from the region the account reserves, and
+        // nothing host-visible is created under the region's own.
+        Assert.Contains(expected: (SdfResidencySelector.RegionStagingOwner + "/mesh-region"), collection: rig.Gpu.HostVisibleFamilies);
+        Assert.DoesNotContain(expected: (SdfResidencySelector.RegionOwner + "/mesh-region"), collection: rig.Gpu.HostVisibleFamilies);
     }
     [Fact]
     public void ARelocationShrinksAnOversizedMeshRegionToItsNeed() {

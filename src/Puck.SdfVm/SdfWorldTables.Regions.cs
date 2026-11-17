@@ -93,7 +93,8 @@ public sealed partial class SdfWorldTables {
             policy: GpuResidencyPolicy.Staged,
             recorder: m_gpu.Recorder,
             slotCount: MeshRegionSlotCount,
-            hostCopies: m_regionHostCopies
+            hostCopies: m_regionHostCopies,
+            staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region")
         )
         : new GpuRegion(
             bindings: m_gpu.Bindings,

@@ -214,6 +214,12 @@ public sealed class GpuDeviceMemoryWorkLawTests {
             expected: [("admit", 4096L, 1024L), ("admit", 4096L, 0L), ("admit", 4096L, 1024L), ("Counted", 4096L, 0L), ("admit", 100L, 0L), ("Returned", 100L, 0L), ("admit", 200L, 0L), ("DeviceRefused", 200L, 0L)],
             actual: owners.Log
         );
+        // An allocation made inside the scope is asked as one that gives way, on this thread only, and the scope ends.
+        using (GpuMemoryAdmissionScope.Enter()) {
+            work.Admit(bytes: 300L, device: Device, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal).Return();
+        }
+        work.Admit(bytes: 300L, device: Device, family: null, payer: null, payerBytes: 0L, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal).Return();
+        Assert.Equal(expected: [("admit-gives-way", 300L, 0L), ("Returned", 300L, 0L), ("admit", 300L, 0L), ("Returned", 300L, 0L)], actual: owners.Log[^4..]);
         // Another ledger's grant is refused.
         _ = Assert.Throws<ArgumentException>(testCode: () => new GpuDeviceMemoryWork(backend: "directx").CountAllocated(allocation: 0x12, grant: counted));
     }
@@ -223,10 +229,10 @@ public sealed class GpuDeviceMemoryWorkLawTests {
         public List<(string Call, long Bytes, long PayerBytes)> Log { get; } = [];
         public GpuMemoryVerdict Verdict { get; set; } = GpuMemoryVerdict.Granted;
 
-        public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes) {
-            Log.Add(item: ("admit", bytes, payerBytes));
+        public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay) {
+            Log.Add(item: ((givesWay ? "admit-gives-way" : "admit"), bytes, payerBytes));
 
-            return new(Bytes: bytes, Net: bytes, Verdict: Verdict);
+            return new(Bytes: bytes, Net: bytes, Payer: null, Verdict: Verdict);
         }
         public void Settle(GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) => Log.Add(item: (settlement.ToString(), admission.Bytes, 0L));
         public Puck.Abstractions.Memory.IAllocationObserver OfSegment(GpuMemorySegment segment) => new Observer();

@@ -55,6 +55,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // created.
     private bool RequestPreview(string name, RuntimeResource selected) {
         m_previewRequest = null;
+        // The selection it replaces no longer waits on a preview: its promise ends before this one asks.
+        SettleReservation();
 
         if (!NeedsPreview(spec: selected.Spec)) {
             if (m_preview is not null) {
@@ -89,7 +91,7 @@ public sealed partial class ShaderPipelineRenderNode {
             SteadyBytes: checked((m_allocationBytes + previewBytes))
         );
 
-        if (!account.Fits || !TryReservePeak(peakBytes: account.PeakBytes)) {
+        if (!account.Fits || !TryReserveMore(bytes: previewBytes)) {
             var refusal = account.Refusal();
 
             throw new InvalidOperationException(
@@ -102,6 +104,7 @@ public sealed partial class ShaderPipelineRenderNode {
             pools: [PreviewDescriptorPool(inFlight: m_inFlight)],
             refusal: out var descriptorRefusal
         )) {
+            SettleReservation();
             throw new InvalidOperationException(message: $"The preview for '{selected.Spec.Name}' is refused: {descriptorRefusal}");
         }
 
@@ -134,6 +137,7 @@ public sealed partial class ShaderPipelineRenderNode {
             gpu: gpu,
             pipelines: pipelines,
             directX: directX,
+            givesWay: true,
             height: request.Height,
             inFlight: inFlight,
             width: request.Width
@@ -182,6 +186,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 innerException: failure,
                 message: $"The preview for '{request.Name}' could not be allocated: {failure.Message}"
             );
+            SettleReservation();
 
             return;
         }
@@ -196,12 +201,15 @@ public sealed partial class ShaderPipelineRenderNode {
         m_preview = next;
         m_selectedOutput = request.Name;
         m_outputRefreshRequested = true;
+        // The preview is owned now, and its promise is spent.
+        SettleReservation();
     }
     // Drops a pending preview selection and waits out its build, which creates objects on the device being released.
     private void CancelPreviewBuild() {
         m_previewRequest = null;
         m_previewBuilding = null;
         m_previewBuild.CancelAndWait(discard: static built => built.Dispose());
+        SettleReservation();
     }
 
     // A selection whose preview is building: the output it selects and the preview's extent.
@@ -234,7 +242,7 @@ public sealed partial class ShaderPipelineRenderNode {
         public IGpuImage[] Targets { get; }
         public uint Width { get; }
 
-        public static async Task<PreviewObjects> CreateAsync(GpuDeviceServices gpu, IGpuDeviceContext device, GpuPassPipelineCache pipelines, bool directX, uint width, uint height, uint inFlight, string owner, CancellationToken cancellationToken) {
+        public static async Task<PreviewObjects> CreateAsync(GpuDeviceServices gpu, IGpuDeviceContext device, GpuPassPipelineCache pipelines, bool directX, uint width, uint height, uint inFlight, string owner, bool givesWay, CancellationToken cancellationToken) {
             var objects = new PreviewObjects(
                 height: height,
                 inFlight: inFlight,
@@ -253,23 +261,27 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 var renderPass = (await objects.Lease.WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)).RenderPass!;
 
-                for (var i = 0; (i < inFlight); i++) {
-                    objects.Targets[i] = gpu.ImageFactory.Create(
-                        format: SurfaceEncoder.CaptureFormat,
-                        name: new GpuObjectName(
-                            index: ((int)i),
-                            owner: owner,
-                            part: "preview"
-                        ),
-                        height: height,
-                        usage: TargetUsage,
-                        width: width
-                    );
-                    objects.Framebuffers[i] = gpu.RenderPassFactory.CreateFramebuffer(
-                        renderPass,
-                        [objects.Targets[i]],
-                        null
-                    );
+                // A preview that replaces a published selection, or belongs to a candidate graph, gives way: a full pool
+                // refuses its targets, and what was published stays.
+                using (GpuMemoryAdmissionScope.Enter(givesWay: givesWay)) {
+                    for (var i = 0; (i < inFlight); i++) {
+                        objects.Targets[i] = gpu.ImageFactory.Create(
+                            format: SurfaceEncoder.CaptureFormat,
+                            name: new GpuObjectName(
+                                index: ((int)i),
+                                owner: owner,
+                                part: "preview"
+                            ),
+                            height: height,
+                            usage: TargetUsage,
+                            width: width
+                        );
+                        objects.Framebuffers[i] = gpu.RenderPassFactory.CreateFramebuffer(
+                            renderPass,
+                            [objects.Targets[i]],
+                            null
+                        );
+                    }
                 }
             } catch {
                 objects.Dispose();

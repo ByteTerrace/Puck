@@ -108,6 +108,21 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     /// <summary>Gets or sets the one-based creation number that throws instead of creating; 0 never throws.</summary>
     public int FailAtCreation { get; set; }
+    /// <summary>Gets or sets the device memory ledger every creation that occupies bytes asks and is counted in, as a
+    /// backend's creation doors do: a creation the ledger's account refuses throws before anything is created.
+    /// <see langword="null"/> asks nothing.</summary>
+    public GpuDeviceMemoryWork? Memory { get; init; }
+
+    /// <summary>The native device the fake's allocations are counted on in <see cref="Memory"/>.</summary>
+    public const nint MemoryDevice = 1;
+
+    /// <summary>Gets or sets the family the fake's allocations are counted under in <see cref="Memory"/>.</summary>
+    public string MemoryFamily { get; set; } = "feedback/graph";
+
+    /// <summary>Gets or sets the bytes the device adds to every allocation it makes beyond what the object holds, as a
+    /// real device's alignment and block size do; they are asked of <see cref="Memory"/> and never counted in
+    /// <see cref="LiveBytes"/>.</summary>
+    public ulong PaddingBytes { get; set; }
     /// <summary>Gets or sets whether <see cref="Events"/> and <see cref="Barriers"/> record.</summary>
     public bool Recording { get; set; }
     /// <summary>Gets or sets whether the next fenced submission throws before any commands reach the queue.</summary>
@@ -155,7 +170,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     /// <summary>Gets or sets the memory profile the device reports; the default reports nothing.</summary>
     public GpuMemoryProfile MemoryProfile { get; set; }
     public GpuMemoryReading MemoryReading => GpuMemoryReading.Absent;
+
     public void RefreshMemoryReading() { }
+
     /// <summary>Gets this fake as every one of its own services.</summary>
     public GpuDeviceServices Services => field ??= new GpuDeviceServices {
         Bindings = this,
@@ -190,6 +207,11 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
                 throw new InvalidOperationException(message: $"Injected allocation failure at creation {(CreationCount + 1)} ({kind}).");
             }
 
+            // The ledger is asked at the size the device would be, before the object exists.
+            var grant = (((Memory is not null) && (bytes > 0UL))
+                ? Memory.Admit(bytes: checked((long)(bytes + PaddingBytes)), device: MemoryDevice, family: MemoryFamily, payer: MemoryFamily, payerBytes: checked((long)(bytes + PaddingBytes)), role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal)
+                : null);
+
             var created = new Created(
                 bytes: bytes,
                 gpu: this,
@@ -198,6 +220,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
                 number: (CreationCount + 1)
             );
 
+            if (grant is not null) { Memory!.CountAllocated(allocation: created.Handle, grant: grant); }
             LiveBytes += bytes;
             PeakLiveBytes = Math.Max(
                 val1: PeakLiveBytes,
@@ -822,6 +845,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
                 if (DisposeCount == 1) {
                     gpu.LiveBytes -= Bytes;
+                    _ = gpu.Memory?.CountReleased(allocation: Handle, device: MemoryDevice);
 
                     if (gpu.PendingReader(imageHandle: Handle) is { } pending) {
                         gpu.UsesAfterRelease.Add(item: $"dispose of {this} while submission {pending} that reads it is pending");

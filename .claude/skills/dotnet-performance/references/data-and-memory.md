@@ -236,7 +236,10 @@ process's one forced job (`MemoryAccount.Owner.TryReserveForced`,
 allowance. So a bake under `host.memory budget 1`, or on a machine with little
 free memory, which the account reads itself, still settles, one group at a
 time in the whole process, and a lockstep World never holds its frame
-forever. Device storage states a class (`MemoryClass`): elastic and workspace
+forever. Transient scratch that a cache's read needs (a mesh store entry and
+its expanded planes) reserves through `MemoryAccount.Owner.TryReserveWithin`:
+admitted with room or as the forced job, and otherwise after a bounded wait,
+past which the read is a miss. Device storage states a class (`MemoryClass`): elastic and workspace
 storage is refused when its pool is full, and fixed storage is admitted past
 the limit and counted, so a full device coarsens detail before it ends a
 World. A

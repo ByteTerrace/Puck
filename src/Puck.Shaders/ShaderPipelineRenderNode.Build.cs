@@ -134,11 +134,16 @@ public sealed partial class ShaderPipelineRenderNode {
                     rows: key.Rows
                 );
 
-                // The peak is reserved before the build allocates anything, so the promise is the account's and no
-                // other holder is given the same room; a peak over the cap, or one the account has no room for, refuses.
-                if (!account.Fits || !TryReservePeak(peakBytes: account.PeakBytes)) {
+                // What the candidate adds is reserved before the build allocates anything, so the promise is the account's
+                // and no other holder is given the same room; a peak over the cap, or one the account has no room for,
+                // refuses. The promise stands until the build is taken (InstallPending).
+                var owned = OwnedBytes;
+                var more = ((account.PeakBytes > owned) ? (account.PeakBytes - owned) : 0UL);
+
+                if (!account.Fits || !TryReserveMore(bytes: more)) {
                     throw account.Refusal();
                 }
+                m_buildPromise = more;
             }
         } catch (Exception error) {
             Refuse(
@@ -181,6 +186,7 @@ public sealed partial class ShaderPipelineRenderNode {
             }
 
             built?.Discard(later: DisposeLater);
+            EndBuildPromise();
             EnsureBuild();
 
             return;
@@ -189,22 +195,29 @@ public sealed partial class ShaderPipelineRenderNode {
         m_resizeBackoff = 0;
 
         if (error is not null) {
+            // A build that failed allocates nothing more: its promise ends here, and only the installed graph is kept.
+            EndBuildPromise();
             if (!key.Candidate) {
                 ExceptionDispatchInfo.Throw(source: error);
             }
 
             Refuse(
                 candidate: true,
-                error: error
+                error: ((error is GpuMemoryRefusedException refused) ? AllocationRefusal(refusal: refused) : error)
             );
 
             return;
         }
 
-        Install(
-            built: built!,
-            key: key
-        );
+        try {
+            Install(
+                built: built!,
+                key: key
+            );
+        } finally {
+            // Installed, its bytes are owned; refused while it allocated, they were released.
+            EndBuildPromise();
+        }
     }
 
     // The selection the next graph installs with: one still waiting for its own preview, else the published one.
@@ -334,6 +347,7 @@ public sealed partial class ShaderPipelineRenderNode {
             KernelCounterRows: (m_passes.FirstOrDefault()?.KernelCounters?.Rows ?? 0),
             BoundPorts: [.. m_externalRegions.Keys],
             SlotObjects: m_slots.Any(predicate: static slot => ((slot.Fence is null) || (slot.Commands is null))),
+            GivesWay: (key.Candidate && m_ready),
             Packages: m_packages,
             Pipelines: m_pipelines
         );
@@ -444,7 +458,9 @@ public sealed partial class ShaderPipelineRenderNode {
     // Everything a build reads, captured on the frame thread when it starts; a build never touches the node.
     // KernelCounterRows is the rows the installed counters reached, BoundPorts the host buffer ports already bound,
     // which keep their regions across installs, and SlotObjects whether a frame slot still lacks its fence or commands.
-    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages, int[] Carried, int KernelCounterRows = 0, string[]? BoundPorts = null, bool SlotObjects = false);
+    // GivesWay is whether the build is a candidate for a graph that keeps running, whose storage a full pool refuses
+    // (GpuMemoryAdmissionScope).
+    private sealed record BuildRequest(BuildKey Key, GpuDeviceServices Gpu, IGpuDeviceContext Device, GpuPassPipelineCache Pipelines, bool DirectX, uint InFlight, string Instance, RenderGraphPackageRecorders Packages, int[] Carried, int KernelCounterRows = 0, string[]? BoundPorts = null, bool SlotObjects = false, bool GivesWay = false);
     // The pipeline and module set of one candidate, built on the thread pool. The install takes each object into the
     // runtime graph and clears it here, so disposing a build releases exactly what was never taken.
     private sealed class GraphBuild : IDisposable {
@@ -491,13 +507,16 @@ public sealed partial class ShaderPipelineRenderNode {
                     plan: plan,
                     request: request
                 ).ConfigureAwait(continueOnCapturedContext: false);
-                build.CreatePassRegions(cancellationToken: cancellationToken, plan: plan, request: request);
-                build.CreateGraphRegions(cancellationToken: cancellationToken, plan: plan, request: request);
-                build.CreateImages(
-                    cancellationToken: cancellationToken,
-                    plan: plan,
-                    request: request
-                );
+                // The graph's storage is created here, synchronously on whichever thread the build resumed on.
+                using (GpuMemoryAdmissionScope.Enter(givesWay: request.GivesWay)) {
+                    build.CreatePassRegions(cancellationToken: cancellationToken, plan: plan, request: request);
+                    build.CreateGraphRegions(cancellationToken: cancellationToken, plan: plan, request: request);
+                    build.CreateImages(
+                        cancellationToken: cancellationToken,
+                        plan: plan,
+                        request: request
+                    );
+                }
 
                 if (request.Key.Preview is { } preview) {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -508,6 +527,7 @@ public sealed partial class ShaderPipelineRenderNode {
                         gpu: request.Gpu,
                         pipelines: request.Pipelines,
                         directX: request.DirectX,
+                        givesWay: request.GivesWay,
                         height: preview.Height,
                         inFlight: request.InFlight,
                         width: preview.Width

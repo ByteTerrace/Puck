@@ -28,10 +28,11 @@ public sealed partial record SdfMesh {
 
     /// <summary>Gets whether the mesh's normals and coarser levels' indices are in memory: always, unless the library
     /// published it from its store and no region has needed its words since they landed.</summary>
-    internal bool Resident => m_restorable?.Resident ?? true;
+    internal bool Resident => (m_restorable?.Resident ?? true);
     /// <summary>Gets whether the store could not restore the mesh's normals and levels, so the mesh can never be written
     /// into a region again and its group bakes again (<see cref="SdfMeshLibrary.LostRevision"/>).</summary>
-    internal bool Lost => m_restorable?.Lost ?? false;
+    internal bool Lost => (m_restorable?.Lost ?? false);
+
     /// <summary>Holds a need for the mesh's normals and coarser levels' indices: they stay in memory, or come back from the
     /// store off the caller's thread, until the matching <see cref="Unneed"/>.</summary>
     internal void Need() => m_restorable?.Need();
@@ -50,11 +51,13 @@ public sealed partial record SdfMesh {
     /// that waits until the parts are resident.</summary>
     public readonly ref struct Held {
         internal Held(SdfMesh mesh) => Mesh = mesh;
+
         /// <summary>Gets the held mesh.</summary>
         public SdfMesh Mesh { get; }
         /// <summary>Gets whether the mesh's parts are readable: false only for a mesh whose store could not restore
         /// them.</summary>
         public bool Readable => !Mesh.Lost;
+
         /// <summary>Releases the need.</summary>
         public void Dispose() => Mesh.Unneed();
     }
@@ -80,6 +83,7 @@ public sealed partial record SdfMesh {
         // again. A block leaves its list when its payload's last claim goes (Detach), before the payload disposes it.
         private readonly List<(int Piece, OwnedBuffer<Vector3> Block, int Length, Payload Owner)> m_normals = [];
         private readonly List<(int Piece, int Level, OwnedBuffer<uint> Block, int Length, Payload Owner)> m_levels = [];
+
         private int m_needs;
         // Written under the gate; read without it, so the frame thread never waits on a restore's copy. The write that
         // makes it Resident follows the copy, so a reader that sees Resident sees the restored parts.
@@ -90,8 +94,8 @@ public sealed partial record SdfMesh {
         private bool m_running;
         private ManualResetEventSlim? m_done;
 
-        public bool Resident => (m_state == State.Resident);
         public bool Lost => (m_state == State.Lost);
+        public bool Resident => (m_state == State.Resident);
 
         // A piece of -1 names the joined normals of a chunked mesh, which its chunks view in order.
         public void AddNormals(int piece, Payload owner, OwnedBuffer<Vector3>? block) {
@@ -134,7 +138,6 @@ public sealed partial record SdfMesh {
                 if (freed) { _ = Interlocked.Add(location1: ref ReleasedNow, value: -bytes); }
             }
         }
-
         public void Need() {
             lock (m_gate) {
                 m_needs++;
@@ -182,7 +185,6 @@ public sealed partial record SdfMesh {
             _ = Interlocked.Add(location1: ref ReleasedBytes, value: m_bytes);
             _ = Interlocked.Add(location1: ref ReleasedNow, value: m_bytes);
         }
-
         // A worker's turn at this storage: nothing when its restore already ran (on a NeedResident caller) or another
         // worker claimed it.
         private void Run() {
@@ -229,8 +231,9 @@ public sealed partial record SdfMesh {
                     );
                 }
                 if (library.Disk is { } disk) {
-                    filled = disk.TryReadInto(declined: out var declined, geometry: geometry, identity: identity, materials: out _, mesh: out _, refusal: out var refusal, storage: refill, taking: null);
-                    failure = (filled ? null : (declined ? "its stored parts no longer match" : (refusal ?? "the store holds no entry")));
+                    // A declined entry says why: its parts no longer fit these blocks, or the read found no workspace memory.
+                    filled = disk.TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out _, mesh: out _, refusal: out var refusal, storage: refill, taking: null);
+                    failure = (filled ? null : (refusal ?? "the store holds no entry"));
                 } else {
                     failure = "the store holds no entry";
                 }
@@ -277,8 +280,8 @@ public sealed partial record SdfMesh {
 
                     if (expected != length) { return false; }
                 }
-                foreach (var (_, block, length, _) in normals) { block.Resize(length: length, clear: false, preserve: false); }
-                foreach (var (_, _, block, length, _) in levels) { block.Resize(length: length, clear: false, preserve: false); }
+                foreach (var (_, block, length, _) in normals) { block.Resize(clear: false, length: length, preserve: false); }
+                foreach (var (_, _, block, length, _) in levels) { block.Resize(clear: false, length: length, preserve: false); }
                 m_shape = shape;
 
                 return true;
@@ -335,6 +338,7 @@ public sealed partial record SdfMesh {
         // thousand restores never fill the pool with blocking reads and decodes.
         private static readonly ConcurrentQueue<Restorable> Waiting = new();
         private static readonly int MaxWorkers = Math.Max(val1: 1, val2: (Environment.ProcessorCount / 4));
+
         private static int Workers;
 
         private static void Enqueue(Restorable restorable) {
@@ -346,8 +350,8 @@ public sealed partial record SdfMesh {
                 var workers = Volatile.Read(location: ref Workers);
 
                 if (workers >= MaxWorkers) { return; }
-                if (Interlocked.CompareExchange(location1: ref Workers, value: (workers + 1), comparand: workers) != workers) { continue; }
-                _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static _ => Work(), state: (object?)null, preferLocal: false);
+                if (Interlocked.CompareExchange(comparand: workers, location1: ref Workers, value: (workers + 1)) != workers) { continue; }
+                _ = ThreadPool.UnsafeQueueUserWorkItem(callBack: static _ => Work(), state: ((object?)null), preferLocal: false);
                 return;
             }
         }

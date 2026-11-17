@@ -43,12 +43,47 @@ public sealed partial class ShaderPipelineRenderNode {
         pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: m_device.MemoryProfile.UnifiedMemory)
     ));
 
-    // Reserves a replacement's peak before anything is allocated for it; false refuses the replacement.
-    private bool TryReservePeak(ulong peakBytes) => Reservation.TryReserve(peak: ((long)Math.Min(val1: peakBytes, val2: ((ulong)long.MaxValue))));
-    // Lowers the reservation to what the instance owns once a replacement's objects are released.
-    private void SettleReservation() => _ = m_reservation?.TryReserve(peak: ((long)Math.Min(val1: OwnedBytes, val2: ((ulong)long.MaxValue))));
+    // The bytes promised to the graph build in flight: what its candidate adds to what the instance owns, from the
+    // build's admission until the build is taken, whether it installs, is refused or is discarded.
+    private ulong m_buildPromise;
+
+    // The bytes promised to the preview the pending selection waits on.
+    private ulong PreviewPromise => ((m_previewRequest is { } request)
+        ? PreviewBytes(extent: (request.Width, request.Height), inFlight: m_inFlight)
+        : 0UL
+    );
+
+    // What the reservation holds: everything the instance owns and every allocation it has been promised and not made.
+    // The reservation is always this sum, so an event of one generation (a retired graph released) never lowers it
+    // under another's promise (a build still running).
+    private long ReservedPeak(ulong more) => ((long)Math.Min(val1: checked((((OwnedBytes + m_buildPromise) + PreviewPromise) + more)), val2: ((ulong)long.MaxValue)));
+    // Reserves more bytes beside everything owned and promised, before anything is allocated for them; false refuses
+    // them. With no graph installed the bytes are the instance's least, reserved whatever the pool holds.
+    private bool TryReserveMore(ulong bytes) {
+        var peak = ReservedPeak(more: bytes);
+
+        return Reservation.TryReserve(floor: (m_ready ? 0L : peak), peak: peak);
+    }
+    // Sets the reservation to what the instance owns and has been promised, after a promise ended or objects were
+    // released. It restates what was already admitted, so it is stated as the floor and is never refused.
+    private void SettleReservation() => _ = m_reservation?.TryReserve(floor: ReservedPeak(more: 0UL), peak: ReservedPeak(more: 0UL));
+    // Ends the graph build's promise as the build is taken.
+    private void EndBuildPromise() {
+        m_buildPromise = 0UL;
+        SettleReservation();
+    }
     // Releases the reservation with the instance's objects.
-    private void ReleaseReservation() => _ = m_reservation?.TryReserve(peak: 0L);
+    private void ReleaseReservation() {
+        m_buildPromise = 0UL;
+        _ = m_reservation?.TryReserve(peak: 0L);
+    }
+    // The refusal of a candidate the account or the device refused while it allocated: its reserved peak counts what
+    // its objects hold, and the device allocates more (a whole block for the first object of its kind, padding), which
+    // a full pool does not have. The installed graph keeps running, as it does for a peak over the budget.
+    private static InvalidDataException AllocationRefusal(GpuMemoryRefusedException refusal) => new(
+        innerException: refusal,
+        message: $"[{ShaderPipelineMemoryAccount.RefusalCode}] The candidate was refused while it allocated: {refusal.Message} The installed graph keeps running."
+    );
 
     /// <summary>Gets the budget every replacement's peak is refused against, in bytes: the account's
     /// (<see cref="DeviceBudgetBytes"/>), lowered to <see cref="BudgetCapBytes"/> when that is smaller.</summary>

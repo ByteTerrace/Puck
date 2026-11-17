@@ -24,9 +24,48 @@ public enum GpuMemorySettlement {
 /// <summary>The account's answer to one admission, which its settlement hands back unchanged.</summary>
 /// <param name="Verdict">Whether the allocation may be made.</param>
 /// <param name="Bytes">The allocation's size, in bytes: what the segment is promised until the grant settles.</param>
-/// <param name="Net">The bytes the pool is promised until the grant settles: <paramref name="Bytes"/> less the part a
-/// reservation already promised.</param>
-public readonly record struct GpuMemoryAdmission(GpuMemoryVerdict Verdict, long Bytes, long Net);
+/// <param name="Net">The bytes the admission added to what the pool has promised: <paramref name="Bytes"/> less the part
+/// drawn from a reservation.</param>
+/// <param name="Payer">The family whose reservation the difference was drawn from, which a grant that is not counted
+/// gives it back to; <see langword="null"/> when nothing was drawn.</param>
+public readonly record struct GpuMemoryAdmission(GpuMemoryVerdict Verdict, long Bytes, long Net, string? Payer);
+/// <summary>
+/// Marks the device allocations the calling thread makes as ones that give way: an allocation admitted inside the scope
+/// that finds no room is refused (<see cref="GpuMemoryRefusedException"/>) whatever its owner's class, where outside it
+/// storage that cannot give way is admitted past the limit and counted. A holder opens it around the allocation of a
+/// replacement it can do without, such as a pipeline's candidate graph, whose refusal keeps the object it would have
+/// replaced. It is the thread's own: nothing another thread allocates is affected, scopes nest, and a scope is opened
+/// and closed around synchronous allocation, never across an await.
+/// </summary>
+public static class GpuMemoryAdmissionScope {
+    [ThreadStatic]
+    private static int Depth;
+
+    /// <summary>Gets whether the calling thread is inside a scope.</summary>
+    public static bool GivesWay => (Depth > 0);
+
+    /// <summary>Opens a scope on the calling thread; disposing what it returns, on the same thread, closes it.</summary>
+    /// <param name="givesWay">Whether the allocations give way; <see langword="false"/> opens nothing, for a holder
+    /// whose one allocation path serves both a replacement and storage it cannot run without.</param>
+    /// <returns>The scope.</returns>
+    public static Scope Enter(bool givesWay = true) {
+        if (givesWay) { Depth++; }
+
+        return new(entered: givesWay);
+    }
+
+    /// <summary>An open scope (<see cref="Enter"/>).</summary>
+    public readonly ref struct Scope {
+        private readonly bool m_entered;
+
+        internal Scope(bool entered) => m_entered = entered;
+
+        /// <summary>Closes the scope.</summary>
+        public void Dispose() {
+            if (m_entered) { Depth--; }
+        }
+    }
+}
 /// <summary>
 /// The account's leave to make one device allocation, which only <see cref="GpuDeviceMemoryWork.TryAdmit"/> makes and
 /// <see cref="GpuDeviceMemoryWork.CountAllocated"/> takes: the device, the size the device is asked for, the role, the

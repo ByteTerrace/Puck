@@ -121,8 +121,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     // it are m_source's.
     private byte* m_contents;
     private long m_shadowBytes;
+
     // Told of every change to the host copy's storage, outside the native allocator (MemoryBacking.NativeDirect).
     private readonly IAllocationObserver? m_hostCopies;
+
     private IGpuRegionSource? m_source;
 
     private readonly IGpuComputePipeline? m_copyPipeline;
@@ -141,6 +143,12 @@ public sealed unsafe class GpuRegion : IDisposable {
     private readonly IGpuBindings m_bindings;
     private readonly IGpuBufferFactory m_buffers;
     private readonly GpuObjectName m_name;
+    // The name a staged region's staging buffers take: the region's, unless its owner names them apart.
+    private readonly GpuObjectName m_stagingName;
+
+    // The name a slot's host buffer is created under: a staged region's is its staging, any other's is the region.
+    private GpuObjectName HostName(int slot) => ((Policy == GpuResidencyPolicy.Staged) ? m_stagingName : m_name).At(index: slot);
+
     private readonly GpuBufferUsage m_usage;
 
     // The destination a staged region's copies write; replaced when the region grows.
@@ -207,6 +215,9 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="hostCopies">The observer told of every change to the region's host copy, native storage outside the
     /// engine's allocator (<see cref="MemoryBacking.NativeDirect"/>), or <see langword="null"/> for none. It must outlive
     /// the region.</param>
+    /// <param name="staging">The name a staged region's staging buffers are created under, when they are another
+    /// owner's memory than its destination: transfer storage beside storage that holds what is drawn. Each slot's
+    /// buffer takes the slot as its index. <see langword="null"/> names them as the region.</param>
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>,
     /// <paramref name="bindings"/> or <paramref name="recorder"/> is <see langword="null"/>, or a staged region has no
     /// <paramref name="copyPipeline"/>.</exception>
@@ -217,7 +228,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// uniform region is staged or not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
-    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null) : this(
+    public GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, GpuBufferUsage usage = GpuBufferUsage.Storage, IAllocationObserver? hostCopies = null, GpuObjectName? staging = null) : this(
         bindings: bindings,
         buffers: buffers,
         byteCount: byteCount,
@@ -230,6 +241,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         policy: policy,
         recorder: recorder,
         slotCount: slotCount,
+        staging: staging,
         usage: usage
     ) { }
     /// <summary>Initializes a new instance of the <see cref="GpuRegion"/> class that chooses its own residency: the
@@ -330,7 +342,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         usage: GpuBufferUsage.Storage
     ) { }
 
-    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies) {
+    private GpuRegion(GpuResidencyPolicy policy, GpuHostVisibleMemory memory, long byteCount, int slotCount, GpuBufferUsage usage, IGpuBuffer? destination, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline? copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets, IAllocationObserver? hostCopies, GpuObjectName? staging = null) {
         ArgumentNullException.ThrowIfNull(buffers);
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
@@ -418,6 +430,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_bindings = bindings;
         m_buffers = buffers;
         m_name = name;
+        m_stagingName = (staging ?? name);
         m_usage = usage;
         m_destination = destination;
         m_external = (destination is not null);
@@ -522,12 +535,12 @@ public sealed unsafe class GpuRegion : IDisposable {
             for (var index = 0; (index < created.Length); index++) {
                 created[index] = ((memory == GpuHostVisibleMemory.DeviceLocal)
                     ? m_buffers.CreateHostVisibleDeviceLocal(
-                        name: m_name.At(index: index),
+                        name: HostName(slot: index),
                         sizeBytes: hostBytes,
                         usage: m_usage
                     )
                     : m_buffers.CreateHostVisible(
-                        name: m_name.At(index: index),
+                        name: HostName(slot: index),
                         sizeBytes: hostBytes,
                         usage: m_usage
                     )
@@ -1822,7 +1835,7 @@ public sealed unsafe class GpuRegion : IDisposable {
         }
 
         var replacement = m_buffers.CreateHostVisible(
-            name: m_name.At(index: slot),
+            name: HostName(slot: slot),
             sizeBytes: (grows
                 ? ((ulong)GpuCapacity.Grown(current: ((long)buffer.SizeBytes), required: ((long)bytes),
                     ceiling: ((long)Math.Max(val1: bytes, val2: reserve)), divisor: 1))

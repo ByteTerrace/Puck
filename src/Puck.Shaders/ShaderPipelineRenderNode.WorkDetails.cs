@@ -47,12 +47,16 @@ public sealed partial class ShaderPipelineRenderNode {
         var replacementBytes = checked((GpuKernelCounters.SlotBytesOf(rows: rows) * 2UL));
         var peak = checked((OwnedBytes + replacementBytes));
 
-        if ((peak > BudgetBytes) || !TryReservePeak(peakBytes: peak)) {
+        if ((peak > BudgetBytes) || !TryReserveMore(bytes: replacementBytes)) {
             throw new InvalidOperationException(message: $"Instance '{m_name}' kernel work details need {peak} peak bytes; budget is {BudgetBytes}.");
         }
         var before = counters.TotalBytes;
 
-        counters.EnsureRows(rows: rows, slot: slot);
-        m_allocationBytes = checked(((m_allocationBytes + counters.TotalBytes) - before));
+        try {
+            counters.EnsureRows(rows: rows, slot: slot);
+            m_allocationBytes = checked(((m_allocationBytes + counters.TotalBytes) - before));
+        } finally {
+            SettleReservation();
+        }
     }
 }

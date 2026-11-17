@@ -304,7 +304,7 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
             _ = RowOf(segment: placed);
         }
 
-        var admission = (m_owners?.Admit(bytes: bytes, payer: payer, payerBytes: Math.Min(val1: payerBytes, val2: bytes), segment: placed) ?? new GpuMemoryAdmission(Bytes: bytes, Net: bytes, Verdict: GpuMemoryVerdict.Granted));
+        var admission = (m_owners?.Admit(bytes: bytes, givesWay: GpuMemoryAdmissionScope.GivesWay, payer: payer, payerBytes: Math.Min(val1: payerBytes, val2: bytes), segment: placed) ?? new GpuMemoryAdmission(Bytes: bytes, Net: bytes, Payer: null, Verdict: GpuMemoryVerdict.Granted));
 
         if (admission.Verdict == GpuMemoryVerdict.Refused) {
             m_counts.Add(amount: 1L, kind: AdmissionRefusals);

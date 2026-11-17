@@ -4,7 +4,6 @@ using System.IO.Hashing;
 using System.Numerics;
 using Puck.SignedDistance.Illumination;
 using Puck.Abstractions.Memory;
-using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
 
@@ -65,7 +64,7 @@ internal static unsafe class SdfMeshStoreCodec {
     // by place (SdfMeshMaterials.Remap), and as the entry stores them otherwise; `materials` answers the ids the written
     // mesh carries. `declined` marks an entry that is sound but whose shape the storage did not take.
     internal static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh,
-        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, IAllocator? allocator = null) {
+        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, in SdfMeshStoreWorkspace workspace, Puck.Hosting.Jobs.MemoryAccount.Owner owner, IAllocator? allocator = null) {
         mesh = null;
         materials = [];
         declined = false;
@@ -90,9 +89,18 @@ internal static unsafe class SdfMeshStoreCodec {
         try {
             // Expanded entries belong to this decode alone. A shared pool retains a large buffer per size bucket
             // on every worker after a parallel store load, even though no mesh borrows the encoded planes.
-            using var owner = MemoryAccount.Shared.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Workspace, name: "mesh-decode");
             using var decoded = new OwnedBuffer<byte>(allocator: allocator, observer: owner);
 
+            // The expanded planes are reserved before they are allocated, beside the entry's bytes and under the
+            // read's one owner, so a read admitted as the forced job is admitted whole. A decode that finds no room in
+            // its patience declines the entry, which stays in the store: its caller misses, and the mesh is derived
+            // or read again.
+            if (!workspace.TryReserve(bytes: (((long)bytes.Length) + length), owner: owner)) {
+                refusal = SdfMeshStore.WorkspaceRefusal;
+                declined = true;
+
+                return false;
+            }
             decoded.Resize(clear: false, length: length, preserve: false);
             try {
                 fixed (byte* start = compressed) {
