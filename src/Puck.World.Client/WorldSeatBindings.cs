@@ -1573,16 +1573,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (client.Roster.Seat(slot: slot)?.Input is { Admitted: true } input) { m_channels[slot] = input.Channels; }
         if (route.Endpoint.Mirror.TryInput(owner: client.Roster.PrincipalOf(slot: slot), publication: out var publication)) {
             foreach (var cell in publication.SeatStates.Span) {
-                // Presentation-only families remain local; selector cells are published by the authority.
-                if (route.Endpoint.Definition.InputModes is { } modes) {
-                    for (var familyIndex = 0; (familyIndex < modes.Families.Count); familyIndex++) {
-                        var selector = modes.Families[familyIndex].Selector;
-
-                        if ((selector.Kind == WorldInputModeSelectorKind.SeatState) && (selector.Name == cell.Family)) {
-                            SetContextState(slot, cell.Family, cell.State);
-                            break;
-                        }
-                    }
+                // Camera applications and semantic selector families are authority state, even when the
+                // camera family does not select an input tuple. Other presentation families remain local.
+                if (IsAuthoritativeMode(slot, cell.Family)) {
+                    SetContextState(slot, cell.Family, cell.State);
                 }
             }
         }
@@ -1666,6 +1660,25 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             ))
         : null
     );
+
+    /// <summary>Returns whether a mode family selects simulation input or a camera control application, so its
+    /// selection and publication belong to the seat's authority.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="family">The family name.</param>
+    public bool IsAuthoritativeMode(int slot, string family) {
+        if (((uint)slot) >= SeatCount) { return false; }
+        if (FindSeatMode(m_definitions[slot], family) is { } seatMode) {
+            foreach (var state in seatMode.States) {
+                if (state.Target == WorldSeatModeState.CameraTarget) { return true; }
+            }
+        }
+        if (m_definitions[slot].InputModes is { } modes) {
+            foreach (var row in modes.Families) {
+                if (row.Selector.Kind == WorldInputModeSelectorKind.SeatState && row.Selector.Name == family) { return true; }
+            }
+        }
+        return false;
+    }
 
     /// <summary>Gets the built-in editor family as a mode family: <see cref="WorldContextFamilies.EditorPlay"/> and
     /// <see cref="WorldContextFamilies.EditorBuild"/>, starting in play, neither targeting a camera.</summary>

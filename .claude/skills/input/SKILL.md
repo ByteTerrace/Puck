@@ -74,7 +74,9 @@ is corrected in the same change.
   `Engagement`, `BodyState` (a finite or range-partitioned register) or
   `SeatState` (`WorldInputModeSelectorKind`). Never a binding page, the camera
   layout or wall time. `player.mode` changes a `SeatState` family through
-  `WorldCommand.SelectInputState`.
+  `WorldCommand.SelectInputState`. Every family with a camera-targeting state also
+  takes that authority path, even without an `inputModes` selector; the authority
+  composes or dissolves the application and publishes the seat state together.
 - The live set is the global names plus every selected, unsuspended state's
   names. `suspendedBy` suppresses a family by another's selection;
   `combinations` restricts the allowed tuples, checked on every transition.
