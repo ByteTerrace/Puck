@@ -44,6 +44,8 @@ orders, verifying a change by building and running it, and fixing a defect at it
   ([the live World is shared](../puck-world/SKILL.md#the-live-world-is-shared)). `windowed: true`
   holds the GPU lease: use it only on a granted GPU leg, and stop it once its captures are in, never
   keeping it open across code edits.
+  Keep the source fixed while a start is pending, including its build-lease wait: a source change
+  makes the isolated build discard itself. Finish edits and generated catalogs before starting it.
 - Your finish line is headless unless your brief says seeing or measuring a windowed World is the
   work itself (a look you iterate on, a GPU or memory attribution). The GPU, the machine's memory
   and quiet time are shared and scheduled by the lead: a windowed check that only confirms your change

@@ -1969,16 +1969,13 @@ enforces it today.
 
 ### Security review
 
-Owner: disclosure build lanes · high · Next: implement revised D1 with its
-escalation laws, then the single disclosure build table; the rd2-review
+Owner: disclosure build lanes · high · Next: D0b1's acquisition wall, then
+the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
 - [high] Ordinary recipient declarations still require the closed-scope and
   acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
-  D1 implements the live operator grant, guarded authority transitions,
-  single-subject templates, Host separation and peer disconnect. Its remaining
-  verification is tracked in the build table until the lane’s finish line passes.
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
   host preparation and authority maintenance land separately as D0b2–D0b4.
   D4/D5/D7 build closed scopes, D6 opens and migrates private/default-tier input,
