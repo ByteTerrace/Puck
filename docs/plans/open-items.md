@@ -111,6 +111,24 @@ Unranked work that runs next to the queue. Read-only and headless work runs
 beside the GPU-bound lanes, and no more than one lane besides the lead's
 batched window holds the GPU at once.
 
+**Windowed readings owed** to the lead's next GPU window, on the integration
+head, each named by the lane whose landing waits on it:
+
+- crease1: the GPU bake against the CPU audit (a cold boot per backend with a
+  fresh `--cache-dir`, then `puck mesh audit --backend` over the 24 tour
+  exhibits and the Moth), the whole debug world's store audit, and the cold
+  bake time against the one-minute bar.
+- sm0: the seam walk's baseline legs, `puck bench frames --plan
+  worlds/debug/seam-walk.sweep.json --stop <stop> --window` on both backends
+  over its nine stops, in a quiet window; correct the burst ticks after.
+- js1 at `debug.go overlook` (the desktop reading is taken), and vrr1's
+  `world.rates` burst at `debug.go desktop` on the variable-rate display
+  (expect `screens` at most 4).
+- relief1: a World boot and captures of a noise-relieved creation moving as a
+  whole, on both backends.
+- The collection pauses behind the slow frames (Engine job system): a
+  `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
+
 **Reviews owed**, findings-only, each by another family than its author, on
 landed work in the review-only classes of
 [hazards](../development/hazards.md#silent-invariants):
