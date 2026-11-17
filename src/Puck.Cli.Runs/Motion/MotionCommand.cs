@@ -18,7 +18,8 @@ public static partial class MotionCommand {
 
     private const string Verb = "motion";
 
-    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds) {
+    private static int Run(string? scenariosPath, string[] names, bool list, bool reproduce, string? output, string? worldPath, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return CliExit.Refused;
         }
@@ -69,6 +70,7 @@ public static partial class MotionCommand {
         }
 
         return RunWorld(
+            cancellationToken: cancellationToken,
             backend: backend,
             cacheDirectory: ((cacheDirectory is null) ? null : Path.GetFullPath(path: cacheDirectory)),
             cellWidth: cellWidth,
@@ -138,18 +140,24 @@ public static partial class MotionCommand {
             Exit codes: 0 every scenario ran clean, 1 a refused line, a missing still, a blocked camera, a body in the
             wrong form or a failed reproduction, 2 a refusal (a scenario file, a build or a World that did not complete).
             """);
-        command.SetAction(action: parseResult => {
-            if (parseResult.GetValue(routeOption) is { } route) {
-                if (parseResult.GetValue(listOption) || parseResult.GetValue(reproduceOption) ||
-                    parseResult.GetValue(scenariosOption) is not null || (parseResult.GetValue(scenarioOption)?.Length ?? 0) != 0) {
-                    return CliExit.Refuse(Verb, "the route selection", "--route is separate from still scenarios, --list and --reproduce; it always checks two fresh replay legs.");
+        command.SetAction(action: (parseResult, cancellationToken) => Task.FromResult(result: Invoke(cancellationToken: cancellationToken, parseResult: parseResult)));
+
+        return command;
+
+        int Invoke(System.CommandLine.ParseResult parseResult, CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (parseResult.GetValue(option: routeOption) is { } route) {
+                if (parseResult.GetValue(option: listOption) || parseResult.GetValue(option: reproduceOption) ||
+                    (parseResult.GetValue(option: scenariosOption) is not null) || ((parseResult.GetValue(option: scenarioOption)?.Length ?? 0) != 0)) {
+                    return CliExit.Refuse(verb: Verb, what: "the route selection", why: "--route is separate from still scenarios, --list and --reproduce; it always checks two fresh replay legs.");
                 }
-                return RunRoute(route, parseResult.GetValue(outputOption), parseResult.GetValue(worldOption),
-                    parseResult.GetValue(artifactOption), parseResult.GetValue(againstOption), parseResult.GetValue(backendOption),
-                    parseResult.GetValue(cacheOption), parseResult.GetValue(timeoutOption));
+                return RunRoute(route, parseResult.GetValue(option: outputOption), parseResult.GetValue(option: worldOption),
+                    parseResult.GetValue(option: artifactOption), parseResult.GetValue(option: againstOption), parseResult.GetValue(option: backendOption),
+                    parseResult.GetValue(option: cacheOption), parseResult.GetValue(option: timeoutOption), cancellationToken);
             }
-            if (parseResult.GetValue(againstOption) is not null) { return CliExit.Refuse(Verb, "--against-world-artifact", "requires --route."); }
+            if (parseResult.GetValue(option: againstOption) is not null) { return CliExit.Refuse(verb: Verb, what: "--against-world-artifact", why: "requires --route."); }
             return Run(
+            cancellationToken: cancellationToken,
             backend: parseResult.GetValue(option: backendOption),
             cacheDirectory: parseResult.GetValue(option: cacheOption),
             cellWidth: parseResult.GetValue(option: cellWidthOption),
@@ -163,8 +171,6 @@ public static partial class MotionCommand {
             worldArtifact: parseResult.GetValue(option: artifactOption),
             worldPath: parseResult.GetValue(option: worldOption)
             );
-        });
-
-        return command;
+        }
     }
 }

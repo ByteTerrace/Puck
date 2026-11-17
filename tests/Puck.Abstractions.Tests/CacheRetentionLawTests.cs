@@ -14,6 +14,32 @@ public sealed class CacheRetentionLawTests {
     private static string[] Names(IEnumerable<CacheEntry> entries) => [.. entries.Select(selector: static entry => entry.Path[7..])];
 
     [Fact]
+    public void AChildListingFailureDoesNotHideTheRemainingSets() {
+        using var cache = new TemporaryDirectory();
+
+        for (var index = 0; (index < 4); index++) {
+            var set = cache.PathOf(name: $"set-{index}");
+
+            Directory.CreateDirectory(path: set);
+            File.WriteAllBytes(path: Path.Combine(path1: set, path2: "entry.bin"), bytes: [1, 2, 3]);
+        }
+        var visited = 0;
+        var result = CacheRetention.EnforceSets(
+            directory: cache.RootPath,
+            bound: CacheBound.Entries(maxEntries: 10),
+            isEntry: _ => {
+                // Inject the same I/O failure a child disappearing during its walk produces, at the first child.
+                if (visited++ == 0) { throw new DirectoryNotFoundException(); }
+                return true;
+            }
+        );
+
+        Assert.Equal(actual: visited, expected: 4);
+        Assert.Equal(expected: 3, actual: result.Kept);
+        Assert.Equal(expected: 9, actual: result.KeptBytes);
+        Assert.Equal(expected: 0, actual: result.Removed);
+    }
+    [Fact]
     public void TheMostRecentlyUsedEntriesWithinTheCountStay() {
         var evicted = CacheRetention.SelectEvictions(
             bound: CacheBound.Entries(maxEntries: 2),
@@ -116,12 +142,12 @@ public sealed class CacheRetentionLawTests {
             _ = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
             // The writer's own set and the held set stay whole; the unheld, newer set is what goes.
-            Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2) && File.Exists(path: used));
+            Assert.True(condition: (File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2) && File.Exists(path: used)));
             Assert.False(condition: File.Exists(path: other));
 
             // The held set in use, alone past the bound, trims nothing; the unheld set beside it goes.
             _ = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 1, MaxEntries: 10), directory: cache.RootPath, inUse: pinned.Item1, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
-            Assert.True(condition: File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2));
+            Assert.True(condition: (File.Exists(path: pinned.Item1) && File.Exists(path: pinned.Item2)));
             Assert.False(condition: File.Exists(path: used));
         }
 
@@ -162,8 +188,8 @@ public sealed class CacheRetentionLawTests {
         var result = CacheRetention.EnforceSets(bound: bound, directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
         Assert.True(condition: File.Exists(path: used));
-        Assert.True(condition: File.Exists(path: fresh.Item1) && File.Exists(path: fresh.Item2));
-        Assert.False(condition: File.Exists(path: stale.Item1) || File.Exists(path: stale.Item2) || File.Exists(path: note) || File.Exists(path: loose));
+        Assert.True(condition: (File.Exists(path: fresh.Item1) && File.Exists(path: fresh.Item2)));
+        Assert.False(condition: (File.Exists(path: stale.Item1) || File.Exists(path: stale.Item2) || File.Exists(path: note) || File.Exists(path: loose)));
         Assert.False(condition: Directory.Exists(path: Path.GetDirectoryName(path: stale.Item1)));
         Assert.False(condition: Directory.Exists(path: empty));
         Assert.Equal(expected: new CacheRetentionResult(Kept: 3, KeptBytes: 3, Removed: 3, RemovedBytes: 3), actual: result);
@@ -173,8 +199,8 @@ public sealed class CacheRetentionLawTests {
         var third = Write(minutesAgo: 60, name: "used/c.bin");
         var trimmed = CacheRetention.EnforceSets(bound: new CacheBound(MaxBytes: 2, MaxEntries: 10), directory: cache.RootPath, inUse: used, isEntry: static name => (Path.GetExtension(path: name) == ".bin"));
 
-        Assert.True(condition: File.Exists(path: used) && File.Exists(path: third));
-        Assert.False(condition: File.Exists(path: second) || File.Exists(path: fresh.Item1) || File.Exists(path: fresh.Item2));
+        Assert.True(condition: (File.Exists(path: used) && File.Exists(path: third)));
+        Assert.False(condition: (File.Exists(path: second) || File.Exists(path: fresh.Item1) || File.Exists(path: fresh.Item2)));
         Assert.Equal(expected: 3, actual: trimmed.Removed);
 
         // A set a reader holds an entry of keeps what it cannot delete, and its directory with it, on Windows.
@@ -302,19 +328,19 @@ public sealed class CacheRetentionLawTests {
 
         // An older set fills most of the bound; a new set written past it lists within the interval and drops the old
         // set whole, however soon after the first listing its writes land.
-        for (var index = 0; index < 6; index++) {
+        for (var index = 0; (index < 6); index++) {
             File.SetLastWriteTimeUtc(lastWriteTimeUtc: DateTime.UtcNow.AddHours(value: -1), path: cache.WriteText(name: $"old/{index}.bin", text: "01234567"));
         }
 
         var listings = 0;
 
-        for (var index = 0; index < 6; index++) {
+        for (var index = 0; (index < 6); index++) {
             var written = cache.WriteText(name: $"new/{index}.bin", text: "01234567");
 
             listings += (CacheRetention.EnforceSetsOnWrite(bound: bound, directory: cache.RootPath, inUse: written, isEntry: static _ => true) ? 1 : 0);
             Assert.True(condition: (Directory.GetFiles(path: cache.RootPath, searchOption: SearchOption.AllDirectories, searchPattern: "*").Sum(selector: static file => new FileInfo(fileName: file).Length) <= bound.MaxBytes));
         }
         Assert.False(condition: Directory.Exists(path: cache.PathOf(name: "old")));
-        Assert.Equal(expected: 2, actual: listings);
+        Assert.Equal(actual: listings, expected: 2);
     }
 }

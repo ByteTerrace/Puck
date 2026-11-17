@@ -13,11 +13,12 @@ namespace Puck.Cli;
 /// start time, so a recycled process id never reads as ready, and a reader removes the marks of Worlds that have exited.
 /// </summary>
 public sealed class WorldReadiness {
-    private const string Folder = "world-ready";
     private const string AttachmentLine = "[world.control: operator attachment ";
+    private const string Folder = "world-ready";
 
     private readonly string? m_mark;
     private readonly bool m_device;
+    private readonly Lock m_gate = new();
 
     private int m_marked;
 
@@ -56,13 +57,19 @@ public sealed class WorldReadiness {
     /// <param name="line">The line.</param>
     /// <param name="stdout">Whether the line came on standard output.</param>
     public void Observe(string line, bool stdout) {
-        if (Ready || !Signals(line: line, opensDevice: m_device, stdout: stdout) || (Interlocked.Exchange(location1: ref m_marked, value: 1) != 0) || (m_mark is null)) { return; }
+        if (Ready || !Signals(line: line, opensDevice: m_device, stdout: stdout)) { return; }
 
-        try {
-            System.IO.Directory.CreateDirectory(path: Path.GetDirectoryName(path: m_mark)!);
-            File.WriteAllBytes(bytes: [], path: m_mark);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // An unwritable mark leaves the World counted by its expected peak, which only ever over-reserves.
+        lock (m_gate) {
+            if (Ready) { return; }
+            try {
+                if (m_mark is not null) {
+                    System.IO.Directory.CreateDirectory(path: Path.GetDirectoryName(path: m_mark)!);
+                    File.WriteAllBytes(bytes: [], path: m_mark);
+                }
+                Volatile.Write(location: ref m_marked, value: 1);
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // Keep reserving the expected peak and retry the mark on the next readiness report.
+            }
         }
     }
     /// <summary>Reads which Worlds have reported ready, by process id and UTC start ticks, and removes the marks of the
@@ -105,7 +112,6 @@ public sealed class WorldReadiness {
             return false;
         }
     }
-
     private static string Directory(string root) => Path.Combine(path1: root, path2: Folder);
     private static string Name(int processId, long startTicks) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{processId}-{startTicks}");
 }
