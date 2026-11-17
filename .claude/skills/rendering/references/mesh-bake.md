@@ -810,7 +810,7 @@ laws exercise that boundary.
   of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
   job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in
-  `StageMeshRegionCore` is the one place its draws are held out until then; a
+  `SdfWorldTables.StageMeshDraw` writes its rows absent until then; a
   relocation, a moved mesh or a trim drops that mesh's progress, so a job still in
   flight for its old words lands nothing. A frame that stands is staged again
   when a mesh lands (`StageLandedMeshes`), and a lockstep frame waits for the
@@ -846,12 +846,11 @@ laws exercise that boundary.
   the draws every view renders from once. The hand-over stages its own
   rows: the dresser replaces a group's bindings in their run when its
   piece and copy counts stand, so its journal names those rows alone;
-  `SdfWorldTables.TryStageDrawChanges` takes a row whose new mesh stands,
-  the arena moves the row's name (`SdfMeshRegionArena.Rename`, the old mesh
-  becoming retained slack) and the claims move with it
-  (`SdfMeshClaims.Move`). A replacement that changes a group's piece or
-  copy count rebuilds the dresser's topology and stages every record once
-  ([open](../../../../docs/plans/open-items.md#other-frame-time-findings)).
+  `SdfWorldTables.StageMeshRegion` moves each changed name through the arena's
+  row transaction and stages only those rows. A piece/copy-count change
+  reallocates that group's run, preserving every unrelated row. Only a start
+  over (failure retry, the free share, a forced pack or locked canonical order)
+  rebuilds all owners. Claims and glass counts move inside the row writer.
   `SdfMeshPathBake.Pending` stays true while a product waits, so
   `world.wait bakes` and a lockstep frame wait for it;
   `SdfMeshPathBake.DrawsPending` leaves the waiting products out, and a
@@ -899,7 +898,7 @@ laws exercise that boundary.
   counts bytes in a `long` and words in an `int`: a mesh's byte offset is
   `((long)VertexWord) * sizeof(uint)`, `Contents` refuses past `int.MaxValue`
   bytes, and a piece of the host copy is read through `ContentsAt(offset,
-  length)` (`StageMeshMotion` reads only the draw records that way). Host writes
+  length)` (`SdfWorldTables.StageChangedDraws` reads only the draw records that way). Host writes
   go to a buffer in pieces of at most 1 GiB. No run of the debug world reaches
   2 GiB, so `GpuResidencyLawTests` holds a 3 GiB region written and flushed
   through buffers that record their writes, and `SdfWorldTablesUploadLawTests`
@@ -1323,3 +1322,4 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   sampled region reports `field refused`, and one whose evaluation faults
   `field failed`. Mirrored groups (left and right) share one geometry and one
   stored mesh.
+

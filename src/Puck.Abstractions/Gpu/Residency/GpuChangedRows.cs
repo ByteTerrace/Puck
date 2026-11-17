@@ -35,7 +35,9 @@ public sealed class GpuChangedRows {
 
     /// <summary>Gets the stable read-only face to publish to consumers.</summary>
     public GpuRowChanges Reader { get; }
+
     internal bool StableRows { get; }
+
     /// <summary>Gets the latest produced serial, starting at one; zero before the first frame.</summary>
     public long Serial { get; private set; }
     /// <summary>Gets the latest frame's table row count.</summary>
@@ -112,25 +114,18 @@ public sealed class GpuChangedRows {
             var slot = ((int)(serial % m_frames.Length));
 
             if ((m_serials[slot] != serial) || m_everything[slot]) { return false; }
-            var bound = StableRows ? m_rows[slot] : rows;
+            var bound = (StableRows ? m_rows[slot] : rows);
+
             if (!Fits(m_frames[slot], bound) || !Fits(rows: bound, runs: m_reseats?[slot])) { return false; }
         }
         for (var serial = since; (serial < through);) {
             serial++;
             var slot = ((int)(serial % m_frames.Length));
 
-            AppendBounded(into, m_frames[slot], rows);
-            AppendBounded(reseated, m_reseats?[slot], rows);
+            into?.Append(m_frames[slot], rows);
+            reseated?.Append(m_reseats?[slot], rows);
         }
         return true;
-    }
-    private static void AppendBounded(GpuUploadRuns? into, GpuUploadRuns? runs, int rows) {
-        if (into is null || runs is null) { return; }
-        for (var run = 0; run < runs.Count; run++) {
-            var start = runs.Start(run);
-            var length = Math.Min(rows - start, runs.Length(run));
-            if (length > 0) { into.Add(start, length); }
-        }
     }
 
     private static bool Fits(GpuUploadRuns? runs, int rows) {

@@ -41,7 +41,7 @@ public sealed partial class SdfWorldTables {
 
         for (var row = 0; (row < extent); row++) {
             var draw = draws[row];
-            var absent = draw.Mesh is null || !MeshStands(mesh: draw.Mesh);
+            var absent = ((draw.Mesh is null) || !MeshStands(mesh: draw.Mesh));
             var record = words.Slice(length: SdfMeshRecord.DrawWords, start: (row * SdfMeshRecord.DrawWords));
             var generation = record[(SdfMeshRecord.SelectionWord + 11)];
 
@@ -57,7 +57,7 @@ public sealed partial class SdfWorldTables {
             var known = (row < m_ledgerExtent);
             // Deliberately independent of Observe's identity predicate and of its cells. Ordinary matrix, material,
             // bounds and displacement changes are not incarnation changes.
-            var changed = (known && (last.Absent || !ReferenceEquals(m_ledgerRoster, draws.Rows) || last.Occupancy != draws.Occupancy(row) ||
+            var changed = (known && (last.Absent || !ReferenceEquals(objA: m_ledgerRoster, objB: draws.Rows) || (last.Occupancy != draws.Occupancy(row: row)) ||
                 !Equals(objA: (last.Draw.MotionIdentity ?? last.Draw.Identity), objB: (draw.MotionIdentity ?? draw.Identity)) ||
                 !ReferenceEquals(objA: last.Draw.Mesh, objB: draw.Mesh) || (last.Draw.FrameSlot != draw.FrameSlot) ||
                 (last.Draw.IsDynamic != draw.IsDynamic) || (last.Draw.Glass != draw.Glass) ||
@@ -73,10 +73,10 @@ public sealed partial class SdfWorldTables {
                 SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Seeds);
                 if (!m_seedMeshHistory && !m_seededMeshDraws.Contains(value: row)) { RowMismatch(SdfRowChecks.SeedMismatch, row, draw.Identity, "seed"); }
             }
-            m_rowLedger[row] = new(Absent: absent, Draw: draw, Occupancy: draws.Occupancy(row), Generation: generation);
+            m_rowLedger[row] = new(Absent: absent, Draw: draw, Occupancy: draws.Occupancy(row: row), Generation: generation);
         }
         // A removed suffix is absent to a subsequent grow, even when the returning identity is unchanged.
-        for (var row = extent; (row < m_ledgerExtent); row++) { m_rowLedger[row] = new(Absent: true, Draw: default, Occupancy: 0, Generation: 0); }
+        for (var row = extent; (row < m_ledgerExtent); row++) { m_rowLedger[row] = new(Absent: true, Draw: default, Generation: 0, Occupancy: 0); }
         m_ledgerExtent = extent;
         m_ledgerRoster = draws.Rows;
     }
@@ -94,8 +94,8 @@ public sealed partial class SdfWorldTables {
         private bool m_pending;
         private long m_checkedRevision = -1;
 
-        public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
+        public GpuMemoryBytes OwnedBytes => default;
 
         public bool TryTake(SdfWorldTables current, int uploadBytes,
             [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
@@ -143,4 +143,3 @@ public sealed partial class SdfWorldTables {
         public void Dispose() { }
     }
 }
-

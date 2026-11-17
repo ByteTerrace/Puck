@@ -54,7 +54,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
         var actual = nearDresser.Dress(frame: frame).DressedDraws();
 
         Assert.Equal(expected: expected.Count, actual: actual.Count);
-        Assert.All(collection: expected, action: draw => Assert.Contains(collection: actual, filter: other => other.Mesh.Indices.Span.SequenceEqual(other: draw.Mesh.Indices.Span) && other.Mesh.Positions.Span.SequenceEqual(other: draw.Mesh.Positions.Span)));
+        Assert.All(collection: expected, action: draw => Assert.Contains(collection: actual, filter: other => (other.Mesh.Indices.Span.SequenceEqual(other: draw.Mesh.Indices.Span) && other.Mesh.Positions.Span.SequenceEqual(other: draw.Mesh.Positions.Span))));
         // The lone block's box lies within 3 m of the camera, the union's beyond.
         Assert.Contains(expectedSubstring: "demand-points=1 groups=2", actualString: near.DescribeResidency(radius: 3f));
         Assert.Contains(expectedSubstring: "near=1 ", actualString: near.DescribeResidency(radius: 3f));
@@ -95,4 +95,3 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.Equal(expected: new Vector3(x: 1f, y: 1f, z: 0f), actual: half);
     }
 }
-

@@ -223,7 +223,7 @@ public sealed class SdfMeshHistory {
 
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
-        var seed = (reseat || !ReferenceEquals(cell.Table, table) || cell.Occupancy != occupancy || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
+        var seed = (reseat || !ReferenceEquals(objA: cell.Table, objB: table) || (cell.Occupancy != occupancy) || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
             (cell.FrameSlot != draw.FrameSlot) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
             (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));

@@ -108,5 +108,3 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }
-
-

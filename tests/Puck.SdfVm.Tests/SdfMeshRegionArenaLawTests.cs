@@ -56,7 +56,6 @@ public sealed class SdfMeshRegionArenaLawTests {
         Assert.True(condition: ((((ulong)arena.Words) * sizeof(uint)) <= SdfWorldTables.MostMeshRegionBytes));
         Assert.Equal(expected: (kept.Length + 1), actual: arena.Placements.Count);
     }
-
     [Fact]
     public void AListPastTheReserveMovesOnlyTheMeshesTheGrownReserveTakes() {
         var small = Triangle(offset: 0f);
@@ -89,7 +88,7 @@ public sealed class SdfMeshRegionArenaLawTests {
         Assert.Equal(expected: 2, actual: arena.Moved.Count);
         Assert.True(condition: (arena.Moved.Contains(item: small) && arena.Moved.Contains(item: big)));
         Assert.Equal(expected: kept, actual: arena.Placements[tail]);
-        Assert.True(condition: arena.Placements[small].VertexWord >= reserveEnd);
+        Assert.True(condition: (arena.Placements[small].VertexWord >= reserveEnd));
 
         // A mesh the grown reserve takes that the list does not name is forgotten, never moved.
         arena.Plan(draws: [.. Enumerable.Range(count: ((4 * SdfMeshRegionArena.MinimumDrawCapacity) + 1), start: 0).Select(selector: _ => Draw(mesh: tail))]);

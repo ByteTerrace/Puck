@@ -71,9 +71,10 @@ public sealed partial class SdfWorldTables {
 
         m_owedOrder.Clear();
         foreach (var mesh in m_meshesOwed.Set) {
-            for (var index = m_rowsByMesh.First(mesh); index >= 0; index = m_rowsByMesh.Next(index)) {
+            for (var index = m_rowsByMesh.First(key: mesh); (index >= 0); index = m_rowsByMesh.Next(row: index)) {
                 var draw = draws[index];
-                m_owedOrder.Add(((demand is null) ? 0f : SdfMeshDemand.BoxOf(in draw, out var center, out var half) ? demand.Priority(center, half) : float.PositiveInfinity, index));
+
+                m_owedOrder.Add(item: (((demand is null) ? 0f : (SdfMeshDemand.BoxOf(center: out var center, draw: in draw, half: out var half) ? demand.Priority(center: center, half: half) : float.PositiveInfinity)), index));
             }
         }
         System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_owedOrder).Sort(comparison: ByPriority);
@@ -227,8 +228,8 @@ public sealed partial class SdfWorldTables {
         private readonly HashSet<SdfMesh> m_needed = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly List<SdfMesh> m_changes = [];
 
-        public IReadOnlySet<SdfMesh> Set => m_set;
         public int Count => m_set.Count;
+        public IReadOnlySet<SdfMesh> Set => m_set;
 
         public bool Contains(SdfMesh mesh) => m_set.Contains(item: mesh);
         public void Add(SdfMesh mesh) {
@@ -278,9 +279,9 @@ public sealed partial class SdfWorldTables {
         }
     }
     private sealed class LandingProgress(int words) {
-        public int Words { get; } = words;
-        public int Taken { get; set; }
         public int Landed { get; set; }
+        public int Taken { get; set; }
+        public int Words { get; } = words;
     }
     private readonly record struct LandingSlice(SdfMesh Mesh, LandingProgress Progress, int Word, int Count);
     private sealed class LandingJob {
@@ -290,8 +291,8 @@ public sealed partial class SdfWorldTables {
     // The background GPU work's client that lands the mesh region's owed words; the tables own its state, and every call
     // runs on the frame thread.
     private sealed class MeshLanding(SdfWorldTables tables) : ISdfGpuWorkClient {
-        public GpuMemoryBytes OwnedBytes => default;
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
+        public GpuMemoryBytes OwnedBytes => default;
 
         public bool TryTake(SdfWorldTables current, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
             if (current.TryTakeLanding(job: out var landing, uploadBytes: uploadBytes)) {
@@ -315,4 +316,3 @@ public sealed partial class SdfWorldTables {
         public void Dispose() { }
     }
 }
-

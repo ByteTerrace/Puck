@@ -45,9 +45,10 @@ public sealed class GpuUploadRuns {
     /// <summary>Adds another set's represented runs, retaining this set's bounded coarsening. Null and self append
     /// owe nothing new.</summary>
     /// <param name="source">The runs to append, or null.</param>
-    public void Append(GpuUploadRuns? source) {
+    /// <param name="limit">The exclusive bound of incoming runs; existing destination runs are retained.</param>
+    public void Append(GpuUploadRuns? source, int limit = int.MaxValue) {
         if ((source is null) || ReferenceEquals(objA: source, objB: this)) { return; }
-        for (var run = 0; (run < source.Count); run++) { Add(start: source.Start(index: run), length: source.Length(index: run)); }
+        for (var run = 0; (run < source.Count); run++) { Add(start: source.Start(index: run), length: Math.Min(limit - source.Start(run), source.Length(index: run))); }
     }
 
     /// <summary>Gets the logical bytes in the retained integer arrays, excluding object and array headers.</summary>

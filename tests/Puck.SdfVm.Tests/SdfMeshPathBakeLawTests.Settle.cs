@@ -12,6 +12,7 @@ namespace Puck.SdfVm.Tests;
 public sealed partial class SdfMeshPathBakeLawTests {
     private static readonly Vector3 OwnHalf = new(value: 0.2f);
     private static readonly Vector3 MemberHalf = new(value: 0.1f);
+
     // A member this many slots past its group's own: the group's poses span three rows a slot over the gap, more point
     // table entries than one dispatch's samples (SdfWorldPackage.MeshBakeMaxSamples).
     private const int PosedGap = ((SdfWorldPackage.MeshBakeMaxSamples / 3) + 1);
@@ -30,6 +31,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
                 if (batch.InputRows > SdfWorldPackage.MeshBakeMaxSamples) {
                     Assert.True(condition: (batch.InputRows > batch.Samples));
                     var points = new Vector4[batch.InputRows];
+
                     Assert.True(condition: batch.WritePoints(table: points));
                     full = true;
                 }
@@ -40,7 +42,6 @@ public sealed partial class SdfMeshPathBakeLawTests {
         Assert.True(condition: full);
         Assert.Single(collection: dresser.Dress(frame: frame).DressedDraws());
     }
-
     // A group whose member slides away bakes again only once the slide stops: a member still moving, however far from
     // its baked pose, queues nothing, and once it holds still for the settle window the group bakes at the pose snapped
     // to the settle steps while its skinned mesh keeps drawing. Another bake sharing the library takes that geometry's
@@ -187,7 +188,7 @@ public sealed partial class SdfMeshPathBakeLawTests {
 
             transforms[((2 * group) + 1)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: origin);
             if (memberGap > 1) { transforms[((2 * group) + 2)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: origin); }
-            transforms[((2 * group) + 1 + memberGap)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (origin + new Vector3(x: offset, y: 0f, z: 0f)));
+            transforms[(((2 * group) + 1) + memberGap)] = new DynamicTransform(Orientation: Quaternion.Identity, Position: (origin + new Vector3(x: offset, y: 0f, z: 0f)));
         }
 
         return new SdfFrame(Program: program, ProgramChanged: false, Time: time, Views: []) { DynamicTransforms = transforms, FarDistance = 100f };
@@ -245,4 +246,3 @@ public sealed partial class SdfMeshPathBakeLawTests {
         return bytes;
     }
 }
-

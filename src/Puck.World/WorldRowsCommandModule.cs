@@ -21,26 +21,27 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
     private const string Verb = "world.rows";
 
     private static readonly CommandForms WorldRowsForms = CommandForms.Of(verb: Verb, "check <on|off>",
-        "force hit-bound [<frames>]", "force limit <bytes|auto>", "force relocate", "force skip <tables|host|scene>", "force pack", "force dress-fault [<writes>]", "status");
+        "force hit-bound [<frames>]", "force limit <bytes|auto>", "force relocate", "force skip <tables|host|scene>", "force pack", "force dress-fault [<dresses>]", "status");
 
     private CommandResult Handle(WireArgs args) {
         if ((args.Count == 2) && args.Is(index: 0, value: "check") && (args.Is(index: 1, value: "on") || args.Is(index: 1, value: "off"))) {
             SdfVm.SdfRowChecks.Enabled = args.Is(index: 1, value: "on");
             return new(Output: $"[{Verb}: check={(SdfVm.SdfRowChecks.Enabled ? "on" : "off")}]");
         }
-        if (args.Count == 2 && args.Is(0, "force") && args.Is(1, "pack")) {
+        if ((args.Count == 2) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "pack")) {
             SdfVm.SdfRowChecks.PackRequested = true;
             return new(Output: $"[{Verb}: row pack armed]");
         }
-        if (args.Count is 2 or 3 && args.Is(0, "force") && args.Is(1, "dress-fault")) {
-            var writes = 1;
-            if (args.Count == 3 && (!args.TryInt(2, out writes) || writes < 1)) { return WorldRowsForms.Refuse(in args); }
-            SdfVm.SdfRowChecks.DressFaultAfter = writes;
-            return new(Output: $"[{Verb}: dress failure armed after {writes} writes]");
+        if ((args.Count is 2 or 3) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "dress-fault")) {
+            var dresses = 1;
+
+            if ((args.Count == 3) && (!args.TryInt(index: 2, value: out dresses) || (dresses < 1))) { return WorldRowsForms.Refuse(in args); }
+            SdfVm.SdfRowChecks.DressFaultAfter = dresses;
+            return new(Output: $"[{Verb}: dress failure armed after {dresses} dresses]");
         }
-        if (args.Count == 3 && args.Is(0, "force") && args.Is(1, "skip") && (args.Is(2, "host") || args.Is(2, "scene"))) {
-            SdfVm.SdfRowChecks.SkipHostRequested = args.Is(2, "host");
-            SdfVm.SdfRowChecks.SkipSceneRequested = args.Is(2, "scene");
+        if ((args.Count == 3) && args.Is(index: 0, value: "force") && args.Is(index: 1, value: "skip") && (args.Is(index: 2, value: "host") || args.Is(index: 2, value: "scene"))) {
+            SdfVm.SdfRowChecks.SkipHostRequested = args.Is(index: 2, value: "host");
+            SdfVm.SdfRowChecks.SkipSceneRequested = args.Is(index: 2, value: "scene");
             return new(Output: $"[{Verb}: {args[2]} cursor skip armed]");
         }
         if (probe.Residency?.Tables is not { } tables) {
@@ -92,3 +93,4 @@ public sealed class WorldRowsCommandModule(WorldRenderProbe probe) : ICommandMod
         );
     }
 }
+

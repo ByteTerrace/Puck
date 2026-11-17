@@ -53,7 +53,7 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
                 }
 
                 draws[index] = (draw with { ClipPlane = clip.Plane });
-                copiedRows?.Add(index);
+                copiedRows?.Add(item: index);
                 draws.Add(item: (draw with {
                     CarryRotation = clip.CopyRotation,
                     CarryScale = clip.CopyScale,

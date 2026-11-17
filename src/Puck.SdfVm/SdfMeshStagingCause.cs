@@ -22,7 +22,6 @@ public enum SdfMeshStagingCause : byte {
     /// <summary>The journal is taken, and the record keeps its mesh: a pose, metadata or a history cut changed.</summary>
     Pose = 6,
 }
-
 /// <summary>The first reason that fired for a topology rebuild of the dresser (<see cref="SdfMeshDresser.Dress"/>),
 /// counted by <see cref="SdfMeshHistory.TopologyBuildsOf"/>.</summary>
 public enum SdfMeshTopologyReason : byte {
@@ -35,7 +34,6 @@ public enum SdfMeshTopologyReason : byte {
     /// <summary>The operator requested a canonical start over.</summary>
     Forced = 3,
 }
-
 /// <summary>The names <see cref="SdfMeshStagingCause"/>'s members take in work kind names.</summary>
 public static class SdfMeshStagingCauses {
     private static readonly string[] Names = ["rebuild", "portal", "retry", "landing", "cursor", "hand-over", "pose"];
@@ -46,5 +44,5 @@ public static class SdfMeshStagingCauses {
     /// <summary>Returns a cause's name in a work kind name.</summary>
     /// <param name="cause">The cause.</param>
     /// <returns>The dotted-name segment, such as <c>hand-over</c>.</returns>
-    public static string NameOf(SdfMeshStagingCause cause) => Names[(int)cause];
+    public static string NameOf(SdfMeshStagingCause cause) => Names[((int)cause)];
 }

@@ -56,11 +56,13 @@ public sealed class SdfMeshRegionArena : IDisposable {
     // The region's words up to the limit: the reserve is the range at zero, and each placed mesh a range of its own.
     private readonly GpuRangeAllocator m_ranges;
 
-    private readonly HashSet<SdfMesh> m_toPlace = new(ReferenceEqualityComparer.Instance);
-    private readonly HashSet<SdfMesh> m_unused = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<SdfMesh> m_toPlace = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly HashSet<SdfMesh> m_unused = new(comparer: ReferenceEqualityComparer.Instance);
+
     private long m_placedWords;
     private long m_unusedWords;
     private bool m_firstRows;
+    private int m_namesChanged;
     private int m_drawCapacity;
     // Whether a trim forgot a mesh since the latest full plan, so a list naming a refused mesh is planned again.
     private bool m_trimmed;
@@ -148,10 +150,10 @@ public sealed class SdfMeshRegionArena : IDisposable {
             _ = Forget(mesh: mesh);
             _ = m_placed.Remove(item: mesh);
             if (m_named.ContainsKey(key: mesh)) {
-                _ = m_moved.Add(mesh);
+                _ = m_moved.Add(item: mesh);
                 _ = m_refused.Add(item: mesh);
             } else if (m_ahead.Contains(item: mesh)) {
-                _ = m_moved.Remove(mesh);
+                _ = m_moved.Remove(item: mesh);
                 _ = m_aheadRefused.Add(item: mesh);
             } else {
                 m_forgotten.Add(item: mesh);
@@ -196,77 +198,87 @@ public sealed class SdfMeshRegionArena : IDisposable {
     /// <exception cref="InvalidOperationException">The list's draw records alone pass the arena's limit.</exception>
     public void Plan(IReadOnlyList<SdfMeshDraw> draws) {
         ArgumentNullException.ThrowIfNull(draws);
-        BeginRows(draws.Count);
-        for (var row = 0; row < draws.Count; row++) { NameRow(row, draws[row].Mesh); }
+        BeginRows(extent: draws.Count);
+        for (var row = 0; (row < draws.Count); row++) { NameRow(index: row, mesh: draws[row].Mesh); }
         EndRows();
     }
+
     // Row transactions collect all unnames before placement, so their released slack is available to every new name.
     internal void BeginRows(int extent) {
+        m_namesChanged = 0;
         ArgumentOutOfRangeException.ThrowIfGreaterThan(extent, SdfMeshRegion.MaxDraws);
         m_placed.Clear(); m_moved.Clear(); m_forgotten.Clear(); m_toPlace.Clear();
         Relocated = false; Unchanged = true;
-        m_firstRows = m_drawCapacity == 0 && extent > 0;
-        if (m_latestMeshes.Length < extent) { Array.Resize(ref m_latestMeshes, Math.Max(extent, 2 * m_latestMeshes.Length)); }
-        for (var row = extent; row < m_latestMeshCount; row++) { NameRow(row, null); }
+        m_firstRows = ((m_drawCapacity == 0) && (extent > 0));
+        if (m_latestMeshes.Length < extent) { Array.Resize(array: ref m_latestMeshes, newSize: Math.Max(val1: extent, val2: (2 * m_latestMeshes.Length))); }
+        for (var row = extent; (row < m_latestMeshCount); row++) { NameRow(index: row, mesh: null); }
         m_latestMeshCount = extent;
     }
     internal void NameRow(int index, SdfMesh? mesh) {
         var old = m_latestMeshes[index];
-        if (ReferenceEquals(old, mesh)) { return; }
+
+        if (ReferenceEquals(objA: old, objB: mesh)) { return; }
         Unchanged = false;
         m_latestMeshes[index] = mesh;
         if (old is not null) {
-            var left = m_named[old] - 1;
-            if (left == 0) { m_named.Remove(old); m_refused.Remove(old); NamedWords -= SdfMeshRegion.WordsOf(old); }
-            else { m_named[old] = left; }
-            RefreshUnused(old);
+            var left = (m_named[old] - 1);
+
+            if (left == 0) { m_named.Remove(key: old); m_refused.Remove(item: old); NamedWords -= SdfMeshRegion.WordsOf(mesh: old); } else { m_named[old] = left; }
+            RefreshUnused(mesh: old);
         }
         if (mesh is null) { return; }
-        SdfMeshHistory.ProcessWork.Count(SdfMeshHistory.StagingPlanRecords);
-        ref var names = ref CollectionsMarshal.GetValueRefOrAddDefault(m_named, mesh, out var named);
+        SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.StagingPlanRecords);
+        m_namesChanged++;
+        ref var names = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: m_named, exists: out var named, key: mesh);
+
         names++;
-        if (!named) { NamedWords += SdfMeshRegion.WordsOf(mesh); }
-        RefreshUnused(mesh);
-        if (!m_placements.ContainsKey(mesh)) { m_toPlace.Add(mesh); }
+        if (!named) { NamedWords += SdfMeshRegion.WordsOf(mesh: mesh); }
+        RefreshUnused(mesh: mesh);
+        if (!m_placements.ContainsKey(key: mesh)) { m_toPlace.Add(item: mesh); }
     }
     internal void EndRows() {
+        SdfMeshHistory.ProcessWork.Raise(SdfMeshHistory.PeakRowsPlanned, m_namesChanged);
         if (m_latestMeshCount > m_drawCapacity) {
-            GrowReserve(m_latestMeshCount);
-            foreach (var mesh in m_moved) { m_toPlace.Add(mesh); }
+            GrowReserve(drawCount: m_latestMeshCount);
+            foreach (var mesh in m_moved) { m_toPlace.Add(item: mesh); }
             Unchanged = false;
         }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); Unchanged = false; }
-        if (m_trimmed) { foreach (var mesh in m_refused) { m_toPlace.Add(mesh); } m_trimmed = false; }
+        if (m_trimmed) { foreach (var mesh in m_refused) { m_toPlace.Add(item: mesh); } m_trimmed = false; }
         foreach (var mesh in m_toPlace) {
-            if (!m_named.ContainsKey(mesh) || m_placements.ContainsKey(mesh)) { continue; }
+            if (!m_named.ContainsKey(key: mesh) || m_placements.ContainsKey(key: mesh)) { continue; }
             Unchanged = false;
-            if (TryPlace(mesh)) { m_refused.Remove(mesh); continue; }
+            if (TryPlace(mesh: mesh)) { m_refused.Remove(item: mesh); continue; }
             _ = ForgetUnnamed();
-            if (TryPlace(mesh)) { m_refused.Remove(mesh); } else { m_refused.Add(mesh); }
+            if (TryPlace(mesh: mesh)) { m_refused.Remove(item: mesh); } else { m_refused.Add(item: mesh); }
         }
-        var reserveWords = (long)m_drawCapacity * SdfMeshRecord.DrawWords;
-        var free = Words - reserveWords - m_placedWords;
-        var relocate = m_forceRelocation || (m_refused.Count > 0 && reserveWords + NamedWords <= LimitWords && !Unchanged) ||
-            (free > PackedShare * NamedWords && free > m_retainedSlackWords);
+        var reserveWords = (((long)m_drawCapacity) * SdfMeshRecord.DrawWords);
+        var free = ((Words - reserveWords) - m_placedWords);
+        var relocate = (m_forceRelocation || ((m_refused.Count > 0) && ((reserveWords + NamedWords) <= LimitWords) && !Unchanged) ||
+            ((free > (PackedShare * NamedWords)) && (free > m_retainedSlackWords)));
+
         if (relocate) {
-            RelocationReason = m_forceRelocation ? "forced relocation" : m_refused.Count > 0 ? "named meshes fit packed" : "free words exceed packed share";
+            RelocationReason = (m_forceRelocation ? "forced relocation" : ((m_refused.Count > 0) ? "named meshes fit packed" : "free words exceed packed share"));
             m_forceRelocation = false;
             Pack();
         } else if (m_firstRows) { RelocationReason = "first plan"; }
-        Relocated = relocate || m_firstRows;
+        Relocated = (relocate || m_firstRows);
         if (Relocated) { Relocations++; Unchanged = false; }
     }
+
     /// <summary>Changes one row's mesh name using the same operation as a whole plan.</summary>
     public void Rename(int index, SdfMesh mesh) {
         ArgumentOutOfRangeException.ThrowIfNegative(index);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, m_latestMeshCount);
-        NameRow(index, mesh);
+        NameRow(index: index, mesh: mesh);
     }
+
     private void RefreshUnused(SdfMesh mesh) {
-        if (m_placements.ContainsKey(mesh) && !Names(mesh)) {
-            if (m_unused.Add(mesh)) { m_unusedWords += SdfMeshRegion.WordsOf(mesh); }
-        } else if (m_unused.Remove(mesh)) { m_unusedWords -= SdfMeshRegion.WordsOf(mesh); }
+        if (m_placements.ContainsKey(key: mesh) && !Names(mesh: mesh)) {
+            if (m_unused.Add(item: mesh)) { m_unusedWords += SdfMeshRegion.WordsOf(mesh: mesh); }
+        } else if (m_unused.Remove(item: mesh)) { m_unusedWords -= SdfMeshRegion.WordsOf(mesh: mesh); }
     }
+
     /// <summary>Names the meshes the draws are about to name, in place of those named ahead before: each holding no
     /// words takes the lowest free run that holds it (<see cref="Placed"/>, which the region owes), the meshes no list
     /// names giving their words up first (<see cref="Forgotten"/>), and one that still finds none is refused ahead
@@ -281,11 +293,11 @@ public sealed class SdfMeshRegionArena : IDisposable {
 
         m_forgotten.Clear();
         m_placed.Clear();
-        m_scratch.Clear(); m_scratch.AddRange(m_ahead);
+        m_scratch.Clear(); m_scratch.AddRange(collection: m_ahead);
         m_ahead.Clear();
-        foreach (var mesh in m_scratch) { RefreshUnused(mesh); }
+        foreach (var mesh in m_scratch) { RefreshUnused(mesh: mesh); }
         m_scratch.Clear();
-        for (var index = 0; index < meshes.Count; index++) { m_ahead.Add(meshes[index]); RefreshUnused(meshes[index]); }
+        for (var index = 0; (index < meshes.Count); index++) { m_ahead.Add(item: meshes[index]); RefreshUnused(mesh: meshes[index]); }
         if (m_unusedWords > m_retainedSlackWords) { _ = ForgetUnnamed(); }
         _ = PlaceAhead();
     }
@@ -332,16 +344,16 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_placements.Add(key: mesh, value: new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord));
         mesh.Acquire(cached: true);
         m_placed.Add(item: mesh);
-        m_placedWords += SdfMeshRegion.WordsOf(mesh);
-        RefreshUnused(mesh);
+        m_placedWords += SdfMeshRegion.WordsOf(mesh: mesh);
+        RefreshUnused(mesh: mesh);
 
         return true;
     }
     // Frees a placed mesh's words and lets its placement claim go; its words.
     private long Forget(SdfMesh mesh) {
         _ = m_placements.Remove(key: mesh, value: out var placement);
-        m_placedWords -= SdfMeshRegion.WordsOf(mesh);
-        RefreshUnused(mesh);
+        m_placedWords -= SdfMeshRegion.WordsOf(mesh: mesh);
+        RefreshUnused(mesh: mesh);
         mesh.Release(cached: true);
 
         return ((long)m_ranges.Free(start: ((ulong)placement.VertexWord)));
@@ -351,7 +363,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         var words = 0L;
 
         m_scratch.Clear();
-        m_scratch.AddRange(m_unused);
+        m_scratch.AddRange(collection: m_unused);
         foreach (var mesh in m_scratch) {
             words += Forget(mesh: mesh);
             m_forgotten.Add(item: mesh);
@@ -371,7 +383,7 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_moved.Clear();
         m_placed.Clear();
         m_refused.Clear();
-        for (var row = 0; row < m_latestMeshCount; row++) {
+        for (var row = 0; (row < m_latestMeshCount); row++) {
             if (m_latestMeshes[row] is not { } mesh) { continue; }
 
             if (m_placements.ContainsKey(key: mesh) || m_refused.Contains(item: mesh)) { continue; }
@@ -431,4 +443,3 @@ public sealed class SdfMeshRegionArena : IDisposable {
         m_forgotten.RemoveRange(count: (m_forgotten.Count - before), index: before);
     }
 }
-

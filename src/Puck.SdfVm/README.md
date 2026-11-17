@@ -558,13 +558,18 @@ distance, the identity, the material and the triangle. An inspector request
 copies six (24 bytes), through the packed normal, and captures that frame's
 camera, jitter and cut revision, so point reconstruction never uses a later
 camera. The surface pass writes every in-extent record each frame, so the
-answer needs no currency check.
+answer is interpreted under the row epoch its mesh target recorded.
 Composed pick maps route identity and material names to the same captured emitter,
 rebasing mesh draw ordinals into that emitter's table. An emitter with no material
 names still reports an unavailable name.
 
-The graph owns transfer and host-read barriers. The frame's immutable `ISdfPickMap`
-travels with the request. A mesh identity names a draw ordinal; the host's pick
+The graph owns transfer and host-read barriers. The host's immutable `ISdfPickMap`
+travels with the request. `SdfDressedPickMap` resolves a mesh row through its owner and
+offset, without assuming the host run leads the table. Each request also carries the table
+and identity revision the mesh target actually rendered under, retained while that target
+stands and restored if recording is abandoned. A changed row identity or a replaced table
+discards the answer for another sample. An unrelated hand-over keeps the pick valid.
+A mesh identity names a row address; the host's pick
 map also names a program instance by its ordinal plus one under the `Sdf` kind,
 which no record carries. The record is 32 bytes per render pixel. Nothing in
 this picker enters simulation input or grants edit authority.

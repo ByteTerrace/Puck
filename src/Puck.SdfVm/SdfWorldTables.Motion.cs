@@ -242,7 +242,7 @@ public sealed partial class SdfWorldTables {
     }
     // Observes and packs one record through the same door for full and incremental staging.
     private ulong StageMeshDraw(int index, in SdfMeshDraw draw, Span<uint> record, ReadOnlySpan<byte> old, ref StagingTally tally, bool incremental = false) {
-        var absent = draw.Mesh is null || !MeshStands(mesh: draw.Mesh);
+        var absent = ((draw.Mesh is null) || !MeshStands(mesh: draw.Mesh));
         var wasAbsent = m_absentRows.Contains(item: index);
         Span<uint> before = stackalloc uint[SdfMeshRecord.DrawWords];
 
@@ -254,13 +254,13 @@ public sealed partial class SdfWorldTables {
         if (absent) {
             m_meshHistory.Retire(index: index);
             SdfMeshRegion.WriteAbsent(record: record);
-            if (draw.Mesh is not null) { _ = m_absentRows.Add(item: index); } else { _ = m_absentRows.Remove(index); }
-            if (draw.Mesh is not null && m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
+            if (draw.Mesh is not null) { _ = m_absentRows.Add(item: index); } else { _ = m_absentRows.Remove(item: index); }
+            if ((draw.Mesh is not null) && m_meshArena.Refused.Contains(item: draw.Mesh)) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.RefusedAbsent); }
         } else {
             var reseat = MeshTransformWasReseated(draw: in draw);
 
             if (reseat) { _ = m_namedRowCuts.Add(item: index); }
-            observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat, occupancy: m_currentDrawRows.Occupancy(index), table: m_currentDrawRows.Rows);
+            observation = m_meshHistory.Observe(draw: in draw, index: index, reseat: reseat, occupancy: m_currentDrawRows.Occupancy(row: index), table: m_currentDrawRows.Rows);
             _ = m_absentRows.Remove(item: index);
             if (incremental && !wasAbsent) {
                 // Both ordinary edits and landing use the arena's current placement, never an absent record's zeros.
@@ -340,7 +340,8 @@ public sealed partial class SdfWorldTables {
     }
 
     private void EnsurePreviousMeshCapacity(int count) {
-        var bytes = (ulong)Math.Max(1, count) * MeshMatrixBytes;
+        var bytes = (((ulong)Math.Max(val1: 1, val2: count)) * MeshMatrixBytes);
+
         if (bytes <= m_previousMeshTransforms.SizeBytes) {
             return;
         }
@@ -354,4 +355,3 @@ public sealed partial class SdfWorldTables {
         m_seedMeshHistory = true;
     }
 }
-

@@ -12,13 +12,15 @@ namespace Puck.SdfVm;
 // (sdfMeshResolveHit) bounds such a read whatever its cause, but cannot tell an occupant that is in bounds from the one
 // the target named; this count can.
 public sealed partial class SdfWorldPasses {
-    internal SdfMeshRowStamp MeshRowsOf(string instance) => Refresh(instance).MeshRows;
+    internal SdfMeshRowStamp MeshRowsOf(string instance) => Refresh(instance: instance).MeshRows;
     internal SdfMeshRowStamp NoteMeshRows(string instance, SdfMeshRowStamp stamp) {
-        var entry = Refresh(instance);
+        var entry = Refresh(instance: instance);
         var previous = entry.MeshRows;
+
         entry.MeshRows = stamp;
         return previous;
     }
+
     // The hit-holding outputs of a view's passes: the mesh target, the visibility records the surface pass writes from
     // it, and the glass target.
     private enum HitTarget : byte {
@@ -39,21 +41,21 @@ public sealed partial class SdfWorldPasses {
 
         switch (part) {
             case SdfWorldPackage.Parts.Mesh:
-                entry.Note(target: HitTarget.Mesh, tables: tables);
+                entry.Note(tables: tables, target: HitTarget.Mesh);
                 break;
             case SdfWorldPackage.Parts.Glass:
-                entry.Note(target: HitTarget.Glass, tables: tables);
+                entry.Note(tables: tables, target: HitTarget.Glass);
                 break;
             case SdfWorldPackage.Parts.Surface:
-                entry.Check(target: HitTarget.Mesh, tables: tables);
-                entry.Note(target: HitTarget.Visibility, tables: tables);
+                entry.Check(tables: tables, target: HitTarget.Mesh);
+                entry.Note(tables: tables, target: HitTarget.Visibility);
                 break;
             case SdfWorldPackage.Parts.Views:
             case SdfWorldPackage.Resolve:
-                entry.Check(target: HitTarget.Visibility, tables: tables);
+                entry.Check(tables: tables, target: HitTarget.Visibility);
                 break;
             case SdfWorldPackage.Parts.GlassShade:
-                entry.Check(target: HitTarget.Glass, tables: tables);
+                entry.Check(tables: tables, target: HitTarget.Glass);
                 break;
         }
     }
@@ -62,16 +64,17 @@ public sealed partial class SdfWorldPasses {
     /// <param name="instance">The instance's name.</param>
     /// <param name="tables">The tables the pass would have recorded against.</param>
     internal void SkippedClearMeshTarget(string instance, SdfWorldTables tables) =>
-        Refresh(instance: instance).Note(target: HitTarget.Mesh, tables: tables);
+        Refresh(instance: instance).Note(tables: tables, target: HitTarget.Mesh);
 
     private sealed partial class Entry {
         public SdfMeshRowStamp MeshRows;
+
         private readonly (SdfWorldTables? Tables, long Revision)[] m_hitTargets = new (SdfWorldTables?, long)[3];
 
         public void Note(HitTarget target, SdfWorldTables tables) =>
-            m_hitTargets[(int)target] = (tables, tables.MeshRevision);
+            m_hitTargets[((int)target)] = (tables, tables.MeshRevision);
         public void Check(HitTarget target, SdfWorldTables tables) {
-            var (noted, revision) = m_hitTargets[(int)target];
+            var (noted, revision) = m_hitTargets[((int)target)];
 
             if (!ReferenceEquals(objA: noted, objB: tables) || (revision != tables.MeshRevision)) {
                 SdfMeshHistory.ProcessWork.Count(kind: SdfMeshHistory.TargetsStale);

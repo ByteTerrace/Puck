@@ -232,7 +232,8 @@ public sealed record SdfFrame(
     /// <summary>The dresser's retained rows. The host's input draw list remains in <see cref="MeshDraws"/>.</summary>
     public SdfMeshRows? MeshRows { get; init; }
 
-    internal SdfMeshDraws DrawRows => new(this);
+    internal SdfMeshDraws DrawRows => new(frame: this);
+
     /// <summary>Gets the baked template slots, which draw only through MeshInstances.</summary>
     public IReadOnlyList<int> MeshAssetSlots { get; init; } = [];
     /// <summary>Gets the copies of local geometry assets.</summary>
