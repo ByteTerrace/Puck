@@ -81,13 +81,10 @@ memo is wrong at this tree.
 
 Two facts the memo does not state, both load-bearing below **[opened]**. The
 source of a durable-slot submission is the submitting world's own authored
-document id (`src/Puck.World.Server/WorldTick.Step.cs:463`):
+document id (`WorldTick.StepCore` in
+`src/Puck.World.Server/WorldTick.Step.cs`).
 
-```csharp
-                    SourceDocumentId: (Host.Document.Definition.DocumentId ?? string.Empty),
-```
-
-and a screen onto a nested destination observes as the owning world's
+A screen onto a nested destination observes as the owning world's
 authority, into the owning world's mirror
 (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:292-295`):
 
