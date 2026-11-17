@@ -1297,7 +1297,8 @@ by its fence share is GPU back-pressure, not CPU work.
   then waits for bake settlement before requesting the still. An ordinary settled screenshot converges temporal views
   but does not request `SdfFrame.ConvergesLighting`; it can capture before a background GI
   trace finishes. Pin the camera and tick in both legs and use lockstep's
-  synchronous scene/refill/trace drain for the comparison.
+  held scene/refill/trace drain for the comparison: the frame answers waiting with the
+  stage it waits for (`SdfMeshIrradiance.Convergence`) while the loop holds the tick, and the console answers between.
   Keep each code build's completed private mesh store for warm comparison
   legs: sharing one directory does not share payloads across changed bake
   identities, and silently turns the second leg into another cold bake.

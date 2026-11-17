@@ -115,8 +115,12 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             return ((m_entries.TryGetValue(key: instance, value: out var entry) && entry.Residency is { } residency) ? LightingWaitOf(residency: residency) : null);
         }
     }
-    private static string? LightingWaitOf(SdfWorldResidency residency) =>
-        (residency.LightingPending ? $"residency '{residency.Name}' is converging its probe lighting and exposure" : null);
+    // Names the part of the convergence still waited for (SdfMeshIrradiance.Convergence) while one stands.
+    private static string? LightingWaitOf(SdfWorldResidency residency) => (residency.LightingPending
+        ? ((residency.MeshIrradiance.Convergence is { Stage: not SdfMeshConvergenceStage.None } convergence)
+            ? $"residency '{residency.Name}' is converging its probe lighting ({convergence}) and exposure"
+            : $"residency '{residency.Name}' is converging its probe lighting and exposure")
+        : null);
     /// <inheritdoc/>
     /// <remarks>The refusal of the residency the instance's view renders from (<see cref="SdfWorldResidency.Refusal"/>):
     /// its tables' build or its views kernel, refused by name, which only a change to what they are built from

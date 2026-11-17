@@ -55,8 +55,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
    seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
-   the scheduling stage's windowed reading, the control plane's step C0.3,
-   then the pool's design.
+   the scheduling stage's and C0.3's windowed readings, the control plane's
+   step C0.4, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change, steps R0 to R2 of
    [its memo](arrival-proportional.md), then the frame thread's field queries.
@@ -128,6 +128,10 @@ head, each named by the lane whose landing waits on it:
   (expect `screens` at most 4).
 - relief1: a World boot and captures of a noise-relieved creation moving as a
   whole, on both backends.
+- c03: at a lockstep walkthrough stop that converges lighting, on both
+  backends, a console verb issued during the drain answers within one
+  iteration (`host.frames`' control gap under the wait budget plus a pacer
+  period), and the stop's still against the build before it.
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
 
@@ -330,10 +334,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's windowed reading, then
+order once: the scheduling stage's windowed reading and C0.3's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.3 (its review is answered and C0.1 and C0.2 are built), then the pool's
-design (J1). The garbage-collection cuts
+step C0.4 (C0.1 to C0.3 are built), then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
