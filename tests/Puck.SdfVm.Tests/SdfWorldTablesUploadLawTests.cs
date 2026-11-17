@@ -1198,10 +1198,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         private readonly SdfResidencySelector? m_selector;
 
-        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, SdfResidencySelector? selector = null) {
+        public Rig(int slots, int programWordReserve = 0, GpuMemoryProfile profile = default, GpuDescriptorHeapBudget? heap = null, SdfResidencySelector? selector = null, GpuBufferPages? meshPages = null) {
             Gpu = new UploadModelGpu() {
                 DescriptorHeap = heap,
                 MemoryProfile = profile,
+                DestinationPages = (part, _) => part == "mesh-region" ? meshPages : null,
             };
             m_selector = selector;
             m_programWordReserve = programWordReserve;

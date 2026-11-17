@@ -89,7 +89,6 @@ public sealed partial class SdfWorldTables {
         WriteWorldBuffer(buffer: m_decalRegion.Buffer(slot: slot), member: SdfWorldPackage.DecalCells, set: set);
         WriteWorldBuffer(buffer: m_volumeRegion.Buffer(slot: slot), member: SdfWorldPackage.Volumes, set: set);
         WriteWorldBuffer(buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
-        WriteMeshSlabs(layout: SdfWorldInterfaces.WorldLayout, region: m_meshRegion.Buffer(slot: slot), set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.MeshBakePoints, set: set);
         WriteWorldBuffer(buffer: m_meshIrradiance ?? m_dummyBuffer, member: SdfWorldPackage.MeshIrradiance, set: set);
         WriteWorldBuffer(buffer: m_dummyBuffer, member: SdfWorldPackage.SampledValues, set: set);
@@ -124,7 +123,6 @@ public sealed partial class SdfWorldTables {
     // released.
     internal void WriteMeshTables(nint set, int slot, IGpuBuffer?[] bound) {
         if (!ReferenceEquals(objA: bound[0], objB: m_meshRegion.Buffer(slot: slot))) {
-            WriteMeshSlabs(layout: SdfWorldInterfaces.MeshLayout, region: m_meshRegion.Buffer(slot: slot), set: set);
         }
         WriteMeshBuffer(bound: ref bound[0], buffer: m_meshRegion.Buffer(slot: slot), member: SdfWorldPackage.MeshRegion, set: set);
         WriteMeshBuffer(bound: ref bound[1], buffer: m_dynamicTransformRegion.Buffer(slot: slot), member: SdfWorldPackage.DynamicTransforms, set: set);
@@ -150,30 +148,7 @@ public sealed partial class SdfWorldTables {
         );
         bound = view;
     }
-    // Writes the mesh region's slab views (SdfMeshSlabs) at an interface's slab member, beside the region itself: each
-    // slab the region reaches as a view of that slab's bytes, each past its end the unused-member buffer, so every
-    // descriptor of the array is valid whether or not a kernel reads it. The one place a set binds them; a set rewrites
-    // them whenever it rebinds the region.
-    internal void WriteMeshSlabs(nint set, ShaderInterfaceLayout layout, IGpuBuffer region, IGpuBindings? bindings = null) {
-        var resource = SdfKernelInterfaces.ResourceOf(layout: layout, member: SdfWorldPackage.MeshSlabs);
-        var writer = (bindings ?? m_bindings);
 
-        for (var slab = 0; (slab < SdfMeshSlabs.Count); slab++) {
-            var inside = SdfMeshSlabs.TryView(bytes: out var bytes, offsetBytes: out var offset, regionBytes: region.SizeBytes, slab: slab);
-            var buffer = (inside ? region : m_dummyBuffer);
-
-            writer.WriteBuffer(
-                arrayElement: ((uint)slab),
-                binding: resource.Binding,
-                bufferHandle: buffer.BufferHandle,
-                bufferSize: (inside ? bytes : buffer.SizeBytes),
-                descriptorSetHandle: set,
-                elementStride: sizeof(uint),
-                kind: resource.Kind,
-                offsetBytes: (inside ? offset : 0UL)
-            );
-        }
-    }
     // Writes a buffer at a member of the mesh interface in a mesh pass set, when the set does not already bind it.
     internal void WriteMeshBuffer(ref IGpuBuffer? bound, IGpuBuffer buffer, string member, nint set) {
         if (ReferenceEquals(objA: bound, objB: buffer)) {

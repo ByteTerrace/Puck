@@ -241,13 +241,10 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// asks the slot's fence for the wake as it does, so a job cannot be in flight without one; the wake may come early or
 /// twice, and a step reads the fences either way. It stops at the host: a thread that never paces (a host with no
 /// pacer wait, a swap chain's own wait or a blocked present) steps the work at its frame's pumps alone.</para>
-/// <para>Invariant: what a job reads is neither rewritten nor released before its fence. A job leases the tables'
-/// generation as it is taken (<see cref="SdfWorldTables.BackgroundGeneration"/>, the uploads submitted, and the ring
-/// slot the latest wrote), and the tables' two doors read the leases: the retirement door releases nothing retired at
-/// or after the oldest lease in flight (<see cref="OldestLease"/>), and the upload waits out every lease on the ring
-/// slot it rewrites (<see cref="EndLeases"/>). A lease ends when its job's fence has signaled. The lease holds on any
-/// queue; on the frame's own queue the upload's wait for its predecessor already implies it, so the doors never
-/// wait and the count of waits (<c>lease-waits</c>) stays zero.</para>
+/// <para>Invariant: a job's resources retire only after the device timeline passes their last use. Admission
+/// requires the tables' frame queue, so its checkpoint covers every background submission too. Pending copies remain
+/// explicit holds in the tables' retirement door. Ring-slot rewrites independently wait the jobs reading that slot
+/// (<see cref="EndLeases"/>); submission fences also wake the host and complete readbacks.</para>
 /// <para>Invariant: what a job holds on the device is reserved before it is allocated. A slot's buffers, its readback
 /// among them, come from one door (<see cref="SdfGpuWorkRecording.HostBuffer"/>,
 /// <see cref="SdfGpuWorkRecording.DeviceBuffer"/>, <see cref="SdfGpuWorkRecording.CopyToReadback"/>), which raises the
@@ -430,21 +427,6 @@ public sealed class SdfGpuWork : IDisposable {
     /// <summary>Gets the jobs in flight now.</summary>
     public int InFlight => m_inFlight;
 
-    /// <summary>Returns the oldest generation a job in flight leased (<see cref="SdfWorldTables.BackgroundGeneration"/>
-    /// as it was taken), or <see cref="ulong.MaxValue"/> when no lease stands: nothing the tables retired at or after
-    /// it may be released. A lease ends when its job's fence has signaled, read here; a job that never reached the
-    /// queue reads nothing and holds none.</summary>
-    /// <returns>The generation.</returns>
-    /// <exception cref="DeviceLostException">The device was lost.</exception>
-    public ulong OldestLease() {
-        var oldest = ulong.MaxValue;
-
-        foreach (var slot in m_slots) {
-            if ((slot.Job is not null) && (slot.Generation < oldest) && Reads(slot: slot)) { oldest = slot.Generation; }
-        }
-        return oldest;
-    }
-
     /// <summary>Adds a job source the service takes jobs from in turn and disposes with itself.</summary>
     /// <param name="client">The source, called only on the recording thread.</param>
     public void Add(ISdfGpuWorkClient client) {
@@ -531,6 +513,9 @@ public sealed class SdfGpuWork : IDisposable {
     private void Enter(SdfWorldTables tables, bool driven) {
         ArgumentNullException.ThrowIfNull(argument: tables);
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (!ReferenceEquals(Queue, tables.BackgroundQueue)) {
+            throw new InvalidOperationException("Background work must submit on the tables' device queue.");
+        }
         if (m_failure is { } failure) {
             m_failure = null;
             failure.Throw();
@@ -820,7 +805,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // Records a job into its slot between its timestamps and submits it armed with the slot's fence, which is asked to
     // wake the host's wait when the job completes. The one door a job reaches the queue through: it stamps the job's
-    // lease before the job binds anything. False when the device had no room for what the job holds: the job is handed
+    // ring slot before the job binds anything. False when the device had no room for what the job holds: the job is handed
     // back to its client, and nothing reached the queue.
     private bool Submit(ISdfGpuWorkClient client, object job, double estimate, int index, Slot slot, bool charged, SdfWorldTables tables) {
         var recorder = m_gpu.Recorder;
@@ -830,7 +815,6 @@ public sealed class SdfGpuWork : IDisposable {
         slot.ReadbackBytes = 0;
         slot.Readback = null;
         slot.Copied = false;
-        slot.Generation = tables.BackgroundGeneration;
         slot.RingSlot = tables.CurrentSlot;
         try {
             recorder.BeginCommandBuffer(commandBufferHandle: commandBuffer);
@@ -1032,7 +1016,7 @@ public sealed class SdfGpuWork : IDisposable {
     }
     // One slot: its command buffer, fence and timestamp readback, the job in it and its client, the buffers it holds,
     // the readback its job copied into and how many bytes, the GPU seconds the job was charged and when it was
-    // submitted, and the tables' generation and ring slot the job leased.
+    // submitted, and the tables' ring slot the job leased.
     private sealed class Slot(IGpuCommandPool Commands, IGpuSubmissionFence Fence, IGpuReadbackBuffer Times) {
         public IGpuCommandPool Commands { get; } = Commands;
         public IGpuSubmissionFence Fence { get; } = Fence;
@@ -1052,7 +1036,6 @@ public sealed class SdfGpuWork : IDisposable {
         public double Estimate { get; set; }
         public object? Job { get; set; }
         public long SubmittedAt { get; set; }
-        public ulong Generation { get; set; }
         public int RingSlot { get; set; }
         // Whether the job's estimate was charged to the GPU budget, which its measured time then settles.
         public bool Charged { get; set; }

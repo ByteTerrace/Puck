@@ -21,7 +21,7 @@ public sealed partial class SdfWorldTables {
         var previous = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf(part: "previous-dynamic-transforms"), sizeBytes: ((ulong)bytes), usage: Puck.Abstractions.Gpu.GpuBufferUsage.Storage);
 
         try {
-            Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: bytes));
+            Retire(replaced: m_dynamicTransformRegion.Grow(byteCount: bytes), carryingRegion: m_dynamicTransformRegion);
         } catch {
             previous.Dispose();
 

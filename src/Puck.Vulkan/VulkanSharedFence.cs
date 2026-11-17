@@ -42,21 +42,7 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
             return false;
         }
 
-        var typeInfo = new VkSemaphoreTypeCreateInfo {
-            InitialValue = 0,
-            SType = VkSemaphoreTypeCreateInfo.StructureType,
-            SemaphoreType = VkSemaphoreTypeCreateInfo.Timeline,
-        };
-        var createInfo = new VkSemaphoreCreateInfo {
-            PNext = ((nint)(&typeInfo)),
-            SType = StructureTypeSemaphoreCreateInfo,
-        };
-        var created = device.CreateSemaphore(
-            device.Handle,
-            in createInfo,
-            0,
-            out var semaphore
-        );
+        var created = TryCreateTimeline(device, out var semaphore);
 
         if (created != VkResult.Success) {
             refusal = $"vkCreateSemaphore refused a timeline semaphore ({created})";
@@ -96,23 +82,36 @@ public sealed unsafe class VulkanSharedFence : IGpuSharedFence {
 
     /// <summary>Gets the native timeline <c>VkSemaphore</c> handle, or zero once disposed.</summary>
     public nint SemaphoreHandle => m_semaphore;
+
+    // Imported external fences and the device's retirement timeline use the same native creation.
+    internal static nint CreateTimeline(VulkanDeviceCommands device) {
+        TryCreateTimeline(device, out var semaphore).ThrowIfFailed(device: device, operation: "vkCreateSemaphore(timeline)");
+        return semaphore;
+    }
+    private static VkResult TryCreateTimeline(VulkanDeviceCommands device, out nint semaphore) {
+        var typeInfo = new VkSemaphoreTypeCreateInfo {
+            InitialValue = 0, SType = VkSemaphoreTypeCreateInfo.StructureType,
+            SemaphoreType = VkSemaphoreTypeCreateInfo.Timeline,
+        };
+        var createInfo = new VkSemaphoreCreateInfo {
+            PNext = (nint)(&typeInfo), SType = StructureTypeSemaphoreCreateInfo,
+        };
+        return device.CreateSemaphore(device.Handle, in createInfo, 0, out semaphore);
+    }
     /// <inheritdoc/>
     /// <remarks>Reads <c>vkGetSemaphoreCounterValue</c>; <c>VK_ERROR_DEVICE_LOST</c> surfaces as
     /// <see cref="DeviceLostException"/>.</remarks>
     public ulong CompletedValue {
         get {
-            ObjectDisposedException.ThrowIf(
-                condition: (0 == m_semaphore),
-                instance: this
-            );
-            m_device.GetSemaphoreCounterValue(
-                m_device.Handle,
-                m_semaphore,
-                out var value
-            ).ThrowIfFailed(device: m_device, operation: "vkGetSemaphoreCounterValue");
-
-            return value;
+            return ReadCompletedValue(m_device, m_semaphore);
         }
+    }
+
+    internal static ulong ReadCompletedValue(VulkanDeviceCommands device, nint semaphore) {
+        ObjectDisposedException.ThrowIf(semaphore == 0, typeof(VulkanSharedFence));
+        device.GetSemaphoreCounterValue(device.Handle, semaphore, out var value)
+            .ThrowIfFailed(device: device, operation: "vkGetSemaphoreCounterValue");
+        return value;
     }
 
     /// <inheritdoc/>

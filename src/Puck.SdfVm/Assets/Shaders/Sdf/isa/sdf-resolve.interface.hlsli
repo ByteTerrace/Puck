@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/42f0d0cd7092600fc4667a8c6748628ca6da41c04c8fb8e5f7eb93a04108c7ac). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/d4c137558e7694bf28c53967ec68d45f02a4058167fe4f22d97600f8063c7b33). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -113,17 +113,16 @@ struct SdfResolveFrame {
 [[vk::binding(14, 1)]] StructuredBuffer<uint> sdfMeshRegion : register(t14, space1);
 [[vk::binding(15, 1)]] StructuredBuffer<uint> sdfMeshIrradiance : register(t15, space1);
 [[vk::binding(16, 1)]] StructuredBuffer<uint> sdfFrameSampled : register(t16, space1);
-[[vk::binding(17, 1)]] StructuredBuffer<uint> sdfMeshSlabs[64] : register(t17, space1);
-[[vk::binding(81, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t81, space1);
+[[vk::binding(17, 1)]] StructuredBuffer<SdfLight> sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5 : register(t17, space1);
 #define sdfLights sdfLightsLayout27ca437eafcfb2ef7e652cdc81f326face73209e6adffa61f04dffc997d7c8c5
-[[vk::binding(82, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t82, space1);
+[[vk::binding(18, 1)]] StructuredBuffer<SdfSkyBlock> sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9 : register(t18, space1);
 #define sdfSky sdfSkyLayoutcf5989bcab395177650d42c028df69d633f031173a236e87e6f40e104d525aa9
-[[vk::binding(83, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t83, space1);
+[[vk::binding(19, 1)]] StructuredBuffer<SdfSkyLayer> sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8 : register(t19, space1);
 #define sdfSkyLayers sdfSkyLayersLayoutb8b05e94adeef57d901b9217964b288f590ab8e7f74318d31922800728b169a8
-[[vk::binding(84, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t84, space1);
-[[vk::binding(85, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t85, space1);
+[[vk::binding(20, 1)]] StructuredBuffer<float4> sdfSkyCoefficients : register(t20, space1);
+[[vk::binding(21, 1)]] StructuredBuffer<SdfShadowHandoff> sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e : register(t21, space1);
 #define sdfShadowHandoffs sdfShadowHandoffsLayout981efb60b212c94dac2862f0fb486ea3aaed2504fac947a2a5d6ffc91403e13e
-[[vk::binding(86, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t86, space1);
+[[vk::binding(22, 1)]] StructuredBuffer<uint2> sdfSkyEnvironment : register(t22, space1);
 
 // The Pass group: descriptor set 3, register space 3.
 struct SdfResolvePass {
@@ -245,8 +244,8 @@ struct SdfResolvePass {
     [[vk::offset(1276)]] uint _pad1276;
     [[vk::offset(1280)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa8CCFD78C : register(b0, space3);
-#define passGroup passGroupIsa8CCFD78C
+[[vk::binding(0, 3)]] ConstantBuffer<SdfResolvePass> passGroupIsa24361B06 : register(b0, space3);
+#define passGroup passGroupIsa24361B06
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
