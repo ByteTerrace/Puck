@@ -82,17 +82,25 @@ public sealed class ShaderClosureRefusedException : Exception {
 /// confined to that root. It is the one include walk: <see cref="ShaderCompiler"/> collects every compile's closure
 /// through it before the cache is consulted, so a missing include is refused by name even when a warm cache holds the
 /// bytecode it once produced.
-/// <para>Every <c>#include "…"</c> or <c>#include &lt;…&gt;</c> line resolves relative to the directory of the file that
-/// holds it, including one inside an inactive preprocessor branch: the closure is the set of files a source names, not
-/// the set one configuration happens to read. An include the caller generates, such as a pass's interface declarations,
-/// is read from the text handed in for its path rather than from disk, whether or not a file holds that path.</para>
+/// <para>Every <c>#include "…"</c> or <c>#include &lt;…&gt;</c> line resolves against the directory of the file that
+/// holds it and then, in order, against each include directory the compile names (<see cref="ShaderIncludeDirectories"/>),
+/// the first that holds the file winning, as DXC searches its <c>-I</c> directories; this includes a line inside an
+/// inactive preprocessor branch: the closure is the set of files a source names, not the set one configuration happens
+/// to read. An include the caller generates, such as a pass's interface declarations, is read from the text handed in
+/// for its path rather than from disk, whether or not a file holds that path. The closure records where each directive
+/// resolved (<see cref="WithIncludes"/>), so nothing resolves an include a second way.</para>
 /// </summary>
 public sealed partial class ShaderSourceClosure {
+    // Where each directive resolved: by the including file's full path, then by the path the directive names.
+    private readonly IReadOnlyDictionary<string, Dictionary<string, ShaderIncludeResolution>> m_resolutions;
+
     private ShaderSourceClosure(
         string? root,
         IReadOnlyList<ShaderSourceDependency> sources,
         IReadOnlyList<ShaderSourceDependency> includes,
         IReadOnlyDictionary<string, string> contents,
+        IReadOnlyList<string> includeDirectories,
+        IReadOnlyDictionary<string, Dictionary<string, ShaderIncludeResolution>> resolutions,
         long expandedBytes,
         int depth
     ) {
@@ -100,6 +108,8 @@ public sealed partial class ShaderSourceClosure {
         Sources = sources;
         Includes = includes;
         Contents = contents;
+        IncludeDirectories = includeDirectories;
+        m_resolutions = resolutions;
         ExpandedBytes = expandedBytes;
         Depth = depth;
     }
@@ -110,6 +120,9 @@ public sealed partial class ShaderSourceClosure {
     public int Depth { get; }
     /// <summary>Gets the UTF-8 bytes of every distinct file in the closure, stage sources included.</summary>
     public long ExpandedBytes { get; }
+    /// <summary>Gets the include directories at least one include resolved through, as full paths, in search
+    /// order.</summary>
+    public IReadOnlyList<string> IncludeDirectories { get; }
     /// <summary>Gets every include the stage sources reach, in discovery order, by full path.</summary>
     public IReadOnlyList<ShaderSourceDependency> Includes { get; }
     /// <summary>Gets the directory every file must lie within, or <see langword="null"/> for an unconfined closure.</summary>
@@ -135,10 +148,13 @@ public sealed partial class ShaderSourceClosure {
     /// <param name="readInclude">Reads an include's text by full path, <see langword="null"/> when no file holds it, in
     /// place of the file system, for a caller reading another tree than the working one; or <see langword="null"/> to read
     /// the file system.</param>
+    /// <param name="includeDirectories">The directories, in search order, an include that does not lie beside the file
+    /// naming it resolves through (<see cref="ShaderStageSource.IncludeDirectories"/>), or <see langword="null"/> for
+    /// none.</param>
     /// <returns>The closure.</returns>
     /// <exception cref="ShaderClosureRefusedException">An include is missing, a file lies outside
     /// <paramref name="root"/>, or a limit is exceeded; the code names which.</exception>
-    public static ShaderSourceClosure Collect(IReadOnlyList<(string Path, string Text)> sources, ShaderSourceLimits limits, string? root = null, IReadOnlyDictionary<string, string>? generated = null, Func<string, string?>? readInclude = null) {
+    public static ShaderSourceClosure Collect(IReadOnlyList<(string Path, string Text)> sources, ShaderSourceLimits limits, string? root = null, IReadOnlyDictionary<string, string>? generated = null, Func<string, string?>? readInclude = null, IReadOnlyList<string>? includeDirectories = null) {
         ArgumentNullException.ThrowIfNull(argument: sources);
         ArgumentNullException.ThrowIfNull(argument: limits);
 
@@ -146,13 +162,44 @@ public sealed partial class ShaderSourceClosure {
             ? null
             : Path.GetFullPath(path: root)
         );
+        var searched = (includeDirectories ?? []).Select(selector: static directory => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: directory))).Distinct(comparer: PuckPaths.Comparer).ToArray();
+        var used = new bool[searched.Length];
         var roots = new List<ShaderSourceDependency>(capacity: sources.Count);
         var includes = new List<ShaderSourceDependency>();
         var contents = new Dictionary<string, string>(comparer: PuckPaths.Comparer);
+        var resolutions = new Dictionary<string, Dictionary<string, ShaderIncludeResolution>>(comparer: PuckPaths.Comparer);
         var visited = new HashSet<string>(comparer: PuckPaths.Comparer);
         var rootPaths = new HashSet<string>(comparer: PuckPaths.Comparer);
         var expanded = 0L;
         var deepest = 0;
+
+        // An include's text by full path, or null when nothing holds it: generated text first, then the caller's reader or
+        // the file system. A file larger than one file may hold is refused before it is read.
+        string? Read(string includePath) {
+            if ((generated is not null) && generated.TryGetValue(key: includePath, value: out var text)) {
+                return text;
+            }
+
+            if (readInclude is not null) {
+                return readInclude(arg: includePath);
+            }
+
+            var info = new FileInfo(fileName: includePath);
+
+            if (!info.Exists) {
+                return null;
+            }
+
+            // A file's UTF-8 text is never longer than its bytes, so an oversized file is refused before it is read.
+            if (info.Length > limits.MaxFileBytes) {
+                throw new ShaderClosureRefusedException(
+                    code: ShaderClosureRefusedException.FileBytes,
+                    message: $"'{includePath}' holds {info.Length} bytes; one file may hold at most {limits.MaxFileBytes}."
+                );
+            }
+
+            return File.ReadAllText(path: includePath);
+        }
 
         void Admit(string path, string text) {
             if (
@@ -190,21 +237,62 @@ public sealed partial class ShaderSourceClosure {
             var directory = (Path.GetDirectoryName(path: path) ?? Environment.CurrentDirectory);
 
             foreach (Match match in IncludePattern().Matches(input: text)) {
-                var includePath = Path.GetFullPath(path: Path.Combine(
-                    path1: directory,
-                    path2: match.Groups[1].Value
-                ));
+                var written = match.Groups[1].Value;
+                string? includePath = null;
+                string? included = null;
+                var through = -1;
 
-                if (rootPaths.Contains(item: includePath)) {
+                // The including file's directory, then each include directory in order: the first that holds the file wins.
+                for (var candidate = -1; ((candidate < searched.Length) && (includePath is null)); candidate++) {
+                    var candidatePath = Path.GetFullPath(path: Path.Combine(
+                        path1: ((candidate < 0) ? directory : searched[candidate]),
+                        path2: written
+                    ));
+
+                    if (rootPaths.Contains(item: candidatePath)) {
+                        throw new ShaderClosureRefusedException(
+                            code: ShaderClosureRefusedException.SourceIncluded,
+                            message: $"'{path}' includes the stage source '{candidatePath}' of the same compile."
+                        );
+                    }
+
+                    if (visited.Contains(item: candidatePath)) {
+                        (includePath, through) = (candidatePath, candidate);
+                    } else if (Read(includePath: candidatePath) is { } read) {
+                        (includePath, included, through) = (candidatePath, read, candidate);
+                    }
+                }
+
+                if (includePath is null) {
+                    var beside = Path.GetFullPath(path: Path.Combine(path1: directory, path2: written));
+
                     throw new ShaderClosureRefusedException(
-                        code: ShaderClosureRefusedException.SourceIncluded,
-                        message: $"'{path}' includes the stage source '{includePath}' of the same compile."
+                        code: ShaderClosureRefusedException.IncludeMissing,
+                        message: ((searched.Length == 0)
+                            ? $"'{path}' includes '{written}', and no file exists at '{beside}'."
+                            : $"'{path}' includes '{written}', and no file exists at '{beside}' or below the include directories '{string.Join(separator: "', '", value: searched)}'.")
                     );
                 }
 
-                if (!visited.Add(item: includePath)) {
+                if (!resolutions.TryGetValue(key: path, value: out var directives)) {
+                    directives = new Dictionary<string, ShaderIncludeResolution>(comparer: StringComparer.Ordinal);
+                    resolutions[path] = directives;
+                }
+
+                directives[written] = new ShaderIncludeResolution(
+                    Directory: ((through < 0) ? null : searched[through]),
+                    Path: includePath
+                );
+
+                if (through >= 0) {
+                    used[through] = true;
+                }
+
+                if (included is null) {
                     continue;
                 }
+
+                visited.Add(item: includePath);
 
                 var includeDepth = (depth + 1);
 
@@ -220,40 +308,6 @@ public sealed partial class ShaderSourceClosure {
                         code: ShaderClosureRefusedException.DependencyCount,
                         message: $"the closure reaches more than {limits.MaxDependencies} includes at '{includePath}'."
                     );
-                }
-
-                if (
-                    (generated is null) ||
-                    !generated.TryGetValue(
-                        key: includePath,
-                        value: out var included
-                    )
-                ) {
-                    if (readInclude is not null) {
-                        included = (readInclude(arg: includePath) ?? throw new ShaderClosureRefusedException(
-                            code: ShaderClosureRefusedException.IncludeMissing,
-                            message: $"'{path}' includes '{match.Groups[1].Value}', and no file exists at '{includePath}'."
-                        ));
-                    } else {
-                        var info = new FileInfo(fileName: includePath);
-
-                        if (!info.Exists) {
-                            throw new ShaderClosureRefusedException(
-                                code: ShaderClosureRefusedException.IncludeMissing,
-                                message: $"'{path}' includes '{match.Groups[1].Value}', and no file exists at '{includePath}'."
-                            );
-                        }
-
-                        // A file's UTF-8 text is never longer than its bytes, so an oversized file is refused before it is read.
-                        if (info.Length > limits.MaxFileBytes) {
-                            throw new ShaderClosureRefusedException(
-                                code: ShaderClosureRefusedException.FileBytes,
-                                message: $"'{includePath}' holds {info.Length} bytes; one file may hold at most {limits.MaxFileBytes}."
-                            );
-                        }
-
-                        included = File.ReadAllText(path: includePath);
-                    }
                 }
 
                 Admit(
@@ -308,7 +362,9 @@ public sealed partial class ShaderSourceClosure {
             contents: new ReadOnlyDictionary<string, string>(dictionary: contents),
             depth: deepest,
             expandedBytes: expanded,
+            includeDirectories: [.. searched.Where(predicate: (_, index) => used[index])],
             includes: includes.AsReadOnly(),
+            resolutions: resolutions,
             root: fullRoot,
             sources: roots.AsReadOnly()
         );
@@ -328,35 +384,37 @@ public sealed partial class ShaderSourceClosure {
             value: (".." + Path.DirectorySeparatorChar)
         ));
     }
-    /// <summary>Returns a source's text with each include directive naming the path <paramref name="map"/> gives its
-    /// include instead, the include resolved as <see cref="Collect"/> resolves it (against the source's directory) and
-    /// every other character kept, so no line moves.</summary>
-    /// <param name="text">The source's text.</param>
-    /// <param name="path">The source's path, which a relative include resolves against.</param>
-    /// <param name="map">Maps an include's full path and the path its directive names to the path the directive names
-    /// instead, which may be the same.</param>
+    /// <summary>Returns the text of a file of this closure with each include directive naming the path
+    /// <paramref name="map"/> gives its include instead, the include as this closure resolved it and every other character
+    /// kept, so no line moves. A directive this closure did not resolve keeps its text.</summary>
+    /// <param name="text">The file's text, as this closure read it.</param>
+    /// <param name="path">The file's path: a stage source or an include of this closure.</param>
+    /// <param name="map">Maps where a directive resolved and the path it names to the path the directive names instead,
+    /// which may be the same.</param>
     /// <returns>The text.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="text"/>, <paramref name="path"/> or
     /// <paramref name="map"/> is <see langword="null"/>.</exception>
-    public static string WithIncludes(string text, string path, Func<string, string, string> map) {
+    public string WithIncludes(string text, string path, Func<ShaderIncludeResolution, string, string> map) {
         ArgumentNullException.ThrowIfNull(argument: text);
         ArgumentNullException.ThrowIfNull(argument: path);
         ArgumentNullException.ThrowIfNull(argument: map);
 
-        var directory = (Path.GetDirectoryName(path: Path.GetFullPath(path: path)) ?? Environment.CurrentDirectory);
+        var includer = Path.GetFullPath(path: path);
 
         return IncludePattern().Replace(
             evaluator: match => {
                 var include = match.Groups[1];
+
+                if (!m_resolutions.TryGetValue(key: includer, value: out var directives) || !directives.TryGetValue(key: include.Value, value: out var resolution)) {
+                    return match.Value;
+                }
+
                 var start = (include.Index - match.Index);
 
                 return string.Concat(
                     str0: match.Value.AsSpan(length: start, start: 0),
                     str1: map(
-                        arg1: Path.GetFullPath(path: Path.Combine(
-                            path1: directory,
-                            path2: include.Value
-                        )),
+                        arg1: resolution,
                         arg2: include.Value
                     ),
                     str2: match.Value.AsSpan(start: (start + include.Length))

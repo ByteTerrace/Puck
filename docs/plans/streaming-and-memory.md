@@ -1548,11 +1548,15 @@ the fixed shares are gone.
   one operating-system wait on the high-resolution timer and the event
   (`IPrecisionWaiter.TryWait` with a wake), and runs the work registered for
   it (`HostWaits.Serve`, a `WaitService`) when the event is set or the time a
-  service asked for comes. Three things set it. A job's fence, asked as the
-  job is submitted (`IGpuSubmissionFence.SignalOnCompletion`): Direct3D 12
-  sets the event's own handle from `ID3D12Fence::SetEventOnCompletion`, and
-  on Vulkan, which has no such call, one thread for the process waits each
-  watched fence in the driver and sets it (`VulkanFenceWatch`). A client with
+  service asked for comes; each service is handed what is left of the wait
+  when its turn comes, so several together end by the deadline. Three things
+  set it. A job's fence, asked as the job is submitted
+  (`IGpuSubmissionFence.SignalOnCompletion`): Direct3D 12 sets the event's
+  own handle from `ID3D12Fence::SetEventOnCompletion`, and where a backend
+  cannot register one (Vulkan, which has no such call, or a refused Direct3D
+  12 registration) a shared watcher waits that fence in the driver on a
+  thread of its own and sets it (`GpuFenceWatch`), so no fence's pending
+  submission hides another's completion. A client with
   a job to take or a slot given back (`SdfGpuWork.Wake`), which the bake calls
   when work of its pool has finished since its last take
   (`SdfMeshPathBake.Offered`). And time: a step the budget held asks to run
@@ -2376,7 +2380,11 @@ and generation stamps. Only it issues `Lease` values; revocation makes existing
 leases stale before remapping can publish new coverage. `GpuRegion.StageOwed`
 intersects the coalesced upload runs with writable pages without joining the
 result again, sizes its request table to those exact runs, and validates their
-leases at recording. The region's address ceiling reserves room for the
+leases at recording, restaging a stale request instead of failing the frame.
+Unmapped debt stays owed; changed pages re-owe the host-known prefix, and
+published meshes whose proofs go stale return through ordinary landing.
+Replacement buffers supply their own page authority, and external leases
+include the target offset. The region's address ceiling reserves room for the
 worst-case split table at the minimum supported mapping page, 4 KiB.
 An ordinary contiguous growth preserves proofs through its ordered carry;
 shrink and disposal revoke them. No native sparse destination is selected yet.
@@ -2397,13 +2405,56 @@ counting wrappers do not define a second queue. A checkpoint after retirement
 covers all preceding jobs without an extra per-job retirement counter or signal.
 The job fences remain responsible for wakeups, readbacks and ring-slot rewrites.
 
+**Piece 3: pool pressure and the Vulkan binding door.** Account trim requests
+reach both native arenas through `IGpuMemoryOwners.TrimRequested` and the
+device ledger. `GpuMemoryPool.Trim` frees empty blocks and marks every
+existing live block for release when its last placement returns. That mark
+survives delayed retirement. New blocks follow the ordinary spare-block
+policy until another request. Arena teardown removes the subscription.
+The pool and native recording-driver laws show that a live neighbour keeps
+the block held and the last return frees it, with no replacement allocation.
+The account law exercises the subscription and its removal.
+
+Vulkan enables both sparse buffer features only with an available binding
+queue, preferring the graphics family and otherwise requesting a separate
+queue. `VulkanLogicalDevice.BindSparse` is the submission-thread transaction:
+flush deferred graphics and signal N, bind waiting N and signaling N+1,
+submit a graphics wait on N+1, then return its completion value. The bind and
+graphics join share the existing device timeline. A failed bind or join
+prevents further completion proofs on that generation; backing must remain
+held until teardown. The native-call laws exercise one or two queue handles,
+an open graphics batch, null-memory unbinding and failure. They prove call
+ordering, not driver execution or physical-page lifetime. The initial join
+uses the existing conservative all-commands wait; first-access-stage
+specialization and its measurement remain with native resource integration.
+This follows the semaphore ordering in the Vulkan reference and the independent
+vkd3d-proton implementation cited in the backend contract above.
+
 **Pieces still to build, in dependency order.** Add native reserved/sparse
-resources and mapping queues, page-only
-residency admission with pool-owned slack, sparse arena placement policy, and
-unmap/empty-block trim plus physical compaction. These remain step 7 work;
-this piece claims neither a sparse path chosen nor a budget-drop physical
-release. Both backends must stay bootable at each piece, and the final hardware
-check below still gates any claim that sparse relief works.
+resource ownership, Direct3D 12 tile mapping, page-only residency admission
+with pool-owned slack (M2), sparse arena placement policy (M5), and fenced
+unmapping plus physical compaction (M6). Vulkan's binding door and both pools'
+empty-block trim exist; mesh regions still choose contiguous storage. No
+current piece claims a sparse path chosen or budget-drop sparse relief. Both
+backends must stay bootable at each piece, and the final hardware check below
+still gates any claim that sparse relief works.
+
+**Code review disposition (continuation 3, findings on 2ad5ac190a).**
+
+| Finding | Answer |
+|---|---|
+| F1 high | Fixed at `RetireBackgroundResource(GpuRegion)`: the pending-use predicate compares the actual feedback buffer. The hidden-residency law holds it across repeated trim polls and releases it after the irradiance copy submits. |
+| F2 high | Fixed: destination shrink re-owes every surviving mesh and draw row, even when forgetting a tail did not relocate the arena. The arrival law starts with a standing mesh, grows for a large tail, forgets it, and verifies lower held region bytes and a standing survivor without another relocation. |
+| F3 medium | Clipped debt is retained, stale staged runs are restaged, the host-known prefix is re-owed on mapping changes, and published stale meshes re-enter landing. Page and arrival laws cover these paths. An external region's disjoint writes beyond its known prefix still need exact retained coverage before sparse external targets are used; this is a remaining integration item, not a claim of complete external remap recovery. |
+| F4 medium | Grow, shrink and restage use one destination-authority selection door; external lease offsets include the target. A fully committed buffer correctly has all-writable coverage. Native paged buffers always supply their own authority. Laws cover replacement and nonzero external targets. |
+| F5 medium | Trim removes retained mesh proofs against the arena's current placements, independently of its consumed Forgotten delta. |
+| F6 low | Stale landing entries no longer reset the traversal cursor per entry. Repeated page scans by retained lease values after an unrelated revision remain a performance follow-up. The claimed two signals per prepare does not follow: `GpuRetirementQueue.Poll` checkpoints only when newly eligible held objects exist. |
+| F7 low | Corrected the sync-pair reference: `MaxCopyRuns` bounds pre-clipping debt; the encoded table can expand after clipping. |
+| F8 info | Confirmed scope: this device timeline unifies SdfWorldTables frame and background retirement. Surface uploads and render-node resources retain their existing completion points; no global consolidation is claimed. |
+
+The laws use modeled buffers and native-call recording, not native validation
+of sparse physical lifetime. Native sparse ownership and hardware qualification
+remain with the pieces above.
 
 **Design review disposition (sm7b, e9c1d485c9).** H1's write/publication proof,
 M1's retirement proof and M3's absent-row path now have device-free laws as

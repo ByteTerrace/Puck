@@ -533,7 +533,9 @@ references—all content-addressed under
 `<tree>/objects/sha256/<hex[0..2]>/<hex64>` (the same layout `puck publish`'s
 dry-run and `Puck.Launcher.Release.DirectoryReleaseSource` already read) and
 hash-checked, so `verify` and a client both catch a mismatch
-by name. `build` refuses unless `puck schema --check` and `puck registry --check`
+by name. `build --channel` requires one portable directory name, refusing roots,
+separators, traversal and device names before writing the tree.
+`build` refuses unless `puck schema --check` and `puck registry --check`
 both pass, and unless the worlds tree is clean (or `--allow-dirty` is given);
 a refusal exits 2.
 

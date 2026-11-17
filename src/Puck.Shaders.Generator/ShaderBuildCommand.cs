@@ -10,7 +10,9 @@ namespace Puck.Shaders.Generator;
 /// <remarks>
 /// Options: <c>--project &lt;directory&gt;</c>, <c>--request &lt;file&gt;</c> (one <see cref="ShaderBuildOutput"/> a
 /// line), <c>--lock &lt;file&gt;</c> (the publication lock), <c>--cache &lt;directory&gt;</c> (default
-/// <see cref="ShaderCompiler.DefaultCacheDirectory"/>), <c>--dxc &lt;command&gt;</c> (default <c>dxc</c>) and
+/// <see cref="ShaderCompiler.DefaultCacheDirectory"/>), <c>--dxc &lt;command&gt;</c> (default <c>dxc</c>),
+/// <c>--include &lt;directory&gt;</c> (the include directory every stage source resolves through,
+/// <see cref="ShaderIncludeDirectories.CheckoutDirectory"/>) and
 /// <c>--jobs &lt;n&gt;</c>; a compile also takes <c>--inputs &lt;file&gt;</c>, which it writes after success with every file
 /// it read (<see cref="ShaderBuild.Reads"/>), one full path a line, for the build to skip the next run on. Without <c>--jobs</c> a compile asks its host for every core over its standard streams
 /// (<see cref="StreamShaderCoreBroker"/>); the build host answers from MSBuild's own core budget. Every message is one
@@ -25,7 +27,7 @@ internal static class ShaderBuildCommand {
         for (var index = 1; (index < arguments.Length); index += 2) {
             if (
                 ((index + 1) >= arguments.Length) ||
-                (arguments[index] is not ("--project" or "--request" or "--lock" or "--cache" or "--dxc" or "--jobs" or "--inputs")) ||
+                (arguments[index] is not ("--project" or "--request" or "--lock" or "--cache" or "--dxc" or "--jobs" or "--inputs" or "--include")) ||
                 !options.TryAdd(key: arguments[index], value: arguments[(index + 1)])
             ) {
                 return Refuse(reason: $"'{arguments[index]}' is not a shader build option, or it repeats or has no value.");
@@ -52,6 +54,7 @@ internal static class ShaderBuildCommand {
             var build = new ShaderBuild(
                 availableMemory: Puck.Hosting.HostMemory.AvailablePhysicalBytes,
                 compiler: compiler,
+                includeDirectories: (options.TryGetValue(key: "--include", value: out var include) && !string.IsNullOrWhiteSpace(value: include)) ? [include] : null,
                 lockFile: lockFile,
                 log: Console.Out,
                 projectDirectory: project

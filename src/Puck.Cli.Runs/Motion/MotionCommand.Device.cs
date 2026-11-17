@@ -9,7 +9,7 @@ public static partial class MotionCommand {
     private const string ManifestFileName = "manifest.json";
 
     // Everything that boots a World: the build, the run or the two runs of --reproduce, and the report of each.
-    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds) {
+    private static int RunWorld(string repositoryRoot, string scenarioFile, string world, string directory, MotionScenarioSet set, IReadOnlyList<MotionScenario> selected, bool reproduce, string? worldArtifact, WorldBackendPreference? backend, string? cacheDirectory, int columns, int cellWidth, int timeoutSeconds, CancellationToken cancellationToken) {
         _ = Directory.CreateDirectory(path: directory);
 
         var deadline = TimeSpan.FromSeconds(value: timeoutSeconds);
@@ -17,6 +17,7 @@ public static partial class MotionCommand {
 
         if (!WorldLaunch.TryResolve(
             build: out var leased,
+            cancellationToken: cancellationToken,
             error: out var buildError,
             logDirectory: directory,
             named: worldArtifact,
@@ -53,7 +54,7 @@ public static partial class MotionCommand {
         var scenariosDisplay = CliPaths.ToDisplay(fullPath: scenarioFile, relativeTo: repositoryRoot);
 
         if (!reproduce) {
-            var result = MotionRun.Execute(progress: Console.Error, request: RequestFor(runDirectory: directory, start: null));
+            var result = MotionRun.Execute(cancellationToken: cancellationToken, progress: Console.Error, request: RequestFor(runDirectory: directory, start: null));
 
             return Conclude(commit: commit, directory: directory, result: result, scenarios: scenariosDisplay, set: set, world: worldDisplay);
         }
@@ -69,13 +70,13 @@ public static partial class MotionCommand {
             ConfinedDirectory.RemoveTree(path: first);
             ConfinedDirectory.RemoveTree(path: second);
 
-            a = MotionRun.Execute(progress: Console.Error, request: RequestFor(runDirectory: first, start: start));
+            a = MotionRun.Execute(cancellationToken: cancellationToken, progress: Console.Error, request: RequestFor(runDirectory: first, start: start));
 
             if (a.Error.Length != 0) {
                 break;
             }
 
-            b = MotionRun.Execute(progress: Console.Error, request: RequestFor(runDirectory: second, start: a.StartTick));
+            b = MotionRun.Execute(cancellationToken: cancellationToken, progress: Console.Error, request: RequestFor(runDirectory: second, start: a.StartTick));
 
             if (b.TooLateStart is not { } later) {
                 break;

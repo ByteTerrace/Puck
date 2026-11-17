@@ -1,5 +1,5 @@
 #include "../isa/sdf-bloom.interface.hlsli"
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/bloom-filter.hlsli"
+#include "Shared/bloom-filter.hlsli"
 
 float3 bloomTap(BloomAxis x, BloomAxis y, float2 delta, float2 texel) {
     return bloomSelected(max(bloomAreaSample(bloomSource, bloomSampler, x, y, delta * texel), 0.0), passGroup.bloomCutoff);

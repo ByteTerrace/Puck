@@ -160,13 +160,16 @@ before mesh reads; zero placement words reject every triangle through the existi
 `GpuBufferPages` issues the mesh destination's writable lease. Landing completion and
 `MeshStands` require its generation unchanged; a moved mesh without one stays owed and
 its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and checks
-the proof again at recording. Native sparse mapping remains in the streaming plan.
+the proof again at recording, restaging stale requests and retaining unmapped debt.
+Mapping changes re-owe the host-known prefix and stale published meshes; a shrink
+re-lands survivors even without arena relocation. Destination replacements read
+the new buffer's authority. Native sparse mapping remains in the streaming plan.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
 `SdfMeshRows.Create` returns the table and its sole writer. The dresser owns runs per host, group and own-mesh
 occurrence; allocator tickets guard frees and fresh occupancies guard history even for same-mesh reuse.
-The frame keeps its host inputs and publishes `MeshRows` separately. Claims and glass counts move inside writes.
+The frame keeps its host inputs (`MeshDraws` and its journal) and references the dresser's `MeshRows` and dressed pick map, which `SdfMeshDresser.Dress` adopts onto the frame in place (`SdfFrame.AdoptDressing`) rather than copying the record; a frame another dresser dressed is copied first. The revision, journal, serial and staging cause of a dressed frame are the rows' own, read through `SdfMeshDraws` (`SdfFrame.DrawRows`), never the host fields. Claims and glass counts move inside writes.
 `SdfMeshHistory.Observe` compares table identity and occupancy; free/owed/refused rows retire in `StageMeshDraw`.
 Only start over rebuilds every owner: retry, the free share, forced packing or a noncanonical locked frame.
 Picking stamps the mesh target's row table/revision and rejects a changed row identity before resolving its owner.
@@ -566,7 +569,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   from the
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
-  `CanDrawIndirectCount` is false, the recorder issues those same initialized
+  `VulkanGpuRecorder.CanDrawIndirectCount` is false, the recorder issues those same initialized
   slots in one fixed `vkCmdDrawIndirect` when multi-draw is available; otherwise
   it advances the word base for each individual slot, including empty rejected slots;
   no raster CPU cull or level path remains. Keep command-to-vertex read barriers and
@@ -881,6 +884,18 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   source, dead code included, so a lighting, screen or view module in the
   closure would move a stored mesh's key. Add to the bake's closure only what
   the bake reads, and check with `puck mesh identity --against`.
+- **A shared header is included as `Shared/<name>.hlsli`.** It resolves
+  through an include directory: the build passes the checkout's
+  (`$(PuckShaderIncludeDirectory)`, `src/Puck.Shaders/Assets/Shaders`), and a
+  runtime reader (`SdfKernelSource.Read`, a reload) asks
+  `ShaderIncludeDirectories.Of` for the deployment's `Assets/Shaders`, where
+  `Puck.Shaders` deploys `Shared` as content; a reload of a checkout tree
+  therefore reads the World's deployed headers. Never climb out of a
+  project with `../`: the deployed tree (`Assets/Shaders/Sdf`) cannot reach it,
+  its sources are refused, and every specialization stays interpreted. A
+  source refused at load is named by `SdfKernelSet.SourceRefusalOf`, printed
+  as `[world.shaders: <kernel> source refused ...]` and carried into each
+  specialization refusal.
 - **Keep control flow uniform around barriers and groupshared gathers.**
   Inactive lanes still reach the barriers.
 - **Hot reload compiles kernel sources only.** With `Puck.World` running:
@@ -1034,7 +1049,12 @@ compares and fails naming the file that drifted, it writes nothing.
   `VulkanMemoryArena`) are one `GpuMemoryPool` each, which holds the policy:
   first fit across a key's shared blocks, a block of its own for a resource
   past half a block that no shared block holds, freed as it empties, and one
-  empty shared block kept spare per key. A backend supplies only the native
+  empty shared block kept spare per key outside pressure. `MemoryAccount.TrimRequested`
+  reaches both arenas through `IGpuMemoryOwners` and `GpuDeviceMemoryWork`.
+  `GpuMemoryPool.Trim` frees empty blocks and marks the existing live blocks
+  for release on their last return, including a delayed fenced return. It
+  never revokes a live placement; new blocks do not inherit an old request.
+  A backend supplies only the native
   allocate, free and bind calls and finds a resource's placement again (a
   private-data token on Direct3D 12, a handle map on Vulkan). The pool reuses a
   range only once its resource's release returns it and sees no fence: a range
@@ -1044,6 +1064,15 @@ compares and fails naming the file that drifted, it writes nothing.
   floor) once it holds four times more, and a relocated mesh region shrinks to
   its need (`GpuRegion.Shrink`). Upload heaps are system memory: a staging
   buffer kept at a whole region's size costs the process that much working set.
+- Vulkan enables `sparseBinding` and `sparseResidencyBuffer` together only
+  with a nonempty sparse queue family, preferring graphics. The device owns
+  a separate binding queue when needed. `VulkanLogicalDevice.BindSparse`
+  checkpoints graphics, binds waiting that value and signaling the next,
+  then submits a graphics wait before returning. Both signals share the
+  device's retirement timeline; a failed bind or join prevents further
+  retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
+  both queue arrangements and an open batch. This is the binding door only:
+  native sparse buffer ownership and mesh backing selection remain step 7.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`); a placed mesh's words are owed without a
   compare (`GpuRegion.OweSourced`) and the upload's flush writes them from the

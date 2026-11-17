@@ -11,6 +11,10 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="MemoryBacking.DeviceBlocks"/>.
 /// </summary>
 public interface IGpuMemoryOwners {
+    /// <summary>Requests release of unused native blocks. Invoked outside the account lock; handlers may enter
+    /// their pool and report physical releases back to the account. Owners unregister at device teardown.</summary>
+    event Action? TrimRequested;
+
     /// <summary>Answers whether an allocation may be made in a segment, before the device is asked: the segment's pool
     /// has room for it beside everything held and promised there, and the segment has room under its own limit. A grant
     /// promises its bytes until <see cref="Settle"/> is called for it, which happens exactly once. Called outside the

@@ -53,6 +53,13 @@ public sealed class SdfWorldPipelineCatalog(GpuRegionCopyPass regionCopy, SdfMes
                 value: out var kernels
             )) {
                 kernels = SdfKernelSet.Load(target: target);
+
+                foreach (var kernel in SdfShadeKernels.Specialized) {
+                    if (kernels.SourceRefusalOf(kernel: kernel) is { } refusal) {
+                        Console.Error.WriteLine(value: $"[world.shaders: {SdfKernelSet.StemOf(kernel: kernel)} source refused, its specializations stay interpreted: {refusal}]");
+                    }
+                }
+
                 m_deployed.Add(
                     key: target,
                     value: kernels

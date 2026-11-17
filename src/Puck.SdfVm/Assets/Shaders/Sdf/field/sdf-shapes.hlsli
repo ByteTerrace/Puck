@@ -2,7 +2,7 @@
 #ifndef FIELD_SDF_SHAPES_HLSLI
 #define FIELD_SDF_SHAPES_HLSLI
 // The 2D box distance (puckBoxDistance2) and the glyph median decode (puckMsdfReconstruct) are the overlays' too.
-#include "../../../../../Puck.Shaders/Assets/Shaders/Shared/msdf.hlsli"
+#include "Shared/msdf.hlsli"
 // The exact distance to a box centred on the origin, from q = abs(p) - halfExtents: the outside part's length plus the
 // inside part's largest (never positive) component. Every box below reads it; the 2D cylinder, slab and extrude
 // profiles read puckBoxDistance2.

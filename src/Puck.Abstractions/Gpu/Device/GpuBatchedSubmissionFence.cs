@@ -14,8 +14,10 @@ namespace Puck.Abstractions.Gpu;
 /// that failure; so is a disposed fence whose device was lost. Single-threaded, like every pump-thread GPU object.
 /// <para>A completion signal (<see cref="SignalOnCompletion"/>) follows the same states: asked of a deferred fence it
 /// waits for the batch's hand-off, asked of an aliased one it is the owner's, and only an armed fence asks its backend
-/// (<see cref="SignalNative"/>). Every state that ends without a native signal (abandoned, faulted, already retired)
-/// sets the event itself, so a waiter is never left asleep on a submission that will not signal.</para>
+/// (<see cref="TrySignalNative"/>). A backend that cannot register the event hands the fence to the shared watcher
+/// (<see cref="GpuFenceWatch"/>), which waits it in the driver (<see cref="WaitNativeFor"/>) until it completes. Every
+/// state that ends without a native signal (abandoned, faulted, already retired) sets the event itself, so a waiter is
+/// never left asleep on a submission that will not signal.</para>
 /// </summary>
 public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     private GpuSubmissionBatch? m_deferred;
@@ -25,6 +27,9 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     private bool m_abandoned;
     private bool m_armed;
     private bool m_disposed;
+    // Whether the shared watcher was handed the armed submission; it is withdrawn before the native fence is reset or
+    // released.
+    private bool m_watched;
     private ExceptionDispatchInfo? m_failure;
     // The completion signal asked for while the submission was still deferred, owed to the backend once it is armed.
     private EventWaitHandle? m_owedSignal;
@@ -83,6 +88,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         if (!m_armed) { return; }
 
         WaitNativeCounted();
+        Unwatch();
         DrainNative();
         m_armed = false;
         m_generation++;
@@ -110,7 +116,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         } else if (!m_armed) {
             _ = signal.Set();
         } else {
-            SignalNative(signal: signal);
+            SignalArmed(signal: signal);
         }
     }
     /// <inheritdoc/>
@@ -130,6 +136,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_armed = false;
         m_disposed = true;
         SettleOwedSignal();
+        Unwatch();
         DisposeNative();
         GC.SuppressFinalize(obj: this);
     }
@@ -150,7 +157,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_armed = true;
         if (m_owedSignal is { } signal) {
             m_owedSignal = null;
-            SignalNative(signal: signal);
+            SignalArmed(signal: signal);
         }
     }
     /// <summary>Queues the signal of a submission whose entries are already on the queue, and arms the fence only once
@@ -200,9 +207,34 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     protected abstract void DisposeNative();
     /// <summary>Asks the backend to set <paramref name="signal"/> once the native fence reaches the value its armed
     /// submission signals, or at once when it already has. Called only while the fence is armed, on the thread that
-    /// submits; it must not block. A backend that cannot register sets the signal instead, so the waiter polls.</summary>
+    /// submits; it must not block.</summary>
     /// <param name="signal">The event to set.</param>
-    protected abstract void SignalNative(EventWaitHandle signal);
+    /// <returns>Whether the backend registered the event with the device; <see langword="false"/> when it has no such
+    /// registration or the device refused it, and the shared watcher then waits the fence
+    /// (<see cref="WaitNativeFor"/>) and sets the event.</returns>
+    protected abstract bool TrySignalNative(EventWaitHandle signal);
+    /// <summary>Blocks for at most <paramref name="slice"/> until the native fence reaches the value its armed submission
+    /// signals. Called on a watcher thread while the fence is armed, concurrently with the submitting thread's reads and
+    /// waits but never with <see cref="DrainNative"/> or <see cref="DisposeNative"/>, which the watcher is withdrawn
+    /// from first; it must be safe under that concurrency, and a throw (a lost device) ends the watch as reached.</summary>
+    /// <param name="slice">The longest the call may block.</param>
+    /// <returns>Whether the fence reached its value; <see langword="false"/> when the slice passed first.</returns>
+    protected internal abstract bool WaitNativeFor(TimeSpan slice);
+
+    // Asks the backend for a completion event, or has the shared watcher wait the fence when the backend cannot.
+    private void SignalArmed(EventWaitHandle signal) {
+        if (!TrySignalNative(signal: signal)) {
+            m_watched = true;
+            GpuFenceWatch.Begin(fence: this, signal: signal);
+        }
+    }
+    // Takes the fence back from the shared watcher before its native fence is reset or released.
+    private void Unwatch() {
+        if (m_watched) {
+            m_watched = false;
+            GpuFenceWatch.Withdraw(fence: this);
+        }
+    }
 
     // Drains an abandoned fence, so it can be armed again, and reports the abandonment to the caller that waited.
     [System.Diagnostics.CodeAnalysis.DoesNotReturn]

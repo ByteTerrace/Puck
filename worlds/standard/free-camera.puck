@@ -37,7 +37,7 @@ template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "f
       name: rig
       version: "puck.camera.program.v1"
       operations [
-        lookAt(focusDistance: 1, subject: reference(), worldAxes: false)
+        lookAt(focusDistance: 1)
         fieldOfView(fieldOfViewRadians: fieldOfView)
       ]
     }

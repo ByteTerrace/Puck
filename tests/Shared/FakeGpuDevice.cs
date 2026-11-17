@@ -318,14 +318,6 @@ internal sealed class FakeGpuDevice :
     }
     void IGpuRecorder.DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset) => Hit(key: "IGpuRecorder.DispatchIndirect");
 
-    bool IGpuRecorder.CanDrawIndirectCount {
-        get {
-            Hit(key: "IGpuRecorder.CanDrawIndirectCount");
-
-            return true;
-        }
-    }
-
     void IGpuRecorder.DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) => Hit(key: "IGpuRecorder.DrawIndirectCount");
     void IGpuRecorder.ClearStorageImage(nint commandBufferHandle, nint imageHandle, GpuPixelFormat format) => Hit(key: "IGpuRecorder.ClearStorageImage");
     void IGpuRecorder.ClearStorageBuffer(nint commandBufferHandle, nint bufferHandle, ulong sizeBytes) {
@@ -512,7 +504,13 @@ internal sealed class FakeGpuDevice :
 
         return LastCreatedFence;
     }
-    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline ??= new SubmissionTimeline(this);
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline {
+        get {
+            Hit(key: "IGpuQueueSubmitter.Timeline");
+
+            return (m_timeline ??= new SubmissionTimeline(this));
+        }
+    }
     private SubmissionTimeline? m_timeline;
     private sealed class SubmissionTimeline(FakeGpuDevice gpu) : GpuQueueTimeline {
         private readonly Queue<(ulong Value, long Order)> m_pending = new();

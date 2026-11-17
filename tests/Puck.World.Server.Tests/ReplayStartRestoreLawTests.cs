@@ -35,6 +35,36 @@ public sealed class ReplayStartRestoreLawTests {
         Assert.Equal(expected: [expected], actual: sink.Seeds);
     }
 
+    /// <summary>A replay start whose run edited the configuration after the checkpoint validates the checkpoint before
+    /// it reinstalls anything: a checkpoint the restore refuses leaves the edited definition installed as it was.</summary>
+    [Fact]
+    public void ARefusedCheckpointLeavesTheEditedConfigurationInstalled() {
+        using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
+        var server = fixture.Server;
+
+        Assert.True(condition: server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var boot, reason: out var reason), userMessage: reason);
+        server.EnqueueMutation(mutation: new WorldMutation.UpsertStateRow(
+            Principal: Principal.Console,
+            Row: new WorldStateRow(CellName.Parse(candidate: "after-checkpoint"), CellKind.Int)
+        ));
+        Assert.True(condition: server.DrainAdministrative());
+
+        var edited = server.Definition;
+        var malformed = (boot! with { Population = (boot.Population with { SimulatedCount = -1 }) });
+
+        _ = Assert.ThrowsAny<Exception>(testCode: () => server.Persistence.RestoreReplayStart(checkpoint: malformed));
+        Assert.Same(
+            expected: edited,
+            actual: server.Definition
+        );
+        server.Persistence.RestoreReplayStart(checkpoint: boot!);
+        Assert.NotSame(
+            expected: edited,
+            actual: server.Definition
+        );
+    }
+
     private sealed class SeedSink(Func<ulong> seed) : IClientSink {
         public List<ulong> Seeds { get; } = [];
 
