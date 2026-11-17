@@ -595,7 +595,7 @@ public sealed partial class WorldPersistence {
             }
             if (AnyUncapturableStateEverLatched()) {
                 checkpoint = null;
-                reason = "a checkpoint cannot capture pumped addon guests or a stepped machine without durable checkpoint support";
+                reason = "a checkpoint cannot capture a stepped machine without durable checkpoint support";
 
                 return false;
             }

@@ -65,7 +65,10 @@ public static class BundleCommand {
         }
         var paths = new HashSet<string>(comparer: StringComparer.Ordinal);
 
-        foreach (var file in release["files"]!.AsArray()) {
+        if (release["files"] is not JsonArray files) {
+            throw new InvalidDataException(message: "release.json must contain a 'files' array.");
+        }
+        foreach (var file in files) {
             var relative = ((string)file!["path"]!);
 
             if (!Puck.Confinement.PortablePath.IsRelative(path: relative)) {
