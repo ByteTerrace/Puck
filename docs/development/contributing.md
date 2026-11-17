@@ -790,7 +790,9 @@ and `state.search`, and in a rendering World the shader compiler's
 `shaders.compiler`, the SDF kernel loads under `shaders.sdf-kernels`, and, on
 Vulkan,
 `procedures.vulkan`. An owner whose counts need nothing more than a named set
-of kinds holds a `WorkCounterSet` rather than writing its own source.
+of kinds holds a `WorkCounterSet` rather than writing its own source; a count
+taken per query on a hot path holds a `ShardedWorkCounterSet`, whose per-thread
+shards cost a plain store instead of an interlocked update.
 `world.budget` distinguishes live program size from
 reserved capacity. For a repeatable reading, run
 [`puck counters`](../reference/cli.md#puck-counterswork-counter-collector): it
