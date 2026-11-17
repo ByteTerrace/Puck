@@ -376,22 +376,280 @@ internal static partial class Subjects {
         );
 
         for (var draw = 0; (draw < 4096); ++draw) {
-            var expected = rawTable.SampleIndex(generator: ref rawGenerator);
-            var fromSigned = signedTable.SampleIndex(generator: ref signedGenerator);
-            var fromUnsigned = unsignedTable.SampleIndex(generator: ref unsignedGenerator);
+            var expected = rawTable.SampleIndex(advances: out var rawAdvances, generator: ref rawGenerator);
+            var fromSigned = signedTable.SampleIndex(advances: out var signedAdvances, generator: ref signedGenerator);
+            var fromUnsigned = unsignedTable.SampleIndex(advances: out var unsignedAdvances, generator: ref unsignedGenerator);
 
             if (expected < 0) { return $"draw {draw} selected index {expected}"; }
             if (expected >= rawTable.Count) { return $"draw {draw} selected index {expected} at count {rawTable.Count}"; }
             if (rawWeights[expected] == 0UL) { return $"draw {draw} selected zero-weight entry {expected}"; }
             if (fromSigned != expected) { return $"draw {draw}: the signed twin selected {fromSigned} where the raw table selected {expected}"; }
             if (fromUnsigned != expected) { return $"draw {draw}: the unsigned twin selected {fromUnsigned} where the raw table selected {expected}"; }
-            if (rawTable.Sample(generator: ref rawGenerator) != rawTable.SampleIndex(generator: ref signedGenerator)) { return $"draw {draw}: Sample and SampleIndex disagree on identically advanced generators"; }
+            if ((rawAdvances != signedAdvances) || (rawAdvances != unsignedAdvances)) { return $"draw {draw}: the twins reported {rawAdvances}, {signedAdvances} and {unsignedAdvances} advances"; }
+            if (rawTable.Sample(advances: out var sampleAdvances, generator: ref rawGenerator) != rawTable.SampleIndex(advances: out var indexAdvances, generator: ref signedGenerator)) { return $"draw {draw}: Sample and SampleIndex disagree on identically advanced generators"; }
+            if (sampleAdvances != indexAdvances) { return $"draw {draw}: Sample reported {sampleAdvances} advances where SampleIndex reported {indexAdvances}"; }
             if (rawGenerator.State != signedGenerator.State) { return $"draw {draw}: Sample and SampleIndex consumed different advance counts"; }
 
-            _ = unsignedTable.SampleIndex(generator: ref unsignedGenerator);
+            _ = unsignedTable.SampleIndex(advances: out _, generator: ref unsignedGenerator);
         }
 
         return null;
+    }
+
+    /// <summary>A draw generator that replays a fixed word script and throws when a draw reads past its end, so a
+    /// sampler that consumes more words than it reports fails loudly. The position counts words consumed.</summary>
+    private struct ScriptedDraws(uint[] words) : IDrawGenerator {
+        private int m_next;
+
+        public readonly int Position => m_next;
+
+        public void Advance(ulong count) => throw new NotSupportedException();
+        public uint NextUInt32() => ((m_next < words.Length)
+            ? words[m_next++]
+            : throw new InvalidOperationException(message: "script ended")
+        );
+        public uint NextUInt32(uint minimum, uint maximum) => throw new NotSupportedException();
+    }
+
+    // One raw word, or the words, that make BoundedRandomSampling.TrySampleWide's first candidate below `bound`
+    // accepted as exactly `value`. A bound within one word is Lemire's multiply-high map: the first word at or above
+    // value·2^32/bound whose low product clears the rejection window. A wider bound masks the little-endian words of
+    // the candidate, which accepts a value below the bound as itself.
+    private static uint[] AliasWideWordsFor(BigInteger value, BigInteger bound) {
+        var twoTo32 = (BigInteger.One << 32);
+
+        if (bound == twoTo32) { return [((uint)value)]; }
+        if (bound < twoTo32) {
+            var rejectionWindow = (twoTo32 % bound);
+            var word = ((((value * twoTo32) + bound) - 1) / bound);
+
+            while (true) {
+                var product = (word * bound);
+
+                if (
+                    ((product >> 32) == value) &&
+                    ((product & (twoTo32 - 1)) >= rejectionWindow)
+                ) {
+                    return [((uint)word)];
+                }
+
+                ++word;
+            }
+        }
+
+        var wordCount = ((int)((((bound - 1).GetBitLength()) + 31) / 32));
+        var words = new uint[wordCount];
+
+        for (var index = 0; (index < wordCount); ++index) {
+            words[index] = ((uint)((value >> (32 * index)) & (twoTo32 - 1)));
+        }
+
+        return words;
+    }
+
+    // One alias draw over the script [column word, threshold word, ...wide words], through the table and through
+    // SampleOnce, which must agree on the pick, the reported advances and the words consumed.
+    private static (int Index, int Advances, int Position, string? Failure) AliasProbe(AliasTable<int> table, ulong[] weights, uint column, uint word, uint[] wide) {
+        uint[] script = [column, word, .. wide];
+        var tableDraws = new ScriptedDraws(words: script);
+        var onceDraws = new ScriptedDraws(words: script);
+        var index = table.SampleIndex(
+            advances: out var advances,
+            generator: ref tableDraws
+        );
+        var once = WeightedSampler.SampleOnce(
+            advances: out var onceAdvances,
+            generator: ref onceDraws,
+            weights: weights
+        );
+        string? failure = null;
+
+        if (
+            (once != index) ||
+            (onceAdvances != advances) ||
+            (onceDraws.Position != tableDraws.Position)
+        ) {
+            failure = $"table and SampleOnce disagree at column {column}, word 0x{word:X8}: ({index}, {advances}, {tableDraws.Position}) against ({once}, {onceAdvances}, {onceDraws.Position})";
+        } else if (advances != tableDraws.Position) {
+            failure = $"column {column}, word 0x{word:X8} reported {advances} advances but consumed {tableDraws.Position} words";
+        }
+
+        return (index, advances, tableDraws.Position, failure);
+    }
+
+    /// <summary>Each alias entry's selection probability is exactly its weight over the total. Per column, the claim
+    /// measures through the public draw the transition the table encodes (the word below which the column keeps its
+    /// own index, the alias, and, on the one word equal to that transition, how many of the exact wide draw's values
+    /// keep it) by scripted words, sums every column's exact mass in <see cref="BigInteger"/>, and requires it to equal
+    /// <c>weight · columnCount · 2³²</c> for every entry and zero for every padding column. It also pins the cost: two
+    /// advances on every word but the transition word, and exactly two plus the wide draw's words there.</summary>
+    public static string? AliasTableExactSelectionMass() {
+        List<ulong[]> weightSets = [
+            [1UL, 1UL, 1UL],
+            [1UL, 2UL, 4UL],
+            [3UL, 5UL, 7UL, 11UL, 13UL],
+            [0UL, 5UL, 0UL, 3UL, 0UL, 2UL],
+            [1UL, 2UL, 3UL, 4UL, 5UL, 6UL, 7UL],
+            [42UL],
+            [0x7FFFFFFFUL, 0x7FFFFFFEUL, 1UL],
+            [0x7FFFFFFFUL, 0x7FFFFFFFUL, 2UL],
+            [0x7FFFFFFFUL, 0x7FFFFFFEUL, 3UL],
+            [1UL, (1UL << 40)],
+            [1UL, 3UL, ((1UL << 33) + 1UL)],
+            [ulong.MaxValue, ulong.MaxValue, 1UL],
+        ];
+        var twoTo32 = (BigInteger.One << 32);
+        var transitionColumns = 0;
+        var wideTransitionColumns = 0;
+
+        foreach (var weights in weightSets) {
+            var entries = weights.Select(selector: (weight, index) => (index, weight)).ToArray();
+            var table = WeightedSampler.Create(entries: entries);
+            var columnCount = ((int)BitOperations.RoundUpToPowerOf2(value: ((uint)weights.Length)));
+            var total = weights.Aggregate(seed: BigInteger.Zero, func: (sum, weight) => (sum + weight));
+            var mass = new BigInteger[columnCount];
+            var label = $"[{string.Join(separator: ", ", values: weights)}]";
+
+            for (var column = 0; (column < columnCount); ++column) {
+                var highest = AliasProbe(
+                    column: ((uint)column),
+                    table: table,
+                    weights: weights,
+                    wide: AliasWideWordsFor(
+                        bound: total,
+                        value: (total - 1)
+                    ),
+                    word: uint.MaxValue
+                );
+
+                if (highest.Failure is { } highestFailure) { return $"{label}: {highestFailure}"; }
+                if ((highest.Index < 0) || (highest.Index >= weights.Length)) { return $"{label}: column {column} drew index {highest.Index}, outside [0, {weights.Length})"; }
+                if (weights[highest.Index] == 0UL) { return $"{label}: column {column} drew the zero-weight entry {highest.Index}"; }
+                if (highest.Index == column) {
+                    // A column that always keeps itself: the word equal to uint.MaxValue also lands on itself.
+                    mass[column] += (twoTo32 * total);
+
+                    continue;
+                }
+
+                var alias = highest.Index;
+                var lowestAlias = BigInteger.Zero;
+                var upperAlias = (twoTo32 - 1);
+
+                // The smallest word that leaves the column when the wide draw is its largest value: the floored threshold,
+                // since a word below keeps the column, a word above leaves it, and the equal word leaves it for the
+                // largest ticket whatever the remainder.
+                while (lowestAlias < upperAlias) {
+                    var middle = ((lowestAlias + upperAlias) / 2);
+                    var probe = AliasProbe(
+                        column: ((uint)column),
+                        table: table,
+                        weights: weights,
+                        wide: AliasWideWordsFor(
+                            bound: total,
+                            value: (total - 1)
+                        ),
+                        word: ((uint)middle)
+                    );
+
+                    if (probe.Failure is { } middleFailure) { return $"{label}: {middleFailure}"; }
+                    if (probe.Index == column) { lowestAlias = (middle + 1); } else { upperAlias = middle; }
+                }
+
+                var threshold = lowestAlias;
+                var atThreshold = AliasProbe(
+                    column: ((uint)column),
+                    table: table,
+                    weights: weights,
+                    wide: AliasWideWordsFor(
+                        bound: total,
+                        value: BigInteger.Zero
+                    ),
+                    word: ((uint)threshold)
+                );
+
+                if (atThreshold.Failure is { } thresholdFailure) { return $"{label}: {thresholdFailure}"; }
+
+                var remainder = BigInteger.Zero;
+
+                if (atThreshold.Index == column) {
+                    // The wide draw decides this word: the remainder is the count of its values that keep the column.
+                    var lowest = BigInteger.One;
+                    var upper = (total - 1);
+
+                    while (lowest < upper) {
+                        var middle = ((lowest + upper) / 2);
+                        var probe = AliasProbe(
+                            column: ((uint)column),
+                            table: table,
+                            weights: weights,
+                            wide: AliasWideWordsFor(
+                                bound: total,
+                                value: middle
+                            ),
+                            word: ((uint)threshold)
+                        );
+
+                        if (probe.Failure is { } wideFailure) { return $"{label}: {wideFailure}"; }
+                        if (probe.Index == column) { lowest = (middle + 1); } else { upper = middle; }
+                    }
+
+                    remainder = lowest;
+                    ++transitionColumns;
+
+                    if (atThreshold.Advances != (2 + AliasWideWordsFor(bound: total, value: BigInteger.Zero).Length)) {
+                        return $"{label}: column {column} at its threshold reported {atThreshold.Advances} advances for a wide draw of {AliasWideWordsFor(bound: total, value: BigInteger.Zero).Length} words";
+                    }
+                    if (total > twoTo32) { ++wideTransitionColumns; }
+                } else if (atThreshold.Advances != 2) {
+                    return $"{label}: column {column} at a whole-step threshold reported {atThreshold.Advances} advances";
+                }
+
+                // Every neighbouring word is a plain two-advance draw.
+                foreach (var neighbour in new[] { (threshold - 1), (threshold + 1) }) {
+                    if ((neighbour < 0) || (neighbour >= twoTo32)) { continue; }
+
+                    var probe = AliasProbe(
+                        column: ((uint)column),
+                        table: table,
+                        weights: weights,
+                        wide: [],
+                        word: ((uint)neighbour)
+                    );
+
+                    if (probe.Failure is { } neighbourFailure) { return $"{label}: {neighbourFailure}"; }
+                    if (probe.Advances != 2) { return $"{label}: column {column}, word {neighbour} next to its threshold reported {probe.Advances} advances"; }
+                    if (probe.Index != ((neighbour < threshold) ? column : alias)) { return $"{label}: column {column} did not keep or leave by its threshold at word {neighbour}"; }
+                }
+
+                // The column keeps its index on every word below the threshold and on `remainder` of the total's
+                // wide values at the threshold; it hands the rest to the alias.
+                var keep = ((threshold * total) + remainder);
+
+                mass[column] += keep;
+                mass[alias] += ((twoTo32 * total) - keep);
+            }
+
+            var expected = Oracles.AliasSelectionMass(
+                columnCount: columnCount,
+                weights: weights
+            );
+
+            for (var index = 0; (index < columnCount); ++index) {
+                if (mass[index] != expected[index]) {
+                    return $"{label}: entry {index} of weight {((index < weights.Length) ? weights[index] : 0UL)} has selection mass {mass[index]} of {(twoTo32 * columnCount * total)}, expected {expected[index]}";
+                }
+            }
+        }
+
+        // The rare branch must have been reached, at a one-word and at a multi-word wide draw.
+        return ((transitionColumns == 0)
+            ? "no weight set reached a column whose threshold word takes a wide draw"
+            : ((wideTransitionColumns == 0)
+                ? "no weight set reached a wide draw wider than one word"
+                : null
+            )
+        );
     }
 
     // Element weights for the alias twins: a zero entry, a one, a saturating carrier extreme and a spread between, at

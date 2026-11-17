@@ -90,7 +90,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
         height: 36U,
         interpolationAlpha: 0f,
         width: 64U
-    );
+    )!;
 
     [Fact]
     public void ARoutePublishedDuringCaptureWaitsForTheNextFramesPresentationDecision() {

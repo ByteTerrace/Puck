@@ -86,11 +86,13 @@ maps each question to its wing and README section.
   across systems, never reseed to "resume", and keep draw order stable.
 - **Alias tables are order-sensitive.** Build once at load from
   deterministically ordered entries; entry order is part of the table's
-  identity. A sample consumes exactly two generator advances.
+  identity. A sample is exact and reports the advances it consumed (two, plus
+  an exact wide draw on the one word in 2^32 that equals a column's threshold).
 - **Seeking counts advances, not calls.** `Advance`-based seeking is exact only
   against fixed-cost draws (`NextUInt32()`, the fraction draws, the Gaussian
-  pair, an alias sample). A bounded `NextUInt32(min, max)` and `Shuffle` can
-  reject and consume extra advances.
+  pair) or a draw's reported advance count (an alias sample's `advances`). A
+  bounded `NextUInt32(min, max)` and `Shuffle` can reject and consume extra
+  advances.
 - **Wrap is the default.** Bare operators are unchecked, `checked` forms throw
   after rounding, and `AddSaturating` / `SubtractSaturating` (unsigned and unit
   types) or `FixedSaturate` (`FixedQ4816` and vectors) clamp. Some saturators

@@ -12,7 +12,7 @@ public sealed partial class WorldCostLawTests {
     public void LiveScopedAndPerShapeCostsReconcileToThePackedProgram() {
         var emitter = new CostEmitter();
         var source = new SdfCompositionFrameSource(dresser: emitter, emitters: [emitter]);
-        var frame = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32);
+        var frame = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!;
         var program = frame.Program;
         var report = WorldPlacementCostReport.Read(frame: frame);
         var scoped = Assert.Single(collection: report.Placements, predicate: row => (row.Placement == "scoped"));

@@ -25,6 +25,8 @@
         <ProjectReference Include="../../src/Puck.World.Machines/Puck.World.Machines.csproj" />
         <ProjectReference Include="../../src/Puck.World.Addons/Puck.World.Addons.csproj" />
         <ProjectReference Include="../../src/Puck.World.Embeddings/Puck.World.Embeddings.csproj" />
+        <!-- The host's fixed-step pump, which the tick-script and tick-exactness laws drive the console through. -->
+        <ProjectReference Include="../../src/Puck.Launcher/Puck.Launcher.csproj" />
     </ItemGroup>
     <ItemGroup>
         <Using Include="Puck.State" />

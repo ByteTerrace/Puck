@@ -76,7 +76,7 @@ public sealed class BodyStampScaleLawTests {
             height: WorldViewInstances.DefaultSessionHeight,
             interpolationAlpha: 0f,
             width: WorldViewInstances.DefaultSessionWidth
-        );
+        )!;
 
         Assert.Equal(
             actual: ShapeHeight(frame: Frame()),

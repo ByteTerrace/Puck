@@ -103,18 +103,24 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         lock (m_gate) {
             if (!m_entries.TryGetValue(key: instance, value: out var entry) || entry.Residency is not { } residency) { return null; }
             if (residency.MeshesPending) { return $"residency '{residency.Name}' is completing its meshes"; }
-            return LightingWaitOf(residency: residency);
+            return HeldOf(residency: residency);
         }
     }
     /// <inheritdoc/>
-    /// <remarks>A view of a residency that holds its frame for its lighting (<see cref="SdfWorldResidency.LightingPending"/>):
-    /// the probes and the exposure converge through the residency's background GPU work, which its staging drives
-    /// (<see cref="SdfWorldResidency.Stage"/>), so a recording of the held frame would only take the GPU from it.</remarks>
+    /// <remarks>A view of a residency whose frame source waits on work off the frame's thread
+    /// (<see cref="SdfWorldResidency.SourceWaiting"/>, a program still building), or that holds its frame for its lighting
+    /// (<see cref="SdfWorldResidency.LightingPending"/>): the work runs on the pool or through the residency's background
+    /// GPU work, which its staging drives (<see cref="SdfWorldResidency.Stage"/>), so a recording of the held frame would
+    /// only take the GPU from it.</remarks>
     public string? WithheldOf(string instance) {
         lock (m_gate) {
-            return ((m_entries.TryGetValue(key: instance, value: out var entry) && entry.Residency is { } residency) ? LightingWaitOf(residency: residency) : null);
+            return ((m_entries.TryGetValue(key: instance, value: out var entry) && entry.Residency is { } residency) ? HeldOf(residency: residency) : null);
         }
     }
+    // The one reason a residency's views wait on work outside their recording: the frame source's first, then lighting.
+    private static string? HeldOf(SdfWorldResidency residency) => ((residency.SourceWaiting is { } source)
+        ? $"residency '{residency.Name}' holds its frame while {source}"
+        : LightingWaitOf(residency: residency));
     // Names the part of the convergence still waited for (SdfMeshIrradiance.Convergence) while one stands.
     private static string? LightingWaitOf(SdfWorldResidency residency) => (residency.LightingPending
         ? ((residency.MeshIrradiance.Convergence is { Stage: not SdfMeshConvergenceStage.None } convergence)

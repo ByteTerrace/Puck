@@ -1318,6 +1318,9 @@ by its fence share is GPU back-pressure, not CPU work.
   trace finishes. Pin the camera and tick in both legs and use lockstep's
   held scene/refill/trace drain for the comparison: the frame answers waiting with the
   stage it waits for (`SdfMeshIrradiance.Convergence`) while the loop holds the tick, and the console answers between.
+  A program or presentation-field build answers the same way and never blocks the frame: a frame source names the
+  build in `ISdfFrameSource.Waiting` (filming nothing while no program fits the slot layout), the residency keeps its
+  frame and withholds its views (`SdfWorldResidency.SourceWaiting`), and `world.wait` releases naming it.
   Keep each code build's completed private mesh store for warm comparison
   legs: sharing one directory does not share payloads across changed bake
   identities, and silently turns the second leg into another cold bake.

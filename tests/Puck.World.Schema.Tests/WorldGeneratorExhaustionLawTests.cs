@@ -117,7 +117,7 @@ public sealed class WorldGeneratorExhaustionLawTests {
                 );
 
                 expectedRng.Advance(count: ((ulong)cursor));
-                var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(generator: ref expectedRng);
+                var expectedEntry = WeightedSampler.Create<int>(entries: remaining).Sample(advances: out _, generator: ref expectedRng);
                 var actual = Fire(
                     generator: generator,
                     cursor: cursor,

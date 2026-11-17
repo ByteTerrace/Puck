@@ -252,10 +252,12 @@ public static partial class GeneratorEngine {
         );
     // One draw from a unit set under a mode: the full table when nothing is drawn (or the mode never exhausts), else
     // a table over the undrawn units. An exhausted mask refuses under WithoutReplacement and clears under
-    // RestartOnExhaustion, in the same emission. Exactly two generator advances either way, so cursor seeking
-    // stays exact. On success the picked unit's bit is set in `mask` (exhausting modes only) and the unit's ENTRY
-    // ordinal is returned; -1 with `reason` set otherwise.
-    private static int DrawEntry<TGenerator>(GeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref TGenerator rng, string what, out string reason) where TGenerator : struct, IDrawGenerator {
+    // RestartOnExhaustion, in the same emission. The draw reports the advances it consumed (two, plus the words of an
+    // exact wide draw on the rare threshold word), which the cursor adds; a refusal consumes none. On success the
+    // picked unit's bit is set in `mask` (exhausting modes only) and the unit's ENTRY ordinal is returned; -1 with
+    // `reason` set otherwise.
+    private static int DrawEntry<TGenerator>(GeneratorMode mode, EntrySet? set, ref ClosedBitset256 mask, ref TGenerator rng, string what, out int advances, out string reason) where TGenerator : struct, IDrawGenerator {
+        advances = 0;
         reason = string.Empty;
 
         if (set?.UnitCount > GeneratorCapacity.MaxEntriesPerSet) {
@@ -274,7 +276,10 @@ public static partial class GeneratorEngine {
         }
 
         if (mode == GeneratorMode.WithReplacement) {
-            return set.UnitEntries[set.Full.Sample(generator: ref rng)];
+            return set.UnitEntries[set.Full.Sample(
+                advances: out advances,
+                generator: ref rng
+            )];
         }
 
         var units = set.UnitEntries.Length;
@@ -282,7 +287,10 @@ public static partial class GeneratorEngine {
         int picked;
 
         if (mask.IsEmpty) {
-            picked = set.Full.Sample(generator: ref rng);
+            picked = set.Full.Sample(
+                advances: out advances,
+                generator: ref rng
+            );
         } else {
             Span<int> elements = stackalloc int[GeneratorCapacity.MaxEntriesPerSet];
             Span<ulong> weights = stackalloc ulong[GeneratorCapacity.MaxEntriesPerSet];
@@ -313,9 +321,13 @@ public static partial class GeneratorEngine {
                 }
 
                 mask = default;
-                picked = set.Full.Sample(generator: ref rng);
+                picked = set.Full.Sample(
+                    advances: out advances,
+                    generator: ref rng
+                );
             } else {
                 picked = elements[WeightedSampler.SampleOnce(
+                    advances: out advances,
                     generator: ref rng,
                     weights: weights[..pooled]
                 )];
@@ -354,8 +366,8 @@ public static partial class GeneratorEngine {
                     return drawn;
                 }
             case GeneratorSource.WeightedNumeric: {
-                    advances = WeightedSampler.AdvancesPerDraw;
                     var picked = DrawEntry(
+                        advances: out var drawnAdvances,
                         mask: ref mask,
                         mode: generator.Mode,
                         reason: out reason,
@@ -364,6 +376,7 @@ public static partial class GeneratorEngine {
                         what: "weighted"
                     );
 
+                    advances = drawnAdvances;
                     value = ((picked < 0)
                         ? 0L
                         : generator.Weighted![picked].Value
@@ -378,9 +391,9 @@ public static partial class GeneratorEngine {
 
                 return true;
             case GeneratorSource.SymmetryOrbit: {
-                    advances = WeightedSampler.AdvancesPerDraw;
                     var compiled = Compiled(generator: generator);
                     var picked = DrawEntry(
+                        advances: out var drawnAdvances,
                         mask: ref mask,
                         mode: generator.Mode,
                         reason: out reason,
@@ -389,6 +402,7 @@ public static partial class GeneratorEngine {
                         what: "orbit"
                     );
 
+                    advances = drawnAdvances;
                     // A node lands in the site's displayed unit — the phase convention a cycle trait reads — so a
                     // fixed site stores node.0 rather than node raw bits.
                     value = ((picked < 0)
@@ -449,13 +463,9 @@ public static partial class GeneratorEngine {
                 return false;
             }
 
-            if (samples > ((long.MaxValue - cursor) - WeightedSampler.AdvancesPerDraw)) {
-                result = default;
-                reason = "draw cursor would overflow";
-                return false;
-            }
             var mask = working[ordinal];
             var picked = DrawEntry(
+                advances: out var drawnAdvances,
                 mask: ref mask,
                 mode: generator.Mode,
                 reason: out reason,
@@ -470,7 +480,14 @@ public static partial class GeneratorEngine {
                 return false;
             }
 
-            samples += WeightedSampler.AdvancesPerDraw;
+            if (drawnAdvances > ((long.MaxValue - cursor) - samples)) {
+                result = default;
+                reason = "draw cursor would overflow";
+
+                return false;
+            }
+
+            samples += drawnAdvances;
 
             if (generator.Mode != GeneratorMode.WithReplacement) {
                 working[ordinal] = mask;

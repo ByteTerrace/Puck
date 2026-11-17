@@ -58,8 +58,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
    seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
-   the scheduling stage's and C0.3's windowed readings, the control plane's
-   step C0.4, then the pool's design.
+   the scheduling stage's, C0.3's and C0.4's windowed readings, the control plane's
+   step C0.5, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
    work proportional to change: R1h and R1a's windowed checks, then R1b, R1c and S2 of
    [its memo](arrival-proportional.md) in that order (R0's rule has read
@@ -130,6 +130,13 @@ head, each named by the lane whose landing waits on it:
   whole, on both backends.
 - c03: the converged still at a lockstep stop against the build before c03,
   on both backends (the control gap is read on both).
+- c04: a `world.reload` that changes the slot layout (an edit that adds an
+  animated placement, unverified as the shortest one), windowed on both backends, plain and under
+  `world.lockstep on`: `host.frames 300` around it reads the control gap under
+  the wait budget plus a pacer period, `world.wait ready 5` issued right after
+  the reload either reports ready or names the composition's build, and the
+  first boot shows the window's first image after the encode builds, with no
+  error line.
 - sm7p: the indexed slab read's paired cost on Vulkan with the counted draws
   held equal (Direct3D 12 is read; see
   [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
@@ -337,9 +344,9 @@ and job-system plans own the mechanisms.
 Owner: principal designs, another family reviews the design before any build,
 a specialist builds · high · Next: the next step of
 [the memo's build order](engine-job-system.md#6-build-order), which states the
-order once: the scheduling stage's windowed reading and C0.3's, then
+order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 [the control plane's](engine-job-system.md#the-control-planes-phase-and-bounded-waits)
-step C0.4 (C0.1 to C0.3 are built), then the pool's design (J1). The garbage-collection cuts
+step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
 
@@ -347,8 +354,17 @@ beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-
   control gap reads p99 119 ms and max 247 ms over 300 iterations, made of
   simulation (`simulate` p99 93 ms, max 116 ms) and produce work (max 70 ms),
   not waits; Direct3D 12 read `simulate` at 0 over the same kind of window.
-  Find what the Vulkan run's ticks do in those iterations and whether a held
-  tick catches up in a burst, which C0.5's tick waits should bound.
+  No held tick catches up in a burst: under lockstep the loop takes at most one
+  step an iteration (`FixedStepPump.TryStep`) and spends a held interval
+  without stepping (`FixedStepPump.Hold`), and a paced burst sheds what is due
+  once its steps spend one step's period (`FixedStepPump.Advance`). So each
+  93 to 116 ms `simulate` is one step, and the Vulkan run stepped where
+  Direct3D 12 held: its frames answered rendered between converging frames
+  (inference, from the code; the reading has no per-iteration render
+  completion). C0.5 owns the step's joins and drains, which bound the control
+  gap once they run through the door; what the step does for 100 ms on Vulkan
+  is a measurement: `host.frames` with the tick lane and a `dotnet-trace` of the
+  pump over a stepping iteration during a convergence on Vulkan.
 - [medium] A rated item's phase is held by its own cadence, so a long frame
   that spans an interval for one item and not another (a hitch, a missed
   frame on a fixed signal) can land two items that took a tier half a period
@@ -2296,21 +2312,6 @@ the wire, then the float duration fields' schema migration.
   evidence, give precise category waivers, delete unreachable code.
 - [low] A lattice's boot-time paint throws on draw exhaustion where compose
   refuses.
-- [low] The alias table rounds each threshold to 32 fractional bits
-  (`WeightedSampler.BuildColumns`), so `weightedNumeric`, `symmetryOrbit` and
-  Markov draws keep a bias of at most 2^-33 per column. An exact threshold
-  needs a draw that sometimes consumes more than two advances (the word equal
-  to the floored threshold, probability 2^-32, then an exact wide draw through
-  `BoundedRandomSampling.TrySampleWide`), which breaks the fixed two-advance
-  cost that `GeneratorEngine`'s draw cursor (`TryDrawNumeric`, `TryFireMarkov`
-  add `WeightedSampler.AdvancesPerDraw`), `WorldDecision`'s documented two
-  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Ruled (the
-  lead): the draws become exact and report their consumed advances
-  (`DrawEntry` and the cursor carry the count), and `AdvancesPerDraw` goes. A
-  fixed cost is an implementation convenience, not a contract worth a wrong
-  distribution (AGENTS.md rule 4, "Do things right"); the common path still
-  takes two advances, so cost moves only on the 2^-32 case. Re-record the
-  replay hashes it moves.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm
@@ -2455,6 +2456,14 @@ The edit loop:
   Zig's incremental compiler as the design
   ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
   per-declaration units, recorded dependencies, early cutoff.
+- [high] A headless debug-world `world.reload` of the unchanged document
+  applies inside one tick on the pump: `host.frames` read that iteration's
+  `simulate` as its whole cost, with 4656926544 bytes allocated on the frame
+  thread and 58/47/10 collections, and the four ticks after it allocating
+  about 200 MB each. It is work, not a wait, so the control plane's door
+  cannot bound it ([where the guarantee stops](engine-job-system.md#where-the-guarantee-stops));
+  attribute the allocation (`dotnet-trace --profile gc-verbose`) and move the
+  install's preparation off the tick, as a build the tick adopts.
 - A shading edit still runs the whole validator over its candidate and
   canonicalizes and digests the edited creation twice; reload's sender
   serializes and diffs whole trees and the server validates the whole
