@@ -97,10 +97,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
-21. [high] [The benchmark](#the-benchmark): the design review of
-    [the memo](benchmark.md), then its stages 1, 2 and 4 together. It
-    replaces [the walkthrough](walkthrough.md)'s line, and the lead ranks it
-    at the next batch.
+21. [high] [The benchmark](#the-benchmark): the live overlay and the
+    command ([the memo](benchmark.md#the-build-order)'s stages 2 and 3), with
+    stage 1's windowed readings in the lead's window. It replaces
+    [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
+    next batch.
 22. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -2891,9 +2892,9 @@ runs.
 
 ### The benchmark
 
-Owner: the lead until the review, then one benchmark lane per stage · high ·
-Next: a design review of [the benchmark memo](benchmark.md) by another model
-family, then [its build order](benchmark.md#the-build-order).
+Owner: one benchmark lane per stage · high · Next: the live overlay and the
+`puck benchmark` command ([the build order](benchmark.md#the-build-order)'s
+stages 2 and 3), and stage 1's windowed fresh-run readings on both backends.
 
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
@@ -2902,14 +2903,32 @@ the stages; this packet holds what a stage does not.
 - [high] The same route runner is built four times: the tour's route stops
   (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and
   the motion scenarios, each with its own plan format and parsers. The
-  memo's stage 6 folds the first three into the benchmark.
+  memo's stage 10 folds the first three into the benchmark. Until then the
+  arrival judge exists twice: `SweepRoute.Arrival` in the CLI and
+  `WorldBenchmarkCommandModule`'s own read of the same two gate forms, which
+  is the one that stays.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
 - [medium] The HUD cannot show an engine reading or a graph:
   `HudBindingVocabulary` is closed over `world.tick`, `world.fps`, seat
   positions, state rows and history, and `WorldHudElementKind` has no plot.
-  Stage 4 adds both as generic mechanisms.
+  Stage 2 adds both as generic mechanisms.
+- [medium] A chapter's first iteration is its slowest by far: the opening
+  `body.pose` to a spawn point steps the simulation for well over a 60 Hz
+  period and allocates on the order of a hundred megabytes on the frame
+  thread, with a generation 1 collection inside it, on a headless World
+  (`world.benchmark`'s `worst` for the seam walk's valley chapters). Find
+  what a pose across the world allocates
+  ([the job system packet](#engine-job-system) owns allocation on the frame
+  thread).
+- [low] Three order-statistic helpers do one job: `HostFrameTimeline.Percentile`
+  (which the recording's statistics reuse), `BenchMetric.Quantile` and
+  `MeshCommand`'s private `Quantile`. Give them one home in `Puck.Maths` when
+  stage 3 moves statistics the CLI and the World share.
+- [low] A World started through the MCP server removes its state directory
+  when it stops, and a run's report with it. An agent names
+  `output <directory>`; the command (stage 3) passes one.
 - [low] The sweep's windowed open items
   ([sweep and visual checks](#sweep-and-visual-checks)) that concern the
   tour's stills, its 2% threshold and its paired tour close when stage 6

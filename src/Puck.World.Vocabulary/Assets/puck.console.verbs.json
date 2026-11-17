@@ -193,6 +193,7 @@
     { "name": "world.assign", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.at", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.attachments", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.benchmark", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "world.binding-bar", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.bloom", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.budget", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
