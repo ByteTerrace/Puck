@@ -54,9 +54,11 @@ public sealed class WorldWatchLawTests {
         Assert.Equal(actual: count, expected: 0);
         watch.Poll(now: At(milliseconds: 1200));
         Assert.Equal(actual: count, expected: 1);
-        using (watch.RecordReads(path: root)) {
+        var rootReads = watch.RecordReads(path: root)!;
+        using (Puck.Assets.CompileInputs.Record(log: rootReads.Log)) {
             Assert.True(condition: WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: root));
         }
+        watch.AdoptReads(reads: rootReads);
         File.WriteAllText(module, Module.Replace(comparisonType: StringComparison.Ordinal, newValue: "9", oldValue: "7"));
         watch.Poll(now: At(milliseconds: 2000));
         watch.Poll(now: At(milliseconds: 2300));
@@ -129,9 +131,11 @@ public sealed class WorldWatchLawTests {
         watch.Poll(now: At(milliseconds: 1000));
         watch.Poll(now: At(milliseconds: 1150));
         Assert.Equal(actual: count, expected: 1);
-        using (watch.RecordReads(path: first)) {
+        var firstReads = watch.RecordReads(path: first)!;
+        using (Puck.Assets.CompileInputs.Record(log: firstReads.Log)) {
             Assert.False(condition: WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: first));
         }
+        watch.AdoptReads(reads: firstReads);
         watch.Complete(result: CommandResult.Error(output: "missing counter.puck"));
         files.WriteText(name: "counter.puck", text: Module);
         watch.Poll(now: At(milliseconds: 1200));

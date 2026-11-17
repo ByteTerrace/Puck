@@ -47,7 +47,8 @@ public sealed class ReloadDeltaLawTests {
         var current = fixture.Server.Definition;
         var delta = WorldReloadDelta.Create(current, fixture.Server.DocumentVersion, current);
         delta = fault switch {
-            "stale" => delta with { BaseVersion = delta.BaseVersion with { Sequence = delta.BaseVersion.Sequence - 1 } },
+            // A version this activation never installed: nothing can hold its declarations.
+            "stale" => delta with { BaseVersion = delta.BaseVersion with { Sequence = delta.BaseVersion.Sequence + 1 } },
             "activation" => delta with { BaseVersion = new(Guid.NewGuid(), delta.BaseVersion.Sequence) },
             "base" => delta with { BaseHash = "wrong" },
             _ => delta with { TargetHash = "wrong" },
@@ -64,16 +65,19 @@ public sealed class ReloadDeltaLawTests {
         Console.WriteLine(refusal.Message);
     }
 
+    // The delta was reconstructed against the exact declarations it names, so an install queued ahead of it changes
+    // nothing about what it installs: the reload lands its target over whatever stands, as a reload always replaces it.
     [Fact]
-    public void AnInstallBetweenPreparationAndApplyRefusesTheQueuedDelta() {
+    public void AnInstallBetweenPreparationAndApplyKeepsTheQueuedDeltaTarget() {
         using var fixture = Fixtures.FreshServer();
         var server = fixture.Server;
-        var delta = WorldReloadDelta.Create(server.Definition, server.DocumentVersion, server.Definition);
+        var target = server.Definition;
+        var delta = WorldReloadDelta.Create(server.Definition, server.DocumentVersion, target);
         var echoes = new List<WorldEditEcho>();
         server.EchoTap += echoes.Add;
         server.EnqueueRebuild(new(WorldRebuildKind.Reset, null, null, false), Principal.Console);
         server.EnqueueRebuild(new(WorldRebuildKind.Reload, null, new WorldRebuildOrigin.File("palette.world.json"), false, "source", delta), Principal.Console);
         fixture.Step();
-        Assert.Contains(echoes, echo => echo.Rejected && echo.Message.Contains(WorldReloadDelta.StaleBaseCode, StringComparison.Ordinal));
+        Assert.Contains(echoes, echo => !echo.Rejected && echo.Message.StartsWith("world.reload applied", StringComparison.Ordinal));
     }
 }
