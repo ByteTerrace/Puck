@@ -24,8 +24,11 @@ public sealed partial class SdfWorldTables {
     internal void PublishMeshIrradiance(IGpuBuffer source, int wordCount, List<int> slots) {
         var bytes = (ulong)wordCount * sizeof(uint);
         if (m_meshIrradiance is null || m_meshIrradiance.SizeBytes != bytes) {
+            // Admission can refuse the replacement. Keep the old published table until creation succeeds.
+            m_retired.Reserve();
+            var replacement = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf("mesh-irradiance"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
             if (m_meshIrradiance is not null) { Retire(m_meshIrradiance); }
-            m_meshIrradiance = m_gpu.BufferFactory.CreateDeviceLocal(name: NameOf("mesh-irradiance"), sizeBytes: bytes, usage: GpuBufferUsage.Storage);
+            m_meshIrradiance = replacement;
             m_meshIrradianceFresh = true;
             m_meshIrradianceSlots.Clear();
             m_bindingRevision++;

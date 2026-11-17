@@ -119,6 +119,7 @@ internal sealed class RefusingGpuDevice :
     void IGpuBindings.WriteSampler(nint descriptorSetHandle, uint binding, uint arrayElement, nint samplerHandle) => throw Reach(member: "IGpuBindings.WriteSampler");
     void IGpuBindings.WriteStorageImage(nint descriptorSetHandle, uint binding, uint arrayElement, nint imageViewHandle) => throw Reach(member: "IGpuBindings.WriteStorageImage");
     IGpuSubmissionFence IGpuQueueSubmitter.CreateSubmissionFence() => throw Reach(member: "IGpuQueueSubmitter.CreateSubmissionFence");
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => throw Reach(member: "IGpuQueueSubmitter.Timeline");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.Submit");
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles, IGpuSubmissionFence fence) => throw Reach(member: "IGpuQueueSubmitter.Submit(fence)");
     void IGpuQueueSubmitter.SubmitAndWait(ReadOnlySpan<nint> commandBufferHandles) => throw Reach(member: "IGpuQueueSubmitter.SubmitAndWait");
