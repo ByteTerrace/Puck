@@ -75,6 +75,22 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
             ? $" voice={((voice.SampleSet is { } set) ? $"samples:{set}" : $"patch:{voice.PatchId}")}/cadence:{voice.CadenceTicks}/pitch:{voice.PitchThousandths}/formant:{voice.FormantThousandths}/pace:{voice.PaceThousandths}"
             : string.Empty);
 
+        if (element.Binding is { } readingToken && HudBindingVocabulary.TryParse(readingToken, out var parsed) && parsed.Kind is HudBindingKind.Reading or HudBindingKind.Recent) {
+            var reading = bindings.ReadReading(readingToken, slot);
+            valueText += $" state={reading.State.ToString().ToLowerInvariant()} sample={reading.Sequence}";
+            if (element.Kind == WorldHudElementKind.Plot) {
+                var samples = new Puck.Abstractions.Presentation.PresentationReading[element.PlotSamples];
+                var count = bindings.CopyRecent(readingToken, slot, samples);
+                valueText += FormattableString.Invariant($" samples={count}/{element.PlotSamples} range={element.PlotMin:0.###}..{element.PlotMax:0.###}");
+                if (element.PlotReferenceBinding is { } reference) {
+                    _ = bindings.TryResolve(reference, slot, out _, out var line);
+                    valueText += $" reference={reference} value='{line}'";
+                } else if (element.PlotReference is { } line) {
+                    valueText += FormattableString.Invariant($" reference={line:0.###}");
+                }
+            }
+        }
+
         return $"[world.hud.element '{panelId}'.'{element.Id}' kind={element.Kind.ToString().ToLowerInvariant()} style={element.Style.ToString().ToLowerInvariant()} binding={bindingToken}{frameText}{valueText}{voiceText}]";
     }
     // A frame element's candidates in rank order (source JSON plus its condition, when one is authored) and the
@@ -132,7 +148,7 @@ internal sealed partial class WorldHudCommandModule(WorldServer server, IHudBind
         };
 
         foreach (var panel in section.Panels) {
-            lines.Add(item: $"[world.hud.panel '{panel.Id}' layer={panel.Layer.ToString().ToLowerInvariant()} style={panel.Style.ToString().ToLowerInvariant()} rect=({panel.Rect.X:F2},{panel.Rect.Y:F2},{panel.Rect.Width:F2},{panel.Rect.Height:F2}) elements={panel.Elements.Count}/{WorldHudCapacity.MaxElementsPerPanel}]");
+            lines.Add(item: $"[world.hud.panel '{panel.Id}' layer={panel.Layer.ToString().ToLowerInvariant()} style={panel.Style.ToString().ToLowerInvariant()} rect=({panel.Rect.X:F2},{panel.Rect.Y:F2},{panel.Rect.Width:F2},{panel.Rect.Height:F2}) elements={panel.Elements.Count}/{WorldHudCapacity.MaxElementsPerPanel} visible={facts.EvaluateAnySeat(panel.Visible).ToString().ToLowerInvariant()}]");
 
             foreach (var element in panel.Elements) {
                 lines.Add(item: DescribeElement(

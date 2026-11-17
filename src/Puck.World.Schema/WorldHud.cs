@@ -35,6 +35,9 @@ public enum WorldHudElementKind : byte {
     /// <summary>A fill-bar readout of a bound binding's normalized 0..1 value (0 when unbound).</summary>
     Gauge,
 
+    /// <summary>A scrolling recent series in an authored range, with an optional reference line.</summary>
+    Plot,
+
     /// <summary>A sampled frame: the element rect shows the frame a <see cref="WorldFrameSource"/> produces
     /// (camera/view/probe/capture) — the picture-in-picture element kind (e.g. a face-cam overlay).</summary>
     Frame,
@@ -135,6 +138,11 @@ public sealed record WorldHudFrameCandidate(WorldFrameSource Source, [property: 
 /// candidate changes; 0 cuts. Finite and non-negative.</param>
 /// <param name="Voice">Optional Text voice. Speaks the resolved literal, binding or template once on visible
 /// arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.</param>
+/// <param name="PlotSamples">The recent samples a Plot requests; counted against the panel's bar reservation.</param>
+/// <param name="PlotMin">The plot's lower bound, in the reading's units.</param>
+/// <param name="PlotMax">The plot's upper bound, strictly above PlotMin.</param>
+/// <param name="PlotReference">An optional constant reference line in the reading's units.</param>
+/// <param name="PlotReferenceBinding">An optional reading binding for a live reference line, instead of PlotReference.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldHudElement(
     string Id,
@@ -151,7 +159,12 @@ public sealed record WorldHudElement(
     float Opacity = 1f,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldHudFrameCandidate>? Sources = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float FadeSeconds = 0f,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldVoiceProfile? Voice = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldVoiceProfile? Voice = null,
+    int PlotSamples = 60,
+    float PlotMin = 0f,
+    float PlotMax = 1f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? PlotReference = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PlotReferenceBinding = null
 ) {
     /// <summary>Gets the frame candidates in rank order — <see cref="Sources"/>, else the bare <see cref="Source"/>
     /// as one unconditional entry, else none. The one shape every reader of a frame element's sources takes.</summary>
@@ -236,6 +249,8 @@ public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<Wo
 /// constructor data, never restated); the render cost each authored element expands into is the overlay writer's own
 /// constant.</summary>
 public static class WorldHudCapacity {
+    /// <summary>The sum of requested plot samples within any world or seat panel.</summary>
+    public const int MaxPlotSamplesPerPanel = 128;
     /// <summary>The per-panel element-row ceiling (world scope).</summary>
     public const int MaxElementsPerPanel = 24;
     /// <summary>The per-seat player-scope panel's element-row ceiling — capped smaller than the world scope's
@@ -252,11 +267,15 @@ public static class WorldHudCapacity {
     /// <see cref="WorldIdentity.Hud"/> is that one panel.</summary>
     public const int MaxSeatPanels = 1;
     /// <summary>The world-scope panel-row ceiling.</summary>
-    public const int MaxWorldPanels = 4;
+    public const int MaxWorldPanels = 5;
 }
 /// <summary>The approved closed v1 binding vocabulary a <see cref="WorldHudElement.Binding"/> names — validated at
 /// document validation (refuse-unknown by name) and resolved render-side, once per frame, by the writer.</summary>
 public enum HudBindingKind : byte {
+    /// <summary>A registered presentation reading, addressed by name.</summary>
+    Reading,
+    /// <summary>A registered presentation reading's recent series.</summary>
+    Recent,
     /// <summary>The live server tick counter.</summary>
     WorldTick,
 
@@ -306,13 +325,16 @@ public enum HudBindingKind : byte {
 /// <param name="Target">For a <see cref="HudBindingKind.StateNamed"/> kind, whether the token carried the trailing
 /// <c>.$target</c> facet — the addressed cell's stored TRUTH rather than its live eased value when it carries a
 /// <see cref="StateDynamics"/> trait. <see langword="false"/> for every other kind.</param>
-public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false);
+/// <param name="ReadingName">The registered source name for Reading and Recent bindings.</param>
+public readonly record struct HudBinding(HudBindingKind Kind, int SeatIndex, string? StateName = null, string? StateCellKey = null, bool Target = false, string? ReadingName = null);
 /// <summary>
 /// The closed v1 HUD binding vocabulary: <c>world.tick</c>, <c>world.fps</c>, <c>seat.&lt;n&gt;.position.{x,y,z}</c>
 /// (1-based seat index, <c>1..</c><see cref="WorldBodiesLimits.LocalSeatCount"/>), <c>population.active</c>,
 /// <c>history.cursor</c>, <c>history.window</c>,
 /// <c>state.&lt;row&gt;</c>, and <c>state.&lt;row&gt;.&lt;key&gt;</c> (see <see cref="HudBindingKind.StateNamed"/>) —
 /// either <c>state.*</c> form may carry a trailing <c>.$target</c> facet (see <see cref="HudBinding.Target"/>).
+/// <c>reading.&lt;name&gt;</c> and <c>recent.&lt;name&gt;</c> address registered presentation sources. Runtime
+/// source names are open: a host without the named source resolves it as absent rather than refusing the document.
 /// A token outside this set refuses by name — the same parse both <see cref="WorldDefinitionValidator"/> (load-time)
 /// and the render-side resolver (frame-time) call, so a document can never carry a binding the renderer would
 /// silently treat as unbound.
@@ -349,6 +371,15 @@ public static class HudBindingVocabulary {
 
         if (string.IsNullOrEmpty(value: token)) {
             return false;
+        }
+
+        var readingKind = token.StartsWith("reading.", StringComparison.Ordinal) ? HudBindingKind.Reading
+            : token.StartsWith("recent.", StringComparison.Ordinal) ? HudBindingKind.Recent : (HudBindingKind?)null;
+        if (readingKind is { } kindOfReading) {
+            var name = token[(token.IndexOf('.') + 1)..];
+            if (name.Length == 0 || name.Any(char.IsWhiteSpace) || name.Contains('{') || name.Contains('}')) { return false; }
+            binding = new(Kind: kindOfReading, SeatIndex: 0, ReadingName: name);
+            return true;
         }
 
         if (string.Equals(

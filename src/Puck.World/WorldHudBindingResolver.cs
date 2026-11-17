@@ -3,6 +3,7 @@ using Puck.Maths;
 using Puck.Overlays;
 using Puck.World.Client;
 using Puck.World.Server;
+using Puck.Abstractions.Presentation;
 
 namespace Puck.World;
 
@@ -25,7 +26,36 @@ namespace Puck.World;
 /// <param name="seatBindings">The seat bindings, whose routed mirror a seat's panel reads.</param>
 /// <param name="history">The boot world's in-session history the <c>history.*</c> tokens present, or
 /// <see langword="null"/> for a host with none, where they read "off".</param>
-public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings, WorldHistory? history) : IHudBindingResolver {
+/// <param name="readings">The host's optional named presentation sources.</param>
+public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor frameRate, WorldPopulation population, WorldContinuum continuum, WorldSeatBindings seatBindings, WorldHistory? history, PresentationReadings? readings = null) : IHudBindingResolver {
+    private readonly char[] m_readingText = new char[64];
+
+    /// <inheritdoc/>
+    public PresentationReading ReadReading(string binding, int seat) {
+        var (known, parsed) = Token(binding);
+        return known && parsed.Kind is HudBindingKind.Reading or HudBindingKind.Recent ? readings?.Read(parsed.ReadingName!) ?? default : default;
+    }
+
+    /// <inheritdoc/>
+    public int CopyRecent(string binding, int seat, Span<PresentationReading> destination) {
+        var (known, parsed) = Token(binding);
+        return known && parsed.Kind == HudBindingKind.Recent ? readings?.CopyRecent(parsed.ReadingName!, destination) ?? 0 : 0;
+    }
+
+    private void ResolveReading(string binding, int seat, out float fraction, out ReadOnlySpan<char> text) {
+        var reading = ReadReading(binding, seat);
+        fraction = reading.State == PresentationReadingState.Present && double.IsFinite(reading.Value) ? (float)Math.Clamp(reading.Value, 0, 1) : 0;
+        if (reading.State != PresentationReadingState.Present) {
+            text = reading.State == PresentationReadingState.Absent ? "absent" : "unmeasured";
+        } else if (reading.Text is { } label) {
+            text = label;
+        } else {
+            if (!reading.Value.TryFormat(m_readingText, out var length, "0.###", CultureInfo.InvariantCulture)) {
+                _ = reading.Value.TryFormat(m_readingText, out length, "G6", CultureInfo.InvariantCulture);
+            }
+            text = m_readingText.AsSpan(0, length);
+        }
+    }
     // A generous FPS ceiling a gauge fraction normalizes against (240 covers every target hertz World boots at).
     private const float FpsNormalizerCeiling = 240f;
     // A generous symmetric world-extent a seat-position gauge fraction normalizes against — cosmetic only; a body
@@ -254,6 +284,10 @@ public sealed class WorldHudBindingResolver(WorldClient client, FrameRateMonitor
         }
 
         switch (parsed.Kind) {
+            case HudBindingKind.Reading:
+            case HudBindingKind.Recent:
+                ResolveReading(binding, seat, out fraction, out text);
+                return true;
             case HudBindingKind.WorldTick:
                 ResolveTick(
                     fraction: out fraction,

@@ -793,12 +793,18 @@ public static class WorldBootComposition {
         // panel's row rather than having a door of its own. CORE: every dependency (WorldClient, FrameRateMonitor, WorldPopulation) is
         // core data, and the HUD document itself is server state — only the STRUCTURE store that feeds the
         // on-screen overlay (HudStore/WorldHudFeed) is presentation-only.
+        services.AddSingleton(implementationFactory: static sp => {
+            var readings = new PresentationReadings();
+            sp.GetService<HostFrameTimeline>()?.RegisterReadings(readings);
+            return readings;
+        });
         services.AddSingleton<IHudBindingResolver>(implementationFactory: static sp => new WorldHudBindingResolver(
             client: sp.GetRequiredService<WorldClient>(),
             frameRate: sp.GetRequiredService<FrameRateMonitor>(),
             population: sp.GetRequiredService<WorldPopulation>(),
             continuum: sp.GetRequiredService<WorldContinuum>(),
             history: sp.GetRequiredService<WorldHistory>(),
+            readings: sp.GetRequiredService<PresentationReadings>(),
             seatBindings: sp.GetRequiredService<WorldSeatBindings>()
         ));
         // The toast store is core so a headless World keeps the latest toast `world.hud toast` reads back.
@@ -934,7 +940,8 @@ public static class WorldBootComposition {
             router: () => sp.GetRequiredService<InputRouter>(),
             wheel: () => sp.GetService<WorldWheelFeed>(),
             pointer: sp.GetService<WorldPointer>(),
-            consoles: sp.GetService<IConsoleSessions>()
+            consoles: sp.GetService<IConsoleSessions>(),
+            readings: sp.GetRequiredService<PresentationReadings>()
         ));
         services.AddSingleton<IOverlayPredicateEvaluator>(implementationFactory: static sp => sp.GetRequiredService<WorldOverlayFacts>());
         services.AddSingleton<WorldBindingBarControl>();
@@ -1003,7 +1010,9 @@ public static class WorldBootComposition {
             script: sp.GetRequiredService<WorldTickScript>(),
             source: sp.GetRequiredService<WorldDefinitionSource>(),
             stateRoot: sp.GetService<Puck.World.Server.WorldStateRoot>(),
-            timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>()
+            timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
+            readings: sp.GetRequiredService<PresentationReadings>(),
+            gpuTiming: sp.GetRequiredService<WorldGpuTiming>()
         ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();

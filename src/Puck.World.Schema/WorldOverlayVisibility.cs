@@ -58,8 +58,13 @@ public abstract record OverlaySubject {
 [JsonDerivedType(typeof(OverlayPredicate.Speaking), typeDiscriminator: "speaking")]
 [JsonDerivedType(typeof(OverlayPredicate.Near), typeDiscriminator: "near")]
 [JsonDerivedType(typeof(OverlayPredicate.State), typeDiscriminator: "state")]
+[JsonDerivedType(typeof(OverlayPredicate.Reading), typeDiscriminator: "reading")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record OverlayPredicate {
+    /// <summary>A named presentation reading is present and nonzero (or has nonempty text). Missing and
+    /// unmeasured sources do not hold. This predicate never reads simulation state.</summary>
+    /// <param name="Name">The registered source name.</param>
+    public sealed record Reading(string Name) : OverlayPredicate;
     /// <summary>The fact holds this frame.</summary>
     public sealed record Now(OverlayFact Fact) : OverlayPredicate;
     /// <summary>The fact held within the last <paramref name="WindowSeconds"/>.</summary>

@@ -147,6 +147,7 @@ namespace Puck.World;
 [JsonSerializable(typeof(OverlayPredicate.Speaking), TypeInfoPropertyName = "OverlayPredicateSpeaking")]
 [JsonSerializable(typeof(OverlayPredicate.Near), TypeInfoPropertyName = "OverlayPredicateNear")]
 [JsonSerializable(typeof(OverlayPredicate.State), TypeInfoPropertyName = "OverlayPredicateState")]
+[JsonSerializable(typeof(OverlayPredicate.Reading), TypeInfoPropertyName = "OverlayPredicateReading")]
 [JsonSerializable(typeof(OverlaySubject.Seat), TypeInfoPropertyName = "OverlaySubjectSeat")]
 [JsonSerializable(typeof(OverlaySubject.Placement), TypeInfoPropertyName = "OverlaySubjectPlacement")]
 [JsonSerializable(typeof(OverlaySubject.Entity), TypeInfoPropertyName = "OverlaySubjectEntity")]

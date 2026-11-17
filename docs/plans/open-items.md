@@ -97,7 +97,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
-21. [high] [The benchmark](#the-benchmark): the live overlay and the
+21. [high] [The benchmark](#the-benchmark): the overlay's windowed proof and the
     command ([the memo](benchmark.md#the-build-order)'s stages 2 and 3). It replaces
     [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
     next batch.
@@ -2891,7 +2891,7 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: the live overlay and the
+Owner: one benchmark lane per stage · high · Next: the overlay's windowed proof and the
 `puck benchmark` command ([the build order](benchmark.md#the-build-order)'s
 stages 2 and 3).
 
@@ -2909,10 +2909,12 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] The HUD cannot show an engine reading or a graph:
-  `HudBindingVocabulary` is closed over `world.tick`, `world.fps`, seat
-  positions, state rows and history, and `WorldHudElementKind` has no plot.
-  Stage 2 adds both as generic mechanisms.
+- [medium] The live overlay's windowed proof remains: on Direct3D 12 and
+  Vulkan, play a seam chapter, capture a presented burst with its standard
+  panel visible, and read `world.gpu-timing` during the run. The report's
+  `gpu` closing rolling window must name the overlay pass with completed
+  samples. The generic reading/recent bindings, plot and per-panel bar
+  reservation are built; the memo's stage 2 owns this GPU check.
 - [medium] A chapter's first iteration is its slowest by far: the opening
   `body.pose` to a spawn point steps the simulation for well over a 60 Hz
   period and allocates on the order of a hundred megabytes on the frame

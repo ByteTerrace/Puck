@@ -2832,7 +2832,7 @@ export type OverlayFact = "SeatInput" | "PointerMotion" | "WheelOpen" | "Console
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
  */
-export type OverlayPredicate = OverlayPredicateNow | OverlayPredicateRecently | OverlayPredicateAll | OverlayPredicateAny | OverlayPredicateNot | OverlayPredicateSpeaking | OverlayPredicateNear | OverlayPredicateState | null;
+export type OverlayPredicate = OverlayPredicateNow | OverlayPredicateRecently | OverlayPredicateAll | OverlayPredicateAny | OverlayPredicateNot | OverlayPredicateSpeaking | OverlayPredicateNear | OverlayPredicateState | OverlayPredicateReading | null;
 
 /**
  * Every predicate holds.
@@ -2883,7 +2883,18 @@ export type OverlayPredicateNow = {
 /**
  * An overlay element's visibility condition — the presentation twin of ActionPredicate, over OverlayFacts. Absent on an element means always visible.
  */
-export type OverlayPredicateNullable = OverlayPredicateNow | OverlayPredicateRecently | OverlayPredicateAll | OverlayPredicateAny | OverlayPredicateNot | OverlayPredicateSpeaking | OverlayPredicateNear | OverlayPredicateState | null;
+export type OverlayPredicateNullable = OverlayPredicateNow | OverlayPredicateRecently | OverlayPredicateAll | OverlayPredicateAny | OverlayPredicateNot | OverlayPredicateSpeaking | OverlayPredicateNear | OverlayPredicateState | OverlayPredicateReading | null;
+
+/**
+ * A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.
+ */
+export type OverlayPredicateReading = {
+  $type?: "reading";
+  /**
+   * The registered source name.
+   */
+  name: string;
+};
 
 /**
  * The fact held within the last WindowSeconds.
@@ -8349,12 +8360,32 @@ export type WorldHudElement = {
    * Optional Text voice. Speaks the resolved literal, binding or template once on visible arrival or change, and stops when hidden. Both patchId and cadenceTicks are required here.
    */
   voice?: WorldVoiceProfile | null;
+  /**
+   * The recent samples a Plot requests; counted against the panel's bar reservation.
+   */
+  plotSamples?: number;
+  /**
+   * The plot's lower bound, in the reading's units.
+   */
+  plotMin?: number;
+  /**
+   * The plot's upper bound, strictly above PlotMin.
+   */
+  plotMax?: number;
+  /**
+   * An optional constant reference line in the reading's units.
+   */
+  plotReference?: number | null;
+  /**
+   * An optional reading binding for a live reference line, instead of PlotReference.
+   */
+  plotReferenceBinding?: string | null;
 };
 
 /**
  * A WorldHudElement's rendered kind — the schema→render expansion cost differs per kind (see WorldHudCapacity).
  */
-export type WorldHudElementKind = "Rect" | "Text" | "Gauge" | "Frame";
+export type WorldHudElementKind = "Rect" | "Text" | "Gauge" | "Plot" | "Frame";
 
 export type WorldHudElementList = (WorldHudElement | null)[];
 

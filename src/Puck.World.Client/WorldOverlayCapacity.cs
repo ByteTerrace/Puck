@@ -20,6 +20,7 @@ public static class WorldOverlayCapacity {
             HudElementsPerPanel: WorldHudCapacity.MaxElementsPerPanel,
             HudElementsPerSeatPanel: WorldHudCapacity.MaxElementsPerSeatPanel,
             HudPanels: WorldHudCapacity.MaxWorldPanels,
+            HudPlotSamplesPerPanel: WorldHudCapacity.MaxPlotSamplesPerPanel,
             HudSeatPanelsPerSeat: WorldHudCapacity.MaxSeatPanels,
             MarkerMaxChipsPerSeat: WorldMarkerCapacity.MaxChipsPerSeat,
             Seats: WorldBodiesLimits.LocalSeatCount,

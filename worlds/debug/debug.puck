@@ -18,6 +18,7 @@ documentId: "debug"
 
 import "../standard/skies"
 import "../standard/free-camera"
+import "../standard/benchmark"
 import "shapes"
 import "studio"
 import "controls"
