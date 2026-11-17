@@ -140,12 +140,14 @@ public sealed class GpuDeviceMemoryWork : IWorkCounterSource {
 
     /// <summary>Gets the backend's name.</summary>
     public string Backend { get; }
+
     /// <summary>Forwards account pressure to the native pools. Registration does not retain a pool once it
     /// unregisters at device teardown. A ledger without an account has no pressure source.</summary>
     public event Action? TrimRequested {
         add { if (m_owners is not null) { m_owners.TrimRequested += value; } }
         remove { if (m_owners is not null) { m_owners.TrimRequested -= value; } }
     }
+
     /// <summary>Gets the device-local bytes held now: allocated and not yet released, including any a device's teardown
     /// refused as leaked.</summary>
     public long Held {

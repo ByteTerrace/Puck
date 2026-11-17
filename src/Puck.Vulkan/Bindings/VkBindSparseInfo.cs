@@ -16,7 +16,6 @@ public struct VkSparseMemoryBind {
     /// <summary>The VkSparseMemoryBindFlags; zero for buffers.</summary>
     public uint Flags;
 }
-
 /// <summary>ABI mirror of VkSparseBufferMemoryBindInfo.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct VkSparseBufferMemoryBindInfo {
@@ -27,12 +26,12 @@ public struct VkSparseBufferMemoryBindInfo {
     /// <summary>A pointer to VkSparseMemoryBind ranges.</summary>
     public nint PBinds;
 }
-
 /// <summary>ABI mirror of VkBindSparseInfo. Buffer-only submissions leave every image count and pointer zero.</summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct VkBindSparseInfo {
     /// <summary>VK_STRUCTURE_TYPE_BIND_SPARSE_INFO.</summary>
     public const uint StructureType = 7;
+
     /// <summary>The structure type.</summary>
     public uint SType;
     /// <summary>The extension chain, including timeline values.</summary>

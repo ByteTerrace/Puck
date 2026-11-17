@@ -160,7 +160,10 @@ before mesh reads; zero placement words reject every triangle through the existi
 `GpuBufferPages` issues the mesh destination's writable lease. Landing completion and
 `MeshStands` require its generation unchanged; a moved mesh without one stays owed and
 its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and checks
-the proof again at recording. Native sparse mapping remains in the streaming plan.
+the proof again at recording, restaging stale requests and retaining unmapped debt.
+Mapping changes re-owe the host-known prefix and stale published meshes; a shrink
+re-lands survivors even without arena relocation. Destination replacements read
+the new buffer's authority. Native sparse mapping remains in the streaming plan.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.

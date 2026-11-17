@@ -132,7 +132,6 @@ public sealed unsafe class VulkanMemoryArena {
             if (m_device.Memory is not null) { m_device.Memory.TrimRequested -= Trim; }
         }
     }
-
     /// <summary>Releases empty blocks and marks held blocks for release after their last fenced placement returns.</summary>
     public void Trim() {
         // Pool callbacks mutate m_blocks, so pressure uses the same outer lock as Bind and Release.

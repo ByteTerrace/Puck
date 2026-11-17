@@ -16,20 +16,24 @@ public sealed class MemoryAdmissionLawTests {
     public void NativePoolTrimSubscriptionFollowsTheAccountAndEndsAtTeardown() {
         var (account, ledger, _) = Discrete();
         var freed = new List<int>();
-        var pool = new GpuMemoryPool<int, int>(1024, _ => 1, (block, _) => freed.Add(block));
+        var pool = new GpuMemoryPool<int, int>(1024, _ => 1, (block, _) => freed.Add(item: block));
+
         ledger.TrimRequested += pool.Trim;
         var live = pool.Place(0, 64, 64, static placement => placement);
+
         account.TrimCaches();
-        Assert.Empty(freed);
-        pool.Return(live);
-        Assert.Equal([1], freed);
+        Assert.Empty(collection: freed);
+        pool.Return(placement: live);
+        Assert.Equal(actual: freed, expected: [1]);
         ledger.TrimRequested -= pool.Trim;
         var next = pool.Place(0, 64, 64, static placement => placement);
-        pool.Return(next);
+
+        pool.Return(placement: next);
         account.TrimCaches();
         Assert.Equal(1, pool.Blocks);
         pool.FreeAll();
     }
+
     private const nint Device = 0xD0;
     private const long Gibibyte = (1L << 30);
     private const long Mebibyte = (1L << 20);

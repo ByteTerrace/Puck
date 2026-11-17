@@ -17,25 +17,29 @@ namespace Puck.Vulkan.Tests;
 public sealed class VulkanGroupedBindingFloorLawTests {
     [Fact]
     public void SparseBuffersRequireBothFeaturesAndARealQueueButNeitherAliasingNorStrictResidency() {
-        var support = Enumerable.Repeat(true, 55).ToArray();
+        var support = Enumerable.Repeat(count: 55, element: true).ToArray();
+
         support[52] = false;
         var sparse = Puck.Vulkan.Bindings.VkQueueFlags.SparseBinding;
-        Puck.Vulkan.Bindings.VkQueueFamilyInfo[] families = [new(2, sparse, 1), new(3, sparse, 1)];
-        Assert.Equal(3U, VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 3));
-        Assert.Equal(2U, VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 7));
-        Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, [new(2, sparse, 0)], 2));
-        Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, [], 2));
+        Puck.Vulkan.Bindings.VkQueueFamilyInfo[] families = [new(Flags: sparse, Index: 2, QueueCount: 1), new(Flags: sparse, Index: 3, QueueCount: 1)];
+
+        Assert.Equal(3U, VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 3, support: support));
+        Assert.Equal(2U, VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 7, support: support));
+        Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(support, [new(Flags: sparse, Index: 2, QueueCount: 0)], 2));
+        Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(families: [], graphicsFamily: 2, support: support));
         var enabled = VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true);
-        Assert.Contains(44U, enabled);
-        Assert.Contains(45U, enabled);
-        Assert.DoesNotContain(52U, enabled);
+
+        Assert.Contains(collection: enabled, expected: 44U);
+        Assert.Contains(collection: enabled, expected: 45U);
+        Assert.DoesNotContain(collection: enabled, expected: 52U);
         foreach (var missing in new[] { 44, 45 }) {
             support[missing] = false;
-            Assert.Null(VulkanLogicalDeviceFactory.SparseFamilyOf(support, families, 3));
-            Assert.Throws<ArgumentException>(() => VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true));
+            Assert.Null(value: VulkanLogicalDeviceFactory.SparseFamilyOf(families: families, graphicsFamily: 3, support: support));
+            Assert.Throws<ArgumentException>(testCode: () => VulkanLogicalDeviceFactory.FeatureIndicesOf(support, sparseBuffers: true));
             support[missing] = true;
         }
     }
+
     private static GpuDeviceCapabilities Device(uint sets, uint pushBytes) => new(
         Backend: "vulkan",
         MaxBoundDescriptorSets: sets,

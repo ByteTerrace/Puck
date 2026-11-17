@@ -1185,6 +1185,7 @@ public sealed class MemoryAccount {
             add => account.TrimRequested += value;
             remove => account.TrimRequested -= value;
         }
+
         public GpuMemoryAdmission Admit(GpuMemorySegment segment, long bytes, string? payer, long payerBytes, bool givesWay) =>
             account.Admit(backend: backend, bytes: bytes, givesWay: givesWay, payer: payer, payerBytes: payerBytes, segment: segment);
         public void Settle(GpuMemorySegment segment, GpuMemoryAdmission admission, GpuMemorySettlement settlement) =>

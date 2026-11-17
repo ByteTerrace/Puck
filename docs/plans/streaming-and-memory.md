@@ -2370,7 +2370,11 @@ and generation stamps. Only it issues `Lease` values; revocation makes existing
 leases stale before remapping can publish new coverage. `GpuRegion.StageOwed`
 intersects the coalesced upload runs with writable pages without joining the
 result again, sizes its request table to those exact runs, and validates their
-leases at recording. The region's address ceiling reserves room for the
+leases at recording, restaging a stale request instead of failing the frame.
+Unmapped debt stays owed; changed pages re-owe the host-known prefix, and
+published meshes whose proofs go stale return through ordinary landing.
+Replacement buffers supply their own page authority, and external leases
+include the target offset. The region's address ceiling reserves room for the
 worst-case split table at the minimum supported mapping page, 4 KiB.
 An ordinary contiguous growth preserves proofs through its ordered carry;
 shrink and disposal revoke them. No native sparse destination is selected yet.
@@ -2424,6 +2428,23 @@ empty-block trim exist; mesh regions still choose contiguous storage. No
 current piece claims a sparse path chosen or budget-drop sparse relief. Both
 backends must stay bootable at each piece, and the final hardware check below
 still gates any claim that sparse relief works.
+
+**Code review disposition (continuation 3, findings on 2ad5ac190a).**
+
+| Finding | Answer |
+|---|---|
+| F1 high | Fixed at `RetireBackgroundResource(GpuRegion)`: the pending-use predicate compares the actual feedback buffer. The hidden-residency law holds it across repeated trim polls and releases it after the irradiance copy submits. |
+| F2 high | Fixed: destination shrink re-owes every surviving mesh and draw row, even when forgetting a tail did not relocate the arena. The arrival law starts with a standing mesh, grows for a large tail, forgets it, and verifies lower held region bytes and a standing survivor without another relocation. |
+| F3 medium | Clipped debt is retained, stale staged runs are restaged, the host-known prefix is re-owed on mapping changes, and published stale meshes re-enter landing. Page and arrival laws cover these paths. An external region's disjoint writes beyond its known prefix still need exact retained coverage before sparse external targets are used; this is a remaining integration item, not a claim of complete external remap recovery. |
+| F4 medium | Grow, shrink and restage use one destination-authority selection door; external lease offsets include the target. A fully committed buffer correctly has all-writable coverage. Native paged buffers always supply their own authority. Laws cover replacement and nonzero external targets. |
+| F5 medium | Trim removes retained mesh proofs against the arena's current placements, independently of its consumed Forgotten delta. |
+| F6 low | Stale landing entries no longer reset the traversal cursor per entry. Repeated page scans by retained lease values after an unrelated revision remain a performance follow-up. The claimed two signals per prepare does not follow: `GpuRetirementQueue.Poll` checkpoints only when newly eligible held objects exist. |
+| F7 low | Corrected the sync-pair reference: `MaxCopyRuns` bounds pre-clipping debt; the encoded table can expand after clipping. |
+| F8 info | Confirmed scope: this device timeline unifies SdfWorldTables frame and background retirement. Surface uploads and render-node resources retain their existing completion points; no global consolidation is claimed. |
+
+The laws use modeled buffers and native-call recording, not native validation
+of sparse physical lifetime. Native sparse ownership and hardware qualification
+remain with the pieces above.
 
 **Design review disposition (sm7b, e9c1d485c9).** H1's write/publication proof,
 M1's retirement proof and M3's absent-row path now have device-free laws as

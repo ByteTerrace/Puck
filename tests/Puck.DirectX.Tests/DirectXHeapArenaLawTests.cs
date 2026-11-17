@@ -29,21 +29,22 @@ public sealed unsafe class DirectXHeapArenaLawTests {
     public void PressureReturnsPhysicalBytesOnlyAfterTheLastPlacementReturns() {
         var calls = new FakeHeapCalls();
         var work = new GpuDeviceMemoryWork(backend: "directx");
+
         work.BeginDevice(device: 0xD0, segments: GpuMemorySegments.FromDirectX(profile: default));
-        var arena = new DirectXHeapArena(calls, 0xD0, work);
-        var first = Create(arena, Buffer(65536), D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, GpuMemoryRole.DeviceLocal);
-        var second = Create(arena, Buffer(65536), D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, GpuMemoryRole.DeviceLocal);
+        var arena = new DirectXHeapArena(calls: calls, device: 0xD0, memory: work);
+        var first = Create(arena: arena, description: Buffer(bytes: 65536), heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, role: GpuMemoryRole.DeviceLocal);
+        var second = Create(arena: arena, description: Buffer(bytes: 65536), heapType: D3D12_HEAP_TYPE.D3D12_HEAP_TYPE_DEFAULT, role: GpuMemoryRole.DeviceLocal);
+
         arena.Trim();
-        Assert.Equal((long)Heap, work.Held);
-        Assert.True(DirectXHeapArena.Release(first, calls));
-        Assert.Equal((long)Heap, work.Held);
-        Assert.True(DirectXHeapArena.Release(second, calls));
+        Assert.Equal(((long)Heap), work.Held);
+        Assert.True(condition: DirectXHeapArena.Release(calls: calls, resource: first));
+        Assert.Equal(((long)Heap), work.Held);
+        Assert.True(condition: DirectXHeapArena.Release(calls: calls, resource: second));
         Assert.Equal(0, work.Held);
         Assert.Equal(0, arena.Heaps);
         arena.FreeAll();
-        work.EndDevice(0xD0);
+        work.EndDevice(device: 0xD0);
     }
-
     [Fact]
     public void ResourcesShareHeapsAndFindTheirRangesThroughTheirTokens() {
         var calls = new FakeHeapCalls();

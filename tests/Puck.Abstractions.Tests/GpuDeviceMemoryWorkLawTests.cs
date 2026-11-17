@@ -227,6 +227,7 @@ public sealed class GpuDeviceMemoryWorkLawTests {
     // An account that answers every admission with one verdict and logs what it was asked and told.
     private sealed class RefusingOwners : IGpuMemoryOwners {
         public event Action? TrimRequested { add { } remove { } }
+
         public List<(string Call, long Bytes, long PayerBytes)> Log { get; } = [];
         public GpuMemoryVerdict Verdict { get; set; } = GpuMemoryVerdict.Granted;
 

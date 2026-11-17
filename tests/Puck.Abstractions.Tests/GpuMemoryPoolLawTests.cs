@@ -14,28 +14,29 @@ public sealed class GpuMemoryPoolLawTests {
     [Fact]
     public void PressureReleasesEmptyBlocksAndRemembersLiveBlocksUntilTheirLastReturn() {
         var (pool, log) = Pool();
-        var empty = Place(pool, 0, 64);
-        var live = Place(pool, 1, 64);
-        var neighbour = Place(pool, 1, 64);
-        pool.Return(empty);
+        var empty = Place(key: 0, pool: pool, size: 64);
+        var live = Place(key: 1, pool: pool, size: 64);
+        var neighbour = Place(key: 1, pool: pool, size: 64);
+
+        pool.Return(placement: empty);
         pool.Trim();
         pool.Trim();
-        Assert.Equal(["alloc 1 1024", "alloc 2 1024", "free 1"], log);
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "free 1"]);
         Assert.Equal(1, pool.Blocks);
-        pool.Return(live);
+        pool.Return(placement: live);
         Assert.Equal(1, pool.Blocks);
-        pool.Return(neighbour); // The owner's fence can return this much later than the pressure request.
+        pool.Return(placement: neighbour); // The owner's fence can return this much later than the pressure request.
         Assert.Equal(0, pool.Blocks);
-        Assert.Equal(["alloc 1 1024", "alloc 2 1024", "free 1", "free 2"], log);
-        Assert.Throws<InvalidOperationException>(() => pool.Return(neighbour));
-        var fresh = Place(pool, 0, 64);
-        pool.Return(fresh); // New blocks do not inherit an obsolete pressure request.
+        Assert.Equal(actual: log, expected: ["alloc 1 1024", "alloc 2 1024", "free 1", "free 2"]);
+        Assert.Throws<InvalidOperationException>(testCode: () => pool.Return(placement: neighbour));
+        var fresh = Place(key: 0, pool: pool, size: 64);
+
+        pool.Return(placement: fresh); // New blocks do not inherit an obsolete pressure request.
         Assert.Equal(1, pool.Blocks);
         pool.FreeAll();
         pool.Trim();
         Assert.Equal(0, pool.Blocks);
     }
-
     [Fact]
     public void AStaleReturnIsRefusedOnceItsOffsetHoldsAnotherResource() {
         var (pool, log) = Pool();

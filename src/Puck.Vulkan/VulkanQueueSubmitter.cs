@@ -13,20 +13,27 @@ public sealed unsafe class VulkanQueueSubmitter {
     // before returning, so no consumer can omit the graphics-side dependency.
     internal void BindSparse(VulkanDeviceCommands device, VkQueue queue, nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings,
         nint semaphore, ulong waitValue, ulong signalValue) {
-        if (device.QueueBindSparse == null) { throw new InvalidOperationException("vkQueueBindSparse is unavailable on a sparse-enabled device."); }
+        if (device.QueueBindSparse == null) { throw new InvalidOperationException(message: "vkQueueBindSparse is unavailable on a sparse-enabled device."); }
         fixed (VkSparseMemoryBind* ranges = bindings) {
-            var buffers = new VkSparseBufferMemoryBindInfo { Buffer = buffer, BindCount = (uint)bindings.Length, PBinds = (nint)ranges };
+            var buffers = new VkSparseBufferMemoryBindInfo { BindCount = ((uint)bindings.Length), Buffer = buffer, PBinds = ((nint)ranges) };
             var timeline = new VkTimelineSemaphoreSubmitInfo {
+                PSignalSemaphoreValues = ((nint)(&signalValue)),
+                PWaitSemaphoreValues = ((nint)(&waitValue)),
                 SType = VkTimelineSemaphoreSubmitInfo.StructureType,
-                WaitSemaphoreValueCount = 1, PWaitSemaphoreValues = (nint)(&waitValue),
-                SignalSemaphoreValueCount = 1, PSignalSemaphoreValues = (nint)(&signalValue),
+                SignalSemaphoreValueCount = 1,
+                WaitSemaphoreValueCount = 1,
             };
             var info = new VkBindSparseInfo {
-                SType = VkBindSparseInfo.StructureType, PNext = (nint)(&timeline),
-                WaitSemaphoreCount = 1, PWaitSemaphores = (nint)(&semaphore),
-                SignalSemaphoreCount = 1, PSignalSemaphores = (nint)(&semaphore),
-                BufferBindCount = 1, PBufferBinds = (nint)(&buffers),
+                BufferBindCount = 1,
+                PBufferBinds = ((nint)(&buffers)),
+                PNext = ((nint)(&timeline)),
+                PSignalSemaphores = ((nint)(&semaphore)),
+                PWaitSemaphores = ((nint)(&semaphore)),
+                SType = VkBindSparseInfo.StructureType,
+                SignalSemaphoreCount = 1,
+                WaitSemaphoreCount = 1,
             };
+
             device.QueueBindSparse(queue.Handle, 1, in info, 0).ThrowIfFailed(device: device, operation: "vkQueueBindSparse");
             GpuQueueWork.Process.Signal();
         }
@@ -92,6 +99,7 @@ public sealed unsafe class VulkanQueueSubmitter {
             ).ThrowIfFailed(device: device, operation: "vkQueueSubmit");
         }
     }
+
     // Submits a batch's deferred submissions in one vkQueueSubmit, a submit info each with its own waits, arming one
     // fence for the whole batch (VulkanSubmissionBatch).
     internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, nint fenceHandle) {

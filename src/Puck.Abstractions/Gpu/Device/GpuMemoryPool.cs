@@ -174,7 +174,6 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
             return true;
         }
     }
-
     /// <summary>Releases empty blocks and marks every held block for release when its last placement returns.
     /// The mark survives delayed fence retirement; live placements are never reclaimed. Blocks allocated after
     /// this request follow the ordinary empty-block policy until another request reaches them.</summary>
@@ -182,11 +181,12 @@ public sealed class GpuMemoryPool<TKey, TBlock> where TKey : notnull {
         lock (m_gate) {
             if (m_retired) { return; }
             foreach (var pool in m_pools.Values) {
-                for (var index = pool.Count - 1; index >= 0; index--) {
+                for (var index = (pool.Count - 1); (index >= 0); index--) {
                     var block = pool[index];
+
                     block.TrimWhenEmpty = true;
                     if (block.Ranges.LiveRanges != 0) { continue; }
-                    pool.RemoveAt(index);
+                    pool.RemoveAt(index: index);
                     m_free(block.Native, false);
                 }
             }
@@ -254,6 +254,7 @@ public readonly struct GpuMemoryPlacement<TBlock> {
 /// <typeparam name="TBlock">A block's native memory.</typeparam>
 internal sealed class GpuMemoryBlock<TBlock>(TBlock native, bool own, object owner, List<GpuMemoryBlock<TBlock>> pool, GpuRangeAllocator ranges) {
     public bool TrimWhenEmpty { get; set; }
+
     public TBlock Native { get; } = native;
     public bool Own { get; } = own;
     public object Owner { get; } = owner;

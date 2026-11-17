@@ -15,8 +15,7 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     private bool m_disposed;
     private VulkanQueueTimeline? m_timeline;
 
-    internal GpuQueueTimeline Timeline => (m_timeline ??= new VulkanQueueTimeline(this));
-
+    internal GpuQueueTimeline Timeline => (m_timeline ??= new VulkanQueueTimeline(device: this));
     // Assigned only by the factory after enabling both sparse buffer features and requesting this queue family.
     internal VkQueue? SparseQueue { get; }
 
@@ -30,11 +29,11 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <param name="bindings">Aligned, nonoverlapping ranges; null memory unbinds a range.</param>
     /// <returns>The device timeline value for the binding operation.</returns>
     public ulong BindSparse(nint buffer, ReadOnlySpan<VkSparseMemoryBind> bindings) {
-        ObjectDisposedException.ThrowIf(m_disposed, this);
-        if (!SparseBuffersEnabled) { throw new InvalidOperationException("This device did not enable sparse buffers."); }
+        ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
+        if (!SparseBuffersEnabled) { throw new InvalidOperationException(message: "This device did not enable sparse buffers."); }
         ArgumentOutOfRangeException.ThrowIfZero(buffer);
-        if (bindings.IsEmpty) { throw new ArgumentException("A sparse binding batch must contain a range.", nameof(bindings)); }
-        return (m_timeline ??= new VulkanQueueTimeline(this)).BindSparse(buffer, bindings.ToArray());
+        if (bindings.IsEmpty) { throw new ArgumentException(message: "A sparse binding batch must contain a range.", paramName: nameof(bindings)); }
+        return (m_timeline ??= new VulkanQueueTimeline(device: this)).BindSparse(buffer, bindings.ToArray());
     }
 
     /// <summary>Gets the graphics queue of the device, first handing the open batch's deferred submissions to it
@@ -76,9 +75,11 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <summary>Gets whether the device was created with <see cref="MemoryBudgetExtension"/>, so its physical device
     /// reports a budget and usage per heap.</summary>
     public bool MemoryBudgetEnabled { get; init; }
+
     /// <summary>The extension that reports a budget and usage per heap
     /// (<c>VkPhysicalDeviceMemoryBudgetPropertiesEXT</c>), enabled when the device lists it.</summary>
     public const string MemoryBudgetExtension = "VK_EXT_memory_budget";
+
     /// <summary>Gets the device's command table, which carries the native <c>VkDevice</c> handle.</summary>
     public VulkanDeviceCommands Commands { get; }
     /// <summary>Gets whether the device has been disposed — a native call through <see cref="Commands"/> after that is

@@ -24,56 +24,58 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     [ThreadStatic] private static List<string>? SparseCalls;
     [ThreadStatic] private static bool FailSparse;
 
-    [Theory]
     [InlineData(31)]
     [InlineData(32)]
+    [Theory]
     public void SparseBindingsJoinTheDeviceTimelineBeforeFurtherGraphicsWork(int bindingQueue) {
         Calls = [];
         SparseCalls = [];
         FailSparse = false;
         var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
         using var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi(), new VkQueue(familyIndex: 1, handle: bindingQueue));
-        var queue = new VulkanGpuQueueSubmitter(new Context(logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+        var queue = new VulkanGpuQueueSubmitter(new Context(logical: logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+
         queue.BeginBatch();
-        queue.Submit([42]);
-        var mapped = logical.BindSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536, Memory = 88, MemoryOffset = 131072 }]);
-        Assert.Equal(2UL, mapped);
-        queue.Submit([43]);
+        queue.Submit(commandBufferHandles: [42]);
+        var mapped = logical.BindSparse(77, [new VkSparseMemoryBind { Memory = 88, MemoryOffset = 131072, ResourceOffset = 65536, Size = 65536 }]);
+
+        Assert.Equal(actual: mapped, expected: 2UL);
+        queue.Submit(commandBufferHandles: [43]);
         Assert.Equal(3UL, queue.Timeline.Checkpoint());
-        Assert.Equal([
+        Assert.Equal(actual: SparseCalls, expected: [
             "submit 31 commands=1 wait=0 signal=0", "submit 31 commands=0 wait=0 signal=1",
             $"bind {bindingQueue} wait=1 signal=2 buffer=77 range=65536+65536 memory=88+131072",
             "submit 31 commands=0 wait=2 signal=0", "submit 31 commands=1 wait=0 signal=0",
             "submit 31 commands=0 wait=0 signal=3",
-        ], SparseCalls);
+        ]);
         SparseCalls.Clear();
         var unmapped = logical.BindSparse(77, [new VkSparseMemoryBind { ResourceOffset = 65536, Size = 65536 }]);
-        Assert.Equal(5UL, unmapped);
-        Assert.Contains($"bind {bindingQueue} wait=4 signal=5 buffer=77 range=65536+65536 memory=0+0", SparseCalls);
+
+        Assert.Equal(actual: unmapped, expected: 5UL);
+        Assert.Contains(collection: SparseCalls, expected: $"bind {bindingQueue} wait=4 signal=5 buffer=77 range=65536+65536 memory=0+0");
         FailSparse = true;
-        Assert.Throws<VulkanException>(() => logical.BindSparse(77, [new VkSparseMemoryBind { Size = 65536 }]));
-        Assert.Throws<InvalidOperationException>(() => queue.Timeline.Checkpoint());
-        Assert.Throws<InvalidOperationException>(() => queue.Timeline.Completed);
+        Assert.Throws<VulkanException>(testCode: () => logical.BindSparse(77, [new VkSparseMemoryBind { Size = 65536 }]));
+        Assert.Throws<InvalidOperationException>(testCode: () => queue.Timeline.Checkpoint());
+        Assert.Throws<InvalidOperationException>(testCode: () => queue.Timeline.Completed);
         FailSparse = false;
         SparseCalls = null;
     }
-
     [Fact]
     public void AnEmptySubmitAndWaitDrainsEarlierDeferredWorkAndKeepsTheBatchOpen() {
         Calls = [];
         var device = new VulkanDeviceCommands(17, Procedures(), deviceFaultEnabled: false);
         using var logical = new VulkanLogicalDevice(device, default, new VkQueue(familyIndex: 0, handle: 31), default, new LogicalApi());
-        var queue = new VulkanGpuQueueSubmitter(new Context(logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+        var queue = new VulkanGpuQueueSubmitter(new Context(logical: logical), new VulkanQueueSubmitter(), new SynchronizationApi());
+
         queue.BeginBatch();
-        queue.Submit([1]);
-        queue.SubmitAndWait([]);
-        Assert.Equal(["submit fence=0 infos=1:1", "queue idle"], Calls);
-        queue.Submit([2]);
+        queue.Submit(commandBufferHandles: [1]);
+        queue.SubmitAndWait(commandBufferHandles: []);
+        Assert.Equal(actual: Calls, expected: ["submit fence=0 infos=1:1", "queue idle"]);
+        queue.Submit(commandBufferHandles: [2]);
         Assert.Equal(2, Calls.Count);
         queue.FlushBatch();
         Assert.Equal("submit fence=0 infos=1:2", Calls[^1]);
     }
-
     [Fact]
     public void AnOpenBatchReachesTheQueueInOneSubmitWhoseLastFenceSignalsEveryFenceInIt() {
         Calls = [];
@@ -99,7 +101,7 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         // One submit, three submit infos in order, armed with the last fenced submission's fence.
         queue.FlushBatch();
         queue.FlushBatch();
-        Assert.Equal(expected: [$"submit fence={Last} infos=1:1,2:2,1:4"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"submit fence={Last} infos=1:1,2:2,1:4"]);
 
         // The earlier fence answers from the last one's VkFence and waits on it without resetting it.
         Calls.Clear();
@@ -107,9 +109,9 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         sync.Signal(handle: Last);
         Assert.True(condition: first.IsSignaled);
         first.Wait();
-        Assert.Equal(expected: [$"wait {Last}"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"wait {Last}"]);
         last.Wait();
-        Assert.Equal(expected: [$"wait {Last}", $"wait {Last}", $"reset {Last}"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"wait {Last}", $"wait {Last}", $"reset {Last}"]);
 
         // Once the owner has drained and reset its fence, a fence answering from it is signaled without asking the driver.
         Calls.Clear();
@@ -129,7 +131,7 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         queue.Submit(commandBufferHandles: [8], fence: first);
         sync.Signal(handle: First);
         first.Wait();
-        Assert.Equal(expected: [$"submit fence={First} infos=1:8", $"wait {First}", $"reset {First}"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: [$"submit fence={First} infos=1:8", $"wait {First}", $"reset {First}"]);
         queue.Submit(commandBufferHandles: [15]);
         Assert.Equal(expected: 3, actual: Calls.Count);
         queue.FlushBatch();
@@ -149,7 +151,7 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         queue.Submit(commandBufferHandles: [14]);
         low.Signal(commandBufferHandles: [], device: device, graphicsQueue: logical.GraphicsQueue, semaphore: 55, value: 1UL);
         queue.FlushBatch();
-        Assert.Equal(expected: ["submit fence=0 infos=1:9", "submit fence=0 infos=1:10", "submit fence=0 infos=1:11", "submit fence=0 infos=1:12", "queue idle", "submit fence=0 infos=1:13", "device idle", "submit fence=0 infos=1:14", "submit fence=0 infos=0:0"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["submit fence=0 infos=1:9", "submit fence=0 infos=1:10", "submit fence=0 infos=1:11", "submit fence=0 infos=1:12", "queue idle", "submit fence=0 infos=1:13", "device idle", "submit fence=0 infos=1:14", "submit fence=0 infos=0:0"]);
 
         // A queue family read hands nothing over; an empty fenced submission splits the batch and still arms its fence.
         Calls.Clear();
@@ -158,7 +160,7 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         _ = logical.GraphicsQueueFamilyIndex;
         Assert.Empty(collection: Calls);
         queue.Submit(commandBufferHandles: [], fence: first);
-        Assert.Equal(expected: ["submit fence=0 infos=1:16", $"submit fence={First} infos=0:0"], actual: Calls);
+        Assert.Equal(actual: Calls, expected: ["submit fence=0 infos=1:16", $"submit fence={First} infos=0:0"]);
         Assert.False(condition: first.IsSignaled);
         sync.Signal(handle: First);
         first.Wait();
@@ -169,9 +171,9 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Resolve(nint handle, byte* name) => (Marshal.PtrToStringUTF8(ptr: ((nint)name)) switch {
         "vkQueueSubmit" => ((nint)((delegate* unmanaged[Cdecl]<nint, uint, VkSubmitInfo*, nint, VkResult>)&Submit)),
-        "vkQueueBindSparse" => (nint)(delegate* unmanaged[Cdecl]<nint, uint, VkBindSparseInfo*, nint, VkResult>)&BindSparse,
-        "vkCreateSemaphore" => (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, nint*, VkResult>)&CreateSemaphore,
-        "vkDestroySemaphore" => (nint)(delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroySemaphore,
+        "vkQueueBindSparse" => ((nint)((delegate* unmanaged[Cdecl]<nint, uint, VkBindSparseInfo*, nint, VkResult>)&BindSparse)),
+        "vkCreateSemaphore" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, nint*, VkResult>)&CreateSemaphore)),
+        "vkDestroySemaphore" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&DestroySemaphore)),
         "vkQueueWaitIdle" => ((nint)((delegate* unmanaged[Cdecl]<nint, VkResult>)&QueueIdle)),
         _ => ((nint)((delegate* unmanaged[Cdecl]<void>)&Trap)),
     });
@@ -183,8 +185,9 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
 
         for (var index = 0; (index < count); index++) {
             var info = submits[index];
-            var timeline = (VkTimelineSemaphoreSubmitInfo*)info.PNext;
-            SparseCalls?.Add($"submit {queue} commands={info.CommandBufferCount} wait={(info.WaitSemaphoreCount == 0 ? 0 : *(ulong*)timeline->PWaitSemaphoreValues)} signal={(info.SignalSemaphoreCount == 0 ? 0 : *(ulong*)timeline->PSignalSemaphoreValues)}");
+            var timeline = ((VkTimelineSemaphoreSubmitInfo*)info.PNext);
+
+            SparseCalls?.Add(item: $"submit {queue} commands={info.CommandBufferCount} wait={((info.WaitSemaphoreCount == 0) ? 0 : *((ulong*)timeline->PWaitSemaphoreValues))} signal={((info.SignalSemaphoreCount == 0) ? 0 : *((ulong*)timeline->PSignalSemaphoreValues))}");
             infos.Add(item: $"{submits[index].CommandBufferCount}:{((submits[index].CommandBufferCount == 0) ? 0 : ((nint*)submits[index].PCommandBuffers)[0])}");
         }
         Calls!.Add(item: $"submit fence={fence} infos={string.Join(separator: ",", values: infos)}");
@@ -197,11 +200,12 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
     private static void DestroySemaphore(nint device, nint semaphore, nint allocator) { }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static VkResult BindSparse(nint queue, uint count, VkBindSparseInfo* info, nint fence) {
-        var timeline = (VkTimelineSemaphoreSubmitInfo*)info->PNext;
-        var buffers = (VkSparseBufferMemoryBindInfo*)info->PBufferBinds;
-        var range = (VkSparseMemoryBind*)buffers->PBinds;
-        SparseCalls!.Add($"bind {queue} wait={*(ulong*)timeline->PWaitSemaphoreValues} signal={*(ulong*)timeline->PSignalSemaphoreValues} buffer={buffers->Buffer} range={range->ResourceOffset}+{range->Size} memory={range->Memory}+{range->MemoryOffset}");
-        return FailSparse ? VkResult.ErrorOutOfDeviceMemory : VkResult.Success;
+        var timeline = ((VkTimelineSemaphoreSubmitInfo*)info->PNext);
+        var buffers = ((VkSparseBufferMemoryBindInfo*)info->PBufferBinds);
+        var range = ((VkSparseMemoryBind*)buffers->PBinds);
+
+        SparseCalls!.Add(item: $"bind {queue} wait={*((ulong*)timeline->PWaitSemaphoreValues)} signal={*((ulong*)timeline->PSignalSemaphoreValues)} buffer={buffers->Buffer} range={range->ResourceOffset}+{range->Size} memory={range->Memory}+{range->MemoryOffset}");
+        return (FailSparse ? VkResult.ErrorOutOfDeviceMemory : VkResult.Success);
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static VkResult QueueIdle(nint queue) {
@@ -232,7 +236,6 @@ public sealed unsafe class VulkanSubmissionBatchLawTests {
         private nint m_next = First;
 
         public void Signal(nint handle) => m_signaled.Add(item: handle);
-
         public VkResult CreateFence(VulkanFrameSynchronizationCreateRequest request, out nint fenceHandle) {
             fenceHandle = m_next++;
 

@@ -986,6 +986,17 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [medium] Before sparse external targets are used, retain the exact host-word
+  coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;
+  an external region can also write beyond that prefix. Its consumed disjoint
+  words currently need its publication owner to re-owe them. Step 7 owns the
+  coverage implementation and a nonzero-target, disjoint-write remapping law.
+- [low] `GpuBufferPages.Lease.IsCurrent`
+  (`src/Puck.Abstractions/Gpu/Residency/GpuBufferPages.cs:138`) scans a lease's
+  pages after an unrelated global revision on every later check. Step 7 owns
+  revision-aware retained-proof validation before sparse churn is enabled.
+
 - [medium] Background GPU work is serviced inside the host's timer wait and
   not inside the swap chain's own (`ISwapChainPacing.TryWaitForFrame`) or a
   present that blocks in the driver, so a Direct3D 12 host the swap chain

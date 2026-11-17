@@ -61,7 +61,6 @@ public sealed unsafe class DirectXHeapArena {
 
     /// <summary>Releases empty heaps and marks held heaps for release after their last fenced placement returns.</summary>
     public void Trim() => m_pool.Trim();
-
     /// <summary>Creates a resource placed in a heap of a type: one with room, or a new one.</summary>
     /// <param name="description">The resource's description.</param>
     /// <param name="heapType">The heap type it lives on.</param>

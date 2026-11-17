@@ -143,12 +143,13 @@ public sealed partial class SdfWorldTables {
 
             if (progress.Pages is { IsCurrent: false }) {
                 // Already visiting this mesh: do not rewind the whole order for every stale page lease.
-                m_landing.Remove(mesh);
+                m_landing.Remove(key: mesh);
                 continue;
             }
             if (progress.Pages is null) {
                 var placement = m_meshArena.Placements[mesh];
-                progress.Pages = m_meshRegion.TryLease((long)placement.VertexWord * sizeof(uint), (long)progress.Words * sizeof(uint));
+
+                progress.Pages = m_meshRegion.TryLease((((long)placement.VertexWord) * sizeof(uint)), (((long)progress.Words) * sizeof(uint)));
                 if (progress.Pages is null) {
                     if (waiting < 0) { waiting = cursor; }
                     cursor++;
@@ -173,10 +174,11 @@ public sealed partial class SdfWorldTables {
         if (!ReferenceEquals(objA: recording.Queue, objB: m_deviceContext.Services.QueueSubmitter)) {
             throw new InvalidOperationException(message: "Mesh landing must submit on the tables' frame queue; row reuse requires its order.");
         }
-        for (var index = 0; index < job.Slices.Count; index++) {
+        for (var index = 0; (index < job.Slices.Count); index++) {
             var slice = job.Slices[index];
+
             if (!m_landing.TryGetValue(key: slice.Mesh, value: out var progress) || !ReferenceEquals(objA: progress, objB: slice.Progress) ||
-                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement) || progress.Pages is not { IsCurrent: true }) { continue; }
+                !m_meshArena.Placements.TryGetValue(key: slice.Mesh, value: out var placement) || (progress.Pages is not { IsCurrent: true })) { continue; }
             job.Slices[index] = slice with { Recorded = true };
 
             m_meshRegion.OweSourced(
@@ -205,9 +207,9 @@ public sealed partial class SdfWorldTables {
                 m_landingStale++;
                 continue;
             }
-            if (!slice.Recorded || progress.Pages is not { IsCurrent: true } pages) {
+            if (!slice.Recorded || (progress.Pages is not { IsCurrent: true } pages)) {
                 m_landingStale++;
-                ForgetLanding(slice.Mesh);
+                ForgetLanding(mesh: slice.Mesh);
                 continue;
             }
             progress.Landed += slice.Count;
@@ -301,8 +303,8 @@ public sealed partial class SdfWorldTables {
         }
     }
     private sealed class LandingProgress(int words) {
-        public GpuBufferPages.Lease? Pages { get; set; }
         public int Landed { get; set; }
+        public GpuBufferPages.Lease? Pages { get; set; }
         public int Taken { get; set; }
         public int Words { get; } = words;
     }

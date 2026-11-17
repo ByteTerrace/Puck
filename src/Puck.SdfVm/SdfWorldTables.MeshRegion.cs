@@ -21,24 +21,27 @@ namespace Puck.SdfVm;
 // primary a mesh hit's material.
 public sealed partial class SdfWorldTables {
     private readonly SdfMeshRegionArena m_meshArena;
+
     private readonly Dictionary<SdfMesh, GpuBufferPages.Lease> m_meshPages = new(comparer: ReferenceEqualityComparer.Instance);
+
     private IGpuBuffer? m_meshPageDestination;
     private ulong m_meshPageRevision;
 
     // Mapping changes invalidate publication even when no producer row changed. Re-owe only affected meshes
     // and revisit their rows; the ordinary whole-mesh landing door republishes them after remapping.
     private void RefreshMeshPages() {
-        var destination = m_meshRegion.Buffer(0);
+        var destination = m_meshRegion.Buffer(slot: 0);
         var revision = m_meshRegion.PageRevision;
-        if (ReferenceEquals(destination, m_meshPageDestination) && revision == m_meshPageRevision) { return; }
+
+        if (ReferenceEquals(objA: destination, objB: m_meshPageDestination) && (revision == m_meshPageRevision)) { return; }
         m_meshPageDestination = destination;
         m_meshPageRevision = revision;
         foreach (var (mesh, lease) in m_meshPages) {
             if (lease.IsCurrent) { continue; }
-            m_meshPages.Remove(mesh);
-            m_meshesOwed.Add(mesh);
-            ForgetLanding(mesh);
-            for (var row = m_rowsByMesh.First(mesh); row >= 0; row = m_rowsByMesh.Next(row)) { m_owedDraws.Add(row, 1); }
+            m_meshPages.Remove(key: mesh);
+            m_meshesOwed.Add(mesh: mesh);
+            ForgetLanding(mesh: mesh);
+            for (var row = m_rowsByMesh.First(key: mesh); (row >= 0); row = m_rowsByMesh.Next(row: row)) { m_owedDraws.Add(length: 1, start: row); }
         }
     }
 
@@ -76,7 +79,7 @@ public sealed partial class SdfWorldTables {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
             m_meshArena.TrimUnused();
             foreach (var mesh in m_meshPages.Keys) {
-                if (!m_meshArena.Placements.ContainsKey(mesh)) { m_meshPages.Remove(mesh); }
+                if (!m_meshArena.Placements.ContainsKey(key: mesh)) { m_meshPages.Remove(key: mesh); }
             }
             m_meshesOwed.RemoveWhere(match: mesh => !m_meshArena.Placements.ContainsKey(key: mesh));
             ForgetAllLanding();
@@ -269,7 +272,7 @@ public sealed partial class SdfWorldTables {
     private void ForgetArenaMeshes() {
         foreach (var mesh in m_meshArena.Forgotten) {
             ForgetLanding(mesh: mesh);
-            m_meshPages.Remove(mesh);
+            m_meshPages.Remove(key: mesh);
             _ = m_meshesOwed.Remove(mesh: mesh);
         }
         m_meshForgotten += m_meshArena.Forgotten.Count;
@@ -472,7 +475,7 @@ public sealed partial class SdfWorldTables {
                 foreach (var mesh in m_meshArena.Moved) {
                     m_meshMoved++;
                     ForgetLanding(mesh: mesh);
-                    m_meshPages.Remove(mesh);
+                    m_meshPages.Remove(key: mesh);
                     // A moved mesh no free run held is refused: it owes nothing until a plan places it.
                     if (!m_meshArena.Placements.TryGetValue(key: mesh, value: out var placement)) {
                         _ = m_meshesOwed.Remove(mesh: mesh);
@@ -480,8 +483,9 @@ public sealed partial class SdfWorldTables {
                     }
                     // A moved mesh whose normals and levels are still coming back from the store stays owed and
                     // lands through the background work, its rows absent until it does.
-                    var pages = m_meshRegion.TryLease((long)placement.VertexWord * sizeof(uint), (long)SdfMeshRegion.WordsOf(mesh) * sizeof(uint));
-                    if (!mesh.Resident || pages is null) { m_meshesOwed.Add(mesh); continue; }
+                    var pages = m_meshRegion.TryLease((((long)placement.VertexWord) * sizeof(uint)), (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)));
+
+                    if (!mesh.Resident || (pages is null)) { m_meshesOwed.Add(mesh: mesh); continue; }
                     m_meshPages[mesh] = pages.Value;
                     mesh.Need();
                     m_meshesWithUpload.Add(item: mesh);
@@ -674,7 +678,7 @@ public sealed partial class SdfWorldTables {
     /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
     public bool MeshStands(SdfMesh mesh) => (m_meshArena.Placements.ContainsKey(key: mesh) &&
-        !m_meshesOwed.Contains(mesh: mesh) && m_meshPages.TryGetValue(mesh, out var pages) && pages.IsCurrent);
+        !m_meshesOwed.Contains(mesh: mesh) && m_meshPages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent);
     /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read
     /// (<see cref="SdfMeshRegionArena.AheadRefused"/>): it can land only in the words the mesh it replaces gives up.
     /// Read on the frame's thread.</summary>
