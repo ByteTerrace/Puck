@@ -97,8 +97,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
     console command hang, the cost corpus, the overlay text advance.
-21. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
-    document, its next step.
+21. [high] [The benchmark](#the-benchmark): the design review of
+    [the memo](benchmark.md), then its stages 1, 2 and 4 together. It
+    replaces [the walkthrough](walkthrough.md)'s line, and the lead ranks it
+    at the next batch.
 22. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -2861,6 +2863,33 @@ runs.
   rerun the integrated tour, standing and walking frame readings and the
   gallery and lift body patrol; history is 47 words per output pixel
   (`HistorySurfaceWords`), so measure the view and slot allocation.
+
+### The benchmark
+
+Owner: the lead until the review, then one benchmark lane per stage · high ·
+Next: a design review of [the benchmark memo](benchmark.md) by another model
+family, then [its build order](benchmark.md#the-build-order).
+
+The owner's words: "it's slow as shit and mostly just static shots that miss
+all of the issues we see while on the move". The memo owns the design and
+the stages; this packet holds what a stage does not.
+
+- [high] The same route runner is built four times: the tour's route stops
+  (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and
+  the motion scenarios, each with its own plan format and parsers. The
+  memo's stage 6 folds the first three into the benchmark.
+- [medium] `host.frames` reads the host loop's interval and never the time a
+  frame was displayed, so judder that an even interval hides is not read
+  (`HostFrameTimeline`). Stage 8 adds the displayed interval.
+- [medium] The HUD cannot show an engine reading or a graph:
+  `HudBindingVocabulary` is closed over `world.tick`, `world.fps`, seat
+  positions, state rows and history, and `WorldHudElementKind` has no plot.
+  Stage 4 adds both as generic mechanisms.
+- [low] The sweep's windowed open items
+  ([sweep and visual checks](#sweep-and-visual-checks)) that concern the
+  tour's stills, its 2% threshold and its paired tour close when stage 6
+  deletes the tour; the memory peak at the garden crossing stays, read by
+  the painting chapter.
 
 ### Agent tooling and skills
 

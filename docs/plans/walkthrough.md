@@ -1,5 +1,10 @@
 # The walkthrough: the debug world played as a benchmark
 
+[The benchmark](benchmark.md) replaces this plan once its design review
+accepts it: the route becomes a program the World plays in real time, the
+lockstep stills and their comparison are deleted, and the steps under
+[scaling to the whole world](#scaling-to-the-whole-world) become its stage 7.
+
 The owner's ruling ([the instrument](../decisions/engine-design.md#the-debug-world-is-the-engines-instrument),
 [the scripted walkthrough](../decisions/engine-design.md#the-scripted-walkthrough)):
 one walkthrough visits every visual and every interaction, and agents drive and
