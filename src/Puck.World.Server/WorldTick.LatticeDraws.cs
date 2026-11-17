@@ -1,5 +1,3 @@
-using System.Buffers;
-
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
@@ -48,15 +46,13 @@ public sealed partial class WorldTick {
 
         var site = WorldDrawSites.StateRow(rowName: row.Name);
         var worldSeed = (definition.Generation?.WorldSeed ?? 0UL);
-        var values = ArrayPool<long>.Shared.Rent(minimumLength: lattice.CellCount);
+        var fireReason = string.Empty;
 
-        try {
-            var pass = values.AsSpan(
-                start: 0,
-                length: lattice.CellCount
-            );
-
-            if (!GeneratorEngine.TryFireBatch(
+        // Boot admission (WorldDrawBootResolver.TryResolve) and the generate compose refuse a pass this source cannot
+        // draw, by name, through the same TryAdvanceLatticePass; a refusal here is a pass neither of them ran.
+        if (!lattice.TryFillFromDraw(
+            field: field,
+            draw: (Span<long> pass) => GeneratorEngine.TryFireBatch(
                 generator: generator,
                 targetKind: CellKind.Fixed,
                 seedState: GeneratorEngine.ComputeSeedState(
@@ -70,18 +66,11 @@ public sealed partial class WorldTick {
                 values: pass,
                 masksAfter: out _,
                 advances: out _,
-                reason: out var fireReason
-            )) {
-                throw new InvalidOperationException(message: $"state row '{row.Name}' draw fill {fireReason} (a validated document must still draw when it paints).");
-            }
-
-            lattice.FillFromDraw(
-                field: field,
-                raw: pass,
-                worldSeed: worldSeed
-            );
-        } finally {
-            ArrayPool<long>.Shared.Return(array: values);
+                reason: out fireReason
+            ),
+            worldSeed: worldSeed
+        )) {
+            throw new InvalidOperationException(message: $"state row '{row.Name}' draw fill {fireReason} (a validated document must still draw when it paints).");
         }
     }
 
