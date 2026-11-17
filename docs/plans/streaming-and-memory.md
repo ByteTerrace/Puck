@@ -1788,6 +1788,15 @@ timing compares different frames. Priced beside it, from the same runs:
   must fit every set's pool on every device, and a mesh larger than a slab
   takes a slab of its own.
 
+**The first reading: material on Direct3D 12.** At the hero spawn on the RTX
+4070, the switch on against off, two boots off around one on, with the same
+counted draws: `surface` about a fifth slower, `shadow-far` and `resolve`
+several percent slower, `views` slightly slower, against a boot-to-boot spread
+near one percent. By the rule above, sparse backing of the one buffer is the
+direction on devices that allow it, and slabs do not land their kernel path.
+The Vulkan pair and the meadow stop are still owed before step 7's backing is
+built; the door and the switch stay, so the comparison can be read again.
+
 ### Step 5: the floor and eviction
 
 **Builds.** The coverage check that makes a floor admissible; each group in
