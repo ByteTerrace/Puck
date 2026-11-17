@@ -1319,6 +1319,12 @@ and not a spiral:
   at the top of Next and gets a lane at once, aimed at the root cause, not a
   packet line: the hall stairs' holes sat as "dark patches" in the sweep packet
   for weeks while engine work ran, and the owner found them unfixed.
+- A run does not end while work is owed or ready (the owner's ruling: "If you
+  still owe, then why'd you stop prematurely?"). Owed windowed readings, ready
+  queue items and filed fixes are the next work, not a closing summary; the
+  lead reports progress and keeps launching and measuring. A lead that landed a
+  batch at night, listed seven owed readings and six ready lanes, and stopped
+  is the case.
 - At each landing the lead checks that the top of Next has lanes on it. Review
   rounds, fix lanes and landings fill a lead's attention without filling the
   machine: once, only three review-bound lanes ran for hours while Next's top
