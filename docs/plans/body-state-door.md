@@ -535,16 +535,10 @@ The population asks a body for a contact and writes the manifold it gets back
 (`WorldBody.RigidContact`), and the solver writes every manifold it is handed
 (`FixedRigidWorld.Step`). Of two rigid bodies the lower index owns the pair
 (`WorldRigidContacts.Owner`), and the pair loop writes the owner's manifold
-when only the partner stepped **[opened]**
-(`src/Puck.World.Server/WorldPopulation.Rigid.cs:225`):
+when only the partner stepped (`WorldPopulation.SolveRigidContacts`)
+**[opened]**.
 
-```csharp
-            if (!ownerBody.RigidStepPrepared && !m_entries[partner].Body!.RigidStepPrepared) {
-                continue;
-            }
-```
-
-An unprepared rigid owner reaches that line when a carried body owns a pair
+An unprepared rigid owner takes that path when a carried body owns a pair
 with a higher-index free rigid body. Carried bodies enter the contact set as
 static solver sides, and their owned manifolds join the solve without putting
 them in the integration roster (`WorldPopulation.ResolveDynamicContacts`,
