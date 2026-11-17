@@ -27,6 +27,10 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
     public WorldDefinition Definition => m_mirror.Definition;
     /// <inheritdoc/>
     public WorldStateMirror StateMirror => m_mirror.FollowState();
+
+    /// <inheritdoc/>
+    public float? SolidScale(string placementId) => m_mirror.SolidScale(placementId: placementId);
+
     /// <inheritdoc/>
     /// <remarks>A session mirrors no static solid field, so an effector finds no ground to plant on and holds its
     /// authored pose.</remarks>

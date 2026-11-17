@@ -16,6 +16,10 @@ public interface IWorldStampSource {
     WorldDefinition Definition { get; }
     /// <summary>Gets the state mirror a look's lanes and a body's live scale read.</summary>
     WorldStateMirror StateMirror { get; }
+
+    /// <summary>The contact-sampled size of a solid placement, when the authority publishes one.</summary>
+    float? SolidScale(string placementId);
+
     /// <summary>Gets the static solid field an effector plants against, or <see langword="null"/> when this world
     /// carries none.</summary>
     SdfFieldEvaluator? StaticField { get; }

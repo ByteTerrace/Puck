@@ -8,7 +8,9 @@ public sealed partial class WorldDocument {
     // Set only while the single-threaded mutation apply call is running. It lets the deferred typed completion carry
     // the exact refusal detail already emitted by the legacy echo path without changing the composition/staging code.
     private string? m_lastMutationFailureDetail;
+
     private string m_lastMutationFailureCode = "world.mutation.refused";
+
     internal string LastMutationFailureCode => m_lastMutationFailureCode;
 
     // The presented action-state register file of every entity index, the borrowed scratch each snapshot entry's
@@ -382,15 +384,16 @@ public sealed partial class WorldDocument {
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = RebuildVerb(kind: request.Kind);
+
         if (!principal.IsAuthority) {
-            DenyGrantTable(denial: $"{verb} requires the operator", connectionId: connectionId,
-                correlationId: correlationId, echoKind: WorldEditEchoKind.Rebuild);
+            DenyGrantTable(connectionId: connectionId, correlationId: correlationId,
+                denial: $"{verb} requires the operator", echoKind: WorldEditEchoKind.Rebuild);
             return false;
         }
         var priorDefinition = m_definition;
 
-        if (request.Delta is { } delta &&
-            (preparationFailure ?? delta.RefuseBase(m_definition, Host.DocumentVersion)) is { } deltaFailure) {
+        if ((request.Delta is { } delta) &&
+            ((preparationFailure ?? delta.RefuseBase(current: m_definition, version: Host.DocumentVersion)) is { } deltaFailure)) {
             RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: deltaFailure, verb: verb);
             return false;
         }
@@ -734,7 +737,7 @@ public sealed partial class WorldDocument {
                 rebuildPopulation: true,
                 rebuildKind: request.Kind
             );
-            Host.ReseedLatticeFields(installed);
+            Host.ReseedLatticeFields(definition: installed);
 
             if (rebuildAddonPlan is not null) {
                 Host.Addons!.Commit(plan: rebuildAddonPlan);
@@ -865,7 +868,8 @@ public sealed partial class WorldDocument {
         }
 
         var message = $"{verb} applied — base is {origin}, journal cleared";
-        if (request.Delta is { } appliedDelta &&
+
+        if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
             message += $", delta={appliedDelta.Patch.Length} bytes payload={payload.Length} bytes";
         }
@@ -886,7 +890,6 @@ public sealed partial class WorldDocument {
 
         return true;
     }
-
     // The non-consuming primer path for AttachSink: PEEKS every body's continuity hint instead of consuming it, so a
     // newly attached sink's boot-state primer can never steal the flag an already-attached sink is still due to
     // observe via the next ordinary EmitSnapshot broadcast (the bug this repairs — see docs/architecture/worlds.md's
@@ -898,7 +901,6 @@ public sealed partial class WorldDocument {
         stepTicks: Host.LastStepTicks,
         tick: Host.CompletedTick
     );
-
     // Every live body's authoritative sim pose, color, archetype, and this tick's continuity hint, written into the
     // reused Host.SnapshotEntries array — the SAME borrowed-scratch shape as before the output hub: a typed subscriber
     // must fully consume (or copy) the returned WorldSnapshot before returning from DeliverSnapshot, because the next
@@ -919,7 +921,7 @@ public sealed partial class WorldDocument {
             m_snapshotState = new long[stateWidth];
         }
 
-        var partitions = ((capacity + SnapshotPartitionRows - 1) / SnapshotPartitionRows);
+        var partitions = (((capacity + SnapshotPartitionRows) - 1) / SnapshotPartitionRows);
         int count;
 
         if (
@@ -989,7 +991,8 @@ public sealed partial class WorldDocument {
             FieldCells: fieldCells,
             FieldsFull: fieldsFull,
             EngineTick: Host.CompletedEngineTicks,
-            Inputs: Host.Input.Publish()
+            Inputs: Host.Input.Publish(),
+            SolidScales: Host.Population.SolidScales()
         );
     }
 
@@ -1023,12 +1026,10 @@ public sealed partial class WorldDocument {
         }
         return count;
     }
-
     // The body a snapshot delivers a row for at an entity index, or null for an inactive or bodiless slot.
     private WorldBody? SnapshotBody(int index) => (Host.Population.IsActive(index: index)
         ? Host.Population.EntryBody(index: index)
         : null);
-
     // Writes the delivered rows of entity indices [first, end) into Host.SnapshotEntries from position offset, in
     // index order, and returns the position after the last. Partitions call it concurrently over disjoint ranges: it
     // writes only those rows' entries, their bodies' continuity and their register-file ranges of m_snapshotState,
@@ -1085,6 +1086,7 @@ public sealed partial class WorldDocument {
     private FieldCellDelta[] m_snapshotCells = [];
     private readonly List<FieldCellDelta> m_latticeSnapshotDeltas = [];
     private int[] m_snapshotOffsets = [];
+
     private SnapshotRows? m_snapshotRows;
 
     // The snapshot's partitioned phase: partition p writes entity indices [256p, 256(p+1)) at the offset the serial
@@ -1425,7 +1427,7 @@ public sealed partial class WorldDocument {
             return;
         }
         Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-            Message: m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode ? reason : $"{WorldServer.Describe(mutation: mutation)} rejected: {reason}",
+            Message: ((m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode) ? reason : $"{WorldServer.Describe(mutation: mutation)} rejected: {reason}"),
             Rejected: true,
             Kind: WorldEditEchoKind.Mutation,
             Mutation: mutation,

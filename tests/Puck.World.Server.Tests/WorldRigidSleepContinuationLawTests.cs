@@ -21,7 +21,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.SetSimulatedCount(2);
         Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
         Pose(index: 1, population: population, x: 3, y: .5f, z: 0);
-        Settle(count: 2, population: population);
+        Settle(definition: definition, count: 2, population: population);
         var floorPosition = population.EntryBody(index: 0)!.FixedPosition;
         var captured = RoundTrip(definition, population);
 
@@ -36,7 +36,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             Assert.True(condition: target.Grounded);
             Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the settled sleeper reads as penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
             Pose(index: 1, population: population, x: 0, y: (target.Position.Y + .7f), z: 0);
-            Step(population: population, tick: 1200);
+            Step(definition: definition, population: population, tick: 1200);
             Assert.True(condition: (population.DynamicContactResolvedPairs > 0));
             Assert.Equal(1, population.SimulatedBodyVisits);
             Assert.False(condition: target.IsPenetratingStaticGeometry(), userMessage: $"the arrival left the sleeper penetrating its floor at y={((double)target.FixedPosition.Y):0.######}");
@@ -75,7 +75,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         byte[] Continue(int step) {
             population.EntryBody(index: 0)!.SubmitIntent(intent: intent);
-            Step(population: population, tick: (1200 + step));
+            Step(definition: definition, population: population, tick: (1200 + step));
             feed.Collect(definition: definition, population: population);
             if (step == 0) {
                 Assert.Equal(0, population.SleepingRigidBodies);
@@ -106,7 +106,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
             Pose(index: 0, population: population, x: 0, y: 2, z: 0);
             Pose(index: 1, population: population, x: 0, y: 3, z: 0);
         } else { Pose(index: 0, population: population, x: 0, y: .5f, z: 0); }
-        Settle(count: (rigidSupport ? 2 : 1), population: population);
+        Settle(definition: definition, count: (rigidSupport ? 2 : 1), population: population);
         var captured = RoundTrip(definition, population).Population;
 
         Assert.Equal(expected: (rigidSupport ? 2 : 1), actual: captured.SleepingGravity.Count);
@@ -120,7 +120,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.Empty(collection: restored.SleepingGravity);
         population.Restore(checkpoint: restored, defaults: definition.PlayerDefaults, tick: 1200);
         if (remoteSupport) {
-            for (var tick = 1200; (tick < 1320); tick++) { Step(population: population, tick: tick); }
+            for (var tick = 1200; (tick < 1320); tick++) { Step(definition: definition, population: population, tick: tick); }
             Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y < FixedQ4816.One));
         } else { Assert.Empty(collection: restored.Entries); }
     }
@@ -138,7 +138,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
         Pose(index: 1, population: population, x: .2f, y: .5f, z: .79f);
         Pose(index: 2, population: population, x: 3, y: .1f, z: 0);
-        Settle(count: 2, population: population);
+        Settle(definition: definition, count: 2, population: population);
         var feed = new WorldEventFeed(capacity: population.Capacity);
 
         feed.Collect(definition: definition, population: population);
@@ -155,7 +155,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         WorldEventEdge[] Arrive() {
             Pose(population, 2, .5f, population.EntryBody(index: 0)!.Position.Y, 0);
-            Step(population: population, tick: 601);
+            Step(definition: definition, population: population, tick: 601);
             feed.Collect(definition: definition, population: population);
             return [.. feed.Edges];
         }
@@ -169,11 +169,11 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var height = population.EntryBody(index: 1)!.FixedPosition.Y;
 
         if (restore) { population.Restore(checkpoint: RoundTrip(definition, population).Population, defaults: definition.PlayerDefaults, tick: 1200); }
-        Step(population: population, tick: 1200);
+        Step(definition: definition, population: population, tick: 1200);
         Assert.Equal(height, population.EntryBody(index: 1)!.FixedPosition.Y);
         Assert.Equal(1, population.SleepingRigidBodies);
         population.EntryBody(index: 0)!.Glide(position: (population.EntryBody(index: 0)!.FixedPosition + (FixedVector3.UnitX * FixedQ4816.FromInteger(value: 3))));
-        for (var tick = 1200; (tick < 1320); tick++) { Step(population: population, tick: tick); }
+        for (var tick = 1200; (tick < 1320); tick++) { Step(definition: definition, population: population, tick: tick); }
         Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y < (height - FixedQ4816.One)));
     }
     [Fact]
@@ -195,7 +195,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var version = population.ContactFieldVersion;
 
         population.EntryBody(index: 2)!.Glide(position: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.FromInteger(value: 2), Z: FixedQ4816.Zero));
-        Step(population: population, tick: 1200);
+        Step(definition: definition, population: population, tick: 1200);
         Assert.Equal(version, population.ContactFieldVersion);
         Assert.True(condition: (population.EntryBody(index: 1)!.FixedPosition.Y > height));
         Assert.False(condition: population.EntryBody(index: 1)!.Resting);
@@ -221,7 +221,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.SetSimulatedCount(2);
         Pose(index: 1, population: population, x: 0, y: 9, z: 0);
         Pose(index: 0, population: population, x: 0, y: 9, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         var ball = population.EntryBody(index: 0)!;
         var carrier = population.EntryBody(index: 1)!;
         var height = ball.FixedPosition.Y;
@@ -229,7 +229,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.True(condition: (height > FixedQ4816.FromInteger(value: 7)), userMessage: $"the ball rests on the car, not the floor ({height})");
         for (var tick = 1200; (tick < 1216); tick++) {
             carrier.Glide(position: (carrier.FixedPosition - (FixedVector3.UnitY * FixedQ4816.FromDouble(value: .0625))));
-            Step(population: population, tick: tick);
+            Step(definition: definition, population: population, tick: tick);
         }
         Assert.True(condition: (ball.FixedPosition.Y < height), userMessage: $"the sleeper stayed at {ball.FixedPosition.Y} above the falling car");
     }
@@ -250,7 +250,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.ActionStateLane.Write(slot: slot, ordinal: 0, raw: FixedQ4816.One.Value);
         population.SyncBodyCells(definition: definition);
         Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         var captured = RoundTrip(definition, population).Population;
         var hash = WorldReplaySnapshot.HashState(population: population);
 
@@ -267,7 +267,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         var population = BoundPopulation(definition: definition);
 
         Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         var captured = RoundTrip(definition, population).Population;
         var hash = WorldReplaySnapshot.HashState(population: population);
 
@@ -295,7 +295,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.SetSimulatedCount(2);
         Pose(index: 0, population: population, x: 0, y: 1, z: 0);
         Pose(index: 1, population: population, x: 0, y: 2.5f, z: 0);
-        Settle(count: 2, population: population);
+        Settle(definition: definition, count: 2, population: population);
         var support = population.EntryBody(index: 0)!;
         var load = population.EntryBody(index: 1)!;
         var height = load.FixedPosition.Y;
@@ -303,7 +303,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.True(condition: (height > (support.FixedPosition.Y + FixedQ4816.FromDouble(value: .7))), userMessage: $"the load at {height} rests on the support at {support.FixedPosition.Y}, not the floor");
         Pose(index: 0, population: population, x: 6, y: ((float)support.FixedPosition.Y), z: 0);
         Assert.Equal(0, population.SleepingRigidBodies);
-        for (var tick = 1200; (tick < 1260); tick++) { Step(population: population, tick: tick); }
+        for (var tick = 1200; (tick < 1260); tick++) { Step(definition: definition, population: population, tick: tick); }
         Assert.True(condition: (load.FixedPosition.Y < (height - FixedQ4816.FromDouble(value: .5))), userMessage: $"the load hung at {load.FixedPosition.Y} over empty space");
     }
     // Removal is a discontinuity seen before the slot drops its body: a load parked on a locomotion support wakes when
@@ -317,7 +317,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.SetSimulatedCount(2);
         Pose(index: 1, population: population, x: 0, y: 2, z: 0);
         Pose(index: 0, population: population, x: 0, y: 3, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         var load = population.EntryBody(index: 0)!;
         var height = load.FixedPosition.Y;
 
@@ -325,7 +325,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         population.SetSimulatedCount(1);
         Assert.Null(@object: population.EntryBody(index: 1));
         Assert.Equal(0, population.SleepingRigidBodies);
-        for (var tick = 1200; (tick < 1260); tick++) { Step(population: population, tick: tick); }
+        for (var tick = 1200; (tick < 1260); tick++) { Step(definition: definition, population: population, tick: tick); }
         Assert.True(condition: (load.FixedPosition.Y < (height - FixedQ4816.One)), userMessage: $"the load hung at {load.FixedPosition.Y} over the retired support");
     }
     // A kit swap that makes a support rigid changes which body owns their contact (WorldRigidContacts.Owner): the swap
@@ -349,7 +349,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Assert.False(condition: population.EntryBody(index: 0)!.IsRigid);
         Pose(index: 0, population: population, x: 0, y: 2, z: 0);
         Pose(index: 1, population: population, x: 0, y: 3, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         Assert.True(condition: WorldBodyStateReads.TryResolveSlot(definition: definition, kind: out _, name: "mode", slot: out var slot));
         population.ActionStateLane.Write(slot: slot, ordinal: 0, raw: FixedQ4816.One.Value);
         population.SyncBodyCells(definition: definition);
@@ -370,7 +370,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
 
         population.SetSimulatedCount(1);
         Pose(index: 0, population: population, x: 0, y: .5f, z: 0);
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         var sleeper = population.EntryBody(index: 0)!;
 
         population.SetSimulatedCount(2);
@@ -384,7 +384,7 @@ public sealed class WorldRigidSleepContinuationLawTests {
         ball.Pose(position: (sleeper.FixedPosition - (FixedVector3.UnitX * start)), yawRadians: FixedQ4816.Zero, pitchRadians: FixedQ4816.Zero, rollRadians: FixedQ4816.Zero);
         Assert.True(condition: ball.TryApplyRigidImpulse(impulse: (FixedVector3.UnitX * speed), velocityCeiling: FixedQ4816.FromInteger(value: 1000)));
         Assert.Equal(1, population.SleepingRigidBodies);
-        Step(population: population, tick: 1200);
+        Step(definition: definition, population: population, tick: 1200);
         var separation = (sleeper.FixedPosition - ball.FixedPosition).Length;
 
         Assert.True(condition: (separation >= (touching - RigidOverlapTolerance)), userMessage: $"the ball integrated {((double)(touching - separation)):0.####} m into the sleeper before the pair formed");
@@ -417,17 +417,17 @@ public sealed class WorldRigidSleepContinuationLawTests {
         Pose(index: 0, population: population, x: 0, y: 2, z: 0);
         Pose(index: 1, population: population, x: 0, y: 3, z: 0);
         if (count > 2) { Pose(index: 2, population: population, x: 20, y: 2, z: 0); }
-        Settle(count: 1, population: population);
+        Settle(definition: definition, count: 1, population: population);
         return population;
     }
     private static void Pose(WorldPopulation population, int index, float x, float y, float z) =>
         population.EntryBody(index: index)!.Pose(pitchRadians: 0, rollRadians: 0, x: x, y: y, yawRadians: 0, z: z);
-    private static void Step(WorldPopulation population, int tick) {
-        population.AdvanceSimulated(stepStartEngineTick: (((ulong)tick) * 1680), stepTicks: 1680, tick: ((ulong)tick));
+    private static void Step(WorldDefinition definition, WorldPopulation population, int tick) {
+        population.AdvanceSimulated(definition: definition, stepStartEngineTick: (((ulong)tick) * 1680), stepTicks: 1680, tick: ((ulong)tick));
         population.ResolveDynamicContacts();
     }
-    private static void Settle(WorldPopulation population, int count) {
-        for (var tick = 0; ((tick < 1200) && (population.SleepingRigidBodies != count)); tick++) { Step(population: population, tick: tick); }
+    private static void Settle(WorldDefinition definition, WorldPopulation population, int count) {
+        for (var tick = 0; ((tick < 1200) && (population.SleepingRigidBodies != count)); tick++) { Step(definition: definition, population: population, tick: tick); }
         Assert.Equal(count, population.SleepingRigidBodies);
     }
     private static WorldDefinition SupportedDocument() {

@@ -633,14 +633,21 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverSessionLever(WorldSessionLever lever) {
         // No presentation service of the OBSERVING world is reachable from inside a destination's own delivery.
     }
+
     /// <inheritdoc/>
-    /// <remarks>Copies every kept field out of the borrowed <paramref name="snapshot"/> before returning (see this
+    /// <remarks>Copies every kept field out of the borrowed snapshot before returning (see this
     /// type's own borrowed-snapshot remarks). The pose endpoints follow <see cref="WorldPoseTable.TryAdmit"/> exactly as
     /// <c>WorldClient</c>'s do, except that a <see cref="EntityContinuityKind.Correction"/>, which the boot client
     /// eases with a decaying render-error offset this mirror does not reproduce, is ordinary double-buffering.</remarks>
+    private readonly WorldSolidScaleMirror m_solidScales = new();
+
+    /// <summary>The authority-sampled root size of a destination solid.</summary>
+    public float? SolidScale(string placementId) { lock (m_snapshotWriteGate) { return m_solidScales.Read(placementId, InterpolationAlpha); } }
+    /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
         if (m_unread) { return; }
         lock (m_snapshotWriteGate) {
+            m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
             m_inputs.Clear();
             foreach (ref readonly var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
             var seeded = m_seededRouteEntity;

@@ -891,8 +891,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // so this only dispatches the write onto the presentation service the lever names.
         m_levers?.Apply(lever: lever);
     }
+
+    private readonly WorldSolidScaleMirror m_solidScales = new();
+    private float m_solidScaleAlpha = 1f;
+
+    /// <inheritdoc/>
+    public float? SolidScale(string placementId) => m_solidScales.Read(alpha: m_solidScaleAlpha, placementId: placementId);
     /// <inheritdoc/>
     public void DeliverSnapshot(in WorldSnapshot snapshot) {
+        m_solidScaleAlpha = 1f;
+        m_solidScales.Deliver(sizes: snapshot.SolidScales.Span);
         m_poses.Begin();
 
         // Field and document row cells are state the snapshot carries beside the document; the mirror re-reads the
@@ -1307,6 +1315,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// reports the server sim pose, never this.</summary>
     /// <param name="alpha">How far this frame sits between the last and next fixed sim step, in <c>[0, 1)</c>.</param>
     public void UpdateRenderPoses(float alpha) {
+        m_solidScaleAlpha = alpha;
         for (var index = 0; (index < EntityCapacity); index++) {
             if (!m_poses.IsActive(index: index)) {
                 continue;

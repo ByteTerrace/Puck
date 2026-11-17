@@ -887,7 +887,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   push from deep inside a box can be down through the floor. The debug world's
   noclip (`worlds/debug/noclip.puck`) is a collider-less free-flight kit
   selected through the `form` register (suit + 2 × noclip).
-- A moving floor is an attached solid placement riding a body (`attach` plus
+- A moving floor is a solid placement scaled by authority-state `sizeBy`, or an attached solid placement riding a body (`attach` plus
   `solid`, analytic provider only); a body grounded on it rides its translation
   and yaw through the same narrowphase and slope test as ordinary contact.
   `motion.groundSnap` follows downward surfaces within an authored reach;
