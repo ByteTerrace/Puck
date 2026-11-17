@@ -530,6 +530,11 @@ public static partial class WorldDefinitionValidator {
                 }
 
                 return;
+            case OverlayPredicate.Reading reading:
+                if (!HudBindingVocabulary.TryParse($"reading.{reading.Name}", out _)) {
+                    errors.Add($"{path}.name must name a presentation reading.");
+                }
+                return;
             case OverlayPredicate.Now now when !Enum.IsDefined(value: now.Fact):
                 errors.Add(item: $"{path}.fact is not a defined OverlayFact.");
                 return;

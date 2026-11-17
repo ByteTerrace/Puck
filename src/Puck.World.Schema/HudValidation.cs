@@ -6,6 +6,9 @@ namespace Puck.World;
 /// exhaustive over what this door can refuse with, by construction rather than by convention — the same discipline
 /// <c>Client.Sdf.SdfRefusal</c> uses for <c>sdf.decode</c>.</summary>
 internal enum HudRefusal {
+    /// <summary>A plot's binding, range, reference or sample reservation is invalid.</summary>
+    [Refusal(door: "hud.validate", condition: "a plot has an invalid recent binding, range, reference or sample reservation", kind: RefusalKind.Verdict)]
+    PlotInvalid,
     /// <summary>The section's panel count exceeds its scope's ceiling — <see cref="WorldHudCapacity.MaxWorldPanels"/>
     /// for a world document, <see cref="WorldHudCapacity.MaxSeatPanels"/> for an identity-owned one.</summary>
     [Refusal(door: "hud.validate", condition: "the section's panel count exceeds its scope's ceiling: WorldHudCapacity.MaxWorldPanels for a world document, WorldHudCapacity.MaxSeatPanels for an identity-owned one", kind: RefusalKind.Verdict)]
@@ -348,6 +351,17 @@ internal static class HudRowValidation {
             rect: element.Rect
         );
 
+        if (element.Kind == WorldHudElementKind.Plot) {
+            if (!HudBindingVocabulary.TryParse(element.Binding, out var series) || series.Kind != HudBindingKind.Recent ||
+                element.PlotSamples < 1 || element.PlotSamples > WorldHudCapacity.MaxPlotSamplesPerPanel ||
+                !float.IsFinite(element.PlotMin) || !float.IsFinite(element.PlotMax) || element.PlotMax <= element.PlotMin ||
+                (element.PlotReference is { } line && !float.IsFinite(line)) ||
+                (element.PlotReference is not null && element.PlotReferenceBinding is not null) ||
+                (element.PlotReferenceBinding is { } reference && (!HudBindingVocabulary.TryParse(reference, out var parsedReference) || parsedReference.Kind != HudBindingKind.Reading))) {
+                Refuse(errors, HudRefusal.PlotInvalid, $"{path} needs a recent.<name> binding, 1..{WorldHudCapacity.MaxPlotSamplesPerPanel} samples, a finite increasing range, and at most one finite reference or reading.<name> reference binding.");
+            }
+        }
+
         ValidateFrameElementSource(
             cameras: cameras,
             definition: definition,
@@ -434,6 +448,10 @@ internal static class HudRowValidation {
         }
 
         var elementIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var plotSamples = elements.Where(static element => element.Kind == WorldHudElementKind.Plot).Sum(static element => (long)element.PlotSamples);
+        if (plotSamples > WorldHudCapacity.MaxPlotSamplesPerPanel) {
+            Refuse(errors, HudRefusal.PlotInvalid, $"{panelPath} requests {plotSamples} plot samples; the panel reserves {WorldHudCapacity.MaxPlotSamplesPerPanel}.");
+        }
 
         for (var index = 0; (index < elements.Count); index++) {
             ValidateElement(

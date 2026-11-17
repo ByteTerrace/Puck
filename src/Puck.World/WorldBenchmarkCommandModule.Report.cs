@@ -8,7 +8,7 @@ using Puck.Launcher;
 
 namespace Puck.World;
 
-internal sealed partial class WorldBenchmarkCommandModule {
+public sealed partial class WorldBenchmarkCommandModule {
     private static readonly string[] LoopKinds = ["cold", "warm"];
 
     // The kind a loop is reported as: the first is cold, the second warm and every later one steady.
@@ -18,7 +18,7 @@ internal sealed partial class WorldBenchmarkCommandModule {
     private CommandResult Finish(string? reason, int dropped, HostFrameRecording? recording) {
         var text = new StringBuilder();
         var report = new JsonObject {
-            ["schema"] = "puck.benchmark.run.v1",
+            ["schema"] = "puck.benchmark.run.v2",
             ["route"] = m_route,
             ["routeIdentity"] = m_routeIdentity,
             ["complete"] = (reason is null),
@@ -31,7 +31,11 @@ internal sealed partial class WorldBenchmarkCommandModule {
             ["loopsRequested"] = m_loops,
             ["iterationsDropped"] = (recording?.Dropped ?? 0L),
             ["iterations"] = (recording?.Count ?? 0),
+            ["overlay"] = new JsonObject { ["enabledAtEntry"] = m_overlayAtEntry, ["changedDuringRun"] = m_overlayChanged },
+            ["gpu"] = (gpuTiming?.Capture() ?? new JsonObject { ["state"] = "absent" }),
         };
+
+        gpuTiming?.RequireRecording(false);
 
         _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: '{m_route}' {((reason is null) ? "finished" : $"ended early ({reason}; {dropped} armed line(s) dropped)")}; {m_entry}");
         if (recording is null) {
@@ -207,7 +211,7 @@ internal sealed partial class WorldBenchmarkCommandModule {
     // Each GPU pass's mean and longest over the samples taken in the chapter, each sample a pass's rolling window mean.
     // Null when the host composes no render graph or no sample was complete.
     private JsonNode? DescribeGpu(Chapter chapter) {
-        if (gpu is not { Available: true }) {
+        if (gpuTiming is not { Available: true }) {
             return null;
         }
         if (chapter.Gpu.Count == 0) {

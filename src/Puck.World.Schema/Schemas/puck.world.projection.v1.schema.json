@@ -15232,6 +15232,23 @@
                                         ],
                                         "additionalProperties": false,
                                         "title": "OverlayPredicateState"
+                                      },
+                                      {
+                                        "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                                        "properties": {
+                                          "$type": {
+                                            "const": "reading"
+                                          },
+                                          "name": {
+                                            "description": "The registered source name.",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "name"
+                                        ],
+                                        "additionalProperties": false,
+                                        "title": "OverlayPredicateReading"
                                       }
                                     ],
                                     "title": "OverlayPredicate"
@@ -15333,6 +15350,23 @@
                                 ],
                                 "additionalProperties": false,
                                 "title": "OverlayPredicateState"
+                              },
+                              {
+                                "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "reading"
+                                  },
+                                  "name": {
+                                    "description": "The registered source name.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "title": "OverlayPredicateReading"
                               }
                             ],
                             "title": "OverlayPredicate"
@@ -15467,6 +15501,23 @@
                       ],
                       "additionalProperties": false,
                       "title": "OverlayPredicateState"
+                    },
+                    {
+                      "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                      "properties": {
+                        "$type": {
+                          "const": "reading"
+                        },
+                        "name": {
+                          "description": "The registered source name.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "title": "OverlayPredicateReading"
                     }
                   ],
                   "default": null,
@@ -26312,6 +26363,23 @@
                     ],
                     "additionalProperties": false,
                     "title": "OverlayPredicateState"
+                  },
+                  {
+                    "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                    "properties": {
+                      "$type": {
+                        "const": "reading"
+                      },
+                      "name": {
+                        "description": "The registered source name.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false,
+                    "title": "OverlayPredicateReading"
                   }
                 ],
                 "default": null,
@@ -30859,6 +30927,23 @@
                       ],
                       "additionalProperties": false,
                       "title": "OverlayPredicateState"
+                    },
+                    {
+                      "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                      "properties": {
+                        "$type": {
+                          "const": "reading"
+                        },
+                        "name": {
+                          "description": "The registered source name.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "title": "OverlayPredicateReading"
                     }
                   ],
                   "default": null,
@@ -31081,6 +31166,23 @@
                   ],
                   "additionalProperties": false,
                   "title": "OverlayPredicateState"
+                },
+                {
+                  "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                  "properties": {
+                    "$type": {
+                      "const": "reading"
+                    },
+                    "name": {
+                      "description": "The registered source name.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "name"
+                  ],
+                  "additionalProperties": false,
+                  "title": "OverlayPredicateReading"
                 }
               ],
               "default": null,
@@ -31356,6 +31458,23 @@
                     ],
                     "additionalProperties": false,
                     "title": "OverlayPredicateState"
+                  },
+                  {
+                    "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                    "properties": {
+                      "$type": {
+                        "const": "reading"
+                      },
+                      "name": {
+                        "description": "The registered source name.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false,
+                    "title": "OverlayPredicateReading"
                   }
                 ],
                 "default": null,
@@ -31381,6 +31500,7 @@
                         "Rect",
                         "Text",
                         "Gauge",
+                        "Plot",
                         "Frame"
                       ],
                       "title": "WorldHudElementKind"
@@ -31824,6 +31944,23 @@
                                 ],
                                 "additionalProperties": false,
                                 "title": "OverlayPredicateState"
+                              },
+                              {
+                                "description": "A named presentation reading is present and nonzero (or has nonempty text). Missing and unmeasured sources do not hold. This predicate never reads simulation state.",
+                                "properties": {
+                                  "$type": {
+                                    "const": "reading"
+                                  },
+                                  "name": {
+                                    "description": "The registered source name.",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "name"
+                                ],
+                                "additionalProperties": false,
+                                "title": "OverlayPredicateReading"
                               }
                             ],
                             "default": null,
@@ -31893,6 +32030,37 @@
                       "additionalProperties": false,
                       "default": null,
                       "title": "WorldVoiceProfile"
+                    },
+                    "plotSamples": {
+                      "description": "The recent samples a Plot requests; counted against the panel\u0027s bar reservation.",
+                      "type": "integer",
+                      "default": 60
+                    },
+                    "plotMin": {
+                      "description": "The plot\u0027s lower bound, in the reading\u0027s units.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "plotMax": {
+                      "description": "The plot\u0027s upper bound, strictly above PlotMin.",
+                      "type": "number",
+                      "default": 1
+                    },
+                    "plotReference": {
+                      "description": "An optional constant reference line in the reading\u0027s units.",
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "default": null
+                    },
+                    "plotReferenceBinding": {
+                      "description": "An optional reading binding for a live reference line, instead of PlotReference.",
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null
                     }
                   },
                   "required": [

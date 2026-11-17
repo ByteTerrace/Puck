@@ -41,10 +41,10 @@ public sealed class OverlayFrameBuilder {
     public const int ElementWords = 12;
     /// <summary>The clip-rect ceiling (index 0 is the unclipped sentinel; the table holds indices 1..MaxClips) — a
     /// cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int MaxClips = 32;
+    public const int MaxClips = 64;
     /// <summary>The element-record ceiling (all rect, text, icon, ring, wedge, and sampled-frame records together) —
     /// a cannot-overflow backstop, never a budget; see <see cref="MaxPanels"/> for what that means.</summary>
-    public const int MaxElements = 4096;
+    public const int MaxElements = 8192;
     /// <summary>The panel-record ceiling — a cannot-overflow backstop, never a budget.</summary>
     /// <remarks>What a capacity here is: the point past which a record cannot be addressed at all — the three fixed
     /// record backstops and the derived text capacity size the GPU region the shader addresses. The budget is

@@ -15,10 +15,11 @@ This memo designs the benchmark as one player-facing feature with one owner:
 a fixed route through the debug world, played in real time by one command and
 one in-game verb, watched live, reported per chapter, and comparable across
 builds by frame-time statistics, counters and motion artifacts. Its design
-review's findings are answered [below](#the-reviews-findings), and its first
-three stages are built or specified: `world.benchmark` plays a route in real
-time and reports every host iteration, and `puck benchmark` boots, plays on
-each backend, reports and compares
+review's findings are answered [below](#the-reviews-findings). Its player, live
+overlay and command are built: `world.benchmark` plays a route in real time and
+reports every host iteration, an imported standard HUD panel shows its recent
+interval and work, and `puck benchmark` boots, plays on each backend, reports
+and compares
 ([the CLI reference](../reference/cli.md#puck-benchmarkthe-route-benchmark)).
 
 ## What professional benchmarks do
@@ -124,7 +125,7 @@ replaces the first three.
 | `world.view.trace` | The final composed presentation inputs over a tick interval | The check that two runs presented the same workload |
 | `world.screenshot … presented` | The frames the display showed, read back as composed, with each frame's changed pixels and luma change | The motion capture at a mark |
 | `capture.start` | A native recording of the window (`Puck.Recording`) | The whole run as the owner saw it, kept for review |
-| The HUD (`WorldHudElementKind`, `HudBindingVocabulary`) | Panels of rect, text, gauge and frame elements over a closed set of bindings that includes `world.fps` | The overlay. It lacks a plot element and bindings for engine readings |
+| The HUD (`WorldHudElementKind`, `HudBindingVocabulary`) | Authored panels, reading and recent-series bindings, and a plot with an optional reference line | The live overlay in `worlds/standard/benchmark.puck` |
 | `puck measure` | Paired before-and-after runs of frozen builds in a quiet window, with medians and interquartile ranges | How a timing question about two builds is answered |
 | `puck.bench.v1` | The report the bench verbs share | The benchmark's report format |
 
@@ -265,7 +266,7 @@ as well as its ring. The recording is allocated before the run, bounded by
 `HostFrameRecording.MaxCapacity`, and counts every iteration past its
 capacity as dropped; the report states the count. The run writes
 `frames.csv` (one row per iteration, with its loop, chapter and tick) and
-`run.json` (`puck.benchmark.run.v1`); `puck benchmark` folds the run into its
+`run.json` (`puck.benchmark.run.v2`); `puck benchmark` folds the run into its
 `report.json` (`puck.bench.v1`) beside the conditions it ran under.
 
 Percentiles are linearly interpolated between order statistics at position
@@ -387,9 +388,19 @@ Nothing is recorded as a baseline in the repository.
 ### What the viewer sees
 
 The overlay is a HUD panel authored in `worlds/standard/` that the debug
-world imports. Stage 2 builds its first, narrower form: a scrolling plot of
+world imports. Its live form is a scrolling plot of
 the iteration interval and work against the budget line, beside the numbers
-the run already holds.
+the run already holds. `world.benchmark overlay on|off|auto` shows it on
+demand, hides it, or follows whether a run is playing (the default).
+
+`reading.<name>` and `recent.<name>` resolve the host's `PresentationReadings`
+registry. The host's interval and work sources read `HostFrameTimeline`'s
+closed-iteration ring directly, in milliseconds, without another sampler or
+ring. `world.hud` echoes each reading's state and sample index; that index is
+the zero-based iteration `host.frames` labels. A plot is right-aligned while
+its requested window fills. The standard authors two sixty-iteration plots,
+their range and colors, the budget reference and their labels. The numeric
+values keep excursions above the plotted range visible.
 
 It needs a read-only presentation data model that neither names a benchmark
 nor lives in one panel:
@@ -410,8 +421,46 @@ results are its console summary and its report. Stage 5's check is an
 imported panel showing a newly authored route's chapter names and a variable
 number of rows with no C# change.
 
-The overlay's own GPU pass is timed and reported, and a run with the overlay
-on is compared only with another that had it on.
+The run requires timestamps through `WorldGpuTiming`, which also serves
+`world.gpu-timing` and dynamic resolution. Its report includes the closing
+rolling GPU window, with the window length, pass names, counts and explicit
+absent/unmeasured states. That window includes the overlay pass; it is not
+a whole-run or per-chapter distribution. Stage 3 adds the latter. The report
+also records whether the overlay was requested at entry and changed during
+the run. A run with the overlay on is compared only with another that had it
+on throughout; stage 3's comparer enforces this.
+
+Stage 2's remaining windowed proof runs on each backend (`directx` and
+`vulkan`). Start `worlds/debug` through `puck_world_start` from the checkout
+being verified, with `paused: true`, `windowed: true`, and the selected
+backend, under its GPU lease. Before arming the run, wait for startup once:
+
+```text
+world.wait ready 120
+world.wait bakes 120
+world.benchmark run worlds/debug/walkthrough-tests.puck "seam walk: the valley into the gallery, walking" at 30
+world.rate resume
+world.wait until 150
+world.hud
+host.frames 1 16.667 1
+world.gpu-timing
+```
+
+Capture eight presented frames with `puck_capture_frame` (`mode: "presented"`,
+`frames: 8`, naming that World), while the chapter is moving. Then run:
+
+```text
+world.wait until 1130
+world.benchmark
+```
+
+Keep the run's reported `report.json` and the presented burst, then stop the
+World through `puck_world_stop` immediately. Nothing settles or holds a frame
+inside the run. The panel must remain readable in motion, with both series
+scrolling and the white budget line in the authored range. `world.hud` must
+agree with `host.frames` at the same sample index, and the overlay pass must
+have completed samples in both `world.gpu-timing` and the report's `gpu`
+window. Those observations close the proof; rendering alone does not.
 
 ### Artifacts in motion
 
@@ -557,15 +606,14 @@ and it waits on the UI overhaul's diegetic surfaces.
 
 ## The build order
 
-The route's player, the recording, the per-chapter report and the command
-with its comparer are built (`WorldBenchmarkCommandModule`, `HostFrameRecording`,
-`BenchmarkCommand`, `BenchmarkComparison`). What remains, each stage with the
-check that closes it:
+The route's player, recording, per-chapter report, live HUD mechanisms and the command
+with its comparer are built (`WorldBenchmarkCommandModule`, `HostFrameRecording`, `HudWriter`,
+`BenchmarkCommand`, `BenchmarkComparison`). What remains, each stage with the check that
+closes it:
 
 | Stage | Lane | Builds | Done when |
 |---|---|---|---|
-| 1. Windowed proof of the start | Lead's GPU window | Nothing new: two fresh runs (a paused boot, `world.benchmark run … at <tick>`, `world.rate resume`) of one seam chapter on each backend, then one with a delayed resume | The chapter's end hash is the same in every fresh run of a backend, the delayed resume included; a run armed at another tick reads a different hash and is labelled by its `entry` |
-| 2. The live overlay | UI and overlay; a GPU leg | Reading bindings in `HudBindingVocabulary`, a plot element in `WorldHudElementKind`, and the standard panel. The overlay channel reserves `HudWriter.GaugeElementCost` render elements for each authored element, so a plot's bars get a reservation of their own | `world.hud` reads the plot's binding back with the value `host.frames` gives for the same iteration; a presented frame of a run shows the panel on both backends; the overlay's pass is in `world.gpu-timing` and in the report |
+| 2. The live overlay's windowed proof | Lead's GPU window | The reading/recent bindings, plot writer, per-panel bar reservation and standard panel are built. Verify the live composition | A presented burst of a run shows the panel on both backends; the overlay's pass is in `world.gpu-timing` and the report's closing rolling GPU window |
 | 3. The command, windowed | Lead's GPU window | Nothing new for the command (`puck benchmark`, `puck benchmark compare`, `puck measure` admitting it, the hitch list, GPU passes, counters and `boot` span are built headless); what remains is the pacer's lift of the presentation target for `--uncapped` (`PresentPacingPolicy.Resolve` caps an explicit target at the display) | A windowed `puck benchmark` of one seam chapter on each backend finishes complete with GPU passes per chapter and a `boot` span from the renderer's first iteration, and `--against` its own report compares clean on each; an `--uncapped` run presents past the display's rate, or the open item that records why not is closed |
 | 4. The route in the document | World and language; headless | The `route` block and `routes` section lowered through the `test` emitter's logic; marks; waypoints and the numeric pose samples; chapter and capture identity; the per-tick hash sequence; the seat-started, bindable run; recording a played chapter; the debug world's nine chapters | A denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable; a recorded chapter replayed from its start gives the recorded per-tick input, pointer motion included |
 | 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |
@@ -580,7 +628,6 @@ check that closes it:
 
 | Question | Settled by | Decides |
 |---|---|---|
-| Whether fresh display-paced runs of one build reach the same chapter hashes on a window | Stage 1 | Whether a determinism defect exists at a tick. Two headless fresh runs of one chapter gave the same hash |
 | Whether the temporal resolve exposes its motion vectors and validity mask to a readback | Stage 9 reads the resolve | Whether the detectors reproject or label their output uncompensated |
 | Whether CI's runners have a GPU | The lead; the workflows name hosted runners | CI runs the headless chapters, and a windowed run on both backends stays the lead machine's qualification |
 | How much the recording and the overlay cost | A paired `puck measure` request with each on and off | Whether the watched pass's ring is on by default |

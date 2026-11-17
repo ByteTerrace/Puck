@@ -1,3 +1,5 @@
+using Puck.Abstractions.Presentation;
+
 namespace Puck.Overlays;
 
 /// <summary>
@@ -11,6 +13,11 @@ namespace Puck.Overlays;
 /// clip-scope contract every per-seat writer uses.
 /// </summary>
 public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
+    /// <summary>The render records each plot sample expands into. Track, reference and status use the existing
+    /// per-element reservation; bars reserve this cost separately per panel.</summary>
+    public const int PlotSampleElementCost = 1;
+    private PresentationReading[] m_plotSamples = [];
+    private int m_plotRemaining;
     // The panel being emitted's presence — multiplied into its chrome and every element's alpha.
     private float m_panelAlpha = 1f;
     // Reused across every ComposeTemplate call (single-threaded on the window-pump thread, like every writer here) so
@@ -136,6 +143,9 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         var h = (rect.Height * panelH);
 
         switch (element.Kind) {
+            case OverlayHudElementKind.Plot:
+                EmitPlot(builder, in element, x, y, w, h);
+                break;
             case OverlayHudElementKind.Rect:
                 builder.WriteRect(
                     x: x,
@@ -279,6 +289,36 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
             );
         }
     }
+    private void EmitPlot(OverlayFrameBuilder builder, in OverlayHudElement element, float x, float y, float w, float h) {
+        var requested = Math.Clamp(element.PlotSamples, 0, m_plotRemaining);
+        m_plotRemaining -= requested;
+        if (requested == 0 || element.Binding is not { } binding || element.PlotMax <= element.PlotMin) { return; }
+        if (m_plotSamples.Length < requested) { m_plotSamples = new PresentationReading[requested]; }
+        var count = Math.Clamp(m_bindings.CopyRecent(binding, m_seat, m_plotSamples.AsSpan(0, requested)), 0, requested);
+        var current = m_bindings.ReadReading(binding, m_seat);
+
+        builder.WriteRect(x, y, w, h, OverlayColorRole.SurfaceInset, radius: 0, alpha: m_theme.Current.Styles.Hud.TrackAlpha * m_panelAlpha);
+        var step = w / requested;
+        for (var index = 0; index < count; index++) {
+            var sample = m_plotSamples[index];
+            if (sample.State != PresentationReadingState.Present || !double.IsFinite(sample.Value)) { continue; }
+            var height = h * (float)Math.Clamp((sample.Value - element.PlotMin) / ((double)element.PlotMax - element.PlotMin), 0, 1);
+            builder.WriteRect(x + (requested - count + index) * step, y + h - height, step, height, element.Role, radius: 0, alpha: m_panelAlpha);
+        }
+
+        double? reference = element.PlotReference;
+        if (element.PlotReferenceBinding is { } token) {
+            var reading = m_bindings.ReadReading(token, m_seat);
+            reference = reading.State == PresentationReadingState.Present ? reading.Value : null;
+        }
+        if (reference is { } line && double.IsFinite(line) && line >= element.PlotMin && line <= element.PlotMax) {
+            var offset = h * (float)((line - element.PlotMin) / ((double)element.PlotMax - element.PlotMin));
+            builder.WriteRect(x, y + h - offset, w, 1, OverlayColorRole.TextPrimary, radius: 0, alpha: m_panelAlpha);
+        }
+        if (current.State != PresentationReadingState.Present || count == 0) {
+            builder.WriteText(x, y, current.State == PresentationReadingState.Absent ? "absent" : "unmeasured", OverlayFrameBuilder.CellHeight(sizePx: Math.Min(h, 16)), OverlayColorRole.TextPrimary, maxChars: TextRunChars, alpha: m_panelAlpha);
+        }
+    }
     private void EmitPanel(OverlayFrameBuilder builder, in OverlayHudPanel panel) {
         var rect = panel.Rect;
 
@@ -327,6 +367,7 @@ public sealed class HudWriter : IOverlaySeatEmitter<OverlayHudSeatPanel> {
         }
 
         m_panelAlpha = panel.Alpha;
+        m_plotRemaining = builder.Leases.Capacity.HudPlotSamplesPerPanel;
 
         var x = (originX + (rect.X * spanW));
         var y = (originY + (rect.Y * spanH));

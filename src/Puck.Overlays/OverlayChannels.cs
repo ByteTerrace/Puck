@@ -97,6 +97,7 @@ public readonly record struct OverlayChannelUsage(
 /// backstop never disagree.</param>
 /// <param name="WheelMaxSectorsPerRing">The most sector pieces one wheel ring presents — <see cref="WheelMaxRings"/>'
 /// per-ring twin.</param>
+/// <param name="HudPlotSamplesPerPanel">The total bars a world or seat HUD panel may request.</param>
 public readonly record struct OverlayCapacity(
     int Seats,
     int HudPanels,
@@ -108,7 +109,8 @@ public readonly record struct OverlayCapacity(
     int BindingBarMaxModifiers,
     int MarkerMaxChipsPerSeat,
     int WheelMaxRings,
-    int WheelMaxSectorsPerRing
+    int WheelMaxSectorsPerRing,
+    int HudPlotSamplesPerPanel = 0
 );
 /// <summary>
 /// The lease table: every channel's reservation, each sized at the writer's measured maximum — the largest record
@@ -152,12 +154,13 @@ public sealed class OverlayChannelLeases {
     private const int CursorTextWordsPerSeat = CursorWriter.MaxLabelChars;
     // Hud — the AUTHORED-HUD reservation, computed in the constructor from the host's OverlayCapacity: world-scope
     // panels x elements PLUS the seat-scope budget (per-seat panels x elements x seats). Each authored element's
-    // render cost is taken at its OWN worst case per resource: a GAUGE costs the most render elements
-    // (HudWriter.GaugeElementCost: track + fill + label) and a TEXT run costs the most glyph words
+    // ordinary render cost is taken at its OWN worst case per resource: a gauge's track + fill + label
+    // (also sufficient for a plot's track + reference + status) and a TEXT run costs the most glyph words
     // (HudWriter.TextRunChars, which the writer CLIPS to — the bound is enforced, not merely assumed); the two
     // ceilings are computed independently because no single authored mix hits both maxima at once, and each is
     // still a valid upper bound alone. One clip per PANEL (HudWriter.EmitPanel/EmitSeatPanel scopes every panel —
-    // world or seat — to its own rect), so the clip reservation is simply the panel count.
+    // world or seat — to its own rect), so the clip reservation is simply the panel count. Plot bars are reserved
+    // separately from the host's total sample budget per panel.
     private const int HudElementCost = HudWriter.GaugeElementCost;
     private const int HudTextWordCost = HudWriter.TextRunChars;
     private const int ToastElements = (3 + ToastWriter.MaxMessageLines);
@@ -192,6 +195,7 @@ public sealed class OverlayChannelLeases {
             count: capacity.Seats,
             name: nameof(OverlayCapacity.Seats)
         );
+        RequireNonNegative(capacity.HudPlotSamplesPerPanel, nameof(OverlayCapacity.HudPlotSamplesPerPanel));
         RequireNonNegative(
             count: capacity.HudPanels,
             name: nameof(OverlayCapacity.HudPanels)
@@ -258,7 +262,7 @@ public sealed class OverlayChannelLeases {
             (seats, (bindingBarElementsPerSeat * seats), 0, (((UInt128)BindingBarTextWordsPerSeat) * seats)),
             (seats, (markerElementsPerSeat * seats), 0, 0),
             (0, ToastElements, 1, ToastTextWords),
-            (hudPanels, ((hudWorldElements + hudSeatElements) * HudElementCost), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
+            (hudPanels, (((hudWorldElements + hudSeatElements) * HudElementCost) + (hudPanels * (uint)capacity.HudPlotSamplesPerPanel * HudWriter.PlotSampleElementCost)), hudPanels, ((hudWorldElements + hudSeatElements) * HudTextWordCost)),
             (seats, ((((UInt128)CursorElementsPerSeat) * seats) + CursorPaneElements), 0, (((UInt128)CursorTextWordsPerSeat) * seats)),
             (seats, (wheelElementsPerSeat * seats), 0, (wheelTextWordsPerSeat * seats)),
             // The editor channel: each seat's inspector and its history scrubber row, each in a clip of its own.

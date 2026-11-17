@@ -65,7 +65,12 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
                 Fit: element.Fit,
                 Mirror: element.Mirror,
                 Radius: element.Radius,
-                Opacity: element.Opacity
+                Opacity: element.Opacity,
+                PlotSamples: element.PlotSamples,
+                PlotMin: element.PlotMin,
+                PlotMax: element.PlotMax,
+                PlotReference: element.PlotReference,
+                PlotReferenceBinding: element.PlotReferenceBinding
             );
 
             if (element.Kind != WorldHudElementKind.Frame) {
@@ -317,6 +322,7 @@ internal sealed class WorldHudFeed(WorldClient client, PlayerRoster roster, HudS
         _ => OverlayHudBand.Under,
     };
     private static OverlayHudElementKind ToKind(WorldHudElementKind kind) => kind switch {
+        WorldHudElementKind.Plot => OverlayHudElementKind.Plot,
         WorldHudElementKind.Rect => OverlayHudElementKind.Rect,
         WorldHudElementKind.Text => OverlayHudElementKind.Text,
         WorldHudElementKind.Gauge => OverlayHudElementKind.Gauge,
