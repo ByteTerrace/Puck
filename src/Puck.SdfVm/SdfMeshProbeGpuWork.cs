@@ -242,7 +242,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var ring = (int)(m_parts++ % SdfGpuWork.SlotCount);
 
         job.Ring = ring;
-        job.Reuse = m_partAnswers[ring];
+        // Never null, so Complete answers the whole array, fault word included, which the ring keeps for reuse.
+        job.Reuse = m_partAnswers[ring] ?? [];
         m_window.Enqueue(item: job);
         _ = SubmitAsync(job: job);
     }
