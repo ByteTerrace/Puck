@@ -1325,6 +1325,14 @@ and not a spiral:
   lead reports progress and keeps launching and measuring. A lead that landed a
   batch at night, listed seven owed readings and six ready lanes, and stopped
   is the case.
+- Owed windows come before new lanes (the owner's ruling, a running issue: the
+  owner had to say both "why'd you stop" and "why not lead with the owed
+  window first"). Whenever the machine is idle or a batch has just landed, the
+  lead first runs every owed reading it can take (quiet legs while nothing
+  builds, then GPU-lease legs), records them, and only then launches the next
+  lanes, briefing them with what the window found. On resuming a session the
+  first action is the owed window, not a launch. Windows are part of the normal
+  flow between landings, never a separate phase that waits for an invitation.
 - At each landing the lead checks that the top of Next has lanes on it. Review
   rounds, fix lanes and landings fill a lead's attention without filling the
   machine: once, only three review-bound lanes ran for hours while Next's top
