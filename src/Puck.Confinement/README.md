@@ -62,7 +62,9 @@ for an install root. From a held directory:
   process holds it.
 - `MoveTo` moves a directory held for removal into another held directory, and
   `DeleteTree` and `DeleteChild` remove a tree step by step through handles; a
-  link anywhere refuses the removal there.
+  link anywhere refuses the removal there. `DeleteTree` and `RemoveTree` can opt into
+  `removeLinks` to unlink descendant links themselves, leaving their targets untouched;
+  run-directory cleanup uses this option. The root must still be a directory rather than a link.
 - `IsMapped` reports whether a file in the directory backs one of this process's
   memory mappings, which the launcher uses to confirm the version directory a
   process was loaded from.

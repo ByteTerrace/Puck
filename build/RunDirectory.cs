@@ -15,8 +15,8 @@ namespace Puck;
 // run's leftovers and old evidence of kinds that never run again. A directory whose owner still runs is never removed,
 // and a family directory named with a token alone names no owner, so it goes once older than StaleAge. A directory is
 // removed through Puck.Confinement (iterative, one open handle per level, never following a link), so a tree of any
-// depth cannot overflow the stack of the process that sweeps it; a directory holding a link, or one something still
-// holds, is left in place and named in a "run directory not removed:" line, and never stops the sweep.
+// depth cannot overflow the stack of the process that sweeps it. Descendant links are unlinked, leaving their targets
+// alone; a directory something still holds is left in place and named in a "run directory not removed:" line.
 internal sealed partial class RunDirectory : IDisposable {
     /// <summary>The prefix every run directory's name starts with.</summary>
     public const string Family = "puck-";
@@ -153,7 +153,7 @@ internal sealed partial class RunDirectory : IDisposable {
     public static bool TryDelete(string path) {
         for (var attempt = 0; (attempt < DeleteAttempts); attempt++) {
             try {
-                ConfinedDirectory.RemoveTree(path: path);
+                ConfinedDirectory.RemoveTree(path: path, removeLinks: true);
 
                 return true;
             } catch (IOException) {
@@ -249,11 +249,11 @@ internal sealed partial class RunDirectory : IDisposable {
 
         return removed;
     }
-    // Removes one swept directory. A directory that cannot be removed (a link in it, something still holding a file, a
+    // Removes one swept directory. A directory that cannot be removed (something still holding a file, a
     // platform the confined removal does not support) is left in place and named, and never fails the sweep.
     private static bool TryRemove(string path, TextWriter? report) {
         try {
-            ConfinedDirectory.RemoveTree(path: path);
+            ConfinedDirectory.RemoveTree(path: path, removeLinks: true);
 
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)) {

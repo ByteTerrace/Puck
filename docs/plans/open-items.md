@@ -2617,10 +2617,6 @@ its lifecycle an explicit state.
 - [medium] `puck_world_start` discards a build when any file under the
   checkout changes mid-build, documentation and `worlds/` edits included. Key
   the source state on what the World's build reads.
-- [medium] `Puck.World`'s `--workers` validator reads a value whose parse
-  already failed (`src/Puck.World/Program.cs`), so `--workers abc` crashes
-  with a stack trace. Skip the check when the parse failed, as `CliOptions`'
-  validators do.
 - [medium] `puck measure` cannot time `bench world` across builds whose
   in-process types differ: the bench loads the frozen build's assemblies
   under the requesting checkout's CLI. Run each side's bench from that side's
@@ -2643,9 +2639,22 @@ its lifecycle an explicit state.
     from it;
   - a failed after side leaves a half-frozen request directory with no
     `request.json` (`MeasureCommand`); stage and rename, or delete it.
-- [low] `puck locks` re-resolves floating packages throughout an affected lock
-  file after a reference change, even without `--update` (`LockFiles`).
-  Preserve resolved versions and reserve upgrades for `--update`.
+- [medium] `puck locks` re-resolves floating packages throughout an affected
+  lock file after a reference change, even without `--update`
+  (`src/Puck.Cli.Gate/Locks/LockFiles.cs`, `RecordArguments` and `Record`).
+  A local-feed reproduction pins `1.*` at `1.0.0`, publishes `1.1.0`, then adds
+  only a project reference: the non-update restore records `1.1.0` as well as
+  the new project entry. `--force` differs from `--force-evaluate`, but an
+  invalidated graph still re-evaluates its floating dependencies. Preserve
+  existing resolutions during graph repair, without retaining a version that
+  a changed constraint excludes, and reserve upgrades for `--update`. This
+  needs a restore-resolution design, not a switch-only fix: cover direct and
+  transitive floating dependencies, multiple target frameworks, changed
+  constraints and removed references. Check with an isolated local feed whose
+  newer package appears between the initial restore and the reference edit;
+  non-update must retain the admissible old version, update must take the new
+  one, and a subsequent locked restore must pass. Do not rewrite resolved
+  versions in the output lock file without resolving their dependency graph.
 - [low] `puck format --check` reports thousands of files drifted, mostly from
   its whitespace phase: the phase or its settings disagree with
   `.editorconfig`. Fix it at the cause and sweep once.
@@ -2660,9 +2669,6 @@ its lifecycle an explicit state.
   starved, or nothing once stdin closes.
 - [low] An old-protocol CLI that already holds a lease keeps it:
   `HostAdmission.Wait` does not read `CliLease.RecordedProtocol`.
-- [low] `puck test` strands temporary run directories that contain links
-  (`build/RunDirectory.cs`'s sweep never removes one). Remove a link without
-  following it, or create none.
 - [low · plausible, Linux only] `FileLock.TryAcquireForDeletion` deletes a
   lock file while it holds it, and the artifact store deletes keyed locks, so
   two builders can lock different inodes at one path
@@ -2702,12 +2708,8 @@ CLI maturity remainders, each a [low]:
   directory though its help promises the imports; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
-  line on the same output; `puck bundle verify` dereferences null on a
-  `release.json` with no `files`; `puck official build --channel` goes
+  line on the same output; `puck official build --channel` goes
   unvalidated into `Path.Combine`.
-- `puck compile --validate` does not run the binding compiler, so a page
-  binding an Axis1D source to a digital command passes it and is refused at
-  boot.
 - Not re-read at the head, so verify before acting: option names that drift
   between siblings; `disclosure` overrides that skip the fixture's validation;
   absolute backslash paths in `lint`, `decompile`, `creation`, `mesh`,
