@@ -8,9 +8,9 @@ namespace Puck.World.Authoring;
 /// <summary>
 /// A second-material inset face region carried by a <see cref="ShapeDocument"/> — one authored shape that reads as
 /// two: an eroded copy of the same primitive, offset along its own local face and composed with its own material,
-/// recessed into or raised proud of the plate. Authored as one shape against the per-stamp shape budget — see
-/// <see cref="CreationDocument.StampShapeCount"/>, which charges a panelled shape as 2, and the shape-field table in
-/// <c>documents.md</c>.
+/// recessed into or raised proud of the plate. Authored as one shape that bakes two field operands; no budget
+/// admits or refuses them, <see cref="CreationDocument.StampShapeCount"/> only reports that bake work (a panelled
+/// shape counts as 2).
 /// </summary>
 /// <param name="Inset">How far the panel copy shrinks on every local axis before it is placed — the copy's own
 /// scale is <c>shape scale − Inset</c> per axis (floored at <see cref="SdfSolidGeometry.MinimumScale"/>), a

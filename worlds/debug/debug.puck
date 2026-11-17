@@ -17,11 +17,14 @@ basis: "avatars/moth"
 documentId: "debug"
 
 import "../standard/skies"
+import "../standard/free-camera"
 import "shapes"
 import "studio"
 import "controls"
 import "devices"
 import "desktop"
+// The free camera's body, ahead of every other inhabitant so it takes the population's highest slot (free-camera.puck).
+import "free-camera"
 // The board game room's card, granary board, Alchemy, Go and Reversi tables, ahead of every other population so their
 // cards, cursors, tokens, stones and discs take the population's top slots (shapes.puck's cardBodies and
 // boardRoomBodies) and every body below keeps its index.
@@ -185,7 +188,7 @@ commands: galleryCommands
 // walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies)
+  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies)
 }
 
 placements {
