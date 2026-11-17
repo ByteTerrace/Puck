@@ -96,6 +96,9 @@ public sealed partial class WorldServer {
             principal: principal,
             request: request
         );
+    /// <summary>Gets a task that completes once every rebuild this authority has started preparing off its tick has
+    /// finished preparing. A prepared rebuild installs at the next drain; nothing on the tick waits for it.</summary>
+    public Task RebuildPreparations => ExecuteAuthorityOperation(operation: () => m_document.RebuildPreparations);
     /// <inheritdoc cref="WorldDocument.ResolveRebuildNeighbours"/>
     public IWorldNeighbourResolver? ResolveRebuildNeighbours(string path) => m_document.ResolveRebuildNeighbours(path: path);
     /// <inheritdoc cref="WorldDocument.TryApplyMutation"/>

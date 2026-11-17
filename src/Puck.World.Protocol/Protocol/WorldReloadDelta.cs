@@ -10,7 +10,8 @@ namespace Puck.World.Protocol;
 /// <param name="Patch">The compact JSON delta in <see cref="WorldDocumentBasis"/> vocabulary.</param>
 /// <param name="DocumentDirectory">The replacement document's asset directory.</param>
 public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string BaseHash, string TargetHash, byte[] Patch, string? DocumentDirectory) {
-    /// <summary>The named refusal for an intervening install or a different authority activation.</summary>
+    /// <summary>The named refusal for a base the authority cannot name: another activation's declarations, or ones an
+    /// install replaced that nothing holds any longer.</summary>
     public const string StaleBaseCode = "world.reload.stale-base";
     /// <summary>The named refusal for a base whose bytes disagree with the sender's claimed base.</summary>
     public const string BaseMismatchCode = "world.reload.base-mismatch";
@@ -47,7 +48,10 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
             ? null : $"{BaseMismatchCode}: the current document does not match {BaseHash}";
     }
 
-    /// <summary>Reconstructs and validates a candidate without changing the authority's document.</summary>
+    /// <summary>Reconstructs a candidate without changing the authority's document. Every member and keyed row the
+    /// patch leaves unchanged is <paramref name="current"/>'s own instance (<see cref="WorldDocumentWalker.Share"/>), so
+    /// what the authority derived from them by reference carries over, and the target pin is checked on that shared
+    /// candidate, so sharing never changes the canonical bytes installed.</summary>
     /// <param name="current">The authority's installed declarations.</param>
     /// <param name="version">Their version.</param>
     /// <param name="candidate">The locally validated result, or null on refusal.</param>
@@ -61,7 +65,13 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
             var basis = WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(current));
             var patch = WorldProjectionDelta.Tree(Patch);
             if (!WorldDocumentBasis.TryMerge(basis, patch, out var merged, out reason)) { return false; }
-            var prepared = WorldDefinitionSerialization.Deserialize(CanonicalJsonDocument.SerializeCompact(merged!), DocumentDirectory);
+            var prepared = WorldDocumentWalker.Share(
+                basis: current,
+                basisTree: basis,
+                patch: patch,
+                value: WorldDefinitionSerialization.Deserialize(CanonicalJsonDocument.SerializeCompact(merged!), DocumentDirectory),
+                valueTree: merged!
+            );
             if (!string.Equals(TargetHash, WorldDefinitionFingerprint.Compute(prepared), StringComparison.Ordinal)) {
                 reason = $"{TargetMismatchCode}: the reconstructed document does not match {TargetHash}";
                 return false;

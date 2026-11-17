@@ -93,7 +93,11 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// <summary>Gets the kind counting the signed-distance programs built from a world's shapes: the server's static
     /// solid field and each static scene a frame presenter emits from the prototypes and placements.</summary>
     public static WorkKind ShapeBuilds { get; } = Registry.Declare(name: "world.boot.shape-builds", unit: "count", workClass: WorkClass.Deterministic);
-    /// <summary>Gets the kind counting asset loads: one per music, tune, patch or audio document an asset row
+    /// <summary>Gets the static solid placements a collider set compiled, because the set it replaced held none for the
+    /// same placement, stamp, creation and frame.</summary>
+    public static WorkKind ColliderPlacementsCompiled { get; } = Registry.Declare(name: "world.boot.collider-placements-compiled", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the static solid placements a collider set took whole from the set it replaced.</summary>
+    public static WorkKind ColliderPlacementsReused { get; } = Registry.Declare(name: "world.boot.collider-placements-reused", unit: "count", workClass: WorkClass.Deterministic);    /// <summary>Gets the kind counting asset loads: one per music, tune, patch or audio document an asset row
     /// resolves off disk, and one per machine content image a machine host prepares. This counts physical work,
     /// including validation and compilation work avoided by held products, rather than authored asset rows.</summary>
     public static WorkKind AssetLoads { get; } = Registry.Declare(name: "world.boot.asset-loads", unit: "count", workClass: WorkClass.Pacing);

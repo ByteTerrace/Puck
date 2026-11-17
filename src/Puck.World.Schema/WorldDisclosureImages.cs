@@ -123,10 +123,7 @@ public sealed class WorldDisclosureImages {
     private readonly List<int> m_dependencyScratch = [];
     private int[][] m_dependents = [];
     private readonly Dictionary<(int Row, string Audience), Entry> m_rows = [];
-    private readonly Dictionary<ImageDigest, WeakReference<WorldRecipientImage>> m_content = [];
-    private readonly List<ImageDigest> m_reclaimed = [];
-    private const int MinimumContentSweep = 256;
-    private int m_contentSweepAt = MinimumContentSweep;
+    private readonly Puck.Abstractions.Collections.WeakValueTable<ImageDigest, WorldRecipientImage> m_content = new();
     private readonly Dictionary<string, AudienceDefinition> m_definitions = [];
     private ArenaChangedKeys? m_changes;
     private StateArena? m_windowArena;
@@ -160,19 +157,14 @@ public sealed class WorldDisclosureImages {
             for (var row = 0; row < m_windowVersions.Length; row++) { m_windowVersions[row] = arena.RowVersion(row); }
             m_work.Add(RowVisits, m_windowVersions.Length);
         }
-        // Reclaimed entries are swept when the table has doubled since the last sweep left it, so a window pays for the
-        // images interned since then rather than for every image held; a dead entry found by an intern is replaced there.
-        if (m_content.Count < m_contentSweepAt) { return; }
-        m_work.Add(ContentVisits, m_content.Count);
-        foreach (var (pin, reference) in m_content) { if (!reference.TryGetTarget(out _)) { m_reclaimed.Add(pin); } }
-        foreach (var pin in m_reclaimed) { m_content.Remove(pin); }
-        m_reclaimed.Clear();
-        m_contentSweepAt = Math.Max(MinimumContentSweep, 2 * m_content.Count);
+        // A window pays for the images interned since the last sweep rather than for every image held; a reclaimed entry
+        // an intern finds is replaced there.
+        if (m_content.SweepIfGrown() is > 0 and var visited) { m_work.Add(ContentVisits, visited); }
     }
     /// <summary>Reports live shared image storage and current tick work, for the operator's budget.</summary>
     /// <returns>The one-line report.</returns>
     public string Describe() {
-        var held = m_content.Values.Select(reference => reference.TryGetTarget(out var image) ? image : null).OfType<WorldRecipientImage>().ToArray();
+        var held = m_content.Values.ToArray();
         return $"disclosure images {held.Length}, bytes {held.Sum(image => (long)image.Bytes)}, tick compositions {Compositions}, composed bytes {ComposedBytes}, skipped {Skipped}, definitions {DefinitionsComposed}";
     }
     private void Prepare(WorldRecipientView view) {
@@ -331,9 +323,9 @@ public sealed class WorldDisclosureImages {
     // The shared image of one disclosed content: the live one with this digest, or a new one the table holds weakly.
     private WorldRecipientImage Intern(ReadOnlySpan<byte> digest, StateCell[] cells, WorldObservedRow? observation, int bytes) {
         var key = ImageDigest.Of(digest);
-        if (!m_content.TryGetValue(key, out var reference) || !reference.TryGetTarget(out var image)) {
+        if (!m_content.TryGetValue(key, out var image)) {
             image = new WorldRecipientImage(digest.ToArray(), cells, observation, bytes);
-            m_content[key] = new WeakReference<WorldRecipientImage>(image);
+            m_content.Set(key, image);
         }
         return image;
     }

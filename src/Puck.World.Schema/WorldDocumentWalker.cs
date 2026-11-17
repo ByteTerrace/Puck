@@ -86,7 +86,7 @@ public readonly struct WorldDocumentSite {
 /// it, which is a cycle, so a value shared by two owners is walked under each.
 /// </para>
 /// </summary>
-public sealed class WorldDocumentWalker {
+public sealed partial class WorldDocumentWalker {
     private readonly Func<Type, bool> m_isSurface;
     private Tables m_tables;
 
@@ -488,7 +488,7 @@ public sealed class WorldDocumentWalker {
     }
 
     // One walk in progress: a visit (Visit) or a rewrite (Rewrite), whichever its constructor was handed.
-    internal sealed class Cursor(Tables tables, IWorldDocumentVisitor visitor, IWorldDocumentRewriter rewriter) {
+    internal sealed partial class Cursor(Tables tables, IWorldDocumentVisitor visitor, IWorldDocumentRewriter rewriter) {
         // The reference values being walked above the one under visit: a value reached again below itself is a cycle.
         private readonly HashSet<object> m_active = new(comparer: ReferenceEqualityComparer.Instance);
         private readonly List<Segment> m_path = [];

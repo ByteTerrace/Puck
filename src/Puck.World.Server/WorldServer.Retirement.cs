@@ -36,6 +36,8 @@ public sealed partial class WorldServer {
             m_tick.DrainOrdered();
             Extensions.Drain();
             _ = m_tick.DrainPendingOps(tick: m_tick.CompletedTick);
+            // A rebuild still preparing was never buffered, so it is answered rather than carried into the checkpoint.
+            m_document.RefusePreparations(reason: "authority is retiring and no longer admits submissions");
             m_authorityRetiring = true;
         }
     }

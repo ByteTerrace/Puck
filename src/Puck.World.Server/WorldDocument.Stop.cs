@@ -20,6 +20,7 @@ public sealed partial class WorldDocument {
     /// addon's answer cell, and the submitter's typed completion.</summary>
     /// <param name="reason">Why the activation stopped.</param>
     internal void RefusePending(string reason) {
+        TakePreparedRebuilds();
         while (m_pending.TryDequeue(result: out var op)) {
             switch (op) {
                 case WorldPendingOp.Mutate mutate:
@@ -70,5 +71,6 @@ public sealed partial class WorldDocument {
                     break;
             }
         }
+        RefusePreparations(reason: reason);
     }
 }

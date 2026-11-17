@@ -114,7 +114,7 @@ public static class WorldDocumentBasis {
             return 0;
         }
     }
-    private static Dictionary<JsonNode, int> IndexRows(JsonArray list, string key, out string duplicate) {
+    internal static Dictionary<JsonNode, int> IndexRows(JsonArray list, string key, out string duplicate) {
         var rows = new Dictionary<JsonNode, int>(list.Count, RowIdentityEquality.Instance);
         var firstDuplicate = int.MaxValue;
         duplicate = string.Empty;
@@ -175,28 +175,23 @@ public static class WorldDocumentBasis {
 
         // A keyed reconstruction replays surviving basis rows in basis order, then appends new keys in target order.
         // For reordered targets the diff chooses the wholesale marker form rather than synthesizing positions.
+        // TryFindRowKey proved every row of both lists carries the key once, so each lookup is one hash probe.
+        var basisRows = IndexRows(basis, key, out _);
+        var targetRows = IndexRows(target, key, out _);
         var reconstructed = new List<JsonNode?>();
 
         foreach (var basisRow in basis) {
-            var basisKey = RowIdentity(key: key, row: basisRow!);
+            var basisKey = RowIdentity(key: key, row: basisRow!)!;
 
-            if (IndexOfRowKey(
-                key: key,
-                list: target,
-                value: basisKey
-            ) >= 0) {
+            if (targetRows.ContainsKey(key: basisKey)) {
                 reconstructed.Add(item: basisKey);
             }
         }
 
         foreach (var targetRow in target) {
-            var targetKey = RowIdentity(key: key, row: targetRow!);
+            var targetKey = RowIdentity(key: key, row: targetRow!)!;
 
-            if (IndexOfRowKey(
-                key: key,
-                list: basis,
-                value: targetKey
-            ) < 0) {
+            if (!basisRows.ContainsKey(key: targetKey)) {
                 reconstructed.Add(item: targetKey);
             }
         }
@@ -224,14 +219,8 @@ public static class WorldDocumentBasis {
 
         foreach (var targetRow in target) {
             var targetObject = ((JsonObject)targetRow!);
-            var targetKey = RowIdentity(key: key, row: targetObject);
-            var basisIndex = IndexOfRowKey(
-                key: key,
-                list: basis,
-                value: targetKey
-            );
 
-            if (basisIndex < 0) {
+            if (!basisRows.TryGetValue(key: RowIdentity(key: key, row: targetObject)!, value: out var basisIndex)) {
                 delta.Add(value: targetObject.DeepClone());
 
                 continue;
@@ -270,13 +259,8 @@ public static class WorldDocumentBasis {
 
         foreach (var basisRow in basis) {
             var basisObject = ((JsonObject)basisRow!);
-            var basisKey = RowIdentity(key: key, row: basisObject);
 
-            if (IndexOfRowKey(
-                key: key,
-                list: target,
-                value: basisKey
-            ) < 0) {
+            if (!targetRows.ContainsKey(key: RowIdentity(key: key, row: basisObject)!)) {
                 var tombstone = new JsonObject();
 
                 CopyRowIdentity(
@@ -380,7 +364,7 @@ public static class WorldDocumentBasis {
 
         return -1;
     }
-    private static bool IsReplaceMarker(JsonNode? node) {
+    internal static bool IsReplaceMarker(JsonNode? node) {
         return (
             (node is JsonObject marker) &&
             (marker.Count == 1) &&

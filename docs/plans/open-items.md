@@ -2449,18 +2449,28 @@ The edit loop:
   Zig's incremental compiler as the design
   ([Inside Zig's Incremental Compilation](https://mlugg.co.uk/posts/incremental-compilation-internals/)):
   per-declaration units, recorded dependencies, early cutoff.
-- [high] A headless debug-world `world.reload` of the unchanged document
-  applies inside one tick on the pump: `host.frames` read that iteration's
-  `simulate` as its whole cost, with 4656926544 bytes allocated on the frame
-  thread and 58/47/10 collections, and the four ticks after it allocating
-  about 200 MB each. It is work, not a wait, so the control plane's door
-  cannot bound it ([where the guarantee stops](engine-job-system.md#where-the-guarantee-stops));
-  attribute the allocation (`dotnet-trace --profile gc-verbose`) and move the
-  install's preparation off the tick, as a build the tick adopts.
+- [high] A debug-world `world.reload` prepares off the tick and shares its
+  unchanged rows, but its install still costs hundreds of milliseconds on the
+  tick that adopts it, and its preparation's garbage pauses the frame thread
+  while it runs. A sampled thread-time trace of the adopting tick reads
+  `WorldServer.RecompileRules` (`SettleInstalledRows` building a scratch arena
+  at the tick's time, then `LoadInPlace` loading every row into the live
+  arena), `WorldOutputHub.DeliverDefinition` (`WorldDisclosureImages.Compose`
+  serializing the whole disclosed definition for its frame digest) and the
+  rigid bodies the install wakes; each of the four ticks after it composes one
+  more audience's whole definition again (`FrameIdentity`, about 200 MB each).
+  Make each proportional to the change: settle and load only the rows whose
+  declarations moved, digest the disclosed frame per shared section, and wake
+  only the bodies whose colliders moved. The preparation itself (two whole
+  serializations, a diff, a merge and a deserialization of a 95 MB document)
+  allocates gigabytes on the pool, about fifty young collections over its
+  seconds; the per-declaration compile the `.puck` compile item above names is
+  what removes it.
 - A shading edit still runs the whole validator over its candidate and
   canonicalizes and digests the edited creation twice; reload's sender
   serializes and diffs whole trees and the server validates the whole
-  candidate. Capture the edit's allocations, then narrow the validation as
+  candidate, off the tick but in proportion to the document, not the edit.
+  Capture the edit's allocations, then narrow the validation as
   `TryValidateTouchedStateRows` narrows a state write.
 - Every other mutation composes over `MaterializeArena`, which exports every
   document row anew. Export only the rows whose arena version moved, and
@@ -2482,11 +2492,11 @@ The edit loop:
 - [low] Reload delta follow-ups: the rebuilt document skips the codec's
   grantee check, so `world.load` and `world.reload` accept different
   documents; a merge refusal surfaces the composer's raw message with no
-  `world.reload.*` code; a document mutation queued ahead makes a reload
-  refuse `stale-base`, so a world that mutates its document most ticks may
-  never reload; the apply-time check re-hashes the whole document; the "CAS
-  resolution first" comment in `WorldDocument.Apply` is false; preparation
-  inside the ordered drain catches four exception types only.
+  `world.reload.*` code; a remote sender's base is nameable only while the
+  authority still holds it (`WorldDocument.Installed` holds installs weakly),
+  so a remote reload into a world that mutates its document most ticks can
+  still refuse `stale-base`; the "CAS resolution first" comment in
+  `WorldDocument.Apply` is false.
 
 State across an install:
 

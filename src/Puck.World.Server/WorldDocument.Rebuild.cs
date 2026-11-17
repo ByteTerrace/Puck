@@ -4,9 +4,16 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldDocument {
+    // Live Load/Reload submissions still preparing off the tick, taken into m_pending at the next drain.
+    private readonly WorldRebuildPreparations m_preparations = new();
+
+    /// <summary>Gets a task that completes once every rebuild preparation started so far has finished; a finished one
+    /// enters the buffered ops at the next drain.</summary>
+    internal Task RebuildPreparations => m_preparations.Completion;
+
     /// <summary>Buffers a whole-document rebuild-and-swap (<c>world.reset</c>/<c>world.load</c>/<c>world.reload</c>)
-    /// for the next <see cref="WorldServer.Step"/> (drained before intents). Retains the submitting envelope's
-    /// connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
+    /// for the next <see cref="WorldServer.Step"/> (drained before intents), preparing its candidate inline. Retains the
+    /// submitting envelope's connection/correlation identity — see <see cref="EnqueueMutation"/>'s own remarks.</summary>
     /// <param name="request">The rebuild request.</param>
     /// <param name="principal">The acting identity the rebuild is checked against.</param>
     /// <param name="connectionId">The submitting envelope's connection id.</param>
@@ -21,47 +28,84 @@ public sealed partial class WorldDocument {
     internal void EnqueueRebuild(WorldRebuildRequest request, Principal principal, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, string? expectedContentHash = null) {
         ArgumentNullException.ThrowIfNull(argument: request);
 
-        string? preparationFailure = null;
-
-        // Only this authority reconstructs the wire delta. The candidate still crosses the ordinary neighbour,
-        // local validation and install doors. Keep its pins until ApplyRebuild rechecks the base after queuing.
-        if (request.Delta is { } delta) {
-            if (!Host.Grants.IsOperator(principal)) {
-                preparationFailure = "world.reload requires the operator";
-            } else if (delta.TryPrepare(m_definition, Host.DocumentVersion, out var candidate, out var deltaReason)) {
-                request = request with { Definition = candidate };
-            } else {
-                preparationFailure = deltaReason;
-            }
+        m_pending.Enqueue(item: CaptureRebuild(
+            connectionId: connectionId,
+            correlationId: correlationId,
+            expectedContentHash: expectedContentHash,
+            principal: principal,
+            request: request
+        ).Prepare());
+    }
+    // A live submission. A Load or Reload carries a candidate whose reconstruction and validation read only the
+    // capture, so a host with workers prepares it on the thread pool and the tick takes it when it is ready; the tick
+    // never waits for it. A Reset's candidate is the base as it stands at apply, so it has nothing to prepare.
+    private void SubmitRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId) {
+        if ((request.Kind == WorldRebuildKind.Reset) || (Host.Jobs is not { Serial: false })) {
+            EnqueueRebuild(
+                connectionId: connectionId,
+                correlationId: correlationId,
+                principal: principal,
+                request: request
+            );
+            return;
         }
 
-        // A carried document is available at submission time, outside Step. Prove its neighbour claims here and carry
-        // any refusal into the ordered tick-boundary decision; ApplyRebuild repeats only document-local checks.
-        var rebuildNeighbours = ((request.Origin is WorldRebuildOrigin.File { Path: var candidatePath })
-            ? ResolveRebuildNeighbours(path: candidatePath)
-            : Host.Neighbours
-        );
-
-        if (
-            (preparationFailure is null) && (request.Definition is { } supplied) &&
-            !WorldDefinitionValidator.TryValidate(
-            definition: supplied,
-            neighbours: rebuildNeighbours,
-            reason: out var proofReason
-        )
-        ) {
-            preparationFailure = $"cross-document load proof failed before enqueue — {proofReason}";
-        }
-
-        m_pending.Enqueue(item: new WorldPendingOp.Rebuild(
-            ConnectionId: connectionId,
-            CorrelationId: correlationId,
-            ExpectedContentHash: expectedContentHash,
-            PreparationFailure: preparationFailure,
-            Principal: principal,
-            Request: request
+        m_preparations.Start(preparation: CaptureRebuild(
+            connectionId: connectionId,
+            correlationId: correlationId,
+            expectedContentHash: null,
+            principal: principal,
+            request: request
         ));
     }
+    // Everything a preparation reads, taken from the authority now: the installed declarations a delta names, their
+    // version, the operator check, and the proof transport for the candidate's path. A delta names the declarations
+    // it was diffed against, which an install since may have replaced while its sender still holds them; any other
+    // request, or a base nothing holds any longer, is prepared against the live definition (a delta then refuses as
+    // stale).
+    private WorldRebuildPreparation CaptureRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash) {
+        var named = ((request.Delta is { } delta) ? Installed(version: delta.BaseVersion) : null);
+
+        return CaptureRebuild(
+            basis: (named ?? m_definition),
+            connectionId: connectionId,
+            correlationId: correlationId,
+            expectedContentHash: expectedContentHash,
+            principal: principal,
+            request: request,
+            version: ((named is null) ? Host.DocumentVersion : request.Delta!.BaseVersion)
+        );
+    }
+    private WorldRebuildPreparation CaptureRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, WorldDefinition basis, WorldDocumentVersion version) => new(
+        Basis: basis,
+        ConnectionId: connectionId,
+        CorrelationId: correlationId,
+        ExpectedContentHash: expectedContentHash,
+        Machines: Host.Machines.ValidationCatalog,
+        Neighbours: ((request.Origin is WorldRebuildOrigin.File { Path: var candidatePath })
+            ? ResolveRebuildNeighbours(path: candidatePath)
+            : Host.Neighbours),
+        Operator: Host.Grants.IsOperator(principal),
+        Principal: principal,
+        Request: request,
+        Version: version
+    );
+    /// <summary>Moves every finished rebuild preparation, oldest first, into the buffered ops. Runs at the start of
+    /// each drain, so a prepared rebuild installs at a tick boundary.</summary>
+    internal void TakePreparedRebuilds() {
+        while (m_preparations.TryTake(op: out var op)) {
+            m_pending.Enqueue(item: op);
+        }
+    }
+    /// <summary>Answers every rebuild still preparing with a refusal, as <see cref="RefusePending"/> answers a buffered
+    /// one.</summary>
+    /// <param name="reason">Why the rebuilds will not install.</param>
+    internal void RefusePreparations(string reason) => m_preparations.Refuse(refuse: preparation => RejectRebuild(
+        connectionId: preparation.ConnectionId,
+        correlationId: preparation.CorrelationId,
+        reason: reason,
+        verb: RebuildVerb(kind: preparation.Request.Kind)
+    ));
 
     // A replay drive's Load/Reload carries no document, so the pinned path is re-read through the door the live verb
     // read it through: drawn for this instance and admitted on its own facts, since the tick path reaches no transport.

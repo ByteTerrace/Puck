@@ -158,26 +158,28 @@ public sealed class WorldSourceWatch {
         m_watch.Clear();
         m_known.Clear();
     }
-    /// <summary>Records the dependencies an ordinary reload reads, including a failed compile's missing imports.</summary>
+    /// <summary>Opens the log an ordinary reload records its dependencies into, including a failed compile's missing
+    /// imports. The reload records into it on whatever flow compiles (<see cref="CompileInputs.Record"/>) and hands it
+    /// back through <see cref="AdoptReads"/> on the host pump.</summary>
     /// <param name="path">The source the reload is reading.</param>
-    /// <returns>A recording scope while watching this source, otherwise null.</returns>
-    public IDisposable? RecordReads(string path) => ((Enabled && PuckPaths.Comparer.Equals(x: PuckPaths.Normalize(path: path), y: m_path)) ? new ReadScope(owner: this) : null);
+    /// <returns>The log while watching this source, otherwise null.</returns>
+    public Reads? RecordReads(string path) {
+        var normalized = PuckPaths.Normalize(path: path);
 
-    private sealed class ReadScope : IDisposable {
-        private readonly WorldSourceWatch m_owner;
-        private readonly CompileInputLog m_reads = new();
-        private readonly CompileInputs.Scope m_scope;
-
-        public ReadScope(WorldSourceWatch owner) {
-            m_owner = owner;
-            m_scope = CompileInputs.Record(log: m_reads);
-        }
-
-        public void Dispose() {
-            m_scope.Dispose();
-            m_owner.Refresh(reads: m_reads);
-        }
+        return ((Enabled && PuckPaths.Comparer.Equals(x: normalized, y: m_path)) ? new Reads(Path: normalized, Log: new CompileInputLog()) : null);
     }
+    /// <summary>Watches the dependencies a reload recorded, when the watch still follows the source it read. Call on
+    /// the host pump.</summary>
+    /// <param name="reads">The reads <see cref="RecordReads"/> opened.</param>
+    public void AdoptReads(Reads reads) {
+        ArgumentNullException.ThrowIfNull(reads);
+        if (Enabled && PuckPaths.Comparer.Equals(x: reads.Path, y: m_path)) { Refresh(reads: reads.Log); }
+    }
+
+    /// <summary>The dependencies one reload of a watched source recorded.</summary>
+    /// <param name="Path">The normalized source path the reload read.</param>
+    /// <param name="Log">The log its compile recorded into.</param>
+    public sealed record Reads(string Path, CompileInputLog Log);
 
     /// <summary>Polls on the host pump using its monotonic presentation timestamp.</summary>
     /// <param name="now">A Stopwatch timestamp; null reads the current timestamp.</param>

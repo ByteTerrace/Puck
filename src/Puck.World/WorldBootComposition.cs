@@ -775,6 +775,7 @@ public static class WorldBootComposition {
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
                 catalog: catalog);
         });
+        services.AddSingleton<WorldReload>();
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWatchCommandModule(
             watch: sp.GetRequiredService<WorldSourceWatch>(),
             source: () => sp.GetRequiredService<TextCommandSource>(),
