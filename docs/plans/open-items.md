@@ -991,12 +991,6 @@ and every memory owner are its steps. This packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
-- [low] The bake batches up to `SdfMeshPathBake.BatchTaps` evaluations, about
-  eight times `SdfGpuWork.FrameShareSeconds` at
-  `SdfMeshPathBake.NanosecondsPerTap`, where the probe cuts its jobs to the
-  share at a measured rate (`SdfGpuWorkRate`): a full batch delays the frame
-  queued behind it by its length. Cut the bake's batches at its measured rate
-  too, and read `over-frame-share` on the done line first.
 - [low · inferred, not run on a device] The Vulkan fence watcher
   (`VulkanFenceWatch`) waits fences in submission order on one thread, so a
   completion is signaled only after every earlier watched submission's. One

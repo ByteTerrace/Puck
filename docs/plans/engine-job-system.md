@@ -41,7 +41,7 @@ one.
   pose pack (`WorldCreationInstances.PackTransforms`) partitions by
   registration.
 - During a cold bake the machine is oversubscribed by construction: the bake
-  runs one worker per logical processor (`SdfMeshPathBake.Residency.cs:39`),
+  runs one worker per logical processor (`SdfMeshPathBake.Workers`),
   the irradiance trace a quarter of the processors more
   (`SdfMeshIrradiance.cs:126-127`), the frame thread runs beside both, and no
   priority separates the frame from the bake.
@@ -89,7 +89,7 @@ Environment.ProcessorCount - 2)` worker threads: every logical processor less
 the frame thread and the audio render thread
 (`WorldAudioRenderService.cs:179`), which are the two threads that must never
 wait on a worker. The Steam Deck (4 cores, 8 threads) runs 6 workers. Nothing else in the engine starts a CPU worker:
-the bake's static pool (`SdfMeshPathBake.Residency.cs:36-43`), the irradiance
+the bake's static pool (`SdfMeshPathBake.WorkQueue`), the irradiance
 worker counts, `Parallel.For` in the engine's runtime paths
 (`SdfMeshIrradiance.cs:1527`, `SdfMeshIrradianceScene.cs:103,579,756`,
 `SdfMeshChunks.cs:96`) and the thread-pool `Task.Run` sites listed below all
@@ -149,11 +149,11 @@ class with ready work, and within a class the job its comparer ranks first
 The `Bake` comparer ranks the group with the **largest** demand priority first:
 `SdfMeshDemand.Priority` grows with nearness and view density
 (`SdfMeshDemand.cs:70-78`, "past one for a demanded box, below one for another")
-and the bake takes the largest today (`SdfMeshPathBake.Residency.cs:333`,
+and the bake takes the largest today (`SdfMeshPathBake.TakeWork`,
 `WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority`). The
 priority is read live at take time, as `TakeWork` reads it ("as the frame thread
-last left it", `:320-321`), so a demand change reorders queued work, and a
-leader inherits the largest of its members' (`:179`). The `Lighting` comparer
+last left it"), so a demand change reorders queued work, and a
+leader inherits the largest of its members' (`SdfMeshPathBake.Prioritize`). The `Lighting` comparer
 is the order the irradiance worker already sorts by (`SdfMeshIrradiance.cs:1459-1467`):
 probes to trace first, by level and distance, then relights by their lighting's
 age, passes, level and distance. The scheduler takes the policies
@@ -180,8 +180,9 @@ probe (`Process`, tracing its hits or relighting them, inside the `Parallel.For`
 at `SdfMeshIrradiance.cs:1527`).
 The unit bound is 2 ms of work, a design parameter measured when the pool
 lands (open question 3). Which queued bake actions exceed it is unknown from
-the code: the dispatcher at `SdfMeshPathBake.Residency.cs:299-341` runs whatever
-action was queued, so J1 measures each action kind's duration and splits those
+the code: the dispatcher (`SdfMeshPathBake.Work`) runs whatever action was
+queued and times each as one figure for the pool's backlog
+(`SdfMeshBakeBacklog.ObserveStage`), so J1 measures each action kind's duration and splits those
 over the bound; the Bake proportional to change packet's narrower closure
 shrinks them anyway.
 
@@ -296,7 +297,7 @@ Every site below moves onto it, with its result kind:
 | `SdfKernelTreeLoad.cs:16-18,62` | `ConcurrentQueue` of ready kernels and errors, polled by `TakeReady` | `Bake` jobs per source; results into the load's kernel channel, drained by `TakeReady`. |
 | `SdfCompositionFrameSource.cs:268` | A `Task` polled each frame | One `Bake` job; the built program and delta into the source's program channel, drained where `AdoptBuild` runs (`:565`). |
 | `SdfMeshIrradiance.cs:558,1011,1147` | Three `Task.Run` and a `Parallel.For` (`:1527`) | `Lighting` jobs and forks; landed probe blocks and the built scene into the volume's lighting channel; `Publish` drains it (`:708`). Lockstep: a `Frame` fork. |
-| `SdfMeshPathBake.cs:1099`, `SdfMeshPathBake.Residency.cs:272-341` | A static work queue, `Task.Run` workers, fire-and-forget | `Bake` jobs under the descending demand comparer; landings into the residency's bake channel; the static pool is deleted. |
+| `SdfMeshPathBake.cs:1099`, `SdfMeshPathBake.Work` | A static work queue, `Task.Run` workers, fire-and-forget | `Bake` jobs under the descending demand comparer; landings into the residency's bake channel; the static pool is deleted. |
 | `BackgroundBuild.cs:134,149` | `Task.Run` on the thread pool, `TryTake` once a frame | `Start` enqueues a `Bake` job; `TryTake` drains the build's own channel. The candidate lifecycle (take-or-discard, cancel callbacks) is kept as a consumer, as the packet says. |
 | `GpuImageLeases.cs:67` | A `Task.Run` disposer | A `Bake` job per retirement batch; a deferred disposal is engine work, not I/O. |
 | `WorldFramePresenter.cs:511,2436` | `Task.Run` | `Bake` (the static field) and `Lighting` (responses) jobs; results into the presenter's channels. |
@@ -796,10 +797,13 @@ limit, waits for a measured need; none of the consumers above has one.
 
 ### The bake as jobs
 
-Each group stage the bake schedules today (`Schedule(group, work)`,
-`SdfMeshPathBake.Residency.cs:158-170`) becomes a `Bake` job under the descending
-demand comparer (section 1); urgent answers (`AnswerQueue`, `:161`) keep their
-place ahead by a reserved rank. The GPU dispatch share is the background GPU
+Each group stage the bake schedules today (`SdfMeshPathBake.Schedule`)
+becomes a `Bake` job under the descending
+demand comparer (section 1); urgent answers (`SdfMeshPathBake.RunFirst`) keep their
+place ahead by a reserved rank. Admission of a group's final lattice reads the
+pool's backlog as wall time (`SdfMeshBakeBacklog`: the stages queued and on
+their way against what the workers drain in an admission's lead), which under
+J1 reads the `Bake` class's ready queue and the pool's worker count. The GPU dispatch share is the background GPU
 work's (`SdfGpuWork.GpuShare` of measured GPU time), recorded and submitted by the frame
 thread as GPU work. The CPU stages are bounded units under the memory account.
 What a bake rebakes is the [Bake proportional to change](open-items.md#bake-proportional-to-change)

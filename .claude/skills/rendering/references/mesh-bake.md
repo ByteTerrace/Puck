@@ -971,9 +971,9 @@ laws exercise that boundary.
   `world.residency`'s `gpu-work` line reads what remains and what is
   reserved. A client keeps what it wrote into a buffer, or the sets that name
   it, by comparing the buffer's object: a replaced one is another object. A
-  batch the pool has no room for goes back to the bake (`Abandon`) and is
-  offered again once a slot comes back; a service with nothing in flight
-  reserves its batch as its floor. Admission of a group's final lattice waits
+  batch the pool has no room for goes back to the bake (`Abandon`), which is
+  offered a slot again once one comes back; a client with no slot in use
+  reserves its batch as the floor. Admission of a group's final lattice waits
   on the pool's backlog measured as wall time (`SdfMeshBakeBacklog`): the
   stages queued and on their way against what the workers drain in an
   admission's lead. Gradients are measured only at the

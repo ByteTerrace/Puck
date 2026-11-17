@@ -1571,10 +1571,11 @@ the fixed shares are gone.
   reservation before it creates one (`SdfGpuWorkHold`, workspace under
   `SdfResidencySelector.WorkOwner`, in the device's pool and the host's) and
   lowers it when the buffer goes. A job the pool has no room for is handed
-  back to its client and offered again once a slot comes back or
-  `SdfGpuWork.DeferralRetry` has passed; a service with nothing in flight and
-  no slot a reader still holds reserves its job as its floor, as does one
-  whose job has waited `SdfGpuWork.ForcedPatience`. The account's floor is
+  back, and its client is offered a slot again once one comes back or
+  `SdfGpuWork.DeferralRetry` has passed, while the other clients' jobs go on;
+  a client with no slot of the service in use reserves its job as the
+  reservation's floor, as does one with no job in flight whose job has waited
+  `SdfGpuWork.ForcedPatience`. The account's floor is
   measured in the owner's own bytes, so it admits the shared block the device
   places a small resource in.
 - **The clamped credit.** A settled charge is at most the wall time its job
