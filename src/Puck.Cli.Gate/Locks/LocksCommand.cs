@@ -37,14 +37,17 @@ public static class LocksCommand {
             if (verdict.ExitCode == CliExit.Success) { Console.Out.WriteLine(value: $"{Verb}: every lock file matches its project."); }
             return verdict.ExitCode;
         }
-        var result = LockFiles.Record(changed: out var changed, repositoryRoot: repositoryRoot, restore: arguments => Restore(arguments: arguments, cancellationToken: cancellationToken, repositoryRoot: repositoryRoot), update: update);
+        var result = LockFiles.Record(advanced: out var advanced, changed: out var changed, repositoryRoot: repositoryRoot, restore: arguments => Restore(arguments: arguments, cancellationToken: cancellationToken, repositoryRoot: repositoryRoot), update: update);
 
         if (result.ExitCode != 0) {
             Console.Error.WriteLine(value: result.Output.TrimEnd());
-            Console.Error.WriteLine(value: $"{Verb}: the restore failed (exit {result.ExitCode}); no lock file is known to be current.");
+            Console.Error.WriteLine(value: $"{Verb}: the restore failed (exit {result.ExitCode}); every lock file is as it was.");
             return CliExit.Failed;
         }
         foreach (var path in changed) { Console.Out.WriteLine(value: $"{Verb}: recorded {path}"); }
+        if (advanced.Count > 0) {
+            Console.Out.WriteLine(value: $"{Verb}: the new references need newer packages than the pinned versions, so these advanced (`puck locks --update` takes newer packages deliberately): {string.Join(separator: "; ", values: advanced.Order(comparer: StringComparer.Ordinal))}");
+        }
         if (changed.Count == 0) { Console.Out.WriteLine(value: $"{Verb}: every lock file already matched its project."); }
         return CliExit.Success;
     }
@@ -64,9 +67,12 @@ public static class LocksCommand {
             `dotnet restore {LockFiles.Solution} --locked-mode` does. A build after a package or project reference
             change therefore fails with NU1004, naming the project, until its lock file is re-recorded here.
 
-            puck locks            restore unlocked; NuGet rewrites only the lock files that no longer match
-                                  their projects, and keeps every other pinned version. Names each lock file
-                                  it wrote.
+            puck locks            restore unlocked, evaluating the whole graph afresh so every lock file lists the
+                                  current project closure, then take every package back to the version its lock
+                                  file already pinned (a floating range resolves to the newest package the feed
+                                  holds, which the fresh evaluation would otherwise record) and let a locked
+                                  restore judge the result. Names each lock file it wrote, and any package a new
+                                  reference forced past its pin.
             puck locks --update   also re-evaluate every floating version ([10.*, ) and the like), taking the
                                   newest packages each range admits: the explicit dependency update.
             puck locks --check    run `dotnet {string.Join(separator: ' ', values: LockFiles.CheckArguments)}` and report each

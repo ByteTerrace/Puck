@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.SignedDistance;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;
@@ -503,12 +504,6 @@ public sealed class SdfMeshLibraryLawTests {
         BakeCell = new Vector3(value: 0.05f),
         Levels = [new SdfMeshLevel(Error: 0.1f, Indices: new uint[] { 0, 1, 3 }, TriangleMaterials: new uint[] { second })],
     };
-
-    private sealed unsafe class HeapAllocator : Puck.Abstractions.Memory.IAllocator {
-        public void* Allocate(nuint size, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedAlloc(byteCount: Math.Max(val1: size, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
-        public void Free(void* ptr) => System.Runtime.InteropServices.NativeMemory.AlignedFree(ptr: ptr);
-        public void* Reallocate(void* ptr, nuint newSize, nuint alignment = 0) => System.Runtime.InteropServices.NativeMemory.AlignedRealloc(ptr: ptr, byteCount: Math.Max(val1: newSize, val2: 1), alignment: Math.Max(val1: alignment, val2: 16));
-    }
 
     private static SdfMesh Mesh(uint[] materials) => new(
         indices: new uint[] { 0, 1, 2, 0, 2, 1, 1, 2, 0 },

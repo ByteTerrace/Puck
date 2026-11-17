@@ -63,7 +63,8 @@ RWStructuredBuffer<uint> Accumulate : register(u0);
 RWStructuredBuffer<float> Channels : register(u1);
 RWTexture2D<float4> Output : register(u2);
 
-static const uint MaxAccumulateScale = 1024;
+#include "probe-accumulate.hlsli"
+
 static const float Fresnel0 = 0.06;
 static const float ShadowSteps = 6.0;
 static const float ShadowStepLength = 0.02;
@@ -71,10 +72,6 @@ static const uint PaintingBoundBit = 4u;
 
 groupshared uint GroupResponse;
 groupshared uint GroupCount;
-
-uint AccumulateScale(uint width, uint height) {
-    return min(MaxAccumulateScale, 0xFFFFFFFFu / max(width * height, 1u));
-}
 
 float SampleResponse(int2 p, int2 size) {
     p = clamp(p, int2(0, 0), size - 1);

@@ -5,9 +5,9 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The bake kernel's gradient stencil, for every CPU answer of a bake lattice (the offline bake, the field levels and the
 /// laws' kernel stand-ins): four tetrahedral taps about a sample, a sixty-fourth of the lattice's finest cell out, whose
-/// values combine into the gradient in field units per world unit. The four offsets are a sync pair with
-/// <c>SdfBakeTaps</c> in <c>passes/sdf-mesh-bake.comp.hlsl</c>; the spacing is not, since the kernel reads each
-/// lattice's (<see cref="SdfMeshBakeRequest.TapSpacing"/>) from its record.
+/// values combine into the gradient in field units per world unit. The kernel reads the same four offsets from the
+/// generated <c>isa/sdf-bake-taps.hlsli</c> (<see cref="SdfMeshBakeTapsHlsl"/>); the spacing is not shared, since the
+/// kernel reads each lattice's (<c>SdfMeshBakeRequest.TapSpacing</c>) from its record.
 /// </summary>
 public static class SdfMeshBakeTaps {
     /// <summary>The share of a lattice's finest cell a tap lies out from its sample, along each axis: a crossing a tap's

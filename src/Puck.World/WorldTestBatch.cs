@@ -89,9 +89,8 @@ internal sealed class WorldTestBatch {
                 var startingIndex = batch.m_index;
 
                 exit = await boot([
-                "--devices", "none", "--world", batch.WorkingWorld, "--headless", "true", "--unpaced", "true",
-                "--exit-after-seconds", "0",
-                "--state-dir", stateDirectory,
+                .. new WorldBootArguments(World: batch.WorkingWorld) { ExitAfterSeconds = 0, Headless = true, StateDirectory = stateDirectory }.Build(),
+                "--unpaced", "true",
                 .. ((first.CacheDirectory is { } cache) ? new[] { "--cache-dir", cache } : []),
                 .. ((first.Workers is { } workers) ? new[] { "--workers", workers.ToString(provider: CultureInfo.InvariantCulture) } : []),
                 "--schedule-dir", Path.Combine(path1: first.Directory, path2: "out"),

@@ -90,14 +90,6 @@
         "resolved": "0.2.607501",
         "contentHash": "17Yxzao41A1oZZ5lCCAnnXOy9up5i/GVEGazBjJAUZ4UISsNAotUt6h7zvCDgfKIC46CD7jszgLzLZoscSIJQA=="
       },
-      "Microsoft.Diagnostics.Tracing.TraceEvent": {
-        "type": "Transitive",
-        "resolved": "3.1.30",
-        "contentHash": "87DUtWHbLA+IFiO6R/dixDrYZa55xmBkZZAK7RowXRvY64O3AJBYjMnAtamf+QhVJ9ZzKHrXCbZpS5Tw2iog6g==",
-        "dependencies": {
-          "Microsoft.Diagnostics.NETCore.Client": "0.2.510501"
-        }
-      },
       "Microsoft.DiaSymReader": {
         "type": "Transitive",
         "resolved": "2.2.10",
@@ -1108,7 +1100,6 @@
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Text": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Transpiler": "[0.1.0-alpha, )",
-          "Microsoft.Diagnostics.Tracing.TraceEvent": "[3.1.*, )",
           "Microsoft.Extensions.Hosting": "[10.*, )",
           "Puck.Launcher": "[1.0.0, )",
           "Puck.Launcher.Linux": "[1.0.0, )",
@@ -1175,7 +1166,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )"

@@ -52,6 +52,14 @@ public static class PortablePath {
 
         return true;
     }
+    /// <summary>Spells a path with <c>/</c> as its only separator: Puck's wire form has no backslash separator, so a
+    /// backslash is a separator wherever a path is spelled. It changes no other character and makes no path full.</summary>
+    /// <param name="path">A path spelled with either separator.</param>
+    /// <returns>The same path with every backslash replaced by <c>/</c>.</returns>
+    public static string Slashed(string path) => path.Replace(
+        newChar: '/',
+        oldChar: '\\'
+    );
     /// <summary>Returns the name before its first dot, so <c>paddleball.world.puck</c> has the stem <c>paddleball</c>; a
     /// name with no dot is its own stem, and one that begins with a dot has the empty stem. Every compound extension is
     /// dropped, which <see cref="System.IO.Path.GetFileNameWithoutExtension(string)"/> (the last extension only) does not.</summary>

@@ -18,7 +18,7 @@ public enum SdfKernel {
     /// <summary>Stores newly traced hit blocks in the resident cache before relighting.</summary>
     ProbeCache,
     /// <summary>Samples the irradiance volume at view cameras, from probes or GPU-cached camera rays.</summary>
-    ProbeMeter,
+    ProbeCameraSample,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
     /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run
