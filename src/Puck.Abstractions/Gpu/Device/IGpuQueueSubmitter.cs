@@ -14,6 +14,9 @@ namespace Puck.Abstractions.Gpu;
 /// external wait may split the batch before the waiting submission.</para>
 /// </summary>
 public interface IGpuQueueSubmitter {
+    /// <summary>Gets the device generation's single completion timeline, shared by every residency and wrapper.
+    /// Its checkpoints flush this queue's deferred batch; reading completion never submits or waits.</summary>
+    GpuQueueTimeline Timeline { get; }
     /// <summary>Adds a wait to the list the next submission carries: that submission, and on Direct3D 12 everything
     /// after it on the queue, starts only once the shared fence reaches the value. A consumer adds the wait for the value
     /// a producer's write signals when it acquires the image, before it records the submission that samples it, so the

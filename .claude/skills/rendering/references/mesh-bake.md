@@ -1004,10 +1004,10 @@ laws exercise that boundary.
   fence signaled and its client released the readback (`SdfGpuWork`, the one
   owner of its slots), and a slot's inputs and outputs (its pass block, point
   table, instance masks and samples) are written only while it is free. What a
-  batch reads of the tables it leases until its fence
-  (`SdfWorldTables.BackgroundGeneration`, `SdfGpuWork.OldestLease`): the
-  tables' retirement door releases nothing retired since, and an upload waits
-  out a lease on the ring slot it rewrites. A batch
+  batch reads of the tables is retained through the device timeline. Background
+  admission requires the tables' frame queue, so the same checkpoint covers
+  frame and batch readers; an upload waits out a lease on the ring slot it
+  rewrites (`SdfGpuWork.EndLeases`). A batch
   abandoned (a recording that failed, a disposed service) returns its lattices
   to their groups, which dispatch them again, and counts its samples as
   `discarded`; `Answered` settles a batch once.

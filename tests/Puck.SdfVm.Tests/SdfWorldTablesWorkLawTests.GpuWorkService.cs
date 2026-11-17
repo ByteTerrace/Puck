@@ -15,6 +15,16 @@ public sealed partial class SdfWorldTablesWorkLawTests {
     private const long Mebibyte = (1L << 20);
 
     [Fact]
+    public void AForeignQueueCannotAdmitAReaderOutsideTheTablesRetirementTimeline() {
+        using var rig = new Rig();
+        rig.Render();
+        var foreign = new FakeGpuDevice();
+        using var work = new SdfGpuWork(foreign, "foreign");
+        Assert.Throws<InvalidOperationException>(() => work.Pump(rig.Engine));
+        Assert.Equal(0, work.InFlight);
+    }
+
+    [Fact]
     public void ACompletedJobIsAnsweredAndTheNextTakenInsideTheHostsWaitWithNoPump() {
         using var rig = new Rig(holdFences: true);
         rig.Render();
@@ -71,24 +81,20 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         Assert.Equal(1, client.Abandoned);
     }
     [Fact]
-    public void AJobsLeaseHoldsWhatItReadsUntilItsFenceWhateverTheQueueOrderSays() {
+    public void ADeviceTimelineHoldsBackgroundReadersWhileRingLeasesProtectRewrites() {
         using var rig = new Rig(holdFences: true);
         rig.Render();
         var client = new BackgroundClient(rig.Gpu.Services);
         var work = rig.Engine.GpuWork;
         work.Add(client);
         try {
-            Assert.Equal(ulong.MaxValue, work.OldestLease());
             work.Pump(rig.Engine);
 
-            // The job leased the generation it was taken at. Its fence is pinned: no later submission's completion
-            // implies its own, so only the lease protects what it reads.
+            // Hold this reader independently of upload waits: the device timeline must not pass it.
             var fence = (FakeGpuDevice.Fence)rig.Gpu.LastSubmittedFence!;
-            var leased = rig.Engine.BackgroundGeneration;
             var retired = new Tracker();
 
             fence.Pinned = true;
-            Assert.Equal(leased, work.OldestLease());
             // Replaced after the job was taken: the job may still read it.
             rig.Engine.RetireBackgroundResource(retired);
 
@@ -96,15 +102,13 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             rig.Render();
             Assert.False(retired.Disposed);
             Assert.True(fence.Armed);
-            // The next upload rewrites the slot the job leased. The retired object's own upload has completed, which
-            // without the lease would release it; the lease holds it, and the upload waits the lease out before it
-            // rewrites the slot.
+            // The next upload rewrites the slot the job leased. Its ring wait ends the pinned reader, which also
+            // lets the device timeline pass the retirement checkpoint.
             rig.Render();
-            Assert.False(retired.Disposed);
+            Assert.True(retired.Disposed);
             Assert.False(fence.Armed);
             Assert.Contains("lease-waits:1,", work.Describe());
-            Assert.Equal(ulong.MaxValue, work.OldestLease());
-            // With the lease over, the retirement door releases it.
+            // The same timeline proof releases it as soon as the last reader completes.
             rig.Render();
             Assert.True(retired.Disposed);
             work.Pump(rig.Engine);
