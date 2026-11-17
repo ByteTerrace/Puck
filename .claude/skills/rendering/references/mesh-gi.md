@@ -159,7 +159,7 @@ into jobs to background work's frame share at the relight's measured rate
 (`RelightRaysWithinShare`): at most `RelightRaysPerJob` until a relight's
 timestamps measure the rate (always, on a queue without timestamps), and at most
 `RelightRaysCeiling` after. Every cut call (trace, select, relight) keeps up to
-`SdfGpuWork.SlotCount` of its jobs in flight (`SubmitPart`, `AwaitPart`), sizing
+`SdfGpuWork.SlotCount` of its jobs in flight (`SdfMeshProbeGpuWork.Run`), sizing
 each as it is submitted, so a call waits about one round trip through the frame
 queue per slot-count of jobs. The service log's
 `trace-jobs=[kind:jobs/units/latency]` (in `world.residency`) shows a volume's

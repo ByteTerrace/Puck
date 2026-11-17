@@ -27,7 +27,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         new(priorSecondsPerUnit: 1e-8),
         new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
     ];
-    // The coordinator's window (SubmitPart, AwaitPart): the parts of one call it has submitted and not yet read, oldest
+    // The coordinator's window (Run): the parts of one call it has submitted and not yet read, oldest
     // first, at most SdfGpuWork.SlotCount, and the answer arrays the parts answer into, a ring of SlotCount. Part k answers
     // into ring entry k mod SlotCount, which part k + SlotCount reuses only after the coordinator has read part k, since
     // the window holds at most SlotCount parts. The coordinator's alone: one coordinator calls Trace, Select and Relight
@@ -109,31 +109,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // One coordinator submits a call's jobs and sleeps on their answers; it never holds the device thread. A job owns a
     // scene claim until completion or abandonment. The service owns every slot's fence and readback token.
     // Each call is cut into jobs whose measured cost fits background work's share of a frame, sized as each is submitted
-    // from the kind's rate as it then stands, and keeps up to SdfGpuWork.SlotCount of them in flight (SubmitPart), so a
-    // call of many jobs waits about one round trip per SlotCount jobs rather than one a job. Its jobs are independent:
-    // each answers its own rows and writes only its own cache slots or batch output rows.
-    // The answer of a call given `reuse` is `reuse` itself, or a larger array when it is too small: the caller keeps the
-    // returned array for its next call and reads only the rows its origins name, never past them, since the words beyond
-    // are an earlier call's.
-    // The origins and input are read before a call returns, so a caller may overwrite the arrays its memories view then.
+    // from the kind's rate as it then stands (Run). Its jobs are independent: each answers its own rows and writes only
+    // its own cache slots or batch output rows.
     // A trace also copies each origin's hits into the device hit cache at its slot, so a relight reads them there and the
     // host never uploads hits it read back.
-    internal uint[] Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> cacheSlots, uint hitCapacity, uint[]? reuse = null) {
-        var words = (origins.Length * SdfMeshProbeDepth.HitWords) + 1;
-        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : new uint[words];
-        for (var start = 0; ((start < origins.Length) || (m_window.Count > 0));) {
-            while ((start < origins.Length) && (m_window.Count < SdfGpuWork.SlotCount)) {
-                var count = Math.Min(val1: TraceOriginsPerJob, val2: (origins.Length - start));
-                SubmitPart(new Job(scene.Acquire(), origins.Slice(start: start, length: count)) {
-                    CacheSlots = cacheSlots.Slice(start: start, length: count), HitCapacity = hitCapacity, First = start,
-                });
-                start += count;
-            }
-            var part = AwaitPart(job: out var done);
-            part.AsSpan(start: 0, length: (done.Origins.Length * SdfMeshProbeDepth.HitWords)).CopyTo(answer.AsSpan(start: (done.First * SdfMeshProbeDepth.HitWords)));
-        }
-        return answer;
-    }
+    internal uint[] Trace(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> cacheSlots, uint hitCapacity, uint[]? reuse = null) =>
+        Run(count: origins.Length, rowWords: SdfMeshProbeDepth.HitWords, reuse: reuse, next: start => {
+            var count = Math.Min(val1: TraceOriginsPerJob, val2: (origins.Length - start));
+
+            return new Job(scene.Acquire(), origins.Slice(start: start, length: count)) { CacheSlots = cacheSlots.Slice(start: start, length: count), HitCapacity = hitCapacity };
+        });
     // The origins one trace job holds at most: those whose measured cost fits background work's share of a frame.
     private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
     // The predicted rays one relight job holds at most: those whose measured cost fits background work's share of a frame,
@@ -154,32 +139,26 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // (`geometry`, `window`) no longer stands as it is taken. `updates` reach the feedback volume with the first job.
     // Returns each probe's SdfMeshProbeRelight.ResultWords words, the probes in order.
     internal uint[] Relight(SdfMeshIrradianceScene scene, Memory<Vector4> origins, ReadOnlyMemory<uint> input, Vector4[] lighting,
-        int volumeWords, in Deltas updates, uint hitCapacity, ReadOnlyMemory<long> rays, ReadOnlyMemory<int> destinations, int geometry, int window,
+        int volumeWords, Deltas updates, uint hitCapacity, ReadOnlyMemory<long> rays, ReadOnlyMemory<int> destinations, int geometry, int window,
         uint[]? reuse = null) {
-        var words = (origins.Length * SdfMeshProbeRelight.ResultWords) + 1;
-        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : new uint[words];
         var batch = new RelightBatch(Probes: origins.Length);
-        var deltas = updates;
-        for (var start = 0; ((start < origins.Length) || (m_window.Count > 0));) {
-            while ((start < origins.Length) && (m_window.Count < SdfGpuWork.SlotCount)) {
-                var predicted = rays.Span;
-                var bound = RelightRaysWithinShare;
-                var end = start + 1;
-                var taken = predicted[start];
-                for (; (end < origins.Length) && ((taken + predicted[end]) <= bound); end++) { taken += predicted[end]; }
-                var last = (end == origins.Length);
-                SubmitPart(new Job(scene.Acquire(), origins[start..end]) {
-                    Input = input.Slice(start: (start * SdfMeshProbeRelight.InputWords), length: ((end - start) * SdfMeshProbeRelight.InputWords)),
-                    Lighting = lighting, VolumeWords = volumeWords, Updates = deltas, HitCapacity = hitCapacity, Rays = taken,
-                    Batch = batch, First = start, Commits = last, Destinations = (last ? destinations : default), Geometry = geometry, Window = window,
-                });
-                deltas = default;
-                start = end;
-            }
-            var part = AwaitPart(job: out var done);
-            part.AsSpan(start: 0, length: (done.Origins.Length * SdfMeshProbeRelight.ResultWords)).CopyTo(answer.AsSpan(start: (done.First * SdfMeshProbeRelight.ResultWords)));
-        }
-        return answer;
+
+        return Run(count: origins.Length, rowWords: SdfMeshProbeRelight.ResultWords, reuse: reuse, next: start => {
+            var predicted = rays.Span;
+            var bound = RelightRaysWithinShare;
+            var end = start + 1;
+            var taken = predicted[start];
+
+            for (; (end < origins.Length) && ((taken + predicted[end]) <= bound); end++) { taken += predicted[end]; }
+
+            var last = (end == origins.Length);
+
+            return new Job(scene.Acquire(), origins[start..end]) {
+                Input = input.Slice(start: (start * SdfMeshProbeRelight.InputWords), length: ((end - start) * SdfMeshProbeRelight.InputWords)),
+                Lighting = lighting, VolumeWords = volumeWords, Updates = ((start == 0) ? updates : default), HitCapacity = hitCapacity, Rays = taken,
+                Batch = batch, Commits = last, Destinations = (last ? destinations : default), Geometry = geometry, Window = window,
+            };
+        });
     }
     internal IGpuBuffer FeedbackBuffer => m_feedback!.Buffer(0);
 
@@ -200,31 +179,25 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         for (var probe = 0; (probe < centers.Length); probe++) {
             left += SelectTestsOf(row: metadata.Span.Slice(start: (probe * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
         }
-        var answer = ((reuse is { } array) && (array.Length > centers.Length)) ? array : new uint[centers.Length + 1];
-        for (var start = 0; ((start < centers.Length) || (m_window.Count > 0));) {
-            while ((start < centers.Length) && (m_window.Count < SdfGpuWork.SlotCount)) {
-                var most = m_rates[(int)JobKind.Select].UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
-                var share = left.CeilingDivide(divisor: Math.Max(val1: 1L, val2: left.CeilingDivide(divisor: most)));
-                var rows = metadata.Span;
-                var count = 0;
-                var tests = 0L;
-                while ((start + count) < centers.Length) {
-                    var probe = SelectTestsOf(row: rows.Slice(start: ((start + count) * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
-                    if ((count != 0) && ((tests + probe) > share)) { break; }
-                    tests += probe;
-                    count++;
-                }
-                left -= tests;
-                SubmitPart(new Job(scene.Acquire(), centers.Slice(start: start, length: count)) {
-                    Input = metadata.Slice(start: (start * SdfMeshProbeRelight.SelectionInputWords), length: (count * SdfMeshProbeRelight.SelectionInputWords)),
-                    Lighting = changes, Selection = true, HitCapacity = hitCapacity, Tests = tests, First = start,
-                });
-                start += count;
+        return Run(count: centers.Length, rowWords: 1, reuse: reuse, next: start => {
+            var most = m_rates[(int)JobKind.Select].UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
+            var share = left.CeilingDivide(divisor: Math.Max(val1: 1L, val2: left.CeilingDivide(divisor: most)));
+            var rows = metadata.Span;
+            var count = 0;
+            var tests = 0L;
+
+            while ((start + count) < centers.Length) {
+                var probe = SelectTestsOf(row: rows.Slice(start: ((start + count) * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
+                if ((count != 0) && ((tests + probe) > share)) { break; }
+                tests += probe;
+                count++;
             }
-            var part = AwaitPart(job: out var done);
-            part.AsSpan(start: 0, length: done.Origins.Length).CopyTo(answer.AsSpan(start: done.First));
-        }
-        return answer;
+            left -= tests;
+            return new Job(scene.Acquire(), centers.Slice(start: start, length: count)) {
+                Input = metadata.Slice(start: (start * SdfMeshProbeRelight.SelectionInputWords), length: (count * SdfMeshProbeRelight.SelectionInputWords)),
+                Lighting = changes, Selection = true, HitCapacity = hitCapacity, Tests = tests,
+            };
+        });
     }
     // The tests one probe of a selection costs at most (sdf-probe-select): its own row, and for a probe traced against
     // an earlier geometry, each of its rays against each changed box of a later one. A probe the kernel finds absent
@@ -237,32 +210,45 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     }
     internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
         SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
-    // Submits one part of the coordinator's call into its window, answering into the part's ring entry.
-    private void SubmitPart(Job job) {
-        var ring = (int)(m_parts++ % SdfGpuWork.SlotCount);
+    // Runs one call of `count` rows, `rowWords` words each, as the jobs `next` cuts from the row it is handed, keeping up
+    // to SdfGpuWork.SlotCount of them in flight, so a call of many jobs waits about one round trip per SlotCount jobs
+    // rather than one a job. The coordinator's window holds a call's parts submitted and not yet read, oldest first, and
+    // part k answers into ring entry k mod SlotCount, which part k + SlotCount reuses only once part k was read. Returns
+    // the rows in order, in `reuse` itself or in a larger array when it is too small: the caller keeps the returned array
+    // for its next call and reads only the rows it asked for, since the words beyond are an earlier call's. Every job has
+    // been answered or cancelled before this returns or throws, so the caller may then overwrite the arrays its jobs'
+    // memories view. One coordinator calls this at a time.
+    private uint[] Run(int count, int rowWords, uint[]? reuse, Func<int, Job> next) {
+        var words = (count * rowWords) + 1;
+        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : new uint[words];
 
-        job.Ring = ring;
-        // Never null, so Complete answers the whole array, fault word included, which the ring keeps for reuse.
-        job.Reuse = m_partAnswers[ring] ?? [];
-        m_window.Enqueue(item: job);
-        _ = SubmitAsync(job: job);
-    }
-    // Waits for the window's oldest part and returns its answer, which the coordinator reads before it submits another
-    // part. A part that was cancelled or failed first waits for the rest of the window, so no job of the call is left
-    // reading the caller's arrays, then throws.
-    private uint[] AwaitPart(out Job job) {
-        job = m_window.Dequeue();
-        try {
-            var answer = job.Answer.Task.GetAwaiter().GetResult();
+        for (var start = 0; ((start < count) || (m_window.Count > 0));) {
+            while ((start < count) && (m_window.Count < SdfGpuWork.SlotCount)) {
+                var job = next(start);
+                var ring = (int)(m_parts++ % SdfGpuWork.SlotCount);
 
-            m_partAnswers[job.Ring] = answer;
-            return answer;
-        } catch {
-            while (m_window.TryDequeue(out var rest)) {
-                try { _ = rest.Answer.Task.GetAwaiter().GetResult(); } catch (Exception) { }
+                job.First = start;
+                job.Ring = ring;
+                // Never null, so Complete answers the whole array, fault word included, which the ring keeps for reuse.
+                job.Reuse = m_partAnswers[ring] ?? [];
+                m_window.Enqueue(item: job);
+                _ = SubmitAsync(job: job);
+                start += job.Origins.Length;
             }
-            throw;
+
+            var done = m_window.Dequeue();
+            uint[] part;
+
+            try { part = done.Answer.Task.GetAwaiter().GetResult(); } catch {
+                while (m_window.TryDequeue(out var rest)) {
+                    try { _ = rest.Answer.Task.GetAwaiter().GetResult(); } catch (Exception) { }
+                }
+                throw;
+            }
+            m_partAnswers[done.Ring] = part;
+            part.AsSpan(start: 0, length: (done.Origins.Length * rowWords)).CopyTo(answer.AsSpan(start: (done.First * rowWords)));
         }
+        return answer;
     }
     // A part submitted while the client stops is answered cancelled, as every pending job is, so its coordinator's window
     // never waits on a job that cannot be taken.
@@ -812,7 +798,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public ReadOnlyMemory<int> Destinations;
         public ReadOnlyMemory<uint> CacheSlots;
         public uint[]? Reuse;
-        // The coordinator's answer ring entry a part answers into (SubmitPart).
+        // The coordinator's answer ring entry a part answers into (Run).
         public int Ring;
         public long Rays;
         public long Tests;

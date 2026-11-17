@@ -344,7 +344,7 @@ public sealed partial class SdfMeshIrradiance {
         }
         uint[] words;
         try {
-            words = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, in updates,
+            words = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, updates,
                 GpuHitCapacity, rays: m_gpuRelightRays.AsMemory(start: 0, length: count), destinations: m_gpuDestinations.AsMemory(start: 0, length: count),
                 geometry: snapshot.Geometry, window: snapshot.WindowVersion, reuse: m_gpuAnswer);
             m_gpuAnswer = words;
