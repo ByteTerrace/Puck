@@ -1048,8 +1048,8 @@
       {
         "Kind": "Classical",
         "Flavor": "None",
-        "Subject": "Pcg3dLatticeNoise.ScatterPoint at the swept block, seed, spacing and radius and at seven hand-chosen parameter pairs over five block pairs including the int extremes",
-        "Against": "Oracles.ScatterPointReference: the block formula formed in BigInteger over Oracles.Pcg3dReference, the PCG3D mix with every carrier reduction explicit, compared modulo 2^32 where the subject's int arithmetic wraps",
+        "Subject": "Pcg3dLatticeNoise.ScatterPoint at the swept block, seed, spacing and radius and at eight hand-chosen parameter pairs over five block pairs including the int extremes; the pair (0x60000000, 0) has a quarter of its words rejected, so the redraw under the decorrelated seed is walked",
+        "Against": "Oracles.ScatterPointReference: the block formula formed in BigInteger over Oracles.Pcg3dReference, the PCG3D mix with every carrier reduction explicit and Lemire's rejection stated in arbitrary width, compared modulo 2^32 where the subject's int arithmetic wraps",
         "Shared": "",
         "Citation": "",
         "Absolute": ""

@@ -95,7 +95,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     ellipsoid bodies, then clearance close to a slope.
 20. [medium] [Language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard): the inline
-    console command hang, the spelling pairs, the overlay text advance.
+    console command hang, the cost corpus, the overlay text advance.
 21. [ordinary] [The walkthrough](walkthrough.md): coverage derived from the
     document, its next step.
 22. Then, by ordinary priority:
@@ -2192,35 +2192,17 @@ lane's.
 ### Language and authoring
 
 Owner: language lane (transpiler) · medium · Next: the inline console command
-hang, then the spelling pairs, then the unreproduced language findings.
+hang, then the cost corpus, then the unreproduced language findings.
 
 - [medium] A scratch test with `when { seat1: world.state.cell.set marker 0 7 }`
   on one line consumed minutes of CPU in preparation with no diagnostic; the
   command and the closing brace on separate lines compiled in seconds.
   Reproduce it and bound or repair the compile.
-- [medium] Spelling pairs the compiler does not yet hold
-  (`SpellingEquivalenceCorpusTests.Open`), each fixed by one canonical form in
-  lowering:
-  - `float-spelling`: `30.24` and `30.240000000000002` are one float32 but two
-    documents. Round a creation's scalars to the shortest float32 round-trip
-    spelling, or keep doubles and say so.
-  - `profile-start`: a closed profile listed from another start vertex is one
-    polygon, two documents and two bake keys. Start the ring at its least
-    vertex.
-  - `chamfer-default`: a zero `chamfer` and none are one program but two
-    creation hashes (`CreationCanonicalizer.Normalize`;
-    [G13](state-and-language.md#designs-chosen)).
-  - `ternary-fold`: a compile-time constant condition in a gate is not folded,
-    so it lowers to a dearer rule program
-    ([G14](state-and-language.md#designs-chosen)).
-  - A literal `rotation` is lowered in one sign on shape rows only; the
-    [modeling plan's S2](modeling-authoring.md#5-implementation-slices)
-    applies the one helper to text runs, placements and animation frames.
-  - The cost pairs two documents cannot share (static placements against one
-    creation, `wall - opening` against its box tiling, a mirrored pair against
-    a `symmetry` fold, union shape order, `x += 3` against `x = x + 3`) need a
-    cost corpus over bake groups and the work sheet beside the document
-    corpus.
+- [medium] The cost pairs two documents cannot share (static placements
+  against one creation, `wall - opening` against its box tiling, a mirrored
+  pair against a `symmetry` fold, union shape order, `x += 3` against
+  `x = x + 3`) need a cost corpus over bake groups and the work sheet beside
+  the document corpus.
 - [medium] A rule `local` costs more than the expression it names:
   `local k = a + 1` then `cards[k]` prices one unit above `cards[a + 1]`,
   because the key program reads the local (`world.budget.rules --why`). Lower
@@ -2249,16 +2231,6 @@ hang, then the spelling pairs, then the unreproduced language findings.
   so a world wanting the standard's `celStyle` as a default that boots off
   copies all eleven values (`worlds/debug/debug.puck`'s `render.toon`). Add an
   object update over a `let`, or a merge builtin beside `concat`.
-- [medium] A literal read from an initially empty ordered pile is refused even
-  when its key belongs to the declared `KeysOf` token domain:
-  `RuleCompileContext` admits authored cells and `CellsOf` topology cells
-  only. Admit literal keys from the declared domain; reproduce by adding
-  `hand["c"] == 1` to `worlds/debug/unbiased-draws-tests.puck` after its
-  transfer.
-- [medium] A solid creation shape without `position` in a hand-written JSON
-  document throws `NullReferenceException` in the validator
-  (`WorldDefinitionValidator.Placements.cs`, through `DocumentSpatialValues`).
-  Default or refuse it before the domain-expansion walk.
 - [medium] No log of author walls exists, though "Ergonomic is optimal"
   (AGENTS.md) asks for one. The walls sit in S11's audit, this packet and the
   sdf-authoring skill's evals: start the one page those link to.
@@ -2289,9 +2261,6 @@ hang, then the spelling pairs, then the unreproduced language findings.
 - [low] A `Capsule` scaled `[0.05, 0.18, 0.05]` stopped about 9 cm short of
   where an author expected (`motion-nod`'s first neck); check what a Capsule's
   half-length means under scale and say so in the shapes reference.
-- [low] `prototypes.schema.json` says a trim is "authored as one shape against
-  the per-stamp shape budget", but no budget exists. Correct the XML docs on
-  `ShapeTrimDocument` and its siblings and regenerate through `puck schema`.
 - [unreproduced] A string literal on the left of a relational gate is not
   flipped (`WorldDocumentEmitter.Rules`); a header `when` gate makes a body's
   `local` report PUCK012; `not` loses its source span and recursion depth
@@ -2333,13 +2302,20 @@ the wire, then the float duration fields' schema migration.
 - Classify the public Maths surface with no law or waiver (algebra wrappers,
   coordinates, continued-fraction certificates, research APIs): bind existing
   evidence, give precise category waivers, delete unreachable code.
-- [low] `Pcg3dLatticeNoise.ScatterPoint` reduces a stateless hash with
-  `hash % inset`, a bias of inset/2^32, and a lattice's boot-time paint throws
-  on draw exhaustion where compose refuses.
+- [low] A lattice's boot-time paint throws on draw exhaustion where compose
+  refuses.
 - [low] The alias table rounds each threshold to 32 fractional bits
-  (`WeightedSampler`), so `weightedNumeric`, `symmetryOrbit` and Markov draws
-  keep a small bias. Exact thresholds with a bounded rejection through
-  `BoundedRandomSampling` remove it.
+  (`WeightedSampler.BuildColumns`), so `weightedNumeric`, `symmetryOrbit` and
+  Markov draws keep a bias of at most 2^-33 per column. An exact threshold
+  needs a draw that sometimes consumes more than two advances (the word equal
+  to the floored threshold, probability 2^-32, then an exact wide draw through
+  `BoundedRandomSampling.TrySampleWide`), which breaks the fixed two-advance
+  cost that `GeneratorEngine`'s draw cursor (`TryDrawNumeric`, `TryFireMarkov`
+  add `WeightedSampler.AdvancesPerDraw`), `WorldDecision`'s documented two
+  PCG32 draws, `StateGenerator`'s docs and the maths laws pin. Settle first
+  whether the weighted draws keep a fixed cost with the bias, or report their
+  consumed advances (`DrawEntry` and the cursor carry the count) and the
+  constant goes.
 - Decide (the lead's call): whether a hashed-witness table may decide primes
   below 2^47 in one strong round in production `IsPrime`, capped near 32 KiB
   and judged cold as well as warm

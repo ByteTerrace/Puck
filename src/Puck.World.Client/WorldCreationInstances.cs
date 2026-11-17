@@ -255,7 +255,7 @@ public sealed partial class WorldCreationInstances {
         public Quaternion FollowedOrientation = Quaternion.Identity;
         // Per-shape-slot part position followers, resolved from the look's PartDynamics map through Parts —
         // indexed by shape slot (the same index PackTransforms's per-shape loop and Parts.TryResolve's
-        // transformSlot use), sized once to the fixed per-stamp shape budget.
+        // transformSlot use), sized once to the document's shape count.
         public readonly bool[] PartFollows = new bool[(document.Shapes?.Count ?? 0)];
         // The rigid delta each shape's animation produced this frame, kept so a later shape naming it as `parent`
         // rides it and a pose read (LatchedShapePose) answers with what was drawn; PartParent is the resolved parent

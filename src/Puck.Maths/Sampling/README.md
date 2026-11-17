@@ -344,7 +344,7 @@ arguments.
 | Operation | Semantics |
 |---|---|
 | `Pcg3d(x, y, z)` | The raw three-lane mix. |
-| `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus the matching `Pcg3d` lane modulo the inset `max(0, spacing − 2·radius)`. |
+| `ScatterPoint(blockX, blockZ, seed, spacing, radius)` | The one jittered point a scatter block holds: `block·spacing + radius` plus an offset uniform in `[0, inset)` for the inset `max(0, spacing − 2·radius)`: the matching `Pcg3d` lane through `BoundedRandomSampling.TryMap`, and an axis whose word is rejected redraws the same lane of `Pcg3d(blockX, blockZ, seed + attempt·HashStreamA)`. |
 | `PcgMultiplier` / `PcgIncrement` / `HashStreamA` / `HashStreamB` / `HashTumble` / `NoiseSeedStreamY` / `NoiseSeedStreamZ` | The published constants the GPU's `sdf-hash.hlsli` and `sdf-noise.hlsli` are generated from. |
 | `ValueNoise01(cellX, cellZ, noiseCells, seed)` | One octave of quintic-smoothed value noise over the cell index, in `[0, 1)`. `Fbm01` sums its octaves. |
 | `Fbm01(cellX, cellZ, frequency, octaves, seed)` | The fractal sum `FieldLattice.ApplyNoiseFill` and `CreationStampSampling.ResolveNoise` both read: octave `k` is `ValueNoise01` over the noise-cell edge `frequency` halved `k` times (floored at one cell), seeded `seed + k·HashStreamA`, weighing the amplitude halved `k` times by a raw shift; the sum is divided by the weights' sum, so the answer stays in `[0, 1)`. A caller folds the world seed into `seed` with `PackedIntPair.FoldXor`. Refuses fewer than one octave. |
