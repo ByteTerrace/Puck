@@ -1165,7 +1165,9 @@ binding allocator is consulted:
 interface and the group, such as `PixelatePass`, and one constant buffer
 variable per group, such as `passGroup`. Every block member carries
 `[[vk::offset(n)]]`, and every binding pairs `[[vk::binding(b, set)]]` with
-`register(xb, spaceS)`; an image or sampler array declares its length. An
+`register(xb, spaceS)`; an image, sampler or read-only buffer array declares
+its length in descriptors, and the host writes each element its own range
+(`IGpuBindings.WriteBuffer`'s array element and offset). An
 array is read through an accessor such as
 `channelLevelsAt(i)`, which hides the 16-byte row an element is stored in.
 The padding is what makes Direct3D 12's sequential constant-buffer packing
@@ -1181,7 +1183,7 @@ pushed block, the pushed index, is a constant buffer marked `Pushed`, which
 only SPIR-V can tell apart; DXIL reflects it as the constant buffer at `b0` in
 space 4, which `ShaderInterfaceLayout.DxilBindings` states. A buffer record
 carries its `ElementStride` ([buffer elements](#buffer-elements)), and every
-record its `Count` of descriptors: an image or sampler array's length, read
+record its `Count` of descriptors: an image, sampler or buffer array's length, read
 from SPIR-V's array type and DXIL's bind count, and one otherwise.
 
 - `SpirvInterfaceReader` parses a SPIR-V module's `DescriptorSet`, `Binding`,

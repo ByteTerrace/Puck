@@ -128,7 +128,7 @@ public sealed partial class WorldRuleHost {
     /// <param name="principal">The querying principal.</param>
     /// <returns>The answer, or its refusal.</returns>
     public QueryAnswer AnswerSubmittedQuery(WorldQuery query, Principal principal) {
-        if (query is WorldQuery.Rules or WorldQuery.Interactions && !principal.IsAuthority) {
+        if (query is WorldQuery.Rules or WorldQuery.Interactions && !Host.Grants.IsOperator(principal)) {
             return new QueryAnswer(Text: "[query refused: an operator diagnostic]", Refused: true);
         }
         if (

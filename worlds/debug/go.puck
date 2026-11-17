@@ -82,7 +82,7 @@ let goCodes = map(range(0, goStones), i => (i < goPerSide) ? goBlack : goWhite)
 // Alchemy's (shapes.puck's alchemyBodies and goBodies): the cursor is the highest body and stone i the one `1 + i`
 // below it. Seat 1 drives each stone, so a seat's `body.pose` may set one on a point (go.md).
 let goTop = ((((galleryPopulation + 2 + boardRoomBodies) - 1) - granaryBodies) - alchemyBodies)
-grants: map(range(0, goStones), i => { capability: Drive, grantee: "seat1", subject: $"body:{goTop - 1 - i}" })
+grants: map(range(0, goStones), i => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{goTop - 1 - i}" })
 
 looks: map(["goStoneBlack", "goStoneWhite", "goCursor"], name => {
   motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }

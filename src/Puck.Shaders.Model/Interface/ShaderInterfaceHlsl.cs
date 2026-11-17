@@ -231,7 +231,9 @@ public static class ShaderInterfaceHlsl {
             ),
         };
 
-        var extent = (((resource.Kind is GpuBindingKind.SampledImage or GpuBindingKind.Sampler) && (member.Length is { } length))
+        // A fixed-length array member is one buffer whose length counts elements, read through its accessor; only an
+        // arrayed image, sampler or buffer member's length counts descriptors (ShaderInterfaceMember.DescriptorCount).
+        var extent = (((member.Kind is ShaderInterfaceMemberKind.SampledImage or ShaderInterfaceMemberKind.Sampler or ShaderInterfaceMemberKind.ReadOnlyBuffer) && (member.Length is { } length))
             ? $"[{Number(value: length)}]"
             : "");
 

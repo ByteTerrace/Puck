@@ -177,6 +177,7 @@ public sealed partial class WorldPopulation {
         body.CaptureSections(alias: alias, held: held, registers: out var registers, sections: out image.Body);
         image.Admission = new(
             AdmissionTrust: entry.AdmissionTrust,
+            AdmissionTier: entry.AdmissionTier,
             Generation: entry.Generation,
             IdentityDomain: entry.IdentityDomain,
             IdentitySubject: entry.IdentitySubject,
@@ -390,6 +391,7 @@ public sealed partial class WorldPopulation {
             entry.IdentityDomain = admission.IdentityDomain;
             entry.IdentitySubject = admission.IdentitySubject;
             entry.AdmissionTrust = admission.AdmissionTrust;
+            entry.AdmissionTier = admission.AdmissionTier;
             entry.ProducerState = new BodyProducerState {
                 AcquiredTarget = producer.AcquiredTarget,
                 ActiveProducerCurveIndex = producer.ActiveCurveIndex,

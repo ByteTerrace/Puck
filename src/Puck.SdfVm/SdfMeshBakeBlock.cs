@@ -58,7 +58,9 @@ public static class SdfMeshBakeBlock {
 
             WriteVector3(block: block, offset: row, value: lattice.Origin);
             WriteUInt32(block: block, offset: (row + 12), value: first);
-            WriteVector3(block: block, offset: (row + 16), value: lattice.Cell);
+            // A grid's spacing places its samples; a points lattice's samples come from the point table, so its second row
+            // carries the spacing its gradient taps lie at instead, which the kernel reads rather than deriving its own.
+            WriteVector3(block: block, offset: (row + 16), value: (lattice.Points.IsEmpty ? lattice.Cell : new Vector3(value: lattice.TapSpacing)));
             WriteUInt32(block: block, offset: (row + 28), value: unchecked((uint)lattice.Selector));
             WriteUInt32(block: block, offset: (row + 32), value: ((uint)lattice.Dims.X));
             WriteUInt32(block: block, offset: (row + 36), value: ((uint)lattice.Dims.Y));

@@ -123,12 +123,15 @@ public sealed partial class CommandRegistry {
     /// </summary>
     /// <param name="modules">The modules whose command definitions are aggregated.</param>
     /// <param name="observers">Observers notified after each command dispatch; defaults to none.</param>
+    /// <param name="authority">The live authority of the world each invocation addresses.</param>
     /// <exception cref="ArgumentNullException"><paramref name="modules"/> is <see langword="null"/>.</exception>
     public CommandRegistry(
         IEnumerable<ICommandModule> modules,
-        IEnumerable<ICommandObserver>? observers = null
+        IEnumerable<ICommandObserver>? observers = null,
+        ICommandAuthority? authority = null
     ) {
         ArgumentNullException.ThrowIfNull(modules);
+        m_authority = authority;
 
         m_observers = ((observers is null)
             ? []
@@ -259,7 +262,7 @@ public sealed partial class CommandRegistry {
             // The same gate for the audience axis: a verb readable by every principal is a choice its author makes,
             // never what an unset value falls to.
             if (definition.Audience == CommandAudience.Unspecified) {
-                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no audience. Every registration must pass CommandAudience.Anyone, CommandAudience.Local or CommandAudience.Operator.");
+                throw new InvalidOperationException(message: $"Command '{definition.Name}' (registered by {owner}) declares no audience. Every registration must pass CommandAudience.Anyone, CommandAudience.Local, CommandAudience.Operator or CommandAudience.Host.");
             }
 
             if (
@@ -702,7 +705,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             forms: WireAckForms,
             name: WireAckCommandName,
             description: "Sets or reports the acknowledgement mode for accepted commands: " + WireAckForms.Spelling + " — `on` (default) echoes every accepted command; `quiet` drops the bare success acknowledgements of side-effecting verbs, while failures and any verb that answers with data still echo; no argument reports the current mode.",
@@ -710,7 +713,7 @@ public sealed partial class CommandRegistry {
             bindability: CommandBindability.Unbindable
         );
         yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+            audience: CommandAudience.Host,
             forms: WireErrorsForms,
             name: WireErrorsCommandName,
             description: "Reports the number of submitted lines this session REFUSED — an unknown verb, a parse error, a handler's failure result, or a refusal raised after the line was accepted: " + WireErrorsForms.Spelling + " — no argument reports the running count; `reset` reports it and zeroes the counter. It is the one number that says whether any submitted line silently no-opped. It counts the lines YOU submitted: a verb that submits lines of its own contributes one refusal when it reports the failure back, and none when it swallows it. A command observer that threw while being told about a dispatch is a broken reporting surface rather than a refused line, so it is reported as a separate trailing `| <n> observer faults` segment, and only when there have been some.",
@@ -839,10 +842,7 @@ public sealed partial class CommandRegistry {
 
         try {
             faulted = false;
-            result = (AudienceRefusal(
-                definition: definition,
-                principal: context.Principal
-            ) ?? definition.Handler(arg: context));
+            result = (AudienceRefusal(definition: definition, context: context) ?? definition.Handler(arg: context));
         } catch (Exception exception) when (IsContainable(exception: exception)) {
             faulted = true;
             result = HandlerFault(
@@ -901,10 +901,7 @@ public sealed partial class CommandRegistry {
 
         try {
             faulted = false;
-            result = (AudienceRefusal(
-                definition: definition,
-                principal: principal
-            ) ?? definition.WireArgsHandler!(
+            result = (AudienceRefusal(definition: definition, context: context) ?? definition.WireArgsHandler!(
                 arg1: context,
                 arg2: new WireArgs(
                     echo: !quiet,
@@ -938,11 +935,14 @@ public sealed partial class CommandRegistry {
     // The one audience check, ahead of both handler boundaries: a verb never runs for a principal its audience does not
     // admit (an operator verb for anyone but the console, a local verb for anyone but the console or a seat), whichever
     // door the line arrived through.
-    private static CommandResult? AudienceRefusal(CommandDefinition definition, Principal principal) => (definition.Audience.Admits(principal: principal)
+    private readonly ICommandAuthority? m_authority;
+    /// <summary>Checks the addressed world at dispatch time.</summary>
+    public bool IsOperator(CommandContext context) => m_authority?.IsOperator(context) == true;
+    private CommandResult? AudienceRefusal(CommandDefinition definition, CommandContext context) => (definition.Audience.Admits(principal: context.Principal, operates: IsOperator(context))
         ? null
         : CommandResult.Error(output: ((definition.Audience == CommandAudience.Operator)
-            ? $"[{definition.Name}: refused — an operator verb; {principal.Describe()} is not the operator]"
-            : $"[{definition.Name}: refused — {definition.Audience.Describe()}; {principal.Describe()} is neither]"))
+            ? $"[{definition.Name}: refused — an operator verb; {context.Principal.Describe()} is not the operator]"
+            : $"[{definition.Name}: refused — {definition.Audience.Describe()}; {context.Principal.Describe()} is neither]"))
     );
     /// <summary>Renders a handler's escaped exception as the error result the wire reports it through.</summary>
     /// <param name="definition">The command whose handler threw.</param>
@@ -1319,10 +1319,7 @@ public sealed partial class CommandRegistry {
             CommandResult result;
 
             try {
-                result = (AudienceRefusal(
-                    definition: definition,
-                    principal: principal
-                ) ?? definition.Handler(arg: context));
+                result = (AudienceRefusal(definition: definition, context: context) ?? definition.Handler(arg: context));
             } catch (Exception exception) when (IsContainable(exception: exception)) {
                 result = HandlerFault(
                     definition: definition,

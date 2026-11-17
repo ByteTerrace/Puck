@@ -7,13 +7,13 @@ namespace Puck.World;
 /// to every read. Delivery history belongs exclusively to a <see cref="WorldDeliveryCursor"/>.</summary>
 public sealed partial class WorldRecipientView(Func<WorldDefinition> definition, Func<StateArena> arena, Principal? recipient,
     WorldDisclosureTier ceiling, Func<bool> observes, WorldDisclosureImages images, string authority,
-    Func<ArenaTime> time) {
+    Func<ArenaTime> time, Func<bool>? operates = null) {
     internal WorldDefinition Source => definition();
     internal StateArena Arena => arena();
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;
     internal ArenaTime Time => time();
-    internal bool Unrestricted => recipient?.IsAuthority == true;
+    internal bool Unrestricted => operates?.Invoke() == true;
     internal WorldStateDisclosure.Observer Observer => new(Arena, recipient, Unrestricted, m_recipientName ??= recipient?.Describe());
     private static readonly WorldWithheldRow WithheldWhole = new(0, HiddenCells.Omit, WholeRow: true);
     // The recipient's canonical token, formatted once for every policy check this view makes.

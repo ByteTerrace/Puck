@@ -364,7 +364,9 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         nint bufferHandle,
         ulong bufferSize,
         GpuBindingKind kind,
-        uint elementStride
+        uint elementStride,
+        uint arrayElement = 0,
+        ulong offsetBytes = 0
     ) {
         if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
             throw new ArgumentOutOfRangeException(
@@ -376,21 +378,24 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
         var device = ((ID3D12Device*)deviceContext.Device.Handle);
         var set = ((DirectXDescriptorSet)GCHandle.FromIntPtr(value: descriptorSetHandle).Target!);
+        var slot = (set.SlotByBinding[binding] + arrayElement);
         var cpuHandle = new D3D12_CPU_DESCRIPTOR_HANDLE {
-            ptr = (set.CpuBase + ((nuint)(set.SlotByBinding[binding] * set.DescriptorSize))),
+            ptr = (set.CpuBase + ((nuint)(slot * set.DescriptorSize))),
         };
 
-        set.Views[set.SlotByBinding[binding]] = 0;
+        set.Views[slot] = 0;
 
         var raw = (0 == elementStride);
         var format = (raw
             ? DXGI_FORMAT.DXGI_FORMAT_R32_TYPELESS
             : DXGI_FORMAT.DXGI_FORMAT_UNKNOWN
         );
-        var elements = checked((uint)(bufferSize / (raw
+        var elementBytes = (raw
             ? sizeof(uint)
             : elementStride
-        )));
+        );
+        var elements = checked((uint)(bufferSize / elementBytes));
+        var firstElement = (offsetBytes / elementBytes);
 
         if (kind == GpuBindingKind.ReadWriteBuffer) {
             var uavDesc = new D3D12_UNORDERED_ACCESS_VIEW_DESC {
@@ -400,7 +405,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
 
             uavDesc.Anonymous.Buffer = new D3D12_BUFFER_UAV {
                 CounterOffsetInBytes = 0,
-                FirstElement = 0,
+                FirstElement = firstElement,
                 Flags = (raw
                     ? D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_RAW
                     : D3D12_BUFFER_UAV_FLAGS.D3D12_BUFFER_UAV_FLAG_NONE
@@ -426,7 +431,7 @@ public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext
         };
 
         srvDesc.Anonymous.Buffer = new D3D12_BUFFER_SRV {
-            FirstElement = 0,
+            FirstElement = firstElement,
             Flags = (raw
                 ? D3D12_BUFFER_SRV_FLAGS.D3D12_BUFFER_SRV_FLAG_RAW
                 : D3D12_BUFFER_SRV_FLAGS.D3D12_BUFFER_SRV_FLAG_NONE

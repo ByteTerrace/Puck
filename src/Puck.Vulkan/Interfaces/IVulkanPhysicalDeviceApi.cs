@@ -88,8 +88,10 @@ public interface IVulkanPhysicalDeviceApi {
     /// <param name="instance">The command table of the instance.</param>
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>
     /// <param name="structureType">The <c>VkStructureType</c> of the feature structure to probe.</param>
+    /// <param name="flag">The zero-based index of the probed <c>VkBool32</c> among the structure's flags: zero for its
+    /// first, the feature most structures carry alone.</param>
     /// <returns><see langword="true"/> if the feature is supported; otherwise, <see langword="false"/>.</returns>
-    bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType);
+    bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType, int flag = 0);
     /// <summary>Gets the presentation modes a physical device supports for a surface.</summary>
     /// <param name="instance">The command table of the instance.</param>
     /// <param name="physicalDeviceHandle">The native <c>VkPhysicalDevice</c> handle.</param>

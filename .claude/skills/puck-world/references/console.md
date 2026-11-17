@@ -42,7 +42,7 @@ while the console addresses another instance (`WorldConsoleAddressLawTests`).
 The `Puck.World`-resident desktop modules still take the boot link, which is
 safe only because the desktop's authority always resolves boot.
 
-`world.explain` is an Operator, Immediate observational one-shot request on the acting
+`world.explain` is a Host, Immediate observational one-shot request on the acting
 seat or pane's existing GPU picker. It suspends that picker's ordinary hover
 demand until the exact surfaced answer's fence completes, and settles on route
 loss, supersession or shutdown, answering the pixel's material.
@@ -114,6 +114,14 @@ and `worlds/debug/verbs-disclosure.puck` is its harness fixture: run it after gi
 the rules computed, which may derive from state a seat is not shown.
 `world.affordances` publishes each verb's `audience`, and `puck verbs` records
 it in the catalog authored commands are validated against.
+
+`CommandAudience.Host` separately names console-only access to host paths,
+connection identities/endpoints, process lifetime and resource diagnostics.
+The registry enforces it before dispatch and authored commands cannot wrap it;
+the silo's remote policy also excludes it. Operator still admits only Console
+until the complete D1 grant transition lands. Changing that predicate alone is
+unsafe: the disclosure plan requires the group and grant escalation closures
+in the same change.
 
 ## Routing — the determinism class
 
@@ -758,7 +766,7 @@ siblings answer through the query door a peer crosses; `WorldServer.Answer`, the
 answers no one in particular, is internal to the server.
 `WorldStateReadView` is the console adapter over this capability until the final
 cleanup in the disclosure plan. It never reads authority state separately.
-What a view cannot reconstruct is the operator's (`Principal.IsAuthority`): the
+What a view cannot reconstruct is the operator's (`WorldGrants.IsOperator`): the
 authority diagnostics, `world.debug-view report` and `goto` (a mode stays
 bindable, since it only selects the shared screen's presentation),
 `world.save`, compiled interaction/field/pattern/table/topology and rule-hazard
@@ -767,7 +775,7 @@ document accounting, sleeping count, machine faults, `session-drift` and `dirty`
 A recipient's status omits those; its gravity summary reads only authored view
 parameters. `world.properties` carries the stamped principal through the query
 door and evaluates property cells through `WorldStateReadView`.
-Raw rule and interaction queries require `Principal.IsAuthority` at
+Raw rule and interaction queries require `WorldGrants.IsOperator` at
 `WorldRuleHost.AnswerSubmittedQuery`, before reaching their compiled diagnostics.
 Placements come from the view; restricted dealt slots are still step 4's work.
 `world.state`,
@@ -847,13 +855,13 @@ node names from `world.counters gpu`, including World and session views, and pri
 which only lowers the device's budget, and prints `budget= device= cap= owned=
 steady= peak=`; a candidate whose peak does not fit fails `installed` or
 `resized` with `SHADERPIPE_BUDGET` and the installed graph keeps running.
-`gpu.faults arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list` (Immediate, `CommandAudience.Operator`,
+`gpu.faults arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list` (Immediate, `CommandAudience.Host`,
 registered in both GPU presentation shapes by `AddGpuCreationFaults`) arms the
 host's `GpuCreationFaults`; an armed creation fails `installed` with
 `GPU_CREATION_FAULT`, `lose` loses the device on its nth counted frame through the host's device-loss (`remove` removes it for real where the backend can, Direct3D 12)
 policy, and every form prints `armed=… <kind>=<seen> … frames=<seen>` for a
 canary's `response` extraction. `gpu.capture [<path> [<frames>]]` (Immediate,
-`CommandAudience.Operator`, `AddGpuCaptureCommand` in the same shapes) arms
+`CommandAudience.Host`, `AddGpuCaptureCommand` in the same shapes) arms
 `GpuFrameCapture` over the tool `--capture-tool` loaded; the GPU hosts bracket
 each frame with its `BeginFrame` and `EndFrame`. A paused
 reset's initialization frame never consumes a pending `pipeline.step`; the step

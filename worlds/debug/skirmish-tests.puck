@@ -6,7 +6,6 @@
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "skirmish-tests"
-grants [{ capability: Mutate, grantee: "seat2", subject: "section:State" }]
 import "skirmish"
 
 bodies {

@@ -624,7 +624,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
 
         foreach (var lattice in batch.Lattices) {
             var first = -(lattice.Selector + 1);
-            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
+            var spacing = lattice.TapSpacing;
             var count = lattice.Instances;
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
@@ -653,7 +653,7 @@ public sealed partial class SdfMeshPathBakeLawTests : IClassFixture<SdfMeshPathB
         var sample = 0;
 
         foreach (var lattice in batch.Lattices) {
-            var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.Cell);
+            var spacing = lattice.TapSpacing;
 
             for (var local = 0; (local < lattice.Samples); local++, sample++) {
                 var position = lattice.SampleAt(local: local);

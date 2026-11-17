@@ -45,9 +45,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, steps 1, 2 and 3's windowed readings, and step 7's prototype with a
-   GPU grant; then what step 3 left, background work serviced off the frame
-   pump.
+   window, steps 1, 2 and 3's windowed readings, and step 7's readings (the
+   prototype is built: the capability read on this machine and the indexed
+   read's paired cost window on both backends,
+   [the measurement](streaming-and-memory.md#the-prototype-as-built)); then
+   what step 3 left, background work serviced off the frame pump.
 3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -516,8 +518,13 @@ What an arrival and a hand-over still cost the frame:
   (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
   body straddling a portal journals every row each frame.
   [Arrival work proportional to change](arrival-proportional.md) holds the
-  design and its remaining steps (R0's owed windows, R1a to R1c, R2, and S2's
-  conditional measure). No capture has yet shown a hand-over frame by frame;
+  design and its remaining steps (R1a to R1c, R2, and S2's conditional measure).
+  R0's counting is built, including producer-local serial attribution and the
+  device-free partition, threshold and steady-window laws. Its
+  [windowed verification request](arrival-proportional.md#windowed-verification-request)
+  still owns the boot, arrival, crossing and steady readings that select the
+  later steps; headless presentation stages no draw records.
+  No capture has yet shown a hand-over frame by frame;
   read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
   only a burst it moved across.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
@@ -837,14 +844,19 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
-- [high] The GPU bake contours the Moth's shin worse than the CPU bake of the
-  same group, so the CPU audit that judges bake changes does not see what
-  ships: `puck mesh audit --prototype moth --group shin-right` reads 866
-  folds and 1690 flipped triangles from a cold Direct3D 12 store, 866 and
-  1689 from a cold Vulkan store, and 578 and 1041 with `--cpu`
-  (`MeshCpuBake`). The two backends agree with each other, so the difference
-  is between the CPU twin and the bake kernels. Find where they diverge and
-  make them one result; then a change judged by `--cpu` holds on the device.
+- [high] `puck mesh audit --cpu` still differs from the device wherever a
+  lattice's gradient taps lie closer than the fixed-point evaluator resolves
+  (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a
+  tier finer than about 8 mm cells, which covers 178 of the Moth's 180 groups,
+  each printing a `cpu taps:` line. Over those 180 groups the CPU and Direct3D 12 audits still
+  disagree by 743 folds and 468 flipped triangles in sum. A judgement made with
+  `--cpu` on such a group is confirmed against a store audit. Closing the gap
+  needs a CPU answer of the field finer than 2⁻¹⁶ m. A narrower floor reads
+  the evaluator's rounding (4 steps disagreed more than 8); the flare's loose
+  bound, below, multiplies that rounding. `shape-groove-union` differs by its
+  field alone (its taps match the kernel's): 32 folds and 20 flipped on the
+  CPU against 47 and 14 on the device, so the two interpreters' groove-union
+  arithmetic is the next pair to compare.
 - [medium] `puck mesh audit` over a cold store audits only the groups stored
   at the tier it plans: over the whole debug world it read 238 of 6544
   groups and reported 6306 "with no stored mesh", although the residency
@@ -863,7 +875,11 @@ the tour's remaining reds and the Moth's shin groups share, then
 - [high] The walkthrough tour is still red on its mesh audits:
   `puck mesh audit --cpu --prototype <id>` (`SweepMeshAudit`) finds flipped
   triangles on six of the fourteen blend exhibits (`shape-groove-union` and
-  `shape-blend-subtraction` worst) and on none of the primitives. Every quad
+  `shape-blend-subtraction` worst) and on none of the primitives. Those counts
+  came from CPU taps wider than the kernel's; on the exhibits' tiers the CPU
+  now places the kernel's taps, which turned `shape-chamfer-union` from 6 folds
+  and 2 flipped to 0 and 0, as on the device, so the six are read again first.
+  Every quad
   of those contours faces out as its lattice edge says
   ([the contour's facing](../../.claude/skills/rendering/references/mesh-bake.md#contouring)),
   so what remains is geometry the lattice's facts do not judge, in three
@@ -954,7 +970,9 @@ Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
-2 and 3's windowed readings and step 7's prototype under a GPU grant, then
+2 and 3's windowed readings and step 7's readings on the built prototype (the
+4070's capability line, the paired `SdfMeshSlabs.IndexedRead` window on both
+backends, then the 2060's and the Deck's readings), then
 [what step 3 left](streaming-and-memory.md#step-3-one-reservation). The plan
 owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
@@ -1974,29 +1992,17 @@ enforces it today.
 
 ### Security review
 
-Owner: disclosure build lanes · high · Next: implement revised D1 with its
-escalation laws, then the single disclosure build table; the rd2-review
+Owner: disclosure build lanes · high · Next: D0b1's acquisition wall, then
+the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
-- [high] No principal but the host's console can declare a state row, moderate
-  a hosted world or operate a world it owns: the write door refuses every
-  recipient declaration, and the operator is a principal kind.
-  [Decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
-  is the revised design: operator grant and Host audience; writable scopes
-  with private contributor policies, structural membership and runtime row/key/
-  byte partitions; declarations-only preparation; a static declaration security
-  closure whose checks recorded reads cannot remove; and validity maintained
-  by each authority commit. It answers H1–H6, M1–M8 and L1–L7 of rd2-review.
-  D1 remains unimplemented: the operator predicate must replace all kind-keyed
-  trust checks together with group and grants-section escalation admission,
-  single-subject admission templates, field-split peer reporting and silo
-  admission. Its law set is in the one [build table](disclosure.md#the-build-order).
+- [high] Ordinary recipient declarations still require the closed-scope and
+  acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
   host preparation and authority maintenance land separately as D0b2–D0b4.
   D4/D5/D7 build closed scopes, D6 opens and migrates private/default-tier input,
-  then D0c switches the remaining general routes. No partial Operate capability
-  is introduced by the memo. Implementation still needs the specified checks
+  then D0c switches the remaining general routes. Those steps need their specified checks
   and trust-boundary review ([silent invariants](../development/hazards.md#silent-invariants)).
 - [medium] The write footprint reads declarations a recipient below `Replica`
   is not delivered, so a `Frames` or `Presentation` session holding Edit
@@ -2717,6 +2723,13 @@ that stops compiling.
   (`gh run view --log-failed` on the latest `main` run).
 - Red on the integration tip, each to update to the behaviour it now meets or
   delete:
+  - SdfVm: eight `SdfMeshPathBakeLawTests` cases (`ACachedReplacement…`,
+    `ADynamicSlotRefines…`, `AFrameTakesTheLattices…`,
+    `AGroupWhoseShapesRideTwoSlots…`, `AKeptSeparateGeometry…`,
+    `AMovedIdentity…`, `AStaticCopyBakesItsUnion…`, `AStaticCopyOfThinPlates…`)
+    and `SdfMeshPathBakeSampledLawTests.AReferenceRepublishedEveryFrame…`,
+    red before the tap-spacing change too; read each for a real bake
+    regression before updating or deleting it.
   - Server: `HoldLawTests` (two checkpoint cases) and
     `TetherLawTests.TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically`
     compare `WorldBody.CaptureIntegrationResidue` records whole, which differ

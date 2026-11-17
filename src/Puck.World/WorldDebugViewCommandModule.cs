@@ -26,7 +26,7 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
     private CommandResult Execute(CommandContext context, WireArgs args) {
         // The diagnostics count and locate authority colliders and contacts, which a recipient's view cannot
         // reconstruct; a mode only selects the shared screen's presentation, the operator's own.
-        if ((args.Count > 0) && (args.Is(index: 0, value: "report") || args.Is(index: 0, value: "goto")) && !context.Principal.IsAuthority) {
+        if ((args.Count > 0) && (args.Is(index: 0, value: "report") || args.Is(index: 0, value: "goto")) && !(context.Registry?.IsOperator(context) == true)) {
             return CommandResult.Error(output: $"[world.debug-view: {args[0]} is an operator form; {context.Principal.Describe()} selects a mode only]");
         }
         if ((args.Count > 0) && args.Is(index: 0, value: "report")) {
@@ -77,7 +77,7 @@ internal sealed class WorldDebugViewCommandModule(WorldDiagnostics diagnostics, 
         diagnostics.Amber = amber;
         if (renderProbe?.Residency is { } residency) { residency.DebugMode = mode; }
         if (settings is not null) { settings.RateTints = DebugViewModes.ShowsRates(mode: mode); }
-        if ((diagnostics.Mode is "colliders" or "contacts") && context.Principal.IsAuthority) {
+        if ((diagnostics.Mode is "colliders" or "contacts") && (context.Registry?.IsOperator(context) == true)) {
             return Report(context, diagnostics.Mode, false);
         }
         return new CommandResult(Output: $"[world.debug-view: {diagnostics.Mode}]");

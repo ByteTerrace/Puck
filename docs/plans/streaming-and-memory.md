@@ -1607,6 +1607,139 @@ landed byte fall toward one; under a forced budget drop the ledger's held
 bytes fall after the fences with no allocation made to free them; and, with
 slabs, no mesh is placed in more than one store.
 
+#### The prototype as built
+
+**The capability read.** Each backend reads, at device creation, how the
+device can back a large buffer and give memory back, into the record that
+already holds its binding limits (`GpuDeviceCapabilities.Backing`, flags
+`GpuBackingSupport`, with the native figures beside them:
+`ReservedResourcesTier`, `ResourceAddressBits`, `SparseAddressSpaceBytes`,
+`StorageBufferOffsetAlignment`). Direct3D 12 reads options' tiled resources
+tier, the virtual address support query and whether the device implements
+`ID3D12Device1` and `ID3D12Device3` (`DirectXFeatureReads.Capabilities`,
+`GpuDeviceCapabilities.WithDirectXBacking`); Vulkan reads the sparse base
+features, the sparse properties, a sparse-binding queue family, the descriptor
+indexing feature and the two memory extensions
+(`VulkanNativePhysicalDeviceApi.GetDeviceCapabilities`,
+`VulkanLogicalDeviceFactory`'s `BackingOf`, which also prints a `[backing]`
+line at device creation). `world.counters gpu` prints them on its
+`capabilities` line (`backing=` and the figures), and its JSON form carries
+them; a device whose backend never read them prints no `backing=`, so none is
+told apart from unasked.
+
+| Capability | RTX 4070 (this machine) | RTX 2060 | Steam Deck (Vulkan, RADV) |
+|---|---|---|---|
+| Sparse binding, buffer residency, aliasing, a binding queue, strict non-residency | The reading is owed (below) | Expected on NVIDIA's Vulkan driver; no vendor page this lane could fetch states it, so it is **unverified** until a reading on the card | Yes: RADV sets each from `enable_sparse`, which is `pdev->info.has_sparse` unless disabled, and `has_sparse` holds from GFX7 except four older APUs **[external: RADV backing]** **[external: RADV backing]**; the Deck's GPU is GFX10.3. Every queue family carries `VK_QUEUE_SPARSE_BINDING_BIT`, and a dedicated sparse queue may be added **[external: RADV backing]** |
+| Sparse address space | Owed | Unverified | `pdev->info.virtual_address_max` when sparse is enabled **[external: RADV backing]** |
+| Memory priority (`VK_EXT_memory_priority`) | Owed | Yes on Turing and newer (NVIDIA's 535.43.02 notes, Linux; listed on Windows drivers before it) **[external: NVIDIA 535]** | Yes: `.EXT_memory_priority = true`, `.memoryPriority = true` **[external: RADV backing]** |
+| Pageable device-local memory (`VK_EXT_pageable_device_local_memory`) | Owed | Yes on Turing and newer, the notes spelling it `VK_EXT_pageable_device_memory` **[external: NVIDIA 535]** | **No**: absent from RADV's extension table **[external: RADV backing]**; an open Mesa issue asks for it **[external: RADV backing]** |
+| Storage-buffer arrays indexed non-uniformly | Owed | Expected (Puck now requires it of every Vulkan device) | Yes: `.shaderStorageBufferArrayDynamicIndexing = true`, `.shaderStorageBufferArrayNonUniformIndexing = true` **[external: RADV backing]** |
+| Storage-buffer offset alignment | Owed | Unverified | 4 bytes **[external: RADV backing]** |
+| Direct3D 12 reserved resources | Owed | Unverified | Through vkd3d-proton: a tier from RADV's sparse features (`d3d12_device_determine_tiled_resources_tier`, none without sparse binding, aliasing, buffer and 2D image residency and a sparse queue), and a hard-coded 40 address bits a resource **[external: vkd3d-proton]** |
+
+Direct3D 12 has no capability to read for paging: every heap is paged by the
+operating system's memory manager, and destroying a heap is the reliable
+release **[external: Microsoft residency]**, so `PageableDeviceLocal` is set on
+every Direct3D 12 device by definition, not by a query. The Deck's lack of
+pageable device-local memory means an over-budget allocation there fails or
+spills rather than paging, which is decision 2's reason to reserve before
+allocating on every device.
+
+**The indexed read.** Every kernel reads the mesh region through one door,
+`frame/sdf-mesh-words.hlsli`: a draw's record through `sdfMeshRecordWord`, a
+mesh's own words (vertices, triangle materials, indices, level table,
+members) through `sdfMeshWord`. Its C# twin is `SdfMeshSlabs`: a word's slab
+is its index over `SdfMeshSlabs.Words` (64 MiB), its place the remainder, and
+`SdfMeshSlabs.TryView` gives each slab's view of the region. The region is
+bound a second time as `SdfMeshSlabs.Count` views (64, enough for
+`GpuRegion.MaxByteCount`; `SdfWorldPackage.MeshSlabs`, an arrayed read-only
+buffer member, which the shader interface now supports), written by
+`SdfWorldTables.WriteMeshSlabs` into the World sets, the mesh pass sets and the
+probe sets, a slab past the region's end binding the unused-member buffer.
+`SdfMeshSlabs.IndexedRead` is the switch, generated as `SDF_MESH_SLAB_INDEX`:
+off, `sdfMeshWord` reads the one binding directly, as before; on, it indexes
+the views with `NonUniformResourceIndex`, which is the read real slabs would
+put in every kernel (records stay one direct table, as they would beside
+slabs). The views are bound either way, so the two builds differ only in the
+kernels' reads.
+
+- *The invariant:* no kernel reads a mesh word except through the door, so the
+  switch reaches every read. *What enforces it:* the door ends by defining
+  `sdfMeshRegion` as a name that does not exist, so any read of the region
+  after it fails to compile; every reader of mesh words includes it
+  (`frame/sdf-mesh.hlsli`, `shade/sdf-probe-trace.hlsli`). *Where it stops:* a
+  kernel that declared and read the region before including the door would
+  escape; none does, and the bake reads no mesh word.
+- *Who reads mesh words* (from the compiled modules with the switch on, each
+  declaring `ShaderNonUniform`): surface, views (plain, interpreter and
+  shade sets), glass (both), resolve (reprojection), the mesh and both shadow
+  vertex stages, the glass raster fragments, occlusion selection (the level
+  table), and the probe trace, relight and meter. Picking reads none on the
+  GPU: `SdfWorldPickReadback` copies visibility record words, and the CPU
+  diagnostics read `SdfMesh` buffers.
+- *What it costs the build:* nothing to the stored meshes. `puck mesh identity
+  --against` the base build reads the same identity on both backends (code 0
+  members differ, both bake kernels the same), so a comparison's two builds
+  share one mesh store.
+- *What it costs every device:* Vulkan devices now require
+  `shaderStorageBufferArrayDynamicIndexing` and
+  `shaderStorageBufferArrayNonUniformIndexing` (`VulkanLogicalDeviceFactory`),
+  which every bar device reports; the device chain now enables a feature flag
+  past a structure's first (`VulkanFeatureFlag`).
+
+**The measurement.** Two builds of one commit, `SdfMeshSlabs.IndexedRead`
+false and true, frozen as `puck measure request` artifacts
+(`--before-input-tree`, `--after-input-tree`), each with a solution build or
+`-p:PuckShaderSpirvEnabled=true`. In a quiet window, for each build and each
+backend, a windowed debug World with `world.lockstep on` before the first tick,
+`world.wait bakes 600`, `world.rate pause`, `world.exposure pin`,
+`world.cadence off`, `world.rates off`, then `world.gpu-timing off`, `on`,
+and a full window of `world.gpu-timing` at the hero spawn and the meadow
+stop. The passes it reads: `sdf.world$surface`, `$views` (and its shade sets
+when present), `$glass`, `$glass-shade`, `$resolve`, `$mesh` (the vertex
+stage and the occlusion kernel), `$shadow-near`, `$shadow-far`,
+`$shadow-second`. The lighting trace runs off the frame: read the
+residency's `gpu-work=[…gpu:…ms…jobs…]` in `world.residency` once the bakes
+settle and again at `[sdf.mesh-gi] done`, and divide the difference by its
+jobs. `world.counters gpu summary` beside each window must read the same draws,
+vertices and texels in both builds (the switch changes no counted work), or the
+timing compares different frames. Priced beside it, from the same runs:
+
+- *The descriptor count:* `SdfMeshSlabs.Count` descriptors in every set that
+  binds the region (a World set per ring slot, each mesh pass set, each probe
+  set), read from `pipeline.inspect world` and the descriptor writes in
+  `world.counters gpu`.
+- *The kept blocks:* the device rows' residual in `host.memory` (room inside
+  shared blocks and the empty block `GpuMemoryPool` keeps per key).
+- *The largest payload and fragmentation:* no counter prints the largest
+  placed mesh yet; `SdfMeshRegion.PlacedBytesOf` over the store's meshes gives
+  both offline, the largest against the slab size and the tail each slab
+  would leave unfilled at that size. The allocator lane adds the reading.
+
+**What each reading decides.**
+
+- *A capability missing on a bar device rules that backing out as the
+  baseline* (upper hardware enhances; the baseline runs everywhere). On the
+  table so far neither is ruled out: the Deck has sparse buffers, the 2060
+  reading is owed.
+- *The index's cost decides between them.* Within the noise of a paired
+  window on every pass and both backends, slabs win, as favoured: no
+  capability question, an emptied slab returns to the device, no
+  single-buffer ceiling, and one store for every residency. Material on any
+  pass, sparse backing of the one buffer wins on devices whose reading
+  allows it, because it changes no kernel, and the region per residency and
+  its ceiling stay.
+- *The Deck is not measured here.* An RDNA2 lane scalarizes a descriptor index
+  that differs across a wave in a loop over its distinct values (an inference
+  from how AMD's compiler treats non-uniform descriptors, unverified here), so
+  NVIDIA's cost is a lower bound for it. A windowed reading on the Deck is owed
+  before slabs land their kernel path; a slab size larger than 64 MiB (a
+  larger `SdfMeshSlabs.WordShift`) lowers the distinct slabs a wave meets and
+  is the lever to try there.
+- *The descriptor count and the largest payload size the slab:* the count
+  must fit every set's pool on every device, and a mesh larger than a slab
+  takes a slab of its own.
+
 ### Step 5: the floor and eviction
 
 **Builds.** The coverage check that makes a floor admissible; each group in
@@ -1773,7 +1906,8 @@ than the authored far distance.
 | The spend margin | Step 2 | The constant in decision 2 |
 | What happens over budget on an RTX card under Linux | A Linux boot of an RTX machine | How strictly Linux discrete must reserve before allocating |
 | The fixed cost of one residency, and of one character | Step 2, then step 5 | Whether a hub of many portals needs a session-scale design beyond this plan |
-| Sparse binding, reserved resources, memory priority and pageable device-local memory on the three bar devices; slab size and the store's decode blocks | Step 7 | Slabs or sparse backing; whether priority classes are passed to the driver |
+| Sparse binding, reserved resources, memory priority and pageable device-local memory on the three bar devices; slab size and the store's decode blocks | Step 7: the read is built and the Deck's column is from its driver's source ([the prototype](#the-prototype-as-built)); the 4070's reading and the 2060's are owed | Slabs or sparse backing; whether priority classes are passed to the driver |
+| The indexed read's cost in every kernel that reads mesh words | Step 7's paired window on both backends ([the measurement](#the-prototype-as-built)), then a reading on the Deck | Slabs or sparse backing |
 | The floor's bytes by class, and the groups whose floor is finer than their coarsest rung | Step 5's first reading | The floor class's size; whether the floor is affordable on each device |
 | Which tier the lighting traces, and what it must keep beyond recent hits | Step 9's first reading | Whether the floor and the trace tier are one product; what observation may evict |
 | How long detail may go unobserved before it is speculative, and the granularity of the mark | Step 8, with a turn's captures | The grace interval, the first owner question, and whether a mark per draw pays |
@@ -1861,6 +1995,23 @@ opinion, none is the specification.
   [a mirror](https://raw.githubusercontent.com/chaotic-cx/mesa-mirror/main/src/amd/vulkan/radv_physical_device.c),
   for the two heaps an APU reports (two thirds and one third of its memory) and
   how their budgets split the free memory the same way.
+- RADV backing: the same [physical-device source](https://raw.githubusercontent.com/chaotic-cx/mesa-mirror/main/src/amd/vulkan/radv_physical_device.c)
+  for the sparse features and properties (each `enable_sparse`, from
+  `radv_sparse_enabled`), `sparseAddressSpaceSize`, the storage-buffer offset
+  alignment of 4, the storage-buffer array indexing features,
+  `EXT_memory_priority`, the queue families' `VK_QUEUE_SPARSE_BINDING_BIT`, and
+  no `EXT_pageable_device_local_memory` in its extension table; with
+  [ac_gpu_info](https://raw.githubusercontent.com/chaotic-cx/mesa-mirror/main/src/amd/common/ac_gpu_info.c)
+  for `has_sparse` (GFX7 and above, less four older APUs) and
+  [Mesa issue 9224](https://gitlab.freedesktop.org/mesa/mesa/-/issues/9224),
+  which asks RADV to implement the pageable extension.
+- NVIDIA 535: [the 535.43.02 driver notes](https://forums.developer.nvidia.com/t/254959),
+  which add `VK_EXT_memory_priority` and the pageable device memory extension
+  for Turing and newer GPUs.
+- vkd3d-proton: [its device source](https://raw.githubusercontent.com/HansKristian-Work/vkd3d-proton/master/libs/vkd3d/device.c),
+  for `d3d12_device_determine_tiled_resources_tier` (the tier from Vulkan's
+  sparse features and queue) and the fixed 40
+  `MaxGPUVirtualAddressBitsPerResource`.
 - RDNA guide: [AMD's RDNA performance guide](https://gpuopen.com/learn/rdna-performance-guide/),
   for 80% of memory and the advice against querying every frame.
 - NVIDIA Vulkan guidance: [Vulkan dos and don'ts](https://developer.nvidia.com/blog/vulkan-dos-donts/),

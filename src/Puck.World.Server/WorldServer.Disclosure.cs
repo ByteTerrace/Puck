@@ -17,7 +17,7 @@ public sealed partial class WorldServer {
 
     internal WorldRecipientView DeliveryView(Principal? recipient, WorldDisclosureTier tier, Func<bool>? observes = null) =>
         new(() => Definition, () => Arena, recipient, tier, observes ?? (() => true), m_disclosureImages,
-            AuthorityIdentity, () => DeliveryTime);
+            AuthorityIdentity, () => DeliveryTime, () => recipient is { } actor && Grants.IsOperator(actor));
 
     /// <summary>Mints the live capability this ingress-stamped console invocation reads through.</summary>
     /// <param name="context">The invocation's context, carrying its stamped principal.</param>
@@ -83,7 +83,7 @@ public sealed partial class WorldServer {
         if (streams.Count == 0) { m_deliveryCursors.Remove(actor); }
     }
     internal WorldDocumentVersion RecipientVersion(Principal recipient) {
-        if (recipient.IsAuthority) { return DocumentVersion; }
+        if (Grants.IsOperator(recipient)) { return DocumentVersion; }
         // A submission with no unambiguous observation stream has received no version. Never substitute an
         // authority install count, or another stream's potentially higher-fidelity delivery count.
         var sequence = m_deliveryCursors.TryGetValue(recipient, out var streams) && streams.Count == 1 ? streams[0].Sequence : 0;

@@ -106,14 +106,20 @@ public static unsafe class DirectXFeatureReads {
     /// <summary>Reads what a device can bind: options' resource binding tier, the highest root signature version and
     /// shader model, and options 19's shader-visible heap sizes. A runtime that does not answer options 19 reports the
     /// heap sizes every binding tier guarantees; one that knows no root signature version or shader model the query
-    /// asks reports that field empty.</summary>
+    /// asks reports that field empty.
+    /// <para>And how it backs memory (<see cref="GpuDeviceCapabilities.WithDirectXBacking"/>): options' tiled resources
+    /// tier, the virtual address support query's per-resource address bits (zero when the runtime does not answer it),
+    /// and the two interfaces the caller probed.</para></summary>
     /// <typeparam name="TSupport">The query's answerer.</typeparam>
     /// <param name="support">The device's feature queries.</param>
+    /// <param name="residencyPriority">Whether the device implements <c>ID3D12Device1</c>.</param>
+    /// <param name="enqueueMakeResident">Whether the device implements <c>ID3D12Device3</c>.</param>
     /// <returns>The capabilities.</returns>
     /// <exception cref="DirectXException">The options query, which every Direct3D 12 runtime answers, failed.</exception>
-    public static GpuDeviceCapabilities Capabilities<TSupport>(TSupport support) where TSupport : IDirectXFeatureSupport {
+    public static GpuDeviceCapabilities Capabilities<TSupport>(TSupport support, bool residencyPriority = false, bool enqueueMakeResident = false) where TSupport : IDirectXFeatureSupport {
         var options = new D3D12_FEATURE_DATA_D3D12_OPTIONS();
         var options19 = new D3D12_FEATURE_DATA_D3D12_OPTIONS19();
+        var addresses = new D3D12_FEATURE_DATA_GPU_VIRTUAL_ADDRESS_SUPPORT();
 
         support.CheckFeatureSupport(
             data: &options,
@@ -128,6 +134,9 @@ public static unsafe class DirectXFeatureReads {
         )) {
             options19 = default;
         }
+        if (!TryCheck(data: ref addresses, feature: D3D12_FEATURE.D3D12_FEATURE_GPU_VIRTUAL_ADDRESS_SUPPORT, support: support)) {
+            addresses = default;
+        }
 
         return GpuDeviceCapabilities.FromDirectX(
             resourceBindingTier: ((uint)options.ResourceBindingTier),
@@ -136,6 +145,11 @@ public static unsafe class DirectXFeatureReads {
             shaderModel: HighestShaderModel(support: support),
             staticSamplerHeapSize: options19.MaxSamplerDescriptorHeapSizeWithStaticSamplers,
             viewHeapSize: options19.MaxViewDescriptorHeapSize
+        ).WithDirectXBacking(
+            enqueueMakeResident: enqueueMakeResident,
+            residencyPriority: residencyPriority,
+            resourceAddressBits: addresses.MaxGPUVirtualAddressBitsPerResource,
+            tiledResourcesTier: ((uint)options.TiledResourcesTier)
         );
     }
     /// <summary>Fills a memory profile from the native structures Direct3D 12 and DXGI report: the architecture's

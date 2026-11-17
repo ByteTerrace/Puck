@@ -7,21 +7,6 @@ namespace Puck.World.Silo;
 
 /// <summary>Admits a host-validated OAuth identity into an explicitly authorized World row. Every command retains that peer generation.</summary>
 internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRouting routing) : IControlSessionHost {
-    private static bool Allows(CommandMetadata command, WorldServer server, WorldPeerEventEntry peer, ControlIdentity identity) {
-        // This is an explicit remote surface. New local/admin verbs never become remotely callable by registration.
-        if (!IsRemoteCommand(name: command.Name)) { return false; }
-        return (
-            server.Population.IsAdmittedPeer(bodyIndex: peer.BodyIndex) &&
-            (server.Population.PeerPrincipal(index: peer.BodyIndex) == peer.Identity) &&
-            WorldAdmissionDoor.TryMatchOAuthEntry(
-            entries: server.Definition.Admission,
-            issuer: identity.Issuer,
-            subject: identity.Subject,
-            verdict: out var current
-        ) &&
-            (current.Tier == WorldDisclosureTier.Replica)
-        );
-    }
     private async Task DisconnectAsync(string target, WorldServer server, WorldPeerEventEntry peer) {
         try {
             await routing.InvokeAsync(
@@ -31,9 +16,6 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
         ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (Exception error) when ((error is ObjectDisposedException or InvalidOperationException or OperationCanceledException)) { /* Retirement discards the row and its peer table. */ }
     }
-    private static bool IsRemoteCommand(string name) => (name is "world.wait" or "world.admission" or "world.links" or
-        "world.state" or "world.state.cell.set" or "world.state.cell.remove" or "world.state.similar");
-
     /// <inheritdoc/>
     public ValueTask<IControlSession> AttachAsync(string target, ControlIdentity identity, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(identity);
@@ -70,25 +52,29 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
                     refusal: out var refusal,
                     verdict: verdict
                 )) { throw new UnauthorizedAccessException(message: refusal); }
+                IControlSession? session = null;
+                void Close(Principal principal) { if (principal == peer.Identity) { session?.Dispose(); } }
                 try {
-                    return routing.CreateControlSession(
+                    session = routing.CreateControlSession(
                         target,
                         Principal.Peer(
                             peer.BodyIndex,
                             peer.Generation
                         ),
-                        command => Allows(
+                        command => SiloControlAdmission.Allows(
                             command: command,
                             identity: identity,
                             peer: peer,
                             server: server
                         ),
-                        () => _ = DisconnectAsync(
+                        () => { server.PeerDisconnected -= Close; _ = DisconnectAsync(
                             peer: peer,
                             server: server,
                             target: target
-                        )
+                        ); }
                     );
+                    server.PeerDisconnected += Close;
+                    return session;
                 } catch { server.DisconnectPeerConnection(peer: peer); throw; }
             },
             cancellationToken
@@ -115,7 +101,7 @@ internal sealed class SiloControlSessionHost(WorldSiloHost silo, SiloConsoleRout
                 ) ||
                     (verdict.Tier != WorldDisclosureTier.Replica)
                 ) { return new ControlCapabilities(""); }
-                return new ControlCapabilities(routing.DescribeCommands(include: command => IsRemoteCommand(name: command.Name)));
+                return new ControlCapabilities(routing.DescribeCommands(include: command => SiloControlAdmission.Describes(command, verdict)));
             },
             cancellationToken
         );

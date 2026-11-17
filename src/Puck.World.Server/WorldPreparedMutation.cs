@@ -9,6 +9,7 @@ namespace Puck.World.Server;
 /// Disposing one that was not installed releases what was staged; a plan its host committed is left alone.</remarks>
 internal struct WorldPreparedMutation(
     WorldMutation mutation,
+    WorldGrants.PreparedAuthorityTransition authority,
     WorldDefinition candidate,
     WorldRuleCompilation? compilation,
     StateArena? arena,
@@ -37,6 +38,7 @@ internal struct WorldPreparedMutation(
     public WorldInstallKind Kind { get; } = kind;
     public IWorldMachinePreparedPlan? MachinePlan { get; } = machinePlan;
     public WorldMutation Mutation { get; } = mutation;
+    public WorldGrants.PreparedAuthorityTransition Authority { get; } = authority;
     public bool SolidAffecting { get; } = solidAffecting;
     public WorldSolidField? Solids { get; } = solids;
     public ulong Tick { get; } = tick;

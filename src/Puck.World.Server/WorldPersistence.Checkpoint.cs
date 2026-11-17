@@ -44,7 +44,7 @@ public sealed partial class WorldPersistence {
     // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
     // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
     internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId) {
-        if (!principal.IsAuthority) {
+        if (!Host.Grants.IsOperator(principal)) {
             return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: "world.undo requires the operator");
         }
         // Journal control is Mutate territory over every section (a replay can rebuild any).
@@ -103,6 +103,7 @@ public sealed partial class WorldPersistence {
             var entry = Host.Document.Journal[index];
 
             if (!WorldDocument.TryCompose(
+            authority: Host.GrantTable,
                 current: candidate,
                 mutation: entry.Mutation,
                 tick: entry.Tick,
@@ -252,6 +253,7 @@ public sealed partial class WorldPersistence {
 
             Host.Document.SwapSolids(solids: undoSolids);
             Host.Document.Install(
+                authority: Host.GrantTable.PrepareDocument(principal, Host.Definition, candidate),
                 definition: candidate,
                 rebuildPopulation: true
             );
@@ -387,6 +389,7 @@ public sealed partial class WorldPersistence {
                 // is expected to succeed; if it somehow does not, leave the journal exactly as it stood rather than
                 // fold onto a candidate that failed to build.
                 if (!WorldDocument.TryCompose(
+            authority: Host.GrantTable,
                     current: candidate,
                     mutation: entry.Mutation,
                     tick: entry.Tick,
@@ -946,15 +949,7 @@ public sealed partial class WorldPersistence {
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();
-        Host.GrantTable.Restore(checkpoint: checkpoint.Grants, resetSessionEpochs: resetSessionEpochs);
-        // Group authority is a derived view of the restored definition, not checkpoint payload. Rebuild it before
-        // any post-restore admission/read path can consult Allows, so role-specific membership and group ownership
-        // cannot remain empty (deny-all) or fall back to a stale role-less projection.
-        Host.GrantTable.RestoreGroups(
-            groups: (Host.Document.Definition.Groups ?? WorldGroupsSection.Empty).Groups,
-            kinds: (Host.Document.Definition.Groups ?? WorldGroupsSection.Empty).Kinds,
-            ownership: (Host.Document.Definition.Groups ?? WorldGroupsSection.Empty).Ownership
-        );
+        Host.GrantTable.Restore(checkpoint.Grants, restoredDefinition, Principal.World, resetSessionEpochs);
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
         // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the

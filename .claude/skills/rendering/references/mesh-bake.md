@@ -1238,10 +1238,21 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   `world.debug-view normals`.
 - **`--cpu` measures a bake change with no GPU.** It drives `SdfMeshPathBake`
   with each lattice answered through the group's CPU field, so a contour,
-  refinement or field change shows in the audit without a boot. Where the
-  fixed-point field and the kernel's agree, its mesh matches a stored Direct3D
-  12 bake of the group to the triangle; a field the evaluator refuses (a regular
-  polygon, a glyph, a sampled region) needs a World boot.
+  refinement or field change shows in the audit without a boot. Every lattice
+  names where its gradient taps lie (`SdfMeshBakeRequest.TapSpacing`, a
+  sixty-fourth of its finest cell); the kernel reads that spacing from the
+  lattice's record and the CPU answers it too, so neither side decides it
+  alone. The fixed-point evaluator answers in 2⁻¹⁶ m steps and cannot place
+  taps closer than `SdfMeshCpuField.ResolutionSpacing`
+  (`SdfMeshCpuField.TapSpacing`): there its taps straddle creases the
+  kernel's do not, and the group's block prints a `cpu taps:` line counting
+  those samples. Only a group without that line, and whose field the two
+  interpreters compute alike, has a CPU mesh that should match a stored
+  bake triangle for triangle. Read the others' folds and flips beside a store
+  audit: blended crease normals can hide folds the device's one-sided normals
+  produce, and can add flips the device does not have.
+  A field the evaluator refuses (a regular polygon, a glyph, a sampled
+  region) needs a World boot.
 - **The store is keyed by the bake identity of the build that booted.** From
   your own worktree's CLI, audit a World you ran from the same checkout, or name
   another build with `--build <its Puck.World bin dir>`; a rebuilt build's

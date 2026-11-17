@@ -132,7 +132,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         comparisonType: StringComparison.Ordinal
     );
     private string DescribeBudget(CommandContext context) {
-        if (!context.Principal.IsAuthority) {
+        if (!server.Grants.IsOperator(context.Principal)) {
             var definition = server.ReadView(context).Definition;
             var instances = WorldPlacementStamper.StaticStampInstances(definition, definition.Placements);
             return $"[world.budget: placements {instances} static instance(s) ({definition.Placements.Count} row(s)) | state {definition.AuthoredState.Count} row(s) | creations {definition.Creations.Count}]";
@@ -306,7 +306,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var view = server.ReadView(context);
         if (!view.Observes) { return "[world.gravity: not disclosed]"; }
         var authored = view.Definition.Gravity;
-        if (!context.Principal.IsAuthority) {
+        if (!server.Grants.IsOperator(context.Principal)) {
             var acceleration = authored.UniformAcceleration;
             return string.Create(CultureInfo.InvariantCulture,
                 $"[world.gravity: solver {authored.Solver} uniform=({acceleration.X:0.#####},{acceleration.Y:0.#####},{acceleration.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} sources={authored.Attractors.Count} points={authored.Points?.Count ?? 0} areas={authored.Areas?.Count ?? 0}]");

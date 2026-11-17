@@ -244,6 +244,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The mesh region as a stream of words: the draw records, then the positions and indices the mesh pass
     /// reads.</summary>
     public const string MeshRegion = "sdfMeshRegion";
+    /// <summary>The mesh region again as <see cref="SdfMeshSlabs.Count"/> views of one slab each, which the mesh words'
+    /// slab read indexes (<see cref="SdfMeshSlabs"/>); a slab past the region's end binds a filler.</summary>
+    public const string MeshSlabs = "sdfMeshSlabs";
     /// <summary>The mesh visibility target the mesh pass draws and the surface pass reads: per pixel the ray parameter, the
     /// draw index plus one (zero where no mesh covers it) and the triangle.</summary>
     public const string MeshVisibility = "meshVisibility";
@@ -407,6 +410,7 @@ public static partial class SdfWorldPackage {
         Table(element: ShaderValueType.Uint, name: MeshRegion),
         Table(element: ShaderValueType.Uint, name: MeshIrradiance),
         Table(element: ShaderValueType.Uint, name: FrameSampled),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.World, length: SdfMeshSlabs.Count, name: MeshSlabs),
     ];
     /// <summary>Gets the values the mesh bake's two kernels, the instance mask and the field sampler, read from their own
     /// pass block beside the extent: the live program's instance-mask width, the dispatch's lattices and their

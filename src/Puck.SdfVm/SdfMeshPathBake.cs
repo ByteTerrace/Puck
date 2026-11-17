@@ -25,6 +25,11 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
     /// <summary>Gets the lattice's local frame, independently of the instances selected by its mask.</summary>
     public int FrameSlot { get; init; } = ((Selector >= 0) ? Selector : -1);
 
+    /// <summary>Gets how far each gradient tap lies from its sample along every axis, in the frame <see cref="Origin"/> is
+    /// in: <see cref="SdfMeshBakeTaps.Spacing"/> of <see cref="Cell"/>. The bake kernel reads it from the lattice's record
+    /// (<see cref="SdfMeshBakeBlock.Write"/>) and every CPU answer of the lattice starts from it, so where the taps lie is
+    /// decided here alone.</summary>
+    public float TapSpacing => SdfMeshBakeTaps.Spacing(cell: Cell);
     /// <summary>Gets the samples the dispatch writes.</summary>
     public int Samples => ((Dims.X * Dims.Y) * Dims.Z);
     /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one

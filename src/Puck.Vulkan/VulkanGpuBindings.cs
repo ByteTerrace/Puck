@@ -149,7 +149,7 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
     /// <inheritdoc/>
     /// <remarks>Whether the buffer is read-only or read-write, and the element stride, describe only a Direct3D 12
     /// view; every Vulkan buffer write is the same storage-buffer descriptor.</remarks>
-    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+    public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement = 0, ulong offsetBytes = 0) {
         if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
             throw new ArgumentOutOfRangeException(
                 actualValue: kind,
@@ -159,11 +159,13 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
         }
 
         allocator.WriteStorageBuffer(
+            arrayElement: arrayElement,
             binding: binding,
             bufferHandle: bufferHandle,
             bufferSize: bufferSize,
             descriptorSetHandle: descriptorSetHandle,
-            device: Device
+            device: Device,
+            offsetBytes: offsetBytes
         );
     }
     /// <inheritdoc/>

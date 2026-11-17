@@ -252,8 +252,8 @@ placements {
 }
 
 grants: concat(
-  [{ capability: Drive, grantee: "seat1", subject: $"body:{cardsTop}" }],
-  map(range(0, 52), k => { capability: Drive, grantee: "seat1", subject: $"body:{cardsTop - 1 - k}" })
+  [{ budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{cardsTop}" }],
+  map(range(0, 52), k => { budget: 64, capability: Drive, grantee: "seat1", subject: $"body:{cardsTop - 1 - k}" })
 )
 
 // At the table's chair, its -Z edge, 1.5 m from the board's centre and facing +Z across it, inside the engage radius: the

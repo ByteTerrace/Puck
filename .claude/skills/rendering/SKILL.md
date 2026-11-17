@@ -413,6 +413,7 @@ add the row you found.
 | Share a constant or a layout between C# and HLSL | a generated declaration (`SdfIsaHlsl`, `ShaderDeclarations`) first; a hand pair only where the table lists one | [sync pairs](references/sync-pairs.md) |
 | Add a pipeline variant to a pass | `GpuPassPipelineKey`: a field that changes the pipeline enters the key, or leases share the wrong pipeline | `src/Puck.Shaders/Pipeline` |
 | Let an author program how a surface shades | `SdfShadeProgram` (the op table, admission, cost) | `src/Puck.SignedDistance/Shading`; [authored shading](references/authored-shading.md) |
+| Read how a device can back a large buffer (sparse binding, reserved resources, memory priority, pageable device-local memory, storage-buffer array indexing) | `GpuDeviceCapabilities.Backing` (`GpuBackingSupport`) and its native figures, read at device creation and printed on `world.counters gpu`'s `capabilities` line | `src/Puck.Abstractions/Gpu/Device`; [streaming plan](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built) |
 | Read what the device lets the process use per segment (a DXGI segment group, a Vulkan heap), or charge a device allocation to the physical memory it was placed in | `IGpuDeviceContext.MemoryReading` (refreshed by `RefreshMemoryReading` on the frame thread), `GpuMemorySegments` (the one place a segment's pool is decided), `GpuDeviceMemoryWork.CountAllocated`'s segment argument (Direct3D 12's through `DirectXDeviceMemory.SegmentOf`, Vulkan's through `GpuMemorySegments.OfMemoryType`); `MemoryAccount.ReadPools` and `host.memory` print them | `src/Puck.Abstractions/Gpu`, `src/Puck.Hosting/Jobs/MemoryAccount.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-1-as-a-brief) |
 | Reserve device memory before allocating it, share a pool between residencies, or hold detail to a budget | `MemoryAccount.ReserveDevice` (a holder's peak, under the owner its objects are named for, `GpuObjectName.MemoryOwnerOf`), `GpuDeviceMemoryWork.TryAdmit` (the one door every native allocation asks; `CountAllocated` takes only its `GpuMemoryGrant`), `SdfResidencySelector` (the one detail bias, each bake's budget, each mesh region's reservation, `SdfGpuWorkBudget`); never a share of `GpuMemoryProfile` | `src/Puck.Hosting/Jobs/MemoryAccount.cs`, `src/Puck.Abstractions/Gpu/Counters`, `src/Puck.SdfVm/SdfResidencySelector.cs`; [streaming plan](../../../docs/plans/streaming-and-memory.md#step-3-one-reservation) |
 | Read where frame time goes | `world.counters gpu`, `world.gpu-timing`, the bake's `gpu-work=[…]` line | [performance and cost](#performance-and-cost) |
@@ -813,6 +814,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   an in-bounds wrong occupant, which `sdf.instances.targets.stale` counts (`SdfWorldPasses.RecordHits`: hit writers note
   the records' revision they recorded under, hit readers compare it). `world.rows force hit-bound [<frames>]` zeroes the
   bound for frames, so every hit is rejected and counted; both counts read zero on an ordinary run.
+- **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
+  `sdfMeshRecordWord` and a mesh's own words (vertices, triangle materials, indices, level table, members) through
+  `sdfMeshWord`, and then makes `sdfMeshRegion` an undeclared name, so a read around it does not compile.
+  `SdfMeshSlabs.IndexedRead` (`SDF_MESH_SLAB_INDEX`) switches `sdfMeshWord` to the slab views the streaming plan's
+  step 7 prices ([the prototype](../../../docs/plans/streaming-and-memory.md#the-prototype-as-built)); the switch
+  changes no counted work and no stored mesh.
 - **Check screen eligibility before reading a screen table.** A material is
   not a screen index: `sdfScreenSurfaceShades` checks the sentinel, bounds and
   source before `material - SDF_SCREEN_MATERIAL - 1` names a screen. Temporal
@@ -1310,7 +1317,10 @@ by its fence share is GPU back-pressure, not CPU work.
   after a `-nodeReuse:false` build (ISA packing, Lipschitz, bakes) and `tests/Puck.Shaders.Tests`.
   Anything that answers a bake lattice on the CPU (`MeshCpuBake`, the SdfVm laws' kernel stand-ins) places
   each sample with `SdfMeshBakeRequest.SampleAt`, as the kernel does: a slab keeps its final lattice's
-  origin and counts its planes from `Slab`, so a copied grid formula answers a slab at the wrong planes. Cross-backend
+  origin and counts its planes from `Slab`, so a copied grid formula answers a slab at the wrong planes. Its
+  gradient taps lie `SdfMeshBakeRequest.TapSpacing` out, which the kernel reads from the lattice's record;
+  the fixed-point evaluator widens only what it cannot resolve (`SdfMeshCpuField.TapSpacing`), and
+  `mesh audit --cpu` counts those samples on a `cpu taps:` line. Cross-backend
   parity (`puck parity --world <file>`) needs a parity world with its contract
   beside it, and none exists while the debug world is the one live world; until
   one does, compare the two backends' captures and counts yourself.

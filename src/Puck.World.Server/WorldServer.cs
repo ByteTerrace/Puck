@@ -632,11 +632,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         // end of this ctor. The drive-gate index (Seam A) syncs alongside it for the identical reason — a boot
         // document may ship an already-gated body (a scenario opening on a downed NPC), and the first Step's intent
         // drain must see it without waiting for a mutation to trigger Install.
-        m_grants.SyncGroups(
-            groups: (definition.Groups ?? WorldGroupsSection.Empty).Groups,
-            kinds: (definition.Groups ?? WorldGroupsSection.Empty).Kinds,
-            ownership: (definition.Groups ?? WorldGroupsSection.Empty).Ownership
-        );
+        m_grants.PrepareDocument(Principal.Console, null, definition).Install();
         m_grants.SyncState(arena: m_arena, definition: definition);
 
         // THE BOOT-LOUD CATALOG CHECK: WorldServer is constructed exactly once per world boot (or per replay
@@ -697,16 +693,6 @@ public sealed partial class WorldServer : IWorldServerHost {
         // (every world authored before this section existed) prints nothing and changes nothing. Applied BEFORE any
         // addon mounts (WorldAddonRuntime.Create runs after this constructor returns), so a mount-time requested-vs-
         // granted report already sees the settled table.
-        foreach (var grant in definition.Grants) {
-            if (WorldTick.IsDocumentChannelRow(grant: grant)) {
-                continue;
-            }
-
-            Grant(
-                grant: m_grants.WithoutAuthoredConsent(grant: grant),
-                actor: Principal.Console
-            );
-        }
 
         // Establish the boot document's OWN declared cable groups: Install (which ALSO calls this on every later
         // mutation/rebuild) never runs at construction, so a cable port authored in the boot document itself needs

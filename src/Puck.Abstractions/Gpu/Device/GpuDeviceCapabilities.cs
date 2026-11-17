@@ -8,7 +8,8 @@ namespace Puck.Abstractions.Gpu;
 /// What a GPU device can bind, as its backend reported it when the device was created: the limits the grouped binding
 /// contract assumes — how many descriptor sets or root-signature words a pipeline may bind, how many push-constant
 /// bytes, and how many descriptors of each kind one shader stage may reach — and, on Direct3D 12, the resource binding
-/// tier, the highest root signature version and shader model, and the shader-visible heap sizes. It is recorded beside
+/// tier, the highest root signature version and shader model, and the shader-visible heap sizes — and how it can back a
+/// large buffer and give memory back (<see cref="Backing"/> and the native figures beside it). It is recorded beside
 /// counted work, like <see cref="GpuDeviceIdentity"/>, so a reading on one device can be held to the contract's
 /// assumptions. Uniform-region admission also reads its constant-buffer view limit.
 /// </summary>
@@ -44,6 +45,19 @@ namespace Puck.Abstractions.Gpu;
 /// Vulkan.</param>
 /// <param name="StaticSamplerHeapSize">Direct3D 12's largest shader-visible sampler heap a root signature with static
 /// samplers may be used beside, in descriptors; zero on Vulkan.</param>
+/// <param name="Backing">How the device can back a large buffer and give its memory back, and how a kernel may index an
+/// array of buffers (<see cref="GpuBackingSupport"/>), the capability read the streaming plan's backing choice rests on;
+/// <see langword="null"/> until a backend reads it (<see cref="WithDirectXBacking"/>, and on Vulkan the physical device's
+/// features, sparse properties, queue families and the two memory extensions), so a device that offers none of it reads
+/// <see cref="GpuBackingSupport.None"/> apart from one never asked.</param>
+/// <param name="ReservedResourcesTier">Direct3D 12's <c>TiledResourcesTier</c> (0 for none, 1 to 4); zero on
+/// Vulkan.</param>
+/// <param name="ResourceAddressBits">Direct3D 12's <c>MaxGPUVirtualAddressBitsPerResource</c>, how much address one
+/// reserved resource may span; zero on Vulkan.</param>
+/// <param name="SparseAddressSpaceBytes">Vulkan's <c>sparseAddressSpaceSize</c>, the address space every sparse resource
+/// shares; zero on Direct3D 12.</param>
+/// <param name="StorageBufferOffsetAlignment">Vulkan's <c>minStorageBufferOffsetAlignment</c>, the alignment a buffer
+/// view's offset into its buffer keeps; zero on Direct3D 12, whose view starts at any whole element.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,
@@ -61,7 +75,12 @@ public sealed record GpuDeviceCapabilities(
     string ShaderModel = "",
     uint ViewHeapSize = 0U,
     uint SamplerHeapSize = 0U,
-    uint StaticSamplerHeapSize = 0U
+    uint StaticSamplerHeapSize = 0U,
+    GpuBackingSupport? Backing = null,
+    uint ReservedResourcesTier = 0U,
+    uint ResourceAddressBits = 0U,
+    ulong SparseAddressSpaceBytes = 0UL,
+    uint StorageBufferOffsetAlignment = 0U
 ) {
     /// <summary>Direct3D 12's 4,096 constant-buffer elements, each a 16-byte float4.</summary>
     public const uint DirectXConstantBufferBytes = (4096U * 16U);
@@ -95,6 +114,67 @@ public sealed record GpuDeviceCapabilities(
     private const string StageUniformBuffersField = "stage.uniform-buffers";
     private const string StaticSamplerHeapField = "heap.samplers-static";
     private const string ViewHeapField = "heap.views";
+    private const string BackingField = "backing";
+    private const string ReservedTierField = "reserved.tier";
+    private const string ResourceAddressBitsField = "reserved.address-bits";
+    private const string SparseAddressSpaceField = "sparse.address-space";
+    private const string StorageBufferOffsetAlignmentField = "storage-buffer.offset-alignment";
+
+    /// <summary>Returns these capabilities with what a Direct3D 12 device reports about backing. A reserved resource
+    /// (<c>CreateReservedResource</c>) at tiled resources tier 1 or above is a buffer whose tiles are mapped and unmapped
+    /// on any queue (<c>UpdateTileMappings</c>): sparse binding, buffer residency and a queue that binds; tier 2 reads an
+    /// unmapped tile as zero, which is Vulkan's strict non-residency. Every heap is paged by the operating system's video
+    /// memory manager (<c>MakeResident</c>, <c>Evict</c>), so device-local memory is always pageable; and a shader model
+    /// 5.1 kernel may index an array of views by a dynamic or, through <c>NonUniformResourceIndex</c>, a non-uniform
+    /// value at every binding tier. A pure function of its arguments.</summary>
+    /// <param name="tiledResourcesTier">Options' <c>TiledResourcesTier</c>, 0 to 4.</param>
+    /// <param name="resourceAddressBits">The GPU virtual address support query's
+    /// <c>MaxGPUVirtualAddressBitsPerResource</c>, or zero when the runtime does not answer it.</param>
+    /// <param name="residencyPriority">Whether the device implements <c>ID3D12Device1</c>, whose
+    /// <c>SetResidencyPriority</c> passes a priority to the memory manager.</param>
+    /// <param name="enqueueMakeResident">Whether the device implements <c>ID3D12Device3</c>, whose
+    /// <c>EnqueueMakeResident</c> makes memory resident without blocking and can refuse past the budget.</param>
+    /// <returns>The capabilities with <see cref="Backing"/>, <see cref="ReservedResourcesTier"/> and
+    /// <see cref="ResourceAddressBits"/> filled.</returns>
+    public GpuDeviceCapabilities WithDirectXBacking(uint tiledResourcesTier, uint resourceAddressBits, bool residencyPriority, bool enqueueMakeResident) {
+        var backing = (GpuBackingSupport.PageableDeviceLocal | GpuBackingSupport.BufferArrayDynamicIndexing | GpuBackingSupport.BufferArrayNonUniformIndexing);
+
+        if (tiledResourcesTier >= 1U) { backing |= (GpuBackingSupport.SparseBinding | GpuBackingSupport.SparseResidencyBuffer | GpuBackingSupport.SparseQueue); }
+        if (tiledResourcesTier >= 2U) { backing |= GpuBackingSupport.SparseNonResidentStrict; }
+        if (residencyPriority) { backing |= GpuBackingSupport.MemoryPriority; }
+        if (enqueueMakeResident) { backing |= GpuBackingSupport.EnqueueMakeResident; }
+
+        return (this with { Backing = backing, ReservedResourcesTier = tiledResourcesTier, ResourceAddressBits = resourceAddressBits });
+    }
+    /// <summary>Returns the backing flags as they print: each set flag's name joined by <c>+</c> in declaration order, or
+    /// <c>none</c>.</summary>
+    /// <param name="backing">The flags.</param>
+    /// <returns>The spelling.</returns>
+    public static string BackingSpelling(GpuBackingSupport backing) {
+        if (backing == GpuBackingSupport.None) { return "none"; }
+
+        var names = new List<string>();
+
+        foreach (var (flag, name) in BackingNames) {
+            if ((backing & flag) != 0) { names.Add(item: name); }
+        }
+
+        return string.Join(separator: '+', values: names);
+    }
+
+    // Each backing flag's one spelling, in declaration order.
+    private static readonly (GpuBackingSupport Flag, string Name)[] BackingNames = [
+        (GpuBackingSupport.SparseBinding, "sparse-binding"),
+        (GpuBackingSupport.SparseResidencyBuffer, "sparse-residency-buffer"),
+        (GpuBackingSupport.SparseResidencyAliased, "sparse-residency-aliased"),
+        (GpuBackingSupport.SparseQueue, "sparse-queue"),
+        (GpuBackingSupport.SparseNonResidentStrict, "sparse-non-resident-strict"),
+        (GpuBackingSupport.MemoryPriority, "memory-priority"),
+        (GpuBackingSupport.PageableDeviceLocal, "pageable-device-local"),
+        (GpuBackingSupport.EnqueueMakeResident, "enqueue-make-resident"),
+        (GpuBackingSupport.BufferArrayDynamicIndexing, "buffer-array-dynamic"),
+        (GpuBackingSupport.BufferArrayNonUniformIndexing, "buffer-array-non-uniform"),
+    ];
 
     /// <summary>Fills Direct3D 12's capabilities from what the device reports. The per-stage limits follow the resource
     /// binding tier's documented table: tier 1 reaches 16 samplers, 14 constant buffer views, 128 shader resource views
@@ -164,7 +244,9 @@ public sealed record GpuDeviceCapabilities(
     /// <summary>Appends the capabilities as <c>key=value</c> fields on one line, an empty or zero backend-specific
     /// field left out:
     /// <c>backend=vulkan descriptor-sets=32 push-constant-bytes=256 stage.samplers=… stage.uniform-buffers=… stage.storage-buffers=… stage.sampled-images=… stage.storage-images=… stage.resources=…</c>,
-    /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>.</summary>
+    /// and on Direct3D 12 <c>root-signature-words=64 … binding-tier=3 root-signature=1.1 shader-model=6.8 heap.views=… heap.samplers=… heap.samplers-static=…</c>;
+    /// then <c>backing=</c> (<see cref="BackingSpelling"/>) once a backend has read it, and the nonzero of <c>reserved.tier</c>,
+    /// <c>reserved.address-bits</c>, <c>sparse.address-space</c> and <c>storage-buffer.offset-alignment</c>.</summary>
     /// <param name="builder">The text to append to.</param>
     /// <returns><paramref name="builder"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="builder"/> is <see langword="null"/>.</exception>
@@ -248,6 +330,15 @@ public sealed record GpuDeviceCapabilities(
             name: StaticSamplerHeapField,
             value: StaticSamplerHeapSize
         );
+        if (Backing is { } backing) {
+            _ = builder.Append(value: ' ').Append(value: BackingField).Append(value: '=').Append(value: BackingSpelling(backing: backing));
+        }
+        AppendCount(builder: builder, name: ReservedTierField, value: ReservedResourcesTier);
+        AppendCount(builder: builder, name: ResourceAddressBitsField, value: ResourceAddressBits);
+        if (SparseAddressSpaceBytes != 0UL) {
+            _ = builder.Append(value: ' ').Append(value: SparseAddressSpaceField).Append(value: '=').Append(provider: CultureInfo.InvariantCulture, handler: $"{SparseAddressSpaceBytes}");
+        }
+        AppendCount(builder: builder, name: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
 
         return builder;
     }
@@ -324,6 +415,15 @@ public sealed record GpuDeviceCapabilities(
             propertyName: StaticSamplerHeapField,
             value: StaticSamplerHeapSize
         );
+        if (Backing is { } backing) {
+            writer.WriteString(propertyName: BackingField, value: BackingSpelling(backing: backing));
+        } else {
+            writer.WriteNull(propertyName: BackingField);
+        }
+        writer.WriteNumber(propertyName: ReservedTierField, value: ReservedResourcesTier);
+        writer.WriteNumber(propertyName: ResourceAddressBitsField, value: ResourceAddressBits);
+        writer.WriteNumber(propertyName: SparseAddressSpaceField, value: SparseAddressSpaceBytes);
+        writer.WriteNumber(propertyName: StorageBufferOffsetAlignmentField, value: StorageBufferOffsetAlignment);
         writer.WriteEndObject();
     }
 
