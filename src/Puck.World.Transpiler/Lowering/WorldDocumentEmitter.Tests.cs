@@ -1043,13 +1043,11 @@ public static partial class WorldDocumentEmitter {
     }
     // The text a bound element stands for in a key or a command line: a number in invariant spelling, a string as
     // written; null for anything else.
-    private static string? KeyText(JsonNode? value) => (value is JsonValue scalar)
+    private static string? KeyText(JsonNode? value) => ((value is JsonValue scalar)
         ? (scalar.TryGetValue(value: out string? text)
             ? text
-            : (scalar.TryGetValue(value: out long whole)
-                ? whole.ToString(provider: CultureInfo.InvariantCulture)
-                : (scalar.TryGetValue(value: out double real) ? real.ToString(format: "R", provider: CultureInfo.InvariantCulture) : null)))
-        : null;
+            : ((scalar.GetValueKind() == System.Text.Json.JsonValueKind.Number) ? scalar.ToJsonString() : null))
+        : null);
     // `{name}` in a seat step written inside a `for` is the bound element's text; `{{` and `}}` are literal braces.
     private static TestStepNode Substituted(TestSeatStepNode seat, Dictionary<string, JsonNode?>? bound, DocumentScope scope) {
         if (bound is null) {
@@ -1074,7 +1072,7 @@ public static partial class WorldDocumentEmitter {
                 continue;
             }
 
-            var close = text.IndexOf(value: '}', startIndex: index);
+            var close = text.IndexOf(startIndex: index, value: '}');
             var name = ((close < 0) ? "" : text[(index + 1)..close]);
 
             if ((close < 0) || !bound.TryGetValue(key: name, value: out var element) || (KeyText(value: element) is not { } substituted)) {

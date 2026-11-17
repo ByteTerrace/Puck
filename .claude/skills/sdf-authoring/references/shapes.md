@@ -259,7 +259,7 @@ are the authored ones. Strands closer than twice their radius fuse.
   contact and the bake read one field. Noise amplitude and wavelength are creation units:
   a placement of scale `s` has amplitude `s * amplitude` and wavelength `s / frequency`.
   Rigid attached rows carry a cached local field in their sampled fixed-point frame.
-  `sizeBy` uses a presentation driver's phase, so solid placements refuse it; it never scales contact.
+  `sizeBy` reads a numeric state binding in authority fixed point. The sampled scale carries contact, relief and blend radii together; zero contributes no solid.
   The narrowphase is the certified
   surface solve the field provider reads too (`FixedFieldColliderContact.Solve`):
   the field's certified box bounds (its evaluator's interval walk, the relief

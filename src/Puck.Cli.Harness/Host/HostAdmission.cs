@@ -5,12 +5,15 @@ namespace Puck.Cli.Host;
 /// <summary>Bounded admission by the machine's host-load thresholds (<see cref="HostLoadThresholds.For"/>), the one
 /// admission every heavy start passes: the gate and <c>affected</c> for their steps, <c>puck lease heavy</c> and
 /// <c>puck lease gpu</c> for their commands, and the MCP adapter for a World it starts. Memory and disk decide whether a
-/// step can run, since running out of either is what fails a build or a heavy suite: a step waits for free memory over
-/// the capacity threshold, a commit charge under its share of the commit limit (allocation fails at the limit with
-/// physical memory still free) and free disk over the pressure threshold. A start is also admitted by its expected peak
-/// (<see cref="HostStartTracker"/>): the commit headroom must cover the start's own peak
-/// (<see cref="HostLoadThresholds.DefaultPeakGb"/> by <see cref="HostStartKind"/>) plus what the admitted starts still
-/// running have left to grow, since admitted Worlds grow into each other. A busy CPU only slows a step, so the CPU is
+/// step can run, since running out of either is what fails a build or a heavy suite: a step waits while free memory is
+/// under the pressure threshold, while the commit headroom is under its reserve (allocation fails at the limit with
+/// physical memory still free) and while free disk is under the pressure threshold. A start is admitted by what it
+/// needs, never by a fixed free-memory or commit floor (<see cref="HostStartTracker"/>): the commit headroom must cover
+/// the start's own peak in private bytes (<see cref="HostLoadThresholds.DefaultPeakGb"/> by <see cref="HostStartKind"/>)
+/// plus what the admitted starts still running have left to grow, since admitted Worlds grow into each other, and
+/// still hold the commit reserve afterwards (<see cref="HostLoadThresholds.CommitCovers"/>); free physical memory must
+/// cover the start's own working set plus the running starts' working-set growth and still sit at the pressure floor
+/// (<see cref="HostLoadThresholds.PhysicalCovers"/>). A busy CPU only slows a step, so the CPU is
 /// advisory: a step admitted over the CPU threshold runs, and the admission prints the load it ran under. A step that
 /// opens a device also waits for an idle GPU; any other step never waits on a GPU holder. A heavy suite
 /// (<see cref="HostProcesses.IsHeavyTestAssembly"/>) also waits while another process runs one, machine-wide, since two
@@ -35,17 +38,26 @@ public static class HostAdmission {
     private static List<(string Reading, string Need)> Shortfalls(HostSample reading, HostLoadThresholds thresholds, HostStartDemand? demand) {
         List<(string Reading, string Need)> shortfalls = [];
 
+        var reserve = thresholds.CommitReserveGb(reading: reading);
+
         if (!thresholds.CommitHasHeadroom(reading: reading)) {
-            shortfalls.Add(item: (string.Create(provider: CultureInfo.InvariantCulture, handler: $"commit {reading.CommitPercent:0}% of limit"), string.Create(provider: CultureInfo.InvariantCulture, handler: $"under {thresholds.CapacityCommitPercent:0}%")));
-        }
-        if (demand is { Covered: false } uncovered) {
+            shortfalls.Add(item: (
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"commit headroom {(reading.CommitLimitGb - reading.CommitChargeGb):0.0}GB ({reading.CommitPercent:0}% of limit charged)"),
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {reserve:0.0}GB (the commit reserve, {thresholds.CommitReservePercent:0}% of the limit)")
+            ));
+        } else if (demand is { CommitCovered: false } uncovered) {
             shortfalls.Add(item: (
                 string.Create(provider: CultureInfo.InvariantCulture, handler: $"commit headroom {uncovered.HeadroomGb:0.0}GB"),
-                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {uncovered.NeedGb:0.0}GB ({uncovered.OwnGb:0.0}GB expected peak of a {KindName(kind: uncovered.Kind)} plus {uncovered.GrowthGb:0.0}GB still to grow in {uncovered.Growing} admitted start(s))")
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(uncovered.NeedGb + reserve):0.0}GB ({uncovered.OwnGb:0.0}GB expected peak of a {KindName(kind: uncovered.Kind)} plus {uncovered.GrowthGb:0.0}GB still to grow in {uncovered.Growing} admitted start(s) plus the {reserve:0.0}GB commit reserve)")
             ));
         }
-        if (!(reading.FreeRamGb > (thresholds.CapacityRamGb ?? 0))) {
-            shortfalls.Add(item: (string.Create(provider: CultureInfo.InvariantCulture, handler: $"freeRAM={reading.FreeRamGb:0.0}GB"), string.Create(provider: CultureInfo.InvariantCulture, handler: $"over {thresholds.CapacityRamGb:0.0}GB")));
+        if ((thresholds.PressureRamGb is { } floor) && (reading.FreeRamGb < floor)) {
+            shortfalls.Add(item: (string.Create(provider: CultureInfo.InvariantCulture, handler: $"freeRAM={reading.FreeRamGb:0.0}GB"), string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {floor:0.0}GB (memory pressure)")));
+        } else if (demand is { PhysicalCovered: false } crowded) {
+            shortfalls.Add(item: (
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"freeRAM={crowded.FreeRamGb:0.0}GB"),
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(crowded.ResidentNeedGb + (thresholds.PressureRamGb ?? 0)):0.0}GB ({crowded.ResidentOwnGb:0.0}GB expected working set of a {KindName(kind: crowded.Kind)} plus {crowded.ResidentGrowthGb:0.0}GB still to grow in the admitted starts plus the {thresholds.PressureRamGb ?? 0:0.0}GB pressure floor)")
+            ));
         }
         if (!(reading.FreeDiskGb >= (thresholds.PressureDiskGb ?? 0))) {
             shortfalls.Add(item: (string.Create(provider: CultureInfo.InvariantCulture, handler: $"freeDisk={reading.FreeDiskGb:0.0}GB"), string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {thresholds.PressureDiskGb:0.0}GB")));

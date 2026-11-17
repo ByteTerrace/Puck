@@ -20,7 +20,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
     }
 
-
     /// <summary>Folds the simulation continuation of captured population entries: the value
     /// <see cref="WorldPopulation.AppendContinuationHash(ref Fnv1aHash, bool)"/> folds from the live slots the entries were
     /// captured from. Each slot's digest folds its sections' digests, the slots fold into segments, and what no slot
@@ -49,7 +48,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         FoldContinuationSegments(digests: digests, hash: ref hash, present: present);
         beside.Fold(hash: ref hash);
     }
-
     /// <summary>The digest of one section: its encoded bytes, hashed alone.</summary>
     /// <typeparam name="TSection">The section type.</typeparam>
     /// <param name="writer">The scratch writer the section is encoded into.</param>
@@ -115,7 +113,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             m_parkedObservationCurrent = true,
             m_profiles = Fnv1aHash.Create(),
         };
-
         internal void Add(WireWriter writer, in WorldPopulationEntryCheckpoint entry, WorldContinuationFoldWork? work) {
             if (entry.Body.Clocks.RigidSleepRootPlusOne != 0) {
                 m_parkedObservationCurrent &= entry.Tail.ContactFieldObservationCurrent;
@@ -226,7 +223,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         return entry;
-    }    private static byte[] EncodePopulation(WorldPopulationCheckpoint section) {
+    }
+    private static byte[] EncodePopulation(WorldPopulationCheckpoint section) {
         var writer = new WireWriter();
 
         writer.WriteInt32(value: section.SimulatedCount);
@@ -275,7 +273,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
         });
         writer.WriteArray(items: (section.AttachedSolids ?? []), writeItem: static (w, row) => {
-            w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation);
+            w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation); w.WriteInt64(value: row.Scale.Value);
         });
 
         return writer.ToArray();
@@ -352,7 +350,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.CapacityCeiling,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
         var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
-            readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion()));
+            readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion(), FixedQ4816.FromRawBits(value: r.ReadInt64())));
 
         return new WorldPopulationCheckpoint(
             AttachedSolids: attached,

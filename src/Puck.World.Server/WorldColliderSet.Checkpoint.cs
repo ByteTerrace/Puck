@@ -7,7 +7,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldColliderSet {
     /// <summary>Captures the sampled carrier transforms, which may precede their current post-rule poses.</summary>
     public WorldAttachedSolidCheckpoint[] CaptureAttached() => Enumerable.Range(0, m_attachedRows.Count)
-        .Select(selector: row => new WorldAttachedSolidCheckpoint(m_attachedResolved[row], m_attachedOrigins[row], m_attachedRotations[row])).ToArray();
+        .Select(selector: row => new WorldAttachedSolidCheckpoint(m_attachedResolved[row], m_attachedOrigins[row], m_attachedRotations[row], m_attachedScales[row])).ToArray();
     /// <summary>Checks the sampled-solid inventory before population restoration changes any state.</summary>
     public void ValidateAttached(IReadOnlyList<WorldAttachedSolidCheckpoint> rows) {
         if (rows.Count != m_attachedRows.Count) { throw new InvalidOperationException(message: "Checkpoint attached-solid inventory differs from its document."); }
@@ -18,6 +18,7 @@ public sealed partial class WorldColliderSet {
         m_attachedColliders.Clear(); m_attachedColliderRows.Clear();
         m_previousAttachedColliders.Clear(); m_previousAttachedColliderRows.Clear();
         Array.Clear(array: m_previousAttachedResolved);
+        Array.Clear(array: m_liveFields);
         m_refreshHash = Fnv1aHash.Create();
         for (var row = 0; (row < rows.Count); row++) {
             var image = rows[row];
@@ -25,28 +26,41 @@ public sealed partial class WorldColliderSet {
             m_attachedResolved[row] = image.Resolved;
             m_attachedOrigins[row] = image.Origin;
             m_attachedRotations[row] = image.Rotation;
-            if (image.Resolved) { RestoreAttachedRow(row, image.Origin, image.Rotation); }
+            m_attachedScales[row] = image.Scale;
+            if (image.Resolved) { RestoreAttachedRow(row, image.Origin, image.Rotation, image.Scale); m_refreshHash.Add(value: image.Scale.Value); }
         }
         m_attachedHash = m_refreshHash.Value;
         m_attachedMoves = default;
         m_attachedSet.Refresh(colliders: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_attachedColliders));
     }
 
-    private void RestoreAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation) {
-        var (placement, creation) = m_attachedRows[row];
-        m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true;
+    private void RestoreAttachedRow(int row, FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale) {
+        var (placement, creation, _, _, reflection) = m_attachedRows[row];
+        m_attachedOrigins[row] = origin; m_attachedRotations[row] = rotation; m_attachedResolved[row] = true; m_attachedScales[row] = scale;
+        if (scale <= FixedQ4816.Zero) { return; }
         m_refreshMargin = FixedQ4816.FromDouble(value: placement.Solid!.Margin); m_refreshRow = row;
-        if (CollidesAsField(creation.EngineDocument)) {
-            if (PosedAttachedField(row, origin, rotation) is { } field) { RecordAttachedCollider(field); }
+        if (m_attachedFields[row] is not null) {
+            if (PosedAttachedField(origin: origin, rotation: rotation, row: row, scale: scale) is { } field) { RecordAttachedCollider(attached: field); }
             return;
         }
         CreationStampEmitter.VisitFixedPrimitiveCopies(document: creation.EngineDocument,
-            transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation).Transform, visitor: m_attachedVisitor);
+            transform: new WorldPosedSolid(Creation: creation, Origin: origin, Placement: placement, Rotation: rotation, Scale: (FixedQ4816.FromDouble(value: placement.Scale) * scale), ReflectionNormal: reflection).Transform, visitor: m_attachedVisitor);
     }
+    private FixedStaticCollider? PosedAttachedField(int row, FixedVector3 origin, FixedQuaternion rotation, FixedQ4816 scale) {
+        if ((m_attachedFields[row] is not { } field) || (scale <= FixedQ4816.Zero)) { return null; }
+        if (scale != FixedQ4816.One) {
+            if (m_scaledAttachedSizes[row] != scale) {
+                var scaled = new UniformScaledField(field.Field!.Field, field.Field.Bounds, scale);
 
-    private FixedStaticCollider? PosedAttachedField(int row, FixedVector3 origin, FixedQuaternion rotation) =>
-        (m_attachedFields[row] is { } field) ? field with {
-            Center = (origin + rotation.Rotate(field.Center)),
-            Rotation = rotation,
-        } : null;
+                m_scaledAttachedFields[row] = field with {
+                    Center = (field.Center * scale),
+                    Extent = (field.Extent * scale),
+                    Field = new FixedColliderField(scaled, FixedQ4816.Max(x: FixedQ4816.FromRawBits(value: 1), y: (field.Field.GradientStep * scale)), field.Field.Bounded) { Bounds = scaled },
+                };
+                m_scaledAttachedSizes[row] = scale;
+            }
+            field = m_scaledAttachedFields[row]!.Value;
+        }
+        return field with { Center = (origin + rotation.Rotate(vector: field.Center)), Rotation = rotation };
+    }
 }

@@ -52,9 +52,8 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    planes put off the surface, slivers beside a crease, a face narrower than
    a cell), which keep six blend exhibits and the Moth's shin groups red,
    then moving blends step 4.
-4. [high] [Collision versus drawn mesh](#collision-versus-drawn-mesh): a solid
-   creation that grows or shrinks, refused since the moving-root relief
-   change; contact that follows a simulated `sizeBy`, then the refusal goes.
+4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
+   seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
    the scheduling stage's and C0.3's windowed readings, the control plane's
    step C0.4, then the pool's design.
@@ -1457,22 +1456,6 @@ colliders and the field provider read one certified surface solve
 Owner: next geometry and bake lane · ordinary · Next: the groups sharp boxes
 left worse, then the valley sectors' buried colliders.
 
-- [high] A solid creation cannot grow or shrink: `WorldDefinitionValidator`
-  refuses a `solid` placement whose creation has `sizeBy` ("its driver scales
-  presentation only and cannot move a deterministic contact surface"), added
-  with the moving-root relief change. Before it, such a creation compiled and
-  its contact stayed at the unscaled size while the picture scaled, so the
-  refusal surfaced a silent mismatch by removing a capability: a rising
-  platform, a melting ice shelf a player stands on, an inflating balloon that
-  pushes a body. Fix at the cause: drive `sizeBy`'s phase from the simulation
-  (fixed-point, from the authority's tick and state, rule 4), scale the
-  contact field by the same factor (the relief change already scales a fixed
-  placement's amplitude, blend radii and contact bounds together), and give a
-  body standing on or pushed by a growing solid the step-up, snap and
-  depenetration a moving solid gets; then delete the refusal. Check: a scratch
-  world whose solid grows under a standing body and shrinks away from it,
-  with contact and drawn surface agreeing at sampled points per tick, and
-  `puck test --reproduce` bit-identical.
 - [medium] Sub-cell features draw badly where boxes touch or a thin layer sits
   inside a union. `puck mesh audit --cpu` reads these worse since boxes became
   sharp: `goTable` (its flush face prisms' seams), `hall-floor-2` and `-3` (a

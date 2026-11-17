@@ -384,6 +384,7 @@ public sealed record TextRunDocument(
     public const string ModeEngrave = "engrave";
     /// <summary>The relief a run without a <see cref="Depth"/> takes, in the creation's own units.</summary>
     public const float DefaultDepth = 0.02f;
+
     /// <summary>Gets the run's relief, the half depth its glyph slab straddles its surface by, in the creation's own
     /// units.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
@@ -392,7 +393,6 @@ public sealed record TextRunDocument(
     /// them from it.</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public bool Engraves => string.Equals(a: Mode, b: ModeEngrave, comparisonType: StringComparison.Ordinal);
-
     /// <summary>The number of glyph shapes this run expands to for the per-stamp shape budget — its non-whitespace
     /// Unicode scalar count, a conservative upper bound of the atlas's laid-out placements (which skip whitespace and
     /// unmapped code points). Counted in runes, matching the one-glyph-per-scalar expansion, so a supplementary-plane
@@ -591,8 +591,9 @@ public sealed record CreationBehaviorDocument(
 /// <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxVolumes"/> — see <see cref="VolumeDocument"/>. Each rides the
 /// creation root's or a named shape's dynamic slot; a static placement bakes its frame in. Presentation-only: no
 /// distance field, no collider.</param>
-/// <param name="SizeBy">Optional driver whose phase, clamped to [0, 1], uniformly scales the rendered creation about
-/// its origin. Its weight blends from the neutral size 1; zero hides it. Presentation only, never collider scale.</param>
+/// <param name="SizeBy">Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1],
+/// uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size
+/// contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,

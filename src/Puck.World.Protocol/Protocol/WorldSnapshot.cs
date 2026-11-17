@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Maths;
 using System.Numerics;
 using Puck.Physics.Motion;
 
@@ -128,6 +129,7 @@ public readonly record struct EntitySnapshot(
 /// reader (a HUD binding, a gait driver) must pass to evaluate a <c>StateAdvance</c> row's live value; never derived
 /// from <see cref="Tick"/> at a simulation rate.</param>
 /// <param name="Inputs">Authority-issued input epochs and continuation decisions, disclosed only to their owner.</param>
+/// <param name="SolidScales">The sizes contact sampled before this tick's body motion.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -140,8 +142,11 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<FieldCellDelta> FieldCells = default,
     bool FieldsFull = false,
     ulong EngineTick = 0UL,
-    ReadOnlyMemory<WorldInputPublication> Inputs = default
+    ReadOnlyMemory<WorldInputPublication> Inputs = default,
+    ReadOnlyMemory<WorldSolidScale> SolidScales = default
 );
+/// <summary>The uniform root-size fraction contact sampled for a solid placement this tick.</summary>
+public readonly record struct WorldSolidScale(string Placement, FixedQ4816 Scale);
 /// <summary>One lattice or typed document-cell write carried on a snapshot.</summary>
 /// <param name="Cell">The lattice cell index (z, then layer, then x), or declared document-cell ordinal.</param>
 /// <param name="Field">The field's index within its named region.</param>

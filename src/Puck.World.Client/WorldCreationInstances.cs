@@ -232,6 +232,9 @@ public sealed partial class WorldCreationInstances {
         // time and ungated/state-driven swings work there too.
         public bool DriverSeeded;
         public WorldGaitDrivers.Activity DriverActivity;
+
+        public float PackedSize = 1f;
+
         public WorldEntityAddress DriverAddress;
         public Vector3 DriverPosition;
 
@@ -344,6 +347,7 @@ public sealed partial class WorldCreationInstances {
 
         return layouts;
     }
+
     // A pooled shape's frame for ShapeEmission. Every slot holds the rigid delta its motion imparts to creation space
     // (PackTransforms), and the bake reads it at identity, so a chain starts under the slot that moves the shape (a
     // trim's reference under its own) and then takes the shape's rest pose, in creation units; the slot's pose carries
@@ -356,6 +360,7 @@ public sealed partial class WorldCreationInstances {
         public SdfProgramBuilder Relief(SdfProgramBuilder builder, ShapeDocument shape) => Prefix(builder: builder).Translate(offset: shape.Position).Rotate(rotation: shape.Rotation);
         public int MaterialOf(ShapeDocument shape, int paletteSlot) => paletteIds[(paletteSlot % paletteIds.Length)];
     }
+
     private Registration? FindBody(int bodyIndex) {
         if (!m_bodySlotsStale) {
             return (((((uint)bodyIndex) < ((uint)m_bodySlots.Length)) && (m_bodySlots[bodyIndex] is var slot and >= 0))

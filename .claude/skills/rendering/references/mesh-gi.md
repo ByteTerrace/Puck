@@ -585,6 +585,9 @@ done line; a nested residency's done line is insufficient.
   `DrainKey` changes (`DrainStands`) and records nothing drained; the next
   drain's first pass relights from no bounce, so the stopped one leaves nothing
   in its light (`AConvergedLightingFrameDrainsAcrossIterationsAndDiscardsAPassWhoseLightingChanged`).
+  A faulted scene build keeps the volume `Settling` and fails the next frame
+  that resolves a scene (`RefreshScene`), as a faulted worker or meter fails
+  `Stage`.
 - A record is `SdfMeshIrradianceProbe.ProbeWords` words: the key, sky shares,
   radiance cube, light bits, origin and sky-light cube before
   `SdfMeshIrradianceProbe.DepthWord`, then the packed first-hit surface words and
