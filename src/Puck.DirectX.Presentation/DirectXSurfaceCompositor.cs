@@ -246,14 +246,24 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
         SelectOutput();
         CreateRtvHeap(device: device);
         AcquireBackBuffers(device: device);
-        var encodePipeline = AcquireEncodePipeline(deviceContext: deviceContext);
+        AcquireEncodePipeline(deviceContext: deviceContext);
+        CreateCommandInfrastructure(device: device);
+    }
+    // Builds the encode's sets and each slot's draw command once its pipeline has built, which the pool builds on the
+    // thread pool: a present never waits for it, and until it lands there is nothing to encode with.
+    private bool EnsureEncode(DirectXDeviceContext deviceContext) {
+        if (m_encodeDrawCommands[0] is not null) {
+            return true;
+        }
+        if (m_encodeLease?.Poll() is not { } encodePipeline) {
+            return false;
+        }
+
         var encodeSets = AllocateEncodeSets(
             deviceContext: deviceContext,
             encodePipeline: encodePipeline
         );
         var heaps = deviceContext.DescriptorHeaps;
-
-        CreateCommandInfrastructure(device: device);
 
         // Each slot's encode draw command is invariant for the compositor's whole activation lifetime: every field it
         // reads is set once, above, and never reassigned. Building them once here (parity with the Vulkan compositor's
@@ -274,6 +284,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 ),
             ];
         }
+
+        return true;
     }
     /// <summary>
     /// Waits only for the ring slot this frame's <see cref="Present"/> is about to reuse (the pipelined replacement
@@ -327,10 +339,17 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     /// <summary>
     /// Encodes <paramref name="surface"/> fullscreen onto the current back buffer and presents. Handles
     /// GPU-resident surfaces (via a <see cref="DirectXImageViews"/> handle), imported shared textures, and CPU pixel
-    /// surfaces (uploaded through the device's <see cref="IGpuSurfaceUpload"/>). A no-op when the surface is empty.
+    /// surfaces (uploaded through the device's <see cref="IGpuSurfaceUpload"/>). A no-op when the surface is empty, and a
+    /// skipped present, the window keeping the image it shows, while the display encode's pipeline is still building.
     /// </summary>
     public void Blit(DirectXDeviceContext deviceContext, Surface surface) {
         if (surface.IsEmpty) {
+            return;
+        }
+        if (!EnsureEncode(deviceContext: deviceContext)) {
+            // Counted as presentation.skipped, which world.counters reads.
+            m_presentation.RecordSkip();
+
             return;
         }
 
@@ -899,8 +918,8 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
     }
     // Takes the display encode from the device's pass pipelines, for a render pass of one color attachment in the swap
     // chain's format; its vertex stage draws the fullscreen triangle from SV_VertexID, so the pipeline reads no vertex
-    // input. The pool builds it, and the compositor waits for it once, here.
-    private GpuPassPipeline AcquireEncodePipeline(DirectXDeviceContext deviceContext) {
+    // input. The pool builds it, and the first present after it lands takes it (EnsureEncode).
+    private void AcquireEncodePipeline(DirectXDeviceContext deviceContext) {
         m_encodeLease = m_pipelines.Acquire(
             device: deviceContext,
             key: SurfaceEncoder.Key(
@@ -913,8 +932,6 @@ public sealed unsafe class DirectXSurfaceCompositor : IDisposable {
                 )])
             )
         );
-
-        return m_encodeLease.Wait(cancellationToken: CancellationToken.None);
     }
     // Creates the encode group's pool as a range of the device's shader-visible heaps, admitted first like every other
     // owner's so a heap that cannot hold it refuses it by name, and allocates a set per ring slot, whose sampler and block

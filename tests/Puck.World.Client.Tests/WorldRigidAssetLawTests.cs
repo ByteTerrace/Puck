@@ -21,7 +21,7 @@ public sealed class WorldRigidAssetLawTests {
             client.DeliverSnapshot(snapshot: new WorldSnapshot(++tick, 1, 1,
                 new[] { new EntitySnapshot(0, new Vector3(x: x, y: 0, z: 0), Quaternion.Identity, Vector3.One, true, 0, 0, 0, continuity, generation) }, "a"));
             client.UpdateRenderPoses(alpha: 1);
-            var frame = frames.CaptureFrame(deltaSeconds: 0, height: 64, interpolationAlpha: 1, width: 64);
+            var frame = frames.CaptureFrame(deltaSeconds: 0, height: 64, interpolationAlpha: 1, width: 64)!;
 
             return (frame.Program, Assert.Single(collection: frame.MeshInstances));
         }
@@ -51,13 +51,13 @@ public sealed class WorldRigidAssetLawTests {
     public void SixHundredRigidBodiesShareOneBakeAndKeepTheirIdentityWithoutRebuildingTheProgram() {
         var emitter = new RigidEmitter();
         var source = new SdfCompositionFrameSource([emitter], new Dresser());
-        var first = source.CaptureFrame(deltaSeconds: 0, height: 720, interpolationAlpha: 0, width: 1280);
+        var first = source.CaptureFrame(deltaSeconds: 0, height: 720, interpolationAlpha: 0, width: 1280)!;
 
         Assert.Single(collection: first.Program.Instances);
         var materials = first.Program.MaterialCount;
 
         emitter.Count = 600;
-        var crowd = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280);
+        var crowd = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280)!;
 
         Assert.Same(first.Program, crowd.Program);
         Assert.Equal(1, source.ProgramBuilds);
@@ -90,13 +90,13 @@ public sealed class WorldRigidAssetLawTests {
             }
 
             emitter.Count = 1;
-            var departed = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280);
+            var departed = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280)!;
 
             Assert.Same(first.Program, departed.Program);
             Assert.Single(collection: dresser.Dress(frame: departed).MeshDraws);
             Assert.Equal(1, source.ProgramBuilds);
             emitter.Count = 0;
-            var empty = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280);
+            var empty = source.CaptureFrame(deltaSeconds: (1f / 60f), height: 720, interpolationAlpha: 0, width: 1280)!;
 
             Assert.Same(first.Program, empty.Program);
             Assert.Empty(collection: dresser.Dress(frame: empty).MeshDraws);

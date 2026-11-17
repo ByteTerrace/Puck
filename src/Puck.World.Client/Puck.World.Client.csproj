@@ -2,6 +2,7 @@
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Engine services</PuckLayer>
+        <PuckWaitRule>true</PuckWaitRule>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />

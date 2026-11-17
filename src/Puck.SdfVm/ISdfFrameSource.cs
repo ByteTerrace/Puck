@@ -10,13 +10,20 @@ public interface ISdfFrameSource {
     /// <summary>Drops any device-owned resources held outside the main engine. The next produced frame rebuilds them
     /// against the replacement device. Default no-op for CPU-only frame sources.</summary>
     void NotifyDeviceLost() { }
-    /// <summary>Captures the scene, cameras, and per-entity transforms for one rendered frame.</summary>
+    /// <summary>Captures the scene, cameras, and per-entity transforms for one rendered frame. It never waits for work
+    /// another thread does for the frame (a program or a field still building): it films nothing, or a frame that does not
+    /// yet show what its content calls for, and names that work in <see cref="Waiting"/>.</summary>
     /// <param name="width">The render width in pixels.</param>
     /// <param name="height">The render height in pixels.</param>
     /// <param name="deltaSeconds">The presentation frame delta in seconds (for time-based presentation smoothing).</param>
     /// <param name="interpolationAlpha">The fraction in <c>[0, 1)</c> between the previous and current fixed simulation tick, for interpolating presentation state toward the variable display rate; a static source may ignore it.</param>
-    /// <returns>The frame to render.</returns>
-    SdfFrame CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    /// <returns>The frame to render, or <see langword="null"/> when the source films nothing this frame, so the frame
+    /// it filmed last stands.</returns>
+    SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha);
+    /// <summary>Gets why the latest <see cref="CaptureFrame"/> filmed nothing, or a frame that does not yet show what its
+    /// content calls for, naming the work it waits on; <see langword="null"/>, the default, when the frame shows it. A
+    /// residency answers waiting with it and never holds such a frame for a still.</summary>
+    string? Waiting => null;
     /// <summary>Presents the frame the source captured last once more, in a produced frame whose residency renders a
     /// held frame (a converging capture's) in place of calling
     /// <see cref="CaptureFrame"/>: whatever the source does for each produced frame beyond composing it, such as placing

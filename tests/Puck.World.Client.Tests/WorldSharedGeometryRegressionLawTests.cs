@@ -141,7 +141,7 @@ public sealed class WorldSharedGeometryRegressionLawTests {
             Client.UpdateRenderPoses(1);
             m_session?.DeliverSnapshot(snapshot);
         }
-        public SdfFrame Frame() { m_local?.Tick((1f / 60)); return m_frames.CaptureFrame(64, 64, (1f / 60), 1); }
+        public SdfFrame Frame() { m_local?.Tick((1f / 60)); return m_frames.CaptureFrame(64, 64, (1f / 60), 1)!; }
     }
     private sealed class Dresser : ISdfFrameDresser {
         public SdfFrame Dress(SdfProgram program, DynamicTransform[] transforms, SdfMovedTransforms moved, IReadOnlyList<SdfMeshDraw> meshDraws, long meshDrawsRevision, uint width, uint height, float deltaSeconds, float interpolationAlpha) => new(Program: program, ProgramChanged: false, Time: 0, Views: []) { DynamicTransforms = transforms, MovedTransforms = moved };

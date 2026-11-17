@@ -383,17 +383,21 @@ each become one list entry rather than one hand-written program-build method.
 `SdfCompositionFrameSource` composes a fixed emitter list into one
 `ISdfFrameSource`, assigning each emitter a contiguous dynamic-transform slot
 range and rebuilding only on a revision change. With `BuildsInBackground`, as
-the World's presenter and routed scenes build, a rebuild after the first emits
-in the frame that finds the change and builds on the thread pool: the frames
-until the build finishes render the program held before it, with live
-transforms, mesh draws and dress, and the first frame after adopts it, so a
-portal crossing's two program rebuilds leave the crossing frame. The build also
-measures the words its program differs in from the one held (`SdfProgramDelta`),
-which the adopting frame carries so its upload copies only them, and the
-adopting frame repacks the transform table but owes only the rows the repack
-changed. A converging capture or tick-locked dresser waits for the build instead,
-so replacement geometry reaches exposure and lighting on the same tick in each
-run. Its table persists across
+the World's presenter and routed scenes build, every program emits in the frame
+that finds the change and builds on the thread pool, and no frame waits for a
+build: the frames until the build finishes render the program held before it,
+with live transforms, mesh draws and dress, and the first frame after adopts
+it, so a portal crossing's two program rebuilds leave the crossing frame. The
+build also measures the words its program differs in from the one held
+(`SdfProgramDelta`), which the adopting frame carries so its upload copies only
+them, and the adopting frame repacks the transform table but owes only the rows
+the repack changed. A frame with no program emitted under the current slot
+layout (the first, or one after an emitter's slot count moved) films nothing,
+and a converging capture or tick-locked dresser carries the held program while
+a build stands; both name the build in `Waiting`, which the residency answers
+waiting with (`SdfWorldResidency.SourceWaiting`), so a lockstep host holds its
+tick and replacement geometry reaches exposure and lighting on the same tick in
+each run. Its table persists across
 frames and `SdfMovedTransforms` records which ranges each frame's emitters
 repacked, so every residency's tables consuming the frame stage only what moved
 since they last uploaded.

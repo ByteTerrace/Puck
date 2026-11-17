@@ -15,7 +15,7 @@ public sealed class WorldComposedPickMapLawTests {
     public void CapturedMaterialNamesFollowTheSameComposedOwnerAsTheHit(uint identity, int owner) {
         var emitters = new NamedEmitter[] { new(name: "first"), new(name: "second") };
         var source = new SdfCompositionFrameSource(dresser: emitters[0], emitters: emitters);
-        var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32).PickMap!;
+        var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!.PickMap!;
         var selected = emitters[owner];
         var name = ((owner == 0) ? "first" : "second");
         var target = Assert.IsType<WorldPickTarget>(@object: captured.Resolve(identity: identity));
@@ -23,7 +23,7 @@ public sealed class WorldComposedPickMapLawTests {
         Assert.Equal(expected: name, actual: target.Prototype);
         Assert.Equal(expected: $"{name}.palette[0]", actual: captured.MaterialName(identity: identity, material: selected.Material));
         selected.Replace(name: "replacement");
-        var replacement = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32).PickMap!;
+        var replacement = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!.PickMap!;
 
         Assert.NotSame(actual: replacement, expected: captured);
         Assert.Equal(expected: $"{name}.palette[0]", actual: captured.MaterialName(identity: identity, material: selected.Material));
@@ -38,7 +38,7 @@ public sealed class WorldComposedPickMapLawTests {
         var bake = new SdfMeshPathBake { Residency = "pick" };
         using var dresser = new SdfMeshDresser(bake);
         try {
-            var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32);
+            var captured = source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!;
             var dressed = dresser.Dress(frame: captured);
             var meshDraw = SdfVisibility.IdentityOf(kind: SdfVisibilityKind.Mesh, source: 0);
 
@@ -48,7 +48,7 @@ public sealed class WorldComposedPickMapLawTests {
 
             emitters[0].Replace(name: "replacement");
 
-            var replaced = dresser.Dress(frame: source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32));
+            var replaced = dresser.Dress(frame: source.CaptureFrame(deltaSeconds: 0, height: 32, interpolationAlpha: 0, width: 32)!);
 
             Assert.NotSame(actual: replaced.PickMap, expected: dressed.PickMap);
             Assert.Equal(expected: "replacement", actual: Assert.IsType<WorldPickTarget>(@object: replaced.PickMap!.Resolve(identity: meshDraw)).Placement);

@@ -966,7 +966,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         var poll = ((Stopwatch.Frequency * WatchPollMilliseconds) / 1000);
 
         foreach (var (name, entry) in m_entries) {
-            if (entry.Capture is { Completion.IsCompleted: true } capture) {
+            if ((entry.Capture is { } capture) && capture.Completion.IsCompleted) {
                 var result = capture.Completion.GetAwaiter().GetResult();
 
                 entry.CompleteCapture(error: (result.Succeeded

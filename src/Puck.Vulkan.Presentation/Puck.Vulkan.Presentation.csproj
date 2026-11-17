@@ -2,6 +2,7 @@
     <PropertyGroup>
         <PuckKind>Production</PuckKind>
         <PuckLayer>Presentation</PuckLayer>
+        <PuckWaitRule>true</PuckWaitRule>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Assets/Puck.Assets.csproj" />

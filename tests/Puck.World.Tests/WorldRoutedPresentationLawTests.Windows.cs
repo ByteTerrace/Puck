@@ -230,7 +230,7 @@ public sealed partial class WorldRoutedPresentationLawTests {
             EngineTick = 50400UL,
             Tick = 2UL,
         });
-        var advanced = scene.FrameSource.CaptureFrame(deltaSeconds: 5f, height: 36U, interpolationAlpha: 1f, width: 64U);
+        var advanced = scene.FrameSource.CaptureFrame(deltaSeconds: 5f, height: 36U, interpolationAlpha: 1f, width: 64U)!;
 
         Assert.Equal(actual: advanced.Clock, expected: north.FollowState().Presented);
         Assert.Equal(actual: advanced.Clock.Whole, expected: 50400UL);

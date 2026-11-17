@@ -228,6 +228,30 @@ public static class HostWaits {
 
         return count;
     }
+    /// <summary>Returns the deadline waits standing now as one line of text, each as its reason, its thread, how long it
+    /// has blocked and its budget (<see cref="WaitRecord.Describe"/>), joined by semicolons: what <c>world.wait</c> names
+    /// when it releases before its condition holds. It allocates, so a caller reads it only to report.</summary>
+    /// <returns>The standing waits, or <see langword="null"/> when no thread stands in one.</returns>
+    public static string? DescribeStanding() {
+        var records = new WaitRecord[Math.Max(val1: 1, val2: Volatile.Read(location: ref Slots).Length)];
+        var count = Standing(destination: records);
+
+        if (count == 0) {
+            return null;
+        }
+
+        var now = Stopwatch.GetTimestamp();
+        var text = new System.Text.StringBuilder();
+
+        for (var index = 0; (index < count); index++) {
+            if (index > 0) {
+                _ = text.Append(value: "; ");
+            }
+            _ = text.Append(value: records[index].Describe(nowTimestamp: now));
+        }
+
+        return text.ToString();
+    }
     /// <summary>Copies the latest deadline waits that expired, newest first, into <paramref name="destination"/>.</summary>
     /// <param name="destination">The span to fill.</param>
     /// <returns>The number of records written, at most the span's length and at most sixteen.</returns>
