@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using System.Security.Cryptography;
+using Puck.Assets;
 using System.Text.Json;
 using Puck.World;
 using Puck.Commands;
@@ -71,9 +71,7 @@ public static class MotionRouteRun {
             .Where(predicate: path => ((Path.GetExtension(path: path).ToLowerInvariant() is ".dll" or ".spv" or ".dxil" or ".dxbc" or ".hlsl" or ".hlsli") ||
                 path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".runtimeconfig.json") || path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".deps.json")))
             .Order(comparer: StringComparer.Ordinal)) {
-            using var stream = File.OpenRead(path: file);
-
-            files[Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: artifactRoot)] = Convert.ToHexStringLower(inArray: SHA256.HashData(source: stream));
+            files[Puck.Abstractions.PuckPaths.Relative(path: file, relativeTo: artifactRoot)] = ContentPin.OfFile(path: file).Hex;
         }
         var hash = files[Path.GetFileName(path: artifact)];
         WorldProcess started;

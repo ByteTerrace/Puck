@@ -1,5 +1,5 @@
 using Puck.World;
-using System.Security.Cryptography;
+using Puck.Assets;
 using System.Text.Json;
 
 namespace Puck.Cli.Motion;
@@ -48,7 +48,7 @@ public static partial class MotionCommand {
                 File.WriteAllText(Path.Combine(path1: directory, path2: "record-failure.json"), JsonSerializer.Serialize(recorded));
                 return CliExit.Refuse(verb: Verb, what: "the canonical route recording", why: string.Join(separator: "; ", values: recorded.Problems));
             }
-            var tapeHash = Convert.ToHexStringLower(inArray: SHA256.HashData(source: File.ReadAllBytes(path: tape)));
+            var tapeHash = ContentPin.OfFile(path: tape).Hex;
 
             Console.Error.WriteLine(value: "motion: replay leg A in a fresh World.");
             var a = MotionRouteRun.Execute(plan, artifact, world, repository, Path.Combine(path1: directory, path2: "run-a"), backend, cache, Remaining(), tape, lease.Key, cancellationToken);
