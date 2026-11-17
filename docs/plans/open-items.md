@@ -2836,9 +2836,13 @@ runs.
   completes only as two attached runs. Find what the crossing holds twice, and
   stop the store's cap from evicting the live identity's meshes
   ([memory](#memory-on-the-deck-tier)).
-- [medium] `world.debug-view report colliders --json` throws
-  `DivideByZeroException` on the debug world, headless and windowed, so the
-  sweep's colliders signal is red on a refusal.
+- [low] A windowed `world.debug-view report colliders --json` on the debug
+  world has not been read since the report moved to a deferred worker: a
+  headless reading completes with no exception (463664 witnesses tested,
+  complete coverage), but the earlier `DivideByZeroException` was seen on a
+  windowed World, which adds the rendered-mesh comparisons. Read it once in a
+  windowed window; if it still throws, the answer's text carries no stack, so
+  catch it in `WorldDiagnostics` with the exception's `ToString()`.
 - [medium] The full windowed sweep records companion overlaps between bodies 0
   and 42 after a clean initial reading. Find which walking or pose transitions
   let the companion touch her and fix its separation
@@ -2848,11 +2852,6 @@ runs.
   (`sdf.mesh-gi.camera-traces` differs with World history), so a cross-build
   comparison cannot separate a change from lighting history. The paired tour
   on one attached World confirms whether the remainder is the probe cache's.
-- [medium] Baseline status comparisons can perpetuate a prior comparison
-  failure after its metrics match: `SweepBaseline.Changes` compares the
-  stored, comparison-adjusted status with the current intrinsic one, and
-  `SweepRun` makes each such change red again. Keep the intrinsic verdict
-  apart from comparison failures.
 - [medium] A windowed sweep's convergence is unproven under load: the case
   that once starved it (frames held for minutes, the attachment dropping) has
   not been retried beside a build or a test run.
@@ -3360,8 +3359,6 @@ reversal brake, then a sitting.
 - [low] `dashPose`, `airPose`, `airWings` and `bootBoost` are each one cell
   keyed `"0"`, so only body 0's dash drives the lean and flare. Key them per
   body together.
-- [low] `player.binding-bar model <value>` stores any text, and every value
-  but `single` stacks. Refuse an unknown model by name.
 - [low] A requested boom distance replaces the orbit op's distance outright
   (`SdfCameraProgram`'s `Evaluate`), and `WorldSeatViewState.AuthoredDistance`
   reads the first orbit op's literal, so a scalar-bound orbit distance stops

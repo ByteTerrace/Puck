@@ -67,9 +67,9 @@ let barRing = {
   label: "Bar"
   entries [
     { id: "barWings", command: "controls.bar", text: "wings single", sources: null }
-    { id: "barWingsFull", command: "controls.bar", text: "wings wings", sources: null }
+    { id: "barWingsFull", command: "controls.bar", text: "wings stacked", sources: null }
     { id: "barSidebars", command: "controls.bar", text: "sidebars single", sources: null }
-    { id: "barSidebarsFull", command: "controls.bar", text: "sidebars wings", sources: null }
+    { id: "barSidebarsFull", command: "controls.bar", text: "sidebars stacked", sources: null }
     { id: "barCompact", command: "controls.bar.compact", sources: null }
     { id: "barFull", command: "controls.bar.full", sources: null }
   ]
