@@ -12,6 +12,10 @@ namespace Puck.Abstractions.Gpu;
 /// <see cref="Wait"/> throw <see cref="GpuSubmissionAbandonedException"/>, and the wait that reports it drains the fence
 /// for reuse. A fence whose submission reached the queue but whose signal could not be proven is faulted, and rethrows
 /// that failure; so is a disposed fence whose device was lost. Single-threaded, like every pump-thread GPU object.
+/// <para>A completion signal (<see cref="SignalOnCompletion"/>) follows the same states: asked of a deferred fence it
+/// waits for the batch's hand-off, asked of an aliased one it is the owner's, and only an armed fence asks its backend
+/// (<see cref="SignalNative"/>). Every state that ends without a native signal (abandoned, faulted, already retired)
+/// sets the event itself, so a waiter is never left asleep on a submission that will not signal.</para>
 /// </summary>
 public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     private GpuSubmissionBatch? m_deferred;
@@ -22,6 +26,8 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     private bool m_armed;
     private bool m_disposed;
     private ExceptionDispatchInfo? m_failure;
+    // The completion signal asked for while the submission was still deferred, owed to the backend once it is armed.
+    private EventWaitHandle? m_owedSignal;
 
     /// <inheritdoc/>
     /// <remarks>A submission still deferred in an open batch is not signaled.</remarks>
@@ -82,6 +88,23 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_generation++;
     }
     /// <inheritdoc/>
+    /// <remarks>A fence deferred in an open batch keeps the signal until the batch's hand-off arms it or answers it from
+    /// the batch's owner.</remarks>
+    public void SignalOnCompletion(EventWaitHandle signal) {
+        ArgumentNullException.ThrowIfNull(signal);
+        if ((m_failure is not null) || m_abandoned || m_disposed) {
+            _ = signal.Set();
+        } else if (m_deferred is not null) {
+            m_owedSignal = signal;
+        } else if (m_alias is { } alias) {
+            if (alias.m_generation != m_aliasGeneration) { _ = signal.Set(); } else { alias.SignalOnCompletion(signal: signal); }
+        } else if (!m_armed) {
+            _ = signal.Set();
+        } else {
+            SignalNative(signal: signal);
+        }
+    }
+    /// <inheritdoc/>
     public void Dispose() {
         if (m_disposed) { return; }
         try {
@@ -97,6 +120,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_alias = null;
         m_armed = false;
         m_disposed = true;
+        SettleOwedSignal();
         DisposeNative();
         GC.SuppressFinalize(obj: this);
     }
@@ -115,6 +139,10 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         RequireArmable();
         m_deferred = null;
         m_armed = true;
+        if (m_owedSignal is { } signal) {
+            m_owedSignal = null;
+            SignalNative(signal: signal);
+        }
     }
     /// <summary>Queues the signal of a submission whose entries are already on the queue, and arms the fence only once
     /// the signal call returned. A refused signal cannot leave the fence reading drained over work that runs: the queue
@@ -145,6 +173,7 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
                 m_deferred = null;
                 m_failure = ExceptionDispatchInfo.Capture(source: drainFailure);
             }
+            SettleOwedSignal();
 
             throw;
         }
@@ -160,6 +189,11 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
     protected abstract void DrainNative();
     /// <summary>Releases the native fence.</summary>
     protected abstract void DisposeNative();
+    /// <summary>Asks the backend to set <paramref name="signal"/> once the native fence reaches the value its armed
+    /// submission signals, or at once when it already has. Called only while the fence is armed, on the thread that
+    /// submits; it must not block. A backend that cannot register sets the signal instead, so the waiter polls.</summary>
+    /// <param name="signal">The event to set.</param>
+    protected abstract void SignalNative(EventWaitHandle signal);
 
     // Drains an abandoned fence, so it can be armed again, and reports the abandonment to the caller that waited.
     [System.Diagnostics.CodeAnalysis.DoesNotReturn]
@@ -188,6 +222,18 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         m_deferred = null;
         m_alias = owner;
         m_aliasGeneration = owner.m_generation;
+        if (m_owedSignal is { } signal) {
+            m_owedSignal = null;
+            owner.SignalOnCompletion(signal: signal);
+        }
+    }
+    // Sets a signal owed to a submission that will now never ask its backend: abandoned, faulted, run by a drain, or
+    // disposed. Whoever wakes reads the fence and finds which.
+    private void SettleOwedSignal() {
+        if (m_owedSignal is { } signal) {
+            m_owedSignal = null;
+            _ = signal.Set();
+        }
     }
     /// <summary>Marks a submission that never reached the queue as abandoned: a batch's hand-off, or the backend's own
     /// submit, failed before anything was put on the queue. Every later <see cref="IsSignaled"/> reports it, and the next
@@ -198,5 +244,6 @@ public abstract class GpuBatchedSubmissionFence : IGpuSubmissionFence {
         RequireArmable();
         m_deferred = null;
         m_abandoned = true;
+        SettleOwedSignal();
     }
 }

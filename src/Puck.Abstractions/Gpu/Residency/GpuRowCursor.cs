@@ -10,6 +10,8 @@ public sealed class GpuRowChanges {
     /// <summary>Gets the journal's retained array payload for memory attribution.</summary>
     public long StorageBytes => m_owner.StorageBytes;
 
+    internal bool StableRows => m_owner.StableRows;
+
     internal bool Collect(long since, long through, int rows, GpuUploadRuns into, GpuUploadRuns? reseated) =>
         m_owner.TryCollect(into: into, reseated: reseated, rows: rows, since: since, through: through);
 }
@@ -42,7 +44,7 @@ public sealed class GpuRowCursor {
         into.Clear();
         m_pending = new(Reader: reader, Revision: revision, Rows: rows, Serial: through, Table: table);
         var whole = (force || (m_committed is not { } last) || !ReferenceEquals(objA: last.Reader, objB: reader) ||
-            !ReferenceEquals(objA: last.Table, objB: table) || (last.Rows != rows) ||
+            !ReferenceEquals(objA: last.Table, objB: table) || ((last.Rows != rows) && (reader?.StableRows != true)) ||
             ((reader is null) ? (last.Revision != revision) :
                 (((last.Revision != revision) && (through <= last.Serial)) || !reader.Collect(last.Serial, through, rows, into, reseated))));
 

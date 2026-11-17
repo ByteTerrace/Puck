@@ -7,7 +7,7 @@ using Puck.SignedDistance.Illumination;
 namespace Puck.SdfVm;
 
 // Each slot owns one readback buffer per demand: a pick's copies the record's first four words, an inspector's its first six. Every record
-// of the render extent is the frame's own, so the answer needs no currency check. A copy is read only once the node proves
+// of the render extent is stamped with the mesh target's row epoch. A copy is read only once the node proves
 // its slot complete (RenderGraphSlotResults), which precedes the next copy into that slot's buffers; changing demand never
 // replaces an in-flight buffer.
 internal sealed class SdfWorldPickReadback : IDisposable {
@@ -39,7 +39,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         picker.Attach(readback: this);
     }
 
-    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, SdfReprojectionView sample, long cut) {
+    public void Prepare(int slot, uint width, uint height, SdfFrame frame, string visibility, SdfReprojectionView sample, long cut, SdfMeshRowStamp rowStamp) {
         var target = m_slots[slot];
 
         if (target.Prepared) {
@@ -47,7 +47,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             target.Prepared = false;
             m_picker.Complete(readback: this, result: null);
         }
-        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, sample: sample, width: width)) {
+        if (!m_picker.Take(cut: cut, frame: frame, height: height, readback: this, request: out var request, rowStamp: rowStamp, sample: sample, width: width)) {
             return;
         }
         if (request.Sample is not null) {
@@ -61,6 +61,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         target.Visibility = visibility;
         target.Prepared = true;
     }
+
     public ulong ReadbackBytes => m_slots.Aggregate(0UL, static (bytes, slot) => checked(((bytes
         + (slot.IdentityBuffer?.SizeBytes ?? 0UL)) + (slot.SurfaceBuffer?.SizeBytes ?? 0UL))));
 
@@ -75,7 +76,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         var request = target.Request;
 
         target.Prepared = false;
-        m_copies.Record(slot: slot, result: target);
+        m_copies.Record(result: target, slot: slot);
         readback = new RenderGraphBufferReadback(Version: target.Visibility!,
             SourceOffsetBytes: (((((ulong)request.Y) * request.Width) + request.X) * SdfWorldPackage.VisibilityRecordByteLength),
             SizeBytes: ((ulong)target.RecordBytes), Destination: target.Buffer!);
@@ -113,7 +114,6 @@ internal sealed class SdfWorldPickReadback : IDisposable {
             Normal = new Vector3(x: ((float)normal.Item1), y: ((float)normal.Item2), z: ((float)normal.Item3)),
         };
     }
-
     // The visibility record's normal word (SdfVisibility.NormalBits): two signed-normalized octahedral
     // coordinates unpacked and decoded through SdfOctahedral, the C# statement of the kernels' sdfOctDecode. The reserved
     // pair (SdfVisibility.ZeroNormal) means no normal and decodes as zero.

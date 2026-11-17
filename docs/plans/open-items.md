@@ -48,8 +48,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    window, steps 1, 2 and 3's windowed readings, and step 7's readings (the
    prototype is built: the capability read on this machine and the indexed
    read's paired cost window on both backends,
-   [the measurement](streaming-and-memory.md#the-prototype-as-built)); then
-   what step 3 left, background work serviced off the frame pump.
+   [the measurement](streaming-and-memory.md#the-prototype-as-built)), and
+   step 3's servicing readings (the slow present and the quiet cold bake,
+   [step 3's check](streaming-and-memory.md#step-3-one-reservation)).
 3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -140,6 +141,10 @@ head, each named by the lane whose landing waits on it:
 - sm7p: the indexed slab read's paired cost on Vulkan with the counted draws
   held equal (Direct3D 12 is read; see
   [the prototype as built](streaming-and-memory.md#the-prototype-as-built)).
+- sm3r: the slow-present reading (`world.target 10`, then 5, then 20, from a
+  cold store, both backends) and the quiet cold bake, as
+  [step 3's check](streaming-and-memory.md#step-3-one-reservation) states
+  what each should show.
 - The collection pauses behind the slow frames (Engine job system): a
   `dotnet-trace --profile gc-verbose` attribution on the windowed debug world.
 
@@ -532,21 +537,16 @@ carries the tick.
 
 What an arrival and a hand-over still cost the frame:
 
-- [high] A hand-over's own frame: a replacement that changes a group's piece
-  or copy count, and a group's first mesh, rebuild the dresser's whole draw
-  list (`SdfMeshDresser.BuildDrawTopology`) and stage every row
-  (`SdfWorldTables.StageMeshRegionCore`) on the frame thread in one frame; a
-  body straddling a portal journals every row each frame.
-  [Arrival work proportional to change](arrival-proportional.md) holds the
-  design: R1a's producer-index staging, absent records, shared cursors and independent
-  comparisons are built and its 28 focused laws pass; its cold boot's captures,
-  forcing counts on both backends and owed-frame timing remain the lead's
-  [verification request](arrival-proportional.md#r1a-as-built), beside R1h's windowed
-  hit-door check. The remaining implementation steps are R1b, R1c and S2;
-  R2 stays with the visibility plan's V1b. R0's rule has read them.
-  No capture has yet shown a hand-over frame by frame;
-  read `SdfMeshHistory.DressTopologyBuilds` before and after a burst and keep
-  only a burst it moved across.
+- [high] The arrival row implementation owes windowed verification and the
+  lifetime fix pass: the tour and meadow cross-check on both backends, a
+  presented burst retaining its group across a hand-over, delayed picks through
+  a hand-over and the gallery portal, and two Worlds' canonical lockstep stills.
+  [The exact R1b request](arrival-proportional.md#windowed-r1b-verification-request)
+  names the commands, forcing counts and what decides each. R1a and R1h retain
+  their outstanding windowed requests there too. Count-changing arrivals keep
+  unrelated owner runs; only a start over rebuilds them. Indexed clipping (R1c)
+  still replaces the conservative portal visit, and clustered trace scenes (S2)
+  remain next; R2 stays with the visibility plan's V1b.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
   produce and simulate both inflated as if the frame thread were starved,
   which steady readings do not show. A stop's window can also still hold part
@@ -688,9 +688,6 @@ The frame's GPU side:
 - [medium] Confirm whether the bench's default `world.indirect medium` is the
   bar's highest quality; if not, every frame reading sits below the bar's
   setting.
-- [low · unmeasured] `SdfMeshPathBake.IrradiancePending` walks every group
-  once a frame per residency after the bake settles; give it the done-through
-  cursor `Pending` uses.
 
 Stalls and hitches to attribute:
 
@@ -771,9 +768,11 @@ says how one is reproduced and profiled.
   - `CrossingEdges`' per-edge hash set, and `Refine`'s `Thickens` and slot
     numbering. The crossed-cell masks already flow from `CrossingEdges` to
     `ExtractRefined`; add no second topology scan there;
-  - admission: a third to a half of the bake's takes find no lattice to
-    dispatch while hundreds of groups wait (`SdfMeshPathBake.Backlogged`) or
-    on the memory account;
+  - admission: a third to a half of the bake's takes found no lattice to
+    dispatch while hundreds of groups waited on the pool's backlog or on the
+    memory account. The backlog is now wall time (`SdfMeshBakeBacklog`); read
+    the done line's `idle` and `per-take` again, and what is left is the
+    memory account's;
   - the frame thread's `SdfWorldResidency.Capture` and the per-view recording
     while hundreds of views stand.
 - [high] A cold bake's private memory climbs far past the Deck tier's 10 GB in
@@ -993,11 +992,23 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
-- [high] Step 3 admits every device allocation and left background GPU work
-  taken only at frame pumps: servicing it during the host's present wait or on
-  a queue of its own, the bake's backlog admission as a rate of wall time, jobs
-  that lease the generations they read and reserve what they hold. The plan's
-  step 3 names the measurement that chooses between the two.
+- [medium] Background GPU work is serviced inside the host's timer wait and
+  not inside the swap chain's own (`ISwapChainPacing.TryWaitForFrame`) or a
+  present that blocks in the driver, so a Direct3D 12 host the swap chain
+  paces at two to four refreshes a present steps it at its pumps alone, and
+  the serialized lighting takes a job a frame there (Vulkan paces those
+  targets by the timer, which is serviced). The control plane's C0.6 puts the
+  Direct3D 12 frame latency waitable on the door. Step 3's slow-present
+  reading at `world.target 20` says how much is lost.
+- [medium] The lighting's device memory (the trace scene's region, the
+  feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
+  fixed storage with no reservation; only a job's slot buffers reserve
+  (`SdfGpuWorkHold`).
+- [low · inferred, not run on a device] The Vulkan fence watcher
+  (`VulkanFenceWatch`) waits fences in submission order on one thread, so a
+  completion is signaled only after every earlier watched submission's. One
+  queue retires in order, so that holds today; a second queue needs a wait on
+  any of several fences.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -1069,11 +1080,6 @@ Lifecycle lows, each argued from source and not run:
   `m_traceOwed` left set), so with an unplaced mesh every query is cancelled
   in turn and the scene cannot rebuild while the bake is pending. Count the
   timeout as stale-scene evidence.
-- [low · plausible] A timestamp pair with end before start poisons the
-  GPU-time credit: `SdfGpuWork.Settle` masks the wrapped difference and the
-  credit falls to about -1e10, which `Accrue` caps only from above, holding
-  all bake and probe GPU work for good. Clamp each charge, floor the credit
-  and count the clamps.
 - [low] `SdfMeshStore`'s documentation says a set a World is baking or loading
   is never cut short by another's write, but a write protects only its own
   set: two 4 GiB sets against the 8 GiB cap can evict a peer's live set.
@@ -3654,3 +3660,4 @@ reviews it and says so (the owner's ruling).
   automating their gameplay with Puck, identifying the game from a catalog
   and judging through the addon system's observation grants. The catalog is
   external data outside simulation state, and the addon is opt-in.
+

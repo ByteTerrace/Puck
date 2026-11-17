@@ -16,6 +16,7 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the ring slot the latest upload wrote, whose region buffers the frame's passes bind, or -1 before the
     /// first upload.</summary>
     public int CurrentSlot => m_currentSlot;
+    internal IGpuQueueSubmitter BackgroundQueue => m_gpu.QueueSubmitter;
 
     /// <summary>Submits the frame's upload: waits the previous upload, flushes and copies what every region owes into
     /// the next ring slot, then submits it fenced. Nothing
@@ -38,6 +39,8 @@ public sealed partial class SdfWorldTables {
             m_frameFences[((int)((m_uploads - 1UL) % FrameRingSize))].Wait();
             m_completedUploads = m_uploads;
         }
+        // The flush below rewrites the slot's buffers, which a background job that leased the slot may still read.
+        m_gpuWork.EndLeases(ringSlot: slot);
 
         var previousSlot = m_currentSlot;
 
@@ -97,7 +100,9 @@ public sealed partial class SdfWorldTables {
         }
     }
     // A background client's buffer can be a source of the frame upload. Use the same retirement door as tables.
-    internal void RetireBackgroundResource(IDisposable replaced) => m_retired.Hold(item: replaced,
+    /// <summary>Retains a replaced background resource through pending copies and the device timeline.</summary>
+    /// <param name="replaced">The object to dispose after its last submitted use.</param>
+    public void RetireBackgroundResource(IDisposable replaced) => m_retired.Hold(item: replaced,
         pendingUse: () => ReferenceEquals(m_meshIrradianceSource, replaced) && m_meshIrradianceSlots.Count > 0);
     // Device teardown after drain/loss releases even unsubmitted carries.
     private void DisposeRetired(ulong completed) => m_retired.Release(completed: completed, release: static replaced => replaced.Dispose());

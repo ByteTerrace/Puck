@@ -50,6 +50,10 @@ public sealed class SdfResidencySelector {
     /// region's growth is. On unified memory it lies in the pool the regions do, where it is fixed storage: admitted,
     /// counted, and past a full pool's limit counted as that.</summary>
     public const string RegionStagingOwner = "sdf.mesh-region-staging";
+    /// <summary>The owner a background GPU job's buffers are created under (<see cref="SdfGpuWork"/>'s slots: points,
+    /// samples, hits, readbacks): workspace, reserved before it is allocated and refused when its pool has no room,
+    /// apart from the one job a service cannot progress without.</summary>
+    public const string WorkOwner = "sdf.gpu-work";
 
     private static readonly ConditionalWeakTable<IGpuDeviceContext, SdfResidencySelector> Selectors = [];
     // How long a residency's report counts toward the bias after it was made; a residency no frame prepares stops
@@ -104,6 +108,14 @@ public sealed class SdfResidencySelector {
             pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: device.MemoryProfile.UnifiedMemory)
         ));
     }
+    /// <summary>Returns a reservation for what one background GPU service's jobs hold on the device: workspace under
+    /// <see cref="WorkOwner"/>, in the pool the mesh regions lie in for its device-local buffers and in the host's for
+    /// its host-visible ones.</summary>
+    /// <returns>The reservation, holding nothing; disposing it releases it.</returns>
+    public SdfGpuWorkHold ReserveWork() => new(
+        device: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: Pool),
+        host: m_account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: WorkOwner, pool: PhysicalMemory.Host)
+    );
     /// <summary>Registers a residency: its grant, which reserves its mesh region and budgets its detail.</summary>
     /// <param name="name">The residency's name, for the selector's line.</param>
     /// <returns>The grant; disposing it releases its reservation and takes it out of the sum.</returns>

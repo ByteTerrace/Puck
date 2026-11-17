@@ -78,6 +78,8 @@ public sealed class SdfMeshHistory {
     /// copies changed, of the host's list when its count changed, and each host row or instance mesh that names another
     /// mesh. It is what a table whose owners keep their rows would write for the frame.</summary>
     public static WorkKind RowsOwnedChanged { get; } = Registry.Declare(name: "sdf.instances.rows.owned.changed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Counts live rows yielded by the table's whole-table enumeration.</summary>
+    public static WorkKind RowsWalkedWhole { get; } = Registry.Declare(name: "sdf.instances.rows.walked-whole", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Counts the passes that resolve hits from a target recorded under another revision of the draw records
     /// than the tables now hold (<see cref="SdfWorldTables.MeshRevision"/>): a surface pass reading a mesh target, a
     /// views or resolve pass reading visibility records, a glass shading pass reading a glass target. Zero on a correct
@@ -159,7 +161,7 @@ public sealed class SdfMeshHistory {
         return kinds;
     }
     private static WorkKind[] DeclareTopologyReasons() {
-        string[] names = ["retry", "host-draws", "copy-layout", "group-new", "group-reshaped", "group-count"];
+        string[] names = ["retry", "free-share", "locked", "forced"];
         var kinds = new WorkKind[names.Length];
 
         for (var reason = 0; (reason < kinds.Length); reason++) {
@@ -170,6 +172,8 @@ public sealed class SdfMeshHistory {
     }
 
     private struct Cell {
+        public ulong Occupancy;
+        public object? Table;
         public object? Key;
         public SdfMesh? Mesh;
         public uint Generation;
@@ -197,6 +201,7 @@ public sealed class SdfMeshHistory {
         if ((index >= m_cells.Length) || (m_cells[index].Key is null)) { return; }
         m_cells[index].Key = null;
         m_cells[index].Mesh = null;
+        m_cells[index].Table = null;
         ProcessWork.Count(kind: Retired);
     }
     /// <summary>Observes a surface at its staged index. Ordinary matrix motion retains its generation; changes to
@@ -206,17 +211,19 @@ public sealed class SdfMeshHistory {
     /// <param name="draw">The surface, with a stable motion key or a stable picking identity.</param>
     /// <param name="reseat">Whether a root or used skin-member transform starts a new history interpretation, even
     /// when the surface's packed pose and metadata are unchanged.</param>
+    /// <param name="occupancy">The row allocation's incarnation, zero for an undressed host list.</param>
+    /// <param name="table">The producer table owning the occupancy sequence.</param>
     /// <returns>The generation to write into that exact record and its matrix seed decision.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The index is outside the draw representation.</exception>
     /// <exception cref="ArgumentException">The draw names no identity.</exception>
     /// <exception cref="InvalidOperationException">This cell exhausted its uint generation lifetime.</exception>
-    public SdfMeshObservation Observe(int index, in SdfMeshDraw draw, bool reseat = false) {
+    public SdfMeshObservation Observe(int index, in SdfMeshDraw draw, bool reseat = false, ulong occupancy = 0, object? table = null) {
         if ((index < 0) || (index >= SdfMeshRegion.MaxDraws)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
         var key = ((draw.MotionIdentity ?? draw.Identity) ?? throw new ArgumentException(message: "A mesh draw needs a stable surface identity.", paramName: nameof(draw)));
 
         if (index >= m_cells.Length) { Array.Resize(array: ref m_cells, newSize: Math.Max(val1: (index + 1), val2: Math.Max(val1: 4, val2: (2 * m_cells.Length)))); }
         ref var cell = ref m_cells[index];
-        var seed = (reseat || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
+        var seed = (reseat || !ReferenceEquals(objA: cell.Table, objB: table) || (cell.Occupancy != occupancy) || !Equals(objA: cell.Key, objB: key) || !ReferenceEquals(objA: cell.Mesh, objB: draw.Mesh) ||
             (cell.FrameSlot != draw.FrameSlot) || (cell.UsesRootMaterialFrame != draw.UsesRootMaterialFrame) || (cell.Dynamic != draw.IsDynamic) || (cell.Glass != draw.Glass) ||
             (cell.Clip != draw.ClipPlane) || (cell.CarryRotation != draw.CarryRotation) ||
             (cell.CarryTranslation != draw.CarryTranslation) || (cell.CarryScale != draw.CarryScale));
@@ -224,6 +231,8 @@ public sealed class SdfMeshHistory {
         if (seed) {
             if (cell.Generation == uint.MaxValue) { throw new InvalidOperationException(message: "A staged mesh cell exhausted its generation lifetime; its GPU history cannot safely reuse a token."); }
             cell.Generation++;
+            cell.Occupancy = occupancy;
+            cell.Table = table;
             cell.Key = key;
             cell.Mesh = draw.Mesh;
             cell.FrameSlot = draw.FrameSlot;
@@ -254,6 +263,7 @@ public sealed class SdfMeshHistory {
             if (cell.Key is null) { continue; }
             cell.Key = null;
             cell.Mesh = null;
+            cell.Table = null;
             retired++;
         }
         m_activeCount = count;

@@ -491,12 +491,21 @@ internal sealed class FakeGpuDevice :
 
         return LastCreatedFence;
     }
-    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline;
-    private readonly ImmediateTimeline m_timeline = new();
-    private sealed class ImmediateTimeline : GpuQueueTimeline {
+    GpuQueueTimeline IGpuQueueSubmitter.Timeline => m_timeline ??= new SubmissionTimeline(this);
+    private SubmissionTimeline? m_timeline;
+    private sealed class SubmissionTimeline(FakeGpuDevice gpu) : GpuQueueTimeline {
+        private readonly Queue<(ulong Value, long Order)> m_pending = new();
         private ulong m_completed;
-        protected override void Signal(ulong value) => m_completed = value;
-        protected override ulong ReadCompleted() => m_completed;
+        protected override void Signal(ulong value) => m_pending.Enqueue((value, gpu.m_armed));
+        protected override ulong ReadCompleted() {
+            while (m_pending.TryPeek(out var point)) {
+                foreach (var fence in gpu.SubmittedFences) {
+                    if (fence.Order <= point.Order && !fence.Abandoned && !fence.IsSignaled) { return m_completed; }
+                }
+                m_completed = m_pending.Dequeue().Value;
+            }
+            return m_completed;
+        }
         protected override void DisposeNative() { }
     }
     void IGpuQueueSubmitter.Submit(ReadOnlySpan<nint> commandBufferHandles) {
@@ -770,24 +779,47 @@ internal sealed class FakeGpuDevice :
 
     /// <summary>A submission fence. It reads signaled once submitted unless the device holds fences; a held fence reads
     /// signaled when nothing is armed, the test has completed it, or a wait has completed a submission made after it, as
-    /// the backends' fences on one queue do.</summary>
+    /// the backends' fences on one queue do. A pinned fence does not read signaled for a later wait: a submission whose
+    /// completion no later submission implies, as one on another queue would be.</summary>
     public sealed class Fence(FakeGpuDevice gpu, Creation? creation = null) : IGpuSubmissionFence {
         private long m_order;
+        internal long Order => m_order;
+        private bool m_completed;
+        private EventWaitHandle? m_signal;
 
         /// <summary>Gets whether a submission is outstanding on the fence.</summary>
         public bool Armed { get; private set; }
-        /// <summary>Gets or sets whether a held fence's outstanding submission has completed.</summary>
-        public bool Completed { get; set; }
+        /// <summary>Gets or sets whether a held fence's outstanding submission has completed. Completing it sets the
+        /// signal its submission asked for.</summary>
+        public bool Completed {
+            get => m_completed;
+            set {
+                m_completed = value;
+                if (value) { _ = m_signal?.Set(); }
+            }
+        }
         /// <summary>Gets or sets whether the fence's submission never reached the queue.</summary>
         public bool Abandoned { get; set; }
+        /// <summary>Gets or sets whether only the test's completion, or a wait on this fence, signals it.</summary>
+        public bool Pinned { get; set; }
+        /// <summary>Gets the signal the outstanding submission asked to be set on its completion, or null.</summary>
+        public EventWaitHandle? CompletionSignal => m_signal;
         public bool IsSignaled {
             get {
                 gpu.Hit(key: "IGpuSubmissionFence.IsSignaled");
 
                 if (Abandoned) { throw new GpuSubmissionAbandonedException(); }
 
-                return (!gpu.m_holdFences || !Armed || Completed || (m_order <= gpu.m_waitedThrough));
+                return Retired;
             }
+        }
+
+        private bool Retired => (!gpu.m_holdFences || !Armed || Completed || (!Pinned && (m_order <= gpu.m_waitedThrough)));
+
+        public void SignalOnCompletion(EventWaitHandle signal) {
+            gpu.Hit(key: "IGpuSubmissionFence.SignalOnCompletion");
+            m_signal = signal;
+            if (Abandoned || Retired) { _ = signal.Set(); }
         }
 
         public void Dispose() {
@@ -807,7 +839,8 @@ internal sealed class FakeGpuDevice :
             }
 
             Armed = false;
-            Completed = false;
+            m_completed = false;
+            m_signal = null;
         }
 
         internal void Arm() {
@@ -819,7 +852,8 @@ internal sealed class FakeGpuDevice :
             }
 
             Armed = true;
-            Completed = false;
+            m_completed = false;
+            m_signal = null;
             m_order = ++gpu.m_armed;
         }
     }

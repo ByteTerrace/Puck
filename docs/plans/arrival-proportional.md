@@ -63,126 +63,57 @@ steps and run beside them.
 
 ## What exists
 
-This inventory records the design's pre-R1a reading. R1a has replaced the landing
-filter and the hand-written journal consumers; [its built state](#r1a-as-built)
-names the current doors and evidence. The row table and its writer remain R1b.
+The row and consumer doors are current; the remaining whole-scene trace cost
+and store path are inventoried below. [R1b as built](#r1b-as-built) records
+the enforcing structures and [its request](#windowed-r1b-verification-request)
+holds the windowed observations still owed.
 
-### The draw list and its staging
+### The draw rows and their staging
 
-`SdfMeshDresser.Dress` returns the frame with a dense list **[opened]**: the
-host's own draws, then each finished bake group's draws in the bake's group
-order (each copy's pieces, or the group's pieces in place), then each instance
-that carries its own mesh, then the carried copies `SdfSlotClip.Apply` appends
-for a body straddling a portal. A draw's place in that list is its row
-everywhere below.
+`SdfMeshDresser.Dress` keeps a run for each owner instead of rebuilding a dense
+list when a group's count changes. The host's list, each bake group, each
+own-mesh occurrence and the portal copies have separate runs. A reshaped owner
+allocates its replacement run and frees the old run by ticket; other runs stand.
+The table carries staged draws, owner provenance, occupancy and a reader-only
+journal. The frame retains the host's input list separately.
 
-The dresser keeps the list across frames and rebuilds it whole
-(`SdfMeshDresser.BuildDrawTopology`) when any of these holds **[opened]**: the
-last publication did not complete; the host's draw count changed; the bake's
-copy layout revision moved; a group finished that the last dressing did not
-hold; a group's mesh was replaced by one with another piece count or another
-copy count; or the count of finished groups changed. A replacement that keeps
-both counts takes the other path (`SdfMeshDresser.Replace`), which rewrites that
-group's run in place and names only its rows in the draw journal
-(`SdfFrame.MeshDrawChanges`, a `GpuChangedRows`).
-
-A rebuild journals "everything". `SdfWorldTables.TryStageDrawChanges` then
-refuses the journal, and `SdfWorldTables.StageMeshRegionCore` plans the arena
-over the whole list (`SdfMeshRegionArena.Plan`, counted by
-`SdfMeshHistory.StagingPlanRecords`), walks the claims of every draw
-(`SdfMeshClaims.Update`), and, where the count changed, packs every record
-(`SdfWorldTables.StageMeshMotion`) **[opened]**. A record is
-`SdfMeshRecord.DrawWords` words, so the upload carries the whole record
-reserve. The frame-bar lane counted the meadow's whole list planned again on
-each rebuild of an arrival window **[reading]**.
-
-Two more paths restage the list whole, and neither is counted by
-`SdfMeshHistory.DressTopologyBuilds` **[opened]**:
-
-- **A draw waiting for its mesh is filtered out of the staged list**
-  (`SdfWorldTables.StageMeshRegionCore`, the landing filter), so staged rows
-  are compacted and differ from the producer's rows. Every landing while any
-  draw waits changes the filtered count and packs every staged record again,
-  and `SdfWorldTables.TryStageDrawChanges` refuses the journal for as long as
-  any mesh is owed. A replacement lands ahead of the draws and never filters;
-  a group's first mesh does.
-- **A body straddling a portal** makes every frame journal "everything"
-  (the dresser's portal path), so each such frame plans and compares the whole
-  list ([frame rendering](../rendering/sdf/handbook/frame-rendering.md#what-a-frame-uploads)
-  says so: "Active or removed portal clipping currently publishes full draw
-  changes").
-
-The portal path is also what keeps clipping right today **[opened]**.
-`SdfSlotClip.Apply` clips every row whose `SdfMeshDraw.FrameSlot` lies in a
-clip's slot run, whoever owns the row: a group drawn in place, a host draw that
-carries a slot, and a rigid copy's draws, which take the copy's slot and whose
-clip `SdfCompositionFrameSource.ComposeSlotClips` adds for that slot. The
-dresser's reverse index (`SdfMeshDresser.IndexBindings`) lists by slot only the
-bindings drawn in place; a copy's bindings are listed by copy, and a host draw
-by nothing. So only the portal path's visit of every host draw
-(the former host-draw collector, replaced by `GpuRowCursor` in R1a) and every binding puts back a host row or a
-copy row once its clip ends or moves.
-
-A new program makes the dresser visit every binding, since a kept group can be
-read under another slot **[opened]**. And these walk every row or copy on
-ordinary frames **[opened]**: `SdfMeshPathBake.SameCopyLayout`, the dresser's
-copy comparison and its input commit, the dresser's claims on any frame that
-changes a mesh (`SdfMeshClaims.Update`), the residency's glass count, the
-tables' own glass count, and `SdfWorldTables.GlassMaySee`'s index refresh on
-every mesh revision.
+`SdfWorldTables.StageMeshRegion` consumes row changes through `GpuRowCursor`,
+updates arena names and claims, applies placements and stages changed records
+through `StageMeshDraw`. A free, owed or refused row is absent, never filtered.
+`GpuRowIndex` supplies each mesh's row chain, so a landing or reserve growth
+revisits only the affected mesh's rows. A new/expired cursor takes a bounded
+whole-table answer through that same path. Normal extent changes keep the row
+journal incremental; dense input lists retain the conservative extent check.
 
 ### Who holds a row index
 
-| Holder | What it keeps by row | What a shifted row costs it today |
-|---|---|---|
-| `SdfWorldTables` | The staged draw, its packed record, the arena's name for the row (`SdfMeshRegionArena.Rename`), the glass rows | Packed again |
-| `SdfMeshHistory` | A generation per cell, moved whenever the cell's occupant, mesh or slot changes | A new generation for every shifted row |
-| The previous-matrix table | Each row's last matrix, seeded from the current one on a new generation | Seeded: the row reads as still |
-| Each raster pass's `SdfMeshOcclusion` | Visibility, level and generation per row, on the GPU; the kernel resets a row whose generation differs | Every shifted row leaves the remembered visible set: the early phase draws none of them that a box bounds, so the depth they are tested against holds only the rows that did not shift |
-| The temporal resolve | A pixel's receiver identity, whose source is the row (`sdfHistoryReceiverMatches`) | History rejected under every shifted row |
-| `SdfDressedPickMap` and `SdfWorldPicker` | Identity by row; a pick's copy is read back frames later and resolved through the map, which assumes the host's rows lead the list | The map is compared row by row, and rebuilt when an identity differs |
-| `SdfMeshIrradiance` | A hash and a static flag per row (`SdfMeshIrradiance.StaticKey`), read through the draw journal by row; the key folds the rows in order | Folded whole when the journal refuses, and a new key whenever a row moves, which rebuilds the scene |
-| `SdfMeshIrradiance.DiagnosticScene` | The static draws in order | No match, so no diagnostic scene |
-| `SdfMeshIrradianceScene` | Nothing by row: its instances are its own list | Rebuilt (decision 3) |
-
-No CPU readback carries a row index besides a pick **[opened]**: the other
-readback buffers `Puck.SdfVm` creates are the background work's, portal sight's
-and the exposure meter's.
-
-So a shifted row costs more than its record **[inference]**: the frame after a
-rebuild draws with little of its occlusion history and resolves without its
-temporal history under those rows, which no count in `sdf.instances` shows
-beyond `SdfMeshHistory.Seeded`.
+| Holder | What validates the row |
+|---|---|
+| The staged record and previous matrix | `StageMeshDraw`, observing table identity and occupancy through `SdfMeshHistory.Observe`, or retiring absence |
+| Occlusion and detail history | The record's generation; a changed occupant seeds its previous matrix |
+| A delayed pick | The mesh target's table/revision stamp, the row's last identity revision, and the immutable host map |
+| The static scene key | A cursor-maintained sum of static-row hashes, independent of order |
+| The diagnostic scene | Equality of static contents as a multiset |
 
 ### Every writer
 
-The rest-epoch cache in the tick was deleted after missing four writes
-([hazards](../development/hazards.md#an-invariant-kept-by-convention)), so the
-writers are listed, with what tells the dresser about each today **[opened]**:
+Only `SdfMeshRows.Writer` can allocate, free, set or start over its table. Each
+operation owns its journal entry, mesh claims, glass count and picking
+provenance. `SdfMeshDresser` derives changed groups and copies by comparison,
+and reads host and transform journals through independent cursors. A failed
+publication remains pending; retry starts over through the table, including
+allocations the failed owner never remembered.
 
-| What a row's content depends on | Its writers | How the change is seen |
-|---|---|---|
-| A group's shown mesh | The bake's product setter and its hand-over, which move the product revision at eight places | Not by that revision: `SdfMeshDresser.Dress` compares each group's shown mesh by reference each frame |
-| A group's copies | The frame's instances | `SdfMeshPathBake.SameCopyLayout` compares the layout each frame and moves one revision |
-| The program's groups | A program rebuild (an edit, a responding placement) | The bake keeps the group object of every group the new program keeps, and any other differs by reference; the dresser visits every binding |
-| A slot's or a copy's pose | The frame source | `SdfMovedTransforms` through its commit, and a reference compare per copy; unknown history visits everything |
-| The host's draws | Each scene emitter | The host's journal; unknown history visits everything |
-| Portal clips | The frame's `SdfFrame.SlotClips` | Nothing: the portal path visits and journals everything |
-| The list itself | Six places in the dresser assign, append or strip draws: three add the row to the journal by hand, the rebuild journals everything, and the clip's append and strip add nothing | The journal, or "everything" |
-| Whether a row is drawn | A mesh landing, a refusal, a trim, a relocation (`SdfWorldTables`) | The landing filter, recomputed over the whole list |
+R1c still replaces the conservative portal walk. It restores every owner's
+base draw, applies `SdfSlotClip.Apply`, writes through the writer and retains
+one run of carried copies. Its source-index mapping comes from `Apply` itself,
+including a row whose authored plane already equals the clip plane. The pose
+index (`SdfMeshDresser.IndexBinding`) is not a clip index: clips must reach host
+rows and rigid copies too.
 
-Three things follow. The derivation of what changed is already a comparison
-against the inputs for meshes, copies and groups, which cannot miss a writer.
-The journal is kept by convention: a write and its journal entry are separate
-statements at each site, and one writer has none. And the journal's reading is
-kept by convention too: the frame publishes the producer's own journal object,
-whose `GpuChangedRows.Begin` and `GpuChangedRows.Owe` are public, the dressed
-list is a `List` a holder can downcast, and each consumer wrote its own "collect
-since my serial, or refresh" guard (`SdfWorldTables.TryStageDrawChanges`,
-`SdfMeshIrradiance.StaticKey`, the former dresser host-draw collector, which alone
-checks that the runs fit the table, and for the transform journal
-`SdfMeshDresser.CollectSlotBindings`, `SdfWorldTables.PrepareMeshTransformCuts`
-and `SdfWorldTables.PackDynamicTransforms`) **[opened]**.
+The copy comparisons (`SdfMeshPathBake.SameCopyLayout` and the dresser's input
+snapshot) remain the derivation over instances. The static trace scene still
+builds its top level for changed contents, as decision 3 describes.
 
 ### The trace scene and its export
 
@@ -1076,40 +1007,212 @@ The pure pack comparison reuses `SdfMeshRegion.WriteDraw` and
 predicate it checks, as F14 requires. Device comparison reuses
 `SdfGpuWorkRecording.CopyToReadback` and the existing slot/fence lifetime.
 
+### R1b as built
+
+`SdfMeshRows` holds private row storage. `Create` delegates to the nested writer's
+factory, which constructs a fresh table and a writer with a private constructor;
+there is no operation that obtains a writer for an existing table. Frames retain
+the host's input list and publish `MeshRows` separately. The writer's allocate,
+free, set and start-over operations own the journal, claims, glass count,
+occupancies and picking provenance. `GpuRangeAllocator` supplies the runs and
+checks their tickets. An occupancy is scoped by table identity and never resets.
+
+`SdfMeshDresser` compares actual group products and copy membership under the
+bake's frame gate. It replaces only that owner's run when its count changes;
+other owners retain their addresses and bindings. A start over frees through
+the table, including a run no owner retained after a failure, and rebuilds in
+host/group/own-mesh/clip-copy order. Allocation and free clear the canonical flag;
+only the first completed reconciliation or a completed start over sets it.
+`PackingFreeDivisor` chooses the free share. Locked frames start over only when
+ordering is no longer canonical or reconciliation will change an owner's count.
+R1b's portal walk can discover a copy-run change after reconciliation; on a locked
+frame it retries from empty before publishing, then stands on subsequent frames.
+
+The arena's `BeginRows`, `NameRow` and `EndRows` own reserve growth, names,
+admission, slack and relocation. `Plan` calls those same operations for a whole
+input. Running placement and unused-word totals replace the old placement scan.
+Unnames precede placing, so their released slack is available to new names.
+The table consumer moves claims and mesh-row membership per changed name.
+`StageMeshDraw` remains the only record writer: it observes a live draw with its
+table and occupancy or retires and writes absent. Newly exposed records upload
+every word, because a grown reserve can cover old mesh words even where its new
+host shadow reads zero. A moved mesh's chain stages in the same transaction.
+
+`SdfDressedPickMap` translates owner provenance instead of storing a copied
+identity list. `SdfWorldPasses` retains the mesh target's `SdfMeshRowStamp` per
+view; the recorder restores its previous stamp on abandonment. The views pass
+stamps that epoch, not the latest frame revision. `SdfWorldPicker.Current` rejects
+another table or a row identity changed since that epoch; `SdfPickResult` applies
+the same identity bound when a published answer is read later. The host map is
+still compared by reference. Unrelated hand-overs retain valid picks.
+
+The irradiance key is an incrementally maintained sum of static-row hashes.
+Its static-row set supplies snapshots; a pack alone keeps the scene, and
+`DiagnosticScene` compares scene contents as a multiset, including multiplicity.
+The dresser's optional oracle rebuilds from inputs and compares live draws as a
+multiset. The independent staging ledger also reads occupancy and producer-table
+identity; it shares no observation predicate with the live history.
+
+The enforcing doors are therefore the writer for row mutation and its journal,
+the allocator ticket for stale frees, `StageMeshDraw` for record/absence/history,
+`Observe` for occupancy, `MeshStands` for landing, and the recorded row epoch for
+picks. The deliberate boundary is unchanged: until R1c, active or ended clips
+visit all base rows through the writer, with all carried copies in one run.
+The table's `Live` enumeration counts whole walks; disable the diagnostic oracle
+when reading production whole-walk deltas, since the oracle intentionally reads
+every live row. GPU queue ordering and resource lifetime still owe the lead's
+silent-invariant fix pass and windowed validation.
+
+#### Windowed R1b verification request
+
+Use a World started from this checkout through `puck_world_start`, document
+`worlds/debug`, `windowed: true`, physical devices disabled. Run once with
+`backend: directx` and once with `backend: vulkan`, then stop each through
+`puck_world_stop`. Use the shared mesh store. On its named Operator attachment:
+
+```text
+world.rows check on
+world.cadence off
+world.wait ready 600
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.rows.check --json
+```
+
+Run the existing tour against that same process (replace `<processId>` with
+the id the start returned; use a backend-specific output directory):
+
+```text
+dotnet .claude/scratch/r1b-cli/Puck.Cli.dll sweep --attach <processId> --no-headless --no-scenarios --output .claude/scratch/r1b-tour
+```
+
+Then run the arrival and forcing window on that same attachment:
+
+```text
+debug.go stage
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances clear-peaks
+world.counters sdf.instances --json
+world.counters sdf.rows.check --json
+debug.go meadow
+world.wait bakes 600
+world.wait residency 600
+world.rows force pack
+world.wait 2
+world.rows force dress-fault
+world.wait 2
+world.rows force skip host
+world.rows force skip scene
+world.rows force skip tables
+world.wait 300
+world.rows force limit 0
+world.wait 2
+host.memory collect
+world.rows force limit auto
+world.rows force relocate
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.rows.check --json
+world.counters sdf.instances --json
+world.rows status
+```
+
+Require nonzero dress/pack/ledger/seed/device comparisons and zero mismatches;
+nonzero pack/retry starts, skipped and whole answers for each consumer,
+refused/returned rows and trims. Repeat after `gpu.faults lose` and require new
+table whole answers and further comparisons. The device-free laws cover orphan
+allocations, same-key/same-mesh reuse without an intervening absent publication,
+reserve growth, holes, refusal, relocation, expired history and static multiset
+packing. Windowed observations, captures and timings remain unconfirmed here.
+
+For the hand-over burst, keep the meadow view fixed, first settle it at a lower
+render scale, then request full demand while the burst is armed:
+
+```text
+world.rows check off
+debug.go meadow
+world.render-scale primary pin 0.5
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances --json
+world.screenshot .claude/scratch/r1b-hand-over.png presented 60
+world.render-scale primary pin 1
+world.view.pick primary 0.5 0.5
+world.wait captures 60
+world.wait bakes 600
+world.wait residency 600
+world.view.pick primary 0.5 0.5
+world.counters sdf.instances --json
+```
+
+Keep only a burst whose `rows.packed.hand-over` advanced, and identify its group
+from the world, not from pixels. Every presented frame must contain the group;
+unaffected rows retain history, hand-over packed records equal owned changed rows,
+and rebuild counts move only with a start over. If the scale change finishes
+outside the capture window, repeat the burst around the next demand change;
+an unexercised burst supplies no evidence. Record thread-allocated bytes and the
+following frame's late-phase draws in the lead's quiet instrumentation window.
+
+For gallery picks and canonical order:
+
+```text
+world.rows check on
+debug.go portal-link
+world.wait bakes 600
+world.wait residency 600
+world.view.pick primary 0.5 0.5
+body.stop 0
+body.pose 51.5 0.05 34.5 90 0 0
+world.wait 30
+world.view.pick primary 0.5 0.5
+debug.go portal-garden
+world.wait 2
+view.recenter 1
+body.fly -1 0 0 0 0 0 4
+world.wait 150
+body.stop 0
+world.wait bakes 600
+world.wait residency 600
+world.view.pick primary 0.5 0.5
+world.rows status
+world.counters sdf.rows.check --json
+```
+
+Also hold a hover while playing the walkthrough's gallery-to-garden painting
+crossing. A replaced table discards its pending answer; the next pick names the
+surface in the destination world, and unaffected-row picks survive a hand-over.
+For the two-World still comparison, start two fresh paused lockstep Worlds,
+advance both through the same count-changing arrival, then take the existing
+tick-exact lockstep stills at the same tick and pinned exposure. A stable locked
+frame adds no start over. The capture and lifetime review belong to the lead;
+this lane's finish line remains headless.
+
 ## R0: the counts and the rule
 
-R0's counts are built and decide nothing by time. Every staging passes
-`SdfWorldTables.StageMeshRegion`, which ends in `SdfWorldTables.TryStageDrawChanges`
-or in `SdfWorldTables.StageMeshRegionCore` **[opened]**. Both packing paths call
-`SdfWorldTables.StageMeshDraw` through one staging tally, which publishes the
-packed total and its causes together. The invariant is that every packed record
-has exactly one cause; the tally's publication enforces that partition.
-`SdfMeshHistory.RecordsChanged` is added only by the changed-run staging
-(`SdfWorldTables.StageChangedDraws`), never by the whole pack
-(`SdfWorldTables.StageMeshMotion`) an arrival takes while a waiting draw is
-filtered out, so the rule reads `SdfMeshHistory.RecordsPacked` and its cause
-totals instead. These are presentation counts; they never decide simulation
-state or schedule work.
+Every staging passes `SdfWorldTables.StageMeshRegion` and packs through
+`StageChangedDraws` and the one `StageMeshDraw` door. One staging tally publishes
+the packed total and its causes together: every packed record has exactly one
+cause. The original R0 readings selected R1b; the counts now describe the
+retained-row path and never decide simulation state or schedule work.
 
-**The cause of a packed record.** Each record a staging packs is counted under
-one cause. A staging that does not take the journal has one cause for all its
-records, the first of the top five below that holds; one that takes it splits
-its records between the last two. The dresser states why a frame owes
-everything beside the serial it publishes, so the tables can tell the first
-three apart (`SdfFrame.MeshDrawChangesCause`). A serial is local to its
-producer: a replacement draw list's stated cause applies even when its serial
-equals the preceding list's. Restaging the same published frame after a landing
-does not consume its stated cause again.
+**The cause of a packed record.** A published start over states rebuild or
+retry beside its captured serial. A portal visit states portal. Those causes
+apply only on the first consumption of that publication. Otherwise a row
+returning live is landing, a changed mesh name is hand-over, and the rest is
+pose. A cursor's conservative answer compares through the same staging door;
+it does not invent a rebuild. The cursor kind remains available to callers
+without a classified producer cause.
 
 | Cause | Holds when |
 |---|---|
-| `rebuild` | The frame owes everything because the dresser rebuilt its topology |
-| `portal` | The frame owes everything because of the portal path |
-| `retry` | The frame owes everything because the publication before it failed |
-| `landing` | The dresser's journal is incremental and the tables refuse it because a mesh is owed, the staged list was filtered or its count differs |
-| `cursor` | The journal cannot be collected: another producer or list, an expired serial, the first staging of new tables |
-| `hand-over` | The journal is taken; this cause counts the records whose mesh differs from the one staged |
-| `pose` | The journal is taken; this cause counts the rest |
+| `rebuild` | The dresser published a canonical start over |
+| `portal` | The conservative portal walk changed the record |
+| `retry` | A failed publication forced a start over |
+| `landing` | A row returns live from absence |
+| `cursor` | An unclassified conservative consumer refresh |
+| `hand-over` | The record changes its mesh name, including a freed interior row |
+| `pose` | The record keeps its mesh; pose, metadata or a history cut changes it |
 
 **The counts** (in `sdf.instances`; `<cause>` is each cause
 above):
@@ -1119,10 +1222,10 @@ above):
 | `rows.packed.<cause>` | Total | Records packed under that cause, on either path |
 | `frames.<cause>` | Total | Stagings that packed a record under that cause |
 | `frames.over-chunk.<cause>` | Total | Stagings whose records under that cause number more than the threshold below |
-| `rows.owned.changed` | Total | Rows held by the owners whose mesh, copies or count the dress changed: what a proportional table would write |
-| `dress.topology-builds.<reason>` | Total | Rebuilds by the first of the six reasons that fired |
+| `rows.owned.changed` | Total | Unique addresses gained, renamed or freed inside the published extent; counted inside row writes |
+| `dress.topology-builds.<reason>` | Total | Start overs by retry, free share, locked order or operator request |
 | `peak.rows.packed.<cause>` | Peak | The most records one staging packed under that cause |
-| `peak.rows.planned` | Peak | The most rows one staging submitted to `SdfMeshRegionArena.Plan` |
+| `peak.rows.planned` | Peak | The peak of names submitted in one staging |
 | `peak.rows.extent` | Peak | The most rows the table held |
 
 The scene's counters (`SdfMeshIrradiance.Counters`, source `sdf.mesh-gi`) expose
@@ -1250,7 +1353,7 @@ debug.go portal-link
 ```
 
 For each window, sum the seven packed-row deltas and compare with
-`SdfMeshHistory.RecordsPacked`'s delta; sum the six reason deltas and compare
+`SdfMeshHistory.RecordsPacked`'s delta; sum the start-over reason deltas and compare
 with `SdfMeshHistory.DressTopologyBuilds`' delta. Read peaks directly, never
 subtract them. The steady over-chunk deltas must all be zero. Boot must show
 landing; crossing must show portal staging. Apply the fixed rule above to
@@ -1287,7 +1390,7 @@ is a verification request to the lead.
 |---|---|---|---|---|
 | R1h. The hit door's checks | Owed | The resolver is built (`sdfMeshResolveHit`, the kernel kind `gpu.mesh-hits.rejected`, `sdf.instances.targets.stale`, `world.rows force hit-bound`). What remains is its windowed check | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation |
 | R1a. The staged table is the producer's | Built; windowed check owed | [The implemented doors, levers and device-free evidence](#r1a-as-built) | `StageMeshDraw`; `GpuRowCursor`; the compiler's reader-only frame | 28 focused laws pass; the cold boot's captures, device counts and owed-frame timing on both backends remain the lead's request |
-| R1b. Rows | Large | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
+| R1b. Rows | Headless implementation; windowed verification owed | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
 | R1c. Clips are derived | Small to medium | The slot index over every row, the staged draw computed from base and clips, a clip's copies as a run; the portal path's "everything" and the list rewrite deleted | The table's staging of a row | The cross-check through a crossing by a host-drawn body and by a rigid copy, with clipped rows of each owner kind and ended clips counted; a straddling body clipped on both sides and whole again after it withdraws |
 | R2. Piece rows | Large | With the visibility plan's V1b | That plan's | That plan's, and a hand-over's packed records |
 | S2. Clustered top level | Medium | Cells, clusters reused by equal sorted lists, cluster blocks in the arena, the prefix over cells | The cluster's constructor; the one scene publisher | The cross-check's ray set; the irradiance scene laws; a pack rebuilds no cluster; a scene change during an upload abandons without a lost device on Vulkan |
@@ -1331,9 +1434,9 @@ then S2.
 | The slot proof (`RenderGraphSlotResults`, `SdfMeshOcclusion.Completed`) | Reused | A readback carrying a row is delivered only at its slot's completion; the table and the row's serial decide whether it is still true |
 | The specialization's retired builds (the residency's retired shade sets and their pins) | Considered, not reused | The same idea, a superseded product kept until nothing pins it, is what scene and cluster claims already do with their own counts |
 | `SdfMeshClaims` | Reused | `SdfMeshClaims.Move` per row, with a claim and a release for a row gained and lost, inside the writer |
-| `SdfDressedPickMap` | Replaced by the table's identities | It is rebuilt and compared whole, and assumes the host's rows lead the list |
+| `SdfDressedPickMap` | Reused as a row-table reader | Resolves owner provenance with the recorded identity epoch, without a per-change map |
 | `SdfSlotClip.Apply` | Replaced by a staged draw the table derives | The one unjournaled writer; its rule (the first clip whose run holds the slot) is kept |
-| The dresser's slot index (`SdfMeshDresser.IndexBindings`) | Kept for poses, not used for clips | It lists only bindings drawn in place, and a clip reaches host draws and copies too |
+| The dresser's slot index (`SdfMeshDresser.IndexBinding`) | Kept for poses, not used for clips | It lists only bindings drawn in place, and a clip reaches host draws and copies too |
 | The bake's product revision | Rejected as a change signal | Eight writers move it by hand; the dresser's comparison needs none |
 | The background work's readback (`SdfGpuWorkRecording.CopyToReadback`) | Reused for the device comparison | It is how a background job already answers with device bytes at a point in the queue |
 | `gpu.faults` and `host.memory collect` | Reused as forcing levers | A lost device and a trim already have operator levers; the new forcing forms follow `gpu.faults record` |
@@ -1405,9 +1508,12 @@ then S2.
 | The scene's static draws, entries and prefix bytes at the meadow, and builds per arrival | R0 | The scene's counters and the rule |
 | Which debug-world bodies straddle the gallery glass as host draws and as rigid copies | R1c's lane | The world's documents and a pick at the glass; it adds what is missing to the tour |
 | The cell size of 3d | S2's lane | Clusters built per scene change and traversal steps per ray, both counted |
-| How many runs a program rebuild reallocates | R1b's lane | Runs kept across `world.reload` and a responding placement's toggle |
-| The free share that triggers a pack | R1b's lane | Packs per arrival against the peak extent, both counted |
+| Runs kept through live program reloads and responding placements | Lead's windowed R1b check | Compare occupancies of unaffected groups across `world.reload` and a responding placement toggle |
+| Whether the row free-share policy needs tuning | Lead's windowed R1b check | `SdfMeshRows.PackingFreeDivisor` bounds the holes; compare `start-over.pack` with `peak.rows.extent` over the arrival before changing it |
 
 ---
 
 [Plans](README.md) · [Visibility](visibility.md) · [Illumination](illumination.md) · [Open items](open-items.md#residency-and-streaming) · [Frame rendering](../rendering/sdf/handbook/frame-rendering.md)
+
+
+

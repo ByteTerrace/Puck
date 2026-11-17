@@ -18,10 +18,15 @@ namespace Puck.SdfVm;
 /// <param name="MeshRevision">The mesh draw revision rendered by this request.</param>
 /// <param name="Map">The immutable host identity table captured with the frame.</param>
 public readonly record struct SdfPickResult(long Request, uint X, uint Y, uint Width, uint Height, uint Identity, float Distance, int Material, SdfProgram Program, long MeshRevision, ISdfPickMap? Map = null) {
+    /// <summary>The table and identity revision actually rendered by the mesh target.</summary>
+    public SdfMeshRowStamp RowStamp { get; init; }
     /// <summary>Gets the host identity from the table captured by this request.</summary>
-    public object? Target => Map?.Resolve(identity: Identity);
+    public object? Target => (RowIdentityStands ? Map?.Resolve(identity: Identity) : null);
     /// <summary>Gets the host material name captured beside the rendered program.</summary>
-    public string? MaterialName => Map?.MaterialName(identity: Identity, material: Material);
+    public string? MaterialName => (RowIdentityStands ? Map?.MaterialName(identity: Identity, material: Material) : null);
+
+    private bool RowIdentityStands => ((Kind != SdfVisibilityKind.Mesh) || (RowStamp.Rows is null) || RowStamp.Rows.IdentityStands(((int)Source), RowStamp.Revision));
+
     /// <summary>Gets the hit kind.</summary>
     public SdfVisibilityKind Kind => SdfVisibility.KindOf(identity: Identity);
     /// <summary>Gets the source: the mesh draw ordinal of a hit.</summary>

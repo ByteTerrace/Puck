@@ -207,7 +207,7 @@ public sealed class HostLoop(
                     if ((now - nextDeadline) > period) {
                         nextDeadline = now;
                     } else {
-                        HostWaits.Until(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
+                        HostWaits.Pace(deadlineTimestamp: nextDeadline, precisionWaiter: m_waiter, time: time);
                         timeline.NoteLate(ticks: Math.Max(val1: 0L, val2: (time.GetTimestamp() - nextDeadline)));
                     }
                     timeline.Mark(phase: HostFramePhase.Wait);

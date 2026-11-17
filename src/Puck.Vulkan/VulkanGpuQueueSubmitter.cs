@@ -162,13 +162,16 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
 /// The Vulkan <see cref="IGpuSubmissionFence"/>: one unsignaled <c>VkFence</c>, armed by a fenced queue submit and
 /// drained by a bounded <c>vkWaitForFences</c> (<see cref="VulkanFenceWait"/>) + reset. Its batch and alias states are the shared
 /// <see cref="GpuBatchedSubmissionFence"/>'s: a fence answering from its batch's owner waits on the owner's
-/// <c>VkFence</c> without resetting it.
+/// <c>VkFence</c> without resetting it. A completion signal is the process's fence watcher's
+/// (<see cref="VulkanFenceWatch"/>), which the fence withdraws from before it resets or destroys its <c>VkFence</c>.
 /// </summary>
 internal sealed class VulkanGpuSubmissionFence : GpuBatchedSubmissionFence {
     private readonly VulkanDeviceCommands m_device;
     private readonly IVulkanFrameSynchronizationApi m_frameSynchronizationApi;
 
     private nint m_fenceHandle;
+    // Whether the watcher was asked to watch the fence since it was last reset.
+    private bool m_watched;
 
     internal VulkanGpuSubmissionFence(VulkanDeviceCommands device, IVulkanFrameSynchronizationApi frameSynchronizationApi) {
         m_device = device;
@@ -221,14 +224,32 @@ internal sealed class VulkanGpuSubmissionFence : GpuBatchedSubmissionFence {
         fenceHandle: m_fenceHandle
     ).ThrowIfFailed(device: m_device, operation: "vkWaitForFences");
     /// <inheritdoc/>
-    protected override void DrainNative() => m_frameSynchronizationApi.ResetFence(
-        device: m_device,
-        fenceHandle: m_fenceHandle
-    ).ThrowIfFailed(device: m_device, operation: "vkResetFences");
+    protected override void DrainNative() {
+        Unwatch();
+        m_frameSynchronizationApi.ResetFence(
+            device: m_device,
+            fenceHandle: m_fenceHandle
+        ).ThrowIfFailed(device: m_device, operation: "vkResetFences");
+    }
+    /// <inheritdoc/>
+    /// <remarks>Hands the fence to the process's watcher thread, which waits it in the driver and sets the
+    /// signal.</remarks>
+    protected override void SignalNative(EventWaitHandle signal) {
+        m_watched = true;
+        VulkanFenceWatch.Watch(api: m_frameSynchronizationApi, device: m_device, fenceHandle: m_fenceHandle, signal: signal);
+    }
+    // Takes the fence back from the watcher before a reset or a destroy, which no thread may be waiting it through.
+    private void Unwatch() {
+        if (m_watched) {
+            m_watched = false;
+            VulkanFenceWatch.Withdraw(fenceHandle: m_fenceHandle);
+        }
+    }
     /// <inheritdoc/>
     /// <remarks>Destroys the fence without waiting (the frame-ring owner drains the device before teardown, and a
     /// lost device has nothing left to wait on).</remarks>
     protected override void DisposeNative() {
+        Unwatch();
         m_frameSynchronizationApi.DestroyFence(
             device: m_device,
             fenceHandle: m_fenceHandle

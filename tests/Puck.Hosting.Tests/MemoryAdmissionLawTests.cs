@@ -159,6 +159,26 @@ public sealed class MemoryAdmissionLawTests {
         Assert.Equal(expected: (Mebibyte, 0L), actual: (admission.OverLimit, admission.Promised));
     }
     [Fact]
+    public void AFloorAdmitsTheSharedBlockItsResourceIsPlacedInAndRefusesAResourcePastIt() {
+        var (account, ledger, segments) = Discrete();
+
+        Budget(account: account, localBudget: Gibibyte, segments: segments, serial: 1UL);
+
+        var limit = account.ReadAdmission(pool: PhysicalMemory.Device).Limit!.Value;
+        using var work = account.ReserveDevice(memoryClass: MemoryClass.Workspace, owner: "work", pool: PhysicalMemory.Device);
+
+        Assert.True(condition: Allocate(allocation: 0x10, bytes: limit, family: "view/targets", ledger: ledger));
+        Assert.True(condition: work.TryReserve(floor: Mebibyte, peak: Mebibyte));
+        // The device places a small resource in a block many times its size. The floor is the owner's own bytes, so the
+        // block of a resource within it is admitted, past the limit and counted, as fixed storage is.
+        Assert.True(condition: ledger.TryAdmit(bytes: (64L * Mebibyte), device: Device, family: null, grant: out var block, payer: "work/buffer", payerBytes: Mebibyte, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        ledger.CountAllocated(allocation: 0x11, grant: block);
+        _ = ledger.CountPlaced(allocation: 0x11, bytes: Mebibyte, device: Device, family: "work/buffer");
+        Assert.True(condition: (account.ReadAdmission(pool: PhysicalMemory.Device).OverLimit > 0L));
+        // A second resource is past the floor: its block is refused, and nothing is counted.
+        Assert.False(condition: ledger.TryAdmit(bytes: (64L * Mebibyte), device: Device, family: null, grant: out _, payer: "work/buffer", payerBytes: Mebibyte, role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+    }
+    [Fact]
     public void ADeviceRefusalLowersTheSegmentsLimitToWhatItHoldsUntilItsBudgetChanges() {
         // The clock stands still, so the refusal's probe never comes due and only the budget can lift it.
         var (account, ledger, segments) = Discrete(clock: static () => 1L);

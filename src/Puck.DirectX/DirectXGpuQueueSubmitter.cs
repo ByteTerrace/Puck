@@ -260,6 +260,19 @@ public sealed unsafe class DirectXGpuSubmissionFence : GpuBatchedSubmissionFence
         value: m_pendingValue
     );
     /// <inheritdoc/>
+    /// <remarks>Asks <c>ID3D12Fence::SetEventOnCompletion</c> with the event's own handle, which the fence sets when it
+    /// reaches the pending value, at once when it already has, and when the device is removed. A refused call sets the
+    /// event here, so the waiter polls.</remarks>
+    protected override void SignalNative(EventWaitHandle signal) {
+        var armed = new DirectXDeviceCommandCalls(device: ((ID3D12Device*)m_device)).SetEventOnCompletion(
+            fence: ((ID3D12Fence*)m_fence),
+            fenceEvent: ((HANDLE)signal.SafeWaitHandle.DangerousGetHandle()),
+            value: m_pendingValue
+        );
+
+        if (armed.Failed) { _ = signal.Set(); }
+    }
+    /// <inheritdoc/>
     protected override void DrainNative() {
         m_pendingValue = 0UL;
         if (m_nextValue == ulong.MaxValue) { Renew(); }
