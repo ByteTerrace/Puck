@@ -95,7 +95,13 @@ internal static class GpuFenceWatch {
                     _ = Waiting.Remove(item: done);
                     // Set on completion, on a reported loss and on withdrawal alike: whoever wakes reads the fence.
                     // Under Gate, so no signal joins the watch after it was set.
-                    foreach (var signal in done.Signals) { _ = signal.Set(); }
+                    foreach (var signal in done.Signals) {
+                        try {
+                            _ = signal.Set();
+                        } catch (ObjectDisposedException) {
+                            // Its waiter closed it and waits no more; the watcher thread outlives every waiter.
+                        }
+                    }
                     done = null;
                     Monitor.PulseAll(obj: Gate);
                 }
