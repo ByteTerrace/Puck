@@ -1588,18 +1588,18 @@ collider, then the lifecycle lows as one pass.
   predicted motion. The game tables carry relief, so a knocked Go stone costs
   dozens of queries a tick. Answer per surface over a field collider; done
   when the Go knock scene counts about one exact query per candidate pair.
-- [medium] `physics.contact` still counts through the shared atomic
-  `WorkCounterSet` (`FixedStaticContactWork.CountQuery` and `CountConvex`):
-  a surviving convex query adds three or four `WorkCount.AddShared` CAS
-  updates, even without a reader. The cause is shared counter storage, not
-  the physics wrapper. Add single-writer shards in the common counting home
-  (`src/Puck.Abstractions/Counting`), then switch the contact source to it;
-  reuse `WorkCount.Add` and `ForwardingWorkCounterSource`'s live/retired total
-  handling rather than making physics carry a second aggregator. Preserve
-  totals when a writer thread exits, and bound retained shard state under
-  thread churn (a tracked `ThreadLocal` alone retains every retired thread).
-  Check concurrent writers, reads and retirement for exact monotonic totals,
-  then physics ordering/friction laws and `world.counters physics.contact`.
+- [medium] The SDF field counters still count through the shared atomic
+  `WorkCounterSet` on per-query paths: `SdfFieldEvaluator.PointWork`
+  (`PointEvaluations` and `PointInstructions` per point walk,
+  `SdfFieldEvaluator.PointWalk.cs`), `SdfQueryWork.ProcessWork`
+  (`GradientTaps` per tap, `SdfFieldEvaluator.cs`) and
+  `SdfBoundsCache.ProcessWork` (`PrepassBounds`,
+  `SdfFieldEvaluator.Bounds.cs`). Each is two or three `AddShared` CAS
+  updates per evaluation, which `ShardedWorkCounterSet` replaces with a
+  plain store per thread. Move them onto it:
+  `SdfFieldEvaluator.CountArrayPayload` and `CreateReachScratch` take a
+  `WorkCounterSet` and need a counting parameter both types satisfy, and
+  `puck bench world` (`WorldBenchmarks`) lists the sets as sources.
 - [low] A curved body resting on one point has no torsional friction
   (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
   stone keeps spinning and stays awake. Add a row about the slot's normal,
@@ -3035,8 +3035,8 @@ proves itself with `puck compile` lowering to the same document.
   (`RetiredGraph.ReleasePublication`) and one awaiting consumers
   (`RetiredGraph.ArmAfterConsumers`) their own completion.
 - [low] Small merges, one lane together:
-  - the work ledgers that wrap a `WorkCounterSet` repeat its forwarding
-    members (`WorldBodyWork`, `FixedContactSweepWork`,
+  - the work ledgers that wrap a `WorkCounterSet` or `ShardedWorkCounterSet`
+    repeat its forwarding members (`WorldBodyWork`, `FixedContactSweepWork`,
     `FixedStaticContactWork`, `WorldBootWork`); a ledger with no behaviour of
     its own is the set;
   - `SdfGpuWork.CopyToReadback` and `GpuKernelCounters`' handle-based copy

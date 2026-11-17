@@ -21,9 +21,10 @@ namespace Puck.Abstractions.Counting;
 /// </para>
 /// </summary>
 public sealed class WorkKind {
-    // The first WorkCounterSet that lists this kind and the kind's index in it, so a count into that set finds its
-    // counter without scanning the set's kinds. The index is written before the set is published.
-    internal WorkCounterSet? HomeSet;
+    // The first owner (a WorkCounterSet or a ShardedWorkCounterSet's layout key) that lists this kind and the kind's
+    // index in it, so a count into that owner's storage finds its counter without scanning the kinds. The index is
+    // written before the owner is published.
+    internal object? HomeSet;
     internal int HomeIndex;
 
     /// <summary>Gets what two readings of this kind may be expected to agree on.</summary>
