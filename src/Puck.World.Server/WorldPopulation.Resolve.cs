@@ -815,7 +815,8 @@ public sealed partial class WorldPopulation {
             if (
                 !m_entries[index].Active ||
                 (BodyContact(index: index) != WorldBodyContactMode.Solid) ||
-                (m_entries[index].Body is not { Collider: { } collider, OrdinaryAdvanceAdmitted: true, CarriedBy: null } body)
+                (m_entries[index].Body is not { Collider: not null } body) ||
+                (!body.OrdinaryAdvanceAdmitted && (body.CarriedBy is null))
             ) {
                 continue;
             }
@@ -885,6 +886,15 @@ public sealed partial class WorldPopulation {
                 DynamicContactCandidates++;
                 var rightIndex = grid.Sphere(ordinal: rightOrdinal).Index;
                 var right = m_entries[rightIndex].Body!;
+
+                // Held bodies are static solver sides only against a free rigid body. Their carrier is never a
+                // contact partner; locomotion neighbours are resolved by the carry block pass.
+                if (((left.CarriedBy is { } leftCarrier) &&
+                        ((leftCarrier == rightIndex) || !right.IsRigid || (right.CarriedBy is not null))) ||
+                    ((right.CarriedBy is { } rightCarrier) &&
+                        ((rightCarrier == leftIndex) || !left.IsRigid || (left.CarriedBy is not null)))) {
+                    continue;
+                }
 
                 if (m_dynamicContactDegrees[rightIndex] >= m_bodyContactPolicy.MaxPairsPerBody) {
                     continue;

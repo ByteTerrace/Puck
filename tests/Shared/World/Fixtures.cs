@@ -302,7 +302,9 @@ internal static partial class Fixtures {
             TunesRaw: [],
             PatchesRaw: [],
             AudioRaw: null,
-            CollisionRaw: collision,
+            CollisionRaw: collision with {
+                BodyContactsRaw = (collision.BodyContactsRaw ?? new WorldBodyContactPolicy(ContactHertz: 30f, ContactDampingRatio: 10f, ContactSpeed: 3f)),
+            },
             HostRaw: StandardHost,
             // The engine ships no rig (Assets/worlds/standard.puck authors the standard one), and a nonzero
             // census must author a views section, so the fixture carries the standard chase framing itself.

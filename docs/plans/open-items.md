@@ -1587,27 +1587,18 @@ collider, then the lifecycle lows as one pass.
   `SdfFieldEvaluator.CountArrayPayload` and `CreateReachScratch` take a
   `WorkCounterSet` and need a counting parameter both types satisfy, and
   `puck bench world` (`WorldBenchmarks`) lists the sets as sources.
-- [low] A curved body resting on one point has no torsional friction
-  (`FixedRigidWorld.SolveRolling` resists only tangent axes), so a spun Go
-  stone keeps spinning and stays awake. Add a row about the slot's normal,
-  clamped by the normal impulse times a patch radius.
-- [low] A carried body's tangibility push moves a rigid body positionally,
-  outside the solve (`WorldBody.ApplyRigidPositionalCorrection`), because the
-  broadphase skips carried bodies. Admit a carried body as a static side that
-  pushes with its velocity, and delete the positional door.
 - [low] A stack's base under more than about two bodies' load can settle below
   the rest band. Build three-high and four-high stack scenes, read the base's
   penetration and fix the solver's load sharing.
-- [low] The solver's contact softness (`ContactHertz`, `ContactDampingRatio`,
-  `ContactSpeed` in `FixedRigidSolverOptions`) is an engine default the World
-  never authors; give `collision.bodyContacts` the fields.
 - [low] A non-rigid sleeper still wakes on every `ContactFieldVersion` move
   (`WorldBody.TryDeferSleepingAdvance`); only parked rigid islands take the
   local wake. No live world enables non-rigid sleep yet.
 - Lifecycle lows, read from source and not run: a rigid kit with a motion
   cadence is prepared twice (`WorldPopulation.Rigid.cs`, `WorldBody.Step.cs`);
-  a carried body's contacts are never released, so the box beneath cannot
-  park; one refused probe drops a body's surface warm start
+  a stationary carried body's live pair contacts keep free rigid bodies in its
+  non-parking island (`WorldPopulation.Sleep.cs`, `CollectRigidIsland` traverses
+  carried rigid sides too), so those resting bodies cannot park;
+  one refused probe drops a body's surface warm start
   (`ReleaseUntouchedRigidContacts`); a lattice spill into an
   empty slot under an envelope minimum accepts more than it was offered and
   faults the tick (`WorldTick.Fields.cs`, `FieldLattice`).

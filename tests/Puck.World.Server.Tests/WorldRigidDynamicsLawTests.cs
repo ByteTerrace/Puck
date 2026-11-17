@@ -15,6 +15,32 @@ namespace Puck.World.Server.Tests;
 /// <summary>Laws for the rigid-dynamics facet (<see cref="WorldRigid"/>): pair-contact momentum conservation and
 /// checkpoint/restore bit-exactness across a rigid body's own state.</summary>
 public sealed class WorldRigidDynamicsLawTests {
+    [InlineData(0f, 10f, 3f)]
+    [InlineData(30f, 0f, 3f)]
+    [InlineData(30f, 10f, 0f)]
+    [Theory]
+    public void AuthoredContactSoftnessChangesTheWorldSolve(float hertz, float dampingRatio, float speed) {
+        var source = FallingRigidBallDocument();
+        var contacts = source.Collision.BodyContacts;
+        using var standard = Fixtures.FreshServer(definition: source);
+        using var changed = Fixtures.FreshServer(definition: source with {
+            CollisionRaw = source.Collision with {
+                BodyContactsRaw = contacts with {
+                    ContactHertz = hertz,
+                    ContactDampingRatio = dampingRatio,
+                    ContactSpeed = speed,
+                },
+            },
+        });
+        var a = standard.JoinSeat();
+        var b = changed.JoinSeat();
+
+        a.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 0f, yawRadians: 0f, z: 0f);
+        b.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 0f, yawRadians: 0f, z: 0f);
+        standard.Step();
+        changed.Step();
+        Assert.NotEqual(expected: a.FixedPosition.Y, actual: b.FixedPosition.Y);
+    }
     [Fact]
     public void FrozenNeighboursDoNotConsumeTheCandidateBudgetBeforeAnAwakeBody() {
         var source = LensOnFloorDocument();

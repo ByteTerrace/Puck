@@ -198,13 +198,16 @@ public sealed class WorldCarryTangibilityLawTests {
         );
     }
     [Fact]
-    public void CarriedBodyPairCorrectionWakesARestingRigidCarrier() {
+    public void CarriedRigidContactPushesTheFreeBodyWithoutMovingTheCarrierPositionally() {
         using var fixture = JoinedCarrier(definition: WallCarryDocument(
             includeOtherBody: true,
             includeWall: false,
             rigidCarrier: true
         ));
         var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var before = carrier.FixedPosition;
+        var free = fixture.Server.Body(index: (BallIndex + 1))!;
+        var freeBefore = free.FixedPosition;
         var residue = carrier.CaptureIntegrationResidue();
 
         carrier.ApplyIntegrationResidue(residue: residue with {
@@ -226,9 +229,39 @@ public sealed class WorldCarryTangibilityLawTests {
 
         fixture.Step();
 
-        Assert.False(
-            condition: carrier.Resting,
-            userMessage: "the carried body's dynamic-pair correction moved the rigid carrier without opening its exact-rest latch"
-        );
+        Assert.Equal(expected: before, actual: carrier.FixedPosition);
+        Assert.True(condition: (fixture.Server.Population.RigidManifoldsThisTick > 0), userMessage: "no rigid manifold joined the solve");
+        // A deep penetration's biased displacement survives the unbiased relax, even when that relax removes the
+        // push-out velocity. The carrier remains unmoved, and the free body's correction came from the manifold.
+        Assert.NotEqual(expected: freeBefore, actual: free.FixedPosition);
+    }
+    [InlineData(false)]
+    [InlineData(true)]
+    [Theory]
+    public void ACarriedBodyPushesWithItsVelocityThroughTheSolveInEitherIndexOrder(bool carryHigherIndex) {
+        using var fixture = JoinedCarrier(definition: WallCarryDocument(includeOtherBody: true, includeWall: false, rigidCarrier: true));
+        var population = fixture.Server.Population;
+        var carriedIndex = (BallIndex + (carryHigherIndex ? 1 : 0));
+        var freeIndex = (BallIndex + (carryHigherIndex ? 0 : 1));
+        var carrier = fixture.Server.Body(index: CarrierIndex)!;
+        var free = fixture.Server.Body(index: freeIndex)!;
+
+        free.Pose(pitchRadians: 0f, rollRadians: 0f, x: 0f, y: 1f, yawRadians: 0f, z: -0.89f);
+        free.ApplyIntegrationResidue(residue: free.CaptureIntegrationResidue() with { OrdinaryAdvanceAdmitted = true });
+        Assert.True(condition: population.TryBeginCarry(carrierIndex: CarrierIndex, reason: out var reason, targetIndex: carriedIndex), userMessage: reason);
+        Assert.False(condition: population.TryEndCarry(carrierIndex: CarrierIndex, reason: out _));
+        carrier.ApplyIntegrationResidue(residue: carrier.CaptureIntegrationResidue() with {
+            RigidVelocity = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -FixedQ4816.One),
+        });
+        fixture.Step();
+
+        Assert.True(condition: (population.RigidManifoldsThisTick > 0));
+        Assert.True(condition: (free.CaptureIntegrationResidue().RigidVelocity.Z < -FixedQ4816.FromDouble(value: 0.5d)),
+            userMessage: $"the free body received no velocity impulse: {free.CaptureIntegrationResidue().RigidVelocity}");
+        Assert.Equal(expected: -FixedQ4816.One, actual: carrier.CaptureIntegrationResidue().RigidVelocity.Z);
+        Assert.True(condition: fixture.Server.TryCaptureCheckpoint(hostRow: WorldAuthorityHostRowCheckpoint.Empty,
+            checkpoint: out var checkpoint, reason: out reason), userMessage: reason);
+        fixture.Server.RestoreCheckpoint(checkpoint: checkpoint!);
+        Assert.Equal(expected: CarrierIndex, actual: fixture.Server.Body(index: carriedIndex)!.CarriedBy);
     }
 }

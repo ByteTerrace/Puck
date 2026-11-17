@@ -41,12 +41,14 @@ public sealed class FixedRigidSolverOptions {
     public int RelaxIterations { get; init; } = 1;
     /// <summary>The number of restitution iterations per step.</summary>
     public int RestitutionIterations { get; init; } = 1;
+
     /// <summary>The authored contact frequency, before the substep-derived clamp.</summary>
-    public FixedQ4816 ContactHertz { get; init; } = FixedQ4816.FromInteger(value: 30L);
+    public FixedQ4816 ContactHertz { get; init; }
     /// <summary>The authored contact damping ratio.</summary>
-    public FixedQ4816 ContactDampingRatio { get; init; } = FixedQ4816.FromInteger(value: 10L);
+    public FixedQ4816 ContactDampingRatio { get; init; }
     /// <summary>The ceiling on the push-out speed a biased solve may request.</summary>
-    public FixedQ4816 ContactSpeed { get; init; } = FixedQ4816.FromInteger(value: 3L);
+    public FixedQ4816 ContactSpeed { get; init; }
+
     /// <summary>The closing normal speed below which a contact restitutes at zero rather than its pair's coefficient.</summary>
     public FixedQ4816 RestitutionThreshold { get; init; } = FixedQ4816.FromInteger(value: 1L);
     /// <summary>The rest offset: the separation a contact settles at. A contact whose separation lies within twice this

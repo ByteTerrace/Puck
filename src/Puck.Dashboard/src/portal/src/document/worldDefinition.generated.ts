@@ -6050,6 +6050,18 @@ export type WorldBodyContactPolicy = {
    * Below this closing speed (world units/second), a rigid contact restitutes at zero rather than its pair's coefficient, so two bodies at rest never micro-bounce. Non-negative; small enough that a real strike is unaffected.
    */
   rigidPairRestitutionSpeed?: number;
+  /**
+   * The contact spring frequency in hertz, clamped by the solver to one eighth of the substep rate. Non-negative; zero authors no soft push.
+   */
+  contactHertz?: number;
+  /**
+   * The contact spring's damping ratio, dimensionless and non-negative.
+   */
+  contactDampingRatio?: number;
+  /**
+   * The maximum penetration push-out speed, in metres per second. Non-negative; zero authors no push-out bias.
+   */
+  contactSpeed?: number;
 };
 
 /**
@@ -12219,7 +12231,7 @@ export type WorldRigid = {
    */
   friction?: number;
   /**
-   * The rolling-resistance lever, in metres at scale one: each contact point resists the body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair's average applies, and it never resists spin about the contact normal. Non-negative; zero (the default) applies none.
+   * The rolling-resistance lever, in metres at scale one: each contact point resists the body's rolling (its angular velocity about the axes tangent to the surface, relative to what it touches) with a torque of at most this lever times the point's normal force, so a rolling ball or a rocking disc settles instead of rolling forever, and a heavier load resists more. It scales with the body like its collider, against another rigid body the pair's average applies. It is also the patch radius bounding torsional resistance about the contact normal, so a body spun on a curved point settles too. Non-negative; zero (the default) applies none.
    */
   rollingResistance?: number;
   /**
@@ -13197,7 +13209,7 @@ export type WorldShapingAlong = {
 
 export type WorldSimulationDefaults = {
   /**
-   * The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world — a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never — not zero and not "already expired" — since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Maths.FixedTickConversion.PerRate always derives a whole engine-tick step width — never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, and a world authoring no simulation section runs at UnauthoredSimulationRateHz — the distinct rate-0 resident world is reached only by authoring rateHz 0 by name. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), the substep-derived contact clamp (contactHertz <= RateHz * n / 8 at substep count n — it coincides with RateHz / 4 only at n = 2), and the representable band — none of which is built yet. The clamp's n is a solver parameter, so its validator arrives with the solver landing that introduces it. A derived floor belongs here, beside the rate it constrains, never as a second section.
+   * The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world — a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never — not zero and not "already expired" — since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Maths.FixedTickConversion.PerRate always derives a whole engine-tick step width — never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, and a world authoring no simulation section runs at UnauthoredSimulationRateHz — the distinct rate-0 resident world is reached only by authoring rateHz 0 by name. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), and the representable band; these floors are not built yet. The rigid solver already clamps authored contact frequency to RateHz * n / 8 at substep count n, supplied by collision.bodyContacts.rigidSubstepCeiling. It coincides with RateHz / 4 only at n = 2. A derived floor belongs here, beside the rate it constrains, never as a second section.
    */
   rateHz: number;
 };
