@@ -364,32 +364,70 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
     }
     [Fact]
-    public void TheBudgetIsAQuarterOfDeviceLocalMemoryAndACapOnlyLowersIt() {
-        static GpuMemoryProfile DeviceLocal(ulong bytes) => new(
-            CoherentUnifiedMemory: false,
-            DeviceLocalBytes: bytes,
-            HostVisibleDeviceLocalBytes: 0UL,
-            LargestDeviceLocalHeapBytes: bytes,
-            UnifiedMemory: false
-        );
+    public void AReplacementTheAccountHasNoRoomForIsRefusedByNameAndInstallsOnceItHas() {
+        var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
+        var gpu = new FakePipelineGpu();
+        using var node = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
+            deviceContext: gpu,
+            height: Extent,
+            hostsOnDirectX: false,
+            inFlightFrames: InFlight,
+            name: "feedback",
+            width: Extent
+        ) { MemoryAccount = account };
+        var candidate = Feedback();
+        var peak = node.Account(pipeline: candidate).PeakBytes;
 
-        Assert.Equal(
-            actual: (
-                Unreported: ShaderPipelineMemoryBudget.For(profile: default),
-                Small: ShaderPipelineMemoryBudget.For(profile: DeviceLocal(bytes: (1024UL * Mebibyte))),
-                Large: ShaderPipelineMemoryBudget.For(profile: DeviceLocal(bytes: (12288UL * Mebibyte))),
-                Degenerate: ShaderPipelineMemoryBudget.For(profile: DeviceLocal(bytes: 3UL))
+        // The device's pool holds one byte less than the graph's peak: the reservation is refused, so the candidate is
+        // refused by name before anything is created for it.
+        account.SetBudget(bytes: (((long)peak) - 1L), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        Assert.Equal(expected: (peak - 1UL), actual: node.DeviceBudgetBytes);
+
+        var creations = gpu.CreationCount;
+
+        node.Swap(pipeline: candidate);
+        _ = Produce(node: node);
+        Assert.StartsWith(actualString: node.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
+        Assert.Equal(expected: (creations, 0L), actual: (gpu.CreationCount, account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).Promised));
+        // With room for the peak the same candidate installs, and its peak is what the account promised it.
+        account.SetBudget(bytes: ((long)peak), pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        node.Swap(pipeline: candidate);
+        _ = node.ProduceUntilInstalled();
+        Assert.Null(@object: node.LastSwapError);
+        Assert.Equal(expected: ((long)peak), actual: account.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Device).Promised);
+        // A second instance finds the room taken: no two instances are promised the same bytes.
+        using var other = new ShaderPipelineRenderNode(
+            pipelines: new GpuPassPipelineCache(),
+            deviceContext: gpu,
+            height: Extent,
+            hostsOnDirectX: false,
+            inFlightFrames: InFlight,
+            name: "other",
+            width: Extent
+        ) { MemoryAccount = account };
+
+        other.Swap(pipeline: candidate);
+        _ = Produce(node: other);
+        Assert.StartsWith(actualString: other.LastSwapError!.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
+    }
+    [Fact]
+    public void TheBudgetIsTheAccountsRoomAndACapOnlyLowersIt() {
+        // A discrete device no reading names leaves its pool unbounded, so the account's figure is the most a budget
+        // reads and only the cap lowers it.
+        var gpu = new FakePipelineGpu {
+            MemoryProfile = new GpuMemoryProfile(
+                CoherentUnifiedMemory: false,
+                DeviceLocalBytes: (1024UL * Mebibyte),
+                HostVisibleDeviceLocalBytes: 0UL,
+                LargestDeviceLocalHeapBytes: (1024UL * Mebibyte),
+                UnifiedMemory: false
             ),
-            expected: (
-                Unreported: (512UL * Mebibyte),
-                Small: (256UL * Mebibyte),
-                Large: (3072UL * Mebibyte),
-                Degenerate: (512UL * Mebibyte)
-            )
-        );
-
-        var gpu = new FakePipelineGpu { MemoryProfile = DeviceLocal(bytes: (1024UL * Mebibyte)) };
+        };
         using var node = Node(gpu: gpu);
+
+        Assert.Equal(expected: ulong.MaxValue, actual: node.DeviceBudgetBytes);
+
         var budgets = new List<ulong> { node.BudgetBytes };
 
         node.BudgetCapBytes = (1024UL * Mebibyte);
@@ -401,7 +439,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
         Assert.Equal(
             actual: budgets,
-            expected: [(256UL * Mebibyte), (256UL * Mebibyte), Mebibyte, (256UL * Mebibyte)]
+            expected: [ulong.MaxValue, (1024UL * Mebibyte), Mebibyte, ulong.MaxValue]
         );
         _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: () => node.BudgetCapBytes = 0UL);
     }

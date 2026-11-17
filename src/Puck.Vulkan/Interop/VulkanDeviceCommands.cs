@@ -14,7 +14,9 @@ namespace Puck.Vulkan.Interop;
 public sealed unsafe class VulkanDeviceCommands {
     /// <summary>Gets the memory this device sub-allocates its buffers and offscreen images from.</summary>
     public VulkanMemoryArena Arena => (m_arena ??= new VulkanMemoryArena(device: this));
+
     private VulkanMemoryArena? m_arena;
+
     /// <summary>The <c>vkAcquireNextImageKHR</c> entry point; <see langword="null"/> unless <c>VK_KHR_swapchain</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, nint, out uint, VkResult> AcquireNextImageKhr;
     /// <summary>The <c>vkAllocateCommandBuffers</c> entry point.</summary>
@@ -61,12 +63,16 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
     /// <summary>The <c>vkCmdDrawIndirect</c> entry point, used by the fixed-record fallback.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void> CmdDrawIndirect;
+
     /// <summary>Gets whether the device enabled several indirect records in one native call.</summary>
     public bool MultiDrawIndirectEnabled { get; }
+
     /// <summary>The <c>vkCmdDrawIndexed</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void> CmdDrawIndexed;
+
     /// <summary>The device extension counted indirect draws need, <c>VK_KHR_draw_indirect_count</c>.</summary>
     public const string DrawIndirectCountExtension = "VK_KHR_draw_indirect_count";
+
     /// <summary>The <c>vkCmdDrawIndirectCountKHR</c> entry point; <see langword="null"/> unless
     /// <c>VK_KHR_draw_indirect_count</c> is enabled beside <c>multiDrawIndirect</c>.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void> CmdDrawIndirectCountKhr;
@@ -627,7 +633,6 @@ public sealed unsafe class VulkanDeviceCommands {
 
     /// <summary>Records that <c>vkDestroyDevice</c> destroyed the device.</summary>
     public void MarkDestroyed() => IsDestroyed = true;
-
     /// <summary>Destroys or frees one object this device owns through the object type's entry point, skipping a zero
     /// handle. Every <c>vkDestroy*</c> child-object entry point and <c>vkFreeMemory</c> share this shape, and this is
     /// the only zero-handle guard on them: every device-level destroy path calls it without checking first.</summary>
@@ -650,28 +655,51 @@ public sealed unsafe class VulkanDeviceCommands {
             );
         }
     }
-    /// <summary>Counts one successful <c>vkAllocateMemory</c> into <see cref="Memory"/> at its allocation size, keyed by
-    /// this device: in the role row its role names (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>), and in the segment
-    /// of the heap its memory type allocates from, which a preferred request may have taken as a fallback
-    /// (<see cref="GpuMemorySegments.OfMemoryType"/>), charging that heap's pool. Swapchain images are never allocated
+    /// <summary>Makes one <c>vkAllocateMemory</c> the device's memory ledger admitted first: asks <see cref="Memory"/> for
+    /// the allocation at its size, in the segment of the heap its memory type allocates from, which a preferred request
+    /// may have taken as a fallback (<see cref="GpuMemorySegments.OfMemoryType"/>); allocates; and counts it in the role
+    /// row its role names (<see cref="GpuDeviceMemoryWork.IsDeviceLocal"/>) and that segment, charging the heap's pool.
+    /// An allocation the device refuses for want of memory hands its grant back. Swapchain images are never allocated
     /// through this table, so they are never counted.</summary>
-    /// <param name="memoryHandle">The <c>VkDeviceMemory</c> the allocation returned; freeing it through
-    /// <see cref="FreeMemory"/> through <c>Destroy</c> counts its release.</param>
-    /// <param name="allocationSize">The allocation's size, in bytes, as <c>VkMemoryAllocateInfo.allocationSize</c>.</param>
+    /// <param name="allocateInfo">The allocation, as <c>vkAllocateMemory</c> takes it.</param>
     /// <param name="role">What the allocation is for.</param>
-    /// <param name="memoryTypeIndex">The memory type it allocated from, as <c>VkMemoryAllocateInfo.memoryTypeIndex</c>.</param>
     /// <param name="family">The family that names the whole allocation, for memory one resource holds; <see langword="null"/>
     /// for an arena block, whose placements name their parts (<see cref="GpuDeviceMemoryWork.CountAllocated"/>).</param>
+    /// <param name="payer">The family of the resource that prompted the allocation, whose reservation it draws on, or
+    /// <see langword="null"/>.</param>
+    /// <param name="payerBytes">The bytes of the resource that prompted the allocation.</param>
+    /// <returns>The <c>VkDeviceMemory</c>; freeing it through <see cref="FreeMemory"/> through <c>Destroy</c> counts its
+    /// release.</returns>
+    /// <exception cref="GpuMemoryRefusedException">The account or the device refused the allocation; nothing was
+    /// allocated.</exception>
+    /// <exception cref="VulkanException">The allocation failed for another reason.</exception>
     /// <exception cref="InvalidOperationException">The device registered no segments with <see cref="Memory"/>.</exception>
-    public void CountAllocated(nint memoryHandle, ulong allocationSize, GpuMemoryRole role, uint memoryTypeIndex, string? family) =>
-        Memory?.CountAllocated(
-            allocation: memoryHandle,
-            bytes: checked((long)allocationSize),
+    public nint AllocateCounted(in VkMemoryAllocateInfo allocateInfo, GpuMemoryRole role, string? family, string? payer, ulong payerBytes) {
+        var grant = Memory?.Admit(
+            bytes: checked((long)allocateInfo.AllocationSize),
             device: Handle,
             family: family,
+            payer: payer,
+            payerBytes: checked((long)payerBytes),
             role: role,
-            segment: Memory.SegmentsOf(device: Handle).OfMemoryType(memoryTypeIndex: memoryTypeIndex)
+            segment: Memory.SegmentsOf(device: Handle).OfMemoryType(memoryTypeIndex: allocateInfo.MemoryTypeIndex)
         );
+        var result = AllocateMemory(
+            Handle,
+            in allocateInfo,
+            0,
+            out var memory
+        );
+
+        if ((result is VkResult.ErrorOutOfDeviceMemory or VkResult.ErrorOutOfHostMemory) && (grant is not null)) {
+            throw grant.Refuse();
+        }
+        if (!result.IsSuccess()) { grant?.Return(); }
+        result.ThrowIfFailed(device: this, operation: "vkAllocateMemory");
+        if (grant is not null) { Memory!.CountAllocated(allocation: memory, grant: grant); }
+
+        return memory;
+    }
     /// <summary>Destroys one buffer or image this device owns and then frees the memory bound to it, skipping either
     /// handle when it is zero.</summary>
     /// <param name="destroy">The object type's entry point from this table: <see cref="DestroyBuffer"/> or <see cref="DestroyImage"/>.</param>

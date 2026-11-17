@@ -126,17 +126,11 @@ public unsafe sealed class VulkanNativeExternalMemoryApi : IVulkanExternalMemory
                 SType = StructureTypeMemoryAllocateInfo,
             };
 
-            request.Device.AllocateMemory(
-                request.Device.Handle,
-                in allocateInfo,
-                0,
-                out var memoryHandle
-            ).ThrowIfFailed(device: request.Device, operation: "vkAllocateMemory");
-            request.Device.CountAllocated(
-                allocationSize: allocateInfo.AllocationSize,
+            var memoryHandle = request.Device.AllocateCounted(
+                allocateInfo: in allocateInfo,
                 family: GpuDeviceMemoryWork.ImportedFamily,
-                memoryHandle: memoryHandle,
-                memoryTypeIndex: memoryTypeIndex,
+                payer: GpuDeviceMemoryWork.ImportedFamily,
+                payerBytes: allocateInfo.AllocationSize,
                 role: GpuMemoryRole.DeviceLocal
             );
 

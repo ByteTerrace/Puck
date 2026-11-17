@@ -1,5 +1,7 @@
 using Puck.Abstractions.Gpu;
+using Puck.Abstractions.Memory;
 using Puck.Hosting;
+using Puck.Hosting.Jobs;
 
 namespace Puck.Shaders;
 
@@ -27,9 +29,29 @@ public sealed partial class ShaderPipelineRenderNode {
     // The capture readback's staging buffer, counted like every other resource at its logical size: the published RGBA8
     // surface's width times its height times four. Zero until the first capture creates it.
     private ulong m_readbackBytes;
+    // The instance's reservation in the process's memory account, made for the owner its resources are named under.
+    // Fixed storage: a replacement that finds no room is refused here, before anything is allocated, and the installed
+    // graph's own allocations are never refused.
+    private MemoryAccount.DeviceReservation? m_reservation;
 
-    /// <summary>Gets the budget every replacement's peak is refused against, in bytes: the device's
-    /// <see cref="ShaderPipelineMemoryBudget.For"/>, lowered to <see cref="BudgetCapBytes"/> when that is smaller.</summary>
+    /// <summary>Gets the account the instance reserves its replacements in: the process's.</summary>
+    public MemoryAccount MemoryAccount { get; init; } = MemoryAccount.Shared;
+
+    private MemoryAccount.DeviceReservation Reservation => (m_reservation ??= MemoryAccount.ReserveDevice(
+        memoryClass: MemoryClass.Fixed,
+        owner: new GpuObjectName(owner: m_name, part: "graph").MemoryOwner(),
+        pool: GpuMemorySegments.ExpectedPool(role: GpuMemoryRole.DeviceLocal, unifiedMemory: m_device.MemoryProfile.UnifiedMemory)
+    ));
+
+    // Reserves a replacement's peak before anything is allocated for it; false refuses the replacement.
+    private bool TryReservePeak(ulong peakBytes) => Reservation.TryReserve(peak: ((long)Math.Min(val1: peakBytes, val2: ((ulong)long.MaxValue))));
+    // Lowers the reservation to what the instance owns once a replacement's objects are released.
+    private void SettleReservation() => _ = m_reservation?.TryReserve(peak: ((long)Math.Min(val1: OwnedBytes, val2: ((ulong)long.MaxValue))));
+    // Releases the reservation with the instance's objects.
+    private void ReleaseReservation() => _ = m_reservation?.TryReserve(peak: 0L);
+
+    /// <summary>Gets the budget every replacement's peak is refused against, in bytes: the account's
+    /// (<see cref="DeviceBudgetBytes"/>), lowered to <see cref="BudgetCapBytes"/> when that is smaller.</summary>
     public ulong BudgetBytes => ((m_budgetCapBytes is { } cap)
         ? Math.Min(
             val1: cap,
@@ -62,9 +84,18 @@ public sealed partial class ShaderPipelineRenderNode {
     /// <see cref="OwnedBytes"/> and the installed graph's steady-state bytes include them; zero when no graph is
     /// installed.</summary>
     public ulong RegionBytes => m_regionBytes;
-    /// <summary>Gets the device's budget, in bytes: <see cref="ShaderPipelineMemoryBudget.For"/> over the device's
-    /// memory profile.</summary>
-    public ulong DeviceBudgetBytes => ShaderPipelineMemoryBudget.For(profile: m_device.MemoryProfile);
+    /// <summary>Gets the most bytes the process's memory account would let the instance's peak reach now: what the
+    /// instance owns or has reserved, and the room its pool has left (<see cref="MemoryAccount.DeviceReservation.Room"/>);
+    /// <see cref="ulong.MaxValue"/> where nothing bounds the pool. A replacement is admitted by reserving its peak
+    /// (<see cref="MemoryAccount.DeviceReservation.TryReserve"/>), so two instances cannot be promised the same room.</summary>
+    public ulong DeviceBudgetBytes {
+        get {
+            var reservation = Reservation;
+            var room = reservation.Room;
+
+            return ((room == long.MaxValue) ? ulong.MaxValue : checked((Math.Max(val1: OwnedBytes, val2: ((ulong)reservation.Peak)) + ((ulong)room))));
+        }
+    }
     /// <summary>Gets the installed graph's account: the bytes it owns, and the peak a reload of it at its extent and
     /// selection would reach from what the node owns now. Both are zero when no graph is installed.</summary>
     public ShaderPipelineMemoryAccount InstalledAccount => (((m_pipeline is { } pipeline) && m_ready)
@@ -356,10 +387,11 @@ public sealed partial class ShaderPipelineRenderNode {
     // a planned access draws into it: a graphics pass's output or a package's color-attachment port.
     public static GpuImageUsage UsageOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
         ((storage.Declaration.Kind == ShaderPipelineResourceKind.Depth)
-            ? (GpuImageUsage.DepthAttachment | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.ShaderReadOnly) ? GpuImageUsage.Sampled : GpuImageUsage.None))
-            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(plan: plan, storage: storage, layout: GpuImageLayout.RenderTarget)
+            ? GpuImageUsage.DepthAttachment | (Accessed(layout: GpuImageLayout.ShaderReadOnly, plan: plan, storage: storage) ? GpuImageUsage.Sampled : GpuImageUsage.None)
+            : GpuImageUsage.Sampled | GpuImageUsage.Storage | (Accessed(layout: GpuImageLayout.RenderTarget, plan: plan, storage: storage)
                 ? GpuImageUsage.ColorAttachment
                 : GpuImageUsage.None));
+
     // Whether a planned access takes a storage in a layout.
     private static bool Accessed(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, GpuImageLayout layout) =>
         plan.Passes.Any(predicate: pass => pass.Accesses.Any(predicate: access => ((access.Storage == storage.Index) && (access.Use.Layout == layout))));

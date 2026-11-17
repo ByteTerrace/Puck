@@ -43,7 +43,9 @@ public sealed partial class SdfMeshPathBake {
     // completions are the producer signal an offline caller waits on (WaitForProgress). A System.Threading.Lock has no
     // Monitor.Wait, so the count has its own monitor.
     private static readonly object ProgressGate = new();
+
     private static long ProgressCount;
+
     private static readonly List<(Group Group, Action Work)> WorkQueue = [];
     private static readonly Queue<Action> AnswerQueue = new();
 
@@ -56,8 +58,8 @@ public sealed partial class SdfMeshPathBake {
     private sealed class WorkerSlot {
         public bool Running;
     }
-    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
 
+    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
     // What the bake counts for its done line, and what that line says (SdfMeshBakeReport, outside the bake's code identity):
     // the stage ticks, the samples of each kind, the takes made while a group still owed a lattice and what ended each
     // take's batch, the groups waiting on a dispatch, in flight and on the workers, and the frame thread's waits on the
@@ -73,11 +75,10 @@ public sealed partial class SdfMeshPathBake {
 
         return scope;
     }
-
     // Adds the time since a timestamp to a stage's account; the report names a stage that held one group's worker for
     // seconds, so the bake's long poles can be found.
     private void Account(BakeStage stage, long since, Group? group = null, SdfMeshBakeReport.Detail detail = default) {
-        var ticks = m_accounts.Add(stage: stage, since: since);
+        var ticks = m_accounts.Add(since: since, stage: stage);
 
         if (group is not null) {
             SdfMeshBakeReport.Slow(detail: detail, dynamic: group.Dynamic, instances: group.Instances, residency: Residency, selector: group.Selector, stage: stage, ticks: ticks);
@@ -153,6 +154,7 @@ public sealed partial class SdfMeshPathBake {
         Enqueue(group: group, urgent: false, work: work);
         return true;
     }
+
     // Runs work on the bake's pool ahead of every queued stage, in the order it came, as a lattice's answer runs: a
     // completed dispatch's samples are read and decoded there, off the frame's thread.
     internal static void RunFirst(Action work) {
@@ -161,6 +163,7 @@ public sealed partial class SdfMeshPathBake {
             StartWorkers();
         }
     }
+
     // Queues work for which the group's job count is already taken (Group.QueueWork). A stage that throws finishes its
     // group with no new mesh (Fail), so its reservation and workspace are released and the bake still settles. An
     // urgent answer runs even once its group retires, since it owns its decoded samples and frees them.
@@ -232,6 +235,7 @@ public sealed partial class SdfMeshPathBake {
             lock (ProgressGate) { return ProgressCount; }
         }
     }
+
     /// <summary>Sleeps until a pool worker has finished a work item since <paramref name="since"/>, or the timeout
     /// elapses.</summary>
     /// <param name="since">The <see cref="Progress"/> the caller read before it last looked at the bake.</param>
@@ -245,7 +249,6 @@ public sealed partial class SdfMeshPathBake {
             return (Monitor.Wait(obj: ProgressGate, timeout: timeout) && (ProgressCount != since));
         }
     }
-
     /// <summary>Retires every group of the bake, for a residency released, without waiting for any of them: their queued
     /// work is dropped before it runs, a stage running for one queues no further stage, an answer arriving for one is
     /// dropped, and each group frees its workspace when its last running job ends.</summary>
@@ -312,25 +315,28 @@ public sealed partial class SdfMeshPathBake {
     private (Vector3 Center, Vector3 Half) WorldBox(Group group) {
         if (!group.Dynamic || (group.Slot >= m_demandTransforms.Count)) { return (group.DemandCenter, group.DemandHalf); }
         var box = SdfMeshBox.Carried(center: group.DemandCenter, half: group.DemandHalf, transform: m_demandTransforms[group.Slot]);
+
         return (box.Center, box.AxisHalf);
     }
     private static (Vector3 Center, Vector3 Half) TransformDemandBox(Group group, Matrix4x4 matrix) => TransformBox(center: group.DemandCenter, half: group.DemandHalf, matrix: matrix);
     // The world-axis box about a box carried through a matrix.
     private static (Vector3 Center, Vector3 Half) TransformBox(Vector3 center, Vector3 half, Matrix4x4 matrix) {
-        return (Vector3.Transform(center, matrix), VectorFunctions.OrientedHalfExtent(halfExtent: half, matrix: in matrix));
+        return (Vector3.Transform(matrix: matrix, position: center), VectorFunctions.OrientedHalfExtent(halfExtent: half, matrix: in matrix));
     }
     // A shared geometry is wanted where its actual occurrences stand. Never union distant occurrence boxes:
     // the empty space between them is neither visible demand nor a nearby surface.
     private float MeasureDemand(Group group, bool priority) {
-        if (CopiesOf(group) is not { } copies) {
-            var (center, half) = WorldBox(group);
-            return (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
+        if (CopiesOf(group: group) is not { } copies) {
+            var (center, half) = WorldBox(group: group);
+            return (priority ? Demand.Priority(center: center, half: half) : Demand.DistanceFrom(center: center, half: half, index: 0));
         }
         var result = (priority ? 0f : float.PositiveInfinity);
+
         foreach (var index in copies) {
-            var (center, half) = TransformDemandBox(group, m_demandCopies[index].Matrix);
-            var value = (priority ? Demand.Priority(center, half) : Demand.DistanceFrom(index: 0, center: center, half: half));
-            result = (priority ? MathF.Max(result, value) : MathF.Min(result, value));
+            var (center, half) = TransformDemandBox(group: group, matrix: m_demandCopies[index].Matrix);
+            var value = (priority ? Demand.Priority(center: center, half: half) : Demand.DistanceFrom(center: center, half: half, index: 0));
+
+            result = (priority ? MathF.Max(x: result, y: value) : MathF.Min(x: result, y: value));
         }
         return result;
     }
@@ -347,6 +353,11 @@ public sealed partial class SdfMeshPathBake {
         ArgumentNullException.ThrowIfNull(argument: tables);
 
         lock (m_gate) {
+            // The grant is the tables', read once: its budget and bias are the selector's from then on (Retier).
+            if (!ReferenceEquals(objA: m_detail, objB: tables.Grant)) {
+                m_detail = tables.Grant;
+                Volatile.Write(location: ref m_bias, value: m_detail.Bias);
+            }
             // The region's account is read every frame: the next frame's tiers are budgeted by it (Retier).
             m_regionLimitBytes = ((long)tables.MeshRegionLimitBytes);
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
@@ -380,6 +391,7 @@ public sealed partial class SdfMeshPathBake {
             m_allResident = all;
         }
     }
+
     // Names the tables the products that wait ahead of the draws, then hands the draws to those whose every piece
     // stands in the mesh region: the one place a product that replaces a drawn mesh takes the draws (Group.ShowOwn).
     // The standing products take the draws together, once none is still landing or one has waited
@@ -440,6 +452,7 @@ public sealed partial class SdfMeshPathBake {
             if (state == AheadState.StandsRefused) { m_handedRefused++; }
         }
     }
+
     /// <summary>Describes where the resident triangles' detail is asked from: one line a demand point that sees some
     /// group finest (its eye, its pixels a metre at one metre, the groups and triangles whose tier it sets and the
     /// finest tier among them), then the groups holding the most triangles, each with its tier, the rungs that change
@@ -575,10 +588,11 @@ public sealed partial class SdfMeshPathBake {
             // such group's cell in display pixels and the longest wait, now and since the bake started, the finer tiers
             // landed, and the resident triangles by the tier they were baked at.
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tiers-owed={m_tiersOwed} owed-error={m_owedError:0.00}px owed-frames={m_owedFrames} worst-owed-error={m_worstOwedError:0.00}px worst-owed-frames={m_worstOwedFrames} retiers={m_retiers} retiers-reused={m_retiersReused}");
-            // The region's budget (Retier): the bytes the frame's draws name against it, the meshes the region refuses,
-            // the groups drawing a finer tier than their demand asks, the finer tiers the budget holds back, the coarser
-            // tiers landed to make room, and the half rungs every demand is coarsened by, with the steps up and down.
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={RegionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={m_biasRaised} bias-lowered={m_biasLowered}");
+            // The residency's budget from its presentation's selector (Retier): the bytes the frame's draws name
+            // against it, the meshes the region refuses, the groups drawing a finer tier than their demand asks, the
+            // finer tiers the budget holds back, the coarser tiers landed to make room, and the half rungs every demand
+            // is coarsened by, the selector's one bias, with its steps up and down.
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
             for (var tier = 0; (tier < tierTriangles.Length); tier++) {
                 if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }
             }

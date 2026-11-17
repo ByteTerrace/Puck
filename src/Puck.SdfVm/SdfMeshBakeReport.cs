@@ -203,14 +203,13 @@ internal static class SdfMeshBakeReport {
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
     /// <param name="admitted">The groups admitted this take.</param>
-    /// <param name="available">The machine's free bytes, when read.</param>
-    public static void Deferred(string residency, int selector, long peak, int admitted, long? available) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} available={available}");
-    /// <summary>Writes the line for a group admitted alone, whatever the budget and the machine's free memory read.</summary>
+    public static void Deferred(string residency, int selector, long peak, int admitted) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] deferred residency={residency} group={selector} peak={peak} admitted={admitted} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
+    /// <summary>Writes the line for a group admitted alone as the process's one forced job, whatever the account's host
+    /// pool holds.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="selector">The group's selector.</param>
     /// <param name="peak">The group's peak bytes.</param>
-    /// <param name="available">The machine's free bytes, when read.</param>
-    public static void AdmittedAlone(string residency, int selector, long peak, long? available) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} available={available}");
+    public static void AdmittedAlone(string residency, int selector, long peak) => Console.Error.WriteLine(value: $"[sdf.mesh-bake] admitted alone residency={residency} group={selector} peak={peak} budget={MemoryAccount.Shared.Read().Budget} room={MemoryAccount.Shared.ReadAdmission(pool: Puck.Abstractions.Memory.PhysicalMemory.Host).Room}");
     /// <summary>Writes the line for a group whose bake refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>

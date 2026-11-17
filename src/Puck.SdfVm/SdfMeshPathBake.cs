@@ -7,7 +7,6 @@ using Puck.Shaders;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Baking;
 using Puck.Abstractions.Memory;
-using Puck.Hosting;
 using Puck.Hosting.Jobs;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
@@ -268,6 +267,7 @@ public sealed partial class SdfMeshPathBake {
 
     // A refinement whose box keeps this share of every extent has converged.
     private const float Converged = 0.7f;
+
     /// <summary>The spacing, in metres, a final lattice's refined cells aim for where no member declares a detail
     /// (<see cref="SdfInstanceRange.Detail"/>), floored by the group's tier (<see cref="SdfMeshTier"/>); the most fine cells
     /// a coarse cell splits into along each axis is <c>MaxRefinement</c> (<see cref="SdfSampledLattice.Refine"/>).</summary>
@@ -385,6 +385,7 @@ public sealed partial class SdfMeshPathBake {
             lock (m_gate) { return Owes(); }
         }
     }
+
     // Whether the bake still owes the dressed frame a mesh, a slice or a successor. Under the gate.
     private bool Owes() {
         if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { return true; }
@@ -393,6 +394,7 @@ public sealed partial class SdfMeshPathBake {
         while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
         return (m_doneThrough < m_groups.Count);
     }
+
     /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
     /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
     /// not hold its first lighting measurement or a later static-scene refresh behind unrelated work.</summary>
@@ -448,7 +450,6 @@ public sealed partial class SdfMeshPathBake {
     private long m_productRevision;
 
     private long m_dressedRevision = -1;
-
     // The groups whose product lands in the mesh region ahead of the draws (Group.Ahead); the count of changes to
     // that list, the count the tables were last named its meshes at, and those tables; and the products that took
     // their draws, those the region had no room for beside the mesh they replace among them. Under the gate.
@@ -456,15 +457,19 @@ public sealed partial class SdfMeshPathBake {
     private readonly List<SdfMesh> m_aheadMeshes = [];
     // Where each waiting product stands this frame, by its place in m_ahead (ServeAhead).
     private readonly List<AheadState> m_aheadStates = [];
+
     private long m_aheadRevision;
+
     private long m_aheadNamed = -1L;
+
     private SdfWorldTables? m_aheadTables;
     private long m_handed;
     private long m_handedRefused;
 
-    // Whether a residency's tables land this bake's meshes: they have read it their region's limit (ObserveResidency).
+    // Whether a residency's tables land this bake's meshes: they have handed it their grant (ObserveResidency).
     // A bake no tables observe (an offline bake) draws every product at once, since nothing would hand it its draws.
-    private bool LandsAhead => (m_regionLimitBytes != 0L);
+    private bool LandsAhead => (m_detail is not null);
+
     private enum AheadState : byte { Landing, Stands, StandsRefused }
 
     private void AwaitAhead(Group group) {
@@ -669,8 +674,6 @@ public sealed partial class SdfMeshPathBake {
             // The first group the account defers holds its place: no group behind it starts its final lattice
             // before it does, so a large group never starves behind a stream of smaller ones.
             var admissionWaits = false;
-            long? available = null;
-            var availableRead = false;
             var backlogged = false;
             var backlogRead = false;
 
@@ -708,20 +711,19 @@ public sealed partial class SdfMeshPathBake {
 
                     var peak = PeakOf(final: group.Final!);
 
-                    // The machine's free memory paces admission; it is read outside the account, at most every
-                    // AvailableSeconds.
-                    if (!availableRead) { available = AvailablePhysicalBytes(); availableRead = true; }
-                    if (!group.Memory.TryReserve(available: available, peak: peak)) {
-                        if (admitted > 0) {
-                            if (!group.DeferredReported) { SdfMeshBakeReport.Deferred(admitted: admitted, available: available, peak: peak, residency: Residency, selector: group.Selector); group.DeferredReported = true; }
+                    // The account's host pool paces admission: its budget, and the machine's free memory as the
+                    // account reads it.
+                    if (!group.Memory.TryReserve(peak: peak)) {
+                        // With nothing of the bake admitted, the group is admitted whatever the pool holds, as the
+                        // process's one forced job, so the bake always progresses; while another bake holds that
+                        // allowance this one waits for it, as it waits for room. The library's cache stays: the
+                        // groups following a leader take its mesh from there rather than baking it again.
+                        if ((admitted > 0) || !group.Memory.TryReserveForced(peak: peak)) {
+                            if (!group.DeferredReported) { SdfMeshBakeReport.Deferred(admitted: admitted, peak: peak, residency: Residency, selector: group.Selector); group.DeferredReported = true; }
                             admissionWaits = true;
                             continue;
                         }
-                        // With nothing of the bake admitted, the group is admitted whatever the budget and the machine's
-                        // free memory read, so the bake always progresses, one group at a time. The library's cache
-                        // stays: the groups following a leader take its mesh from there rather than baking it again.
-                        group.Memory.Reserve(peak: peak);
-                        if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(available: available, peak: peak, residency: Residency, selector: group.Selector); }
+                        if (!group.DeferredReported) { SdfMeshBakeReport.AdmittedAlone(peak: peak, residency: Residency, selector: group.Selector); }
                     }
                     group.DeferredReported = false;
                     group.Admitted = true;
@@ -759,23 +761,6 @@ public sealed partial class SdfMeshPathBake {
             }
             return true;
         }
-    }
-
-    // How long a reading of the machine's free memory paces admission before it is read again.
-    private const double AvailableSeconds = 0.25;
-
-    private long? m_available;
-    private long m_availableAt;
-
-    // The machine's free physical memory, read again once the last reading is AvailableSeconds old. Under the gate.
-    private long? AvailablePhysicalBytes() {
-        var now = Stopwatch.GetTimestamp();
-
-        if ((m_availableAt == 0) || (Stopwatch.GetElapsedTime(endingTimestamp: now, startingTimestamp: m_availableAt).TotalSeconds >= AvailableSeconds)) {
-            m_available = HostMemory.AvailablePhysicalBytes();
-            m_availableAt = now;
-        }
-        return m_available;
     }
 
     private readonly List<(int First, ReadOnlyMemory<Vector4> Rows)> m_takenPoses = [];
@@ -1578,7 +1563,7 @@ public sealed partial class SdfMeshPathBake {
         var finest = MathF.Min(x: detail, y: glyphDetail);
 
         if (group.Fitted && float.IsFinite(f: finest) && ((finest * MaxDetailRefinement) < coarse)) {
-            lattice = BudgetedLattice(group: group, widest: coarse, finest: (finest * MaxDetailRefinement));
+            lattice = BudgetedLattice(finest: (finest * MaxDetailRefinement), group: group, widest: coarse);
             coarse = MathF.Max(x: lattice.Cell.X, y: MathF.Max(x: lattice.Cell.Y, y: lattice.Cell.Z));
         }
 
@@ -1630,7 +1615,7 @@ public sealed partial class SdfMeshPathBake {
             finest = MathF.Min(x: finest, y: MemberCell(radius: radius));
         }
 
-        var lattice = BudgetedLattice(group: group, widest: (longest / (FinalSamples - 1)), finest: finest);
+        var lattice = BudgetedLattice(finest: finest, group: group, widest: (longest / (FinalSamples - 1)));
         var spacing = lattice.Cell;
         var coarse = MathF.Max(x: spacing.X, y: MathF.Max(x: spacing.Y, y: spacing.Z));
         var regions = new List<SdfLatticeRegion>();
@@ -2299,7 +2284,7 @@ public sealed partial class SdfMeshPathBake {
                 // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
                 // into a valid triangle instead of making one degenerate face immobilize the whole fan.
                 if (!(Dot(a: normal, b: normal) > ((1e-12 * longest) * longest))) { return; }
-                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(vertex: a, axis: 0) + Patch(vertex: b, axis: 0)) + Patch(vertex: c, axis: 0)), ((Patch(vertex: a, axis: 1) + Patch(vertex: b, axis: 1)) + Patch(vertex: c, axis: 1)), ((Patch(vertex: a, axis: 2) + Patch(vertex: b, axis: 2)) + Patch(vertex: c, axis: 2))), Reference: normal));
+                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(axis: 0, vertex: a) + Patch(axis: 0, vertex: b)) + Patch(axis: 0, vertex: c)), ((Patch(axis: 1, vertex: a) + Patch(axis: 1, vertex: b)) + Patch(axis: 1, vertex: c)), ((Patch(axis: 2, vertex: a) + Patch(axis: 2, vertex: b)) + Patch(axis: 2, vertex: c))), Reference: normal));
                 m_starts[(a + 1)]++;
                 m_starts[(b + 1)]++;
                 m_starts[(c + 1)]++;
@@ -2437,7 +2422,7 @@ public sealed partial class SdfMeshPathBake {
         public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); } TryRelease(); } }
         public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
 
-        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner("mesh-bake-group");
+        public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
 
         private SdfMesh? m_mesh;
 
@@ -2495,6 +2480,7 @@ public sealed partial class SdfMeshPathBake {
         public bool Ahead => (m_shown is not null);
         // The frames the product has waited ahead of the draws (SdfMeshPathBake.ServeAhead).
         public int AheadFrames { get; set; }
+
         // Hands the draws to the product, letting go of the mesh it replaces. Under the owner's gate.
         public void ShowOwn() {
             if (m_shown is not { } shown) { return; }
@@ -2625,16 +2611,18 @@ public sealed partial class SdfMeshPathBake {
         // tier than it draws, whether it is the finer tier's replacement of the group it replaces, and whether a finer
         // tier's bake meshed nothing at the demanded tier, so none is tried until the demand asks another.
         public int DemandedTier { get; set; }
+
         // The metres one display pixel covers at its demand box, as the bake last measured it (MeasureDemands); not a
         // number before the first measure.
         public float DemandPixel { get; set; } = float.NaN;
+
         public int OwedFrames { get; set; }
         // The frames in a row the demand has asked a coarser tier than it draws, and, for a tier's replacement, the
         // bytes of mesh region it is expected to add (a finer tier) or give back (a coarser one, negative).
         public int SpareFrames { get; set; }
         public long RetierDeltaBytes { get; set; }
-        public bool Retiering { get; set; }
         public bool RetierRefused { get; set; }
+        public bool Retiering { get; set; }
 
         // Takes the demand box from the planned box, once.
         public void TakeDemandBox() {
@@ -2703,6 +2691,7 @@ public sealed partial class SdfMeshPathBake {
         public int Factor { get; init; }
 
         public SdfLatticeRegion[] Regions { get; init; } = [];
+
         // The group's tier's cell (SdfMeshTier), which floors FineCell for the essential cells' split.
         public float TierCell { get; init; }
     }

@@ -29,6 +29,9 @@ namespace Puck.SdfVm;
 /// <param name="ShadeDefault">The default shade program the first frame packs after <paramref name="Program"/>'s words
 /// (<see cref="SdfFrame.ShadeDefault"/>), which the program region is sized to hold from construction; <see langword="null"/>
 /// when the first frame has none.</param>
+/// <param name="Selector">The presentation's selector the tables register their residency with, which reserves their
+/// mesh region and budgets their bake; <see langword="null"/> takes the device's
+/// (<see cref="SdfResidencySelector.Of"/>).</param>
 public sealed record SdfWorldTablesOptions(
     SdfProgram Program,
     int DynamicTransformCapacity = 1,
@@ -36,5 +39,6 @@ public sealed record SdfWorldTablesOptions(
     int InstanceCapacity = 0,
     GpuWorkLedger? WorkLedger = null,
     SdfSkyDetails? SkyDetails = null,
-    SdfShadeProgram? ShadeDefault = null
+    SdfShadeProgram? ShadeDefault = null,
+    SdfResidencySelector? Selector = null
 );
