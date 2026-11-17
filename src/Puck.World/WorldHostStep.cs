@@ -8,7 +8,7 @@ namespace Puck.World;
 /// The fixed step every boot shape runs: seat route changes, boot scheduling, authority and instance steps,
 /// the composition's post-step, then seat intent completion. The host-work clock a world.wait counts lives here.
 /// </summary>
-internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, HostPacing pacing) {
+internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTape, WorldConsoleWaitGate waitGate, WorldCaptureScheduler captureScheduler, WorldTestRun scheduleRunner, WorldTickScript tickScript, WorldPeerHost peerHost, WorldInstanceHost instances, WorldServiceExtensions extensions, WorldSeatAuthorityRouter seatRouter, WorldSourceWatch sourceWatch, WorldReload reload, HostPacing pacing) {
     private readonly WorldCaptureScheduler m_captureScheduler = captureScheduler;
     private readonly WorldServer m_server = server;
     private readonly WorldReplayTape m_replayTape = replayTape;
@@ -99,6 +99,7 @@ internal sealed class WorldHostStep(WorldServer server, WorldReplayTape replayTa
     /// offscreen shell then publishes logical wheel state.</param>
     public void Step(in FixedStepContext context, Action? afterInstances) {
         sourceWatch.Poll();
+        reload.Poll();
         // A seat claim can be published off this thread (a federated observer reporting an onward handoff) or by a
         // console verb in the drain just run. Its subscribers change seat state and bind state mirrors, so the edge is
         // delivered here, on the pump thread, at each point of the step after which a claim can have moved: before

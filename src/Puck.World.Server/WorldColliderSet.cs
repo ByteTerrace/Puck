@@ -579,6 +579,7 @@ public sealed partial class WorldColliderSet : IContactField {
                 (compiled.WorldSeed != worldSeed) ||
                 (compiled.DefaultGrip != worldDefaultGrip)
             ) {
+                WorldBootWork.Count(kind: WorldBootWork.ColliderPlacementsCompiled);
                 compiled = CompilePlacement(
                     creation: creation,
                     defaultGrip: worldDefaultGrip,
@@ -596,6 +597,8 @@ public sealed partial class WorldColliderSet : IContactField {
                         shown: compiled
                     );
                 }
+            } else {
+                WorldBootWork.Count(kind: WorldBootWork.ColliderPlacementsReused);
             }
 
             placementsCompiled[placement] = compiled;

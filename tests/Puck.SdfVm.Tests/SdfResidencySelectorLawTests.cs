@@ -211,11 +211,11 @@ public sealed class SdfResidencySelectorLawTests {
         var budget = new SdfGpuWorkBudget(clock: () => now);
 
         budget.Accrue();
-        budget.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
+        var debited = budget.ChargeGpu(seconds: SdfGpuWork.FrameShareSeconds);
 
         // A timestamp pair read end before start wraps to nearly the counter's range: seconds no job in flight for a
         // few milliseconds ran. The job is charged its estimate, and the measurement is counted.
-        var charged = budget.SettleGpu(estimate: SdfGpuWork.FrameShareSeconds, inFlight: 0.004, measured: 1.8e10);
+        var charged = budget.SettleGpu(debited: debited, estimate: SdfGpuWork.FrameShareSeconds, inFlight: 0.004, measured: 1.8e10);
 
         Assert.Equal(expected: 0.004, actual: charged);
         Assert.Contains(expectedSubstring: "clamped:1,", actualString: budget.Describe());
@@ -231,9 +231,9 @@ public sealed class SdfResidencySelectorLawTests {
 
         // Charges past the debt's floor are dropped and counted: jobs that honestly ran long, an estimate that is
         // garbage, a charge that is not a number. The credit never falls below the floor.
-        for (var job = 0; (job < 8); job++) { _ = budget.SettleGpu(estimate: 0.0, inFlight: 1.0, measured: 1.0); }
-        budget.ChargeGpu(seconds: 1e30);
-        budget.ChargeGpu(seconds: double.NaN);
+        for (var job = 0; (job < 8); job++) { _ = budget.SettleGpu(debited: 0.0, estimate: 0.0, inFlight: 1.0, measured: 1.0); }
+        _ = budget.ChargeGpu(seconds: 1e30);
+        _ = budget.ChargeGpu(seconds: double.NaN);
         Assert.Equal(expected: -SdfGpuWorkBudget.MostDebtSeconds, actual: budget.GpuCredit);
         Assert.DoesNotContain(expectedSubstring: "floored:0]", actualString: budget.Describe());
 
@@ -253,6 +253,27 @@ public sealed class SdfResidencySelectorLawTests {
         }
         Assert.True(condition: budget.Holds);
         Assert.Equal(expected: TimeSpan.Zero, actual: budget.UntilHolds);
+    }
+    [Fact]
+    public void ASettlementGivesBackOnlyWhatItsChargeDebitedSoTheFloorMintsNoCredit() {
+        var now = Stopwatch.Frequency;
+        var budget = new SdfGpuWorkBudget(clock: () => now);
+
+        budget.Accrue();
+
+        var before = budget.GpuCredit;
+        // An estimate far past the debt's floor: the floor takes only what lies above it.
+        var debited = budget.ChargeGpu(seconds: 1.0);
+
+        Assert.Equal(expected: -SdfGpuWorkBudget.MostDebtSeconds, actual: budget.GpuCredit);
+        Assert.Equal(expected: (before + SdfGpuWorkBudget.MostDebtSeconds), actual: debited, precision: 12);
+        // The job then measures a millisecond: it is charged that, in place of what was debited, and the credit is where
+        // the charge found it less the measurement, never the dropped part of the estimate given back as a burst.
+        var charged = budget.SettleGpu(debited: debited, estimate: 1.0, inFlight: 0.01, measured: 0.001);
+
+        Assert.Equal(expected: 0.001, actual: charged);
+        Assert.Equal(expected: (before - 0.001), actual: budget.GpuCredit, precision: 12);
+        Assert.True(condition: (budget.GpuCredit <= (SdfGpuWorkBudget.MostBankSeconds * SdfGpuWork.GpuShare)), userMessage: $"the credit rose to {budget.GpuCredit}");
     }
     [Fact]
     public void AReportMadeBeforeTheLimitWasRestoredDoesNotRaiseTheBias() {

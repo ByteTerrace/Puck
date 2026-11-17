@@ -467,21 +467,30 @@ add-a-kind procedure: [references/mutations.md](references/mutations.md).
 **Paths resolve beside the document** that names them (`WorldDocumentPaths`);
 shipped engine content resolves through `PuckPaths.Shipped`.
 
-**Reload travels as a delta.** `world.reload` compiles the current source, then
-`WorldReloadDelta.Create` diffs the installed declarations with `WorldDocumentBasis.Diff`
-and proves the merge reproduces the target. Only the keyed patch, authority document
-version, base/result fingerprints, directory and source pin cross the submission wire;
-the Rebuild cap stays 16 MiB. The server reconstructs and validates before enqueue,
-then rechecks the base at ordered apply. `world.reload.stale-base` names an intervening
-install or another activation; `world.reload.base-mismatch` and
+**Reload travels as a delta, prepared off the tick.** `world.reload` is an immediate
+verb (`WorldReload`): it captures the installed declarations and their version on the
+pump, compiles, admits, text-checks and diffs the current source on the thread pool
+(`WorldReloadDelta.Create` over `WorldDocumentBasis.Diff`, proving the merge reproduces
+the target), and submits from the pump; its session holds later lines until the
+authority's verdict, so a following read sees the reloaded world. Only the keyed patch,
+authority document version, base/result fingerprints, directory and source pin cross
+the submission wire; the Rebuild cap stays 16 MiB. The authority prepares a live
+Load or Reload off its tick and gate too (`WorldRebuildPreparation`, taken at the next
+drain by `WorldRebuildPreparations`, on a host with workers): it reconstructs against
+the declarations the delta names (`WorldDocument.Installed`, held weakly while the
+sender holds them, so installs since do not refuse it), shares every member and keyed
+row the patch leaves unchanged with them (`WorldDocumentWalker.Share`, so collider sets,
+stamps and other reference-keyed products carry over), checks the target pin on that
+shared candidate, and admits it once (`WorldDefinitionAdmission`, whose programs
+`ApplyRebuild` adopts). The replay drive and a history seek prepare inline.
+`world.reload.stale-base` names a base the authority cannot name (another activation,
+or replaced declarations nothing holds); `world.reload.base-mismatch` and
 `world.reload.target-mismatch` name disagreeing content. Retry by issuing a fresh
 reload. The success echo prints patch and complete payload bytes. Reload still uses
 the ordinary rebuild's state, input, journal and replay semantics; a wire delta is
-not a presentation-only mutation. Whole-document serialization, reconstruction and
-validation still allocate at this boundary (the next edit-to-running work item).
-For a live stdin driver, send an immediate read (`world.status` or `world.row`)
-after `world.reload` before waiting for its deferred answer: the following read
-is the session's drain barrier, including while startup's script backlog is held.
+not a presentation-only mutation. What the install itself still costs on the tick
+(state settlement, the in-place arena load, disclosure composition) is the next
+edit-to-running work item.
 
 **An import names; the named file decides what it brings.** `import "skies"`,
 never `import "skies.puck"` (PUCK121). A module library (a source emitting no

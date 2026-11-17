@@ -39,6 +39,8 @@ public sealed partial class WorldDocument {
     private WorldSolidField? m_solids;
 
     private readonly WorldServer m_host;
+    // Every definition this activation installed, by install ordinal, held weakly (Installed).
+    private readonly Puck.Abstractions.Collections.WeakValueTable<long, WorldDefinition> m_installed = new();
 
     /// <summary>Gets the loaded base definition the journal is an edit history over.</summary>
     internal WorldDefinition Base => m_base;
@@ -91,6 +93,7 @@ public sealed partial class WorldDocument {
         m_base = definition;
         m_definition = definition;
         m_host = host;
+        m_installed.Set(key: 0, value: definition);
     }
 
     /// <summary>Replaces the journal base and names its new origin, without touching the live definition.</summary>
@@ -106,6 +109,19 @@ public sealed partial class WorldDocument {
         m_definition = definition;
         if (Host.Arena is { } arena) { WorldStateReader.Bind(definition, arena); }
         m_sequence++;
+        m_installed.Set(key: m_sequence, value: definition);
+        _ = m_installed.SweepIfGrown();
+    }
+    /// <summary>Returns the declarations this activation installed at an install ordinal, while anything still holds
+    /// them: the live definition at the current ordinal, or an earlier one a capture (a reload's preparation) holds.</summary>
+    /// <param name="version">The authority version naming them.</param>
+    /// <returns>The declarations, or <see langword="null"/> when the version is another activation's or nothing holds
+    /// them any longer.</returns>
+    internal WorldDefinition? Installed(WorldDocumentVersion version) {
+        if (!version.IsDelivered || (version.Activation != Host.DocumentVersion.Activation)) { return null; }
+        return ((version.Sequence == m_sequence)
+            ? m_definition
+            : (m_installed.TryGetValue(key: version.Sequence, value: out var held) ? held : null));
     }
 
     /// <summary>Adopts a rebuilt solid field and bumps its revision.</summary>

@@ -713,24 +713,46 @@ Reload submissions carry a `WorldReloadDelta`, not the composed document. Its
 patch is the existing `WorldDocumentBasis.Diff` vocabulary (keyed refinements,
 deletions and list replacement where order changes); the sender proves its
 `TryMerge` round trip before submitting. The Rebuild payload cap remains 16 MiB.
-`WorldDocument.EnqueueRebuild` reconstructs from the authority's installed
-declarations, checks the exact `WorldDocumentVersion` and canonical base/result
-fingerprints, and proves neighbours before buffering. `ApplyRebuild` rechecks the
-base before any state or journal change, so an earlier queued install cannot
-silently change the meaning of the patch. The named refusals are
-`world.reload.stale-base` (version or activation), `world.reload.base-mismatch`
-and `world.reload.target-mismatch` (content). A malformed delta or invalid
-candidate also refuses without installation. Wire shape validation excludes a
-client-supplied reconstructed document on Reload; only the server fills it.
-The success echo prints delta and complete payload bytes.
+
+A live Load or Reload is prepared off the authority's tick and gate. Its
+submission captures what the candidate alone decides from
+(`WorldRebuildPreparation`: the declarations a delta names, their version, the
+operator check, the proof transport and the machine catalog), and a host with
+workers runs the preparation on the thread pool (`WorldRebuildPreparations`, one
+`BackgroundBuild` per rebuild); the drain at the start of each tick's pending ops
+takes finished ones, oldest first, so a prepared rebuild enters the buffered ops at
+a tick boundary as a submission arriving then would, and the tape records it where
+it applies. The replay drive and a history seek prepare inline
+(`EnqueueRebuild`), so a re-drive installs at its recorded tick. Preparation
+reconstructs the delta against the declarations it names (`WorldDocument.Installed`
+holds every installed definition weakly by install ordinal, so the sender's capture
+keeps its base nameable across installs since), checks the canonical base/result
+fingerprints, and admits the candidate once with the neighbour proof and the machine
+catalog (`WorldDefinitionValidator.TryAdmit`); `ApplyRebuild` adopts the admission's
+programs (`WorldDefinitionAdmission.AppliesTo`) instead of validating again. The
+reconstruction shares every member and keyed row the patch leaves unchanged with the
+named declarations (`WorldDocumentWalker.Share`), and the target pin is checked on
+that shared candidate, so sharing never changes the installed bytes while collider
+sets, stamps and the other reference-keyed products carry over
+(`world.boot.collider-placements-reused`). A delta reconstructed against its named
+base is a complete target, so an install between preparation and apply does not
+refuse it; only a buffered delta whose basis is unknown (one a checkpoint restored)
+is checked against the live document at apply. The named refusals are
+`world.reload.stale-base` (another activation, or replaced declarations nothing
+holds), `world.reload.base-mismatch` and `world.reload.target-mismatch` (content),
+and `world.rebuild.preparation-failed` for a preparation that threw. A malformed
+delta or invalid candidate also refuses without installation; a rebuild still
+preparing when the activation stops or retires is refused, never checkpointed. Wire
+shape validation excludes a client-supplied reconstructed document on Reload; only
+the server fills it. The success echo prints delta and complete payload bytes.
 
 The reconstructed candidate then uses the same `ApplyRebuild` door as an
 in-process whole-document reload, preserving its simulation, input and journal
 semantics. Replay records the source pin and rereads that source, not the
 activation-specific patch. This transport change does not turn reload into
-`InstallKindOf`'s presentation mutation: reconstruction, serialization, full
-validation and the existing reload rebuild still allocate. Those are the next
-edit-to-running allocation work, separately from sending unchanged content.
+`InstallKindOf`'s presentation mutation: the install still settles the state rows,
+loads the arena in place and composes every audience's disclosure on the tick.
+Those are the next edit-to-running work, separately from sending unchanged content.
 
 `host.journalDepth` bounds the undo horizon: `0` (the default) leaves the
 journal growing for the life of the process, exactly as before the field

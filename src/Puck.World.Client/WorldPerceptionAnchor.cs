@@ -57,6 +57,20 @@ public sealed class WorldPerceptionAnchor {
         ? m_perceivedBody[slot]
         : slot
     );
+    /// <summary>The body seat <paramref name="slot"/> possesses: its perceived body when that is not the seat's own bound
+    /// body, else -1. Every seat-relative pose that follows the perceived world (the camera anchor, the
+    /// <c>seat.&lt;n&gt;.position.*</c> HUD bindings, <c>world.view.camera</c>) resolves this body in the boot frame
+    /// (<c>WorldContinuum.TryResolvePresentedSeatPose</c>).</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <returns>The possessed body's 0-based index in the boot world, or -1.</returns>
+    public int Possessed(int slot) {
+        var body = PerceivedBody(slot: slot);
+
+        return ((body == slot)
+            ? -1
+            : body
+        );
+    }
     /// <summary>Publishes seat <paramref name="slot"/>'s resolved anchor. Called only from
     /// <c>WorldSeatContextSync.Publish</c>, the one per-tick (and boot-seed) loopback read of the grant
     /// table's control-application set.</summary>

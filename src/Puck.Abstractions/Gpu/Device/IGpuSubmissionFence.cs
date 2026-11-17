@@ -33,4 +33,11 @@ public interface IGpuSubmissionFence : IDisposable {
     /// the submission retires.</param>
     /// <exception cref="ArgumentNullException"><paramref name="signal"/> is <see langword="null"/>.</exception>
     void SignalOnCompletion(EventWaitHandle signal);
+    /// <summary>Hands the submission armed with this fence to the queue now when an open batch still defers it
+    /// (<see cref="IGpuQueueSubmitter.BeginBatch"/>), with every submission deferred before it and the batch kept open,
+    /// and does nothing otherwise. A deferred submission neither runs nor sets its completion signal until it reaches the
+    /// queue, so a thread that sleeps on that signal while the batch is open hands it off first, or it sleeps behind
+    /// its own work. It never blocks on the GPU.</summary>
+    /// <exception cref="DeviceLostException">The device was lost.</exception>
+    void HandOff();
 }

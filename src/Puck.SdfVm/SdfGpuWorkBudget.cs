@@ -22,7 +22,10 @@ namespace Puck.SdfVm;
 /// (<see cref="MeasuredWithin"/>), since no job ran longer than that, and the credit is floored at the debt
 /// (<see cref="ChargeGpu"/>, <see cref="SettleGpu"/> are the only writes that lower it). So one faulty measurement
 /// (a timestamp pair read end before start wraps to nearly the counter's whole range) holds the work for at most
-/// <see cref="MostDebtSeconds"/> over <see cref="SdfGpuWork.GpuShare"/> seconds, never for good.
+/// <see cref="MostDebtSeconds"/> over <see cref="SdfGpuWork.GpuShare"/> seconds, never for good. A settlement replaces
+/// what the job's charge actually debited (<see cref="ChargeGpu"/> returns it), never the estimate: the part of an
+/// estimate the floor dropped was never taken, so it is never given back, and no settlement raises the credit above
+/// where the job's charge found it.
 /// </para>
 /// <para>The services take from it first come, in the order their residencies are pumped. Thread-safe.</para>
 /// </summary>
@@ -126,21 +129,26 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
     }
     /// <summary>Charges a submitted job's estimated GPU time.</summary>
     /// <param name="seconds">The estimate, in seconds.</param>
-    public void ChargeGpu(double seconds) {
-        lock (m_gate) { Charge(seconds: seconds); }
+    /// <returns>The seconds the charge debited: the estimate, less what the debt's floor dropped; what the job's
+    /// settlement (<see cref="SettleGpu"/>) replaces.</returns>
+    public double ChargeGpu(double seconds) {
+        lock (m_gate) { return Charge(seconds: seconds); }
     }
-    /// <summary>Replaces a charged job's estimate with its measured GPU time, held to what the job could have run
-    /// (<see cref="MeasuredWithin"/>), and counts a measurement that was not one.</summary>
-    /// <param name="estimate">The seconds the job was charged.</param>
+    /// <summary>Replaces what a charged job debited with its measured GPU time, held to what the job could have run
+    /// (<see cref="MeasuredWithin"/>), and counts a measurement that was not one. It gives back at most what the charge
+    /// debited.</summary>
+    /// <param name="debited">The seconds the job's charge debited (<see cref="ChargeGpu"/>'s answer).</param>
+    /// <param name="estimate">The seconds the job was estimated to take, which a measurement no job could have made
+    /// falls back to.</param>
     /// <param name="measured">The seconds its timestamps read.</param>
     /// <param name="inFlight">The wall time, in seconds, between the job's submission and its answer.</param>
     /// <returns>The seconds the job is charged in the estimate's place.</returns>
-    public double SettleGpu(double estimate, double measured, double inFlight) {
+    public double SettleGpu(double debited, double estimate, double measured, double inFlight) {
         var seconds = MeasuredWithin(clamped: out var clamped, estimate: estimate, inFlight: inFlight, measured: measured);
 
         lock (m_gate) {
             if (clamped) { m_clamped++; }
-            Charge(seconds: (seconds - estimate));
+            _ = Charge(seconds: (seconds - debited));
         }
 
         return seconds;
@@ -162,19 +170,26 @@ public sealed class SdfGpuWorkBudget(Func<long>? clock = null) {
         }
     }
 
-    // The one write that lowers the GPU credit: under the gate. A charge that is not a number changes nothing, and the
-    // debt stops at its floor.
-    private void Charge(double seconds) {
+    // The one write that moves the GPU credit by a charge: under the gate. A charge that is not a number changes
+    // nothing, and the debt stops at its floor. Answers the seconds the credit actually fell by (negative for a refund).
+    private double Charge(double seconds) {
         if (double.IsNaN(d: seconds)) {
             m_floored++;
 
-            return;
+            return 0.0;
         }
+
+        var before = m_credit;
+
         m_credit -= seconds;
-        m_charged += seconds;
         if (m_credit < -MostDebtSeconds) {
-            m_credit = -MostDebtSeconds;
+            m_credit = Math.Min(val1: before, val2: -MostDebtSeconds);
             m_floored++;
         }
+
+        var debited = (before - m_credit);
+
+        m_charged += debited;
+        return debited;
     }
 }

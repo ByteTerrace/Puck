@@ -30,7 +30,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldSourceWatch sourceWatch) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldReload reload) : ICommandModule {
     private static readonly CommandForms WorldKitDefaultForms = CommandForms.Of(verb: "world.kit.default", "<name>");
     private static readonly CommandForms WorldGrantSetForms = CommandForms.Of(verb: "world.grant.set", WorldGrantCommandModule.GrantForm);
     private static readonly CommandForms WorldGrantRemoveForms = CommandForms.Of(verb: "world.grant.remove", WorldGrantCommandModule.RevokeForm);
@@ -282,13 +282,15 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 );
             }
         );
-        // Re-reading the authority document is operator work, just as loading or undoing it is.
+        // Re-reading the authority document is operator work, just as loading or undoing it is. It runs between ticks:
+        // the source compiles and diffs on the thread pool (WorldReload) and the authority installs it at a tick
+        // boundary, while the issuing session holds its later lines for the verdict.
         yield return CommandDefinition.WithWireArgs(
             bindability: CommandBindability.Unbindable,
-            routing: CommandRouting.Simulation,
+            routing: CommandRouting.Immediate,
             audience: CommandAudience.Host,
             name: "world.reload",
-            description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
+            description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The source compiles, validates and diffs against the installed document off the simulation thread, and the authority installs the result at a tick boundary; the issuing session's later lines wait for the verdict. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
                     definition: server.ReadView(context: context).Definition,
@@ -297,55 +299,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return CommandResult.Error(output: reloadArmed);
                 }
 
-                var path = definitionSource.SourcePath;
-                using var sourceReads = sourceWatch.RecordReads(path: path);
-
-                // See world.load's own remarks: reuses server.Neighbours, the one live-session resolver.
-                if (!WorldDefinitionLoader.TryLoadFileForAdmission(
-                    admission: out var admission,
-                    catalog: machineCatalog,
-                    contentHash: out var contentHash,
-                    documents: server.RebuildDocuments,
-                    instanceIdentity: server.InstanceIdentity,
-                    neighbours: server.ResolveRebuildNeighbours(path: path),
-                    path: path,
-                    reason: out var reason
-                )) {
-                    return sourceWatch.Refuse(diagnostic: reason);
-                }
-
-                var loaded = admission!.Definition;
-
-                if (!textCatalog.TryValidate(
-                    definition: loaded,
-                    origin: path,
-                    reason: out reason
-                )) {
-                    return sourceWatch.Refuse(diagnostic: $"text assets refused: {reason}");
-                }
-
-                WorldReloadDelta delta;
-
-                try {
-                    // The delta names installed declarations. A recipient export contains tick values instead,
-                    // which are neither this base nor what a reload installs. This verb is operator-only.
-                    delta = WorldReloadDelta.Create(server.Configuration, server.DocumentVersion, loaded);
-                } catch (InvalidDataException exception) {
-                    return sourceWatch.Refuse(diagnostic: exception.Message);
-                }
-                return link.SubmitRebuild(
-                    echoes: echoes,
-                    request: new WorldRebuildRequest(
-                        ContentHash: contentHash,
-                        Definition: null,
-                        Delta: delta,
-                        Force: false,
-                        Kind: WorldRebuildKind.Reload,
-                        Origin: new WorldRebuildOrigin.File(Path: path)
-                    ),
-                    principal: context.Principal,
-                    verb: "world.reload"
-                );
+                return reload.Run(context: context);
             }
         );
         yield return Simulation(
