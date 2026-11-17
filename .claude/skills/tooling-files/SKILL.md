@@ -35,7 +35,8 @@ Build architecture, compiler identities, candidate installation and admission ro
 
 Lexical containment and ancestor inspection do not establish confinement against concurrent path replacement.
 Every repository walk that deletes or replaces files (`ConfinedDirectory.RemoveTree`, `CliFiles.CopyDirectory`,
-`CacheRetention`) stays beneath a directory handle and refuses descendant links. The caller owns the selected
+`CacheRetention`) stays beneath a directory handle and never follows descendant links. Tree removal refuses them
+by default; run-directory cleanup opts into `removeLinks` to unlink them without touching their targets. The caller owns the selected
 root, whose ancestors are resolved by the OS. A path-based `Directory.EnumerateFiles(..., AllDirectories)` follows
 junctions and symbolic links, so it never feeds a deletion.
 

@@ -126,6 +126,7 @@ internal static partial class Fixtures {
                 : definition?.DocumentDirectory),
             utf8Json: bytes
         );
+        definition = WorldStateSettlement.SettleBeforeAdmission(definition: definition);
 
         var population = new WorldPopulation(definition: definition);
         var machines = new WorldMachineHost(

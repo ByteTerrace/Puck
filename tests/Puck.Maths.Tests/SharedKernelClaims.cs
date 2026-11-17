@@ -1394,7 +1394,7 @@ internal static class SharedKernelClaims {
         var seed = unchecked((uint)left[2]);
         var spacing = ((int)(unchecked((uint)right[0]) % 4096U));
         var radius = ((int)(unchecked((uint)right[1]) % 2048U));
-        List<(int Spacing, int Radius)> parameters = [(spacing, radius), (2, 1), (8, 1), (8, 4), (8, 5), (1, 0), (0, 0), (100, 3)];
+        List<(int Spacing, int Radius)> parameters = [(spacing, radius), (2, 1), (8, 1), (8, 4), (8, 5), (1, 0), (0, 0), (100, 3), (0x60000000, 0)];
 
         if (deep) {
             for (var s = 0; (s <= 64); ++s) {

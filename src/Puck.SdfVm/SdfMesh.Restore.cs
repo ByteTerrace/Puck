@@ -198,8 +198,8 @@ public sealed partial record SdfMesh {
         // while the state is Restoring nothing reads the blocks (readers need Resident) and nothing frees them (Free needs
         // Resident), and a claim on each owning payload keeps its blocks from being disposed. The decode skips every plane
         // but the normals and the coarser levels' indices (Refill), and checks the entry's counts against the blocks' before
-        // it writes any. The store answers what it answered at publication (SdfMeshLibrary.Store publishes what it reads
-        // back), so the words a region writes again are the words it wrote first. Any failure, an allocation's included,
+        // it writes any. The store answers what it answered at publication (SdfMeshLibrary.Store publishes what the
+        // entry answers, SdfMeshStoreCodec.Conform), so the words a region writes again are the words it wrote first. Any failure, an allocation's included,
         // ends the storage Lost, which bakes its groups again; nothing escapes to the worker.
         private void RunClaimed() {
             var owners = new List<Payload>();
