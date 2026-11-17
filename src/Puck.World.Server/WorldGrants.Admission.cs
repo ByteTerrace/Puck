@@ -91,13 +91,15 @@ public sealed partial class WorldGrants {
     /// uses. <c>Server.WorldPeerHost</c> calls this from the tick thread on socket teardown (graceful or dead).</summary>
     /// <param name="peer">The peer entry <see cref="TryAdmitPeerConnection"/> returned at admission.</param>
     internal void DisconnectPeerConnection(WorldPeerEventEntry peer) {
-        if (!Host.IsLivePeer(peer.Identity)) { return; }
-        ApplyLifecycleEvents(
-            admitted: [],
-            disconnected: [peer],
-            ordered: true,
-            input: true
-        );
+        lock (Host.AuthorityGate) {
+            if (!Host.IsLivePeer(principal: peer.Identity)) { return; }
+            ApplyLifecycleEvents(
+                admitted: [],
+                disconnected: [peer],
+                ordered: true,
+                input: true
+            );
+        }
     }
     /// <summary>Removes a peer admitted by a transfer whose multi-member commit is rolling back, including every
     /// generation-scoped grant minted with it.</summary>
@@ -451,10 +453,15 @@ public sealed partial class WorldGrants {
                 continue;
             }
 
-            var templates = current.Templates.Where(template => !revokedKeys.Contains((template.Capability, template.SubjectFor(index)))).ToArray();
-            var rows = templates.Select(template => new WorldGrant(principal, template.Capability, template.SubjectFor(index), template.Exclusive,
-                Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask)).ToArray();
-            IReadOnlyList<WorldAdmissionGrant> installedTemplates = TryGrantSet(rows, Principal.World, out _) ? templates : [];
+            var installedTemplates = new List<WorldAdmissionGrant>();
+
+            foreach (var template in current.Templates.OrderByDescending(keySelector: row => (row.Capability == WorldCapability.Operate))) {
+                if (revokedKeys.Contains(item: (template.Capability, template.SubjectFor(bodyIndex: index)))) { continue; }
+                var row = new WorldGrant(principal, template.Capability, template.SubjectFor(bodyIndex: index), template.Exclusive,
+                    Budget: template.Budget, EventBudget: template.EventBudget, KindMask: template.KindMask);
+
+                if (TryGrant(row, Principal.World, out var reason)) { installedTemplates.Add(item: template); } else { Host.Document.DenyGrantTable(("admission grant refused: " + reason), SubmissionEnvelope.LocalConnectionId, 0); }
+            }
 
             // The next absence comparison may only contain rows that ACTUALLY reached the live table. An authored
             // row rejected by exclusivity or another grant-door rule was never present to revoke; recording it here

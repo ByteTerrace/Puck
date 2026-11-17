@@ -6,15 +6,19 @@ namespace Puck.World.Server;
 public sealed partial class WorldServer {
     /// <summary>Closes transports attached to a generation when its ordered disconnect applies.</summary>
     public event Action<Principal>? PeerDisconnected;
+
     internal void ClosePeerTransport(Principal principal) => PeerDisconnected?.Invoke(principal);
+
     /// <summary>Whether a peer generation is still connected and may submit commands.</summary>
-    public bool IsLivePeer(Principal principal) => principal.Kind == PrincipalKind.Peer && Population.IsAdmittedPeer(principal.Index) &&
-        !Population.IsParked(principal.Index) && Population.PeerPrincipal(principal.Index) == principal;
+    public bool IsLivePeer(Principal principal) => ((principal.Kind == PrincipalKind.Peer) && Population.IsAdmittedPeer(bodyIndex: principal.Index) &&
+        !Population.IsParked(index: principal.Index) && (Population.PeerPrincipal(index: principal.Index) == principal));
     /// <summary>Disconnects one live peer through the ordered lifecycle, including its transports.</summary>
     public bool DisconnectPeer(Principal peer, Principal actor) {
-        if (!Grants.IsOperator(actor) || !IsLivePeer(peer) || !Population.TryCaptureTransferredPeer(peer.Index, out var entry)) { return false; }
-        DisconnectPeerConnection(entry);
-        return true;
+        lock (AuthorityGate) {
+            if (!Grants.IsOperator(principal: actor) || !IsLivePeer(principal: peer) || !Population.TryCaptureTransferredPeer(index: peer.Index, peer: out var entry)) { return false; }
+            DisconnectPeerConnection(peer: entry);
+            return true;
+        }
     }
 
     /// <summary>Gets the mounted Simulation-lane addon host, or <see langword="null"/> when none is attached.</summary>

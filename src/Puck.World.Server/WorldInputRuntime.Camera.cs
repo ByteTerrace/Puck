@@ -42,7 +42,7 @@ public sealed partial class WorldInputRuntime {
             }
             // Same local-seat admission grant as player.camera, with the same lifetime. Its inhabited placement
             // has no fixed body index a document could grant. Refused compositions never install this grant.
-            m_host.Grant(new(owner.Principal, WorldCapability.Drive, target, false), Principal.Console);
+            m_host.Grant(new(owner.Principal, WorldCapability.Drive, target, false, Budget: ushort.MaxValue), Principal.Console);
             reason = string.Empty;
             return true;
         } finally {

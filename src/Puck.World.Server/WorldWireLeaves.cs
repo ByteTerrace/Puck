@@ -15,6 +15,15 @@ namespace Puck.World.Server;
 /// is trusted local state while a federation peer's bytes are not: the one shared reader applies the untrusted-input
 /// discipline everywhere. Public so a law can read and write exactly the leaf a tape or checkpoint carries.</summary>
 public static class WorldWireLeaves {
+    /// <summary>Reads the disclosure tier shared by peer and session lifecycle/checkpoint leaves.</summary>
+    public static WorldDisclosureTier ReadDisclosureTier(ref WireReader reader) {
+        var tier = ((WorldDisclosureTier)reader.ReadByte());
+
+        if (tier is not (WorldDisclosureTier.Frames or WorldDisclosureTier.Presentation or WorldDisclosureTier.Replica)) {
+            reader.Fail(detail: $"unknown disclosure tier {((byte)tier)}", refusal: WireRefusal.PayloadMalformed);
+        }
+        return tier;
+    }
     /// <summary>Writes a live intent-source union, refusing an undeclared source before writing any bytes.</summary>
     public static void WriteIntentSource(WireWriter writer, IntentSource source) {
         if (!WorldWireCodec.TryWriteIntentSource(source: source, writer: writer)) {
@@ -41,6 +50,7 @@ public static class WorldWireLeaves {
     public static WorldTransferCommitMember ReadCommitMember(ref WireReader reader) {
         var profile = WorldIdentityProjectionWire.ReadOptional(reader: ref reader);
         var motion = ReadCommitMemberMotion(reader: ref reader);
+
         var (memberId, companion) = ReadMemberIdentity(reader: ref reader);
 
         return (motion with { Companion = companion, MemberId = memberId, Profile = profile });
@@ -240,7 +250,7 @@ public static class WorldWireLeaves {
         var identityDomain = reader.ReadString(field: "peer identity domain");
         var identitySubject = reader.ReadString(field: "peer identity subject");
         var admissionTrust = ReadAdmissionTrust(reader: ref reader);
-        var tier = (WorldDisclosureTier)reader.ReadByte();
+        var tier = ReadDisclosureTier(reader: ref reader);
         var authorityTransferred = reader.ReadBoolean();
         var placementId = reader.ReadNullableString(field: "peer placement id");
         var catalogRig = reader.ReadByte();
@@ -268,7 +278,6 @@ public static class WorldWireLeaves {
 
         return new WorldPeerEventEntry(
             AdmissionTrust: admissionTrust,
-            Tier: tier,
             AuthorityTransferred: authorityTransferred,
             BodyIndex: bodyIndex,
             CatalogRig: catalogRig,
@@ -279,6 +288,7 @@ public static class WorldWireLeaves {
             PlacementId: placementId,
             RemoteHuman: remoteHuman,
             Source: source,
+            Tier: tier,
             TravelTurn: travelTurn
         );
     }
@@ -305,7 +315,7 @@ public static class WorldWireLeaves {
         writer.WriteString(value: peer.IdentityDomain);
         writer.WriteString(value: peer.IdentitySubject);
         WriteAdmissionTrust(writer: writer, trust: peer.AdmissionTrust);
-        writer.WriteByte((byte)peer.Tier);
+        writer.WriteByte(value: ((byte)peer.Tier));
         writer.WriteBoolean(value: peer.AuthorityTransferred);
         writer.WriteNullableString(value: peer.PlacementId);
         writer.WriteByte(value: peer.CatalogRig);

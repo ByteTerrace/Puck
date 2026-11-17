@@ -2017,6 +2017,24 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [low, D2/F12; before state-fed membership is introduced] Operator-source
+  protection currently rejects any dependency writable through a recipient's
+  seeded Edit/all, and `Allows` denies Edit/all wholesale when an operator source
+  exists (`src/Puck.World.Server/WorldGrants.Authority.cs`,
+  `src/Puck.World.Server/WorldGrants.cs`). Today's group members and roles are
+  literal, so the reference collector reaches no such source. When membership
+  becomes state-fed, protect the concrete source at the write door and admit
+  unrelated state edits; prove both cases with an ordinary seeded seat. Do not
+  make a live membership source render all authority transitions unusable.
+- [low, D2/F18] Operator-group comparison uses record equality over list-bearing
+  groups and kinds in `src/Puck.World.Server/WorldGrants.Authority.cs`. A separately
+  materialized but equivalent protected group can therefore cause a conservative
+  refusal when an ordinary seat edits another group. Replace that comparison with
+  the group's canonical structural equality and prove independent materialization
+  plus a real membership change. Duplicate kind names and group ids are already
+  refused by `WorldDefinitionValidator.ValidateGroups`; the first/last lookup
+  discrepancy is unreachable through admitted documents.
+
 - [high] Ordinary recipient declarations still require the closed-scope and
   acquisition-wall work in [decision 3a](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole).
   The acquisition wall has one owner (D0b1); binding/relation/input partitioning,
@@ -3283,6 +3301,13 @@ checks and the developer exhibits; the diagnostics (findings, pins, goto,
 annotate, the `probes` and `exposure` views) are
 [editor E6's](editor.md#open-items).
 
+- [medium, D2 live probe] Loading a saved debug-world snapshot through
+  `world.load` exceeds `WorldFrameCodec.MaxPayloadBytes`'s 16 MiB Rebuild cap
+  (`src/Puck.World.Protocol/Protocol/WorldFrameCodec.cs:50`): the camera probe's
+  canonical payload was 21,832,203 bytes and was refused before submission.
+  Make whole-world replacement scale through the existing content-addressed
+  document transport; do not raise an arbitrary cap or exempt local callers.
+  Direct boot of the same snapshot does not use the rebuild envelope.
 - Restore and inspect the remaining developer exhibits: the rate range, the
   traversal course's geometry and the kinematics scope. Clean bot verdicts do
   not show that they look or measure correctly.
@@ -3354,6 +3379,14 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
+- [medium, D2 live probe] `worlds/debug/debug.puck` and its imports declare no
+  camera-targeting `seatModes` family or `camera-seat-0` inhabitant. A headless
+  `player.camera 1` consequently refuses at `WorldSeatBindings.TryResolveCameraMode`
+  before reaching the repaired Drive grant. Wire the standard authored camera
+  mode, body and rig into the debug world, then verify its entry, movement and
+  exit on an ordinary seat in a windowed boot. D2's server camera law exercises
+  the grant without making the seat an operator; a temporary authored snapshot
+  is only a runtime probe, not the missing standard-package design.
 - [medium] Nothing drives controller output: no `Puck.World*` code references
   `IGamepadOutput`, and cartridge rumble (`IFeedbackMachine.MotorLevel`) has
   no consumer outside `Puck.Machines`. Wire a machine's motor to the engaged

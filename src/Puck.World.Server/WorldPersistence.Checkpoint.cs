@@ -44,7 +44,7 @@ public sealed partial class WorldPersistence {
     // entry's index and reason on stderr, and installs NOTHING — a validated prefix is not a validated document, and no
     // general admissibility invariant lets a partially-replayed journal stand in for one that fully replayed.
     internal bool ApplyUndo(int count, Principal principal, int connectionId, long correlationId) {
-        if (!Host.Grants.IsOperator(principal)) {
+        if (!Host.Grants.IsOperator(principal: principal)) {
             return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: "world.undo requires the operator");
         }
         // Journal control is Mutate territory over every section (a replay can rebuild any).
@@ -251,9 +251,13 @@ public sealed partial class WorldPersistence {
 
             var previousDefinition = Host.Document.Definition;
 
+            if (!Host.GrantTable.TryPrepareDocument(actor: principal, candidate: candidate, current: previousDefinition, grantsWrite: false, prepared: out var authority, reason: out var authorityReason)) {
+                return RefuseUndo(connectionId: connectionId, correlationId: correlationId, refusal: $"undo refused: {authorityReason}");
+            }
+
             Host.Document.SwapSolids(solids: undoSolids);
             Host.Document.Install(
-                authority: Host.GrantTable.PrepareDocument(principal, Host.Definition, candidate),
+                authority: authority!,
                 definition: candidate,
                 rebuildPopulation: true
             );
@@ -819,6 +823,7 @@ public sealed partial class WorldPersistence {
         Host.Population.ValidateCheckpoint(checkpoint: checkpoint.Population);
 
         var restoredDefinition = admission.Definition;
+        var restoredAuthorityTransition = Host.GrantTable.PrepareRestore(checkpoint.Grants, restoredDefinition, Principal.World, resetSessionEpochs);
         var restoredInput = WorldInputRuntime.PrepareRestore(Host, restoredDefinition, (server.Input ?? WorldInputRuntimeCheckpoint.Empty));
 
         WorldTick.ValidateFederatedInputs(server.FederatedInputs, restoredDefinition.Population.Capacity);
@@ -949,7 +954,7 @@ public sealed partial class WorldPersistence {
         Host.Population.SyncBodyCells(definition: Host.Document.Definition);
         Host.Input = restoredInput;
         Host.Input.BindRestoredBodies();
-        Host.GrantTable.Restore(checkpoint.Grants, restoredDefinition, Principal.World, resetSessionEpochs);
+        restoredAuthorityTransition.Install();
 
         // A restored parked PEER generation is released right here, not at its grace deadline: the connection that
         // occupied it did not survive the restore and peer body-resume does not exist, so — exactly as the

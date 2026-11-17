@@ -39,9 +39,9 @@ public sealed class InputCameraModeLawTests {
         var epoch = owner.Epoch;
         var camera = Enumerable.Range(0, fixture.Server.Population.Capacity).Single(predicate: index =>
             (fixture.Server.Population.InhabitantPlacementId(index: index) == (WorldSeatModeState.CameraPlacementIdPrefix + "0")));
-        var actor = ((refusal == 2) ? Principal.Addon(name: "camera-mode-test") : Principal.Console);
+        var actor = ((refusal == 2) ? Principal.Addon(name: "camera-mode-test") : principal);
 
-        if (refusal == 2) { fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: 0), false), Principal.Console); }
+        if (refusal == 2) { fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: 0), false, Budget: 1), Principal.Console); }
         var admitted = fixture.Server.Input.TrySetSeatState(activation: 19, actor: actor, family: "camera", principal: principal, reason: out var reason, state: "free");
 
         Assert.Equal(actual: admitted, expected: (refusal == 0));
@@ -59,6 +59,9 @@ public sealed class InputCameraModeLawTests {
         Assert.Contains(collection: publication.SeatStates.ToArray(), filter: cell => ((cell.Family == "camera") && (cell.State == "free")));
         Assert.Contains(collection: fixture.Server.GrantTable.Applications(principal: principal), filter: row => (row.Target == GrantSubject.Body(index: camera)));
         Assert.True(condition: fixture.Server.GrantTable.Allows(principal, WorldCapability.Drive, GrantSubject.Body(index: camera)).IsAllowed);
+        Assert.False(condition: fixture.Server.Grants.IsOperator(principal: principal));
+        Assert.True(condition: fixture.Server.Grants.TryGetBudget(principal, WorldCapability.Drive, GrantSubject.Body(index: camera), out var budget));
+        Assert.Equal(actual: budget, expected: ushort.MaxValue);
         Assert.True(condition: fixture.Server.Input.TrySetSeatState(activation: 20, actor: actor, family: "camera", principal: principal, reason: out reason, state: "seat"), userMessage: reason);
         Assert.Equal((epoch + 2), owner.Epoch);
         Assert.Equal(new ulong[] { 20 }, owner.LastSwitch.ConsumedActivations.ToArray());

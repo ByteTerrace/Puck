@@ -40,6 +40,8 @@ public sealed partial class WorldPersistence {
                 : WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: documentDirectory,
                     utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog));
             var definition = admission.Definition;
+            // Refuse authority before a configuration rewind can replace machines, geometry or population.
+            _ = Host.GrantTable.PrepareRestore(checkpoint.Grants, definition, Principal.World, resetSessionEpochs: true);
             // A malformed guest image must refuse before geometry, machines, or the live definition move.
             using var addonPlan = Host.Addons?.PrepareCheckpoint(definition, (checkpoint.Addons ?? []));
             // The run may have edited geometry or machine configuration after the checkpoint.
@@ -47,10 +49,12 @@ public sealed partial class WorldPersistence {
                 ConfigurationShape(json: checkpoint.Server.DefinitionJson)) {
                 if (!WorldDocument.TryBuildSolids(definition: definition, reason: out var solidReason, solids: out var solids)) { throw new InvalidOperationException(message: solidReason); }
                 if (!Host.Machines.TryPrepare(Host.Configuration, definition, out var machines, out var machineReason)) { throw new InvalidOperationException(message: machineReason); }
+                var authority = Host.GrantTable.PrepareDocument(Principal.World, Host.Definition, definition);
+
                 if (machines is not null) { Host.Machines.Commit(plan: machines); Host.Machines.Finish(plan: machines); }
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
                 Host.Document.Install(
-                    authority: Host.GrantTable.PrepareDocument(Principal.World, Host.Definition, definition), definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
+                    authority: authority, definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
             }
             RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
                 restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);

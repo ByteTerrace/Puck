@@ -632,7 +632,10 @@ public sealed partial class WorldServer : IWorldServerHost {
         // end of this ctor. The drive-gate index (Seam A) syncs alongside it for the identical reason — a boot
         // document may ship an already-gated body (a scenario opening on a downed NPC), and the first Step's intent
         // drain must see it without waiting for a mutation to trigger Install.
-        m_grants.PrepareDocument(Principal.Console, null, definition).Install();
+        m_grants.PrepareDocument(Principal.Console, null, definition with { GrantsRaw = [] }).Install();
+        foreach (var grant in definition.Grants.OrderByDescending(keySelector: row => (row.Capability == WorldCapability.Operate))) {
+            if (!WorldTick.IsDocumentChannelRow(grant: grant)) { m_grants.ApplyGrant(m_grants.WithoutAuthoredConsent(grant: grant), Principal.Console); }
+        }
         m_grants.SyncState(arena: m_arena, definition: definition);
 
         // THE BOOT-LOUD CATALOG CHECK: WorldServer is constructed exactly once per world boot (or per replay

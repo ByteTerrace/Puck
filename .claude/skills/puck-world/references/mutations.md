@@ -225,7 +225,7 @@ table — a row added there grants nothing until relaunch.
   (`WorldPopulation.RebirthActionState`: `state.body` slots at their initials;
   a `state.identity` slot keeps its value on a body with an identity when the
   previous document declared it under the same name and kind) → journal CLEARS → the transition admitted by
-  `WorldGrants.PrepareReset` wipes and re-seeds the RUNTIME grant table from the
+  `WorldGrants.TryPrepareReset` admits replacing and re-seeding the RUNTIME grant table from the
   candidate's complete `Grants` section, with authored consent withheld → every currently-admitted peer
   connection's admission grant re-mints (see [authority.md](authority.md)).
   Reset targets `m_base` WITHOUT moving it; Load/Reload REPLACE it. Fully

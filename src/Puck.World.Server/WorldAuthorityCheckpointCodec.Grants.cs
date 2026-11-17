@@ -122,10 +122,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             Control: control,
             Drive: drive,
             Edit: edit,
-            Operate: operate,
             Grantee: grantee,
             Mutate: mutate,
-            Observe: observe
+            Observe: observe,
+            Operate: operate
         );
     }
     private static byte[] EncodeGrants(WorldGrantsCheckpoint section) {
@@ -284,7 +284,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     value: session.BodyIndex,
                     writeValue: static (w2, v) => w2.WriteInt32(value: v)
                 );
-                w.WriteByte((byte)session.Tier);
+                w.WriteByte(value: ((byte)session.Tier));
                 w.WriteInt32(value: session.BodyGeneration);
                 w.WriteBoolean(value: session.ObserverEnded);
                 WorldWireCodec.WriteIntent(
@@ -376,7 +376,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             maximum: MaxCollectionCount
         );
         var bodyIndex = reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadInt32());
-        var tier = (WorldDisclosureTier)reader.ReadByte();
+        var tier = WorldWireLeaves.ReadDisclosureTier(reader: ref reader);
         var bodyGeneration = reader.ReadInt32();
         var observerEnded = reader.ReadBoolean();
         var input = WorldWireCodec.ReadIntent(reader: ref reader);

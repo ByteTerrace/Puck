@@ -368,16 +368,18 @@ public sealed partial class WorldDocument {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority) {
+    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, bool prepareAuthority = true) {
         refusalCode = null;
-        if (!authority.IsOperator(mutation.Principal)) {
-            var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, tick: tick, engineTick: engineTick));
-            if (!view.Admits(mutation, out var withheld)) {
+        if (!authority.IsOperator(principal: mutation.Principal)) {
+            var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, engineTick: engineTick, tick: tick));
+
+            if (!view.Admits(mutation: mutation, row: out var withheld)) {
                 candidate = current; evictedKey = null; reason = view.Refusal("mutation", withheld); refusalCode = WorldRecipientMutations.NotDisclosedCode; return false;
             }
         }
 
         if (!TryComposeCore(
+            authority: authority,
             candidate: out candidate,
             current: current,
             engineTick: engineTick,
@@ -385,9 +387,8 @@ public sealed partial class WorldDocument {
             instanceIdentity: instanceIdentity,
             mutation: mutation,
             reason: out reason,
-            tick: tick,
             refusalCode: out refusalCode,
-            authority: authority
+            tick: tick
         )) {
             return false;
         }
@@ -418,8 +419,8 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        return authority.TryPrepareDocument(mutation.Principal, current, candidate,
-            WorldMutationKindCatalog.SectionOf(mutation) == WorldSection.Grants, out _, out reason);
+        return (!prepareAuthority || authority.TryPrepareDocument(mutation.Principal, current, candidate,
+            (WorldMutationKindCatalog.SectionOf(mutation: mutation) == WorldSection.Grants), out _, out reason));
     }
 
     // The state row a state mutation writes, or null for every other kind — the row whose bound document values
@@ -611,16 +612,16 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.Batch batch:
                 return TryComposeBatch(
+                    authority: authority,
                     batch: batch,
                     candidate: out candidate,
                     current: current,
                     engineTick: engineTick,
                     evictedKey: out evictedKey,
-                    instanceIdentity: instanceIdentity,
-                            reason: out reason,
-                    tick: tick,
+                            instanceIdentity: instanceIdentity,
+                    reason: out reason,
                     refusalCode: out refusalCode,
-            authority: authority
+            tick: tick
                 );
             // The field-scoped population and views edits compose against the row AS IT STANDS HERE — the pending
             // candidate — so two console verbs queued in one tick each keep the other's field.

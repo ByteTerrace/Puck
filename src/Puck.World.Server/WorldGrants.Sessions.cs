@@ -346,8 +346,8 @@ public sealed partial class WorldGrants {
             templates: admitted.Templates
         ) { Tier = admitted.Tier };
 
-        if (!TryGrantSet(admitted.MintedGrants, Principal.World, out var reason)) {
-            Host.Document.DenyGrantTable("session grant set refused: " + reason, SubmissionEnvelope.LocalConnectionId, 0);
+        foreach (var grant in admitted.MintedGrants.OrderByDescending(keySelector: static row => row.Capability == WorldCapability.Operate)) {
+            _ = TryApplyGrant(grant: grant, actor: Principal.World);
         }
     }
     /// <summary>Applies an embodiment: records the body and installs the body-relative rows.</summary>

@@ -9,6 +9,7 @@ internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms PlayerFrameForms = CommandForms.Of(verb: FrameCommand, SeatForm);
     private static readonly CommandForms PlayerModeForms = CommandForms.Of(verb: ModeCommand, "<family> <state> [seat]", "<family> [seat]");
     private static readonly CommandForms PlayerCameraForms = CommandForms.Of(verb: CameraCommand, SeatForm);
+
     // The population placement id backing seat <paramref name="slot"/>'s camera body. A camera-capable world
     // authors one inhabited placement per local seat it wants Free Cam over; WorldClient.TryInhabitantBody resolves the placement's CURRENT entity index rather
     // than a baked constant, since an inhabited body's table slot is not authored — it is wherever
@@ -50,6 +51,7 @@ internal sealed partial class PlayerCommandModule {
                 Grantee: Principal.Seat(slot: slot),
                 Capability: WorldCapability.Drive,
                 Subject: target,
+                Budget: ushort.MaxValue,
                 Exclusive: false
             )
         );

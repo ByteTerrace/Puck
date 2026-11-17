@@ -57,7 +57,7 @@ public sealed partial class WorldDocument {
 
             if (
                 !ownsBody &&
-                !Host.Grants.IsOperator(principal) &&
+                !Host.Grants.IsOperator(principal: principal) &&
                 (!Host.GrantTable.TryGetChannelReach(
                 channels: source.Channels,
                 mask: out var reach,
@@ -384,7 +384,8 @@ public sealed partial class WorldDocument {
     // drawn and admitted by WorldDefinitionLoader.TryLoadFileForAdmission; this is the apply-time gate every install passes.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null) {
         var verb = RebuildVerb(kind: request.Kind);
-        if (!Host.Grants.IsOperator(principal)) {
+
+        if (!Host.Grants.IsOperator(principal: principal)) {
             DenyGrantTable(connectionId: connectionId, correlationId: correlationId,
                 denial: $"{verb} requires the operator", echoKind: WorldEditEchoKind.Rebuild);
             return false;
@@ -463,7 +464,6 @@ public sealed partial class WorldDocument {
                 WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>))) ==
             System.Text.Json.JsonSerializer.Serialize(candidate.Admission,
                 WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(IReadOnlyList<WorldAdmissionEntry>)))));
-
 
         Host.RebuildTap?.Invoke(
             arg1: request,
@@ -745,15 +745,21 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
+            var authorityAdmitted = (keepAuthority
+                ? Host.GrantTable.TryPrepareDocument(actor: principal, candidate: installed, current: priorDefinition, grantsWrite: false, prepared: out var authority, reason: out var authorityReason)
+                : Host.GrantTable.TryPrepareReset(actor: principal, candidate: installed, current: priorDefinition, prepared: out authority, reason: out authorityReason));
+
+            if (!authorityAdmitted) {
+                RejectRebuild(connectionId: connectionId, correlationId: correlationId, reason: authorityReason, verb: verb);
+                return false;
+            }
             if (request.Kind != WorldRebuildKind.Reload) { Host.Input.Restart(); }
             SwapSolids(solids: rebuildSolids);
             // A whole-document rebuild restarts scalar state and lattice stores together. Preserving one while
             // reseeding the other can duplicate finite stores; live mutations and checkpoints retain their own paths.
 
-            var authority = keepAuthority ? Host.GrantTable.PrepareDocument(principal, priorDefinition, installed)
-                : Host.GrantTable.PrepareReset(principal, priorDefinition, installed);
             Install(
-                authority: authority,
+                authority: authority!,
                 arena: rebuildArena,
                 compilation: compilation,
                 definition: installed,

@@ -428,6 +428,7 @@ public sealed partial class WorldReplaySnapshot {
     /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
     internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
+        server.ReplaysInput = true;
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -2065,6 +2066,7 @@ public sealed partial class WorldReplaySnapshot {
 
         return hash.Value;
     }
+
     // One slot's share of the population hash; an inactive slot folds nothing.
     private static void AppendBodyState(ref Fnv1aHash hash, WorldPopulation population, int index) {
         {

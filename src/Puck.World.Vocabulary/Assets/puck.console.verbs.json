@@ -153,7 +153,7 @@
     { "name": "screen.peek", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "screen.source", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "screen.state", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
-    { "name": "source.passthrough", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
+    { "name": "source.passthrough", "bindable": false, "audience": "host", "valueKind": "digital", "wireArgs": true },
     { "name": "source.passthrough.arrow.down", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "source.passthrough.arrow.left", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": false },
     { "name": "source.passthrough.arrow.right", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": false },

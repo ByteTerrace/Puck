@@ -40,6 +40,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
     private static readonly CommandForms WorldSaveForms = CommandForms.Of(verb: "world.save", "[path]");
     private static readonly CommandForms WorldLoadForms = CommandForms.Of(verb: "world.load", "<path> [force]");
     private static readonly CommandForms WorldTextForms = CommandForms.Of(verb: "world.text", "[font]");
+
     // Buffer a mutation over the link and return a quiet ack — the server prints the loud accept/reject line when the
     // buffered edit applies at the tick boundary, and the barrier guarantees a following world.status sees the result.
     // world.load's own trailing-token grammar: <path> [force], where `force` is recognized only as the LAST token.
@@ -136,7 +137,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 var id = args[0].ToString();
 
                 if (WorldDefinitionRows.FindPlacement(
-                    placements: server.ReadView(context).Definition.Placements,
+                    placements: server.ReadView(context: context).Definition.Placements,
                     id: id
                 ) is not { } placement) {
                     return CommandResult.Error(output: $"[world.placement.get: no placement row named '{id}']");
@@ -224,7 +225,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldLoadForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.ReadView(context).Definition,
+                    definition: server.ReadView(context: context).Definition,
                     verb: "world.load"
                 ) is { } loadArmed) {
                     return CommandResult.Error(output: loadArmed);
@@ -290,7 +291,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             description: "Re-reads the CURRENT document origin from disk and rebuilds from it — the artist external-edit loop: edit the JSON or .puck source externally, world.reload, no restart: world.reload. The journal always clears on success (reload IS a fresh read of what is on disk right now, so there is nothing to discard-guard the way world.load does). A missing/invalid file, or a re-read that no longer validates or compiles, leaves the running world untouched and echoes a loud line naming why. Fully replay-compatible: captured on the tape, CAS-pinned by a sha256-64 hash of the bytes read off disk (for .puck, of the document it lowers to, so an edit that lowers identically keeps the pin) — a re-drive re-reads the same path and refuses BY NAME if the document has moved since the recording was made. The accept echo names the re-read origin.",
             handler: (context, _) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.ReadView(context).Definition,
+                    definition: server.ReadView(context: context).Definition,
                     verb: "world.reload"
                 ) is { } reloadArmed) {
                     return CommandResult.Error(output: reloadArmed);
@@ -324,6 +325,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 }
 
                 WorldReloadDelta delta;
+
                 try {
                     // The delta names installed declarations. A recipient export contains tick values instead,
                     // which are neither this base nor what a reload installs. This verb is operator-only.
@@ -353,7 +355,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldUndoForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.ReadView(context).Definition,
+                    definition: server.ReadView(context: context).Definition,
                     verb: "world.undo"
                 ) is { } undoArmed) {
                     return CommandResult.Error(output: undoArmed);
@@ -387,7 +389,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             forms: WorldSaveForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
-                    definition: server.ReadView(context).Definition,
+                    definition: server.ReadView(context: context).Definition,
                     verb: "world.save"
                 ) is { } saveArmed) {
                     return CommandResult.Error(output: saveArmed);
@@ -482,7 +484,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return WorldTextForms.Refuse();
                 }
 
-                var text = server.ReadView(context).Definition.Text;
+                var text = server.ReadView(context: context).Definition.Text;
 
                 if (text is null) {
                     return new CommandResult(Output: "[world.text: none]");
@@ -539,14 +541,16 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var view = server.ReadView(context);
+                var view = server.ReadView(context: context);
+
                 if (!view.Observes) { return new CommandResult(Output: "[world.status: not disclosed]"); }
                 var definition = view.Definition;
-                var isOperator = server.Grants.IsOperator(context.Principal);
-                var source = isOperator ? Puck.Abstractions.PuckPaths.Normalize(definitionSource.SourcePath) : string.Empty;
+                var isOperator = server.Grants.IsOperator(principal: context.Principal);
+                var isHost = (context.Principal.Kind == PrincipalKind.Console);
+                var source = (isHost ? Puck.Abstractions.PuckPaths.Normalize(path: definitionSource.SourcePath) : string.Empty);
                 // The journal and the save snapshot are the authority's edit history: the journal's length moves with
                 // an operator's hidden-only edit, so a recipient's status carries neither.
-                var journal = (server.Grants.IsOperator(context.Principal)
+                var journal = (server.Grants.IsOperator(principal: context.Principal)
                     ? $" session-drift {WorldSessionCapture.DescribeDrift(
                         definition: definition,
                         snapshot: WorldSaveSnapshot.Compose(
@@ -582,32 +586,32 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     )
                     : "none"
                 );
-                var basis = ((isOperator && WorldDefinitionFileSource.TryPeekBasis(
+                var basis = ((isHost && WorldDefinitionFileSource.TryPeekBasis(
                     basisPath: out var basisPath,
                     path: source,
                     reason: out var unusedPeekReason
                 ) && (basisPath is { }))
-                    ? Puck.Abstractions.PuckPaths.Normalize(basisPath)
+                    ? Puck.Abstractions.PuckPaths.Normalize(path: basisPath)
                     : "none"
                 );
                 // The process's document accounting sits beside `source` and `basis` because it is a fact about the
                 // documents this process merged, not about the world one of them describes: `shared` counts the
                 // reaches answered from a document already composed here, which is what a shard's four neighbours
                 // and its own basis all naming one island turns into.
-                var documents = isOperator ? string.Create(
+                var documents = (isHost ? string.Create(
                     provider: CultureInfo.InvariantCulture,
                     handler: $"composed {WorldBootWork.Current.Read(kind: WorldBootWork.Compositions)} shared {WorldBootWork.Current.Read(kind: WorldBootWork.CompositionsShared)} held {WorldDefinitionFileSource.ComposedDocumentsHeld} ({WorldDefinitionFileSource.ComposedDocumentBytes} bytes)"
-                ) : string.Empty;
+                ) : string.Empty);
                 var journalDepth = definition.Host.JournalDepth;
                 var journalDepthText = ((journalDepth > 0)
                     ? journalDepth.ToString(provider: CultureInfo.InvariantCulture)
                     : "unbounded"
                 );
 
-                var machineFaults = isOperator ? string.Concat(server.Machines.InstanceNames.Select(name => server.Machines.InstanceState(name))
-                    .Where(state => state?.Fault is not null).Select(state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}")) : string.Empty;
-                var provenance = isOperator ? $" source {source} basis {basis} documents {documents}" : string.Empty;
-                var sleeping = isOperator ? $" sleeping {server.Population.SleepingCount}" : string.Empty;
+                var machineFaults = (isOperator ? string.Concat(values: server.Machines.InstanceNames.Select(selector: name => server.Machines.InstanceState(name: name))
+                    .Where(predicate: state => (state?.Fault is not null)).Select(selector: state => $" machine {state!.Value.Name} {state.Value.Status}: {state.Value.Fault}")) : string.Empty);
+                var provenance = (isHost ? $" source {source} basis {basis} documents {documents}" : string.Empty);
+                var sleeping = (isOperator ? $" sleeping {server.Population.SleepingCount}" : string.Empty);
 
                 return new CommandResult(Output: string.Create(
                     provider: CultureInfo.InvariantCulture,
@@ -664,7 +668,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var rows = server.ReadView(context).Definition.References;
+                var rows = server.ReadView(context: context).Definition.References;
 
                 if (rows is not { Count: > 0 }) {
                     return new CommandResult(Output: "[world.references: none]");
@@ -691,7 +695,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var metadata = server.ReadView(context).Definition.Metadata;
+                var metadata = server.ReadView(context: context).Definition.Metadata;
 
                 if (metadata is null) {
                     return new CommandResult(Output: "[world.metadata: none]");
@@ -739,7 +743,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return refusal;
                 }
 
-                var rows = server.ReadView(context).Definition.Admission;
+                var rows = server.ReadView(context: context).Definition.Admission;
 
                 if (rows is not { Count: > 0 }) {
                     return new CommandResult(Output: "[world.admission: none — no remote peer can verify and no traveller can arrive]");

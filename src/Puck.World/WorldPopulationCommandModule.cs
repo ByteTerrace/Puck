@@ -132,9 +132,10 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         comparisonType: StringComparison.Ordinal
     );
     private string DescribeBudget(CommandContext context) {
-        if (!server.Grants.IsOperator(context.Principal)) {
-            var definition = server.ReadView(context).Definition;
-            var instances = WorldPlacementStamper.StaticStampInstances(definition, definition.Placements);
+        if (context.Principal.Kind != PrincipalKind.Console) {
+            var definition = server.ReadView(context: context).Definition;
+            var instances = WorldPlacementStamper.StaticStampInstances(definition: definition, placements: definition.Placements);
+
             return $"[world.budget: placements {instances} static instance(s) ({definition.Placements.Count} row(s)) | state {definition.AuthoredState.Count} row(s) | creations {definition.Creations.Count}]";
         }
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
@@ -161,10 +162,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
 
         // The residency's execution states, over the programs it shades or compiles; a declared program none of its
         // frames activates is neither.
-        var shaderStates = renderProbe?.Residency?.ShadeStatus ?? [];
-        var interpreted = shaderStates.Count(static p => p.State == "interpreted");
-        var specialized = shaderStates.Count(static p => p.State == "specialized");
-        var pending = shaderStates.Count(static p => p.State == "compiling");
+        var shaderStates = (renderProbe?.Residency?.ShadeStatus ?? []);
+        var interpreted = shaderStates.Count(predicate: static p => (p.State == "interpreted"));
+        var specialized = shaderStates.Count(predicate: static p => (p.State == "specialized"));
+        var pending = shaderStates.Count(predicate: static p => (p.State == "compiling"));
+
         render += $", shading programs {shades.Count}, interpreted {interpreted}, specialized {specialized}, pending {pending}, quarantined 0";
         if (worstShade is not null) {
             render += $", worst static cost {worstShade.PixelWork(lights: Puck.SignedDistance.SdfShadeProgram.MaxLights)} ({worstShade.Name})";
@@ -175,6 +177,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             var emissive = shadeMaterials.Where(predicate: static material => material.Program.Outputs.Any(predicate: static output =>
                 ((output.Phase == Puck.SignedDistance.SdfShadePhase.Surface) && (output.Name == "emissive"))))
                 .Select(selector: static material => material.Program.Name).Distinct(comparer: StringComparer.Ordinal).ToArray();
+
             if (emissive.Length != 0) { render += $", probes and meter use base response for emissive programs [{string.Join(separator: ", ", values: emissive)}]"; }
         }
 
@@ -303,13 +306,16 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         provider: CultureInfo.InvariantCulture
     );
     private string DescribeGravity(CommandContext context) {
-        var view = server.ReadView(context);
+        var view = server.ReadView(context: context);
+
         if (!view.Observes) { return "[world.gravity: not disclosed]"; }
         var authored = view.Definition.Gravity;
-        if (!server.Grants.IsOperator(context.Principal)) {
+
+        if (!server.Grants.IsOperator(principal: context.Principal)) {
             var acceleration = authored.UniformAcceleration;
+
             return string.Create(CultureInfo.InvariantCulture,
-                $"[world.gravity: solver {authored.Solver} uniform=({acceleration.X:0.#####},{acceleration.Y:0.#####},{acceleration.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} sources={authored.Attractors.Count} points={authored.Points?.Count ?? 0} areas={authored.Areas?.Count ?? 0}]");
+                $"[world.gravity: solver {authored.Solver} uniform=({acceleration.X:0.#####},{acceleration.Y:0.#####},{acceleration.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} sources={authored.Attractors.Count} points={(authored.Points?.Count ?? 0)} areas={(authored.Areas?.Count ?? 0)}]");
         }
         var compiled = population.CompiledGravity;
         var statistics = population.GravityStatistics;
@@ -446,7 +452,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 ? $"producer:{producer}"
                 : "live"
         ));
-        var looks = server.ReadView(context).Definition.Looks;
+        var looks = server.ReadView(context: context).Definition.Looks;
         var workload = WorldRigCatalog.ActiveWorkload(
             isActive: index => (population.IsActive(index: index) && (WorldDefinitionRows.ResolveLook(looks, population.LookIndex(index: index)).Source is WorldLookSource.Catalog)),
             capacity: population.Capacity,
@@ -462,11 +468,11 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var counts = population.ActiveKitCounts();
         var kits = string.Join(
             separator: " ",
-            values: server.ReadView(context).Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
+            values: server.ReadView(context: context).Definition.Kits.Select(selector: (kit, row) => $"{kit.Name}={counts[row]}")
         );
-        var defaults = server.ReadView(context).Definition.Population;
-        var kitAssignment = DescribeAssignment(assignment: server.ReadView(context).Definition.Assignment);
-        var lookAssignment = DescribeAssignment(assignment: server.ReadView(context).Definition.LookAssignment);
+        var defaults = server.ReadView(context: context).Definition.Population;
+        var kitAssignment = DescribeAssignment(assignment: server.ReadView(context: context).Definition.Assignment);
+        var lookAssignment = DescribeAssignment(assignment: server.ReadView(context: context).Definition.LookAssignment);
 
         return $"[world.population: {simulated} network-human stand-ins active (0..{population.PeerCapacity}), behavior {behavior} | distribution {DescribeDistribution(distribution: defaults.Distribution)} | peerVariation {DescribeVariation(variation: defaults.PeerVariation)} seatVariation {DescribeVariation(variation: defaults.SeatVariation)} peerColors {DescribeSequence(sequence: defaults.PeerColors)} | assignments kit={kitAssignment} look={lookAssignment} | {local} local + {simulated} = {(local + simulated)}/{population.Capacity} inhabitants | archetypes {kits} | {WorldRigCatalog.RigCount} catalog looks, {WorldRigCatalog.MinInstructionCount}..{WorldRigCatalog.MaxInstructionCount} instructions/avatar; catalog workload {workload.Leaves} leaves in {workload.Instances} leaf cull instances, {workload.Instructions} authored VM instructions (creation stamps accounted separately)]";
     }
@@ -526,7 +532,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 verb: "world.budget"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeBudget(context))),
+            : new CommandResult(Output: DescribeBudget(context: context))),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -539,7 +545,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 verb: "world.gravity"
             ) is { } refusal)
             ? refusal
-            : new CommandResult(Output: DescribeGravity(context))),
+            : new CommandResult(Output: DescribeGravity(context: context))),
             routing: CommandRouting.Immediate
         );
         yield return CommandDefinition.WithWireArgs(
@@ -571,7 +577,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             forms: WorldPopulationForms,
             handler: (context, args) => {
                 if (args.Count == 0) {
-                    return new CommandResult(Output: DescribePopulation(context));
+                    return new CommandResult(Output: DescribePopulation(context: context));
                 }
 
                 int? count = null;
@@ -673,7 +679,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                     );
                 }
 
-                return new CommandResult(Output: (notice + DescribePopulation(context)));
+                return new CommandResult(Output: (notice + DescribePopulation(context: context)));
             },
             routing: CommandRouting.Simulation
         );
