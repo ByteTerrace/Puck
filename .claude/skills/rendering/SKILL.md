@@ -169,7 +169,7 @@ The staging door maintains the tables' glass row set. `RecordLanding` requires t
 queue to be the device's frame queue before it owes any words.
 `SdfMeshRows.Create` returns the table and its sole writer. The dresser owns runs per host, group and own-mesh
 occurrence; allocator tickets guard frees and fresh occupancies guard history even for same-mesh reuse.
-The frame keeps its host inputs and publishes `MeshRows` separately. Claims and glass counts move inside writes.
+The frame keeps its host inputs (`MeshDraws` and its journal) and references the dresser's `MeshRows` and dressed pick map, which `SdfMeshDresser.Dress` adopts onto the frame in place (`SdfFrame.AdoptDressing`) rather than copying the record; a frame another dresser dressed is copied first. The revision, journal, serial and staging cause of a dressed frame are the rows' own, read through `SdfMeshDraws` (`SdfFrame.DrawRows`), never the host fields. Claims and glass counts move inside writes.
 `SdfMeshHistory.Observe` compares table identity and occupancy; free/owed/refused rows retire in `StageMeshDraw`.
 Only start over rebuilds every owner: retry, the free share, forced packing or a noncanonical locked frame.
 Picking stamps the mesh target's row table/revision and rejects a changed row identity before resolving its owner.

@@ -1431,8 +1431,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // An order-independent sum, updated only for cursor-named rows; packing leaves the scene standing.
     private (int Key, int Draws) StaticKey(SdfFrame frame) {
         var draws = frame.DrawRows;
-        var whole = m_keyCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, draws.Roster, draws.Count,
-            frame.MeshDrawsRevision, m_keyRuns);
+        var whole = m_keyCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
+            draws.Revision, m_keyRuns);
 
         if (whole) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneWhole);
@@ -1459,8 +1459,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
         }
         m_keyExtent = draws.Count;
-        if (SdfRowChecks.SkipSceneRequested) { m_skipKeyThrough = ((frame.MeshDrawChangesSerial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipSceneRequested = false; }
-        if (frame.MeshDrawChangesSerial <= m_skipKeyThrough) {
+        if (SdfRowChecks.SkipSceneRequested) { m_skipKeyThrough = ((draws.Serial + SdfMovedTransforms.History) + 2); SdfRowChecks.SkipSceneRequested = false; }
+        if (draws.Serial <= m_skipKeyThrough) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.SceneSkipped);
             // Leave this consumer's cursor at its previous endpoint until its history expires.
         } else { m_keyCursor.Commit(); }

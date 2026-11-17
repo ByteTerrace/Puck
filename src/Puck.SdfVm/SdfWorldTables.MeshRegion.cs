@@ -357,8 +357,8 @@ public sealed partial class SdfWorldTables {
         ServiceMemoryTrim();
         SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
         PrepareMeshTransformCuts(frame: frame);
-        var whole = m_drawCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, draws.Roster, draws.Count,
-            frame.MeshDrawsRevision, m_owedDraws, force: !m_meshStaged);
+        var whole = m_drawCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
+            draws.Revision, m_owedDraws, force: !m_meshStaged);
 
         if (whole) { SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.TablesWhole); }
         m_owedDraws.Append(source: m_reseatedDraws); m_owedDraws.Append(source: m_landedRows);
@@ -400,8 +400,8 @@ public sealed partial class SdfWorldTables {
         var words = (draws.Count * SdfMeshRecord.DrawWords);
 
         if (m_meshDrawWords.Length < words) { Array.Resize(array: ref m_meshDrawWords, newSize: Math.Max(val1: words, val2: (2 * m_meshDrawWords.Length))); }
-        m_stagingCause = (((frame.MeshDrawChangesSerial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster))
-            ? frame.MeshDrawChangesCause : null);
+        m_stagingCause = (((draws.Serial != m_meshSourceSerial) || !ReferenceEquals(objA: m_meshCauseSource, objB: draws.Roster))
+            ? draws.Cause : null);
         _ = StageChangedDraws(candidates: m_owedDraws, draws: draws);
         if (m_meshDrawCount != ((uint)draws.Count)) { m_meshRevision++; }
         m_meshDrawCount = ((uint)draws.Count);
@@ -409,7 +409,7 @@ public sealed partial class SdfWorldTables {
         m_stagedCount = draws.Count;
         m_meshHistory.RetireAfter(count: draws.Count);
         EnsurePreviousMeshCapacity(count: draws.Count);
-        m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = frame.MeshDrawsRevision; m_meshSourceSerial = frame.MeshDrawChangesSerial; m_meshStaged = true;
+        m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = draws.Revision; m_meshSourceSerial = draws.Serial; m_meshStaged = true;
         OrderLanding(draws: draws); CountOwed();
         FinishMeshStaging(frame: frame);
     }
@@ -421,7 +421,7 @@ public sealed partial class SdfWorldTables {
     private void FinishMeshStaging(SdfFrame frame) {
         AccountMeshOwed(frame: true);
         CheckMeshRows(frame: frame);
-        if ((m_skipDrawThrough > 0) && (frame.MeshDrawChangesSerial <= m_skipDrawThrough)) {
+        if ((m_skipDrawThrough > 0) && (frame.DrawRows.Serial <= m_skipDrawThrough)) {
             SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Skipped);
         } else { m_drawCursor.Commit(); m_skipDrawThrough = 0; }
         m_landedRows.Clear();
@@ -436,7 +436,7 @@ public sealed partial class SdfWorldTables {
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
     public void StageLandedMeshes(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(argument: frame);
-        if (m_disposed || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.DrawRows.Roster, objB: m_meshSource) || (frame.MeshDrawsRevision != m_meshSourceRevision)) { return; }
+        if (m_disposed || !m_meshLandedSinceStaging || !ReferenceEquals(objA: frame.DrawRows.Roster, objB: m_meshSource) || (frame.DrawRowsRevision != m_meshSourceRevision)) { return; }
         StageMeshRegion(frame: frame);
     }
 

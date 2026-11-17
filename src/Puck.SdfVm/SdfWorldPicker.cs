@@ -165,7 +165,7 @@ public sealed class SdfWorldPicker {
         m_flight = readback;
         request = new SdfPickResult(Request: m_request,
             X: Math.Min(val1: ((uint)(m_x * width)), val2: (width - 1)), Y: Math.Min(val1: ((uint)(m_y * height)), val2: (height - 1)),
-            Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.MeshDrawsRevision, Map: frame.PickMap) { CutRevision = cut, RowStamp = rowStamp, Sample = (m_surface ? sample : null) };
+            Width: width, Height: height, Identity: 0, Distance: 0, Material: -1, Program: frame.Program, MeshRevision: frame.DrawRowsRevision, Map: frame.PickMap) { CutRevision = cut, RowStamp = rowStamp, Sample = (m_surface ? sample : null) };
         return true;
     }
     // Ends the copy in flight: an answer once its node proved the copy's slot complete, or null when its recording was
