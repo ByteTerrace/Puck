@@ -91,6 +91,30 @@ public sealed class RuleCompilerLawTests {
         )),
         expected: RuleRefusal.StateCellUndeclared
     );
+    // A pile that starts empty still declares every key its token domain row declares.
+    [Fact]
+    public void AnEmptyPileReadOfATokenDomainKeyCompiles() => _ = RulesFixture.Compile(rule: RulesFixture.Rule(
+        gate: new ActionPredicate.CompareState(
+            Comparison: ExpressionOp.Equal,
+            Key: "a",
+            State: "hand",
+            Value: 0m
+        ),
+        name: "empty-pile"
+    ));
+    [Fact]
+    public void AnEmptyPileReadOfAKeyOutsideItsTokenDomainIsRefused() => Assert.Equal(
+        actual: RulesFixture.Refusal(rule: RulesFixture.Rule(
+            gate: new ActionPredicate.CompareState(
+                Comparison: ExpressionOp.Equal,
+                Key: "zz",
+                State: "hand",
+                Value: 0m
+            ),
+            name: "empty-pile-ghost"
+        )),
+        expected: RuleRefusal.StateCellUndeclared
+    );
     // Computed keys evaluate at their use and consume no slot in the declared-local buffer.
     [Fact]
     public void ComputedKeysDoNotConsumeDeclaredLocalSlots() {
