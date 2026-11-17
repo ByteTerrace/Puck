@@ -1108,6 +1108,7 @@
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Shaders": "[0.1.0-alpha, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.*, )",
+          "Microsoft.Diagnostics.Tracing.TraceEvent": "[3.1.*, )",
           "Microsoft.Extensions.FileSystemGlobbing": "[10.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Harness": "[1.0.0, )",
@@ -1314,7 +1315,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )"

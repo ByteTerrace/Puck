@@ -124,14 +124,88 @@ public sealed class LockFileRecordLawTests {
         LockScratch.Write(write: (name, text) => directory.WriteText(name: name, text: text));
         var root = directory.RootPath;
         var clean = File.ReadAllBytes(path: Path.Combine(path1: root, path2: LockScratch.Clean));
-        var result = LockFiles.Record(changed: out var changed, repositoryRoot: root, restore: arguments => LockScratch.Dotnet(arguments: arguments, repositoryRoot: root), update: false);
+        var result = LockFiles.Record(advanced: out var advanced, changed: out var changed, repositoryRoot: root, restore: arguments => LockScratch.Dotnet(arguments: arguments, repositoryRoot: root), update: false);
 
         Assert.True(condition: (result.ExitCode == 0), userMessage: result.Output);
+        Assert.Empty(collection: advanced);
         Assert.Equal(actual: changed, expected: [LockScratch.Drifted, LockScratch.Unlocked]);
         Assert.Equal(expected: clean, actual: File.ReadAllBytes(path: Path.Combine(path1: root, path2: LockScratch.Clean)));
         Assert.DoesNotContain(expectedSubstring: "Dropped.Package", actualString: File.ReadAllText(path: Path.Combine(path1: root, path2: LockScratch.Drifted)));
         var check = LockFiles.Check(repositoryRoot: root, restore: arguments => LockScratch.Dotnet(arguments: arguments, repositoryRoot: root));
 
         Assert.True(condition: (check.ExitCode == CliExit.Success), userMessage: string.Join(separator: '\n', values: check.Report));
+    }
+}
+/// <summary>CONTRACT UNDER TEST: <see cref="LockPins.Hold"/> takes a rewritten lock file back to the version the previous
+/// file pinned for a package the project still asks for the same way, and leaves a package whose request, role or
+/// presence changed at what the restore resolved.</summary>
+public sealed class LockPinLawTests {
+    private static string Lock(string requested, string resolved, string hash, string transitiveResolved, string framework = "net11.0") => $$"""
+        {
+          "version": 1,
+          "dependencies": {
+            "{{framework}}": {
+              "Floating.Direct": {
+                "type": "Direct",
+                "requested": "{{requested}}",
+                "resolved": "{{resolved}}",
+                "contentHash": "{{hash}}"
+              },
+              "Floating.Transitive": {
+                "type": "Transitive",
+                "resolved": "{{transitiveResolved}}",
+                "contentHash": "{{hash}}",
+                "dependencies": {
+                  "Other": "[1.0.0, )"
+                }
+              }
+            }
+          }
+        }
+        """;
+
+    [Fact]
+    public void ARewrittenFileReturnsToItsPinnedVersionsWhenTheRequestsAreUnchanged() {
+        var previous = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
+        var current = Lock(requested: "[10.*, )", resolved: "10.0.15", hash: "BBBB", transitiveResolved: "2.0.2");
+        var packages = new List<string>();
+
+        Assert.Equal(expected: previous, actual: LockPins.Hold(current: current, packages: packages, previous: previous));
+        Assert.Equal(expected: ["Floating.Direct 10.0.14 (restored from 10.0.15)", "Floating.Transitive 2.0.1 (restored from 2.0.2)"], actual: packages);
+    }
+    [Fact]
+    public void ANewPackageTakesTheVersionTheSolutionAlreadyPinsWhenItsRangeAdmitsIt() {
+        var elsewhere = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
+        var previous = "{ \"version\": 1, \"dependencies\": { \"net11.0\": {} } }";
+        var current = Lock(requested: "[10.*, )", resolved: "10.0.15", hash: "BBBB", transitiveResolved: "2.0.2");
+        var newRange = Lock(requested: "[11.*, )", resolved: "11.0.1", hash: "BBBB", transitiveResolved: "2.0.2");
+        var solution = LockPins.Collect(texts: [elsewhere]);
+        var packages = new List<string>();
+
+        Assert.Equal(expected: Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1").Replace(oldValue: "\r\n", newValue: "\n"), actual: LockPins.Hold(current: current, packages: packages, previous: previous, solution: solution)?.Replace(oldValue: "\r\n", newValue: "\n"));
+        Assert.Equal(expected: 2, actual: packages.Count);
+        var outside = new List<string>();
+
+        _ = LockPins.Hold(current: newRange, packages: outside, previous: previous, solution: solution);
+        Assert.Equal(expected: ["Floating.Transitive 2.0.1 (restored from 2.0.2)"], actual: outside);
+    }
+    [Fact]
+    public void AChangedRequestIsTheReferenceChangeAndStandsAsRestored() {
+        var previous = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
+        var current = Lock(requested: "[11.*, )", resolved: "11.0.1", hash: "BBBB", transitiveResolved: "2.0.1");
+        var packages = new List<string>();
+
+        Assert.Null(@object: LockPins.Hold(current: current, packages: packages, previous: previous));
+        Assert.Empty(collection: packages);
+    }
+    [Fact]
+    public void AnUnchangedFileAndAnotherFrameworkStandAsRestored() {
+        var text = Lock(requested: "[10.*, )", resolved: "10.0.14", hash: "AAAA", transitiveResolved: "2.0.1");
+        var elsewhere = Lock(requested: "[10.*, )", resolved: "10.0.15", hash: "BBBB", transitiveResolved: "2.0.2", framework: "net11.0/win-x64");
+        var packages = new List<string>();
+
+        Assert.Null(@object: LockPins.Hold(current: text, packages: packages, previous: text));
+        Assert.Null(@object: LockPins.Hold(current: elsewhere, packages: packages, previous: text));
+        Assert.Empty(collection: packages);
     }
 }

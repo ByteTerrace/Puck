@@ -18,13 +18,7 @@
 #define SDF_SAMPLED_REGIONS
 #define SDF_GLYPH_ATLAS
 #include "sdf-bake-world.hlsli"
-
-static const float3 SdfBakeTaps[4] = {
-    float3(1.0, -1.0, -1.0),
-    float3(-1.0, -1.0, 1.0),
-    float3(-1.0, 1.0, -1.0),
-    float3(1.0, 1.0, 1.0),
-};
+#include "../isa/sdf-bake-taps.hlsli"
 
 [numthreads(64, 1, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID) {

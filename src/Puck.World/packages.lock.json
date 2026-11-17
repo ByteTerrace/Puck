@@ -2,15 +2,6 @@
   "version": 1,
   "dependencies": {
     "net11.0": {
-      "Microsoft.Diagnostics.Tracing.TraceEvent": {
-        "type": "Direct",
-        "requested": "[3.1.*, )",
-        "resolved": "3.1.30",
-        "contentHash": "87DUtWHbLA+IFiO6R/dixDrYZa55xmBkZZAK7RowXRvY64O3AJBYjMnAtamf+QhVJ9ZzKHrXCbZpS5Tw2iog6g==",
-        "dependencies": {
-          "Microsoft.Diagnostics.NETCore.Client": "0.2.510501"
-        }
-      },
       "Microsoft.Extensions.Hosting": {
         "type": "Direct",
         "requested": "[10.*, )",
@@ -45,14 +36,6 @@
         "type": "Transitive",
         "resolved": "2.2.2",
         "contentHash": "2B9YmHPKO+k7YpAAnqmiXwiMJnfjfj1C868RszOll2iZWLnGTAiC1q21L/d7CvTan7T+hyqU8dR0Dcy3cpjVfQ=="
-      },
-      "Microsoft.Diagnostics.NETCore.Client": {
-        "type": "Transitive",
-        "resolved": "0.2.510501",
-        "contentHash": "juoqJYMDs+lRrrZyOkXXMImJHneCF23cuvO4waFRd2Ds7j+ZuGIPbJm0Y/zz34BdeaGiiwGWraMUlln05W1PCQ==",
-        "dependencies": {
-          "Microsoft.Extensions.Logging": "6.0.0"
-        }
       },
       "Microsoft.Extensions.Configuration": {
         "type": "Transitive",
@@ -652,7 +635,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )"

@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions;
 using Puck.Commands;
 using Puck.Input;
 using Puck.Input.Devices;
@@ -259,7 +260,7 @@ public sealed class XInputGamepadConnection : IGamepadConnection {
     }
     private long ScheduleExpiry(bool active, uint durationMilliseconds) =>
         (active
-            ? (m_time.GetTimestamp() + ((long)(durationMilliseconds * (m_time.TimestampFrequency / 1000.0))))
+            ? m_time.TimestampAfter(milliseconds: durationMilliseconds)
             : long.MaxValue
         );
     private void StopBody() {

@@ -597,7 +597,6 @@
         "type": "Project",
         "dependencies": {
           "ByteTerrace.Puck.Commands": "[0.1.0-alpha, )",
-          "Puck.Launcher": "[1.0.0, )",
           "Puck.World.Protocol": "[1.0.0, )",
           "Puck.World.Schema": "[1.0.0, )",
           "Puck.World.Server": "[1.0.0, )"

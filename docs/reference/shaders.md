@@ -1676,7 +1676,10 @@ bytecode (`cs_5_0`), written beside the source as `<stem>.<entry>.dxbc`
 (`ProbeKindManifest.KernelBytecodePath`) by the shared recipe's
 `CompileDirect3D11Kernels` target for every `Direct3D11KernelSource` item, and a kernel
 host creates the kernel from that bytecode on its own Direct3D 11 device, so
-nothing compiles there. The host is the camera graph a camera trigger names, or,
+nothing compiles there. The compile is handed no include handler, so the build
+task expands each quoted `#include` alone on its line (the probe kernels share
+`probe-accumulate.hlsli`) before it compiles, and a kernel's bytecode is stale
+when its source or any file it includes is newer. The host is the camera graph a camera trigger names, or,
 for a kernel whose trigger socket reads a view or another probe and that binds
 no camera, the render adapter's own host, which cycles the kernel whenever its
 trigger publishes a frame. The camera frame converter's YUY2, NV12 and L8

@@ -13,12 +13,6 @@ internal static class SharedKernelClaims {
 
     private static FixedQ4816 Raw(long value) =>
         FixedQ4816.FromRawBits(value: value);
-    private static FixedVector3 Vector(ReadOnlySpan<long> raws) =>
-        new(
-            X: Raw(value: raws[0]),
-            Y: Raw(value: raws[1]),
-            Z: Raw(value: raws[2])
-        );
     private static string Render(FixedVector3 vector) =>
         string.Create(
             provider: CultureInfo.InvariantCulture,
@@ -286,7 +280,7 @@ internal static class SharedKernelClaims {
     /// <param name="left">The vector's three raws.</param>
     /// <param name="right">Bound raws.</param>
     public static string? WithLengthTowardZero(bool deep, long[] left, long[] right) {
-        var vector = Vector(raws: left);
+        var vector = RawVectors.Of(lanes: left);
         var within = Oracles.SquaredNorm(raws: left);
         var bounds = new List<long> { right[0], right[1], right[2], 0L, -1L, 1L, 3L, RawOne, (RawOne * 1000L), (1L << 45), long.MaxValue };
 
@@ -360,7 +354,7 @@ internal static class SharedKernelClaims {
     /// <param name="left">The vector's three raws.</param>
     /// <param name="right">Three freely drawn radius raws.</param>
     public static string? IsWithinExactSquares(bool deep, long[] left, long[] right) {
-        var vector = Vector(raws: left);
+        var vector = RawVectors.Of(lanes: left);
         var sum = Oracles.SquaredNorm(raws: left);
         var root = Oracles.IntegerSquareRoot(value: sum);
         var reported = ((root > long.MaxValue)
@@ -402,8 +396,8 @@ internal static class SharedKernelClaims {
             ? [FoldNarrow(raw: left[0]), FoldNarrow(raw: left[1]), FoldNarrow(raw: left[2])]
             : [Fold(raw: left[0]), Fold(raw: left[1]), Fold(raw: left[2])]);
         long[] forward = [Fold(raw: right[0]), Fold(raw: right[1]), Fold(raw: right[2])];
-        var offsetVector = Vector(raws: offset);
-        var forwardVector = Vector(raws: forward);
+        var offsetVector = RawVectors.Of(lanes: offset);
+        var forwardVector = RawVectors.Of(lanes: forward);
         var cosines = new List<long> { RawOne, (RawOne - 1L), 56756L, 46341L, 32768L, 1L, 0L, -1L, -32768L, -46341L, -(RawOne - 1L), -RawOne };
 
         if (deep) {
@@ -480,8 +474,8 @@ internal static class SharedKernelClaims {
     /// <param name="left">The vector's three raws.</param>
     /// <param name="right">The axis's three raws, normalized before use.</param>
     public static string? RejectFromAndNormalized(long[] left, long[] right) {
-        var vector = Vector(raws: left);
-        var axis = Vector(raws: right).Normalize();
+        var vector = RawVectors.Of(lanes: left);
+        var axis = RawVectors.Of(lanes: right).Normalize();
 
         if (axis == FixedVector3.Zero) {
             axis = FixedVector3.UnitY;
@@ -562,8 +556,8 @@ internal static class SharedKernelClaims {
     /// <param name="left">The first vector's three raws.</param>
     /// <param name="right">The second vector's three raws.</param>
     public static string? TryAddSubtractRefuseOutsideCarrier(long[] left, long[] right) {
-        var first = Vector(raws: left);
-        var second = Vector(raws: right);
+        var first = RawVectors.Of(lanes: left);
+        var second = RawVectors.Of(lanes: right);
 
         for (var subtract = 0; (subtract < 2); ++subtract) {
             var fits = true;
@@ -598,7 +592,7 @@ internal static class SharedKernelClaims {
 
             if (actual != fits) { return $"{name} answered {actual} where the exact lanes {(fits ? "fit" : "overflow")}"; }
             if (!fits && (result != FixedVector3.Zero)) { return $"{name} refused but left {Render(vector: result)}"; }
-            if (fits && (result != Vector(raws: expected))) { return $"{name} returned {Render(vector: result)}, expected {Render(vector: Vector(raws: expected))}"; }
+            if (fits && (result != RawVectors.Of(lanes: expected))) { return $"{name} returned {Render(vector: result)}, expected {Render(vector: RawVectors.Of(lanes: expected))}"; }
         }
 
         return null;
@@ -608,7 +602,7 @@ internal static class SharedKernelClaims {
     /// <param name="left">A facing's three raws.</param>
     /// <param name="right">Unused.</param>
     public static string? YawOfFacingAndAttitude(long[] left, long[] right) {
-        var facing = Vector(raws: left);
+        var facing = RawVectors.Of(lanes: left);
         var expected = FixedQ4816.Atan2(
             x: -facing.Z,
             y: -facing.X

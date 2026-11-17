@@ -14,14 +14,9 @@ namespace Puck.Physics;
 /// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Every kind is
 /// <see cref="WorkClass.Deterministic"/>: the same world and input spend the same work on every run and host, though a
 /// process running several solvers (a test host) sums them all.</remarks>
-public sealed class FixedStaticContactWork : IWorkCounterSource {
+public sealed class FixedStaticContactWork : WorkLedger<ShardedWorkCounterSet> {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.contact";
-
-    private readonly ShardedWorkCounterSet m_counts = new(
-        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed],
-        name: SourceName
-    );
 
     /// <summary>Gets the kind counting resolves: one per body move or rest solved against the analytic colliders.</summary>
     public static WorkKind Resolves { get; } = new(name: "physics.contact.resolves", unit: "count", workClass: WorkClass.Deterministic);
@@ -58,19 +53,20 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// it is created.</summary>
     public static FixedStaticContactWork Process { get; } = new();
 
-    /// <inheritdoc/>
-    public string Name => m_counts.Name;
-    /// <inheritdoc/>
-    public ReadOnlySpan<WorkKind> WorkKinds => m_counts.WorkKinds;
+    /// <summary>Initializes a new instance of the <see cref="FixedStaticContactWork"/> class, every kind at zero.</summary>
+    public FixedStaticContactWork() : base(counters: new(
+        kinds: [Resolves, SupportDistances, Queries, ConvexQueries, Supports, Pushes, FieldQueries, FieldBounds, FieldSamples, FieldReads, FieldUnproved, FieldNarrowed],
+        name: SourceName
+    )) { }
 
     /// <summary>Counts one resolve of a body against the analytic colliders.</summary>
-    public void CountResolve() => m_counts.Count(kind: Resolves);
+    public void CountResolve() => Counters.Count(kind: Resolves);
     /// <summary>Counts one support-distance query (<see cref="FixedStaticContactSolver.TrySupportDistance"/>).</summary>
-    public void CountSupportDistance() => m_counts.Count(kind: SupportDistances);
+    public void CountSupportDistance() => Counters.Count(kind: SupportDistances);
     /// <summary>Counts one exact collider query.</summary>
     /// <param name="pushed">Whether it returned a push.</param>
     public void CountQuery(bool pushed) {
-        var shard = m_counts.ThreadShard;
+        var shard = Counters.ThreadShard;
 
         shard.Count(kind: Queries);
 
@@ -81,7 +77,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <summary>Counts one iterative convex query and the support-map evaluations it spent.</summary>
     /// <param name="supports">The support-map evaluations.</param>
     public void CountConvex(int supports) {
-        var shard = m_counts.ThreadShard;
+        var shard = Counters.ThreadShard;
 
         shard.Count(kind: ConvexQueries);
         shard.Add(amount: supports, kind: Supports);
@@ -91,7 +87,7 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
     /// <param name="samples">The field evaluations.</param>
     /// <param name="unproved">Whether the query ended unproved.</param>
     public void CountField(int bounds, int samples, bool unproved) {
-        var shard = m_counts.ThreadShard;
+        var shard = Counters.ThreadShard;
 
         shard.Count(kind: FieldQueries);
         shard.Add(amount: bounds, kind: FieldBounds);
@@ -106,11 +102,5 @@ public sealed class FixedStaticContactWork : IWorkCounterSource {
         }
     }
     /// <summary>Counts one field-collider query its partition narrowed (<see cref="FieldNarrowed"/>).</summary>
-    public void CountNarrowed() => m_counts.Count(kind: FieldNarrowed);
-    /// <summary>Reads the current total of one of this ledger's kinds.</summary>
-    /// <param name="kind">One of this ledger's kinds.</param>
-    /// <returns>The total counted so far.</returns>
-    public long Read(WorkKind kind) => m_counts.Read(kind: kind);
-    /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind: kind, value: out value);
+    public void CountNarrowed() => Counters.Count(kind: FieldNarrowed);
 }

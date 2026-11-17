@@ -4,34 +4,38 @@ using Microsoft.Diagnostics.Tracing;
 using Microsoft.Diagnostics.Tracing.Parsers;
 using Microsoft.Diagnostics.Tracing.Parsers.Clr;
 
-namespace Puck.World;
+namespace Puck.Cli.Host;
 
 /// <summary>
-/// A suspended walk of this process's managed heap: the runtime's own heap dump, the technique <c>dotnet-gcdump</c>
-/// uses. An EventPipe session this process opens on itself through its diagnostics port enables the runtime provider's
+/// A suspended walk of another .NET process's managed heap: the runtime's own heap dump, the technique <c>dotnet-gcdump</c>
+/// uses. An EventPipe session this process opens on the target through its diagnostics port enables the runtime provider's
 /// heap-collect and heap-dump keywords, which make the runtime run one blocking full collection with every managed
 /// thread suspended and, during it, write each live object (its address, size, type and the objects it refers to) and
 /// each root to the event stream. The walk reads the stream back and names the large object heap's tenants: each object
 /// of at least the large object threshold (85,000 bytes) counts in the totals, and each of at least a stated size is
 /// named by its type and the first holder found (the type of an object referring to it, or the kind of root that keeps
 /// it), grouped by both. The collection compacts nothing it would not otherwise, and its pause is the walk's suspension;
-/// reading the stream takes seconds on a heap of a few gigabytes, so it is taken on request, never per frame.
+/// reading the stream takes seconds on a heap of a few gigabytes. The walk runs in the reading process, so the target
+/// pays only the collection, and no engine process carries the trace-parsing package.
 /// </summary>
-internal static class ManagedHeapWalk {
+public static class ManagedHeapWalk {
     /// <summary>The runtime's large object threshold, in bytes: an object at least this large is allocated on the large
     /// object heap (the default of <c>GCLOHThreshold</c>, which Puck does not set).</summary>
     public const long LargeObjectBytes = 85_000;
 
     private const string RuntimeProvider = "Microsoft-Windows-DotNETRuntime";
 
-    /// <summary>Walks the heap.</summary>
+    /// <summary>Walks a process's heap.</summary>
+    /// <param name="processId">The target process, which must expose its diagnostics port (the default of every .NET
+    /// process) to this user.</param>
     /// <param name="minimumBytes">The smallest object whose tenant is named; smaller large objects count only in the
     /// totals.</param>
     /// <returns>The walk.</returns>
     /// <exception cref="InvalidOperationException">The runtime wrote no heap dump.</exception>
-    public static HeapWalk Run(long minimumBytes) {
+    /// <exception cref="ServerNotAvailableException">The process exposes no diagnostics port.</exception>
+    public static HeapWalk Run(int processId, long minimumBytes) {
         var keywords = (long)(ClrTraceEventParser.Keywords.GC | ClrTraceEventParser.Keywords.GCHeapCollect | ClrTraceEventParser.Keywords.GCHeapDump | ClrTraceEventParser.Keywords.GCHeapAndTypeNames | ClrTraceEventParser.Keywords.Type);
-        var client = new DiagnosticsClient(processId: Environment.ProcessId);
+        var client = new DiagnosticsClient(processId: processId);
         using var session = client.StartEventPipeSession(providers: [new EventPipeProvider(eventLevel: EventLevel.Verbose, keywords: keywords, name: RuntimeProvider)], requestRundown: false, circularBufferMB: 1024);
         using var source = new EventPipeEventSource(stream: session.EventStream);
 
@@ -123,11 +127,11 @@ internal static class ManagedHeapWalk {
 /// <param name="Nodes">The live objects the dump wrote, of every size.</param>
 /// <param name="Collection">The index of the collection that wrote the dump.</param>
 /// <param name="Tenants">The tenants of objects at least the walk's minimum size, largest first.</param>
-internal sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants);
+public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants);
 /// <summary>One tenant of the large object heap: the objects of one type one holder keeps.</summary>
 /// <param name="Type">The objects' type.</param>
 /// <param name="Holder">The first holder the walk found: the type of an object referring to them, a <c>root:</c> kind,
 /// or <c>unreached</c>.</param>
 /// <param name="Objects">The objects.</param>
 /// <param name="Bytes">Their bytes.</param>
-internal sealed record HeapTenant(string Type, string Holder, int Objects, long Bytes);
+public sealed record HeapTenant(string Type, string Holder, int Objects, long Bytes);
