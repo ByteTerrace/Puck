@@ -780,10 +780,6 @@ says how one is reproduced and profiled.
   `SdfDualContouring` already copied its lists; every creased group builds a
   `ContourProjection` of its own. Count them with `--profile gc-verbose`, then
   write each into storage its worker owns.
-- [medium] A static copy of a union bakes its small shape off the union's
-  field: `SdfMeshPathBakeLawTests.AStaticCopyBakesItsUnionKeepingItsSmallShapeAtItsOwnResolution`
-  finds a vertex 1.62 m from the union. The mesh is off its field; fix that.
-  The file's two other failing laws are timing-dependent: delete them.
 - [medium] A placement whose creation is not a rigid asset (a timeline,
   drivers, effectors, field-changing lanes, cameras or faces) still opens a
   group per placement (`WorldPlacementStamper`'s `EmitPlacement`), where a
@@ -1384,6 +1380,20 @@ step 2 legs on the RTX 2060 and the Deck, then step 5, the work bound
 calibrated and the device-loss quarantine, then step 6, the engine's layers
 migrated to standard programs.
 
+- [high] The deployed kernel tree cannot read its own sources.
+  `SdfKernelSource.Read` of the specialized kernels (views, glass and the shade
+  views) from `Assets/Shaders/Sdf` beside the application is refused with
+  `SHADERSRC_INCLUDE_MISSING`: `field/sdf-shapes.hlsli`, `shade/sdf-light.hlsli`
+  and other kernel sources include
+  `../../../../../Puck.Shaders/Assets/Shaders/Shared/*.hlsli`, a path that
+  exists only in a source checkout. `SdfKernelSet.Load` swallows the refusal, so
+  a running World keeps no kernel source and every shade specialization is
+  refused by name; a copied kernel tree fails a shader reload the same way
+  (`SdfShadeKernelsSourceLawTests.TheDeployedKernelsCarryTheSourcesASpecializationPlansFrom`
+  and `SdfWorldResidencyShaderReloadLawTests.AReloadOfKernelsRetunedByATuningConstantApplies`
+  are red for this cause). An include resolves beside the file that names it, so
+  either the deployed layout carries the shared headers where each includer
+  reaches them or the includes take one spelling that resolves in both layouts.
 - [medium · unconfirmed] One authored program edit compiles two sets:
   `shaders.compiler.runs.dxc` rose by 4 per edit on both backends where views
   and glass make 2, likely a requested set overtaken while the active and
@@ -2156,6 +2166,11 @@ lane's.
   and `BodyActionState` (`WorldPersistence.AppendStateHashComponent`). The
   door's steps D5 to D9 take the first and D9 to D11 the rest. A replica's
   fixed floor per scenario is unmeasured.
+- [low] A debug-world scenario fixture that keeps `documentId: "debug"` (hall,
+  chess, cardtable, freecell, meadow, suit) still boots the garden, night and
+  hearth companions the debug world's `references` name, beside the boot
+  authority. Hall's scenarios cross none of them; a fixture that overrides
+  `references` and `destinations` to none runs one authority.
 - [medium] The authority-level replay start commits before it validates: with
   geometry or machine configuration edited after the checkpoint,
   `WorldPersistence.ReplayStart.cs` installs the machine reconfiguration and
@@ -2163,11 +2178,6 @@ lane's.
   refused checkpoint leaves both moved. The debugger's machine-snapshot
   restore has the same shape (`WorldAddonRuntime.Debugger.cs`). Validate first
   with `TryValidateCheckpoint` (`IMachineCheckpointRuntime`).
-- [medium] Hall's test fixture uses `documentId: "hall-tests"`, so the garden
-  and night references admit a separate full `debug` authority whose six
-  machines its stopped-machines import does not stop, and each root tick
-  advances four authorities. Remove the avoidable companion workload, keeping
-  the scenarios' claims.
 - [low] `WorldPersistence.Checkpoint.cs`'s refusal text says "a checkpoint
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
@@ -2775,18 +2785,7 @@ that stops compiling.
   (`gh run view --log-failed` on the latest `main` run).
 - Red on the integration tip, each to update to the behaviour it now meets or
   delete:
-  - SdfVm: eight `SdfMeshPathBakeLawTests` cases (`ACachedReplacement…`,
-    `ADynamicSlotRefines…`, `AFrameTakesTheLattices…`,
-    `AGroupWhoseShapesRideTwoSlots…`, `AKeptSeparateGeometry…`,
-    `AMovedIdentity…`, `AStaticCopyBakesItsUnion…`, `AStaticCopyOfThinPlates…`)
-    and `SdfMeshPathBakeSampledLawTests.AReferenceRepublishedEveryFrame…`,
-    red before the tap-spacing change too; read each for a real bake
-    regression before updating or deleting it.
-  - Server: `HoldLawTests` (two checkpoint cases) and
-    `TetherLawTests.TetherCheckpointRestore_PreservesRopeAnchorAndReelFractionAndContinuesBitIdentically`
-    compare `WorldBody.CaptureIntegrationResidue` records whole, which differ
-    only in `LastContactFieldVersion`; compare the bodies' sections
-    (`WorldBody.CaptureSections`). `TransferAbortKitWideningLawTests` needs a
+  - Server: `TransferAbortKitWideningLawTests` needs a
     nonzero accumulator remainder its fixture's rates no longer leave.
     `GpuFaultsCommandModuleLawTests`, `WorldRuleMixedDocumentTransactionLawTests`,
     `ShapingRowLawTests`, `InhabitCountLawTests`, and one case each of
@@ -2796,9 +2795,6 @@ that stops compiling.
     `WorldAuthorityBlobStore.DirectoryTarget`); `DeliveryReviewLawTests` (four
     cases) and `SessionObservationLawTests.ReadDoors` (four), the disclosure
     area's.
-  - `puck test worlds/debug/input-continuity-tests.puck` fails one world:
-    its scenario submits `replay.record`, `replay.stop` and `replay.inspect`
-    as `seat1`, which are operator verbs.
   - Presentation: `FederationTransferLawTests.ReservationWire_RefusesAnUndecodableTravelerIdentityByName`
     builds wire bytes by hand that fell behind the companion member fields.
   - Rendering: four `SdfPassPlanLawTests` laws expect shadow-near before mesh;
@@ -2806,12 +2802,15 @@ that stops compiling.
     expects `sdf-world-views` where a programless frame binds the plain
     kernel; three more of its laws wait on elapsed frames for a graph rebuild
     and fail under load (wait on the install signal);
-    `SdfPackedContractLawTests`, three `SdfMeshStoreLawTests` capacity laws,
+    `SdfPackedContractLawTests`,
     `SdfMeshIrradianceLawTests.RemovingTheLastStaticDrawReplacesItsSceneAndProbeMeasurements`;
     `SdfSkyEnvironmentDeviceLawTests` and `WorldRoutedPresentationLawTests`
     still set `IndirectTier = Off`, which now runs the volume; `GpuRegion`'s
-    two-gigabyte staging law; a cascade-sizing law that times out; and the
-    SdfVm residency and cadence laws.
+    two-gigabyte staging law; a cascade-sizing law that times out; and
+    `SdfWorldPassesLawTests`' cadence and temporal laws, 55 of which fail
+    because the view never stands (`TemporalRig.Stood()`) after twelve frames
+    (naming only the frame's sky as a direct source did not change it; the
+    cause is unread).
   - Tooling: `McpInteropTests` placement counts,
     `RemoteMcpTests.StateVectorWrite_GrantedPrincipalSucceedsAndUngrantedIsRefused`
     (a client timeout), `LanesCommandLawTests`, the `docs links` symbol
@@ -2822,9 +2821,7 @@ that stops compiling.
   - Unconfirmed whether they predate the change that found them:
     `MeshCommandTests` (`AnOfflineBakeAuditsAGroupWithNoDeviceAndNoStore`,
     `TheIdentityVerbPrintsABuildsIdentityItsPartsAndWhatDiffers`,
-    `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`) and
-    `VulkanDeviceChainCleanupLawTests` (two cases failing at log index 1 with
-    `unexpected native call` during instance creation).
+    `AStoredDummyADamagedEntryAndAMissingMeshAreReportedAsSuch`).
 - The keep-list the owner approves: exact results and determinism
   (`Puck.Maths.Tests`' laws; World.Server `MusicReplayReDerivabilityLawTests`,
   `CrossingReplayLawTests`, `ReplayForkLawTests`,
@@ -2998,20 +2995,6 @@ mirrors wait for the presentation view. The
 owner lifted test requirements for this campaign (AGENTS.md). A duplicate is
 fixed when found; this packet holds one only between waves. A `.puck` rewrite
 proves itself with `puck compile` lowering to the same document.
-
-- [low] Rendering law fixtures predating R1a have stale assumptions. The saved
-  base assemblies reproduce `RootCutProducer`'s empty dress
-  (`tests/Puck.SdfVm.Tests/SdfWorldTablesUploadLawTests.RootReseats.cs`, the
-  `Library.Store` fixture), all three `SdfMeshRegionArenaLawTests`' old packing
-  expectations, and `SdfKernelSetLawTests.ARendererConstantMovesNoBakeStamp`'s
-  comparison of the full encoding against the field-only fingerprint. The
-  kernel-set run also finds a fixture that copies an incomplete kernel list
-  (`ALoadCountsOnceWithEveryByteItRead`) and an assertion requiring a reflected
-  pass block even when the compiler removes it
-  (`EveryCompiledKernelReadsItsHostsInterfaceOnBothBackends`, after its actual
-  interface mismatch check passed). These fixtures are not evidence against
-  R1a; replace their setup/expectations from the current mechanisms when next
-  working that area. R1a's direct table law and frame/header/layout laws pass.
 
 - [low] Two lock-file poll loops: `ConfinedDirectory.AcquireLock`
   (`Puck.Confinement`, handle-relative) and `FileLock.Acquire`
