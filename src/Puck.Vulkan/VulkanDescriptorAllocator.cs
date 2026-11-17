@@ -124,12 +124,15 @@ public sealed class VulkanDescriptorAllocator(IVulkanDescriptorApi descriptorApi
     /// <param name="binding">The binding index within the set.</param>
     /// <param name="bufferHandle">The native <c>VkBuffer</c> handle to bind.</param>
     /// <param name="bufferSize">The size, in bytes, of the bound buffer range.</param>
-    public void WriteStorageBuffer(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize) {
+    /// <param name="arrayElement">The array element within the binding.</param>
+    /// <param name="offsetBytes">The offset, in bytes, of the bound range into the buffer; a multiple of the device's
+    /// <c>minStorageBufferOffsetAlignment</c>.</param>
+    public void WriteStorageBuffer(VulkanDeviceCommands device, nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, uint arrayElement = 0, ulong offsetBytes = 0) {
         descriptorApi.WriteBuffer(request: new VulkanDescriptorBufferWriteRequest(
-            ArrayElement: 0,
+            ArrayElement: arrayElement,
             Binding: binding,
             BufferHandle: bufferHandle,
-            BufferOffset: 0,
+            BufferOffset: offsetBytes,
             BufferRange: bufferSize,
             DescriptorSetHandle: descriptorSetHandle,
             DescriptorType: VulkanDescriptorType.StorageBuffer,

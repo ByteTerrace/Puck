@@ -7,7 +7,8 @@ namespace Puck.Vulkan.Factories;
 
 /// <summary>
 /// The default <see cref="IVulkanLogicalDeviceFactory"/>: it creates a logical device, enabling the
-/// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>fragmentStoresAndAtomics</c> and
+/// swapchain extension, <c>shaderSampledImageArrayDynamicIndexing</c>, <c>shaderStorageBufferArrayDynamicIndexing</c>,
+/// <c>shaderStorageBufferArrayNonUniformIndexing</c>, <c>fragmentStoresAndAtomics</c> and
 /// <c>shaderStorageImageExtendedFormats</c> and <c>shaderDemoteToHelperInvocation</c> always, refusing a device without any of them,
 /// and the optional pipeline-executable-properties,
 /// storage-image-without-format, external memory and semaphore,
@@ -84,6 +85,25 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // The 0-based VkPhysicalDeviceFeatures flag index of shaderClipDistance: the SDF mesh and shadow passes' vertex stages
     // write a clip distance, which clips a body straddling a portal at the portal's glass.
     private const uint ClipDistanceFeatureIndex = 37u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of shaderStorageBufferArrayDynamicIndexing: the mesh words' slab
+    // read (frame/sdf-mesh-words.hlsli) indexes an array of storage buffers.
+    private const uint StorageBufferArrayDynamicIndexingFeatureIndex = 35u;
+    // The sparse flags among VkPhysicalDeviceFeatures (sparseBinding, sparseResidencyBuffer, sparseResidencyAliased),
+    // read for the capability record and never enabled. Indices from the Vulkan SDK 1.4.363 vulkan_core.h.
+    private const int SparseBindingFeatureIndex = 44;
+    private const int SparseResidencyBufferFeatureIndex = 45;
+    private const int SparseResidencyAliasedFeatureIndex = 52;
+    // VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES (Vulkan 1.2 core), whose sixth VkBool32 (index 5) is
+    // shaderStorageBufferArrayNonUniformIndexing: the slab read's index differs across a compute wave's lanes (each pixel
+    // names its own draw), so it needs the non-uniform qualifier and this feature.
+    private const uint StructureTypePhysicalDeviceDescriptorIndexingFeatures = 1000161001;
+    private const int StorageBufferArrayNonUniformIndexingFlag = 5;
+    // VK_EXT_memory_priority and VK_EXT_pageable_device_local_memory, each with its feature structure whose first VkBool32
+    // is the feature (memoryPriority, pageableDeviceLocalMemory), read for the capability record and never enabled.
+    private const string MemoryPriorityExtension = "VK_EXT_memory_priority";
+    private const uint StructureTypePhysicalDeviceMemoryPriorityFeatures = 1000238000;
+    private const string PageableDeviceLocalMemoryExtension = "VK_EXT_pageable_device_local_memory";
+    private const uint StructureTypePhysicalDevicePageableDeviceLocalMemoryFeatures = 1000412000;
 
     // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
     // it; a device reporting any of them absent is refused naming it.
@@ -91,6 +111,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),
+        (StorageBufferArrayDynamicIndexingFeatureIndex, "shaderStorageBufferArrayDynamicIndexing", "the mesh words' slab read indexes an array of storage buffers"),
         (ClipDistanceFeatureIndex, "shaderClipDistance", "the SDF mesh and shadow passes clip a body straddling a portal at its glass"),
     ];
     // 0-based VkPhysicalDeviceFeatures flag indices enabled only when the device reports them: storage-image
@@ -178,6 +199,36 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             ),
         ];
     }
+    /// <summary>Returns the backing a physical device offers (<see cref="GpuBackingSupport"/>), beyond what its sparse
+    /// properties already put in its capabilities: the sparse base features, a queue family that binds sparse memory,
+    /// storage-buffer array indexing, and the memory priority and pageable device-local memory extensions, each present
+    /// with its feature reported. Nothing read here is enabled except the indexing the slab read requires.</summary>
+    private GpuBackingSupport BackingOf(VulkanInstanceCommands instance, nint physicalDeviceHandle, IReadOnlyList<bool> support) {
+        bool Base(int index) => ((index < support.Count) && support[index]);
+        bool Extension(string name, uint structureType) => (
+            m_physicalDeviceApi.HasDeviceExtension(extensionName: name, instance: instance, physicalDeviceHandle: physicalDeviceHandle) &&
+            m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle, structureType: structureType)
+        );
+
+        var backing = GpuBackingSupport.None;
+
+        if (Base(index: SparseBindingFeatureIndex)) { backing |= GpuBackingSupport.SparseBinding; }
+        if (Base(index: SparseResidencyBufferFeatureIndex)) { backing |= GpuBackingSupport.SparseResidencyBuffer; }
+        if (Base(index: SparseResidencyAliasedFeatureIndex)) { backing |= GpuBackingSupport.SparseResidencyAliased; }
+        if (Base(index: ((int)StorageBufferArrayDynamicIndexingFeatureIndex))) { backing |= GpuBackingSupport.BufferArrayDynamicIndexing; }
+        if (m_physicalDeviceApi.GetQueueFamilies(instance: instance, physicalDeviceHandle: physicalDeviceHandle)
+            .Any(predicate: static family => ((family.Flags & VkQueueFlags.SparseBinding) != 0))) {
+            backing |= GpuBackingSupport.SparseQueue;
+        }
+        if (m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceDescriptorIndexingFeatures, flag: StorageBufferArrayNonUniformIndexingFlag)) {
+            backing |= GpuBackingSupport.BufferArrayNonUniformIndexing;
+        }
+        if (Extension(name: MemoryPriorityExtension, structureType: StructureTypePhysicalDeviceMemoryPriorityFeatures)) { backing |= GpuBackingSupport.MemoryPriority; }
+        if (Extension(name: PageableDeviceLocalMemoryExtension, structureType: StructureTypePhysicalDevicePageableDeviceLocalMemoryFeatures)) { backing |= GpuBackingSupport.PageableDeviceLocal; }
+
+        return backing;
+    }
     private (IReadOnlyList<string> ExtensionNames, IReadOnlyList<uint> FeatureStructureTypes) ComposeExtensionsAndFeatures(
         VulkanInstanceCommands instance,
         nint physicalDeviceHandle,
@@ -201,6 +252,10 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
             throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderDrawParameters, which GPU mesh selection needs to read indirect draw identities.");
         }
         featureStructureTypes.Add(item: ShaderDrawParameters);
+        if (!m_physicalDeviceApi.IsExtensionFeatureSupported(instance: instance, physicalDeviceHandle: physicalDeviceHandle,
+            structureType: StructureTypePhysicalDeviceDescriptorIndexingFeatures, flag: StorageBufferArrayNonUniformIndexingFlag)) {
+            throw VulkanResultExtensions.Unavailable(reason: "The Vulkan device does not report shaderStorageBufferArrayNonUniformIndexing, which the mesh words' slab read needs to index its storage buffers per pixel.");
+        }
         var drawIndirectCount = (SupportsIndirectDrawFeatures(support: support) && m_physicalDeviceApi.HasDeviceExtension(
             extensionName: VulkanDeviceCommands.DrawIndirectCountExtension, instance: instance, physicalDeviceHandle: physicalDeviceHandle));
 
@@ -460,6 +515,11 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
         var featureIndices = FeatureIndicesOf(support: support);
 
+        capabilities = (capabilities with {
+            Backing = ((capabilities.Backing ?? GpuBackingSupport.None) | BackingOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle, support: support)),
+        });
+        Console.Error.WriteLine(value: $"[backing] {GpuDeviceCapabilities.BackingSpelling(backing: capabilities.Backing.Value)} sparse.address-space={capabilities.SparseAddressSpaceBytes} storage-buffer.offset-alignment={capabilities.StorageBufferOffsetAlignment}");
+
         var (extensionNames, featureStructureTypes) = ComposeExtensionsAndFeatures(
             instance: instance.Commands,
             physicalDeviceHandle: physicalDevice.Handle,
@@ -468,6 +528,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
         var request = new VulkanLogicalDeviceCreateRequest(
             AddressBindings: instance.AddressBindings,
+            EnabledFeatureFlags: [new VulkanFeatureFlag(Flag: StorageBufferArrayNonUniformIndexingFlag, StructureType: StructureTypePhysicalDeviceDescriptorIndexingFeatures)],
             EnabledFeatureIndices: featureIndices,
             EnabledFeatureStructureTypes: featureStructureTypes,
             ExtensionNames: extensionNames,

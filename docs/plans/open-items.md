@@ -45,8 +45,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
    agreed with the owner: step 0's baseline legs on both backends in a quiet
-   window, steps 1 and 2's windowed readings, and step 7's prototype with a GPU
-   grant; then step 3.
+   window, steps 1 and 2's windowed readings, and step 7's readings (the
+   prototype is built: the capability read on this machine and the indexed
+   read's paired cost window on both backends,
+   [the measurement](streaming-and-memory.md#the-prototype-as-built)); then
+   step 3.
 3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
    by every lattice fact and are still turned from the field (vertices the
    planes put off the surface, slivers beside a crease, a face narrower than
@@ -967,8 +970,9 @@ Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
 step 0's baseline legs (`puck bench frames --window` over
 `worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1
-and 2's windowed readings and step 7's prototype under a GPU grant, then step
-3. The plan owns the decisions, the build order
+and 2's windowed readings and step 7's readings on the built prototype (the
+4070's capability line, the paired `SdfMeshSlabs.IndexedRead` window on both
+backends, then the 2060's and the Deck's readings), then step 3. The plan owns the decisions, the build order
 and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.

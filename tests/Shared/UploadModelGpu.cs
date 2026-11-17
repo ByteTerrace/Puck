@@ -248,7 +248,7 @@ internal sealed class UploadModelGpu :
     nint IGpuBindings.CreateSampler(GpuSamplerFilter filter) => m_inner.Services.Bindings.CreateSampler(filter: filter);
     void IGpuBindings.DestroyPool(nint poolHandle) { }
     void IGpuBindings.DestroySampler(nint samplerHandle) { }
-    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride) {
+    void IGpuBindings.WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement, ulong offsetBytes) {
         m_bindings[(descriptorSetHandle, binding)] = bufferHandle;
         BufferDescriptorWrites++;
     }

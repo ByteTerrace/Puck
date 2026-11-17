@@ -7,13 +7,15 @@
 // each (position, normal), then the triangle materials, then the indices, then each mesh's members. Every offset and
 // flag is SdfMeshRecord's (Puck.SdfVm.Model), generated into sdf-render.hlsli (SDF_MESH_*). The includer's interface
 // declares the region, sdfMeshRegion, the frame's dynamic transforms, sdfDynamicTransforms, and the frame's sampled
-// table, sdfFrameSampled: sdf-world and sdf-mesh all do. Every read of a vertex's position or normal passes through
+// table, sdfFrameSampled: sdf-world and sdf-mesh all do. Every read of the region passes through sdf-mesh-words.hlsli:
+// a record's words through sdfMeshRecordWord, a mesh's own words through sdfMeshWord. Every read of a vertex's position or normal passes through
 // sdfMeshWorldPosition, sdfMeshWorldNormal or, for the previous frame, sdfMeshPreviousPosition, which displace a height
 // field's draw (sdfMeshDisplaced), so every pass sees one surface.
 #ifndef SDF_MESH_HLSLI
 #define SDF_MESH_HLSLI
 #include "../field/sdf-quaternion.hlsli"
 #include "../isa/sdf-render.hlsli"
+#include "sdf-mesh-words.hlsli"
 
 // The bits below the level of detail (SDF_MESH_LEVEL_SHIFT) in the index a mesh draw call pushes: the draw.
 static const uint SdfMeshDrawMask = ((1u << SDF_MESH_LEVEL_SHIFT) - 1u);
@@ -27,9 +29,9 @@ uint sdfMeshRecord(uint draw) {
 // id, which counts from zero on every backend, so the triangle a vertex names is the level's.
 uint sdfMeshLevelIndex(uint record, uint level) {
     if (level == 0u) { return 0u; }
-    uint table = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD];
-    uint count = sdfMeshRegion[record + SDF_MESH_LEVEL_TABLE_WORD + 1u];
-    return 3u * sdfMeshRegion[table + 3u * min(level, count)];
+    uint table = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
+    uint count = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD + 1u);
+    return 3u * sdfMeshWord(table + 3u * min(level, count));
 }
 
 // A hit a pass read from GPU data (a mesh or glass target's texel, a visibility record, the glass sums' front records),
@@ -53,8 +55,8 @@ bool sdfMeshResolveHit(uint draw, uint triangleIndex, out SdfMeshHit hit) {
     hit.triangleIndex = 0u;
     if (draw < passGroup.meshDraws) {
         uint record = sdfMeshRecord(draw);
-        uint indexWord = sdfMeshRegion[(record + SDF_MESH_INDEX_WORD)];
-        uint levelTable = sdfMeshRegion[(record + SDF_MESH_LEVEL_TABLE_WORD)];
+        uint indexWord = sdfMeshRecordWord(record + SDF_MESH_INDEX_WORD);
+        uint levelTable = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
 
         if ((levelTable >= indexWord) && (triangleIndex < ((levelTable - indexWord) / 3u))) {
             hit.record = record;
@@ -69,10 +71,10 @@ bool sdfMeshResolveHit(uint draw, uint triangleIndex, out SdfMeshHit hit) {
 // The material a record's triangle shades with: the draw's material, plus the triangle's palette entry when its mesh
 // carries one. Read only through sdfMeshMaterial (a resolved hit) and sdfMeshRasterMaterial (a raster stage's own draw).
 int sdfMeshMaterialOf(uint record, uint triangleIndex) {
-    int material = asint(sdfMeshRegion[(record + SDF_MESH_MATERIAL_WORD)]);
+    int material = asint(sdfMeshRecordWord(record + SDF_MESH_MATERIAL_WORD));
 
-    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_MATERIALS_FLAG) != 0u) {
-        material += asint(sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_TRIANGLE_MATERIAL_WORD)] + triangleIndex)]);
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_MATERIALS_FLAG) != 0u) {
+        material += asint(sdfMeshWord(sdfMeshRecordWord(record + SDF_MESH_TRIANGLE_MATERIAL_WORD) + triangleIndex));
     }
 
     return material;
@@ -88,46 +90,46 @@ int sdfMeshRasterMaterial(uint draw, uint triangleIndex) {
 }
 // The dynamic-transform slot a resolved hit's draw stores its mesh in, or SDF_TRANSFORM_SLOT_NONE.
 int sdfMeshHitFrameSlot(SdfMeshHit hit) {
-    return asint(sdfMeshRegion[(hit.record + SDF_MESH_FRAME_SLOT_WORD)]);
+    return asint(sdfMeshRecordWord(hit.record + SDF_MESH_FRAME_SLOT_WORD));
 }
 // The vertex a draw's index `k` names.
 uint sdfMeshIndexAt(uint record, uint k) {
-    return sdfMeshRegion[(sdfMeshRegion[(record + SDF_MESH_INDEX_WORD)] + k)];
+    return sdfMeshWord(sdfMeshRecordWord(record + SDF_MESH_INDEX_WORD) + k);
 }
 // The first word of the vertex a draw's index `k` names.
 uint sdfMeshVertexAt(uint record, uint k) {
-    return (sdfMeshRegion[(record + SDF_MESH_VERTEX_WORD)] + (SDF_MESH_VERTEX_WORDS * sdfMeshIndexAt(record, k)));
+    return (sdfMeshRecordWord(record + SDF_MESH_VERTEX_WORD) + (SDF_MESH_VERTEX_WORDS * sdfMeshIndexAt(record, k)));
 }
 // The first of a skinned vertex's SDF_MESH_SKIN_VERTEX_WORDS words (SdfMeshRecord.SkinVertexWords): its first member,
 // then its second member and share, its gradient's X and Y, and its gradient's Z (SdfMeshInfluence).
 uint sdfMeshInfluenceWord(uint record, uint vertex) {
-    uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
-    return skin + 1u + SDF_MESH_MEMBER_WORDS * sdfMeshRegion[skin] + SDF_MESH_SKIN_VERTEX_WORDS * vertex;
+    uint skin = sdfMeshRecordWord(record + SDF_MESH_SKIN_WORD);
+    return skin + 1u + SDF_MESH_MEMBER_WORDS * sdfMeshWord(skin) + SDF_MESH_SKIN_VERTEX_WORDS * vertex;
 }
 // The first word of the member at `index` of a skinned draw (its slot offset, then its baked position and orientation),
 // or zero for the root sentinel, which rides the draw's matrix.
 uint sdfMeshMemberEntryOf(uint record, uint index) {
-    uint skin = sdfMeshRegion[record + SDF_MESH_SKIN_WORD];
+    uint skin = sdfMeshRecordWord(record + SDF_MESH_SKIN_WORD);
     return index == 255u ? 0u : skin + 1u + SDF_MESH_MEMBER_WORDS * index;
 }
 // The member a draw's vertex rides first, or zero for a vertex that rides the draw's matrix: a baked group's shape on a
 // slot of its own moves its vertices as that slot moves, from where it stood when the mesh was baked (SdfMesh.Members).
 // A vertex wholly one owner's rides that owner first with no share (SdfMeshSkinTuple.Of).
 uint sdfMeshMemberEntry(uint record, uint vertex) {
-    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_SKIN_FLAG) == 0u) {
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) == 0u) {
         return 0u;
     }
-    return sdfMeshMemberEntryOf(record, sdfMeshRegion[sdfMeshInfluenceWord(record, vertex)]);
+    return sdfMeshMemberEntryOf(record, sdfMeshWord(sdfMeshInfluenceWord(record, vertex)));
 }
 // The slot a member rides: the draw's frame slot plus the member's offset.
 uint sdfMeshMemberSlot(uint record, uint entry) {
-    return (uint)(asint(sdfMeshRegion[(record + SDF_MESH_FRAME_SLOT_WORD)]) + asint(sdfMeshRegion[entry]));
+    return (uint)(asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD)) + asint(sdfMeshWord(entry)));
 }
 // One row of a draw's matrix.
 float3 sdfMeshRow(uint record, uint row) {
     uint word = (record + (4u * row));
 
-    return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
+    return asfloat(uint3(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u)));
 }
 // The uniform scale of a draw's matrix, its first row's length: a dynamic group's mesh is in its slot's own units
 // (DynamicTransform.Scale), and a vertex riding a member takes the draw's scale out of the member's frame as the rest of
@@ -141,14 +143,13 @@ float3 sdfMeshWorldDirection(uint record, float3 v) {
 }
 // The object position of the vertex a draw's index `k` names.
 float3 sdfMeshObjectPosition(uint record, uint k) {
-    uint word = sdfMeshVertexAt(record, k);
-    return asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)]));
+    return asfloat(sdfMeshWords3(sdfMeshVertexAt(record, k)));
 }
 // A world direction under the draw's carry rotation (SDF_MESH_CARRY_ROTATION_WORD).
 float3 sdfMeshCarryDirection(uint record, float3 v) {
     uint word = (record + SDF_MESH_CARRY_ROTATION_WORD);
 
-    return rotatePointByQuaternion(v, asfloat(uint4(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)], sdfMeshRegion[(word + 3u)])));
+    return rotatePointByQuaternion(v, asfloat(uint4(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u), sdfMeshRecordWord(word + 3u))));
 }
 // A world point under the draw's carry: its rotation, its scale (SDF_MESH_CARRY_SCALE_WORD), then its translation
 // (SDF_MESH_CARRY_TRANSLATION_WORD). The carry is the last step of every world position the draw resolves, so a copy of a
@@ -156,20 +157,20 @@ float3 sdfMeshCarryDirection(uint record, float3 v) {
 float3 sdfMeshCarryPoint(uint record, float3 p) {
     uint word = (record + SDF_MESH_CARRY_TRANSLATION_WORD);
 
-    return ((sdfMeshCarryDirection(record, p) * asfloat(sdfMeshRegion[(record + SDF_MESH_CARRY_SCALE_WORD)])) + asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)])));
+    return ((sdfMeshCarryDirection(record, p) * asfloat(sdfMeshRecordWord(record + SDF_MESH_CARRY_SCALE_WORD))) + asfloat(uint3(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u))));
 }
 // A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
 // drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.
 float sdfMeshClipDistance(uint record, float3 world) {
     uint word = (record + SDF_MESH_CLIP_PLANE_WORD);
-    float4 plane = asfloat(uint4(sdfMeshRegion[word], sdfMeshRegion[(word + 1u)], sdfMeshRegion[(word + 2u)], sdfMeshRegion[(word + 3u)]));
+    float4 plane = asfloat(uint4(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u), sdfMeshRecordWord(word + 3u)));
 
     return (dot(plane.xyz, world) + plane.w);
 }
 // The frame's sampled-table entry of the heights a draw is displaced by (SdfFrameSampled), or SDF_FRAME_SAMPLED_NONE
 // for a draw drawn as it was baked.
 uint sdfMeshDisplacementEntry(uint record) {
-    uint handle = sdfMeshRegion[(record + SDF_MESH_DISPLACEMENT_WORD)];
+    uint handle = sdfMeshRecordWord(record + SDF_MESH_DISPLACEMENT_WORD);
 
     return ((handle == SDF_FRAME_SAMPLED_NONE) ? SDF_FRAME_SAMPLED_NONE : sdfFrameSampled[handle]);
 }
@@ -258,9 +259,9 @@ float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 norma
 // the normal perpendicular to the surface).
 float3 sdfMeshNormalToWorld(uint record, float3 n) {
     uint rows = (record + SDF_MESH_NORMAL_MATRIX_WORD);
-    float3 row0 = asfloat(uint3(sdfMeshRegion[rows], sdfMeshRegion[(rows + 1u)], sdfMeshRegion[(rows + 2u)]));
-    float3 row1 = asfloat(uint3(sdfMeshRegion[(rows + 3u)], sdfMeshRegion[(rows + 4u)], sdfMeshRegion[(rows + 5u)]));
-    float3 row2 = asfloat(uint3(sdfMeshRegion[(rows + 6u)], sdfMeshRegion[(rows + 7u)], sdfMeshRegion[(rows + 8u)]));
+    float3 row0 = asfloat(uint3(sdfMeshRecordWord(rows), sdfMeshRecordWord(rows + 1u), sdfMeshRecordWord(rows + 2u)));
+    float3 row1 = asfloat(uint3(sdfMeshRecordWord(rows + 3u), sdfMeshRecordWord(rows + 4u), sdfMeshRecordWord(rows + 5u)));
+    float3 row2 = asfloat(uint3(sdfMeshRecordWord(rows + 6u), sdfMeshRecordWord(rows + 7u), sdfMeshRecordWord(rows + 8u)));
 
     return (((n.x * row0) + (n.y * row1)) + (n.z * row2));
 }
@@ -269,8 +270,7 @@ float3 sdfMeshNormalToWorld(uint record, float3 n) {
 // row-vector matrix, whose fourth row carries translation (its normal matrix for the normal), and its carry. The normal
 // is meaningful only for a mesh that carries normals.
 void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
-    uint word = sdfMeshVertexAt(record, k) + 3u;
-    normal = asfloat(uint3(sdfMeshRegion[word], sdfMeshRegion[word + 1u], sdfMeshRegion[word + 2u]));
+    normal = asfloat(sdfMeshWords3(sdfMeshVertexAt(record, k) + 3u));
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
     object = sdfMeshSkinCurrent(record, k, object, normal);
     position = sdfMeshCarryPoint(record, sdfMeshWorldDirection(record, object) + sdfMeshRow(record, 3u));
@@ -375,9 +375,9 @@ float3 sdfMeshSurfaceNormal(SdfMeshHit hit, float3 surfacePoint, float3 rayDirec
     float3 normal = face;
     float3 weights;
     curvature = 0.0;
-    frameSlot = asint(sdfMeshRegion[(record + SDF_MESH_FRAME_SLOT_WORD)]);
+    frameSlot = asint(sdfMeshRecordWord(record + SDF_MESH_FRAME_SLOT_WORD));
 
-    if ((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_SKIN_FLAG) != 0u) {
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u) {
         float3 toA = (surfacePoint - a);
         float3 toB = (surfacePoint - b);
         float3 toC = (surfacePoint - c);
@@ -390,14 +390,14 @@ float3 sdfMeshSurfaceNormal(SdfMeshHit hit, float3 surfacePoint, float3 rayDirec
         frameSlot = ((entry != 0u) ? (int)sdfMeshMemberSlot(record, entry) : frameSlot);
     }
 
-    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_WORLD_MATERIAL_FLAG) != 0u) {
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_WORLD_MATERIAL_FLAG) != 0u) {
         frameSlot = SDF_TRANSFORM_SLOT_NONE;
     }
 
     faceNormal = (face * rsqrt(max(dot(face, face), 1.0e-30)));
     faceNormal = ((dot(faceNormal, rayDirection) > 0.0) ? -faceNormal : faceNormal);
 
-    if (((sdfMeshRegion[(record + SDF_MESH_FLAGS_WORD)] & SDF_MESH_NORMALS_FLAG) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
+    if (((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_NORMALS_FLAG) != 0u) && sdfMeshBarycentric(a, b, c, surfacePoint, weights)) {
         float3 interpolated = weights.x * na + weights.y * nb + weights.z * nc;
 
         if (dot(interpolated, interpolated) > 1.0e-20) {

@@ -40,7 +40,7 @@ float3 sdfMeshPreviousRow(uint record, uint row) {
 float3 sdfMeshPreviousPosition(uint record, uint k) {
     float3 unused = float3(0.0, 1.0, 0.0);
     float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), true, unused);
-    if ((sdfMeshRegion[record + SDF_MESH_FLAGS_WORD] & SDF_MESH_SKIN_FLAG) != 0u) {
+    if ((sdfMeshRecordWord(record + SDF_MESH_FLAGS_WORD) & SDF_MESH_SKIN_FLAG) != 0u) {
         SdfMeshSkinSlots slots = sdfMeshSkinSlotsOf(record, sdfMeshIndexAt(record, k));
         object = sdfMeshSkinPose(slots, object, unused, length(sdfMeshPreviousRow(record, 0u)),
             sdfPreviousDynamicTransforms[3u * slots.root].xyz, sdfPreviousDynamicTransforms[3u * slots.root + 1u],

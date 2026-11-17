@@ -12,8 +12,8 @@ namespace Puck.Vulkan;
 /// </summary>
 [OpensGpuDevice]
 public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceApi {
-    // A single over-sized, zeroed block per chained struct. We only enable the FIRST VkBool32 (the primary
-    // feature) and require every trailing flag to read VK_FALSE; the driver reads exactly sizeof(struct) bytes
+    // A single over-sized, zeroed block per chained struct, with only its requested flags set (the first VkBool32
+    // unless the request names others) and every other flag VK_FALSE; the driver reads exactly sizeof(struct) bytes
     // keyed off sType, so over-allocating is harmless but UNDER-allocating lets it read uninitialized memory
     // past the block, past which a too-small block
     // reads the adjacent block's sType as a bogus VkBool32. 256 bytes comfortably exceeds any
@@ -71,7 +71,16 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
         Utf8StringArray? extensionNames = null;
 
         var featureIndices = request.EnabledFeatureIndices;
-        var featureStructureTypes = request.EnabledFeatureStructureTypes;
+        // Each chained structure once, with the flags it enables: the first for a type the request names alone, and
+        // each flag the request names past it.
+        var featureStructureTypes = new List<(uint StructureType, List<int> Flags)>();
+        void Chain(uint structureType, int flag) {
+            var at = featureStructureTypes.FindIndex(match: entry => (entry.StructureType == structureType));
+
+            if (at < 0) { featureStructureTypes.Add(item: (structureType, [flag])); } else if (!featureStructureTypes[at].Flags.Contains(item: flag)) { featureStructureTypes[at].Flags.Add(item: flag); }
+        }
+        foreach (var structureType in request.EnabledFeatureStructureTypes) { Chain(structureType: structureType, flag: 0); }
+        foreach (var flag in (request.EnabledFeatureFlags ?? [])) { Chain(structureType: flag.StructureType, flag: flag.Flag); }
         var hasFeatureChain = (featureStructureTypes.Count > 0);
 
         // Only allocated for the no-chain path; the chain path writes base features straight
@@ -126,8 +135,8 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
             };
 
             if (hasFeatureChain) {
-                // Build the pNext chain generically: one { sType, pNext, VkBool32 = 1 } block
-                // per requested feature struct. Order is immaterial to vkCreateDevice.
+                // Build the pNext chain generically: one { sType, pNext, VkBool32 flags } block per requested
+                // feature struct, its requested flags set. Order is immaterial to vkCreateDevice.
                 nint chainHead = 0;
 
                 for (var index = 0; (index < featureStructureTypes.Count); index++) {
@@ -141,18 +150,20 @@ public unsafe sealed class VulkanNativeLogicalDeviceApi : IVulkanLogicalDeviceAp
                     Marshal.WriteInt32(
                         ofs: 0,
                         ptr: block,
-                        val: unchecked((int)featureStructureTypes[index])
+                        val: unchecked((int)featureStructureTypes[index].StructureType)
                     );
                     Marshal.WriteIntPtr(
                         ofs: FeatureStructurePNextOffset,
                         ptr: block,
                         val: chainHead
                     );
-                    Marshal.WriteInt32(
-                        ofs: FeatureStructureFlagOffset,
-                        ptr: block,
-                        val: 1
-                    );
+                    foreach (var flag in featureStructureTypes[index].Flags) {
+                        Marshal.WriteInt32(
+                            ofs: (FeatureStructureFlagOffset + (flag * sizeof(uint))),
+                            ptr: block,
+                            val: 1
+                        );
+                    }
                     chainHead = block;
                 }
 

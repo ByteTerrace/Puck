@@ -150,7 +150,7 @@ public sealed class ShaderInterfaceLawTests {
     public void The_document_refuses_numbers_unknown_names_unknown_and_missing_properties(string json) {
         _ = Assert.Throws<InvalidDataException>(testCode: () => ShaderInterface.Parse(json: json));
     }
-    // An arrayed image or sampler takes its length in registers from its binding on, the member after it starts past
+    // An arrayed image, sampler or read-only buffer takes its length in registers from its binding on, the member after it starts past
     // them, the pipeline layout binds that many descriptors there, the include declares the length, and a module
     // reflecting another length is refused.
     [Fact]
@@ -186,9 +186,17 @@ public sealed class ShaderInterfaceLawTests {
             members: [ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: 0, name: "none", type: ShaderValueType.Float4)],
             name: "empty-image-array"
         ));
-        _ = Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
-            members: [new ShaderInterfaceMember(Group: ShaderInterfaceGroup.Pass, Kind: ShaderInterfaceMemberKind.ReadOnlyBuffer, Length: 2, Name: "buffers")],
+        // A read-only buffer array takes its length in descriptors too, each written with its own range.
+        var buffers = new ShaderInterface(
+            members: [ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.Pass, length: 2, name: "buffers")],
             name: "buffer-array"
+        );
+
+        Assert.Equal(actual: buffers.Layout().Bindings.Single(predicate: static binding => (binding.Kind == GpuBindingKind.ReadOnlyBuffer)).Count, expected: 2u);
+        Assert.Contains(actualString: ShaderInterfaceHlsl.Generate(shaderInterface: buffers), expectedSubstring: "StructuredBuffer<uint> buffers[2] : register(");
+        _ = Assert.Throws<InvalidDataException>(testCode: () => new ShaderInterface(
+            members: [ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.Pass, length: 0, name: "none")],
+            name: "empty-buffer-array"
         ));
     }
     [Fact]

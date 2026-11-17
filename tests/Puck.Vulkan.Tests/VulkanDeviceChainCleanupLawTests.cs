@@ -371,7 +371,7 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
         }
         // The required base features: fragment storage (26), extended storage formats (29) and sampled array indexing (34) and clip distance (37).
         public IReadOnlyList<bool> GetFeatureSupport(VulkanInstanceCommands instance, nint physicalDeviceHandle) =>
-            [.. Enumerable.Range(count: 55, start: 0).Select(selector: index => ((index is 26 or 29 or 34 or 37) || (IndirectDraws && (index is 9 or 10))))];
+            [.. Enumerable.Range(count: 55, start: 0).Select(selector: index => ((index is 26 or 29 or 34 or 35 or 37) || (IndirectDraws && (index is 9 or 10))))];
         public GpuMemorySegments GetMemorySegments(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemoryProfile profile) =>
             GpuMemorySegments.FromVulkan(memoryHeaps: [], memoryTypes: [], profile: profile);
         public GpuSegmentReading[] ReadMemoryBudget(VulkanInstanceCommands instance, nint physicalDeviceHandle, GpuMemorySegments segments, bool budgetEnabled, out bool estimated) =>
@@ -406,9 +406,9 @@ public sealed unsafe class VulkanDeviceChainCleanupLawTests {
             (IndirectDraws && (extensionName == VulkanDeviceCommands.DrawIndirectCountExtension));
         public bool HasInstanceExtension(string extensionName, string? layerName) =>
             false;
-        // Required fragment demotion and draw parameters, and no optional feature.
-        public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType) =>
-            (structureType is 1000276000 or 1000063000);
+        // Required fragment demotion, draw parameters and storage-buffer non-uniform indexing, and no optional feature.
+        public bool IsExtensionFeatureSupported(VulkanInstanceCommands instance, nint physicalDeviceHandle, uint structureType, int flag = 0) =>
+            ((structureType is 1000276000 or 1000063000) || ((structureType == 1000161001) && (flag == 5)));
         public VkResult WaitIdle(VulkanDeviceCommands device) =>
             VkResult.Success;
     }
