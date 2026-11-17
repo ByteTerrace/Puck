@@ -94,7 +94,7 @@ public sealed partial class SdfWorldTables {
 
             // Retirement allocates nothing once the region has changed.
             m_retired.Reserve();
-            Retire(replaced: m_programRegion.Grow(byteCount: bytes));
+            Retire(replaced: m_programRegion.Grow(byteCount: bytes), carryingRegion: m_programRegion);
         }
         m_programWordCapacity = words;
         m_instanceCapacity = instances;

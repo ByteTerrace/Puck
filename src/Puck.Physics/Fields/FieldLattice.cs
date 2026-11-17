@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using Puck.Abstractions.Counting;
 using Puck.Maths;
@@ -1378,6 +1379,37 @@ public sealed class FieldLattice {
                 );
             }
         }
+    }
+    /// <summary>Draws one whole-field pass into the lattice's own scratch and paints it: the buffer belongs to the
+    /// lattice that owns the field, is cleared before <paramref name="draw"/> sees it, and is read by the paint only
+    /// when <paramref name="draw"/> answers <see langword="true"/>, so no value of an earlier owner ever reaches a
+    /// cell. The scratch is the one every step pass fills whole before reading (<c>StepDiffuse</c>, <c>StepFlow</c>);
+    /// a paint runs between steps on the simulation thread and never touches it.</summary>
+    /// <param name="field">The field index (see <see cref="TryFieldIndex"/>).</param>
+    /// <param name="draw">Fills the span with one raw <see cref="FixedQ4816"/> value per cell in cell-index order and
+    /// answers whether it did.</param>
+    /// <param name="worldSeed">The deterministic seed later noise/scatter fills use.</param>
+    /// <returns><see langword="true"/> when the pass drew and was painted; <see langword="false"/> when
+    /// <paramref name="draw"/> refused, leaving every cell as it was.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="draw"/> is null.</exception>
+    public bool TryFillFromDraw(int field, FieldDrawPass draw, ulong worldSeed) {
+        ArgumentNullException.ThrowIfNull(argument: draw);
+
+        var raw = MemoryMarshal.Cast<FixedQ4816, long>(span: m_scratch.AsSpan());
+
+        raw.Clear();
+
+        if (!draw(raw: raw)) {
+            return false;
+        }
+
+        FillFromDraw(
+            field: field,
+            raw: raw,
+            worldSeed: worldSeed
+        );
+
+        return true;
     }
     /// <summary>Installs a compatible replacement input while retaining every live cell, pending delta, revision,
     /// and checkpoint shape.</summary>
