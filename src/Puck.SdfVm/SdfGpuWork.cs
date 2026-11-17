@@ -910,9 +910,14 @@ public sealed class SdfGpuWork : IDisposable {
 
         var size = ((sizing == SdfGpuWorkSizing.Granule) ? Granule(bytes: bytes) : Math.Max(val1: bytes, val2: 1UL));
 
-        // A service with nothing in flight reserves its job as its floor, so its work always progresses.
-        if ((m_hold is { } hold) && !hold.TryRaise(bytes: ((long)size), forced: (m_inFlight == 0), hostVisible: hostVisible)) {
-            throw new SdfGpuWorkDeferredException(bytes: ((long)size), part: part);
+        if ((m_hold is { } hold) && !hold.TryRaise(bytes: ((long)size), forced: false, hostVisible: hostVisible)) {
+            // With no room, what the other free slots still hold for jobs to come goes first. Past that a service
+            // with nothing in flight reserves its job as its floor, so its work always progresses, and any other
+            // hands the job back.
+            ReleaseFree(except: slot);
+            if (!hold.TryRaise(bytes: ((long)size), forced: (m_inFlight == 0), hostVisible: hostVisible)) {
+                throw new SdfGpuWorkDeferredException(bytes: ((long)size), part: part);
+            }
         }
 
         IGpuBuffer buffer;
@@ -931,6 +936,16 @@ public sealed class SdfGpuWork : IDisposable {
         }
         held.Add(item: new HeldBuffer(Buffer: buffer, Client: client, HostVisible: hostVisible, Part: part, Readback: readback, Sizing: sizing) { WindowBytes = Math.Max(val1: bytes, val2: 1UL), WindowStart = now });
         return buffer;
+    }
+    // Gives back every buffer the free slots but one hold: no job in flight and no client reads them.
+    private void ReleaseFree(int except) {
+        for (var index = 0; (index < SlotCount); index++) {
+            var slot = m_slots[index];
+
+            if ((index == except) || !slot.IsFree) { continue; }
+            foreach (var held in slot.Held) { Release(held: held); }
+            slot.Held.Clear();
+        }
     }
     private void Release(HeldBuffer held) {
         var bytes = ((long)held.Buffer.SizeBytes);

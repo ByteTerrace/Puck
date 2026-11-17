@@ -86,6 +86,54 @@ public sealed class GpuSubmissionBatchLawTests {
     }
 
     [Fact]
+    public void ACompletionSignalFollowsTheSubmissionThroughItsBatch() {
+        var batch = new Batch();
+        using var alias = new Fence();
+        using var owner = new Fence();
+        using var idle = new Fence();
+        using var signal = new AutoResetEvent(initialState: false);
+
+        // Nothing outstanding: the signal is set at once, so a waiter polls and finds it.
+        idle.SignalOnCompletion(signal: signal);
+        Assert.True(condition: signal.WaitOne(millisecondsTimeout: 0));
+
+        // Asked while deferred, the signal waits for the hand-off: the owner's goes to its backend once it is armed, and
+        // an alias's goes to the owner it answers from. Neither is set before the batch reaches the queue.
+        batch.Begin();
+        batch.TryDefer([1], 1, alias);
+        batch.TryDefer([2], 1, owner);
+        alias.SignalOnCompletion(signal: signal);
+        owner.SignalOnCompletion(signal: signal);
+        Assert.False(condition: signal.WaitOne(millisecondsTimeout: 0));
+        Assert.Empty(collection: owner.NativeSignals);
+        batch.Split(GpuQueueCause.FenceWait);
+        Assert.Equal(expected: 2, actual: owner.NativeSignals.Count);
+        Assert.Empty(collection: alias.NativeSignals);
+        Assert.False(condition: signal.WaitOne(millisecondsTimeout: 0));
+
+        // An armed fence asks its backend directly; a drained one sets the signal itself.
+        owner.SignalOnCompletion(signal: signal);
+        Assert.Equal(expected: 3, actual: owner.NativeSignals.Count);
+        owner.Wait();
+        alias.SignalOnCompletion(signal: signal);
+        Assert.True(condition: signal.WaitOne(millisecondsTimeout: 0));
+    }
+    [Fact]
+    public void ACompletionSignalOwedToASubmissionThatNeverReachesTheQueueIsSetNotLost() {
+        var batch = new Batch { FailBeforeArm = true };
+        using var owner = new Fence();
+        using var signal = new AutoResetEvent(initialState: false);
+
+        batch.Begin();
+        batch.TryDefer([1], 1, owner);
+        owner.SignalOnCompletion(signal: signal);
+        Assert.Throws<InvalidOperationException>(() => batch.Split(GpuQueueCause.FenceWait));
+        // The abandoned submission will never signal: the waiter is woken to read the fence and find it abandoned.
+        Assert.True(condition: signal.WaitOne(millisecondsTimeout: 0));
+        Assert.Throws<GpuSubmissionAbandonedException>(() => _ = owner.IsSignaled);
+        Assert.Throws<GpuSubmissionAbandonedException>(owner.Wait);
+    }
+    [Fact]
     public void DisposingAnOutstandingOwnerDrainsItsSignalBeforeAliasesCanComplete() {
         var batch = new Batch();
         using var alias = new Fence();
@@ -184,5 +232,11 @@ public sealed class GpuSubmissionBatchLawTests {
         }
         protected override void DrainNative() { m_pending = false; m_complete = false; }
         protected override void DisposeNative() => Disposals++;
+        // The signals the backend was asked to set, each when its armed submission completes.
+        public List<EventWaitHandle> NativeSignals { get; } = [];
+        protected override void SignalNative(EventWaitHandle signal) {
+            CheckLive();
+            NativeSignals.Add(signal);
+        }
     }
 }
