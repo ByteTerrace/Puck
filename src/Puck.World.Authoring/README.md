@@ -594,7 +594,7 @@ be followed). `Width` (creation units, finite
 and positive) is how far outward from the reference's own surface the band
 reaches; `Material` is the band's own palette slot; `Inset` (creation units,
 `[0, ShapeTrimDocument.MaxInset]`, default `0.003`) is described below.
-`CreationDocument.StampShapeCount` charges each trim as 2 (the host's own
+`CreationDocument.StampShapeCount` reports each trim as 2 operands of bake work (the host's own
 copy plus the reference's own copy), matching `Panel`'s own convention.
 
 Each trim opens a scope of its own (`SdfProgramBuilder.PushField`/`PopField`)
