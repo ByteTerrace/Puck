@@ -14,8 +14,10 @@ never by pixel equality with a previous build's stills.
 This memo designs the benchmark as one player-facing feature with one owner:
 a fixed route through the debug world, played in real time by one command and
 one in-game verb, watched live, reported per chapter, and comparable across
-builds by frame-time statistics, counters and motion artifacts. It awaits a
-design review by another model family before any build lane starts.
+builds by frame-time statistics, counters and motion artifacts. Its design
+review's findings are answered [below](#the-reviews-findings), and its first
+part is built: `world.benchmark` plays a route in real time and reports every
+host iteration.
 
 ## What professional benchmarks do
 
@@ -31,8 +33,9 @@ design review by another model family before any build lane starts.
 
 Five properties recur, and Puck's sweep tour has none of them:
 
-1. **The game plays itself.** The benchmark is a mode of the shipping
-   executable, started by one console command or one menu action.
+1. **The game plays itself.** In the engines and the games the benchmark is a
+   mode of the shipping executable, started by one console command or one menu
+   action. The measurement frameworks (Unity's, PresentMon) are not.
 2. **What plays is play.** A recording of a real session, or an authored shot
    that moves through the content continuously. Nothing stops to pose.
 3. **It runs in real time or faster, never slower.** No benchmark waits for
@@ -108,7 +111,7 @@ replaces the first three.
 | Piece | What it is | Its part in the benchmark |
 |---|---|---|
 | `test` blocks with `player.signal` | A controller program pinned to ticks, entering through the seat's own bindings as a pad's samples do | The route's program. The statement grammar stays; the block becomes a `route` chapter the live World can play |
-| `world.at` | Console lines pinned to exact ticks, armed as one script | How the World feeds a chapter's program to the seat. Its limit of armed lines bounds a chapter's length |
+| `world.at` | Console lines pinned to exact ticks, armed as one script | The scheduler behind `WorldTickScript.ArmSeat`, the seat door a chapter's lines enter by. Its limit of armed lines bounds a route's length |
 | `WorldClient.AdvanceSeatViews` | Stick look, follow and recenter integrate once per fixed tick; only pointer nudges land between ticks | Why a pad route gives the same intent at any frame rate: the yaw that turns the stick into a world-frame move is a function of ticks |
 | `replay.record`, `replay.verify`, `replay.drive` | The authority's input stream and per-tick population hash; a tape embeds the world's definition and a drive loads it | The proof that two runs took the same authority path. A tape is not the route: it replays the world it was recorded in, so it cannot follow a world edit |
 | `world.state.hash` | The authority's hash at a tick | The chapter's end-state check |
@@ -127,268 +130,324 @@ replaces the first three.
 
 ### One command and one verb
 
-`world.benchmark` is the in-game verb. It plays a route of the world the seat
-stands in, draws the overlay, and at the end shows the results and writes them
-under the state directory.
+`world.benchmark` is the in-game verb (`WorldBenchmarkCommandModule`). It
+plays a route through the running world in real time, records every host
+iteration of it and writes the report under the state directory.
 
 ```text
-world.benchmark                                  # the running or last run: chapter, tick, statistics so far
-world.benchmark run [<route>] [chapter <name>] [loops <n>] [overlay on|off] [capture]
+world.benchmark                                  # the running route's chapter and tick, or the last run's summary
+world.benchmark run <source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [output <directory>]
 world.benchmark stop
-world.benchmark record <route> <chapter>         # write what the seat plays as a chapter's program
 ```
 
-`world.benchmark run` with no argument plays the world's first route, and that
-form is bindable: the debug world binds it on its Tour page, so the owner
-starts it from a pad.
+It is the operator's verb until the route lives in the world's document
+([below](#the-route-is-a-program-the-world-plays)); the bindable form a seat
+starts from a pad arrives with that step.
 
-`puck benchmark` is the command. It boots the world windowed through
-`WorldLaunch` under the GPU lease (or attaches to a running World), sends the
-verb, waits for the run, collects the report and compares it.
+`puck benchmark` is the command, and is stage 3. It boots the world windowed
+through `WorldLaunch` under the GPU lease (or attaches to a running World),
+sends the verb, waits for the run, collects the report and compares it. The
+World plays the route itself, as `timedemo` does; the CLI is a launcher and a
+comparer, holds no copy of the route and pins no steps.
 
-```text
-puck benchmark [<world>] [--route <name>] [--chapter <name>...] [--backend directx|vulkan|both]
-               [--loops <n>] [--capture] [--uncapped] [--fresh] [--headless]
-               [--against <report.json>] [--attach <world>] [--output <dir>]
-```
+### The route is a program the World plays
 
-The World plays the route itself, as `timedemo` does. The CLI is a launcher
-and a comparer; it holds no copy of the route and pins no steps.
+A chapter is a controller program with an arrival: a `test` block's `when`
+and `expect`. A route is the `test` blocks of one `.puck` source whose names
+share a prefix, played in declaration order.
 
-### The route is a program in the world's document
-
-A route is authored `.puck` data in the world it belongs to: an ordered list
-of chapters, each a controller program with the statements a `test` block's
-`when` has today, an arrival, and marks. The spelling below illustrates the
-shape; stage 1 settles it.
-
-```text
-route "valley" {
-  chapter "meadow" {
-    when {
-      seat1: body.pose spawn:meadow-gate 0
-      ticks 1
-      seat1: player.signal gamepad.leftStick 0 1
-      ...
-      mark "tree-shadows" frames 90
-      ...
-    }
-    expect {
-      bodyPosition(body, 0, x) > 41.5
-      ...
-    }
-  }
-}
-```
-
-- **A chapter starts from a declared spawn point and ends in an arrival box.**
-  A world edit that moves the walker breaks one chapter, reported off course
-  by name, and the run goes on from the next chapter's spawn. This is the
-  scripted walkthrough's existing rule
-  ([the decision](../decisions/engine-design.md#the-scripted-walkthrough)).
-- **Inside a chapter nothing stops.** The body walks, runs, turns the camera,
-  rides and crosses as a player does. A chapter that stands still does so
+- **One canonical timed program.** The compiler lowers a `test` block to a
+  `schedule` (`WorldScheduleRow`: a tick, a seat and a command line). A
+  headless `puck test` submits those rows, and `world.benchmark` reads the
+  same lowered rows from `WorldCompileCache` and plays them. No second
+  translator exists.
+- **One door.** Each row is armed through `WorldTickScript.ArmSeat`, the seat
+  ingress `WorldTestRun` uses: the line is submitted as its seat, under the
+  world's grants, in the authority's tick-complete hook. A route never runs a
+  line as the console, so a route does only what its seat may. A row another
+  world or a non-seat principal owns refuses the whole route before anything
+  is armed.
+- **A chapter starts from a declared spawn point and ends in an arrival
+  box**, so a world edit breaks one chapter, reported off course by name, and
+  the run goes on. A pose is a line of the program, and the seat's grant to
+  pose is the world author's, as it is for the headless test.
+- **Inside a chapter nothing stops.** A chapter that stands still does so
   because standing is what it measures.
-- **A mark names a moment**: a tick of the chapter where something is expected
-  to show (a shadow edge sweeping past, the glass, a portal's first frame).
-  Marks label the report, place the captures, and are where a chapter can be
-  looped.
-- **A chapter is also a headless test.** `puck test` generates a test world
-  from each chapter's `when` and `expect`, as it does for a `test` block, so
-  `--reproduce` shows the chapter arrives and reproduces without a renderer.
-- **A played chapter can be recorded.** `world.benchmark record` taps the
-  seat's signals where `InputRouter` drains them into its one per-tick stream
-  and writes them as `player.signal` lines, with pointer motion summed per
-  tick. The owner plays a stretch with a pad and the result is an editable
-  program, never a binary tape.
+- **A run lets go what it held.** The runner tracks each control its
+  `player.signal` lines leave pressed or deflected and releases every one,
+  through the same door, when the run ends or is stopped.
 
-The route lowers to a `routes` section of the compiled document, each step a
-tick offset, a principal and a command, the shape a `schedule` row has. The
-World plays a chapter by arming its steps through `world.at`'s pinned lines
-from the chapter's start tick.
+What the first build leaves open, as stage 4:
 
-The engine's part is generic: a route is any world's, and `world.benchmark`
-plays any route. The debug world's routes are its content; the overlay's
-layout is standard-package data.
+- **A `route` block and a `routes` section**, so a route is content of the
+  world's own document, is found without naming a source file, carries
+  **marks** (a named tick where something is expected to show) and an
+  authored order, and so a seat can start it. The block lowers through the
+  `test` emitter's own tick, principal and settle logic to the same rows.
+  `puck test` then runs each chapter as it runs a `test` today. Ordinary test
+  fixtures keep their setup and verdict machinery and do not become shipping
+  routes.
+- **Recording a played chapter**: a tap where `InputRouter` drains its one
+  per-tick stream, writing `player.signal` lines with pointer motion summed
+  per tick. Its check replays the recording from its initial state and
+  compares the accepted input per tick.
+
+### Where a run starts
+
+A chapter's hash means something only against a known start, and a spawn
+point is not one: the authority's hash includes the tick, and machines, rule
+latches, random streams and other seats are not reset by a pose.
+
+- **A fresh run** boots paused before the first tick, waits for the renderer
+  with authority held, arms the route at a named tick (`at <tick>`) and
+  resumes. Every line then lands on the same absolute tick in every run, from
+  the boot image, so the state at each chapter's end is comparable between
+  runs of one build. This is the only start whose hashes are compared.
+- **An attached run** (the verb typed into a World that has been running)
+  starts wherever that World stands. Its report says so (`entry` names the
+  tick it was armed at), its frame statistics are as valid as any, and its
+  hashes are informational and never compared.
+- **A loop** continues from the state the previous loop left. Loops are
+  reported apart as cold (the first), warm (the second) and steady (the
+  rest), and a loop's hashes are compared only with the same loop of another
+  fresh run.
+
+The chapter-end hash is the check built today. The stronger form, a hash of
+every tick's accepted input and state from the start (the tape's own capture,
+`WorldReplayTape`'s per-tick population hash, or `WorldReplayProbe`'s), is
+stage 4's: it names the first tick two runs part at. A difference between two
+fresh runs is then a determinism defect to find at its tick, never a reason
+to move presentation onto ticks.
 
 ### It plays as a player takes it
 
 A run is display-paced with the ordinary lighting budget and temporal
 history. From the first chapter's start to the last chapter's end nothing
 pauses authority, waits for bakes or residency, converges lighting, holds a
-frame or locks presentation to ticks. These are the seam walk's normal play
-conditions, applied to the whole run.
+frame or locks presentation to ticks.
+
+The run establishes this at entry and then watches it. At `run` it turns
+lockstep presentation off, records that it did, and restores it at the end.
+Every recorded iteration carries a flag for lockstep as it closed, and the
+statistics carry the longest time the simulation stepped no tick. A chapter
+is written **disturbed**, with the reason, when any iteration was locked,
+when the simulation stepped nothing for `StallMilliseconds`, or when a step
+did not answer as authored. Its statistics stay in the report beside the
+reason and are never compared.
 
 Two paces exist, and a report says which it ran:
 
-- **Paced** is the default and the only pace a bar is judged at: the display's
-  refresh, or the device's bar where the display is faster. Frame time is read
-  as both the interval and the work inside it (the interval less the pacer's
-  wait, which `HostFrameTimeline` already separates), so a paced run shows
-  headroom as well as smoothness.
-- **Uncapped** (`--uncapped`) lifts the presentation target and boots with the
-  present mode that allows it. The simulation still runs at its own rate in
-  real time. It is the `timedemo` reading, frames over seconds, and it is a
-  throughput trend for comparing builds, never a bar.
+- **Paced** is the default and the only pace a bar is judged at.
+- **Uncapped** lifts the presentation target and boots with the present mode
+  that allows it. It is the `timedemo` reading, frames over seconds, a
+  throughput trend and never a bar. It is stage 3's.
 
-Running the ticks faster than real time, one tick a frame, is `timedemo`'s
-own pace and is rejected: streaming, baking and lighting get less wall time
-per tick than play gives them, so the run would measure a world no player
-meets.
+Running the ticks faster than real time is rejected: streaming, baking and
+lighting would get less wall time per tick than play gives them.
 
-Conditions are recorded in the report and are part of what makes two runs
-comparable: build identity, backend, adapter, display rate and variable
-refresh, resolution, quality, pace, overlay on or off, capture on or off,
-mesh store warm or empty, a fresh process or a running World, and the host
-load the bench reports already record.
+### What a run reports
+
+`HostFrameTimeline` writes every closing iteration to a `HostFrameRecording`
+as well as its ring. The recording is allocated before the run, bounded by
+`HostFrameRecording.MaxCapacity`, and counts every iteration past its
+capacity as dropped; the report states the count. The run writes
+`frames.csv` (one row per iteration, with its chapter) and `report.json`
+(`puck.benchmark.run.v1`).
+
+An iteration is the host loop's interval. It is not a presented frame and
+not the time a frame stood on the display, and the report names it an
+iteration; stage 8 adds the displayed interval. A headless host records
+iterations with no renderer, and every reading that needs one is absent
+there.
+
+| Reading | Definition | State |
+|---|---|---|
+| Iterations, seconds, average rate | Iterations over seconds | Built |
+| Interval and work | Mean, median, 95th, 99th and 99.9th percentile and maximum of the interval and of the work (the interval less the pacer's wait) | Built |
+| 1% low and 0.1% low | The 99th and 99.9th percentile intervals written as rates; absent under 100 and 1000 iterations | Built |
+| The worst iteration | Its index, its time into the chapter and its phase split. This is the frame bar; the rest are diagnostics | Built |
+| Over budget | Iterations whose work passed the budget, twice it, 50 ms and 100 ms | Built |
+| Pacing | The interval's standard deviation and the mean absolute difference between successive intervals | Built |
+| Simulation | Ticks stepped and ticks shed | Built |
+| Collections | Counts by generation, total and longest pause, bytes allocated per iteration | Built |
+| The chapter's end | Arrived or off course by the body's pose against the position and grounded gates; the gates only the headless test judges are listed; the authority's hash | Built |
+| The hitch list | Each iteration over budget with its tick, the body's position and its phases | Stage 3 |
+| GPU passes | Each pass's mean and maximum, from `world.gpu-timing` | Stage 3 |
+| Streaming and counters | The change across the chapter of each `world.residency` degradation count and of the selected `world.counters`, and `host.memory`'s peak | Stage 3 |
+| Motion steps | Every presented step of the body and the camera's eye over the chapter | Stage 6 |
+
+**Motion.** `WorldSeatMotionTrace` keeps 240 frames and calls a step a stall
+or a jump against its window's mean, so a closing read loses an early hitch
+and names a dash or a rest a defect. Stage 6 gives that observer a recording
+sink for the whole chapter, as the timeline has, keyed by iteration and tick.
+The report then gives the step series and its variation against the motion
+the program asked for, resets only at declared cuts (a pose, a crossing), and
+calls the reading motion-step variation. It becomes animation error only
+when stage 8 supplies the displayed interval to set beside it.
+
+**Which readings load changes.** Three kinds are kept apart, and a
+comparison says which it is reading:
+
+| Kind | Examples | How it is compared |
+|---|---|---|
+| Per-tick and deterministic | Arrival, the state hash of a fresh run, counted rule and contact work per tick | Exactly, on any machine under any load |
+| Cadence-dependent | Counts per rendered frame, iterations, anything summed over frames | With its denominator (per frame, per second), under like conditions |
+| Load- and residency-dependent | Ticks shed (`FixedStepPump` sheds by elapsed wall time), late stagings, frames owed, evictions and re-stagings, every timing | In a quiet window through `puck measure`, never from a lane's own run |
+
+A lane reports the first kind from its own run and files the rest as a
+measurement request.
+
+**Bounds.** A run ends at its wall-time limit (`timeout`) as it ends at
+`stop`: its armed lines are dropped, its held controls released, its pacing
+restored and a partial report written that names the reason and marks each
+chapter ended, unfinished or unreached. The route's simulated length is a
+content target and bounds nothing.
+
+### Comparing runs
+
+Two runs are compared chapter by chapter, and a comparison is one of three
+things:
+
+- **Comparable.** The same chapter identity, both arrived, neither disturbed,
+  like conditions, and the same waypoint coverage (below). Statistics,
+  counts and moments are compared.
+- **A changed workload.** The chapter's identity, its waypoint coverage or its
+  content differs. The report sets both runs side by side as a description
+  and attributes no difference to execution.
+- **Unavailable.** A chapter is off course, disturbed, unfinished or missing
+  in either run. Nothing is compared and the raw evidence is kept.
+
+What makes a chapter the same workload:
+
+- **Chapter identity** is the hash of its canonical program: every row's
+  tick, seat and command, its duration and settle, and its arrival gates. A
+  separate **capture identity** covers its marks and the detector settings,
+  so a moved mark changes what moments mean without changing the workload.
+- **Waypoint coverage.** A chapter names waypoints (stage 4): places the
+  body must pass and directions the camera must face at them. The run
+  records the body's position, the camera's orientation and field of view,
+  and the world and seat at fixed tick intervals, as numbers. A run that
+  arrives after a shortcut or after looking away from the gallery misses a
+  waypoint and is a changed workload. An intentional content edit that keeps
+  the waypoints is comparable, and the content identity that changed is
+  named beside the difference.
+- **Presentation samples.** `WorldPresentationProbe` keeps the first sample
+  of each tick and reads complete only when every tick appears once, which
+  holds under lockstep alone. Stage 6 extends it for display pacing: several
+  frames a tick and ticks with none are both ordinary, and its samples are
+  numeric poses, not hashes.
+
+Between two runs of one build the chapter's end hash is also compared, and
+only for fresh runs ([above](#where-a-run-starts)). Across builds the hash
+is expected to move whenever the simulation or the world changed.
+
+No frame is ever compared with a frame of another build. Timing differences
+are read through `puck measure`, which admits `benchmark` as it admits the
+bench verbs. The comparer's checks include the cases it must refuse: another
+route, unlike conditions, a run that began in lockstep, an off-course
+chapter and a missing metric. A run whose every chapter is unavailable exits
+as a failure, never as a completed comparison.
+
+Nothing is recorded as a baseline in the repository.
 
 ### What the viewer sees
 
 The overlay is a HUD panel authored in `worlds/standard/` that the debug
-world imports. It shows, live:
+world imports. Stage 2 builds its first, narrower form: a scrolling plot of
+the iteration interval and work against the budget line, beside the numbers
+the run already holds.
 
-- a scrolling plot of frame interval and frame work against the budget line;
-- the GPU passes by time, from `world.gpu-timing`;
-- streaming state: bytes owed, tiers owed, late stagings and bakes in flight,
-  from `world.residency`;
-- ticks shed, collections, and the hitch count so far;
-- the chapter's name and progress, and the next mark.
+It needs a read-only presentation data model that neither names a benchmark
+nor lives in one panel:
 
-At the end the panel shows the results: the per-chapter table and the whole
-run's frame-time plot with its hitches marked.
+| Data | What supplies it | What an authored panel does with it |
+|---|---|---|
+| Named scalars and timings | A binding that resolves a registered reading by name (`HudBindingVocabulary`) | Text and gauges, as today |
+| A recent series | A binding to a reading's recent values | A plot element (`WorldHudElementKind`) with an optional reference line |
+| Text and collections | A read-only table a feature publishes: rows of named cells (a run's chapters, each with its name, state and figures) | A repeated row template |
+| A retained series with annotations | A published series kept past the ring (the run's recording) with marked indices | A plot of a selected span with its marks |
 
-The engine gains two mechanisms for it, and neither names a benchmark:
+Each datum is present, absent or unmeasured, and a panel shows the
+difference. The first two rows are stage 2. The last two are the results
+panel, and they are stage 5 because they are the UI overhaul's runtime
+collections ([its third step](ui.md)); the benchmark publishes its table and
+series through that model and builds no layout in C#. Until then a run's
+results are its console summary and its report. Stage 5's check is an
+imported panel showing a newly authored route's chapter names and a variable
+number of rows with no C# change.
 
-- **Bindings to engine readings.** `HudBindingVocabulary` gains tokens that
-  resolve a registered counter or timing by name, so any author's HUD can
-  show a reading the console can print.
-- **A plot element.** `WorldHudElementKind` gains an element that draws the
-  recent values of a binding, with an optional reference line.
-
-Both move onto the retained UI tree when [the UI overhaul](ui.md) reaches its
-third step, as every HUD does. The overlay's own GPU pass is timed and
-reported as a line of its own, and a run with the overlay on is compared only
-with another that had it on.
-
-### What a run reports
-
-The World records one row per host iteration for the whole run:
-`HostFrameTimeline` gains a recording, a second sink for the samples it
-already takes, sized for the run and allocated before it starts. Each row
-carries the iteration's start, interval, work, phases, steps, collections and
-pause time, allocated bytes, the tick, the chapter and whether a capture was
-reading back. The run writes `frames.csv` and `report.json` (`puck.bench.v1`).
-
-Per chapter and for the whole run:
-
-| Reading | Definition |
-|---|---|
-| Frames, seconds, average frame rate | Frames over seconds, as `timedemo` prints |
-| Frame time | Mean, median, 95th, 99th and 99.9th percentile and maximum of the interval, and the same of the work |
-| 1% low and 0.1% low | The 99th and 99.9th percentile frame times written as frame rates. The percentile form is used because it is the stable one; a chapter of fewer than 1000 frames reports no 0.1% low |
-| The worst frame | The slowest frame's interval, with its tick, its place and its phase split. This is the frame bar ([how the bars are read](streaming-and-memory.md#how-the-bars-are-read)); every other frame-time figure is a diagnostic |
-| Hitches | Frames whose work is over the budget, over twice the budget, over 50 ms and over 100 ms; each listed with its tick, the body's position, the nearest mark, its phases and the collections inside it |
-| Pacing | The standard deviation of the interval and the mean absolute difference between successive intervals |
-| Motion evenness | `world.view.motion`'s stalls and jumps of the presented body and the camera's eye |
-| Simulation | Ticks stepped and shed, and the step cost's percentiles |
-| GPU passes | Each pass's mean and maximum |
-| Collections | Counts by generation, total and longest pause, bytes allocated per frame |
-| Streaming | The change across the chapter of each `world.residency` degradation count, and the frames in which any was nonzero |
-| Counters and memory | The change of the selected `world.counters`, and `host.memory`'s peak |
-| The chapter's end | Arrived or off course, and the authority's hash |
-| Moments | The motion artifacts found at its marks ([below](#artifacts-in-motion)) |
-
-With `--loops`, the run plays the route again without restarting and reports
-each loop, the ratio of the worst loop's average frame rate to the best's
-(3DMark's stability figure), and the derivation work each later loop did. A
-second loop that bakes, stages or compiles anything shows work that is not
-proportional to change.
-
-A reading no source answers is written absent with the step that supplies
-it, and a refused read is unmeasured with its answer. Neither is ever zero.
-This is the window's existing rule.
-
-### Comparing runs
-
-Two runs are compared chapter by chapter, and only when they are the same
-workload under the same conditions.
-
-- **The same workload** is the same route identity (the hash of the route's
-  lowered rows) and a chapter both runs arrived in. Between two runs of one
-  build the chapter's end hash must also be equal.
-- **Across builds** the hash is expected to differ whenever the simulation or
-  the world changed, so arrival is the test, and `world.view.trace`'s
-  signatures say how far the presented camera path moved.
-- **What is compared** is the report: frame-time statistics, hitches,
-  counters, streaming counts and moments. No frame is compared with a frame
-  of another build.
-- **Timing differences are read through `puck measure`**, which admits
-  `benchmark` as it admits the bench verbs: frozen builds, a quiet window,
-  paired alternating runs, medians and interquartile ranges of the paired
-  difference. `puck benchmark --against` prints the same comparison for two
-  reports already on disk and says when a difference is inside the spread of
-  the reports' own loops.
-- **Counted differences need no quiet window.** Counters, streaming counts,
-  shed ticks, hashes and arrivals are load-independent, so a lane reports
-  them from its own run and files timing as a measurement request.
-
-Nothing is recorded as a baseline in the repository. A report is a derived
-product kept in ignored scratch.
+The overlay's own GPU pass is timed and reported, and a run with the overlay
+on is compared only with another that had it on.
 
 ### Artifacts in motion
 
-The owner's difficulty is knowing when and how an artifact shows. The route
-answers the "when and how": every moment of a run has a chapter and a tick,
-and `world.benchmark run valley chapter meadow loops 20` replays it at will
-from its spawn point. The capture pass answers "what showed".
+The owner's difficulty is knowing when and how an artifact shows. Every
+moment of a run has a chapter and a tick, and a chapter replays from its
+spawn point. What showed is kept from the run that showed it.
 
-`--capture` is a second pass over the same route, apart from the timed one,
-because reading frames back costs frame time:
+- **The watched pass keeps its own evidence.** A second pass does not see
+  what the first saw: the first crossing warms residency, meshes and lighting
+  history, and reading frames back changes when asynchronous work lands. So
+  the watched run itself keeps a bounded ring of presented frames (the last
+  few seconds, at reduced size, in memory) and writes it out when a trigger
+  fires: an iteration over twice the budget, a counted streaming miss, or a
+  key the viewer presses. The ring's cost is declared in the report, and the
+  ring is opt-in for a run whose timings will be compared. The pre-roll is
+  what makes the frames before a pop available.
+- **A capture pass is a diagnostic rerun.** `capture` plays the route again
+  and reads full presented series at marks and a recording through
+  `capture.start`. It has its own conditions (cold or warm store, fresh or
+  attached), its own timeline, counters and identities, and its moments are
+  never attributed to the timed pass. A mark replayed alone reaches its
+  history by playing its whole chapter from the spawn.
+- **Captures are bounded.** One store of fixed size holds every pending
+  series. A series that does not fit is refused and counted, never queued
+  without limit, and a timed run never waits for capture capacity.
 
-- **A presented series at each mark.** The mark's frames are read back as the
-  display showed them through `world.screenshot`'s presented form, with each
-  frame's tick, interpolation fraction and camera beside it. Captures queue,
-  which removes the rule that one is pending at a time.
-- **The whole run as a recording**, through `capture.start`, so a reviewer or
-  the look-critic agent can watch what the owner watched.
-- **Detectors over each series**, run by the CLI on the saved frames. Each
-  judges a sequence against itself, so none needs a baseline:
+**Detectors** judge a series against itself and report **candidates**, not
+defects, because a correct pan past sunlit leaves reverses pixel luma and a
+correct turn toward the sky steps the frame's mean. Each is defined before it
+is built:
 
-  | Detector | Finds | How |
-  |---|---|---|
-  | Pop | A late surface, a tier change, a cascade switch, a fallback turning into the place | A tile whose change from the frame before stands far above the running median of its own changes |
-  | Flicker | Shimmer, crawling shadow edges, unstable indirect light | Pixels whose luma reverses direction repeatedly across the series, counted per tile |
-  | Step | An exposure, sky or lighting snap | A change of the whole frame's mean luma that stands above the series' own |
-  | Standing change | Shimmer at rest | Any of the three in a chapter's standing span, where nothing should move |
+| Detector | Signal | Definition |
+|---|---|---|
+| Residual | Pops, late surfaces, tier changes, ghosts | The frame is compared with the frame before it reprojected by the renderer's own motion vectors and depth. The residual's 95th percentile per tile, in display-referred luma, divided by the tile's median residual over the series (floored at a noise constant so a zero median does not divide), is the tile's score. Disoccluded pixels are excluded by the reprojection's own validity mask |
+| Flicker | Shimmer and crawling edges | Per pixel after reprojection, the count of sign reversals of the luma difference per second of series time, over pixels whose residual amplitude passes the noise floor; reported per tile as reversals per second |
+| Step | Exposure, sky and lighting snaps | The change of the frame's log mean luma per second, against the series' median rate |
+| Stall | A repeated frame | A presentation whose image is the one before it while the simulation stepped. This is the series' own duplicate flag, a separate signal from the three above |
 
-- **Counted causes beside them.** The streaming counts say why a pop
-  happened; a pop with no counted cause is a rendering defect, and a counted
-  miss with no pop was hidden from the player.
-- **The renderer's own account of instability.** The temporal resolve decides
-  for each pixel whether its history holds. Counting those decisions per view
-  per frame would give an instability reading for every frame of the timed
-  pass with no readback. Whether the resolve exposes the decision is
-  unverified; stage 5 reads the resolve and reports it.
+Scores are normalized per second of series time, so a faster display does
+not raise them. The HUD is masked, a cut (a pose or a crossing) starts a new
+series, and authored motion that the motion vectors describe leaves no
+residual. A detector with no reprojection available labels its output
+uncompensated. A moment with no counted cause has an unknown cause; it is not
+thereby a rendering defect. Moment counts are compared only between runs with
+the same capture identity and coverage.
 
-A detector's output is a ranked list of moments (`moments.json`): chapter,
-mark, tick, tile, detector and magnitude, each with its strip of frames. A
-moment is a place to look and a way to return to it, and a reviewer or the
-look critic judges it. A moment count is compared across builds as a trend.
+The detectors are checked with controls before any trend is read: clean
+moving and animated sequences on which each must stay quiet; an injected
+defect of each class (a tile replaced for one frame, an oscillating tile, a
+gain step, a duplicated frame) that exactly its detector must flag, at its
+index and tile; and the artifacts the owner named, recorded once as known
+positives so a missed defect is seen as well as a false one. A defect that
+never changes, a surface that is always missing or always dark, produces no
+moment; that is the visual bar's and the inspection route's to catch.
 
-A full-reference metric (FLIP or CGVQM) is held back as the last stage. Its
-reference would be the same build's own converged render of the same ticks,
-which is the one place lockstep serves the benchmark, and it is built only if
-the detectors' moments prove too noisy to steer by.
+A full-reference metric (FLIP or CGVQM) is the last stage. Its reference
+must match the camera, the interpolation fraction, animation and exposure
+state and render settings of the frame it judges, and a converged render is
+a reference only where it is itself correct.
 
 ### The invariants
 
 | Invariant | What enforces it | Where the guarantee stops |
 |---|---|---|
-| **One program.** A chapter's input exists once, in its `route` block | The compiler: the live World's steps and the headless test's schedule are both lowered from that block, and no plan file carries a copy | A mark's tick is chosen by hand against the program. A retimed program moves the body away from what the mark names; the capture's pose beside the place it names shows it |
-| **A timed span is undisturbed.** Nothing pauses, holds, settles or locks presentation inside a chapter | The run's recorder is the one place that knows a span is clean: `PresentPacingControl` and the rate lever report a lockstep change, a pause and a held capture to it, and a disturbed chapter's statistics are written absent with the line that disturbed it. Nothing is refused | Load from outside the process. `puck lease quiet` and the recorded host load cover it |
-| **Like is compared with like.** | One comparer, used by `--against` and by `puck measure`'s pointer read: a chapter that is off course, disturbed or of another route identity has no metric to read, and unlike conditions refuse the pairing by name | Presentation is float and frame-paced, so two runs never present identical frames. The spread between loops and an A/A pair measure it |
-| **Measuring changes no state.** The overlay, the recorder and the captures are presentation | Rule 4's boundary: nothing presentation-side writes simulation state. Stage 1 checks it by the chapter hash with the overlay on and off | Measuring does change frame time; the overlay's pass is timed and capture runs as its own pass |
-| **The same intent at any frame rate.** A pad route turns into the same per-tick intent however the display runs | `WorldClient.AdvanceSeatViews` integrates look on fixed ticks, and `world.at` pins each signal to a tick | Pointer look lands between ticks, so a recorded chapter sums pointer motion per tick. Stage 1's windowed check is the proof; if hashes differ between display-paced runs, the frame-time term that reaches intent is found and moved onto ticks |
+| **One program, one door.** A chapter's lines exist once and enter as their seat | The compiler lowers the block once, and `WorldBenchmarkCommandModule` arms only what `WorldCompileCache` returns, only through `WorldTickScript.ArmSeat` | A mark's tick is chosen by hand against the program; the captured pose beside the place it names shows a drift |
+| **A timed span is established, then watched.** | The run sets display pacing at entry and records what it found; every iteration carries the lockstep flag and the statistics carry the longest unstepped span, so a span that began or became invalid is disturbed from the data, whoever caused it. Nothing is refused | Load from outside the process; `puck lease quiet` and the recorded host load cover it |
+| **A hash is compared only from a common start.** | The report's `entry` names how the run began, and the comparer reads hashes only from fresh runs armed at the same tick | An attached run and a loop are not restored to an initial state; they are labelled, never compared |
+| **Like is compared with like.** | One comparer: comparable, changed workload or unavailable, decided from chapter identity, coverage, arrival, disturbance and conditions | Presentation is float and frame-paced; the spread between loops of one kind and an A/A pair measure it |
+| **Measuring changes no state.** | Rule 4's boundary; checked by the chapter hash of a fresh run with the overlay on and off | Measuring does change timing; the overlay's pass and the ring's cost are reported |
+| **The same intent at any frame rate.** | `WorldClient.AdvanceSeatViews` integrates look on fixed ticks and `ArmSeat` pins each line to a tick | Pointer look lands between ticks, so a recorded chapter sums pointer motion per tick |
 
 ## The debug world's route
 
@@ -413,7 +472,7 @@ the three crossings at three speeds. The streaming plan's conditions (a fresh
 process per crossing) are `--route seams --chapter <name> --fresh`.
 
 The gallery's row-by-row inspection is a third route, `exhibits`, built in
-stage 7.
+stage 7, before the fold deletes the tour that inspects it today.
 
 ## What the existing instruments become
 
@@ -422,8 +481,8 @@ stage 7.
 | `puck sweep --tour`'s lockstep stops, its `--baseline` changed-pixel comparison, `levelTolerance`, `amberFraction` and the comparison sheets | Deleted. The windowed leg of `puck sweep` starts a World, runs the benchmark and reads its signals from that run. The tour's stop poses, the owner's findings among them, become marks and rests on the routes, so each is passed in motion |
 | The tour's settled-still baselines | Nothing replaces them in the benchmark. A still of a place is not evidence of how the place looks in play, and equality with an older still is not a goal |
 | Exhibit stills judged against plaques, with the mesh audit beside them | Kept as the `exhibits` route's capture pass: a presented series while the walker stands at each exhibit, so shimmer at rest shows. The judgement stays against the plaque's intent |
-| Route stops and `SweepRoute` | Deleted; `route` blocks replace the `test` blocks of `walkthrough-tests.puck` |
-| `puck bench frames` and `--window`, `worlds/debug/seam-walk.sweep.json`, `worlds/debug/measure-water.json` | Deleted. The window's readings are the benchmark's report, the seam walk is the `seams` route, and a settled stop is a chapter that stands |
+| Route stops and `SweepRoute` | Deleted at stage 10, after the exhibits route replaces the inspection they carry; `world.benchmark` already plays the same `test` blocks |
+| `puck bench frames` and `--window`, `worlds/debug/seam-walk.sweep.json`, `worlds/debug/measure-water.json` | Deleted at stage 10. The window's readings are the benchmark's report, the seam walk is the `seams` route, a settled stop is a chapter that stands, and the `boot` window is the report's `boot` span over the first rendered iterations |
 | `puck motion --route` and `worlds/debug/forest.route.json` | Deleted. The forest becomes a chapter, its paired comparison is `puck measure`'s, and its workload check is the comparer's |
 | Lockstep, `world.at` and the settled `world.screenshot` | Kept as engine mechanisms. `puck motion --reproduce` is the one tool that compares stills exactly, for a change that claims to change nothing (rule 4). It is not part of the benchmark and no landing waits on it |
 | `puck sweep`'s headless leg and scenarios | Unchanged |
@@ -437,8 +496,8 @@ stage 7.
 | What the route is | A recorded tape (`replay.record`); a camera path; a controller program | The controller program. A tape embeds the world it was recorded in and a drive loads that world, so it cannot benchmark an edited one; a Source demo plays back only on the version of the game that recorded it, for the same reason. A camera path skips input, contact, the camera program and prediction from the body's velocity, and the owner's ruling is that a controller drives the player. A program survives edits, reports the chapter an edit broke, and can still be recorded from play |
 | Who plays it | The CLI arming steps over the operator attachment (today); the World | The World. A player-facing verb cannot depend on a coordinator, and every professional benchmark is a mode of the game |
 | Pace | Lockstep; ticks as fast as possible; real time paced; real time uncapped | Real time, paced by default, uncapped on request. The other two change what streaming and lighting are given |
-| What proves the same workload | Pixel equality; authority hash; arrival box | Hash within a build, arrival across builds. Pixels are never compared |
-| Where captures happen | In the timed run with capture frames excluded; a separate pass | A separate pass. A readback costs frame time, and determinism makes the second pass walk the same route |
+| What proves the same workload | Pixel equality; authority hash; arrival box; identity with waypoint coverage | Chapter identity, arrival and waypoint coverage, with the hash between fresh runs of one build. Pixels are never compared |
+| Where captures happen | A separate pass alone; the watched run alone; both | Both. A rerun does not see what a cold first crossing showed, so the watched run keeps a bounded ring with pre-roll, and a capture pass is a diagnostic rerun for full series |
 | Artifact detection | Compare with a previous build's frames; judge a series against itself; a full-reference metric against the same build's converged render | The series against itself first; the reference metric last, if needed. The first option is ruled out |
 | The overlay | Engine-drawn debug text; an authored HUD panel on two generic mechanisms | The authored panel. A drawn-in overlay would put one feature's design in engine code |
 
@@ -449,9 +508,10 @@ Three options exist only because of what Puck is, and each is taken:
   at the scale of many worlds each world carries its own routes. A hub's
   route can cross into them through their portals as the painting chapter
   does.
-- **Change-proportional work.** The standing span and the second loop turn
-  that claim into a counted check: frames that change nothing and a loop that
-  revisits everything should derive nothing.
+- **Change-proportional work.** A standing span and a steady loop turn that
+  claim into a counted reading: what was derived again is set beside whether
+  its input identity changed and whether residency evicted it. Zero work is
+  claimed only for an unchanged working set that fits its budget.
 - **Derived identity.** A route's identity is computed from its lowered rows,
   and a report names the route and build it measured, so a comparison of
   unlike things is refused from the data, with no recorded ledger.
@@ -463,33 +523,57 @@ and it waits on the UI overhaul's diegetic surfaces.
 
 ## The build order
 
-Stages 1, 2 and 4 start together once this memo is reviewed; they share only
-the `routes` section's shape and the report's metric names, both fixed above.
-Stage 3 needs 1; stage 5 needs 1 and 2; stage 6 needs 2, 3 and 5.
+The route's player, the recording and the per-chapter report are built
+(`WorldBenchmarkCommandModule`, `HostFrameRecording`). What remains, each
+stage with the check that closes it:
 
 | Stage | Lane | Builds | Done when |
 |---|---|---|---|
-| 0. The rulings and the fold | Lead, documents | The instrument and scripted-walkthrough decisions say the walkthrough is the benchmark route played in real time and that stills are not compared across builds; `walkthrough.md` is deleted with its open steps here | `puck docs links` passes, and no page outside the CLI reference describes the tour as the benchmark |
-| 1. The route and its player | World and language; headless | The `route` block and `routes` section; `world.benchmark run` and `stop`; chapters armed through `world.at`; arrival and end hash per chapter; `puck test` over chapters; the seam walk and the two gallery rows moved to `route` blocks | Headless: `world.benchmark run seams` prints nine chapters arrived with their hashes, twice the same, and `puck test --reproduce` passes on the route source. Windowed, in the lead's window: three display-paced runs on each backend give the same nine hashes, and the same with the overlay off and on |
-| 2. The recorder, the report and the command | Launcher and CLI; headless | `HostFrameTimeline`'s recording; chapter spans, statistics and the hitch list; `frames.csv` and `report.json`; `puck benchmark` with `--against`; `puck measure` admitting `benchmark`; one statistics function shared by the World's results and the CLI | `frames.csv`'s row count equals the iterations `HostFrameTimeline.Recorded` counted over the run, and its intervals sum to the run's length within one frame; a `world.rate pause` sent inside a chapter writes that chapter disturbed; `puck measure request` accepts every metric pointer; `--against` a report itself prints no difference |
-| 3. The debug world's route | Debug world authoring; a GPU leg for the look of the travel | The nine chapters; `world.benchmark record`; the Tour page binding | Every chapter arrives headless and reproduces; the report names each place of `places.puck` the route entered and each it did not; the route's tick count is under four minutes of simulation; a 60-second recorded chapter arms within `world.at`'s limit or the limit is lifted |
-| 4. The overlay | UI and overlay; a GPU leg | The reading bindings, the plot element, the standard panel and the results panel | `world.hud` reads the plot's binding back with the value `host.frames` gives for the same frame; a presented frame of a run shows the panel on both backends; the overlay's pass appears in `world.gpu-timing` and in the report |
-| 5. Artifacts in motion | Rendering and capture; a GPU leg | Marks; queued presented series with per-frame tick, fraction and camera; the recording; the detectors and `moments.json`; the resolve's instability count if the resolve can give it | A series with one frame duplicated and one replaced by another mark's frame is flagged at those two indices; each detector lights on today's build at the artifacts the owner named (the night trees, the shadows) and at the sill flicker in the open items, and goes out when its defect is fixed |
-| 6. The fold | CLI | The deletions of [the table above](#what-the-existing-instruments-become); the sweep's windowed leg on the benchmark; the streaming plan, the CLI reference and the skills updated | `puck search` finds no `SweepRoute`, `--window` or `--tour`; every reading of [what a window reads](streaming-and-memory.md#what-a-window-reads) is in the report or named absent; `puck scan --only duplicates` names no second route runner |
-| 7. The exhibits route | Debug world authoring and CLI | The walkthrough plan's open steps on the `exhibits` route: coverage derived from the document, a rest and a mark per exhibit derived from the program, the inspection pass over every creation, plaque fit and floor light patches made mechanical | Adding an exhibit to a row turns coverage amber with its name until a chapter rests at it; each mechanical check lights at a defect the owner flagged by hand |
-| 8. Displayed time | Platform and backends | The interval each frame was displayed, from the swapchain's own statistics where the host gives them | On a captured run it agrees with PresentMon's `MsBetweenDisplayChange` for the same frames to within a millisecond; where a host gives none the column is absent |
-| 9. A reference metric, if needed | Rendering | FLIP or CGVQM of a mark's presented series against the same build's converged render of the same ticks | Decided by stage 5: built only if more than half of a route's top moments are judged false by a reviewer |
+| 1. Windowed proof of the start | Lead's GPU window | Nothing new: two fresh runs (a paused boot, `world.benchmark run … at <tick>`, `world.rate resume`) of one seam chapter on each backend, then one with a delayed resume | The chapter's end hash is the same in every fresh run of a backend, the delayed resume included; a run armed at another tick reads a different hash and is labelled by its `entry` |
+| 2. The live overlay | UI and overlay; a GPU leg | Reading bindings in `HudBindingVocabulary`, a plot element in `WorldHudElementKind`, and the standard panel. The overlay channel reserves `HudWriter.GaugeElementCost` render elements for each authored element, so a plot's bars get a reservation of their own | `world.hud` reads the plot's binding back with the value `host.frames` gives for the same iteration; a presented frame of a run shows the panel on both backends; the overlay's pass is in `world.gpu-timing` and in the report |
+| 3. The command and the rest of the report | CLI and World; headless | `puck benchmark`: a fresh paused boot, the route armed at a named tick, both backends, `--uncapped`, loops reported cold, warm and steady, `--against`; `puck measure` admitting it; the hitch list, GPU passes, streaming counts and counters per chapter; a `boot` span from the renderer's first iteration to the first chapter; the comparer and its exit statuses | Statistics agree with hand-computed values on a fixed sample set; the comparer refuses another route, unlike conditions, a run that began in lockstep, an off-course chapter and a missing metric, each by name; a run with every chapter unavailable exits as a failure; a wall-time limit and a `stop` each leave a partial report |
+| 4. The route in the document | World and language; headless | The `route` block and `routes` section lowered through the `test` emitter's logic; marks; waypoints and the numeric pose samples; chapter and capture identity; the per-tick hash sequence; the seat-started, bindable run; recording a played chapter; the debug world's nine chapters | A denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable; a recorded chapter replayed from its start gives the recorded per-tick input, pointer motion included |
+| 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |
+| 6. Motion and presentation samples | World client | A recording sink on `WorldSeatMotionTrace`; `WorldPresentationProbe` under display pacing with numeric samples | A hitch older than 240 frames is in the report; a smooth authored dash and a rest are not called stalls or jumps; a run at twice and at half the tick rate both read complete coverage |
+| 7. The exhibits route | Debug world authoring and CLI | The walkthrough plan's open steps: coverage derived from the document's exhibits, a rest per exhibit, a presented series judged against the plaque, the inspection pass over every creation, plaque fit and floor light patches made mechanical | Adding an exhibit to the row it is derived from turns coverage amber with its name until a chapter rests at it; each mechanical check lights at a defect the owner flagged by hand |
+| 8. Displayed time | Platform and backends | The interval each frame stood on the display, from the swapchain's own statistics, keyed by present | On a captured run it agrees with PresentMon for the same presents: PresentMon's `MsBetweenDisplayChange` describes the previous displayed frame and `DisplayedTime` the current one, so the comparison is by present and interval, with dropped frames named; where a host gives none the column is absent |
+| 9. Artifacts in motion | Rendering and capture; a GPU leg | The watched pass's ring and triggers; the capture pass; the bounded capture store; the four detectors | Each detector stays quiet on the clean moving and animated controls and flags exactly its own injected defect at its index and tile; a late surface seen only on a cold first crossing is in the watched run's evidence when a warm rerun does not show it; a full capture store refuses and counts, and a timed run's iterations are unchanged by it |
+| 10. The fold | CLI | The deletions of [the table above](#what-the-existing-instruments-become), after stages 3, 4, 7 and 9 | Every tour stop and inspection maps to a chapter, a rest or a recorded decision that it no longer pulls its weight; the boot span is read over the first rendered iterations and a missing reading shows unmeasured; `puck search` for `SweepRoute` and for the retired `sweep --tour` and `bench frames --window` forms finds nothing |
+| 11. A reference metric, if needed | Rendering | FLIP or CGVQM of a mark's presented series against a matched reference | Decided by stage 9's controls and known positives: built when the detectors miss a known artifact or more than half of a route's top candidates are judged false |
 
 ## Open questions and their owners
 
 | Question | Settled by | Decides |
 |---|---|---|
-| Whether display-paced runs of one build reach the same chapter hashes | Stage 1's windowed check | Whether any frame-time term reaches intent and must move onto ticks |
-| Under whose authority a chapter's lines run when a seat starts the run. `world.at` runs its lines as the console, and a route's `body.pose` is more than a seat may do by default | Stage 1, under the grants the [World skill](../../.claude/skills/puck-world/SKILL.md) maps | Whether a seat-started run plays as that seat under the world's grants (the default this memo assumes: a route does only what its player may, and a chapter's opening pose is a grant the world's author gives) or only an operator may start one |
-| Whether the temporal resolve exposes its per-pixel history decision | Stage 5 reads the resolve | Whether instability is counted on every frame or only seen in series |
-| Whether CI's runners have a GPU | The lead, from the workflows | Whether CI runs more than the headless chapters |
-| How much the overlay and the recorder cost | Stage 4's `world.gpu-timing` line and a paired `puck measure` request with the overlay on and off | Whether the timed pass defaults the overlay on for the command, as it does for the verb |
-| The route's content and length | The owner's correction after watching stage 3 | The chapters above are the lanes' proposal |
+| Whether fresh display-paced runs of one build reach the same chapter hashes on a window | Stage 1 | Whether a determinism defect exists at a tick. Two headless fresh runs of one chapter gave the same hash |
+| Whether the temporal resolve exposes its motion vectors and validity mask to a readback | Stage 9 reads the resolve | Whether the detectors reproject or label their output uncompensated |
+| Whether CI's runners have a GPU | The lead; the workflows name hosted runners | CI runs the headless chapters, and a windowed run on both backends stays the lead machine's qualification |
+| How much the recording and the overlay cost | A paired `puck measure` request with each on and off | Whether the watched pass's ring is on by default |
+| The route's content and length | The owner's correction after watching stage 4's chapters | The chapters above are the lanes' proposal |
+
+## The review's findings
+
+A design review by another model family raised eleven findings. Each is
+closed by a change here or ruled with its reason.
+
+| Finding | Answer |
+|---|---|
+| B1. A spawn is not the initial state the end hash needs | Closed in [where a run starts](#where-a-run-starts): a fresh run is armed before the first tick at a named tick, so every line lands on the same absolute tick from the boot image; attached runs and loops are labelled and their hashes never compared. `world.benchmark` records `entry` and `start`, and two fresh headless runs gave one hash. The per-tick sequence hash, reusing the tape's capture, is stage 4. Ruled: the remedy for a differing hash is finding the tick, never moving presentation onto ticks |
+| B2. A second capture pass cannot stand in for the watched pass | Closed in [artifacts in motion](#artifacts-in-motion): the watched run keeps its own bounded ring with pre-roll and triggers, a capture pass is a diagnostic rerun with its own conditions and identities, and stage 9's check is a cold-only late surface kept by the watched run |
+| B3. Headless and live must share one program and the seat door | Closed and built: `world.benchmark` plays the schedule rows the compiler lowers a `test` block to, through `WorldTickScript.ArmSeat`, as its seat. It runs no line as the console, refuses a non-seat or sibling-world row before arming, and releases what the program held. The `route` block lowers through the same emitter logic (stage 4), whose check covers a denied action, seat 2 and a portal boundary |
+| B4. Arrival plus opaque signatures is not a comparable workload | Closed in [comparing runs](#comparing-runs): chapter identity includes duration, settle and gates; capture identity is separate; waypoints and numeric pose samples decide comparable, changed workload or unavailable; `WorldPresentationProbe` is extended for display pacing in stage 6. The negative and positive examples are stage 4's check |
+| B5. Load-sensitive counts were called load-independent | Closed in [what a run reports](#what-a-run-reports): three kinds of reading, each with how it is compared; loops are cold, warm and steady. The claim that a later loop must derive nothing is withdrawn: reuse is judged by unchanged input identity and staging by residency demand, with a zero-work claim only for an unchanged working set that fits |
+| B6. Detectors do not separate motion from defects | Closed in [artifacts in motion](#artifacts-in-motion): units, per-second normalization, tile aggregation, a floored noise term, reprojection or an uncompensated label, masking and cuts, a separate stall signal, candidates and not defects, unknown causes left unknown, and controls with class-specific positives and known artifacts |
+| B7. The motion observer loses history and mislabels intent | Closed in [what a run reports](#what-a-run-reports): a recording sink on the existing observer, variation against the motion the program asked for, the name motion-step variation until stage 8; stage 6 builds it with its two checks |
+| B8. The fold deleted inspection and the boot-frame reading before their replacements | Closed in [the build order](#the-build-order): the fold is stage 10, after the exhibits route and the report's `boot` span, and its check maps behaviours, not names |
+| B9. Bindings and a recent plot cannot author the results panel | Closed in [what the viewer sees](#what-the-viewer-sees): a presentation data model of scalars, a recent series, a published table and a retained annotated series; the first panel's narrower scope is stated and the rest is stage 5 on the UI overhaul's collections |
+| B10. Recording and capture had no bounds | Closed for the recording, built: a fixed capacity allocated before the run, a dropped count in the report, a wall-time limit and a `stop` that drop the run's lines, release its controls and write a partial report with each chapter's state. The capture store's bound and saturation are in [artifacts in motion](#artifacts-in-motion) and stage 9's check |
+| B11. Watching transitions misses a mode that already held | Closed and built: the run sets display pacing at entry and records what it found, and every iteration carries the lockstep flag and the unstepped span, so a run that began or became invalid is disturbed from its own data. The comparer's refusals and exit statuses are stage 3's check |
+
+The review's notes on the stage checks are folded into the checks above. Two
+of its notes on the sources are taken: the measurement frameworks in the
+research table are not modes of a shipping game, and UL's page is linked by
+the address that opens.
 
 ## Systems considered
 
@@ -510,6 +594,13 @@ Stage 3 needs 1; stage 5 needs 1 and 2; stage 6 needs 2, 3 and 5.
 - **`world.view.motion` and `world.view.trace`** already read presentation
   evenness and presentation inputs; the report reads them and adds no second
   observer.
+- **`WorldTestRun`** arms a document's schedule rows through
+  `WorldTickScript.ArmSeat`; `world.benchmark` is the second caller of that
+  door and adds no scheduler.
+- **`world.patrol`** poses body 0 across a grid and scans the timeline per
+  point. It is a coverage check of the third-person view, it walks nothing,
+  and its pattern (pinned lines calling back into its own verb) is the one
+  the benchmark's chapter marks use.
 - **`probe.record`** writes a device's readings as a track document that
   stands in for the device. It is the precedent for recording play as an
   authored document, and it records sensor probes, not seat input.
@@ -521,7 +612,7 @@ Stage 3 needs 1; stage 5 needs 1 and 2; stage 6 needs 2, 3 and 5.
 
 Opened and read:
 
-- UL, [how the Time Spy score is calculated](https://support.benchmarks.ul.com/support/solutions/articles/44002136143-how-is-the-3dmark-time-spy-score-calculated)
+- UL, [how the Time Spy score is calculated](https://support.benchmarks.ul.com/support/solutions/articles/44002136143-how-is-the-3dmark-time-spy-score-calculated-)
   and [the stress test result screen](https://support.benchmarks.ul.com/support/solutions/articles/44002134931-stress-test-result-screen).
 - Unity, [Measure.Frames](https://docs.unity3d.com/Packages/com.unity.test-framework.performance@3.0/manual/measure-frames.html)
   and [the Performance Testing package](https://docs.unity3d.com/Packages/com.unity.test-framework.performance@3.0/manual/index.html).

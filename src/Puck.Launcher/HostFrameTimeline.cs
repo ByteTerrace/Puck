@@ -68,6 +68,7 @@ public sealed class HostFrameTimeline {
     private long m_openLate;
     private long m_openControlGap;
     private long m_lastControl;
+    private HostFrameRecording? m_recording;
 
     /// <summary>Creates a timeline over the given clock.</summary>
     /// <param name="time">The host loop's clock.</param>
@@ -80,6 +81,31 @@ public sealed class HostFrameTimeline {
 
     /// <summary>Gets the clock the timeline reads.</summary>
     public TimeProvider Time { get; }
+    /// <summary>Gets the recording every closing iteration is also written to, or <see langword="null"/>.</summary>
+    public HostFrameRecording? Recording => m_recording;
+
+    /// <summary>Starts writing every iteration that closes from now on to a recording as well as the ring. The ring
+    /// and <see cref="Reset"/> are unaffected, so a reader of <c>host.frames</c> sees what it saw before.</summary>
+    /// <param name="recording">The recording to write.</param>
+    /// <exception cref="InvalidOperationException">A recording is already being written.</exception>
+    public void StartRecording(HostFrameRecording recording) {
+        ArgumentNullException.ThrowIfNull(recording);
+        if (m_recording is not null) {
+            throw new InvalidOperationException(message: "The timeline is already writing a recording.");
+        }
+
+        recording.Frequency = m_frequency;
+        m_recording = recording;
+    }
+    /// <summary>Stops writing the recording.</summary>
+    /// <returns>The recording that was being written, or <see langword="null"/> when none was.</returns>
+    public HostFrameRecording? StopRecording() {
+        var recording = m_recording;
+
+        m_recording = null;
+
+        return recording;
+    }
 
     /// <summary>Closes the iteration in progress, if any, and opens the next one.</summary>
     public void BeginIteration() {
@@ -105,6 +131,28 @@ public sealed class HostFrameTimeline {
             m_collections[(slot * 3)] = (gen0 - m_gen0);
             m_collections[((slot * 3) + 1)] = (gen1 - m_gen1);
             m_collections[((slot * 3) + 2)] = (gen2 - m_gen2);
+            m_recording?.Add(
+                sample: new HostFrameSample {
+                    Allocated = m_allocated[slot],
+                    Begin = m_open[((int)HostFramePhase.Begin)],
+                    Commands = m_open[((int)HostFramePhase.Commands)],
+                    Gen0 = (gen0 - m_gen0),
+                    Gen1 = (gen1 - m_gen1),
+                    Gen2 = (gen2 - m_gen2),
+                    Input = m_open[((int)HostFramePhase.Input)],
+                    Interval = m_intervals[slot],
+                    Late = m_openLate,
+                    Pause = m_pauses[slot],
+                    Present = m_open[((int)HostFramePhase.Present)],
+                    Produce = m_open[((int)HostFramePhase.Produce)],
+                    ProduceBlocked = m_openProduceBlocked,
+                    Simulate = m_open[((int)HostFramePhase.Simulate)],
+                    Steps = m_openSteps,
+                    ThreadAllocated = m_threadAllocated[slot],
+                    Wait = m_open[((int)HostFramePhase.Wait)],
+                },
+                start: m_iterationStart
+            );
             Array.Copy(
                 destinationArray: m_phases,
                 destinationIndex: (slot * PhaseCount),
@@ -429,7 +477,7 @@ public sealed class HostFrameTimeline {
         );
     }
     private double Milliseconds(long ticks) => ((ticks * 1000.0) / m_frequency);
-    private static double Percentile(double[] sorted, double fraction) => sorted[Math.Min(
+    internal static double Percentile(double[] sorted, double fraction) => sorted[Math.Min(
         val1: (sorted.Length - 1),
         val2: ((int)Math.Floor(d: (fraction * sorted.Length)))
     )];
