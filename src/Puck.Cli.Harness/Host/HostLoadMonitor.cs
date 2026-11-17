@@ -49,7 +49,9 @@ public readonly record struct HostRunningStart(int Id, HostStartKind Kind, doubl
 /// <param name="CommitReservePercent">The share of the commit limit, in percent, that stays unclaimed after a start's need:
 /// the margin for processes admission does not see (a build, a hand-started suite). The commit headroom itself
 /// below this share is commit pressure and holds every start back. Not judged when the platform reports no commit limit.</param>
-public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null) {
+/// <param name="InstalledRamGb">The machine's installed physical memory, in gigabytes, which no start's working set plus the
+/// pressure floor can exceed (<see cref="NeverFits"/>); not judged when null.</param>
+public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? PressureRamGb, double? PressureDiskGb, double? CommitReservePercent = null, double? InstalledRamGb = null) {
     /// <summary>The commit reserve, in percent of the commit limit: a start is admitted only if the headroom still holds
     /// this much after its need. Allocation fails at the limit with physical memory still free; builds, compilers and
     /// hand-started suites charge commit that admission does not predict, and a tenth of the limit (6.4 GB of a 64 GB
@@ -114,6 +116,24 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <param name="needGb">The physical memory, in gigabytes, the start and the growth still to come take from free memory.</param>
     /// <returns><see langword="true"/> when the start leaves the pressure floor free or is not judged.</returns>
     public bool PhysicalCovers(HostSample reading, double needGb) => ((PressureRamGb is not { } floor) || !double.IsFinite(d: reading.FreeRamGb) || ((reading.FreeRamGb - needGb) >= floor));
+    /// <summary>Names what keeps a start from ever being admitted on this machine however idle it is: its own expected
+    /// private bytes plus the commit reserve exceed the commit limit, or its own expected working set plus the pressure floor
+    /// exceed the installed memory. Waiting cannot help such a start.</summary>
+    /// <param name="reading">The reading, whose commit limit is the machine's.</param>
+    /// <param name="ownGb">The start's own expected commit peak, in gigabytes.</param>
+    /// <param name="residentOwnGb">The start's own expected working-set peak, in gigabytes.</param>
+    /// <returns>The shortfall as a phrase, or <see langword="null"/> when the machine could hold the start alone or does
+    /// not report its totals.</returns>
+    public string? NeverFits(HostSample reading, double ownGb, double residentOwnGb) {
+        if ((CommitReservePercent is not null) && double.IsFinite(d: reading.CommitLimitGb) && ((ownGb + CommitReserveGb(reading: reading)) > reading.CommitLimitGb)) {
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {ownGb:0.0}GB of commit and the commit reserve is {CommitReserveGb(reading: reading):0.0}GB, over the machine's {reading.CommitLimitGb:0.0}GB commit limit");
+        }
+        if ((PressureRamGb is { } floor) && (InstalledRamGb is { } installed) && ((residentOwnGb + floor) > installed)) {
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {residentOwnGb:0.0}GB of working set and the pressure floor is {floor:0.0}GB, over the machine's {installed:0.0}GB of memory");
+        }
+
+        return null;
+    }
     /// <summary>The free disk, in gigabytes, below which every machine is under pressure. A build and a suite write the
     /// same outputs whatever the machine's size, so this one threshold does not scale.</summary>
     public const double DiskPressureGb = 10;
@@ -156,6 +176,7 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
         return new HostLoadThresholds(
             CapacityCpuPercent: Math.Round(digits: 1, value: (100.0 * (1.0 - (idle / logicalProcessors)))),
             CommitReservePercent: DefaultCommitReservePercent,
+            InstalledRamGb: installed,
             PressureDiskGb: DiskPressureGb,
             PressureRamGb: (installed / 8.0)
         );
