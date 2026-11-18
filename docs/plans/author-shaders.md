@@ -51,7 +51,7 @@ Steps 2 and 4 read this matrix, and step 6 reads it again on the final set.
   not interpreted). That is a quality-versus-bar trade this plan does not make:
   it goes to the owner with the readings.
 - **A gap in the rule, and how it is read meanwhile.** No device meets its
-  bar before the rendering research's last stage, so every column fails and
+  bar yet, so every column fails and
   the rule chooses nothing. Until this plan is revised the matrix is read as
   [rendering research decision 13](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history)
   restates it: a column passes when it is no slower than the base column on

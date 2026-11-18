@@ -2,6 +2,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Puck.Abstractions;
+using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Launcher;
 using Puck.Storage;
@@ -14,8 +15,8 @@ namespace Puck.World.Silo.Tests;
 /// <summary>
 /// A hosted world's relative machine content resolves beside the silo document's <c>documentDirectory</c>, the layout
 /// the silo image ships its composed documents in: the first activation and the recovery from its checkpoint both
-/// prepare the machine from it. Without one, a hosted document has no directory, and its relative content is refused
-/// by name rather than read from wherever the process runs.
+/// prepare the machine from it. Without one, a hosted document has no directory, and its machine is refused, naming
+/// the content, rather than reading it from wherever the process runs.
 /// </summary>
 public sealed class WorldSiloDocumentDirectoryLawTests {
     // The image's layout: the composed documents under worlds/, and the authored cartridges beside that directory, so
@@ -105,7 +106,31 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
 
         Assert.True(condition: published.Ok, userMessage: published.Detail);
 
-        // The first activation prepares the cabinet from the published document, and the drain checkpoints it.
+        // A silo document that names no directory gives the hosted document none. The world still activates, and its
+        // cabinet alone is a refused instance whose fault names the relative content, which is never read from
+        // wherever the process runs. Its release checkpoints that refusal, and the next activation, which can prepare
+        // the cabinet, recovers from it with the cabinet at its power-on image instead of refusing the world.
+        var directoryless = Host(directory.RootPath, store, output, row, documentDirectory: null);
+
+        using (directoryless.Instances) {
+            var activation = directoryless.ActivateAsync(identity, TestContext.Current.CancellationToken);
+
+            await PumpAsync(host: directoryless, operation: activation);
+            Assert.True(condition: await activation, userMessage: output.ToString());
+            Assert.True(condition: directoryless.Instances.TryGet(identity.World.Value, out var live));
+            Assert.Null(@object: live!.Server.Definition.DocumentDirectory);
+
+            var cabinet = live.Server.Machines.InstanceState(name: "cabinet");
+
+            Assert.NotNull(@object: cabinet);
+            Assert.Equal(expected: MachineRuntimeStatus.Refused, actual: cabinet.Value.Status);
+            Assert.Null(@object: cabinet.Value.Content);
+            Assert.Contains(expectedSubstring: "has no directory to resolve it beside", actualString: cabinet.Value.Fault);
+            Assert.Contains(expectedSubstring: ContentPath, actualString: cabinet.Value.Fault);
+        }
+
+        // The next activation recovers that checkpoint beside the directory and prepares the cabinet, and the drain
+        // checkpoints it running.
         var first = Host(directory.RootPath, store, output, row, worlds);
 
         using (first.Instances) {
@@ -115,7 +140,7 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
             Assert.True(condition: await activation, userMessage: output.ToString());
             Assert.True(condition: first.Instances.TryGet(identity.World.Value, out var live));
             Assert.Equal(expected: PuckPaths.Normalize(path: worlds), actual: PuckPaths.Normalize(path: live!.Server.Definition.DocumentDirectory!));
-            Assert.NotNull(@object: live.Server.Machines.InstanceState(name: "cabinet"));
+            Assert.Equal(expected: ContentPath, actual: live.Server.Machines.InstanceState(name: "cabinet")?.Content);
             await PumpAsync(host: first, operation: first.DrainAsync(ct: TestContext.Current.CancellationToken));
         }
 
@@ -128,28 +153,23 @@ public sealed class WorldSiloDocumentDirectoryLawTests {
             await PumpAsync(host: recovered, operation: activation);
             Assert.True(condition: await activation, userMessage: output.ToString());
             Assert.True(condition: recovered.Instances.TryGet(identity.World.Value, out var live));
-            Assert.NotNull(@object: live!.Server.Machines.InstanceState(name: "cabinet"));
+            Assert.Equal(expected: ContentPath, actual: live!.Server.Machines.InstanceState(name: "cabinet")?.Content);
             await PumpAsync(host: recovered, operation: recovered.DrainAsync(ct: TestContext.Current.CancellationToken));
         }
 
-        // A silo document that names no directory gives the hosted document none, and the relative content is
-        // refused by name.
-        var directoryless = Host(directory.RootPath, store, output, row, documentDirectory: null);
+        // A directoryless silo never restores that checkpoint: its cabinet would be refused, and the running image the
+        // checkpoint holds is never discarded, so the recovery is refused by name before any state is restored.
+        var directorylessRecovery = Host(directory.RootPath, store, output, row, documentDirectory: null);
 
-        using (directoryless.Instances) {
-            Exception? refusal = null;
+        using (directorylessRecovery.Instances) {
+            var refusal = await Assert.ThrowsAsync<InvalidDataException>(testCode: async () => {
+                var activation = directorylessRecovery.ActivateAsync(identity, TestContext.Current.CancellationToken);
 
-            try {
-                var activation = directoryless.ActivateAsync(identity, TestContext.Current.CancellationToken);
+                await PumpAsync(host: directorylessRecovery, operation: activation);
+                _ = await activation;
+            });
 
-                await PumpAsync(host: directoryless, operation: activation);
-                Assert.False(condition: await activation);
-            } catch (ArgumentException exception) {
-                refusal = exception;
-            }
-
-            Assert.NotNull(@object: refusal);
-            Assert.Contains(expectedSubstring: "has no directory to resolve it beside", actualString: refusal!.Message);
+            Assert.Contains(expectedSubstring: "records a Running machine where this host's is Refused", actualString: refusal.Message);
             Assert.Contains(expectedSubstring: ContentPath, actualString: refusal.Message);
         }
     }

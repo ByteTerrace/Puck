@@ -29,6 +29,48 @@ How the file stays usable:
   sides in a sentence each. A ruling the owner has made goes to its owning
   home, never here.
 
+## Hand-off
+
+The rendering plan is the active programme, and another session orchestrates
+it. Read this, then [the plan's first wave](rendering-research.md#the-first-wave).
+The next lead rewrites this section when it hands off in turn.
+
+- **Start here:** dispatch the plan's first wave of twelve lanes at once, in
+  the merge order the plan gives where lanes meet. The evidence bar is
+  building what a lane touched and running it in the debug world at 2560 by
+  1440, never a test suite. Measurement runs beside the lanes. Adversarial
+  review is only for the classes [hazards](../development/hazards.md#silent-invariants)
+  names.
+- **The 1440p baseline** is the plan's measured column ([the bars and the
+  budget](rendering-research.md#the-bars-and-the-budget)), read on a quiet
+  machine. The slowest frames are the lift chapter's simulation steps; the
+  largest GPU part is the views pass. That run used the debug world's boot
+  settings, not a device's `high` table, until the `bench` lane applies one.
+- **In flight:** `vkalloc`, on branch `worktree-agent-afb2961687c8173ec`, hunts
+  Vulkan's per-frame allocation, several times Direct3D 12's at 1440p. If its
+  session ended before it handed back, start it again from the branch's last
+  commit or from scratch, and land it if its evidence holds.
+- **Settled this round and recorded in their homes:** the frame bar's sizes,
+  topologies and device order (AGENTS.md); deployed data is scratch
+  (AGENTS.md); named engine gaps are filled first, and a material improvement
+  may land below the bar (AGENTS.md); the four engine questions of the
+  rendering plan ([what the owner settled](rendering-research.md#what-the-owner-settled-1));
+  shared products in the [decision register](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
+- **Release rehearsal.** Release Azure dispatched without deploying on
+  `lead/authoring` now builds every artifact. Its last fixes (retrying
+  downloads, the AGB toolchain, the TraceEvent version, the registry) are on
+  the branch; read the latest dispatched run before the owner pushes `main`.
+- **Before the owner pushes `main`:** the [security review](#security-review)'s
+  write-door leaks are a high finding, and AGENTS.md requires each high finding
+  from the riskiest areas to be fixed or explicitly deferred by the owner. The
+  hosted dev store is reset at that deploy. Pushing `main` is the owner's.
+- **Restored branches awaiting the owner's word:** `lane/g5` (the
+  occlusion-aware rate floor, review answered, needs a merge and its windowed
+  check), `lane/toon-3` (a `world.toon off` fix that lands alone),
+  `lane/companion-v1` (prior art for custody steps 9 and 10), and
+  `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7` (the owner's pair
+  session; their rotation libraries are prior art).
+
 ## Next
 
 Ranked whole at the latest batch. The frame bar, the cold-bake bar and the
@@ -88,9 +130,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     and 6, with step 0's fuzzer and step 0b's principals.
 15. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-16. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
-    release's three causes and the production deploy, which a push to `main`
-    needs.
+16. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): a green
+    end-to-end Release Azure rehearsal, then the production deploy, which a
+    push to `main` needs.
 17. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
@@ -107,12 +149,14 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     next batch.
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
-    and visibility packets above. Its
+    and visibility packets above, run as lanes side by side and not as
+    stages. Its [first wave](rendering-research.md#the-first-wave) is twelve
+    lanes that start now, each with its files, its model and its finish
+    line; its [second wave](rendering-research.md#the-second-wave) names
+    what unlocks each lane. Its
     [engine gaps](rendering-research.md#engine-gaps-filled-first) are filled
-    first, ahead of further sculpting around them, and its
-    [work that starts now](rendering-research.md#work-that-starts-now) runs
-    beside its stage 0, which reads the bar on the RTX 4070 at 2560 by 1440;
-    the lead ranks it at the next batch.
+    first, ahead of further sculpting around them. Measurement runs beside
+    the lanes and holds none of them; the lead ranks it at the next batch.
 23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -373,6 +417,10 @@ order once: the scheduling stage's windowed reading, C0.3's and C0.4's, then
 step C0.5 (C0.1 to C0.4 are built), then the pool's design (J1). The garbage-collection cuts
 below, the replay burst's tick budget and `CodeDerivedTable`'s generations run
 beside it as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-work).
+Where the tick runs is an open design question this plan owns
+([its open question 7](engine-job-system.md#open-questions)); it starts when
+the rendering plan's `frame` lane has measured what one more world in frame
+costs.
 
 - [medium] On Vulkan, during a lighting convergence under lockstep, the
   control gap reads p99 119 ms and max 247 ms over 300 iterations, made of
@@ -909,8 +957,9 @@ Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
 Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): a
 feature thinner than a bake cell is lost or faceted (gap 7), which starts with
-decision 10's count of the failing cells that were ever flagged for finer
-sampling, then its contour rule, built behind an audit of every stored mesh;
+decision 10's count: for each failing shape, which of the four defects it
+shows and whether its cell was ever flagged for finer sampling (that plan's
+`contour` lane), then its contour rule, built behind an audit of every stored mesh;
 a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
 [rendering](rendering.md#bake-quality)); and, beside them,
 [moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
@@ -1828,7 +1877,8 @@ Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
 ordinary · Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): depth
 over the bed driving colour, a flow read for each place, a camera inside
-water, and a moving cutter that re-carves. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+water, a field row marked as simulation only, and a moving cutter that
+re-carves; the first four are that plan's `water` lane. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
 P1 last. The plan owns the feature end to end; these are the defects it does not.
 
 - [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
@@ -1962,7 +2012,7 @@ Federation and transfers:
   instance steps on the frame thread whether or not anything shows it
   (`WorldInstanceHost.StepInstances`), and each session is still delivered
   to. The rendering research measures both
-  ([its decision 1](rendering-research.md#1-measure-before-building)) and
+  ([its decision 1](rendering-research.md#1-measure-beside-the-work)) and
   reduces only presentation work. How often an unobserved world delivers is
   this area's question, asked through the observation door's projection
   request and not by the renderer.
@@ -2521,6 +2571,16 @@ Owner: delivery lane · high · Next: the production deploy's catalog listing,
 which a push to `main` needs; then the silo's cold activation, CI's steady
 state, the shader cache and the GC-hole retirement.
 
+- [medium] A world whose checkpoint saved a running machine's image cannot
+  activate when the new host cannot prepare that machine
+  (`CheckpointRestore.Validate` refuses the whole restore by name). That
+  keeps a saved image from being dropped silently, but at scale one machine's
+  missing content makes the whole world unrecoverable until a later deploy.
+  Bring the world up with that machine refused and keep its saved row in the
+  next checkpoint, so a later deploy that can prepare it restores the image.
+  The opposite direction (a refused row on a machine that now prepares) was
+  fixed to boot it from power-on.
+
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -3057,8 +3117,11 @@ The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
 
-- [medium] The headless lift chapter still has isolated simulate spikes around
-  door swaps. A thread trace showed rigid surface probes and full replica frame
+- [high] The lift chapter's steps are the route's slowest frames: at 2560 by
+  1440 a dozen steps take 0.6 to 0.8 s each on both backends, and the
+  headless chapter still has isolated simulate spikes around
+  door swaps. The rendering plan's `frame` lane owns the fix
+  ([first wave](rendering-research.md#the-first-wave)). A thread trace showed rigid surface probes and full replica frame
   serialization (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`).
   The partial navigation bake now runs on a worker, and response swaps keep the
   attached door's sampled pose so its new collider does not wake remote rigid
@@ -3078,10 +3141,17 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] The overlay pass costs about 0.9 ms of GPU time on Direct3D 12
+- [medium] The overlay pass costs 2.4 to 2.8 ms of GPU time at 2560 by 1440
   (`world.gpu-timing`'s `main$overlay` with the benchmark panel up), more
-  than the world's composite and resolve passes; attribute it (the panel's
-  two 60-bar plots against the rest of the overlay) and cut it at the cause.
+  than the world's composite pass; attribute it (the panel's
+  two 60-bar plots against the rest of the overlay) and cut it at the cause
+  ([rendering research decision 15](rendering-research.md#15-present-frames-the-display-has-room-for-and-know-when-they-showed)).
+- [high] The route cannot be played against a remote authority: its driver
+  reads the seat's body, places and navigation from the server of the
+  seat's world (`WorldSeatDriver`), which a remote world does not have on
+  the client. The rendering plan's `bench` lane rebuilds it on what the
+  seat's client was delivered
+  ([its decision 1](rendering-research.md#1-measure-beside-the-work)).
 - [medium] A fresh run's first chapter opens on the boot's settling, not on
   its pose: on a headless World armed `at 10` after a `--paused` boot, the
   chapter's first two iterations (ticks 10 and 11) still simulate for

@@ -48,7 +48,11 @@ A checkpoint restore applies completely or changes nothing. `CheckpointRestore`
 is the only plan `RestoreCheckpoint` applies, and only its `Validate` builds one:
 every row's name, engine and kind against the live lease, every running row's
 image through the runtime's `TryValidateCheckpoint`, and every slot and link are
-checked before anything moves.
+checked before anything moves. A `Refused` row may land on a running lease that
+has neither stepped nor queued a step: the machine keeps its power-on image, so
+a hosted world checkpointed while its content was missing recovers once the
+content is present. A running row never lands on a refused lease, so its image
+is never discarded; that restore is refused by name.
 
 `IMachineRuntime` requires execution status, exact-tick advancement, and disposal.
 Video, audio, normalized input ports, and removable content are optional capabilities.

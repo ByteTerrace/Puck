@@ -18,7 +18,7 @@ runs:
           bin=$destination/bin
         fi
         mkdir -p "$destination"
-        curl --fail --silent --show-error --location --output "$destination/$asset" "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/$asset"
+        curl --fail --silent --show-error --location --retry 6 --retry-all-errors --retry-delay 10 --output "$destination/$asset" "https://github.com/microsoft/DirectXShaderCompiler/releases/download/$version/$asset"
         echo "$expected  $destination/$asset" | sha256sum --check --quiet
         if [[ "$asset" == *.zip ]]; then 7z x -y -o"$destination" "$destination/$asset" > /dev/null; else tar -xzf "$destination/$asset" -C "$destination" --strip-components=1; fi
         "$bin/dxc" --version
