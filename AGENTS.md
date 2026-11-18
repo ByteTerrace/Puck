@@ -297,13 +297,15 @@ agent works in that mode by default, without asking:
     reach for clumsy forms.
   - Upper hardware enhances; the baseline is cross-platform (the owner's
     ruling). The frame bar (60 FPS on the RTX 2060 and RTX 4070, 45 on the
-    Steam Deck, at the highest quality) is set and met by a path every bar
-    device runs. A technique only stronger hardware has (work graphs on the
-    4070, for example) is allowed as an enhancement there, never as what the
-    baseline depends on. Such a path is a second implementation, so it earns
-    its place: it reads the same data, gives the same result within the
-    still tolerance, is measured to pay on that hardware, and falls back to
-    the baseline path automatically. The bar is read at 2560 by 1440 on the
+    Steam Deck, at the highest quality) is met on each device by the path its
+    quality table enables, and a capability that table enables counts toward
+    that device's bar. Every device keeps a working path of its own, so a
+    technique only some hardware has (work graphs on the 4070, hardware ray
+    queries, mesh shaders) is enabled where it pays and the others run their
+    own path. Such a path is a second implementation, so it earns its place:
+    it reads the same data, gives the same result within the still
+    tolerance, is measured to pay on that hardware, and falls back
+    automatically where the capability is missing. The bar is read at 2560 by 1440 on the
     RTX 4070, 1920 by 1080 on the RTX 2060, and the Steam Deck's own panel
     in its native configuration (the owner's ruling), and
     in both topologies: the authority in the same process, and a remote
