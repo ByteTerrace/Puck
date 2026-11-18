@@ -666,6 +666,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   Workflow tool whenever a multi-agent orchestration pays for itself (a wave, a
   fan-out of independent reviews or research, a pipeline of write then verify),
   without asking first; the agent-count guidance in the tool still applies.
+  A workflow agent does not take its agent type's `isolation`: an `agentType:
+  'principal'` writer without `isolation: 'worktree'` in its `agent()` options
+  edits the lead's main checkout, and once switched branches there to commit.
+  Every writing agent in a workflow passes `isolation: 'worktree'`, and its
+  prompt asks for the full deliverable in its return value.
 - **A wave** fans many small fixes out as several writers and one integrator: a
   scout pass inventories, the lead triages into file-disjoint batches (each
   names its items, the files it may touch, and which batch alone owns the
