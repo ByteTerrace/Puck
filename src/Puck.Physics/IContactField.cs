@@ -169,6 +169,27 @@ public readonly record struct ContactResolution(bool Grounded, FixedVector3 Obst
     /// <summary>The actual walkable analytic solve, retained for diagnostics only; absent for providers that do not publish it.</summary>
     public ContactSupportWitness? Support { get; init; }
 }
+
+/// <summary>Probes whether a contact field clears a pose or a segment without moving a live body.</summary>
+public static class FixedContactProbe {
+    /// <summary>Returns whether the field resolves the requested position without a correction, refusal or uncertainty.
+    /// Equal endpoints check occupancy. Distinct endpoints check the swept segment.</summary>
+    /// <param name="field">The contact field to query.</param>
+    /// <param name="start">The initial foot point.</param>
+    /// <param name="end">The requested foot point.</param>
+    /// <param name="orientation">The probe body's orientation.</param>
+    /// <param name="up">The probe body's up axis.</param>
+    /// <param name="volumes">The probe body's local volumes.</param>
+    public static bool IsClear(IContactField field, in FixedVector3 start, in FixedVector3 end, in FixedQuaternion orientation, in FixedVector3 up, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
+        var resolved = end;
+        var velocity = FixedVector3.Zero;
+        var contact = ((start == end)
+            ? field.Resolve(orientation: in orientation, position: ref resolved, up: in up, velocity: ref velocity, volumes: volumes)
+            : field.ResolveSweep(orientation: in orientation, position: ref resolved, previousPosition: in start, up: in up, velocity: ref velocity, volumes: volumes));
+
+        return ((resolved == end) && !contact.Unproved && (contact.Refusal == ContactRefusal.None));
+    }
+}
 /// <summary>The input and outcome of the last walkable analytic push. Read-back only; never part of simulation decisions.</summary>
 /// <param name="Collider">The effective collider used by the solve.</param>
 /// <param name="Volume">The body's volume used by the solve.</param>

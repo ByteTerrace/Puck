@@ -5,24 +5,26 @@ using Puck.World.Authoring;
 namespace Puck.World.Server;
 
 public sealed partial class WorldColliderSet {
-    // A rebuild changes the compiled inventory, not the latest contact sample of every unchanged moving root.
+    // Carry the sampled pose and size when their source is unchanged, then rebuild the collider at that pose even
+    // if the shown creation changed. A response swap can bound both door shapes without losing its carrier sample.
     internal void CarrySamplesFrom(WorldColliderSet? previous) {
         if ((previous is null) || ReferenceEquals(objA: previous, objB: this)) { return; }
         var rows = new WorldAttachedSolidCheckpoint[m_attachedRows.Count];
-        var lookup = previous.m_attachedRows.Select(selector: (moving, row) => (moving, row)).GroupBy(keySelector: pair =>
-            (pair.moving.Placement.Id, pair.moving.Creation.Hash, pair.moving.Origin, pair.moving.Rotation, pair.moving.ReflectionNormal,
-                pair.moving.Placement.Scale, pair.moving.Placement.Solid!.Margin, pair.moving.Placement.Attach)).ToDictionary(group => group.Key, group => group.First().row);
+        var lookup = previous.m_attachedRows.Select(selector: (moving, row) => (moving, row))
+            .GroupBy(keySelector: pair => SampleSource(moving: pair.moving)).ToDictionary(group => group.Key, group => group.First().row);
 
         for (var row = 0; (row < rows.Length); row++) {
             var moving = m_attachedRows[row];
 
-            rows[row] = (!lookup.TryGetValue(key: (moving.Placement.Id, moving.Creation.Hash, moving.Origin, moving.Rotation, moving.ReflectionNormal,
-                moving.Placement.Scale, moving.Placement.Solid!.Margin, moving.Placement.Attach), value: out var old)
+            rows[row] = (!lookup.TryGetValue(key: SampleSource(moving: moving), value: out var old)
                 ? new(false, default, FixedQuaternion.Identity, FixedQ4816.Zero) :
                 new(previous.m_attachedResolved[old], previous.m_attachedOrigins[old], previous.m_attachedRotations[old], previous.m_attachedScales[old]));
         }
         RestoreAttached(rows: rows);
     }
+
+    private static (string Id, FixedVector3 Origin, FixedQuaternion Rotation, FixedVector3? Reflection, WorldPlacementAttach? Attachment, StateBinding? Size)
+        SampleSource(MovingSolidRow moving) => (moving.Placement.Id, moving.Origin, moving.Rotation, moving.ReflectionNormal, moving.Placement.Attach, moving.SizeBinding);
 
     /// <summary>Captures the sampled carrier transforms, which may precede their current post-rule poses.</summary>
     public WorldAttachedSolidCheckpoint[] CaptureAttached() => Enumerable.Range(0, m_attachedRows.Count)

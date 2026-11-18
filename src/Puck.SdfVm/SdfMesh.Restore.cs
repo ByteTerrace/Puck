@@ -280,9 +280,10 @@ public sealed partial record SdfMesh {
 
                     if (expected != length) { return false; }
                 }
+                // Once any resize can run, the codec's Abandon must be able to free the partially refilled planes.
+                m_shape = shape;
                 foreach (var (_, block, length, _) in normals) { block.Resize(clear: false, length: length, preserve: false); }
                 foreach (var (_, _, block, length, _) in levels) { block.Resize(clear: false, length: length, preserve: false); }
-                m_shape = shape;
 
                 return true;
             }

@@ -908,6 +908,16 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
+- [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
+  axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
+  adding the final endpoint wraps. Check dimensions and their product before
+  forming array indices, and let the bake coarsen or partition a box that
+  exceeds the sample budget.
+- [medium] `SdfMeshGeometryBuilder.RelativePose` gives another slot at
+  +3,000,000 m and +4,000,000 m the same key and bakes both at −2,097,152 m.
+  Its rounded component shares an out-of-range sentinel with the stored
+  coordinate. Carry the supported large offsets through the rounded pose,
+  the key and the uploaded rows, with absence represented independently.
 - [high] `puck mesh audit --cpu` still differs from the device wherever a
   lattice's gradient taps lie closer than the fixed-point evaluator resolves
   (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a
@@ -3002,13 +3012,14 @@ The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
 
-- [medium] The lift chapters' hitch lists hold iterations of 250 to 315 ms of
-  simulate time in `place-lift` while the car runs, headless. The likely cause,
-  inferred from the code path and not yet traced, is each door's response swap:
-  its colliders differ, so `WorldPopulation.InstallResponseSolids` compiles the
-  contact field and the navigation runtime again on the tick
-  (`CompileSolidConsumers`). Trace one swap and make it cost what the door
-  changed.
+- [medium] The headless lift chapter still has isolated simulate spikes around
+  door swaps. A thread trace showed rigid surface probes and full replica frame
+  serialization (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`).
+  The partial navigation bake now runs on a worker, and response swaps keep the
+  attached door's sampled pose so its new collider does not wake remote rigid
+  bodies. Profile the remaining spikes with `puck benchmark --headless --route
+  debug --chapter "the lift"` and make the remaining contact install and recipient
+  delivery cost follow the changed rows.
 - [low] A route chapter's control-line refusals are counted when the chapter
   ends (`WorldSeatDriver.Refused`), so a line still settling then is not
   counted; count each line's verdict as it arrives.
