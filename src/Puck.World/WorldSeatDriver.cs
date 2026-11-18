@@ -374,7 +374,7 @@ internal sealed class WorldSeatDriver {
                     return still with { Faces = true, Facing = FixedQ4816.FromDegrees(degrees: face) };
                 }
                 if (rest.LookAt is { } look) {
-                    return still with { Faces = true, Facing = Heading(dx: (FixedQ4816.FromDouble(value: look.X) - read.Position.X), dz: (FixedQ4816.FromDouble(value: look.Z) - read.Position.Z)) };
+                    return still with { Faces = true, Facing = Heading(dx: (Point(look).X - read.Position.X), dz: (Point(look).Z - read.Position.Z)) };
                 }
                 return still;
             }
@@ -733,7 +733,7 @@ internal sealed class WorldSeatDriver {
     private static string NeutralOf(WorldSeatProgramOp operation) => ((operation is WorldSeatProgramOp.Move or WorldSeatProgramOp.Turn) ? "0 0" : "release");
 
     // The yaw that faces a planar direction: facing is (-sin yaw, -cos yaw) in X and Z.
-    private static FixedQ4816 Heading(FixedQ4816 dx, FixedQ4816 dz) => FixedQ4816.Atan2(x: -dz, y: -dx);
+    private static FixedQ4816 Heading(FixedQ4816 dx, FixedQ4816 dz) => new FixedVector3(X: dx, Y: FixedQ4816.Zero, Z: dz).Yaw();
 
     private static FixedQ4816 Planar(in FixedVector3 from, in FixedVector3 to) {
         var dx = (to.X - from.X);
@@ -757,7 +757,7 @@ internal sealed class WorldSeatDriver {
         return Planar(from: point, to: new FixedVector3(X: (from.X + (ax * t)), Y: point.Y, Z: (from.Z + (az * t))));
     }
 
-    private static FixedVector3 Point(Puck.Assets.Documents.DocumentVector3 point) => new(X: FixedQ4816.FromDouble(value: point.X), Y: FixedQ4816.FromDouble(value: point.Y), Z: FixedQ4816.FromDouble(value: point.Z));
+    private static FixedVector3 Point(Puck.Assets.Documents.DocumentVector3 point) => FixedVector3.FromVector3(value: point.Value);
 
     private static string Number(double value) => value.ToString(format: "0.####", provider: CultureInfo.InvariantCulture);
 
