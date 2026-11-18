@@ -2081,6 +2081,8 @@ local row and key identities, copies vector payloads, and retains an unavailable
 fault for its lifetime. Missing and withheld row acquisitions throw the same
 failure. `StateReader.ReduceRaw` and `DomainOrdinals` use these operations for
 authority and restricted access alike.
+Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
+and disclosure images.
 
 The first consumer is `world.state.cell.set`: `TryAcquireWriteDeclaration`
 checks the existing conservative write footprint before the parser asks for
@@ -2109,13 +2111,17 @@ acquisition wall or as permission to start D0b2–D0b4.
 
 The checkpoint passed Release builds of `Puck.State.Tests`,
 `Puck.World.Server.Tests` and `Puck.Cli`, each with zero warnings and errors.
-Seven `StateReadAccessLawTests` cases passed. Eleven filtered server cases
-passed: the three missing/withheld parser pairs, operator acquisition and
-revocation, and seven existing diagnostic-audience cases. The parser fixture
+Fifty focused state cases passed, including seven `StateReadAccessLawTests`
+cases and the existing cell-value and pool-read controls. Eighteen filtered
+server cases passed: the three missing/withheld parser pairs, operator
+acquisition and revocation, and existing diagnostic, hash and vector-disclosure
+controls. The parser fixture
 observes the simulation command's settled result, not its enqueue
 acknowledgement. A headless debug World completed `world.state.hash`,
 `world.state.hash authoritative` and `world.state.hash components`, then
-stopped with exit code zero. Documentation links passed. These checks cover
+stopped with exit code zero, including a recheck after merging the integration
+tip. The subsequent shared-copy refactor was checked by the focused laws.
+Documentation links passed. These checks cover
 the checkpoint's stated invariants; the complete D0a witness packet and
 D0b1's build-negative/public-surface fixtures remain open.
 

@@ -139,6 +139,5 @@ public sealed class StateReadAccess {
         source = default;
         return m_keys.TryGetName(key, out var name) && m_arena.Keys.TryResolve(name, out source);
     }
-    private CellValue Detach(CellValue value) => m_keys is not null && value.Kind == CellKind.Vector
-        ? CellValue.Vector(value.AsVector.ToArray()) : value;
+    private CellValue Detach(CellValue value) => m_keys is null ? value : value.DetachedCopy();
 }
