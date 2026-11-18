@@ -40,6 +40,14 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
   its whole process, so every library a World loads runs without it, while
   `puck bench` runs in the CLI with it: confirm a PGO-dependent win in the
   World's own disassembly.
+- **Most of what .NET 11 adds is static proof, which the World keeps.** Its JIT
+  changes are largely range analysis (bounds and overflow checks), exact-type
+  devirtualization (generic virtual methods included), escape analysis with no
+  profile guard, and generic specialization over structs. None of these needs
+  a profile, so they apply in the World. The sibling references mark each
+  .NET 11 entry as static or as riding PGO, and cite
+  [Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/)
+  by section and pull request.
 - **Idiomatic C# is the fast path.** The JIT flattens abstraction for you (devirtualize → inline → escape-analyze → stack-allocate → range-analyze): interfaces, `foreach`, lambdas, `params` arrays, `^1`, guard-then-index, switch-on-length all compile to what hand-tuned code used to. Write for clarity; delete contortions.
 - **Inlining is the gateway; escape analysis is the payoff.** Delegates, temporary arrays, spans-over-arrays, enumerators, even `Stopwatch` instances get stack-allocated — but only if *every* use of the object inlines. One opaque virtual call (even a no-op `Dispose`) makes the whole object escape to the heap. Keep hot members small and whole.
 - **Safety checks pay only when unprovable.** Bounds checks, null checks, GC write barriers, array covariance checks and dead branches are deleted wherever the JIT proves them redundant (value ranges from bit math, dominating accesses, immutable lengths, `switch` constants, stack-guaranteed return buffers). Write natural validation; let the prover delete it.
@@ -63,6 +71,15 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **I/O/compression:** zlib-ng bump ~2.9x on compressible data; concatenated-gzip decompress ~3.2x; `ZipArchive` Update proportional to change; `BufferedStream.WriteByte` no longer flushes downstream (~4x over compression streams).
 - **Misc:** `Type.AssemblyQualifiedName` cached (>100x repeated); `Random.GetItems` non-pow2 alphabets ~2x (crypto RNG ~27x); OpenSSL digests ~20% (Linux); DATAS GC tuned — re-measure before keeping a .NET 9 opt-out.
 - **Native AOT:** preinit accepts idiomatic cctors (spans, cross-type statics); identical generic bodies fold; size-optimized LINQ regained high-value specializations.
+- **Added by .NET 11** (no timings here; the references cite the post's section for each):
+  - *Checks:* constant-index reads share one bounds check; a span sliced forward in a vector loop is check-free; indices from narrowing casts, bit counts and ORs are proven in range; `checked` arithmetic and narrowing casts lose provably redundant overflow checks. (jit-and-codegen.md)
+  - *Dispatch and allocation:* generic virtual methods devirtualize on a known receiver type; `Enum.Equals` on a generic enum is an integer compare; nullable boxes and constrained-call receivers stop escaping; a struct comparer on a span sort is no longer boxed; delegates are 8 bytes smaller. (jit-and-codegen.md, collections-and-linq.md)
+  - *Stores:* exact-type array stores skip the covariance check; mixed struct copies to the heap use vector stores; neighbouring field stores merge. (jit-and-codegen.md)
+  - *GC:* old `ConditionalWeakTable` entries are skipped by young collections. (data-and-memory.md)
+  - *Numerics:* `BigInteger` is largely rewritten on pointer-width limbs; scalar `Half` casts and the `Dot` methods lower to cheaper instructions. (numerics-simd-threading.md)
+  - *I/O, JSON, text:* a child's redirected output is overlapped I/O on Windows; `Utf8JsonReader` skips whitespace runs in vector steps; ASCII casing is fast under invariant globalization; compiled regexes gain a cleanup pass. (io-network-json-crypto.md, strings-text-search.md)
+  - *Startup and waits:* ReadyToRun precompiles default comparers; `Monitor.Wait`/`Pulse` drop a table lookup. (runtime-aot-reflection-diagnostics.md, numerics-simd-threading.md)
+  - These move Puck's own readings across the SDK change; [measured changes](measured-changes.md#a-runtime-move-shifts-the-baseline) lists which reading each one moves.
 
 ## Pattern changes (write code differently now)
 
@@ -78,10 +95,18 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 **Checks & control flow**
 - Write guards in logical order and index at proven lengths — assertion merging is order-independent; `x[0]`/`x[^1]` is single-check; access-then-`Slice` doesn't double-validate. (references/jit-and-codegen.md)
-- Use `(uint)index < (uint)length` to merge sign+bounds checks; shape ring-buffer wraparound so the compare doubles as the bounds proof (compare+subtract, never `%`). (references/collections-and-linq.md)
+- Use `(uint)index < (uint)length` to merge sign+bounds checks; shape ring-buffer wraparound so the compare doubles as the bounds proof (compare+subtract, never `%`). On .NET 11 the same guard also proves `index - 1` under `index != 0`, and a lookahead guard written `(uint)(i + k) < (uint)span.Length` clears `span[i + 1]` through `span[i + k]`. (references/collections-and-linq.md, references/jit-and-codegen.md)
+- Read constant indices in natural order and return the expression directly: reads in one block share a single check on .NET 11. Keep `checked` on bounded arithmetic; it is free where a guard makes it redundant. (references/jit-and-codegen.md)
+- Write a vector loop over a span as `while (data.Length >= Count) { ...Vector128.Create(data)...; data = data.Slice(Count); }` with a `foreach` tail, not as a `LoadUnsafe`/`Unsafe.Add` walk. Keep an unsafe walk only where disassembly and a measurement show it still wins. (references/jit-and-codegen.md)
 - Use `c is 'a' or 'b' or ...` pattern matching for small char/enum set membership — compiles to a single bit test (~3.5x). (references/jit-and-codegen.md)
 - Keep `lock`/`using`/try-finally inside small helpers — try/finally no longer blocks inlining (try/catch still does). (references/jit-and-codegen.md)
 - Never gate async read loops on `StreamReader.EndOfStream` — it can block synchronously; use `while (await reader.ReadLineAsync() is string line)` (CA2024). (references/io-network-json-crypto.md)
+
+**Async, waits & low-lock**
+- Write async code for how it reads: helpers where they clarify, `Task` or `ValueTask` chosen by the API. Runtime async (`<Features>$(Features);runtime-async=on</Features>`, opt-in per project, not set in Puck) removes the intermediate task and the per-frame exception rethrow from a chain of directly awaited methods; judge an opt-in by allocated bytes. (references/runtime-aot-reflection-diagnostics.md)
+- Time out a task with `task.WaitAsync(timeout[, timeProvider])`, never `Task.WhenAny(task, Task.Delay(timeout))` with the delay left running (CA2027). (references/numerics-simd-threading.md)
+- Mark a field `volatile` only when no lock or `Interlocked` operation already orders its reads; a redundant one blocks JIT optimization on x64. (references/numerics-simd-threading.md)
+- Drain a child process's output with async reads; they are overlapped I/O on Windows and hold no thread. (references/io-network-json-crypto.md)
 
 **Searching & spans**
 - Funnel every multi-value char/byte/substring scan through a cached `static readonly SearchValues<T>` — the strategy repertoire grows each release. (references/strings-text-search.md)
@@ -89,10 +114,13 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - In unconstrained-generic code, call the new `MemoryExtensions` comparer-accepting overloads instead of manual scan loops — null/default comparer stays vectorized (LINQ's `Enumerable.Contains` gained ~3.2x this way). (references/strings-text-search.md)
 - Tokenize with span `MemoryExtensions.Split` (yields `Range`s), not `string.Split`. (references/strings-text-search.md)
 - In encoders/decoders: scan first (SearchValues), allocate only if a change is needed; return the input when it's a no-op. (references/strings-text-search.md)
+- Find or skip whitespace with `IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace` and their siblings; validate a fixed-length hex string with a length test and `ContainsAnyExcept` over a cached set. (references/strings-text-search.md)
 
 **Collections**
 - Use `FrozenDictionary`/`FrozenSet` for long-lived read-mostly maps with enum or small-integral keys — dense keys become a flat array lookup (~0.9 ns). (references/collections-and-linq.md)
-- Hoist `GetAlternateLookup` acquisition out of loops; general API rule: expose generic virtual methods as get-a-worker-delegate factories, never on the per-call path. (references/collections-and-linq.md)
+- Hoist `GetAlternateLookup` acquisition out of loops; general API rule: expose generic virtual methods as get-a-worker-delegate factories, never on the per-call path. The rule is for a call through an interface or base reference; where the call site knows the receiver's exact type, .NET 11 makes the call direct. (references/collections-and-linq.md, references/jit-and-codegen.md)
+- Sort a span, or `CollectionsMarshal.AsSpan(list)`, with a small `readonly struct` comparer: on .NET 11 it allocates nothing and `Compare` inlines, where a `Comparison<T>` lambda costs a delegate call per comparison. (references/collections-and-linq.md)
+- Key a hot `Dictionary` by a value type with the default comparer where the default hash spreads well enough: a custom comparer takes the general path with an interface call per probe. (references/collections-and-linq.md)
 - Pass `capacity` to `ConcurrentDictionary` you `Clear()` and refill — the hint now survives Clear. (references/collections-and-linq.md)
 - Kill double lookups: `OrderedDictionary.TryAdd/TryGetValue(..., out int index)` + `SetAt`; `JsonObject.TryAdd` instead of `ContainsKey`+`Add`. (references/collections-and-linq.md, references/io-network-json-crypto.md)
 - Fill numeric series with `AddRange(Enumerable.Sequence<T>(...))` (~40x vs manual `Add` loop); sample with `Shuffle().Take(n)` (reservoir sampling); use `LeftJoin`/`RightJoin` instead of the GroupJoin/SelectMany/DefaultIfEmpty idiom (~2x). (references/collections-and-linq.md)
@@ -113,6 +141,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 **Interop, reflection, I/O**
 - Replace hot-path private/cross-assembly reflection with `[UnsafeAccessor]` + `[UnsafeAccessorType]` (~3.6x vs cached `FieldInfo`, no boxing; the BCL uses it for its own layering cycles). (references/runtime-aot-reflection-diagnostics.md)
 - Use typed `GCHandle<T>`/`PinnedGCHandle<T>`/`WeakGCHandle<T>` (~18% cheaper, safer); allocate whole-life-pinned native-only buffers with `NativeMemory` instead of pinning managed arrays (stops heap fragmentation). (references/runtime-aot-reflection-diagnostics.md)
+- Compress or decompress an in-memory payload with the one-shot `ZLibEncoder.TryCompress`/`ZLibDecoder.TryDecompress` (and the Deflate and GZip pairs), not a stream over a `MemoryStream`. (references/io-network-json-crypto.md)
 - Wrap compression streams around the final destination — no intermediate `MemoryStream` buffer-then-copy. Construct the final delegate type directly — each wrapper layer costs a call (~18% on DI factories). (references/runtime-aot-reflection-diagnostics.md)
 - Serialize headers/records with span-based `BinaryPrimitives`, not `BinaryReader`/`BinaryWriter` (the BCL is deleting them from its own hot paths). (references/io-network-json-crypto.md)
 - Use copy-on-write immutable arrays for read-hot/write-rare listener lists (the `ActivitySource` fix). (references/runtime-aot-reflection-diagnostics.md)
@@ -155,6 +184,13 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 | `Convert` UTF-8 hex overloads | Hex ⇄ UTF-8 bytes directly | Skip transcoding through `string`/`char` |
 | `DefaultInterpolatedStringHandler.Text` | Read formatted text as `ReadOnlySpan<char>` | Custom handlers; avoid the terminal `string` alloc |
 | `<UseSizeOptimizedLinq>false</UseSizeOptimizedLinq>` | Full speed-optimized LINQ on Native AOT | AOT apps where LINQ throughput beats binary size |
+| `<Features>$(Features);runtime-async=on</Features>` (.NET 11) | The JIT lowers `async` methods; directly awaited chains skip intermediate tasks | Opt-in per project, judged by allocated bytes before and after |
+| `ZLibEncoder`/`ZLibDecoder`, `DeflateEncoder`/`DeflateDecoder`, `GZipEncoder`/`GZipDecoder` (.NET 11) | Span-to-span `TryCompress`/`TryDecompress` and chunked `Compress`/`Decompress`/`Flush` | In-memory payloads; caller-owned or pooled buffers |
+| `ContainsAnyWhiteSpace`, `IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace` and the `LastIndexOf` pair (.NET 11) | Span searches over exactly the `char.IsWhiteSpace` set | Tokenizers and validators; replaces `char.IsWhiteSpace` loops |
+| `Task.WaitAsync(timeout[, timeProvider])` | A timed wait that cleans up its timer | Every task timeout; CA2027 flags the `WhenAny` + `Task.Delay` shape |
+| `Vector128/256/512` `Zip*`, `Unzip*`, `Reverse`, `Concat*`, `Create*Sequence` (.NET 11) | Portable interleave, de-interleave, reversal, half concatenation and lane sequences | Before any per-ISA permute |
+| `Avx512Bmm`, `AvxVnni.V512` (.NET 11) | Bit matrix multiply; 512-bit VNNI multiply-accumulate | GF(2) linear maps and CRC; small-integer dot products |
+| `BigInteger` and `Complex` UTF-8 parse and format (.NET 11) | Parse and format bytes directly | Byte-oriented pipelines |
 
 ## Folklore to delete
 
@@ -162,8 +198,14 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **Custom `ValueStopwatch` structs / `GetTimestamp` bookkeeping for zero-alloc timing.** `Stopwatch.StartNew()` is alloc-free via escape analysis.
 - **"Avoid lambdas/`Func<>` — a delegate always allocates."** Non-escaping delegates whose consumer inlines are elided. (Captured-state display classes still allocate.)
 - **"Never pass temporary `new T[]{...}` / `params` arrays in hot code."** Array stack allocation via escape analysis; spans remain the guarantee, not the only remedy.
-- **Unsafe code (`Unsafe.Add`, pointers) to skip bounds checks on masked/shifted table indices.** Range analysis proves them; the BCL deleted its own unsafe versions and got faster.
-- **Writing the highest array index first so one bounds check dominates.** Sequence cloning builds the guarded fast path from natural-order writes.
+- **Unsafe code (`Unsafe.Add`, pointers) to skip bounds checks on masked/shifted table indices.** Range analysis proves them; the BCL deleted its own unsafe versions and got faster. .NET 11 adds indices from narrowing casts, bit counts and ORs of bounded values.
+- **A `LoadUnsafe`/`Unsafe.Add` walk so a vector loop over a span pays no bounds checks.** The safe slicing loop is check-free on .NET 11, and the runtime's own `Enumerable.Sum` got faster by adopting it. Rewrite, compare disassembly, and keep the unsafe form only where it still measures faster.
+- **Touching the highest array index first, or testing `Length` early, so one bounds check dominates.** Sequence cloning builds the guarded fast path from natural-order writes, and on .NET 11 constant-index reads in one block coalesce into one check.
+- **Flattening async helpers or dropping an `await` to avoid state machines and intermediate tasks.** Runtime async removes those costs for directly awaited chains; the post asks that source not be contorted for them.
+- **`Task.WhenAny(task, Task.Delay(timeout))` as a timeout.** It leaves the timer alive after the task wins; `WaitAsync` does not (CA2027).
+- **A stream wrapped around a `MemoryStream` to zlib an in-memory payload.** The .NET 11 encoder and decoder types work span to span.
+- **Hand-written `(uint)(x - a) <= b` range tests, packed neighbouring field writes, and `Unsafe.As` enum comparisons.** The JIT produces each from the readable spelling on .NET 11.
+- **`volatile` on every shared field "to be safe".** Redundant where a lock or `Interlocked` orders the access, and it blocks JIT optimization.
 - **Reordering `&&` guards / hand-hoisting `Length` to appease the bounds-check eliminator.** Assertion merging is order-independent; `x[0]`/`x[^1]` is single-check.
 - **"Spans don't get loop cloning — use `T[]` in the hottest loops."** Span loops clone like array loops now.
 - **"Methods with `lock`/`using`/try-finally can't inline — flatten them."** try/finally no longer blocks inlining; provably-non-throwing try/catch is deleted outright.

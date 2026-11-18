@@ -17,9 +17,15 @@
 6. [Tensors and C# 14 compound operators](#6-tensors-and-c-14-compound-operators)
 7. [Thread pool: sync-over-async starvation absorbed](#7-thread-pool-sync-over-async-starvation-absorbed)
 8. [Channels](#8-channels)
-9. [Task combinators (WhenAll)](#9-task-combinators-whenall)
-10. [Low-lock code: Volatile half fences](#10-low-lock-code-volatile-half-fences)
+9. [Task combinators (WhenAll) and timeouts](#9-task-combinators-whenall-and-timeouts)
+10. [Low-lock code: Volatile half fences and the volatile modifier](#10-low-lock-code-volatile-half-fences-and-the-volatile-modifier)
 11. [Folklore to delete](#folklore-to-delete)
+
+Entries headed ".NET 11" come from
+[Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/)
+and name the post's section and pull request. They carry no timings; read a
+magnitude in the post and judge a change in Puck by its own disassembly and
+counts ([how to read an entry](jit-and-codegen.md)).
 
 ---
 
@@ -83,6 +89,11 @@ The unifying mechanism: when the hardware lacks an instruction, .NET 11 routes l
 - **What changed:** dotnet/runtime#114410/#114597/#111595: unsigned int→float conversions use `vcvtusi2ss`-family instructions on AVX512, and skip the intermediate `double` hop elsewhere.
 - **Guidance:** Plain casts between `uint`/`ulong` and `float`/`double` are efficient as written — delete the "widen to long/double first" bit tricks. FREE.
 
+### .NET 11: a scalar Half cast is one instruction
+
+- **What changed:** scalar conversions between `Half` and `float` use F16C's `vcvtps2ph` and `vcvtph2ps` when AVX2 is enabled (post: Intrinsics; dotnet/runtime#127094). FREE, static.
+- **In Puck:** the bake and the capture feed pack with `(Half)` casts one value at a time (`VectorFunctions.PackHalf2x16` and the probe-depth, influence and capture paths). They need no change, and a hand-rolled binary16 bit conversion has no reason to exist. The cast rounds to nearest even by contract, so the packed bits should not move across the SDK change; that is not verified here.
+
 ---
 
 ## 3. Writing manual SIMD code
@@ -102,13 +113,24 @@ Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128
 - Broad batch of AVX512 improvements: EVEX embedded broadcasts in more places, better `Vector.Max/Min` codegen, better containment for widening intrinsics, better `Dot` acceleration, better k-mask register handling, `ExtractMostSignificantBits` for `short`/`ushort`/`char` via EVEX masks (feeds core-library `IndexOf` and friends), improved `ConditionalSelect`.
 - **Guidance:** Cross-platform `Vector128/256/512` code gets better AVX512 codegen for free — prefer the portable vector APIs over hand-rolled per-ISA intrinsics unless profiling proves otherwise. FREE on AVX512 hardware.
 
+### .NET 11: portable lane APIs, dot products and bitcast structs
+
+All from the post's Intrinsics section; the [JIT reference](jit-and-codegen.md#9-new-instruction-set-support) lists the same items with their codegen.
+
+- **Lane construction and permutes** (dotnet/runtime#129627): `CreateAlternatingSequence`, `CreateGeometricSequence`, `CreateHarmonicSequence`, the `ConcatLowerLower` family, `Zip`/`ZipLower`/`ZipUpper`, `Unzip`/`UnzipEven`/`UnzipOdd` and `Reverse` on `Vector128/256/512`. Before writing a per-ISA shuffle for an interleave, a half concatenation or a reversal, use these. A byte table lookup inside a lane (the `Shuffle` calls in `VectorLanes`) is a different operation and stays per-ISA.
+- **Dot products** (dotnet/runtime#125666): `Vector128.Dot`, `Plane.Dot` and `Quaternion.Dot` no longer use the dedicated dot-product instruction. Call the BCL `Dot`; do not hand-write `Sse41.DotProduct` or lane arithmetic. Puck's simulation dot products are fixed-point, so this reaches presentation and bake float only.
+- **A struct reinterpreted as a vector** (dotnet/runtime#129563): a named-field struct turned into `Vector128<T>` with `Unsafe.BitCast` stays in a vector register instead of being split into its fields. A presentation vector type with named fields over SIMD storage is cheap to write that way.
+- **`Vector256.Sum` and `Vector512.Sum`** reduce at full width (dotnet/runtime#127329), which the drain in `SignedByteVectorFunctions` gets with no change.
+
 ### New ISA surface (expert intrinsic code only)
 
 - **GFNI** (dotnet/runtime#109537): hardware GF(2^8) instructions. Implementing Reed-Solomon, erasure coding, AES-adjacent transforms? Check the GFNI intrinsic classes before table-based implementations. New API; GFNI hardware required.
 - **VPCLMULQDQ** (dotnet/runtime#109137): vectorized carry-less 64-bit multiply — the core primitive of CRC and GHASH/GCM. Custom CRC/GHASH kernels can now be vector-width. New API; hardware required.
 - **AVX10.2** (dotnet/runtime#111209 + follow-ups): FP min/max with proper NaN semantics and FP conversions as single instructions. FREE on AVX10.2 hardware; nothing to do.
-- **Arm SVE**: `BitwiseSelect`, `MaxPairwise`/`MinPairwise`, `VectorTableLookup` added, but SVE was still **experimental** in 10.0 — portable `Vector<T>`/`Vector128<T>` code stays the safe default on Arm.
-- **Intel APX**: JIT groundwork (32 GPRs, `ccmp`) — existing binaries speed up automatically when APX CPUs arrive. Nothing to do.
+- **AVX-512 Bit Matrix Multiply** (`Avx512Bmm`; .NET 11 post, Intrinsics; dotnet/runtime#124804): multiplies bit matrices with XOR or OR reduction. A candidate for GF(2) linear maps in the finite-field wing and for CRC, beside GFNI and VPCLMULQDQ. New API; hardware required.
+- **`AvxVnni.V512`** (.NET 11 post, Intrinsics; dotnet/runtime#128365): the VNNI multiply-accumulate at 512 bits. Its byte form multiplies unsigned bytes by signed bytes, so a signed-by-signed dot product such as `SignedByteVectorFunctions.Dot` cannot use it as is. New API; hardware required.
+- **Arm SVE**: `BitwiseSelect`, `MaxPairwise`/`MinPairwise`, `VectorTableLookup` added. Scalable `Vector<T>` stays **experimental** and off by default in .NET 11 (post: Intrinsics; dotnet/runtime#129852), so portable `Vector<T>`/`Vector128<T>` code stays the safe default on Arm.
+- **Intel APX**: support is complete in .NET 11 (post: Intrinsics; dotnet/runtime#127536), including the instruction forms that leave the flags untouched and `CTEST`/`CFCMOV`. Existing binaries use it automatically on APX hardware. Nothing to do.
 
 ---
 
@@ -128,6 +150,9 @@ Default position: don't. `TensorPrimitives` for buffer math, portable `Vector128
 
 - `TryWriteBytes` does a straight memory copy when the value is non-negative (no two's-complement adjustment needed): 200-digit positive value 27.814 ns → 5.743 ns (~4.8x) (dotnet/runtime#115445). FREE; fast path is non-negative values only.
 - `BigInteger.Parse` of exactly the `int.MinValue` string returns the cached singleton, allocation-free (dotnet/runtime#104666). Corner case; FREE.
+- **.NET 11 rewrites much of `BigInteger`** (post: Numerics; dotnet/runtime#125799, with #112876, #112178, #113005): limbs are pointer-width, so 64 bits on Puck's target; `ModPow` uses Montgomery multiplication and sliding-window exponentiation; large multiplies use Toom-Cook; shifts, division, parsing and decimal formatting all gain. FREE. `BigIntegerFunctions` reaches this through `BigInteger.ModPow` in its primality and square-root paths with no change. The guidance it supports: above the machine-word kernels, use `BigInteger`'s own operators and `ModPow` instead of hand-rolled arbitrary-width arithmetic.
+- **.NET 11 adds UTF-8 parsing and formatting** to `BigInteger` and `Complex` (post: Numerics; dotnet/runtime#117745): parse and format bytes directly, as for the other primitives.
+- **A `BigInteger` cast to `double` rounds to nearest even on .NET 11.** Values that fit in 64 bits take the hardware conversion (post: Numerics; dotnet/runtime#130721), and a probe on the 11.0.0 runtime found every wider case tried correctly rounded too. `BigIntegerFunctions.ToDouble`'s remark says the platform cast truncates; correcting it, and deciding what the method still adds, is filed in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
 
 ---
 
@@ -208,7 +233,13 @@ public sealed class C(int value)
 
 ---
 
-## 9. Task combinators (WhenAll)
+## 9. Task combinators (WhenAll) and timeouts
+
+### .NET 11: a timeout is `WaitAsync`, never `WhenAny` with an uncancelled `Task.Delay` (CA2027)
+
+- **What changed:** analyzer CA2027 flags `await Task.WhenAny(task, Task.Delay(timeout))` (post: Threading; dotnet/sdk#51452). When `task` finishes first, nothing cancels the delay, so its timer stays alive until the timeout elapses. On a busy path with a long timeout that is one live timer for every completed operation.
+- **Guidance:** wait with `task.WaitAsync(timeout)` or `task.WaitAsync(timeout, timeProvider)` and catch `TimeoutException`. The `TimeProvider` overload keeps an injected clock. Where the code needs to know which task won, cancel the delay's token afterwards, as `ChildProcess.DrainAfterExitAsync` does.
+- **In Puck:** the pinned SDK ships CA2027, but the build does not report it: the SDK's analysis-level files raise it to a warning only under `AnalysisMode` Minimum, Recommended or All, and Puck sets no `AnalysisMode`. The two uncancelled waits in `OperatorMcpFront` are in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
 
 ### Single-task input returns that task directly
 
@@ -230,7 +261,15 @@ Task combined = Task.WhenAll(tasks);
 
 ---
 
-## 10. Low-lock code: Volatile half fences
+## 10. Low-lock code: Volatile half fences and the volatile modifier
+
+### .NET 11: a redundant `volatile` still constrains the JIT
+
+- **What changed:** the runtime removed `volatile` from library fields whose ordering already comes from a lock, an `Interlocked` operation or one-time initialization (post: Threading; dotnet/runtime#125274). On x64, Puck's target, the modifier generally emits no extra instruction, but it stops the JIT from optimizing the access, for example hoisting a read out of a loop. On Arm it also emits fences.
+- **Guidance:** mark a field `volatile` only when it is read outside any lock or `Interlocked` operation that already orders it. A stop or disposed flag that one thread sets and another polls without a lock is such a field. On a hot loop, remove the modifier where something else provides the ordering. Puck's `volatile` fields have not been audited against this.
+- `Monitor.Wait` and `Monitor.Pulse` are cheaper on .NET 11 as well: the condition lives on the lock, which removes a `ConditionalWeakTable` lookup from each wait and pulse (post: Threading; dotnet/runtime#129083). Puck's machine queue and GPU fence waits stay on these host waits and gain with no change.
+
+### Volatile half fences
 
 - **What changed:** dotnet/runtime#107843 adds `Volatile.ReadBarrier()` (load-acquire, "downward fence") and `Volatile.WriteBarrier()` (store-release, "upward fence") — standalone half fences with no associated memory access.
 - **Mechanism:** ReadBarrier prevents accesses after it from reordering before it; WriteBarrier prevents accesses before it from moving after it — analogous to `lock` entry/exit semantics. Cheaper than a full `Thread.MemoryBarrier()`/`Interlocked` full fence when only one direction is needed, and more expressive than contorting code around `Volatile.Read/Write` on a specific field.
@@ -247,6 +286,10 @@ Task combined = Task.WhenAll(tasks);
 - **"Manual scalar loops are fine for simple elementwise ops like `x - 1`."** Dead. `TensorPrimitives.Decrement` is ~13x faster than the manual loop; simple loops over numeric buffers are exactly what the library out-optimizes.
 - **"Hand-write `Vector256` intrinsic code for buffer math."** Usually wasted effort now: the TensorPrimitives driver loop handles 128/256/512 dispatch, alignment, and remainders, and improves for free with hardware and each release.
 - **"RandomNumberGenerator is too slow for random strings/tokens in hot paths."** Dead. ~27x faster `GetItems` with arbitrary alphabet sizes; use `GetItems`/`GetString`/`GetHexString` instead of per-char loops.
+- **"`await Task.WhenAny(task, Task.Delay(timeout))` is the way to time out a task."** It leaves the delay's timer alive after the task wins. `task.WaitAsync(timeout)` cleans up; CA2027 names the shape.
+- **"Mark shared fields `volatile` to be safe."** Where a lock or `Interlocked` already orders the access, the modifier only blocks optimization.
+- **"Hand-roll binary16 packing"** and **"hand-write `Sse41.DotProduct`."** A scalar `(Half)` cast is one instruction with AVX2, and the BCL `Dot` methods choose the faster reduction.
+- **"Write the interleave or reversal with per-ISA shuffles."** `Zip`, `Unzip`, `Reverse` and the concatenation methods are portable on .NET 11.
 - **"Pre-check for a single task before calling Task.WhenAll."** Dead. `WhenAll` returns the lone task directly.
 - **"Materialize your `IEnumerable<Task>` to an array before WhenAll to avoid allocs."** Dead. The enumerable path no longer allocates a temporary buffer.
 - **"Channels leak memory if readers cancel a lot — recycle the channel / inject dummy writes."** Dead. Canceled waiters are unlinked at cancellation time.
