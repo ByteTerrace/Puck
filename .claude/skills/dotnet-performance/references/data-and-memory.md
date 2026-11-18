@@ -77,6 +77,19 @@ survivors and with old-to-young references, not with the garbage.
   ([`SdfMeshIrradiance.ProbeCache`](../../../../src/Puck.SdfVm/SdfMeshIrradiance.cs)).
   `HostLog` kept a ring of strings, so every line promoted; it now copies lines
   into one circular `char[]` ([`HostLog`](../../../../src/Puck.Hosting/HostLog.cs)).
+- **A weak side table keyed by long-lived objects is not a per-frame GC cost
+  on .NET 11.** `ConditionalWeakTable` is built on dependent handles, and
+  before .NET 11 every young collection scanned every such handle, however old
+  its key and value. Dependent handles now age with what they refer to, so a
+  young collection skips the old ones
+  ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/),
+  Write Barriers and Garbage Collection; dotnet/runtime#78746). Puck keeps many
+  such tables as caches keyed by compiled definitions and package fragments
+  (the pass extents in `SdfWorldPasses`, `TopologyCompilation`). A table that
+  takes a new young value every frame still promotes it, like any old
+  container. A gen0 pause compared across the SDK change includes this runtime
+  gain, so read it apart from the workload's
+  ([a runtime move](measured-changes.md#a-runtime-move-shifts-the-baseline)).
 - **A finalizable object survives its first collection.** The desktop capture
   feed made a finalizable WinRT projection a frame; those were the
   finalization-queue promotions in every gen0 until it read frames through the
@@ -326,6 +339,18 @@ writes per-worker state and merges once.
   node pair (`SdfMeshStore.TryReadEntry`, `SdfMeshIrradianceScene.Hierarchy`'s node allocation) and
   unmeasured; read IPC and misses with `AMDuProfPcm` on a pinned harness before
   padding anything.
+- **Once a measurement justifies padding, lay counters out as named fields
+  grouped by the operation that updates them.** Counters one operation updates
+  together stay together, as the four fields `SdfMeshStore.TryReadEntry` adds
+  to on each read are. Unrelated groups (one event's counters and another's) go
+  on separate lines, and the padding between them is memory spent on purpose. A
+  `long[]` of counters is the shape to avoid: its header and length share a
+  line with the first counters, and every access loads the length for a bounds
+  check. The runtime made exactly this change to `MemoryCache`'s counters
+  ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/),
+  Diagnostics; dotnet/runtime#131470). Per-slot interlocked state held in an
+  array (`PublishArena`, `LatestSlotPublication`) has the array shape and is
+  equally unmeasured.
 
 Sources: definition, detection by cache-miss counters and the per-thread fix
 ([TOUB-FS], [INTEL-OPT]).

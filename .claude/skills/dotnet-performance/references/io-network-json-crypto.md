@@ -33,6 +33,11 @@ while (await reader.ReadLineAsync() is string line) { ... }
 ```
 Equally redundant (though not thread-starving) in sync code. Treat any property that can do I/O with suspicion.
 
+### .NET 11: a redirected child's output is read with overlapped I/O on Windows — FREE
+Up to .NET 10 the parent's ends of a child process's stdout and stderr pipes were synchronous handles, so an async read of either one held a thread-pool thread blocked in a native read for as long as the pipe stayed open. .NET 11 opens the parent's ends for overlapped reads and leaves the child's ends synchronous, as console programs expect ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), I/O; dotnet/runtime#125643).
+- Drain a child's output with `ReadAsync` or `ReadToEndAsync`. Do not dedicate a thread to it or wrap a synchronous read in `Task.Run`.
+- In Puck every captured run and every long-lived World or companion process goes through `ChildProcess`, whose two pumps per child no longer hold two pool threads. `ExitDrainStream` reads the same pipe and assumes a `FileStream` over it with a 4096-byte buffer (it casts the pipe to `FileStream` for `PeekNamedPipe`). The pull request's page confirms that the parent's read end is now opened for overlapped I/O; it does not state the reader's buffer size, so whether the 4096-byte assumption still holds is not verified here. Whether cancelling a pending read reaches the operating system's read is not verified here.
+
 ### FileSystemWatcher: native buffer instead of pinned managed array — FREE
 The `byte[]` that `FileSystemWatcher` allocated-and-pinned for OS change records is now a native allocation (also fixes a Windows dispose-while-in-use leak). The buffer was only written by native code and read via spans — its "arrayness" was never used; a native buffer needs no pinning, eliminating a long-lived pinned object that fragmented the heap when many watchers existed. Allocation per watcher start: 8,944 B → 744 B; the bigger win is reduced GC fragmentation (Windows-specific).
 - Generalizable pattern: a buffer only ever touched through pointers/spans that would need whole-life pinning should be `NativeMemory`, not a pinned `byte[]`.
@@ -58,6 +63,13 @@ Header/metadata serialization no longer goes through `BinaryReader`/`BinaryWrite
 
 ### ZipArchive/ZipFile async APIs — new API
 Long-requested async overloads for loading, manipulating, and saving zips. In async contexts (servers), use them instead of `Task.Run` around sync zip code or blocking on request threads. Scalability feature, not a microbenchmark win.
+
+### .NET 11: ZLib, Deflate and GZip encoders and decoders without a stream — new API
+`ZLibEncoder`/`ZLibDecoder`, `DeflateEncoder`/`DeflateDecoder` and `GZipEncoder`/`GZipDecoder` are the engines the compression streams wrap, exposed for direct use on caller-owned buffers ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), I/O; dotnet/runtime#123145). The member names below are read from the net11.0 reference assembly.
+- **One shot, both sides in memory.** The static `TryDecompress(source, destination, out bytesWritten)` on a decoder and `TryCompress(source, destination, out bytesWritten)` on an encoder (with optional quality and window arguments) replace a `MemoryStream` or `UnmanagedMemoryStream`, the compression stream around it, that stream's internal buffers and the final `ToArray` copy. An encoder's `GetMaxCompressedLength(inputLength)` sizes the destination.
+- **Chunked.** An instance's `Compress`, `Decompress` and `Flush` take a source and a destination span and report bytes consumed and written, so a streaming caller uses buffers it owns or pools.
+- **When a stream is still right.** The data arrives from or goes to a real stream, or its expanded size is not known and not bounded.
+- **In Puck.** The mesh store's codec and the PNG codec decompress and compress whole in-memory payloads through stream adapters; moving them is filed in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
 
 ---
 
@@ -130,6 +142,12 @@ return clone;
 return JsonElement.Parse(json);
 ```
 Caveat: for strictly **scoped** use, `using (JsonDocument doc = JsonDocument.Parse(json)) { Use(doc.RootElement); }` remains the fastest option — keep it.
+
+### .NET 11: the reader skips whitespace runs, and the default-encoder writer searches directly — FREE
+Both from the [.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), section JSON.
+- **Reading.** `Utf8JsonReader` skips a run of whitespace with one vectorized search for the next byte that is not one of JSON's four whitespace bytes (dotnet/runtime#129701). Puck's canonical documents are written indented (`CanonicalJsonDocument`: two-space indentation, LF) so they diff, and reading them back skips each indentation run at once. Indentation is not a read-speed reason to write a diffable file compact; compact stays the choice for a product only a machine stores.
+- **Writing.** On the default encoder, `Utf8JsonWriter` finds the characters that need escaping with precomputed `SearchValues` sets instead of calling into `JavaScriptEncoder.Default` (dotnet/runtime#129781), and writes an escape into a range it has already sized, which removes a bounds check per byte (dotnet/runtime#129803). The post describes the search for the default encoder only. Puck's canonical writers set `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` because of the bytes they must produce (an authored `<` or an em-dash is written as itself), so the post's writer gain is not theirs to expect; their search goes through the encoder's own `SearchValues` path ([strings](strings-text-search.md#systemtextencodingsweb-encoders-use-searchvalues)). Whether the bounds-check removal reaches a custom encoder is not verified here.
+- **Rule.** Choose the encoder for the bytes the document must contain, never for this speedup, and never hand-roll escaping.
 
 ---
 
@@ -224,6 +242,9 @@ More `X509Certificate` paths use a singleton `SafeHandle`, avoiding temporary ha
 - **"Rebuild the whole zip rather than using `ZipArchiveMode.Update` for a small change."** Update mode no longer rewrites the world; cost is proportional to what changed (late edits cheapest).
 - **"You must split concatenated gzip members yourself to decompress efficiently."** One `GZipStream` resets native state across members (~3x on member-heavy streams).
 - **"Wrap streams in `BinaryReader`/`BinaryWriter` for structured I/O."** The BCL itself is removing them from hot paths (`ZipArchive`); use span-based `BinaryPrimitives`.
+- **"Zlib needs a stream: wrap the bytes in a `MemoryStream` and a `ZLibStream`, then `ToArray`."** On .NET 11 the encoder and decoder types compress and decompress span to span in one call.
+- **"Read a child process's output on a dedicated thread, or behind `Task.Run`."** On .NET 11 the async read is real overlapped I/O on Windows and holds no thread.
+- **"Write machine-read JSON compact because indentation slows the reader."** The reader skips an indentation run in one vectorized step. Choose compact for size, not for read speed.
 - **"Use `TryParse(s, out _)` to validate an IP."** `IPAddress.IsValid`/`IsValidUtf8` is faster and allocation-free.
 - **"`Uri` can't hold data URIs / anything over 65K chars."** Limit gone; delete raw-string plumbing that dodged `Uri`.
 - **"Transcode UTF8 bytes to `string` before parsing (IPs, PEM, hex)."** `IPAddress`/`IPNetwork` UTF8 parse and `PemEncoding` UTF-8 parse bytes directly; keep data UTF8 end-to-end.

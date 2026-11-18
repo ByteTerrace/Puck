@@ -68,6 +68,31 @@ techniques and the defects review found are what transfer. Each technique cites 
   devirtualization, a stack-allocated enumerator) can show there and not in the
   World: confirm it in the World's build.
 
+## A runtime move shifts the baseline
+
+A reading taken on one runtime and compared with a reading on the next includes
+the runtime's own gains. Keep them apart from the workload's: rebuild the base
+commit on the new SDK and compare against that, never against a number recorded
+on the old one. These .NET 11 changes reach Puck with no source change
+([Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/),
+cited by section and pull request).
+
+| Puck reading | What moves it | Post section; pull request |
+|---|---|---|
+| Allocated bytes that include a delegate | Every CoreCLR delegate is 8 bytes smaller | Deabstraction; dotnet/runtime#99200 |
+| Allocated bytes of a span sort with a struct comparer | The comparer is not boxed, and `Compare` inlines. Since .NET 10 boxed a struct comparer on every span sort (per the post), the irradiance hierarchy's median split (`CentroidOrder`) boxed its comparer once per split node; its trace has not been retaken | Strings and Spans; dotnet/runtime#116109 |
+| A gen0 pause | Young collections skip old `ConditionalWeakTable` entries | Write Barriers and Garbage Collection; dotnet/runtime#78746 |
+| `puck bench startup` | ReadyToRun precompiles default comparer initialization, and the host builds its assembly list with less work | Startup and Deployment; dotnet/runtime#126204, #123568, #123919, #125251 |
+| Thread-pool threads while a child process runs | Redirected stdout and stderr are overlapped reads on Windows, so `ChildProcess`'s two pumps hold no thread | I/O; dotnet/runtime#125643 |
+| Waits on the tick path | `Monitor.Wait` and `Monitor.Pulse` drop a table lookup (the machine queue, the GPU fence waits) | Threading; dotnet/runtime#129083 |
+| Code size and time of checked arithmetic and `BinaryPrimitives` reads | Overflow and bounds checks a guard makes redundant are removed | Bounds Checks; dotnet/runtime#124147, #124184, #127488 |
+| Reading an indented document | `Utf8JsonReader` skips whitespace runs in vector steps | JSON; dotnet/runtime#129701 |
+| Bake and capture float | Scalar `Half` casts and the `Dot` methods lower to cheaper instructions | Intrinsics; dotnet/runtime#127094, #125666 |
+| Arbitrary-width arithmetic | `BigInteger` runs on pointer-width limbs with better multiply, divide and `ModPow` | Numerics; dotnet/runtime#125799 |
+| Invariant casing of ASCII text | A managed ASCII path | Globalization; dotnet/runtime#120685 |
+| Puck's regexes (mostly `[GeneratedRegex]`, in tooling, engine and World code; the switch dispatch reaches only the `Compiled` minority) | A final cleanup pass, whole-literal prefix search, switch dispatch under `Compiled` | Strings and Spans; dotnet/runtime#125289, #124736, #122959 |
+| Launching a child on Linux | Arguments and environment are marshalled into one native block each | Diagnostics; dotnet/runtime#126201 |
+
 ## Know what the change changed
 
 - **Simulation:** compare state hashes from both builds over the touched

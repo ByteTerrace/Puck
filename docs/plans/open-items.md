@@ -3244,6 +3244,127 @@ proves itself with `puck compile` lowering to the same document.
   `worlds/standard/controls.puck` spells the twelve pad sources twice;
   `*-tests.puck` scenarios repeat input lines where `for` and `repeat n`
   serve.
+- Code that .NET 11 makes worth revisiting. Each item names what the runtime
+  changed; [dotnet-performance](../../.claude/skills/dotnet-performance/SKILL.md)
+  cites the post's section and pull request for it. An item is shown by
+  disassembly (`puck bench kernels`) and counted work, with a timing only in
+  the lead's quiet window, and none moves a simulation value. Several are
+  duplicates first and speed second.
+  - **Build: runtime async.** [medium] No project sets the feature. Add
+    `<Features>$(Features);runtime-async=on</Features>` to
+    `Directory.Build.props`, skipping `Puck.Analyzers` (it targets
+    `netstandard2.0`, which has no runtime to lower the methods; that it must
+    be skipped is an inference to check). Rebuild, then compare allocated
+    bytes per request or tick on the World server, silo and networking paths
+    (`AllocationWindow`, `host.memory`) before and after, and keep the opt-in
+    if the counts hold or improve. It pays where small async methods stack:
+    each directly awaited call stops allocating an intermediate task, and an
+    exception stops being rethrown at every frame. The post names cases that
+    are still slower, so the counts decide.
+  - **Maths: unsafe span walks.** [low] `BinaryFieldKernels.AddRegion` walks
+    both regions with `LoadUnsafe` and `Unsafe.Add` and sizes every loop from
+    the destination alone; only its one caller, `BinaryField.AddRegion`,
+    checks that the lengths match. A slicing loop over both spans is free of
+    bounds checks on .NET 11 and makes the span types enforce that invariant.
+    Its remarks promise regions of two gibibytes or more, so slice by element
+    count, never through one byte view whose length would overflow.
+    `Pcg32Extended.AdvanceTableByOne` indexes its whole table through
+    `Unsafe.Add` where a plain loop over a local copy of the array reference
+    is already check-free; its draws do not change. The masked table read in
+    the same type stays, because nothing proves a mask held in a field.
+  - **Maths: the wide fixed-point product.** [medium]
+    `FusedArithmetic.Product` forms every wide `FixedQ4816` product through
+    `Int128`, on a remark that says the form measured faster than `Math.BigMul`
+    and asks for a re-measurement before it is replaced. .NET 11 lowers the
+    signed `Math.BigMul` to one `IMUL` returning both halves. Re-run the A/B on
+    the .NET 11 runtime with disassembly beside the timing. If `BigMul` wins or
+    ties with smaller code, replace the body, delete the remark, and correct
+    the sentence in [the CLI reference](../reference/cli.md#puck-benchthe-puckmaths-microscope)
+    that calls the `Int128` multiply deliberate. The exact product is the same
+    either way. Then read whether `(Int128)long * long` in the algebra kernels
+    (`DoublingAlgebra`, `QuadraticAlgebra`, `MonogenicAlgebra`) lowers to one
+    multiply; if it does not, give them one shared widening-product helper
+    instead of patching each site.
+  - **Maths: `BigIntegerFunctions.ToDouble`.** [low] Its remark says the
+    platform's `BigInteger` to `double` conversion truncates toward zero. On
+    the .NET 11 runtime the cast rounded to nearest even on every value probed:
+    ties and above-half cases at 54, 55, 64, 65, 101 and 201 bits, positive
+    and negative. Correct the remark. With a zero exponent the method then
+    repeats the platform cast, so route that case through the cast and keep
+    the method for what it adds (the binary exponent, the overflow midpoint,
+    the subnormal range), or show a width where the cast still differs.
+  - **Maths: the signed byte dot product.** [low, only on a profile]
+    `SignedByteVectorFunctions.Dot` widens, multiplies, widens again and adds
+    per block. A multiply-add of adjacent widened shorts, the shape
+    `PrimeKernels` already uses, halves the widening; the 512-bit VNNI form
+    takes unsigned by signed bytes, so it needs a bias correction that nobody
+    has derived or checked. Do this only if a profile shows the rule
+    compiler's vector operands spending time here. The result is an exact
+    integer, so order does not matter; check against
+    `SignedByteVectorFunctions.DotScalar`.
+  - **Machines: the framebuffer repack.** [low]
+    `QueuedMachineWorker.RepackFramebuffer` repacks every emulator frame with
+    `Vector128.LoadUnsafe` over `MemoryMarshal.GetReference`. Replace it with
+    a loop that slices source and target forward, then the scalar tail, and
+    read the World build's disassembly (the proof is static, so the World
+    gets it). Its comment requires the vector and scalar paths to agree bit
+    for bit, in the repacked bytes and the average colour.
+  - **SdfVm: one priority order, as a struct comparer.** [medium]
+    `SdfMeshPathBake.ByPriority` and `SdfWorldTables.ByPriority` are the same
+    `Comparison<(float Priority, int Index)>` written twice. Replace both with
+    one public `readonly struct` comparer in a shared home and sort the spans
+    both callers already take through `CollectionsMarshal.AsSpan`. That fixes
+    the duplicate, and on .NET 11 a struct comparer on a span sort is not boxed
+    and its comparison inlines, where the delegate costs a call per
+    comparison. Claim speed only with a counted or traced reading of
+    `SdfWorldTables.OrderLanding` or the path bake's plan. The other
+    `Comparison` lambdas beside them (`SdfMeshIrradiance`'s candidate order,
+    the path bake's tiers) move the same way if a profile shows them hot.
+  - **SdfVm and Assets: zlib through stream adapters.** [medium]
+    `SdfMeshStoreCodec.TryDecode` expands every store entry through a `fixed`
+    block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream
+    probe, though the expanded length is in the header. One
+    `ZLibDecoder.TryDecompress` into the buffer it already owns replaces all
+    four; refuse the entry when the call fails or the written length differs.
+    `SdfMeshStoreCodec.Encode` writes its payload with a `BinaryWriter` over a
+    `MemoryStream`, compresses into a second one and copies out with
+    `ToArray`: write with `BinaryPrimitives` into an owned buffer and compress
+    with `ZLibEncoder.TryCompress`. `PngDecoder.DecodeImageData` and
+    `PngEncoder.ZlibCompress` have the same shape, so put one zlib one-shot
+    helper in a shared home for all four. Decode runs for every store load, in
+    parallel, on the cold-bake and boot path. Show it with allocated bytes per
+    entry and a warm-store load reading. Entries are caches, so a change in
+    compressed bytes needs no migration.
+  - **Commands: one whitespace token rule.** [low] `CommandRegistry.LeadingVerb`
+    and `CommandRegistry.Tokenize`, `WorldCommandArguments.EndOfToken` and
+    `WorldCommandArguments.LastTokenStart`, and `CommandEcho.TryReadToken`
+    each scan `char.IsWhiteSpace` runs by hand, and three comments say they
+    must agree. The comment in `WorldCommandArguments` gives the reason for
+    scanning as "not a listed set"; .NET 11 ships that exact set as span
+    searches (`IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace`). Have the
+    three share one token-rule helper built on them and delete the comment's
+    reason. Command lines are short, so this unifies a rule and claims no
+    speed.
+  - **Shared: one hex-hash validator.** [medium] About ten sites validate a
+    fixed-length hex string, each in its own way: LINQ `Any` or `All` with a
+    per-character predicate (`WorldMutation`, `CorpusManifest`,
+    `WorldSpatialReadDependency`, `WorldDefinitionReadDependency`,
+    `MachineContentAdmissionPolicy`, `AzureWorldReleaseSecrets`,
+    `EntraWorldAuthenticator`), and a span search that passes the digit set as
+    a literal on each call (`AssetContentHash`, `ContentPin.TryParseHex`,
+    `LocalEndpointCapability`). Write one public validator beside the
+    content-hash types, backed by two cached `SearchValues<char>` sets
+    (lowercase, and either case), as a length test and one
+    `ContainsAnyExcept`. Keep each site's case rule: lowercase only at
+    `EntraWorldAuthenticator`, `AssetContentHash` and `ContentPin`.
+  - **MCP: two uncancelled timeouts.** [low] `OperatorMcpFront.RunAsync`
+    waits twice with `Task.WhenAny` over a `Task.Delay` that nothing cancels
+    when the other task wins, the shape analyzer CA2027 names. Replace each
+    with `WaitAsync` and a caught `TimeoutException`, using the `TimeProvider`
+    overload where the clock is injected. Both are failure paths, so this is
+    hygiene. Then consider raising CA2027 to an error in `.editorconfig`: the
+    SDK ships it but reports it as a build warning only under a stricter
+    `AnalysisMode` than Puck's default.
 
 ### Author leaks to the standard
 

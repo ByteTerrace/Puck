@@ -48,6 +48,19 @@ The core rule: cache `SearchValues` instances in `static readonly` fields and ro
 - **Magnitude:** `ContainsAny` with one `OrdinalIgnoreCase` needle over a ~120k-char near-miss haystack: 58.41 µs → 16.32 µs (~3.6x). One of the biggest searching wins in the release.
 - **Adoption:** FREE.
 
+### .NET 11: whitespace searches that match `char.IsWhiteSpace` exactly
+- **What:** `ContainsAnyWhiteSpace`, `IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace`, `LastIndexOfAnyWhiteSpace` and `LastIndexOfAnyExceptWhiteSpace` on `ReadOnlySpan<char>` ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), Strings and Spans, Searching and Comparing; dotnet/runtime#111439). They search the set `char.IsWhiteSpace` accepts through one shared `SearchValues<char>`, so no caller builds or keeps its own.
+- **Adoption:** new API. Use them so the whitespace rule has one owner, in place of a `char.IsWhiteSpace` loop.
+- **Caveat:** the post notes that a scan which usually stops within a character or two (trimming, a short token) can lose to a scalar loop, because the vectorized helper has a fixed setup cost. They pay most on a full scan, such as checking that input contains no whitespace. Judge speed by the input lengths that occur; command lines are short, so adopting them there is a unification, not a speed claim.
+
+### .NET 11: validate a fixed-length hex string with `ContainsAnyExcept`
+- **What:** the runtime replaced a per-character loop that validated a trace identifier with `ContainsAnyExcept` searches (post: Diagnostics; dotnet/runtime#119673).
+- **Pattern:** `span.Length == expected && !span.ContainsAnyExcept(hexDigits)`, where `hexDigits` is a cached `static readonly SearchValues<char>` for the case rule the format requires. A LINQ `Any`/`All` over a `string` with a per-character predicate enumerates through a delegate, and passing the digit set as a string literal on each call leaves the set to be analysed each time (an inference, not measured).
+- **In Puck:** about ten call sites validate a fixed-length hex string (most of them 64 characters) each in their own way; unifying them behind one shared validator is filed in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
+
+### .NET 11: ASCII casing under invariant globalization
+- `ToUpperInvariant` and `ToLowerInvariant` try a managed ASCII path first, and in invariant-globalization mode, which Puck runs, that path is also what makes ASCII casing fast (post: Globalization; dotnet/runtime#120685). FREE. A hand-rolled ASCII casing loop has no reason to exist. Casing two strings to compare them is still worse than an `OrdinalIgnoreCase` comparison.
+
 ### C# 14 first-class spans: MemoryExtensions directly on string
 - **What:** C# 14 span conversions surface many `MemoryExtensions` methods directly on `string` without `.AsSpan()`.
 - **Adoption:** PATTERN (C# 14). Call span helpers on strings directly; fewer `.AsSpan()` incantations.
@@ -100,6 +113,10 @@ static bool Has<T>(ReadOnlySpan<T> span, T value, IEqualityComparer<T>? cmp) =>
 Background: the backtracking engines (interpreter, `RegexOptions.Compiled`, `[GeneratedRegex]`) all share one node-tree optimizer. Since .NET 5 it auto-converts provably-safe loops to atomic ("auto-atomicity": `a*b` → `(?>a*)b` when disjoint). The 10.0 release widened the proofs dramatically. All items below are FREE on all three backtracking engines. Verify what the optimizer did by inspecting the source generator's emitted C#/XML comments ("greedily" vs "atomically").
 
 Of ~20,000 real-world nuget-sourced patterns, only ~100 hand-write an atomic group, yet on 10.0 and later over 70% of those patterns get at least one construct auto-upgraded to atomic.
+
+### .NET 11: a final cleanup pass, whole-literal prefix search, and switch dispatch under `Compiled`
+- **What:** compiled and source-generated regexes get one more simplification pass after the whole-pattern optimizations, which factors a prefix that alternatives share (`[ab]+c[ab]+|[ab]+`) so a failed alternative does not rescan the same run (dotnet/runtime#125289). An alternation of whole literals is found by searching for the complete strings with `SearchValues<string>` where a frequency heuristic expects that to reject more candidates than a character-set filter (the heuristic selects this approach only for case-sensitive alternatives; dotnet/runtime#124736; compiled, source-generated and NonBacktracking). `RegexOptions.Compiled` jumps straight to the branch whose first literal character matches, as the source generator's emitted `switch` already did (dotnet/runtime#122959). All from the [.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), Strings and Spans, Searching and Comparing.
+- **Adoption:** FREE. Puck's regexes are mostly source-generated (`[GeneratedRegex]`: 91 attributes against 29 `RegexOptions.Compiled` uses in `src`, counted with `grep -rEo` over `*.cs`), in tooling and in engine and World code alike, such as the shader `#include` scan (`ShaderSourceClosure`) and the inspector text (`WorldInspectorText`). The cleanup pass (#125289) and the whole-literal search (#124736) reach them. The switch dispatch (#122959) reaches only the minority built with `RegexOptions.Compiled`.
 
 ### Auto-atomicity learns Unicode categories
 - **What:** dotnet/runtime#117869 — disjointness proofs now cover category-based classes (`\d`, `\w`, `\p{...}`), not just explicit chars/ranges. `\w*\p{Sm}`: `\w` is eight Unicode categories, none `Sm`, so the loop goes atomic.
@@ -272,6 +289,8 @@ foreach (Range r in value.AsSpan().Split(',')) Process(value.AsSpan()[r]);
 - **"`regex.Match(input).Success` is fine for boolean checks."** Analyzer-flagged (CA1874). It allocates and computes information you throw away. Same for `Matches(...).Count` vs `Count(...)` (CA1875) — 665 MB of pure-waste allocation in the benchmark.
 - **"`span.IndexOfAny...(...) >= 0` is the containment idiom."** Use `ContainsAny*`; computing an index you never read costs instructions. The regex source generator itself switched.
 - **"Hand-rolled char-by-char scan loops in validators/encoders/decoders are fine."** The BCL keeps replacing its own with `SearchValues`/`IndexOfAnyInRange` and winning (`string.Normalize`, `UrlDecode`, web encoders, `Regex` internals). Manual loops also never inherit future SIMD improvements; a cached `static readonly SearchValues<T>` inherits every one.
+- **"`char.IsWhiteSpace` is a category test, so whitespace runs must be scanned by hand."** .NET 11 ships the exact set as span searches (`IndexOfAnyWhiteSpace` and its siblings).
+- **"Validate a hex hash with `text.All(char.IsAsciiHexDigit)`."** A length test and one `ContainsAnyExcept` over a cached `SearchValues<char>` does it without a delegate per character.
 - **"Passing an explicit comparer (even `EqualityComparer<T>.Default`) to Contains/search kills vectorization"** / **"unconstrained generic code can't use MemoryExtensions."** The ~30 new comparer-accepting overloads route default comparers to the vectorized paths (~3x on arrays via LINQ `Contains`).
 - **"Transcode UTF-8 to chars before parsing Guid/Version"** and **"use `Utf8Parser.TryParse` for UTF-8 GUIDs."** `Guid.Parse(ReadOnlySpan<byte>)` / `Version.Parse(utf8)` are direct and faster. Keep `Utf8Parser` only for parse-off-the-front-of-a-buffer.
 - **"`string.Split` for transient tokenization."** Span-based `MemoryExtensions.Split` returning `Range`s removes the `string[]` and per-token strings; the BCL converted its own call sites.
