@@ -376,7 +376,7 @@ public sealed partial class ArenaSearch {
                 hash.Add(value: position);
                 hash.Add(value: ((ulong)key.Ordinal));
                 if (m_arena.TryRead(key: key, rowOrdinal: ordinal, value: out var value)) {
-                    FoldValue(hash: ref hash, value: value);
+                    value.AddTo(hash: ref hash);
                 }
             } else {
                 hidden++;
@@ -393,25 +393,6 @@ public sealed partial class ArenaSearch {
         }
         if (pile && counted) {
             hash.Add(value: hidden);
-        }
-    }
-    private static void FoldValue(ref Fnv1aHash hash, in CellValue value) {
-        hash.Add(value: ((byte)value.Kind));
-        switch (value.Kind) {
-            case CellKind.Text:
-                hash.Add(value: Fnv1aHash.Compute(values: value.AsText.AsSpan()));
-
-                break;
-            case CellKind.Vector:
-                foreach (var component in value.AsVector.Span) {
-                    hash.Add(value: ((byte)component));
-                }
-
-                break;
-            default:
-                hash.Add(value: value.Raw);
-
-                break;
         }
     }
 }

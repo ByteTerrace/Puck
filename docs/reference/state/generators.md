@@ -383,7 +383,7 @@ The local authority save lives under `world-authorities/` in the state directory
 
 A hosted activation takes the seed from its fenced authority root and reserves a fresh generation. An acknowledged mutation in the recovery journal reuses its recorded private inputs. Its checkpoint identifies that authority and carries stream positions. Rewinding the world, restoring an earlier release or branching from history advances the private stream generation. Document undo restores earlier row state and also advances the generation because another participant may already have seen a later value. A compiled world carries the undrawn source for private first fills.
 
-Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site's generation-specific key. Search treats private samples as unknown. Only explicit authoring previews use the deterministic preview sampler. Replay reads the words captured by the authority. Private sites support neither skip nor an extended table.
+Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site's generation-specific key. A search candidate samples a private site from a sampler its own job's seed keys, never the authority's stream ([plan over what an actor may see](search.md#plan-over-what-an-actor-may-see)). Only explicit authoring previews use the deterministic preview sampler. Replay reads the words captured by the authority. Private sites support neither skip nor an extended table.
 
 ## Extend a source's equidistribution
 

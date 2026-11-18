@@ -524,6 +524,68 @@ A rule outside that closure writes nothing the job can observe, so dropping it
 changes no answer. In a world that imports several games, one game's search
 pays for that game's rules alone.
 
+## Plan over what an actor may see
+
+A job plans as someone. Its `actor` names whose sight it plans over:
+
+| `actor` | The job reads | Its outputs may land in |
+|---|---|---|
+| Omitted | What the public may read | Any audience |
+| A principal, such as `seat2` | What that principal may read | Rows only that principal (or nobody) may read |
+| `world` | The authority's true state | Rows whose audience every row the job reads encloses |
+
+A computer opponent that plays fair names its seat. A diagnostic that peeks
+names `world` and lands where nobody but the authority reads, like the
+skirmish's `skirmishSharp`. Validation refuses an output wider than the
+actor's audience with `SearchWidensAudience`.
+
+A job that plans over a sight never reads a cell its actor may not read.
+Before it reads anything (its restart, every step's walk, its landing), the
+search opens one journal scope, the **veil**, beneath every candidate scope, and
+writes into it what the actor would imagine in place of each hidden cell of the
+job's key rows. The step rewinds the veil with the candidates, so the arena
+anyone else reads is the authority's again. The veil writes:
+
+- For a slot, a keyed row, a ring or a lattice the actor may read: each hidden
+  cell keeps its key and place and takes a value drawn inside the row's declared
+  range from the job's own seed. A lattice whose own policy excludes the actor
+  has every cell imagined.
+- For a pile (an ordered `keysOf` row), whose membership is what it hides: the
+  hidden members leave. Under `hidden: Count` or `Placeholder` the same number of
+  imagined members are dealt from the domain keys the actor may read and sees
+  in no pile over that domain, in the hidden members' places under
+  `Placeholder`. Under `Omit`, or when the row's own policy excludes the actor,
+  the actor is told nothing, not even whether a member is hidden, so the job
+  imagines none.
+- For a private draw site the actor can't read whole: a cursor of zero and no
+  drawn masks.
+
+Every job, `world` included, samples a private draw site from a sampler its own
+seed keys, never from the authority's stream, so an opponent can choose to draw
+without the authority's words or read count moving.
+
+The job's seed is its plan's seed, its name and the stamp of what its actor
+may read. That stamp folds only the readable cells, the names and places of
+hidden cells in rows whose members the actor knows by name, and a pile's
+disclosed count, never the arena's byte ledger. A change the actor can't see
+neither restarts the job nor changes what it imagines; a new public position
+imagines afresh. Because both are functions of the arena's content, a restored
+checkpoint restarts and imagines exactly as the live job did.
+
+A landing names the live arena: an imagined pile member is no token, so
+nothing lands for it, and `best.token` names the live position of the token
+the job walked.
+
+The work is proportional to the job: the veil writes once per step, one write
+per hidden cell of the job's key rows, and a key row the actor reads whole costs
+nothing more than an authority job's fold. Admission prices a read and a write
+per cell of every key row whose declarations can withhold from the actor.
+
+The guarantee covers the job's key rows, which are the plan's rows and every
+row its judge rules and score read or write. A job's turn among the jobs with
+work to do is shared: a `world` job that restarts on a hidden change shifts the
+tick on which another job steps, though never what it answers.
+
 ## Run a search from C#
 
 A host that isn't Puck.World builds the same pieces by hand. This fragment

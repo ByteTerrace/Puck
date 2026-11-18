@@ -1757,14 +1757,18 @@ boundary the language gives, and IVT001 is what makes it hold.
 
 **Rules are the authority.** A rule reads every cell and can deliberately
 reveal through its own write, like a binding on a shared screen. The owner's
-ruling for search is different: a search output whose audience is wider than
-any of its inputs is refused with `SearchWidensAudience`. Compilation shares
-`RuleCompiler.RequireEnclosedAudience` with transforms; execution shares
-`StateArena.ReadAudienceEncloses`, before advancing and before landing. A
-refused job lands nothing. Candidate generation, judge rules, scores, chance,
-enabled and revision rows all belong to that dependency set, maintained by
-`ArenaSearchPlan.Dependencies`. Their audience-check work is priced by
-`RuleCompiler.DisclosureCost`.
+ruling for search is different: a search never lands what its inputs may not
+show its output's readers. A job plans over its `actor`'s sight (the public's
+when none is authored): every hidden cell it reads holds an imagined value from
+its own seed ([plan over what an actor may see](../reference/state/search.md#plan-over-what-an-actor-may-see)),
+and an output wider than the actor is refused with `SearchWidensAudience`. A
+job with `actor: world` reads the authority's true state, and an output whose
+audience is wider than any of its inputs is refused with
+`SearchWidensAudience`: compilation shares `RuleCompiler.RequireEnclosedAudience`
+with transforms, and execution shares `StateArena.ReadAudienceEncloses`, before
+advancing and before landing. A refused job lands nothing. Candidate
+generation, judge rules, scores, chance, enabled and revision rows all belong to
+that dependency set, maintained by `ArenaSearchPlan.Dependencies`.
 
 `WorldSearchCompilation.JudgeRules` excludes a rule only when its gate is
 provably false at a positive search ply (besides the existing host-fact

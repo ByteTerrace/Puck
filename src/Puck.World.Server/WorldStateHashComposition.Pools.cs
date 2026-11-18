@@ -78,7 +78,7 @@ public static partial class WorldStateHashComposition {
                 AppendString(hash: ref hash, value: field.Space?.Value);
                 hash.Add(value: (field.Dimensions ?? -1));
                 AppendAdvance(hash: ref hash, advance: field.Advance);
-                AppendPoolDefault(hash: ref hash, value: field.Default);
+                field.Default.AddTo(hash: ref hash);
             }
         }
         var pools = (state.Pools ?? []);
@@ -103,27 +103,5 @@ public static partial class WorldStateHashComposition {
         }
         // Initial populations and snapshots are arena values. Folding them here as well would make an export
         // differ from its live arena solely because publication changed the document representation.
-    }
-    private static void AppendPoolDefault(ref Fnv1aHash hash, CellValue value) {
-        hash.Add(value: ((byte)(value.HasValue ? 1 : 0)));
-        if (!value.HasValue) {
-            return;
-        }
-        hash.Add(value: ((byte)value.Kind));
-        switch (value.Kind) {
-            case CellKind.Text:
-                AppendString(hash: ref hash, value: value.AsText);
-                break;
-            case CellKind.Vector:
-                var components = value.AsVector.Span;
-                hash.Add(value: components.Length);
-                foreach (var component in components) {
-                    hash.Add(value: unchecked((byte)component));
-                }
-                break;
-            default:
-                hash.Add(value: value.Raw);
-                break;
-        }
     }
 }
