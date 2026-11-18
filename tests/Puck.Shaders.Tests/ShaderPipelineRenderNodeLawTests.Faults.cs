@@ -41,8 +41,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
 
     [Fact]
     public void EveryCreationOfACandidateFaultedInTurnByTheDecoratorDisposesExactlyWhatItCreated() {
-        // A replacement whose history cannot be carried creates, per kind: three images per slot (history, gray, and the
-        // image the fullscreen pass draws into); two compute modules and the fullscreen pass's two; two compute
+        // A replacement whose history cannot be carried creates, per kind: the history's two images (the one a frame reads
+        // and the one it writes) and the image the fullscreen pass draws into per slot, while the gray scratch carries
+        // over; two compute modules and the fullscreen pass's two; two compute
         // pipelines and a graphics one; one descriptor pool for the graph's three passes; one framebuffer per slot; one
         // render pass; and per slot one host-visible constant buffer for the frame group's block and one for each pass's
         // pass block. The passes record into each frame slot's one command list, which the installed graph's first
@@ -53,7 +54,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var expected = new Dictionary<GpuCreationKind, long> {
             [GpuCreationKind.Pipeline] = 3L,
             [GpuCreationKind.Buffer] = (4L * InFlight),
-            [GpuCreationKind.Image] = (3L * InFlight),
+            [GpuCreationKind.Image] = (2L + InFlight),
             [GpuCreationKind.RenderPass] = 1L,
             [GpuCreationKind.Framebuffer] = InFlight,
             [GpuCreationKind.ShaderModule] = 4L,

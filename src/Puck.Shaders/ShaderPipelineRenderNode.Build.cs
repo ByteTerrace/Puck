@@ -69,6 +69,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private bool m_refusedByHeap;
     private long m_refusedFaultsRevision;
     private long m_refusedHeapRevision;
+    private ulong? m_refusedPeak;
     private CompiledShaderPipeline? m_refusedPending;
     private bool m_refusedResize;
     private BuildKey m_buildKey;
@@ -100,9 +101,13 @@ public sealed partial class ShaderPipelineRenderNode {
     }
     // Starts building what the node should install next, unless a build is already running. A paused instance builds
     // too, since a replacement is not a step. A candidate whose replacement peak exceeds the budget, or whose selected
-    // output cannot be resolved, is refused here, before anything is created. The installed pipeline rebuilt after a
-    // device loss is not a replacement and is never refused by the budget: nothing else is owned then, and the graph it
-    // restores was accepted when it installed.
+    // output cannot be resolved, is refused here, before anything is created, and the installed graph keeps rendering
+    // in its place. A candidate replacing a graph that can no longer render (CountsChanged: its recorders cannot render
+    // the current data, so the node holds its last image) has no such fallback: refusing it would freeze the picture on
+    // whatever the installed graph last showed, a world the viewer may have left. It is the instance's least, reserved
+    // whatever the pool holds and refused only by an explicit cap (ReplacementGivesWay). The installed pipeline rebuilt
+    // after a device loss is not a replacement and is never refused by the budget: nothing else is owned then, and the
+    // graph it restores was accepted when it installed.
     private void EnsureBuild() {
         RetryRefusal();
         if (
@@ -119,6 +124,7 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         BuildKey key;
+        ulong? refusedPeak = null;
 
         try {
             key = KeyFor(
@@ -139,16 +145,19 @@ public sealed partial class ShaderPipelineRenderNode {
                 // refuses. The promise stands until the build is taken (InstallPending).
                 var owned = OwnedBytes;
                 var more = ((account.PeakBytes > owned) ? (account.PeakBytes - owned) : 0UL);
+                var givesWay = ReplacementGivesWay;
 
-                if (!account.Fits || !TryReserveMore(bytes: more)) {
-                    throw account.Refusal();
+                if ((account.PeakBytes > ReplacementBudget) || !TryReserveMore(bytes: more, least: !givesWay)) {
+                    refusedPeak = account.PeakBytes;
+                    throw (account with { BudgetBytes = ReplacementBudget }).Refusal();
                 }
                 m_buildPromise = more;
             }
         } catch (Exception error) {
             Refuse(
                 candidate: candidate,
-                error: error
+                error: error,
+                budgetPeak: refusedPeak
             );
 
             return;
@@ -248,10 +257,13 @@ public sealed partial class ShaderPipelineRenderNode {
             : null
         );
     }
-    private void Refuse(bool candidate, Exception error) {
+    // Refuses the requested candidate. budgetPeak is the replacement peak of one the budget refused, retried once the
+    // budget has room for it.
+    private void Refuse(bool candidate, Exception error, ulong? budgetPeak = null) {
         if (candidate) {
             m_hasRefusal = ((m_pending is not null) || m_resizePending || m_rebindPending || m_recountPending);
             m_refusedByHeap = (error is GpuDescriptorHeapRefusalException);
+            m_refusedPeak = budgetPeak;
             m_refusedFaultsRevision = FaultsRevision;
             m_refusedHeapRevision = m_device.Services.Bindings.HeapReleaseRevision;
             m_refusedPending = m_pending;
@@ -273,9 +285,17 @@ public sealed partial class ShaderPipelineRenderNode {
         m_hasRefusal = false;
         m_refusedPending = null;
         m_refusedResize = false;
+        m_refusedPeak = null;
     }
-    // Queues the refused candidate again once the faults or, for a heap refusal, the heap's release revision moves,
-    // unless a newer request is queued.
+    // Whether a replacement can be done without: the installed graph renders the current data, so a candidate the budget
+    // refuses leaves it presenting. A graph whose counts moved (CountsChanged) holds its last image instead.
+    private bool ReplacementGivesWay => (m_ready && !CountsChanged);
+    // The most a replacement's peak may reach now: the budget for one that gives way, and only the cap for the
+    // instance's least.
+    private ulong ReplacementBudget => (ReplacementGivesWay ? BudgetBytes : (m_budgetCapBytes ?? ulong.MaxValue));
+    // Queues the refused candidate again once the faults or, for a heap refusal, the heap's release revision moves, for
+    // a budget refusal once the budget holds its peak (another holder released memory, or the installed graph stopped
+    // rendering, which makes its replacement the instance's least), unless a newer request is queued.
     private void RetryRefusal() {
         if (
             !m_hasRefusal ||
@@ -288,7 +308,8 @@ public sealed partial class ShaderPipelineRenderNode {
                 (
                     !m_refusedByHeap ||
                     (m_device.Services.Bindings.HeapReleaseRevision == m_refusedHeapRevision)
-                )
+                ) &&
+                !((m_refusedPeak is { } peak) && (ReplacementBudget >= peak))
             )
         ) {
             return;
@@ -336,8 +357,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
 
         var request = new BuildRequest(
-            // The storages whose history the install carries over keep their own images, so the build makes none for them.
-            Carried: [.. CarriedHistoryOf(extent: (key.Width, key.Height), plan: key.Pipeline!.Plan).Keys],
+            // The storages the install carries over keep their own instances, so the build makes none for them.
+            Carried: [.. CarriedStoragesOf(extent: (key.Width, key.Height), plan: key.Pipeline!.Plan).Keys],
             Device: m_device,
             DirectX: m_directX,
             Gpu: m_gpu,
@@ -347,7 +368,7 @@ public sealed partial class ShaderPipelineRenderNode {
             KernelCounterRows: (m_passes.FirstOrDefault()?.KernelCounters?.Rows ?? 0),
             BoundPorts: [.. m_externalRegions.Keys],
             SlotObjects: m_slots.Any(predicate: static slot => ((slot.Fence is null) || (slot.Commands is null))),
-            GivesWay: (key.Candidate && m_ready),
+            GivesWay: key.GivesWay,
             Packages: m_packages,
             Pipelines: m_pipelines
         );
@@ -410,6 +431,7 @@ public sealed partial class ShaderPipelineRenderNode {
     private BuildKey KeyFor(CompiledShaderPipeline pipeline, (uint Width, uint Height) extent, bool candidate) =>
         new(
             Candidate: candidate,
+            GivesWay: (candidate && ReplacementGivesWay),
             Height: extent.Height,
             Pipeline: pipeline,
             Preview: PreviewFor(
@@ -431,7 +453,7 @@ public sealed partial class ShaderPipelineRenderNode {
     // resize or a rebinding) rather than the installed pipeline rebuilt after a device loss, the preview it needs,
     // the rows its arrays read, which BindRows replaces whole whenever they change, and the counts its counted buffers
     // are allocated by, with the counter revision they were resolved at.
-    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, long RenderRevision, IShaderPipelineOutputExport? Export) {
+    private readonly record struct BuildKey(CompiledShaderPipeline? Pipeline, uint Width, uint Height, bool Candidate, bool GivesWay, (uint Width, uint Height)? Preview, RowBindings Rows, ShaderPipelineStorageCounts Counts, long CountRevision, long RenderRevision, IShaderPipelineOutputExport? Export) {
         public bool Matches(BuildKey other) =>
             (
                 ReferenceEquals(
@@ -441,6 +463,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 (Width == other.Width) &&
                 (Height == other.Height) &&
                 (Candidate == other.Candidate) &&
+                (GivesWay == other.GivesWay) &&
                 (Preview == other.Preview) &&
                 ReferenceEquals(
                     objA: Rows,
@@ -619,6 +642,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
                     var buffers = new IGpuBuffer[InstancesOf(
                         inFlight: request.InFlight,
+                        plan: plan,
                         storage: planned
                     )];
                     var usage = BufferUsageOf(
@@ -645,6 +669,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
                 var images = new IGpuImage[InstancesOf(
                     inFlight: request.InFlight,
+                    plan: plan,
                     storage: planned
                 )];
 
@@ -864,7 +889,7 @@ public sealed partial class ShaderPipelineRenderNode {
             DisposeUntaken(later: later);
             Dispose();
         }
-        // Disposes every object the install did not take: a storage whose history it carried keeps its own images.
+        // Disposes every object the install did not take: a storage it carried keeps its own instances.
         public void DisposeUntaken(Action<IDisposable?> later) {
             foreach (var images in m_images) {
                 foreach (var image in (images ?? [])) {

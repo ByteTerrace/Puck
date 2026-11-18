@@ -242,7 +242,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Puts one pass of a finished build into service: takes its modules, pipeline and render pass from the build, then
     // allocates what the frame thread owns — the geometry buffer, the framebuffer binding each frame slot's attachments,
     // and the per-slot descriptor and command objects, its sets from the graph's one descriptor pool.
-    private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
+    private void InstallPass(ShaderPipelinePlannedPass planned, IReadOnlyDictionary<string, RuntimeResource> map, GraphBuild built, IReadOnlyDictionary<int, CarriedStorage> carried, GpuDescriptorPoolSizes? graphPool, ref nint descriptorPool) {
         var declaration = planned.Declaration;
         var runtime = new RuntimePass(
             planned,
@@ -302,7 +302,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             }
             runtime.Framebuffers = new IGpuFramebuffer[m_inFlight];
 
-            // A framebuffer owns no image, so one over history the install carries binds the replaced graph's instances,
+            // A framebuffer owns no image, so one over storage the install carries binds the replaced graph's instances,
             // which move into this graph only once nothing else can fail.
             IGpuImage ImageOf(ShaderPipelineAttachment attachment, int slot) {
                 var resource = map[attachment.Version];
@@ -311,7 +311,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 // history cursor; ordinary attachments, including depth, keep their submission slot.
                 var instance = (resource.History
                     ? (((((previous.HistoryLatest + 1) + slot) + resource.Count) - ((int)(m_frame % ((ulong)resource.Count)))) % resource.Count)
-                    : slot);
+                    : InstanceAt(index: slot, resource: previous));
 
                 return previous.Images![instance];
             }
@@ -355,10 +355,10 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             throw;
         }
     }
-    // Whether history built for the installed graph's frame extent carries into a candidate planned at another unchanged:
-    // same declaration shape, and, for an image, the same resolved extent, each resolved against the frame extent it was
-    // built for.
-    private static bool CompatibleHistory(ShaderPipelineResource old, ShaderPipelineResource current, ShaderPipelineStorageCounts previousCounts, ShaderPipelineStorageCounts counts) {
+    // Whether storage built for the installed graph's frame extent carries into a candidate planned at another unchanged:
+    // same declaration shape, and, for an image or depth, the same resolved extent, each resolved against the frame
+    // extent it was built for.
+    private static bool CompatibleStorage(ShaderPipelineResource old, ShaderPipelineResource current, ShaderPipelineStorageCounts previousCounts, ShaderPipelineStorageCounts counts) {
         if (
             (old.Kind != current.Kind) ||
             !string.Equals(
@@ -368,7 +368,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         ) ||
             (old.History != current.History) ||
             (
-                (current.Kind == ShaderPipelineResourceKind.Image) &&
+                (current.Kind != ShaderPipelineResourceKind.Buffer) &&
                 ((old.Dimensions?.Resolve(
                     frameHeight: previousCounts.Height,
                     frameWidth: previousCounts.Width,
@@ -423,7 +423,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     }
     // Allocates the installed pipeline's resources on the frame thread, its arrays bound to rows, and takes the built
     // pipeline and module set into them. The budget was checked against the plan and the rows before the build started. A
-    // storage whose instances carry over from the replaced graph gets none of its own; PreserveCompatibleHistory moves the
+    // storage whose instances carry over from the replaced graph gets none of its own; PreserveCarriedStorages moves the
     // carried ones in.
     // Creates an owned image storage's images at the extent its declaration resolves against the frame and render
     // extents, storing each as it is made so a failure leaves every created image where its owner disposes it.
@@ -474,7 +474,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 ));
         }
     }
-    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedHistory> carried, RowBindings rows, ShaderPipelineStorageCounts counts) {
+    private void Allocate(GraphBuild built, IReadOnlyDictionary<int, CarriedStorage> carried, RowBindings rows, ShaderPipelineStorageCounts counts) {
         var plan = m_pipeline!.Plan;
         var map = new Dictionary<string, RuntimeResource>(comparer: StringComparer.Ordinal);
         PreviewPass? preview = null;
@@ -488,6 +488,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 var resource = new RuntimeResource(
                     count: (shared ? 1 : InstancesOf(
                         inFlight: m_inFlight,
+                        plan: plan,
                         storage: planned
                     )),
                     storage: planned,
@@ -886,7 +887,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         if (previous) { throw new InvalidDataException(message: $"Resource '{resource.Spec.Name}' is not declared as history."); }
         return InstanceAt(index: slot, resource: resource);
     }
-    // Installs a finished build beside the installed graph: allocates its resources, carries compatible history and live
+    // Installs a finished build beside the installed graph: allocates its resources, carries compatible storage and live
     // parameters over, and retires the replaced graph once its readers' submissions complete. An allocation
     // failure leaves the installed graph, its extent, its preview and its feedback images intact, and releases exactly
     // what the candidate created.
@@ -942,7 +943,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         var previousBufferScratch = m_bufferPublicationScratch;
         var previousBufferSecondScratch = m_bufferPublicationSecondScratch;
         var hadFences = m_slots.Any(predicate: static slot => (slot.Fence is not null));
-        var carried = CarriedHistoryOf(
+        var carried = CarriedStoragesOf(
             extent: (key.Width, key.Height),
             plan: next.Plan
         );
@@ -963,11 +964,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_passes = [];
         m_ready = false;
         try {
-            // A candidate replaces a graph that keeps running, so it can be done without: inside the scope an
-            // allocation the pool has no room for is refused instead of admitted past the limit, here as in its build
-            // (BuildRequest.GivesWay). A first graph, or the installed one rebuilt after a device loss, is the
-            // instance's least and allocates outside it.
-            using (GpuMemoryAdmissionScope.Enter(givesWay: (key.Candidate && previousReady))) {
+            // A candidate replacing a graph that keeps rendering can be done without: inside the scope an allocation
+            // the pool has no room for is refused instead of admitted past the limit, here as in its build
+            // (BuildRequest.GivesWay). A first graph, the installed one rebuilt after a device loss, and the replacement
+            // of a graph that can no longer render are the instance's least and allocate outside it.
+            using (GpuMemoryAdmissionScope.Enter(givesWay: (key.GivesWay && previousReady))) {
                 Allocate(
                     built: built,
                     carried: carried,
@@ -975,10 +976,6 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                     rows: key.Rows
                 );
             }
-            PreserveCompatibleHistory(
-                carried: carried,
-                previousPlan: previousPipeline?.Plan
-            );
             PreserveLiveParameters(
                 next: m_passes,
                 previous: previousPasses
@@ -1006,6 +1003,11 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
                 ConfigureWork();
                 ReleaseUndeclaredBindingHolds();
             }
+            // Last, once nothing else can fail: a failed install restores the replaced graph whole.
+            PreserveCarriedStorages(
+                carried: carried,
+                previousPlan: previousPipeline?.Plan
+            );
         } catch (Exception error) {
             m_work.Discard();
             m_preview?.Dispose();
@@ -1143,20 +1145,22 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         throw new InvalidDataException(message: $"Unknown shader pipeline format '{format}'.");
     }
 
-    // Moves the carried history's instances out of the replaced graph into the installed one. The carried instances keep
-    // their contents and the states the replaced graph left them in.
-    private void PreserveCompatibleHistory(IReadOnlyDictionary<int, CarriedHistory> carried, ShaderPipelinePlan? previousPlan) {
+    // Moves the carried storages' instances out of the replaced graph into the installed one, in the states the replaced
+    // graph left them in. History keeps its contents and its ring's cursor; other storage counts as holding nothing, so
+    // the installed graph clears it where its plan says a pass reads it before any writes it.
+    private void PreserveCarriedStorages(IReadOnlyDictionary<int, CarriedStorage> carried, ShaderPipelinePlan? previousPlan) {
         foreach (var (index, carry) in carried) {
             var current = m_resources[index];
             var old = carry.Old;
 
-            current.HistoryLatest = old.HistoryLatest;
-
-            Array.Copy(
-                destinationArray: current.Initialized,
-                length: current.Count,
-                sourceArray: old.Initialized
-            );
+            if (current.History) {
+                current.HistoryLatest = old.HistoryLatest;
+                Array.Copy(
+                    destinationArray: current.Initialized,
+                    length: current.Count,
+                    sourceArray: old.Initialized
+                );
+            }
             CarryStates(
                 current: current,
                 old: old,
@@ -1950,8 +1954,8 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     /// a paused instance builds and installs it too, renders nothing, and keeps publishing its last image until its next
     /// step, resume or reset. A refused candidate leaves the installed graph at its old extent, records
     /// <see cref="LastSwapError"/>, and is retried when a different extent is requested or when something it was refused
-    /// on changes (the operator's GPU faults, or heap space for a heap refusal). Requesting the extent already requested
-    /// does nothing.</summary>
+    /// on changes (the operator's GPU faults, heap space for a heap refusal, or room in the budget for a budget refusal).
+    /// Requesting the extent already requested does nothing.</summary>
     /// <param name="width">The requested frame width, in pixels.</param>
     /// <param name="height">The requested frame height, in pixels.</param>
     /// <exception cref="ObjectDisposedException">The node is disposed.</exception>

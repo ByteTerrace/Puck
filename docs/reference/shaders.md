@@ -2370,8 +2370,11 @@ replacement allocates anything (a reload, a row edit or a resize), the node
 counts two numbers from the plan it would install:
 
 - **Steady-state bytes**: what the graph owns once it runs. That is one
-  instance per frame slot of ordinary and history images and buffers, and one
-  queue-ordered instance of each transient or retained intermediate. This includes
+  instance per frame slot of ordinary images and buffers, one queue-ordered
+  instance of each transient or retained intermediate, and two instances of
+  history that only compute and package dispatches touch and the graph does not
+  publish: the one a frame reads and the one it writes. History a render pass
+  draws, or the graph publishes, keeps one instance per frame slot. This includes
   the images a graphics pass draws into and depth attachments,
   each geometry pass's vertex and index buffer, the fullscreen triangle's vertex
   buffer for each pass that reads the
@@ -2387,8 +2390,15 @@ counts two numbers from the plan it would install:
   encode's RGBA8 target beside it. Package readback buffers remain charged with
   their retiring recorder until its final submission completes. All of it exists
   together while the candidate allocates.
-  History the candidate carries over is moved into it, never allocated fresh,
+  Storage the candidate carries over is moved into it, never allocated fresh,
   so the peak counts those instances once and is lower by exactly their bytes.
+  A candidate carries every storage the installed graph has under the same name
+  with the same shape, extent or size, instance count, initialization and
+  usages: history with its contents, and scratch that only the graph itself
+  reads, which the candidate clears or rewrites. External, package-owned,
+  borrowed, exported and published storage is never carried. A replacement at
+  the installed extent therefore peaks at the installed graph plus only what it
+  changes, not two whole graphs.
 
 Descriptor pools, samplers, command pools, pipelines and shader modules are
 not counted: their size is the driver's.
@@ -2398,10 +2408,21 @@ or allocated, by the code `SHADERPIPE_BUDGET`. The refusal names the peak, the
 steady state and the budget, and reaches the host as `LastSwapError`: the
 `GPU candidate refused:` report, `pipeline.status`, and a failed
 `pipeline.wait <name> installed` or `resized`. The installed graph keeps
-running. It is never freed to make room. A preview that a selection creates is
-held to the same budget and refused the same way. The installed
+running. It is never freed to make room. A budget refusal is tried again once
+the budget holds its peak. A preview that a selection creates is held to the
+same budget and refused the same way. The installed
 pipeline rebuilt after a device loss is not a replacement and is never refused:
 nothing else is owned then, and the graph it restores already fit.
+
+A candidate replacing a graph that can no longer render is not held to the
+device budget either. When an instance's storage counts move (a package's
+counter revision, such as a residency replaced as a viewer crosses into another
+world), the installed graph's recorders cannot render the current data and the
+node holds its last image until a replacement installs. Refusing that
+replacement would freeze the picture on a scene the viewer may have left, so it
+is the instance's least: reserved whatever the pool holds, past its limit if it
+must (which marks the pool's pressure and trims its caches), and refused only
+by a `pipeline.budget` cap.
 
 The budget comes from the process's memory account
 (`ShaderPipelineRenderNode.DeviceBudgetBytes`): what the instance owns or has

@@ -784,7 +784,8 @@ installed graph), `peak=` (what a reload of it would reach) and `budget=`.
 [memory budget](../../docs/reference/shaders.md#memory-budget) below the
 device's, and `pipeline.budget <name> device` removes the cap. A reload whose
 peak does not fit is refused with `SHADERPIPE_BUDGET`, and the installed graph
-keeps running.
+keeps running; the replacement of a graph that can no longer render is refused
+only by a cap.
 `gpu.faults arm <kind> [<n>]` makes the device fail the nth creation of a kind
 from now, or the next one, before the call reaches the device, so a reload can
 be refused partway through its allocation on real hardware. The kinds are

@@ -835,8 +835,8 @@ never reconstructs (its quality restriction,
 view (`WorldSessionSceneEmitter.ReducedQuality`).
 
 Each view's history is its own fragment's: two versions at the output extent,
-one allocation a frame slot each, that the next frame reads through
-`ResourceReference.PreviousFrame`. A resize carries a history buffer only when
+two allocations each, the one the next frame reads through
+`ResourceReference.PreviousFrame` and the one it writes. A resize carries a history buffer only when
 its resolved byte capacity and element size still match. A history version advances only when its
 writer records and its submission succeeds: a failed or skipped write keeps the
 last successful history and the sample count that went with it, reading history

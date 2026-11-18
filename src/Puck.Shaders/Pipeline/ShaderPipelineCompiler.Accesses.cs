@@ -3,10 +3,11 @@ using Puck.Hosting;
 
 namespace Puck.Shaders;
 
-// The one resource tracker. Every storage keeps one instance per frame slot: a current-frame reference reaches this
-// frame's instance, and a previous-frame reference the instance the previous frame wrote. An instance is used in two
-// roles over its life: as this frame's (the current role) and, one frame later, as the previous frame's (the previous
-// role), after which it is idle until its slot comes round again. So in the steady state the first current-role use of a
+// The one resource tracker. A storage keeps one instance per frame slot (history only compute touches keeps two, its
+// ring following its writer: ShaderPipelineRenderNode.InstancesOf): a current-frame reference reaches this frame's
+// instance, and a previous-frame reference the instance the previous frame wrote. An instance is used in two roles over
+// its life: as this frame's (the current role) and, one frame later, as the previous frame's (the previous role), after
+// which it is idle until its turn comes round again. So in the steady state the first current-role use of a
 // frame follows the instance's last previous-role use, or its last current-role use when nothing reads it as the
 // previous frame, and the first previous-role use follows the last current-role use. The planner walks those sequences
 // once, at compile time, and gives every access its exact prior state and barrier; the render node records exactly

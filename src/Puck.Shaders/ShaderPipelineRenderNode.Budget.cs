@@ -58,11 +58,12 @@ public sealed partial class ShaderPipelineRenderNode {
     // under another's promise (a build still running).
     private long ReservedPeak(ulong more) => ((long)Math.Min(val1: checked((((OwnedBytes + m_buildPromise) + PreviewPromise) + more)), val2: ((ulong)long.MaxValue)));
     // Reserves more bytes beside everything owned and promised, before anything is allocated for them; false refuses
-    // them. With no graph installed the bytes are the instance's least, reserved whatever the pool holds.
-    private bool TryReserveMore(ulong bytes) {
+    // them. With no graph installed, or for the replacement of one that cannot render (least), the bytes are the
+    // instance's least, reserved whatever the pool holds.
+    private bool TryReserveMore(ulong bytes, bool least = false) {
         var peak = ReservedPeak(more: bytes);
 
-        return Reservation.TryReserve(floor: (m_ready ? 0L : peak), peak: peak);
+        return Reservation.TryReserve(floor: ((m_ready && !least) ? 0L : peak), peak: peak);
     }
     // Sets the reservation to what the instance owns and has been promised, after a promise ended or objects were
     // released. It restates what was already admitted, so it is stated as the floor and is never refused.
@@ -196,6 +197,7 @@ public sealed partial class ShaderPipelineRenderNode {
             bytes = checked((bytes + Footprint(
                 count: InstancesOf(
                     inFlight: inFlight,
+                    plan: plan,
                     storage: storage
                 ),
                 counts: counts,
@@ -254,7 +256,7 @@ public sealed partial class ShaderPipelineRenderNode {
         width: width
     );
     // What installing a graph planned at an extent, with its counted buffers resolved against counts at that extent, the
-    // preview its selection needs and its arrays bound to rows, costs from what the node owns now. History the graph
+    // preview its selection needs and its arrays bound to rows, costs from what the node owns now. Storage the graph
     // carries from the installed one is moved, not allocated, so the peak holds its bytes once.
     private ShaderPipelineMemoryAccount Account(ShaderPipelinePlan plan, ShaderPipelineStorageCounts counts, (uint Width, uint Height)? preview, RowBindings rows) {
         var extent = (counts.Width, counts.Height);
@@ -277,12 +279,12 @@ public sealed partial class ShaderPipelineRenderNode {
         if (ReferenceEquals(objA: plan, objB: m_pipeline?.Plan)) { steady = checked((steady + PackageReadbackBytes(passes: m_passes))); }
         var carried = 0UL;
 
-        foreach (var index in CarriedHistoryOf(
+        foreach (var index in CarriedStoragesOf(
             extent: extent,
             plan: plan
         ).Keys) {
             carried = checked((carried + Footprint(
-                count: ((int)m_inFlight),
+                count: InstancesOf(inFlight: m_inFlight, plan: plan, storage: plan.Storages[index]),
                 counts: counts,
                 storage: plan.Storages[index]
             ).Bytes));
@@ -358,14 +360,20 @@ public sealed partial class ShaderPipelineRenderNode {
             : GpuResidencyPolicy.Ring),
         slotCount: ((int)m_inFlight)
     );
-    // The history a graph planned at an extent carries from the installed graph, by the index of the storage that
-    // receives it: a history storage of the same name, shape and resolved extent, whose instances were created with every
-    // usage the graph gives it. A carried storage allocates nothing.
-    private Dictionary<int, CarriedHistory> CarriedHistoryOf(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
-        var carried = new Dictionary<int, CarriedHistory>();
+    // The storages a graph planned at an extent takes over from the installed graph, by the index of the storage that
+    // receives them: a storage of the same name, shape, resolved extent or size, instance count and initialization, whose
+    // instances were created with every usage the graph gives them (a depth image for the same attachment). A carried
+    // storage allocates nothing, so a replacement's peak holds only what it changes beside the installed graph rather
+    // than two whole graphs. History keeps its contents. Any other storage is scratch its new graph clears or rewrites,
+    // and only one the installed graph alone reads is carried: never an external, package-owned, borrowed or exported
+    // storage, nor one either graph publishes, whose instances a consumer may still read. The installed graph keeps
+    // every carried instance until it installs on the frame thread, and its submissions run before the new graph's on
+    // the one queue.
+    private Dictionary<int, CarriedStorage> CarriedStoragesOf(ShaderPipelinePlan plan, (uint Width, uint Height) extent) {
+        var carried = new Dictionary<int, CarriedStorage>();
 
         if (
-            (m_pipeline is null) ||
+            (m_pipeline is not { } installed) ||
             !m_ready
         ) {
             return carried;
@@ -374,7 +382,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var counts = CountsAt(extent: extent, plan: plan);
 
         foreach (var storage in plan.Storages) {
-            if (!storage.History) {
+            if (storage.IsExternal || (!storage.History && !Carriable(plan: plan, storage: storage))) {
                 continue;
             }
 
@@ -385,8 +393,10 @@ public sealed partial class ShaderPipelineRenderNode {
                         b: storage.Name,
                         comparisonType: StringComparison.Ordinal
                     ) ||
-                    !old.History ||
-                    !CompatibleHistory(
+                    (old.History != storage.History) ||
+                    (old.Count != InstancesOf(inFlight: m_inFlight, plan: plan, storage: storage)) ||
+                    (!old.History && (old.Borrowed || (old.Export is not null) || !Carriable(plan: installed.Plan, storage: old.Storage) || HoldsPublication(resource: old))) ||
+                    !CompatibleStorage(
                         current: storage.Declaration,
                         counts: counts,
                         old: old.Spec,
@@ -396,24 +406,53 @@ public sealed partial class ShaderPipelineRenderNode {
                     continue;
                 }
 
-                var usage = UsageOf(
-                    plan: plan,
-                    storage: storage
-                );
+                // The instances themselves are what the candidate binds, so their own extent or size is what must match,
+                // whatever the declarations resolved to.
+                var (width, height, _) = Footprint(storage: storage, counts: counts, count: 1);
 
-                if (
-                    ((old.Images is { } images) && images.All(predicate: image => ((image is not null) && ((image.Usage & usage) == usage)))) ||
-                    (old.Buffers is not null)
-                ) {
-                    carried.Add(
-                        key: storage.Index,
-                        value: new CarriedHistory(Old: old)
+                if (old.Images is { } images) {
+                    var usage = UsageOf(
+                        plan: plan,
+                        storage: storage
                     );
+
+                    if (
+                        !images.All(predicate: image => ((image is not null) && ((image.Usage & usage) == usage) && (image.Width == width) && (image.Height == height))) ||
+                        (((usage & GpuImageUsage.DepthAttachment) != 0) && (DepthOf(plan: plan, storage: storage, format: ParseFormat(format: storage.Declaration.Format)) != DepthOf(plan: installed.Plan, storage: old.Storage, format: ParseFormat(format: old.Spec.Format))))
+                    ) {
+                        continue;
+                    }
+                } else if (
+                    (old.Buffers is not { } buffers) ||
+                    !buffers.All(predicate: buffer => ((buffer is not null) && (buffer.SizeBytes == storage.Declaration.ResolveSizeBytes(counts: counts)))) ||
+                    ((BufferUsageOf(plan: installed.Plan, storage: old.Storage) & BufferUsageOf(plan: plan, storage: storage)) != BufferUsageOf(plan: plan, storage: storage))
+                ) {
+                    continue;
                 }
+
+                carried.Add(
+                    key: storage.Index,
+                    value: new CarriedStorage(Old: old)
+                );
             }
         }
 
         return carried;
+    }
+    // Whether a plan's storage is one only its own graph reads, which a replacement may take over: not package-owned and
+    // not published.
+    private bool Carriable(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+        (!m_packages.OwnsBuffer(plan: plan, storage: storage) && !Publishes(plan: plan, storage: storage));
+    // Whether any instance of an installed storage is a publication a consumer may still read.
+    private bool HoldsPublication(RuntimeResource resource) {
+        foreach (var image in (resource.Images ?? [])) {
+            if ((image is not null) && IsPublished(imageHandle: image.ImageHandle)) { return true; }
+        }
+        foreach (var buffer in (resource.Buffers ?? [])) {
+            if ((buffer is not null) && IsPublishedBuffer(handle: buffer.BufferHandle)) { return true; }
+        }
+
+        return false;
     }
 
     // The usages every instance of an image storage is created with. A depth storage is a depth attachment, sampled too
@@ -441,8 +480,8 @@ public sealed partial class ShaderPipelineRenderNode {
             ? GpuBufferUsage.Indirect
             : GpuBufferUsage.None);
 
-    // History an installing graph takes from the installed one: the storage whose instances move into it.
-    private readonly record struct CarriedHistory(RuntimeResource Old);
+    // A storage an installing graph takes from the installed one: the storage whose instances move into it.
+    private readonly record struct CarriedStorage(RuntimeResource Old);
 
     private ShaderPipelineResourceStatus StatusOf(RuntimeResource resource) {
         var (width, height, bytes) = Footprint(

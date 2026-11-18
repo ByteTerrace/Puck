@@ -632,6 +632,48 @@ public sealed class ShaderPipelineAttachmentLawTests {
         );
     }
     [Fact]
+    public void AReloadCarriesItsFrameSizedAttachmentsAndAResizeCarriesNone() {
+        var gpu = new FakePipelineGpu();
+        var plan = Plan(definition: Layers(resources: static resources => [.. resources.Select(selector: static resource => ((resource.Name is "c0" or "c1" or "d0" or "d1")
+            ? (resource with { Dimensions = ShaderPipelineDimensions.Relative() })
+            : resource))]));
+        using var node = InstalledNode(
+            gpu: gpu,
+            plan: plan
+        );
+        static FakePipelineGpu.Created[] Depths(FakePipelineGpu gpu, int skip) => [.. gpu.CreatedObjects.Skip(count: skip).Where(predicate: static created => (created.Kind == "D32Float image"))];
+
+        // A reload at the installed extent takes over the depth ring, and the color chain's, instead of allocating them.
+        var installed = gpu.CreationCount;
+
+        node.Swap(pipeline: Compiled(plan: plan));
+        _ = node.ProduceBuildStart(gpu: gpu);
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(
+            actual: (Error: node.LastSwapError, Depths: Depths(gpu: gpu, skip: installed).Length),
+            expected: (Error: ((Exception?)null), Depths: 0)
+        );
+
+        // A resize changes the frame-sized attachments' extent, so neither is carried: the new framebuffers bind a new
+        // depth ring at the color's extent.
+        var resized = gpu.CreationCount;
+
+        node.Resize(
+            height: (Extent / 2),
+            width: (Extent / 2)
+        );
+        _ = node.ProduceBuildStart(gpu: gpu);
+        _ = node.ProduceFrame(context: default);
+        Assert.Equal(
+            actual: (Error: node.LastSwapError, node.Extent),
+            expected: (Error: ((Exception?)null), ((Extent / 2), (Extent / 2)))
+        );
+        Assert.Equal(
+            actual: Depths(gpu: gpu, skip: resized).Select(selector: static created => created.Bytes),
+            expected: Enumerable.Repeat(count: 3, element: (((Extent / 2UL) * (Extent / 2UL)) * 4UL))
+        );
+    }
+    [Fact]
     public void TheNodeCountsDepthAttachmentsAndGeometryBuffersInWhatItOwns() {
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(

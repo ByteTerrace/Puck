@@ -193,7 +193,7 @@ Until then, the targets below show the shape of the frame, not commitments.
 |---|---|---|---|
 | All GPU memory | Not measured as one figure | 8 GB of the card's 12 | Room for the system and other programs (Puck plays nice with its host) |
 | Resident baked meshes | About 3 GB, growing toward 4 GiB and never shrinking | 3 GB resident around the viewer | Residency evicts by distance and view; the cap is independent of how large the world is |
-| Image history | 188 bytes a pixel for each frame in flight: about 2.1 GB at 2560 by 1440 | 0.9 GB | Decision 13 |
+| Image history | 188 bytes a pixel in two copies, the one a frame reads and the one it writes, plus an 8-byte history colour in two copies: about 1.4 GB at 2560 by 1440 | 0.9 GB | Decision 13 |
 | Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB in one shared pool | One pool for every world in view, not a pool per world |
 | Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | Glass storage shared across views |
 | The bake's own memory while baking | More than 10 GB of private memory in a cold bake | Not a play-time cost, but bounded | The bake's peak must fall far enough that a player's machine can derive (see the fourth principle) |
@@ -213,8 +213,11 @@ Notes on reading it.
   full rate). Every world instance stepping in series on the frame thread
   (`WorldInstanceHost.StepInstances`) does not scale to many visible
   worlds; the [job-system plan](engine-job-system.md) owns that question.
-- **The image history's 2.1 GB is arithmetic, not a reading**: 188 bytes
-  times the pixels of 2560 by 1440, times three copies in flight. It is the
+- **The image history is the root view's largest store**: `pipeline.inspect
+  world` reads it as most of the view graph's memory at the bar's size.
+  History that only compute touches and the graph does not publish keeps
+  two instances, not one for each frame in flight, since its ring follows
+  its writer and one queue orders the reuse behind the read. It is still the
   single largest effect of the owner's size ruling on this plan, and it
   moves the history split ([decision 13](#13-shade-through-one-path-and-shrink-the-image-history))
   from last to early.
@@ -1196,15 +1199,15 @@ motion on the GPU.
 **The problem.** Surface shading exists twice: authored shading programs,
 which are the intended path, and older fixed layers, which the default
 frame still uses. Shading is the largest pass. And the history that
-antialiasing keeps is 188 bytes for every pixel, in one copy for each
-frame in flight.
+antialiasing keeps is 188 bytes for every pixel, in two copies: the one a
+frame reads and the one it writes.
 
 **What we propose.**
 
 1. *Split the history.* Forty of its forty-seven words are a window of
    the last eight frames. That window moves to one buffer updated in
    place where a pixel did not move, and only the words that follow
-   motion stay in a copy for each frame.
+   motion stay in two copies.
 2. *One shading path*, after decision 5 has fixed the colour conversion.
    The ways of running a shading program are measured against the fixed
    layers on the same device, and the fixed layers are then deleted.
@@ -1213,7 +1216,7 @@ frame in flight.
    rate.
 
 **Why.** The owner's ruling on the bar's size makes the history the
-largest single store after the meshes: about 2.1 GB at 2560 by 1440. The
+largest single store after the meshes: about 1.4 GB at 2560 by 1440. The
 split brings it to about 0.9 GB. One shading path removes a second
 implementation.
 
@@ -1227,12 +1230,13 @@ and it is designed and reviewed before it is built.
 from its own position on the moving route. What a player sees when a
 shading program arrives that has no compiled kernel yet.
 
-**Against the budget.** The history row, from about 2.1 GB to 0.9 GB on
+**Against the budget.** The history row, from about 1.4 GB to 0.9 GB on
 the RTX 4070, and the shading row's 4.5 ms.
 
-**Evidence.** Checked: the switch's default, and the history's words for
-each pixel. Not checked: the 2.1 GB is arithmetic from that layout, and
-the shading pass's 3.7 ms is one reading at a smaller window.
+**Evidence.** Checked: the switch's default, the history's words for each
+pixel, and its bytes at the bar's size, which `pipeline.inspect world`
+reads. Not checked: the shading pass's 3.7 ms is one reading at a smaller
+window.
 
 **Owning plan.** [Author shaders](author-shaders.md).
 

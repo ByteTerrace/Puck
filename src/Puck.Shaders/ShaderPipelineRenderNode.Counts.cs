@@ -1,3 +1,4 @@
+using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 
 namespace Puck.Shaders;
@@ -93,15 +94,34 @@ public sealed partial class ShaderPipelineRenderNode {
         ) {
             m_requestedCountRevision = (m_installedCounter?.Revision ?? 0L);
             m_requestedRenderRevision = (m_installedRenderExtent?.Revision ?? 0L);
+            // A new request replaces the refused candidate and its refusal, as a swap does.
             ForgetRefusal();
+            m_lastSwapError = null;
             m_recountPending = true;
         }
     }
-    // A transient or retained intermediate has one queue-ordered allocation shared by every frame slot. Other owned
-    // storages have one allocation per frame slot.
-    private static int InstancesOf(ShaderPipelinePlannedStorage storage, uint inFlight) => ((storage.Declaration.Transient || storage.Declaration.Retained)
-        ? 1
-        : ((int)inFlight));
+    // A transient or retained intermediate has one queue-ordered allocation shared by every frame slot. History that only
+    // compute and package dispatches touch, and that nothing outside the graph reads, has two: the one this frame reads
+    // and the one it writes. Its ring follows its successful writer (HistoryIndex), never the submission slot, and every
+    // frame's submissions run in order on the one queue, so the write that reuses an instance is ordered behind the read
+    // of it a frame earlier by the barrier its planned access records. History a render pass draws keeps one instance a
+    // frame slot, because its framebuffers are built per slot over a fixed instance; a published one keeps one too,
+    // because a consumer reads a publication up to a frame late. Other owned storages have one allocation per frame slot.
+    private static int InstancesOf(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage, uint inFlight) {
+        if (storage.Declaration.Transient || storage.Declaration.Retained) { return 1; }
+
+        return ((storage.History && (inFlight > 2) && !DrawnOrPublished(plan: plan, storage: storage)) ? 2 : ((int)inFlight));
+    }
+    // Whether a render pass draws a storage as an attachment (a document graphics pass, or a package pass's attachment
+    // port) or the graph publishes one of its versions.
+    private static bool DrawnOrPublished(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+        Publishes(plan: plan, storage: storage) ||
+        plan.Passes.Any(predicate: pass => pass.Attachments.Any(predicate: attachment => (attachment.Storage == storage.Index))) ||
+        Accessed(layout: GpuImageLayout.RenderTarget, plan: plan, storage: storage) ||
+        Accessed(layout: GpuImageLayout.DepthAttachment, plan: plan, storage: storage);
+    // Whether the graph publishes one of a storage's versions as a public output.
+    private static bool Publishes(ShaderPipelinePlan plan, ShaderPipelinePlannedStorage storage) =>
+        plan.Resources.Any(predicate: resource => (resource.Public && (resource.Storage == storage.Index)));
     // The instance a slot's index reaches in a storage: its own, or the one instance of a storage that has one.
     private static int InstanceAt(RuntimeResource resource, int index) => ((resource.Count == 1)
         ? 0

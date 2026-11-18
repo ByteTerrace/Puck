@@ -127,9 +127,9 @@ public sealed partial class ShaderPipelineRenderNode {
     // Creates a built package pass's recorder once the graph's pool exists. The recorder owns the built objects from
     // here, so a factory that throws releases them itself; the ones it never received are released here.
     // Each output's owned image instances a package can draw into, one per instance and empty for an external or buffer
-    // output. History the install carries binds the replaced graph's instances, which move into this graph only once
+    // output. Storage the install carries binds the replaced graph's instances, which move into this graph only once
     // nothing else can fail, as a document pass's framebuffers do.
-    private static IReadOnlyList<IGpuImage>[] PackageOutputImages(RuntimePass pass, IReadOnlyDictionary<string, RuntimeResource> map, IReadOnlyDictionary<int, CarriedHistory> carried) =>
+    private static IReadOnlyList<IGpuImage>[] PackageOutputImages(RuntimePass pass, IReadOnlyDictionary<string, RuntimeResource> map, IReadOnlyDictionary<int, CarriedStorage> carried) =>
         [.. pass.Outputs.Select(selector: output => {
             var resource = map[output.Name];
 

@@ -75,8 +75,8 @@ public static partial class SdfWorldPackage {
     public static RenderGraphPackageFragment Fragment => ResolveFragment.Value;
     /// <summary>The temporal fragment: <see cref="Fragment"/>'s passes at the view's render ceiling, native or reduced,
     /// with the reactivity buffer views writes at the render extent, and the history the resolve keeps at the output
-    /// extent: the history color and the history surface, each one allocation a frame slot that the next frame reads
-    /// (<see cref="ResourceReference.PreviousFrame"/>), zero until the resolve first writes it. The resolve reads the
+    /// extent: the history color and the history surface, each two allocations, the one the next frame reads
+    /// (<see cref="ResourceReference.PreviousFrame"/>) and the one it writes, zero until the resolve first writes it. The resolve reads the
     /// visibility records to reproject each pixel through <c>sdfReprojection</c>, and writes the lit
     /// image, the surface transport, the history color and the history surface. The sky never enters the history: it is
     /// evaluated and composited after the resolve.</summary>
