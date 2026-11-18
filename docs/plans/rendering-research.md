@@ -250,7 +250,7 @@ parentheses.
 | V5 | [Visibility](visibility.md#v5-multi-view-and-shadow-work) | Share work between several views and the shadow passes. |
 | M2 | Visibility | The measurement of whether the meadow is limited by geometry on the RTX 2060 and the Steam Deck. |
 | D1, D3, D4, D8 | [Virtual geometry](virtual-geometry.md) | Its decisions on the unit of detail (D1), a hierarchy above the draw (D3), clusters inside a draw (D4) and shadows (D8). |
-| G3a, G3b, G7, G9 | Virtual geometry | Its steps: bounding boxes for skinned draws (G3a, G3b), one mesh baked over many static copies (G7, a "stand parent"), and the cluster experiment (G9). |
+| G3a, G3b, G4, G7, G9 | Virtual geometry | Its steps: bounding boxes for skinned draws, first rigidly skinned (G3a) and then blended (G3b), rigid draws that read their transform slot (G4, the same step as V2b), one mesh baked over many static copies (G7, a "stand parent"), and the cluster experiment (G9). |
 | `transmit-identity`, `transmit-plane` | [Transmission](transmission.md#implementation-steps) | The first step gives each shadow-map texel its body's identity and two depth layers. The second rewrites how a receiver resolves its shadow from them. |
 | Stage 8 | [Benchmark](benchmark.md) | Report how long each frame stood on the display. |
 
@@ -4435,12 +4435,12 @@ All 135 findings are answered by a change to this page. None was left as it
 was. In a few, part of the proposed change was not taken, and the tables
 below say which part and why. The attack's findings had already been
 checked against the code by its own second readers. For the second
-review's, the code each one cites was opened for this page. Three of them
-rest on an outside source that was not reopened here: the paper on
-transmittance to each surface behind decision 6's glass limit, the paper on
-quadrics behind the reopened collapse measure, and the dual contouring
-paper's remark on its threshold. The page records those as the reviewer's
-reading.
+review's, the code or plan passage each one cites was opened for this page.
+Three of them rest on an outside source that was not reopened here: the
+paper on transmittance to each surface behind decision 6's glass limit, the
+paper on quadrics behind the reopened collapse measure, and the dual
+contouring paper's remark on its threshold. The page records those as the
+reviewer's reading.
 
 ### What moved
 
