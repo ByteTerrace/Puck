@@ -12,6 +12,13 @@ scheduling, foliage and terrain, and presentation. Reviews then read the
 result against the code. The reviews ran nothing. The one measurement taken
 since is the quiet benchmark run the summary reports.
 
+A second round of four passes asked which capabilities of the RTX 4070
+the renderer leaves unused: GPU queues, hardware ray tracing, the geometry
+pipeline, and loading, presentation and image quality. Its ranked list and
+the lanes it adds are in
+[GPU capabilities Puck does not use yet](#gpu-capabilities-puck-does-not-use-yet).
+It measured nothing either.
+
 Three things live elsewhere:
 
 - **The step designs.** Each decision here gives the problem, the proposal,
@@ -52,9 +59,10 @@ its second loop, which starts with every mesh already baked.
   garbage-collection pause.
 - **Vulkan allocates eight times what Direct3D 12 does.** Direct3D 12
   allocates about 5 MB in an average iteration and spends 1% of the loop
-  paused for collections. Vulkan allocates about 41 MB and spends 5%. A lane
-  is already working on Vulkan's allocation
-  ([lanes in flight](#lanes-in-flight)).
+  paused for collections. Vulkan allocates about 41 MB and spends 5%. The
+  `vkalloc` lane has since landed its fix
+  ([lanes in flight](#lanes-in-flight)), and the run has not been taken
+  again.
 - **Indirect light follows a lighting change late.** Lighting work is granted
   for each rendered frame, so at the 20 or so frames a second the route runs
   at, the lighting gets a third of the work it would get at 60. The automatic exposure
@@ -77,7 +85,7 @@ its second loop, which starts with every mesh already baked.
 
 ### What we propose
 
-1. **Run the work as lanes side by side, not as stages.** Twelve lanes can
+1. **Run the work as lanes side by side, not as stages.** Fifteen lanes can
    start now and run at once ([the first wave](#the-first-wave)). Each has an
    outcome, the files it owns, and a finish line it reaches by building what
    it touched and running it in the debug world. A second wave follows, and
@@ -103,6 +111,15 @@ its second loop, which starts with every mesh already baked.
    each store on the device. Its shares are provisional. The other devices
    get quality tables authored to fit, and their code paths are written as
    if the hardware were on hand.
+7. **Use what the RTX 4070 has.** A device that lacks a capability does
+   not veto a technique: each device's quality table turns a feature on or
+   off, and a weaker device keeps its own path. Fourteen techniques are
+   ranked by what they give the RTX 4070
+   ([GPU capabilities Puck does not use yet](#gpu-capabilities-puck-does-not-use-yet)).
+   Three start in the first wave: Direct3D 12's draw command and barriers,
+   a completion signal for each background job, and probe rays on the
+   GPU's ray hardware. The largest claim, about 3 ms of the shading pass,
+   follows the lanes that split that pass.
 
 ### What we are unsure of
 
@@ -119,6 +136,9 @@ its second loop, which starts with every mesh already baked.
   it ([the fifth bet](#the-bets)).
 - Eight designs rest on something no engine we read does. Each is a bet
   with a number that ends it ([the bets](#the-bets)).
+- What any GPU capability gives Puck. The round that ranked them measured
+  nothing, so every gain is another engine's figure, a vendor's, or
+  arithmetic, and seven readings decide them.
 
 ### What the owner settled
 
@@ -151,6 +171,10 @@ thread of its own is not ruled out, and the job-system plan owns it
 | Cascade | One of the shadow maps a directional light uses: a near one, a far one, and one for a second light. |
 | Probe | A point in a 3D grid that stores the indirect light arriving there. Tracing a probe finds which surfaces its rays hit. Relighting it shades those hits with the current lights. |
 | Kernel | A compute shader: a program the GPU runs over many pixels or records at once. |
+| Queue, fence | A queue is the ordered line a backend hands GPU work to. A fence is what a CPU thread reads to learn that work on a queue has finished. |
+| Ray query, acceleration structure | An acceleration structure is the hierarchy over triangles that a GPU's ray hardware walks. A ray query is a shader instruction that traces one ray through it, inside any kernel. |
+| Meshlet | A small group of triangles, at most a few hundred, that the GPU culls and draws as one unit. |
+| Capability | Something a GPU and its driver can do that not every bar device can: ray queries, mesh shaders, a second queue. |
 | Bar devices | The RTX 4070 and RTX 2060 at 60 frames a second (16.7 ms a frame), and the Steam Deck at 45 (22.2 ms). |
 | Route, chapter | The benchmark plays a scripted walk through the debug world. A chapter is one named leg, reported on its own. |
 | Lane, wave | A lane is one agent's piece of work on its own branch, with an outcome and a finish line. A wave is a set of lanes that run at the same time. |
@@ -213,8 +237,8 @@ The frame thread and the GPU work at the same time, so each has to fit the
 | The main view, all passes | 24.8 ms and 25.0 ms | 13.2 ms | The sum of the six rows below |
 | Drawing the meshes (`sdf.world$mesh`) | 1.3 ms and 1.1 ms | 1.2 ms | No change claimed |
 | Resolving what each pixel shows (`sdf.world$surface`) | 1.6 ms and 1.5 ms | 1.5 ms | No change claimed |
-| Shadow maps, far and near | 5.0 ms and 2.6 ms | 2.5 ms | Shadow casters culled by the surfaces that read them (decision 11), and maps given by role (decision 6) |
-| Shading (`sdf.world$views`) | 10.5 ms and 13.0 ms | 5.0 ms | The pass has to more than halve. The probe lookup, about a third of it at a smaller window, moves to once for each view at its own rate (decision 13). Nothing yet claims the rest, which makes this the row most likely to move |
+| Shadow maps, far and near | 5.0 ms and 2.6 ms | 2.5 ms | Shadow casters culled by the surfaces that read them (decision 11), and maps given by role (decision 6). Vulkan is already near the share, so part of Direct3D 12's figure may be its draw command, which the `direct3d` lane reads |
+| Shading (`sdf.world$views`) | 10.5 ms and 13.0 ms | 5.0 ms | The pass has to more than halve. The probe lookup, about a third of it at a smaller window, moves to once for each view at its own rate (decision 13). Shading at the rate each tile needs claims about 3 ms more by inference from another engine ([GPU capabilities](#gpu-capabilities-puck-does-not-use-yet)). Neither is measured at the bar's size, which makes this the row most likely to move |
 | Composite (`sdf.world$composite`) | 1.6 ms and 2.0 ms | 1.5 ms | Glass costs what the visible glass covers (decision 14) |
 | Antialiasing resolve, bloom and encode | 3.0 ms and 3.1 ms for the resolve | 1.5 ms | Decision 13's split history stops the resolve copying the stored window every frame |
 | The interface overlay | 2.8 ms and 2.4 ms with the benchmark's panel up | 0.5 ms | Decision 15: the overlay as clipped geometry |
@@ -597,7 +621,7 @@ that day. Nothing else waits for a bet.
 | 4. Products shared by a name that says what they mean | Memo 4 days, prototype 8 | Now on the desktop: the owner confirmed the design. The exchange between GPU vendors has its own box when the hardware is on hand |
 | 5. A program received cold shows a surface quickly | Measurement 2 days, prototype 5 | The measurement now. The prototype when a floor exists |
 | 6. Light carried across an opening between two worlds | 8 days | When light is stored for each group of sources (decision 7) |
-| 7. Tracing light with the field instead of triangles | 6 days | When the probe trace has been measured against the lighting's mesh |
+| 7. Tracing light with the field instead of triangles | 6 days | When the probe trace has been measured against the lighting's mesh, by the software walk and by ray queries (the first wave's `rays` lane) |
 | 8. A viewer is sent the visible part of a world, with secrets withheld | Memo 4 days, prototype 8 | The memo any time |
 
 ### What decides each bet
@@ -714,7 +738,15 @@ shadow. The quantity is the light arriving at each patch before exposure.
   the displayed floor and must leave the arriving light unchanged.
 
 **7. Tracing with the field.** The same rays against the same geometry, for
-the triangle trace and each field method.
+the triangle trace and each field method. On a device with ray queries the
+triangle trace is the hardware one, so the bet is not decided against the
+slower software walk. The bet is read for each device, and a device's table
+chooses the trace it runs. Whatever the number, the field keeps the work
+ray hardware cannot do: the authority's certified line of sight
+(`SdfFieldEvaluator.TryCertifiedLineOfSight`, which nothing outside tests
+calls yet), tracing where no triangles are resident, and a "clear" that
+cannot be false down to a level's sampling, because a coarse level
+encloses the surface within its recorded bound (`SdfMeshFieldLevels`).
 
 - *Ends it:* no field method completes a third more correct rays a second
   at equal quality, with its build, its invalidation and its transfers
@@ -1699,8 +1731,9 @@ rate.
 The work is not staged. It runs as lanes side by side, and an item waits
 only for something it truly needs: a landing that changes the same files, a
 mechanism it builds on, or hardware. This section gives the rules every lane
-runs under, the engine gaps, the lanes that start now, the lanes that follow
-with what unlocks each, and the work after that.
+runs under, the engine gaps, the GPU capabilities Puck does not use yet,
+the lanes that start now, the lanes that follow with what unlocks each, and
+the work after that.
 
 ### How the work is run
 
@@ -1738,7 +1771,10 @@ The review starts when the lane hands back and never holds its landing. In
 this plan those are: the withdrawn picture and every reuse of a result
 between viewers (a trust boundary); the split image history, the GPU work
 list and the early hand-off of background jobs (GPU lifetimes, and a GPU
-read at a position another job wrote); the relief mask's instruction, which
+read at a position another job wrote); each background job's own
+completion signal, the background queue and the acceleration structures
+(when a fence answers, a read on one queue of what another wrote, and a
+structure retired while a queue traces it); the relief mask's instruction, which
 changes the field's encoder and decoder together; any proof that lets an
 exact evaluator skip work; and the first bet's shortcut. Everything else is
 checked by running it and by the area fix passes.
@@ -1875,6 +1911,717 @@ cause was read in the code and reproduced at compile time by its design
 checked: the thin-tip limit and the unblended paint, which are the modeling
 plan's. No other gap was reproduced for this page.
 
+### GPU capabilities Puck does not use yet
+
+A second research round asked one question of four areas: what can the RTX
+4070 do that Puck's renderer does not use? The areas were GPU queues and
+scheduling, hardware ray tracing, the geometry pipeline, and loading,
+presentation and image quality. Each pass read the code first, so nothing
+below is proposed that already exists or is already scheduled.
+
+The round ran under the owner's ruling
+([AGENTS.md](../../AGENTS.md#puck-is-pre-release), "Upper hardware
+enhances") that a target which lacks a capability never vetoes a technique: "We
+can optionally enable/disable features as needed by target hardware." So
+each technique is judged first by what it gives the RTX 4070, and each
+entry says what the other devices run. Five rules hold for all of them:
+
+- **The engine reads a capability from the device, never from a device's
+  name.** A row of the device's authored quality table then says whether to
+  use it (`worlds/standard/quality.puck`, which exists and to which the
+  first wave's `bench` lane adds the per-device table). Each device's bar
+  is read at its own table.
+- **A capability a device's table enables counts toward that device
+  meeting its bar** (the owner's ruling, in the same place of AGENTS.md: a
+  target that lacks a capability never vetoes a technique, and features are
+  enabled per target). A device's bar is met by the path its table selects,
+  so the RTX 4070 meets its bar with ray queries, mesh shaders or a
+  background queue on, and a device whose table leaves one off meets its
+  own bar without it.
+- **Today's path stays as the fallback.** It is taken automatically where
+  the capability is missing or the table leaves it off.
+- **A path that only some devices run is a second implementation.** It
+  reads the same data, gives the same result within the tolerance stills
+  are compared at, and stays only where it is measured to pay.
+- **No technique waits for the other devices.** Their paths are written
+  now, and tested when the RTX 4070 meets its bars.
+
+The round measured nothing. Every figure below is a vendor's or another
+engine's figure for its own setup, or arithmetic from Puck's constants,
+and each says which. "Unverified" means the researcher did not fetch a
+source for the claim or did not read it from the device.
+
+**What Puck already has**, so no lane proposes it again. The mesh pass
+writes a visibility record that the shading reads
+(`SdfWorldPackage.MeshTargetFormat`). Instances are culled on the GPU
+(`SdfMeshOcclusion`). Draws and dispatches are indirect, with a count
+buffer. Direct3D 12 requires enhanced barriers and uses them for buffers,
+and it uploads through heaps the GPU reads directly. Both backends keep
+pipeline caches. The antialiasing resolve is also Puck's own upscaler.
+Output in the two HDR colour spaces is built.
+
+**What it lacks.** Each backend has one queue for all GPU work
+(`IGpuQueueSubmitter`). There is no ray tracing code. A shader is a vertex,
+fragment or compute stage (`ShaderStage`), compiled at one shader model for
+every stage (`ShaderCompiler.ShaderModel`). The Vulkan backend admits only
+shader capabilities that every device enables
+(`VulkanShaderCapabilities`). The only GPU queries are timestamps. So the
+engine has quality tiers as compile variants (`QualityTiers`) but no way
+for a kernel to depend on something only some devices have. The `rays`
+lane below builds that, and the later lanes reuse it.
+
+The techniques worth doing, ranked by what each gives the RTX 4070 at
+2560 by 1440. The rank puts the frame's own time first, then what a
+technique makes possible for the ones after it.
+
+| Rank | Technique | What it speeds up | The gain, and what kind of figure it is | Where it runs in the order |
+|---|---|---|---|---|
+| 1 | Shading at the rate each tile needs, in compute | The shading pass: 10.5 ms against a share of 5 ms | About 3 ms, inferred from another engine's 30% | Second wave, after `views` and `history` |
+| 2 | A Direct3D 12 draw command with no constant ahead of the draw | Shadow maps on Direct3D 12: 5.0 ms against Vulkan's 2.6 ms | Up to about 2.6 ms on Direct3D 12 if the hypothesis holds. Unverified | First wave, `direct3d` |
+| 3 | Mesh shaders over meshlets | Shadow maps, the mesh pass, glass and nested views | Bounded by the 5.0 ms shadow row and part of the 1.3 ms mesh row. Unmeasured, and it overlaps rank 2 | Second wave |
+| 4 | Ray queries for the probe trace and the relight | Background lighting rays, and every ray technique below | Unmeasured on Puck. Each RT core of the RTX 4070's generation tests triangles at four times the rate of the RTX 2060's generation | First wave, `rays` |
+| 5 | A compute queue of its own for background work | A background job's wait, and how large a job may be | A job is answered in about its own 1 to 2 ms, not about 25 ms later. Read from the code. The share of work that then runs for free is unmeasured | Second wave |
+| 6 | A completion signal for each background job | The same wait, on every device and on the frame's queue | The CPU learns a job is done 1 to 2 ms after the frame is handed over, not about 25 ms after. Read from the code | First wave, `signal` |
+| 7 | Shadows by ray where no map reaches | Gap 3 on the RTX 4070, and local lights, which have no shadow maps today | A look. Its cost follows the distant share of the screen. Unmeasured | Second wave |
+| 8 | Reflections by ray on glass and water | Glass and water, which reflect only the sky and the probes | A look. One ray for each reflective pixel. Unmeasured | After the second wave |
+| 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 1.4 GB | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
+| 10 | Texture transitions through enhanced barriers | The gaps between the frame's compute passes on Direct3D 12 | Under half a millisecond, a guess. The sure gain is one barrier model in place of two | First wave, `direct3d` |
+| 11 | Demand counted from what was drawn | The finest level of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
+| 12 | Present timing and the drivers' latency reports | Decision 15's record for every present | No frame time. It is the instrument that reads when a frame showed | Second wave, the record for every present |
+| 13 | Shadow depth with no fragment stage, and pipeline statistics | Shadow passes, and the missing count of vertex work | Small and unverified. The statistics are the counter decision 8 lacks | Second wave, as the first step of mesh shaders |
+| 14 | Mesh landing decoded on the GPU | Warm starts and arrivals. Nothing in a loop whose meshes are resident | Unmeasured. Puck's own landing rate may be the limit first | After the second wave, behind a reading |
+
+Each technique in turn.
+
+**1. Shading at the rate each tile needs, in compute.**
+
+- *What it speeds up.* The pass that shades each pixel
+  (`sdf.world$views`), which takes 10.5 ms on Direct3D 12 and 13 ms on
+  Vulkan against a share of 5 ms. It is the largest GPU row, and decision
+  13's probe lookup claims only about a third of it. The composite and
+  glass passes are compute too and can read the same rate. Hardware
+  variable rate shading cannot do this, because it works only on pixel
+  shaders and the views pass is a compute kernel.
+- *How.* A small pass writes a rate for each tile of pixels: every pixel,
+  or one sample for a tile of 2 by 1, 1 by 2 or 2 by 2. The views kernels
+  shade one sample for a coarse tile and write it to every pixel of the
+  tile, so whole waves of the kernel finish early.
+- *Puck's own part.* The rate comes from what Puck already holds for each
+  pixel: which receiver it shows and how far away, whether its window of
+  past frames is complete, and exact depth and normals from the visibility
+  record. A tile whose pixels show different receivers is an edge and stays
+  at full rate. A pixel that has stood still with a complete window can be
+  shaded coarsely, because the resolve's window already holds its
+  supersampled mean. No engine the round read has that last input.
+- *Evidence.* id Software's DOOM: The Dark Ages has a pipeline of the same
+  shape: a visibility buffer, deferred texturing and deferred lighting. It
+  reports "commonly around ~30% reduction in the heaviest deferred passes"
+  and "~1–2 ms GPU frame time saved in a 60 Hz title", in Microsoft's
+  article on variable-rate compute shaders in that game
+  (<https://developer.microsoft.com/en-us/games/articles/2026/04/variable-rate-compute-shaders-doom-the-dark-ages/>).
+  That 30% applies to the heaviest deferred passes at about 85% dynamic
+  resolution. Activision's software variable rate shading (Drobot, 2020) is
+  the earlier source; the researcher gave no address for it and it was not
+  checked. By inference, 30% of 10.5 ms is about 3 ms. Nothing was measured
+  on Puck.
+- *On each device.* It is ordinary compute, so all three bar devices run
+  it. The coarsest rate a device may use is a row of its table.
+- *Fallback.* Every tile at full rate, which is today's pass.
+- *Cost.* Medium: the pass that writes the rate, and tile packing in the
+  views kernels. It changes the files `views` owns and reads the history
+  `history` splits, so it follows both.
+- *Risks.* Shimmer on specular and thin features, so the rate is gated on
+  the resolve's test for features smaller than a pixel
+  (`sdfResolveFeature`). Coarse tiles that feed the window of past frames
+  can read as lower resolution while moving, so it is judged in presented
+  frames in motion and never in stills.
+
+**2. A Direct3D 12 draw command with no constant ahead of the draw.**
+
+- *What it speeds up.* Every counted indirect raster pass on Direct3D 12,
+  the shadow maps above all. The same passes take 5.0 ms on Direct3D 12 and
+  2.6 ms on Vulkan.
+- *What the code shows.* On Direct3D 12 each indirect command carries a
+  root constant ahead of its draw (`DirectXPipelineLayout.DrawSignature`).
+  Vulkan has no such constant: its vertex shader reads the draw's identity
+  from the draw's index (`sdfMeshRasterIdentity`). Every pass writes one
+  command for each candidate whether or not it draws (`sdfOcclusionEmit`),
+  and a cascade carries up to five such lists.
+- *Evidence.* AMD's performance guide (<https://gpuopen.com/performance/>):
+  "The fast path for ExecuteIndirect is to use only a draw/dispatch in the
+  command signature. Anything else in the command signature will add
+  overhead." And: "Always compact the argument buffer and provide a count
+  buffer if any draws are culled out." The round found no NVIDIA source
+  that measures a constant inside an indirect command. Decision 11 records
+  that culling the far map's casters took a refresh from 23,125 draws to
+  4,138 and from 8.5 ms to 2.9 ms, so the cost of each command dominates
+  there.
+- *The gain is a hypothesis, unverified:* that the gap between the backends
+  is overhead for each command, paid on commands that are mostly empty. If
+  so the ceiling is about 2.4 ms on the shadow maps and 0.2 ms on the mesh
+  pass, on Direct3D 12 only. The gap may have another cause, such as
+  barriers or the far map's split refresh. The `direct3d` lane's first
+  reading settles it.
+- *Two ways to drop the constant.* An incrementing constant "doesn't occupy
+  any argument buffer space", and needs the second tier of indirect
+  execution, reported in `D3D12_FEATURE_D3D12_OPTIONS21`
+  (<https://microsoft.github.io/DirectX-Specs/d3d/IndirectDrawing.html>).
+  The shader then reads the identity from the record, as Vulkan does. Or
+  the identity goes in the command's first-instance word and the vertex
+  shader reads `SV_StartInstanceLocation`, which needs Shader Model 6.8
+  (<https://microsoft.github.io/DirectX-Specs/d3d/HLSL_ShaderModel6_8.html>).
+  The second way collides with the rule that a command's first instance
+  stays zero (`GpuDrawIndirectCommand`), and it needs a shader model chosen
+  for each stage, so the first is preferred.
+- *On each device.* The RTX 4070 reaches Shader Model 6.8 according to a
+  comment in `DirectXDeviceContext.EnsureShaderModelFloor`; the device was
+  not read this round. Whether the Windows runtime exposes the second tier
+  of indirect execution and Shader Model 6.8 without the Agility SDK is
+  unverified, and both ways above depend on it (the note on the Agility
+  SDK under the watched techniques below). The RTX 2060's shader model and
+  its tier of indirect execution are unverified. The Steam Deck runs the Vulkan backend, which
+  already draws without the constant.
+- *Fallback.* Today's command, chosen where the device does not report the
+  tier.
+- *Cost.* Small.
+- *It does not replace compaction.* Removing the empty commands is the
+  second wave's [casters culled by reader](#the-second-wave), and AMD's
+  second sentence argues for it on every device.
+
+**3. Mesh shaders over meshlets.**
+
+A meshlet is a small group of triangles, at most a few hundred, that the
+GPU draws as one unit. A mesh shader transforms one meshlet. An
+amplification shader runs before it and decides which meshlets are drawn.
+
+- *What it speeds up.* The shadow maps, the mesh pass, glass and every
+  nested view's passes.
+- *Both layers of a cascade in one pass.* Every caster a cascade keeps is
+  drawn twice today: once for the layer where light enters
+  (`SdfMeshRasterPass.ShadowDescription`) and once for the layer where it
+  leaves (`SdfMeshRasterPass.ShadowExitDescription`). Its vertices are
+  fetched, skinned and transformed both times. A mesh shader transforms
+  them once. It sends every triangle to the first layer and the triangles
+  that face away from the light to the second, because a mesh shader can
+  choose the target layer for each triangle. The specification says these
+  "can only be per-primitive attributes in MeshShader", with at most 256
+  vertices and 256 primitives
+  (<https://microsoft.github.io/DirectX-Specs/d3d/MeshShader.html>). This
+  gain is Puck's own, because the two layers share one identity and level.
+- *Fewer vertex invocations.* Draws are not indexed today, so each
+  triangle costs three vertex invocations, and a skinned vertex resolves
+  its bone transform on each. AMD measured 1.24 vertices processed for
+  each unique vertex with meshlets, against 1.40 for an indexed mesh
+  ordered for the cache
+  (<https://gpuopen.com/learn/mesh_shaders/mesh_shaders-optimization_and_best_practices/>).
+  The researcher's arithmetic puts a closed mesh at about 0.6 invocations a
+  triangle against 3: about a fifth.
+- *No empty commands.* The amplification shader runs the tests the
+  selection kernel runs today (`sdfSelectionKeeps`,
+  `sdfReceiverMayShadow`, `sdfOcclusionMaySee`) and launches only what
+  survives. It also culls meshlets inside one large draw that is partly in
+  view; a chunk holds up to 131,072 triangles
+  (`SdfMeshChunks.WholeTriangles`). NVIDIA's task shader "allows early
+  culling of a group of primitives", and NVIDIA recommends 64 vertices and
+  126 primitives a meshlet
+  (<https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/>).
+  AMD recommends 128 and 256. The size is a row of each device's table.
+- *Puck's own part.* Meshlets are built from the contour's own cells, as a
+  stage of the bake with its own key (decision 10), so they are a derived
+  cache and never committed. For a skinned mesh they are formed for each
+  moving part, which gives each meshlet an exact box under live transforms.
+- *The gain.* Unmeasured. Nothing splits a shadow pass's time into command
+  processing, vertex work and rasterization today, and that split decides
+  it. It overlaps rank 2: both cut what a command costs.
+- *On each device.* The RTX 2060's generation has mesh shaders (the NVIDIA
+  article above). No source was fetched for the RTX 4070's generation, so
+  the tier is read from the device. The Steam Deck runs Vulkan on the open
+  driver, whose release notes say "Enabled VK_EXT_mesh_shader by default on
+  RADV/RDNA2" (<https://docs.mesa3d.org/relnotes/23.0.0.html>); which
+  driver version the Deck ships is unverified. The Vulkan extension's
+  proposal says mesh shaders written for Direct3D 12 carry over with "no
+  meaningful differences"
+  (<https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_mesh_shader.html>).
+- *Fallback.* Selection in compute with counted indirect draws, compacted.
+- *Cost.* Large. Two new shader stages, a shader model for each stage, an
+  optional Vulkan capability, mesh pipelines and an indirect mesh draw on
+  both backends, cascade depth as a two-slice array, and the bake stage
+  that builds meshlets.
+- *Risks.* An amplification shader that launches little work starves the
+  stage after it; AMD says to process at least 32 to 64 elements a group.
+  The order in which depth ties resolve changes from the order draws were
+  staged in to the order of meshlets. The stamp's fade, each draw's clip
+  plane and the meaning of the draw and vertex counters must be kept.
+
+**4. Ray queries for the probe trace and the relight.**
+
+An acceleration structure is the hierarchy over triangles that a GPU's ray
+hardware walks. A ray query is a shader instruction that traces one ray
+through it, and it works inside a compute kernel.
+
+- *What it speeds up.* Both kinds of background ray. The probe trace sends
+  144 rays from each probe. The relight tests one shadow ray for each light
+  at each hit. Faster rays let the background allowance buy more lighting
+  each second, so lighting follows a change sooner and takes less GPU time
+  from the frame. It is also what ranks 7 and 8 stand on.
+- *What the code shows.* The probe trace already walks triangles on the
+  GPU, in software (`sdfProbeWalk`), over a hierarchy the CPU builds
+  (`SdfMeshIrradianceScene`). The walk has two entry points, closest hit
+  (`sdfProbeIntersect`) and any hit (`sdfProbeOccluded`). A ray-query build
+  compiles the same kernel with the hardware walk in their place, so it
+  never becomes a second relight. The software triangle test uses small
+  tolerances and can miss a ray that passes exactly along an edge.
+- *Evidence.* Each RT core of the RTX 4070's generation tests triangles at
+  twice the rate of the generation before it and four times the rate of the
+  RTX 2060's generation: the whitepaper says "double the throughput for
+  ray-triangle intersection testing over Ampere (and 4x faster than the
+  first-generation RT Core used in Turing GPUs)" (NVIDIA's Ada whitepaper,
+  page 16,
+  <https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf>).
+  It compares generations of core, not the two cards, which differ in RT
+  core count and clocks. Hardware intersection closes the edge case inside
+  one acceleration structure: "The implementation must use a ray-triangle
+  intersection that is watertight". The specification limits that
+  guarantee: "The scope of 'sharing' for this definition of watertightness
+  spans only a given bottom level acceleration structure for geometries
+  that have matching transforms." The plan builds one structure for each
+  baked geometry, and a chunk holds up to 131,072 triangles
+  (`SdfMeshChunks.WholeTriangles`), so an edge shared between chunks,
+  groups or instances is not covered. It is repeatable on one device and driver: "multiple identical TraceRay()
+  or RayQuery::TraceRayInline() calls produce identical results on the same
+  device and driver"
+  (<https://microsoft.github.io/DirectX-Specs/d3d/Raytracing.html>). Two
+  figures in the illumination plan were not fetched again and stay
+  unverified: 1.5 to 1.65 billion incoherent rays a second on an RTX 2080
+  Ti, and 0.97 ms for 512 probes on an RTX 4070 in a shipped game. Puck's
+  own software rays per second have never been read, and that is the
+  lane's first reading.
+- *On each device.* The RTX 4070 has ray queries on Direct3D 12 and, it is
+  expected, on Vulkan (`VK_KHR_ray_query`; NVIDIA's Windows support was not
+  fetched). The RTX 2060 has them with driver support
+  (<https://devblogs.microsoft.com/directx/dxr-1-1/>; the NVIDIA driver
+  note that claims it for that card was seen only in a search result). On
+  the Steam Deck the open driver's page describes software emulation for
+  older parts (<https://docs.mesa3d.org/drivers/radv.html>), from which the
+  researcher infers the Deck's part exposes them natively. Mesa's feature
+  list is a closer source: it lists `VK_KHR_ray_query` as done for
+  "radv/gfx10.3+", and the Deck's part is gfx10.3 (the feature list in Mesa's
+  documentation on its main branch). That is not confirmed on the device, and the illumination plan expects its ray
+  hardware to be about ten times slower. The Deck's table takes whichever
+  walk its own measurement favours. On Vulkan a ray query needs
+  `VK_KHR_acceleration_structure`
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_ray_query.html>).
+- *Fallback.* The software walk, which also stays as the reference for
+  `world.probe` and `puck mesh scene`.
+- *Cost.* Medium to high. One structure for each baked geometry, built
+  once, because a baked tier never changes, and compacted, which saves up
+  to about half its memory
+  (<https://developer.nvidia.com/blog/best-practices-for-using-nvidia-rtx-ray-tracing-updated/>).
+  One structure over the scene's instances, rebuilt when the scene changes.
+  A neutral interface for both on the two backends. One variant of the
+  trace's include. The hit's normal and material still come from Puck's own
+  vertex and material words.
+- *Risks.* Structure memory counts against the 8 GB cap and needs its own
+  row in [the budget](#the-bars-and-the-budget) once read. Builds are
+  background jobs on the one queue, cut to the allowance. A structure is
+  opaque to its device and driver, so it is always derived locally and can
+  never be a shared product.
+- *A further gain.* A rigid body that moves can cast into the lighting as
+  one more instance, which the illumination plan wants.
+
+**5. A compute queue of its own for background work.**
+
+A queue is the ordered line a backend hands GPU work to. A fence is what a
+CPU thread reads to learn that work on a queue has finished.
+
+- *What it speeds up.* Decision 4's wait, at its cause. Background jobs
+  must submit on the frame's queue today (`SdfGpuWork.Enter` refuses
+  anything else). That queue runs in order, so a job waits behind the frame
+  ahead of it, and a long job delays the frame behind it. That delay is the
+  only reason every job is cut to a frame's share, about 4.2 ms
+  (`SdfGpuWork.FrameShareSeconds`). On its own queue a job reaches the GPU
+  when it is submitted and is answered when it finishes. The bake's full
+  batch, about 32 ms of GPU work, could then run as a few jobs sized to
+  stay safely inside the driver's timeout. The same slots would carry more
+  lighting and bake work.
+- *Evidence.* Microsoft names the case: "A separate low priority queue for
+  compute workloads allows an application to utilize spare GPU cycles to
+  perform background computation without negative impact on the primary
+  rendering"
+  (<https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization>).
+  NVIDIA says a second queue gains where shading units sit idle, and to
+  pair workloads with different bottlenecks, for example "math-limited
+  compute with shadow map rasterization"
+  (<https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap>).
+  It describes compute overlapping compute as very efficient on the RTX
+  30 generation. It does not name the RTX 4070's, so equal efficiency there
+  is an inference. No source gives a figure. How much background work then
+  runs in time the frame leaves idle is unmeasured, and a GPU trace of one
+  frame decides it.
+- *Why it is safe in Puck.* Every probe of a batch reads the light from
+  before the batch, and a baked mesh is a derived product named by its
+  inputs. So the order in which two queues finish changes when a result
+  lands and never what it is.
+- *On each device.* Compute queues are part of Direct3D 12 on every
+  device. The Vulkan queue families of the RTX 4070 and the Steam Deck are
+  unverified. For the RTX 2060's generation NVIDIA warns: "Don't overlap
+  compute work on the graphics queue with compute work on a dedicated
+  asynchronous compute queue" (<https://developer.nvidia.com/blog/vulkan-dos-donts>),
+  so its table starts on the fallback until it is measured.
+- *Fallback.* The frame's queue with rank 6's signal.
+- *Cost.* Medium to high. A second submitter with its own completion
+  timeline on both backends, and everything that retires resources reads
+  both. A job waits on the GPU for the frame queue's last table upload, and
+  the frame waits for the batch it commits, through a wait that exists
+  (`GpuExternalWait`). Results reach rows the frame reads through one small
+  copy on the frame's queue, so the background queue writes only its own
+  buffers. Microsoft's rule: "Only one queue can write to a resource at a
+  time". On Vulkan a buffer made for one queue family must be handed over
+  before another family reads it
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/VkSharingMode.html>).
+  The streaming plan's leases already hold on any queue.
+- *Risks.* Priority does not protect the frame on NVIDIA hardware: "The
+  interface simply dictates the queue from which the commands are consumed
+  first", and it "does not affect warp priorities in any meaningful way"
+  (<https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap>).
+  So a heavy trace kernel can still take shading units from the views pass,
+  and the allowance keeps metering measured GPU time. A read on one queue
+  of what another wrote is a class only review catches. NVIDIA says work
+  under about 0.2 ms rarely gains from a fence of its own
+  (<https://developer.nvidia.com/blog/advanced-api-performance-synchronization/>).
+- *Two small things ride it.* Queue priority: the frame's queue high and
+  the background queue normal on Direct3D 12
+  (<https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ne-d3d12-d3d12_command_queue_priority>),
+  and a low global priority on Vulkan where the driver offers it
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_global_priority.html>).
+  Never a priority above the default: it needs privileges, a driver may
+  refuse it, and it takes the GPU from other programs. And uploads: a mesh
+  landing is a copy kernel on the frame's queue today, about 0.8 ms for an
+  8 MiB job by Puck's own estimate (`SdfGpuWork.UploadCopyBytesPerSecond`).
+  NVIDIA says: "To avoid extra synchronizations and resource barriers,
+  asynchronous copy/transfer work can be done in compute queue"
+  (<https://developer.nvidia.com/blog/advanced-api-performance-synchronization/>).
+
+**6. A completion signal for each background job.**
+
+- *What it speeds up.* The other half of the same wait, on every device.
+  The frame defers its submissions into one batch
+  (`GpuSubmissionBatch`). Each hand-over of the batch gives the entries it
+  carries one completion signal, owned by the last of them
+  (`GpuSubmissionBatch.Split` takes the last fence of the entries handed
+  over), and every other fence in that hand-over answers from it. Background
+  jobs are submitted first in the batch, ahead of every render
+  (`RenderGraphRuntime`). So unless something hands the batch over earlier,
+  a job's commands run first on the GPU, yet the CPU sees the job finish
+  only when the whole frame's 25 ms of work retires. Any split between the
+  pump and the frame's end (a read of the queue door, a wait on a deferred
+  fence, a drain) already gives the earlier jobs an earlier signal, so this
+  premise holds only if nothing splits the frame. The `gpu.queue.executes`
+  counters, broken down by cause, show whether anything does.
+- *How.* The batch is handed over in two parts where a fenced background
+  entry ends, with that entry's own signal between them. On Direct3D 12 a
+  signal "occurs after all other operations on the command queue have been
+  completed"
+  (<https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization>).
+  On Vulkan a submit call has one fence, so the batch's owner fence is the
+  one the submit arms (`VulkanSubmissionBatch`). Each entry of one submit
+  call has its own semaphores
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html>),
+  but Puck's completion signal is a `VkFence`. So on Vulkan the per-job
+  signal means a second `vkQueueSubmit`, which is what
+  `GpuSubmissionBatch.Split` already does, or moving the fences to timeline
+  semaphores. It is not a free signal for each entry.
+- *The gain.* The CPU learns a job is done 1 to 2 ms after the frame is
+  handed over. It shows mainly once frames are limited by the GPU: at
+  today's 41 ms frames the previous batch has probably retired by the next
+  pump anyway, which is an inference. It adds to decision 4's early
+  hand-off and does not replace it.
+- *On each device.* All of them, on both backends. It is the path a device
+  takes when its table leaves rank 5 off.
+- *Cost.* Low: one more hand-over and signal a frame on Direct3D 12.
+- *Risks.* It changes which fence answers for a submission, so the batch's
+  rule that everything put on the queue follows every earlier submission
+  must keep holding.
+
+**7. Shadows by ray where no map reaches.**
+
+- *What it fixes.* Two places with no useful shadow today. Past the last
+  cascade nothing casts a shadow at all, which is gap 3. And a point or
+  spot light is shadowed only by the probes' visibility times ambient
+  occlusion (`sdfLightInputs`), which resolves no finer than the probes'
+  spacing.
+- *How.* One any-hit ray toward the sun for each pixel beyond the last
+  cascade, traced against the floor's meshes, and one ray for each shadowed
+  local light in reach. AMD's hybrid shadows are the precedent: they
+  classify 8 by 4 tiles and reject pixels "using the maximum and minimum
+  depth values from the shadow map cascades"
+  (<https://gpuopen.com/manuals/fidelityfx_sdk/techniques/classifier/>).
+- *The gain.* Shadows on the far walls with no far-map draws, at a cost
+  that follows the distant share of the screen. The illumination plan
+  records that stretching the far cascade over the valley costs more than
+  ten times the draws, vertices and GPU time. The ray cost is unmeasured.
+  By inference from the unverified figure in rank 4, a full screen of rays
+  would cost a few milliseconds and the distant share a fraction of that.
+- *Puck's own part.* A coarse mesh traced against a fine one that was
+  drawn can shadow itself. Each level records how far it deviates from the
+  authored field (`SdfMeshFieldLevels`), so the ray starts past that bound.
+  A coarse level also encloses the surface within its recorded bound, so a
+  ray that misses it proves the line is clear, and only a hit near the
+  bound needs the finer mesh. That guarantee stops at features thinner
+  than the level's sampling.
+- *On each device.* As rank 4. A device without rays keeps the probes'
+  answer past the maps, which the first wave's `shadows` lane builds, or
+  the far shadow map if its table chooses it. Local lights keep the probes'
+  share, or the shadow atlas the illumination plan designs.
+- *Cost.* It needs rank 4's structures and changes the files `shadows`
+  owns.
+- *Risks.* A hard edge where rays meet the cascades, which needs the blend
+  band decision 6 designs. Rays for each pixel need a cap, with overload
+  reported and never dropped silently. A soft shadow from a wide light
+  needs several rays or a denoiser, which works against the smaller image
+  history.
+
+**8. Reflections by ray on glass and water.**
+
+- *What it fixes.* Glass and water reflect only the sky and the probes
+  (`sdfMeshReflection`). The lake, the pool and the gallery's glass miss
+  the visual bar for it.
+- *How.* One ray for each reflective pixel, lit at the hit from the probes
+  and the cascades, with no second material system.
+- *Puck's own part.* A reflection ray that hits a portal or a screen reads
+  that view's published picture, under the owner's ruling that a portal is
+  a display for lighting purposes
+  ([illumination](illumination.md#the-gaps-the-round-named)). So a
+  reflection never traces into another world's scene and discloses nothing
+  the picture does not.
+- *Evidence.* Epic's documentation: "Hardware Ray Tracing is the only way
+  to achieve high quality mirror reflections"
+  (<https://dev.epicgames.com/documentation/en-us/unreal-engine/lumen-technical-details-in-unreal-engine>).
+- *On each device, and the fallback.* As rank 4. Today's reflection stays
+  where rays are off.
+- *Cost and risks.* The glass and composite stages, which `water` and
+  `shadows` change first. Shading that differs at each hit is slow on ray
+  hardware; reordering it is on the watch list below.
+
+**9. A vendor's upscaler as an authored alternative to the resolve.**
+
+- *What it speeds up.* At native size, where the bar is read: the resolve
+  (3.0 ms) and the image history (about 1.4 GB today, about 0.9 GB after
+  `history`). At a render scale a player's table authors, every pass that
+  scales with rendered pixels.
+- *Evidence.* NVIDIA's DLSS programming guide gives 95 to 204 MB of
+  internal memory at a 2560 by 1440 output
+  (<https://github.com/NVIDIA/DLSS/raw/main/doc/DLSS_Programming_Guide_Release.pdf>).
+  Its timing table has no RTX 4070 row. The RTX 4070 Ti row reads 0.45 to
+  1.46 ms at a 2560 by 1440 output, depending on the preset, but those rows
+  are for Performance mode, with a quarter-size input, not native size. So
+  its cost on the RTX 4070 at native size is unverified. The memory figure
+  is for the RTX 40 series; the RTX 30 and 20 series reach 207 MB. AMD's open upscaler costs 0.8 ms at 1440p in its native mode
+  on an RX 7900 XTX
+  (<https://gpuopen.com/fidelityfx-super-resolution-3/>). By arithmetic,
+  not measurement, the gain at native size is 1 to 2 ms and about 1 GB.
+- *On each device.* NVIDIA's runs on both RTX cards. AMD's newest ships
+  only as signed Windows libraries
+  (<https://gpuopen.com/fidelityfx-super-resolution-4/>), so on Linux the
+  Steam Deck keeps Puck's resolve; that is an inference. Intel's runs on
+  any GPU with Shader Model 6.4 (<https://github.com/intel/xess>); its
+  Vulkan support is unverified.
+- *Fallback.* Puck's resolve, which every device keeps.
+- *Cost.* High. The resolve also writes transport words for each pixel
+  that the sky and composite read, and a vendor's upscaler returns colour
+  only. Each nested view would need its own instance, so nested views stay
+  on Puck's resolve. Screens and portals need masks. Puck's inputs are
+  better than usual: motion and depth come exactly from the visibility
+  record.
+- *What holds it.* The register rules that temporal reconstruction is
+  Puck's own, for two reasons
+  ([decisions](../decisions/rendering.md)). The owner's ruling removes one:
+  that a vendor's upscaler is tied to a platform. The other stands: it
+  knows nothing of SDF surfaces, nested views or screens. Taking it up
+  means a register entry first. It also brings a vendor's closed binary
+  into a build, which is [the owner's call](#what-the-owner-settled-1).
+
+**10. Texture transitions through enhanced barriers.**
+
+- *What it speeds up.* A barrier tells the GPU that a resource changes
+  use between two passes. Direct3D 12 has an older and a newer form. Puck
+  requires the newer one and uses it for buffers, but every texture still
+  goes through the older one (`DirectXBarriers.Transition`), which makes
+  the driver assume the worst case. The frame is a chain of compute passes
+  over images, so it pays that between most of them.
+- *Evidence.* The specification: "Mixing legacy and enhanced barriers on
+  the same subresource can introduce extra performance overhead"
+  (<https://microsoft.github.io/DirectX-Specs/d3d/D3D12EnhancedBarriers.html>).
+  The gain is unmeasured; under half a millisecond is the researcher's
+  guess. The sure gain is one barrier model in the backend in place of two.
+- *On each device.* Every Direct3D 12 device, since the backend already
+  refuses a device without the newer form. No fallback is needed.
+- *Cost.* Low, inside the Direct3D 12 backend.
+- *Risks.* Tracking the layout of the swap chain's images and of
+  render-pass attachments.
+
+**11. Demand counted from what was drawn.**
+
+- *What it speeds up.* Memory and bake time. Resident meshes are about 3
+  GB, and the finest level, about 1.1 GB of it, is almost never drawn
+  (decision 8). Demand today asks for every group whose box is large enough
+  on screen, with no test for whether anything hides it
+  (`SdfMeshDemand.Observe`). A group behind a wall therefore asks for its
+  finest level.
+- *How.* The selection kernel already decides what each pass draws. For
+  each group it draws, it records the finest level its error rule wanted,
+  with a 32-bit atomic maximum. The words come back the way the kernel's
+  sight results do.
+- *On each device.* All of them; it needs nothing optional.
+- *Cost.* Small.
+- *Risks.* It is a frame late. It may only decide what is kept: prediction
+  still decides arrivals, as decision 9 rules, and the signal never enters
+  a mesh's key.
+
+**12. Present timing and the drivers' latency reports.**
+
+- *What it speeds up.* No frame. It is the instrument decision 15 lacks:
+  when each frame showed, and the time from input to display.
+- *Evidence.* The Vulkan present-timing extension is ratified and reports
+  the refresh duration and the actual time of each present
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_present_timing.html>).
+  NVIDIA's Windows driver ships it, marked as a prerelease, with the newer
+  present-wait and a latency report that splits a frame into input sample,
+  simulation, submission, driver and GPU time
+  (<https://developer.nvidia.com/vulkan-driver>,
+  <https://docs.vulkan.org/refpages/latest/refpages/source/VkLatencyTimingsFrameReportNV.html>).
+  The open driver's main branch lists present timing, the newer
+  present-wait and AMD's latency extension as done
+  (<https://gitlab.freedesktop.org/mesa/mesa/-/raw/main/docs/features.txt>);
+  which version the Steam Deck ships is unverified. On Direct3D 12 the
+  vendors' latency kits are separate libraries
+  (<https://developer.nvidia.com/performance-rendering-tools/reflex>,
+  <https://github.com/GPUOpen-LibrariesAndSDKs/AntiLag2-SDK>).
+- *The gain.* No latency today either: the host needs about 41 ms and the
+  GPU about 25 ms, so no frames queue. Once the host is the faster of the
+  two, up to two frames can queue on Direct3D 12, and starting a frame
+  just in time removes them. That is an inference.
+- *Fallback.* Today's present wait. A missing extension is reported as a
+  capability, as decision 15 plans.
+- *Cost.* Medium, in the Vulkan presenter.
+
+**13. Shadow depth with no fragment stage, and pipeline statistics.**
+
+- *What it speeds up.* The shadow pass's fragment shader exists only to
+  count fragments (`sdf-mesh-shadow.frag.hlsl`). An occlusion query counts
+  the same samples with no pixel shader. That a depth pass with no fragment
+  stage is faster is the researcher's inference, unverified.
+- *What it adds.* A pipeline statistics query reports vertex shader
+  invocations
+  (<https://learn.microsoft.com/en-us/windows/win32/api/d3d12/ns-d3d12-d3d12_query_data_pipeline_statistics>).
+  That is the count of vertex work decision 8 says is missing, and it is
+  what would show rank 3's saving.
+- *On each device.* All of them. Small cost.
+
+**14. Mesh landing decoded on the GPU.**
+
+- *What it speeds up.* Warm starts and arrivals, and nothing in a loop
+  whose meshes are already resident. A stored mesh is inflated and decoded
+  on the CPU (`SdfMeshStoreCodec`), then lands on the GPU through
+  background jobs.
+- *Measure first.* Landing is capped at about 252 MB a second
+  (`SdfGpuWork.UploadBytesPerSecond`), a constant that no disk technique
+  removes. By arithmetic, the 3 GB of resident meshes need about 12 s at
+  that cap whatever the disk does. One reading of `world.residency` after
+  a warm start says whether reading, decoding or landing sets the time.
+- *How, if the reading asks for it.* A store entry is a cache and may
+  change format freely. Each plane is stored in a form the GPU can
+  decompress, and one kernel decompresses it and undoes the bake's
+  prediction straight into place, so the CPU never touches the bytes.
+  Microsoft's GDeflate comes with a CPU codec and a shader decoder
+  (<https://github.com/microsoft/DirectStorage/blob/main/GDeflate/README.md>;
+  whether its licence covers the shader is unverified), and DirectStorage
+  falls back to the CPU
+  (<https://devblogs.microsoft.com/directx/directstorage-1-1-now-available/>).
+  On Linux the reads go through `io_uring`
+  (<https://man7.org/linux/man-pages/man7/io_uring.7.html>) with the same
+  kernel; whether .NET's file reads use it is unverified.
+- *Fallback.* Today's inflate on the CPU.
+- *Cost.* High: a store format, a decode kernel, and the streaming plan's
+  release of the CPU's copies, without which the CPU still needs the
+  decoded planes.
+
+**Readings that decide the unmeasured ones.** The lanes take the first
+three themselves. The rest go to the lead's quiet window and hold no lane.
+
+| Reading | How it is taken | What it decides |
+|---|---|---|
+| Shadow passes on both backends | Each cascade's time beside `world.counters gpu pass 'sdf.world$shadow-*'` (commands, draws, vertices) at the hero spawn and the lobby, before and after Direct3D 12's command changes | Whether the 2.4 ms between the backends is the draw command (rank 2). The `direct3d` lane |
+| Rays per second | `world.counters sdf.mesh-gi` against the trace dispatch's GPU time, with the software walk and with ray queries | Whether probes take the hardware walk on a device (rank 4). The `rays` lane |
+| A job answered inside its frame | The `gpu.queue.executes` counters and the background work's report of jobs answered, before and after the signal | Whether a job is answered a step sooner once frames are limited by the GPU (rank 6). The `signal` lane, with the timing as a request |
+| Capabilities, read from the device with no build | On Direct3D 12 the ray tracing tier, the mesh shader tier, the tier of indirect execution and the highest shader model, each as the Windows runtime reports it with no Agility SDK shipped: whether it reports tier 1.1 in `D3D12_FEATURE_D3D12_OPTIONS21` and Shader Model 6.8 is unverified. On Vulkan the ray query, acceleration structure, mesh shader and present-timing extensions, 64-bit atomics on buffers, which are optional, and the queue families. Later `vulkaninfo` on the Steam Deck | Which paths the RTX 4070's table may turn on (ranks 2, 3, 4, 5 and 12). Whether the `direct3d` lane's root-constant drop needs the Agility SDK, and so whether the owner's question blocks it |
+| One shadow pass split by kind of work | A PIX capture of the far shadow pass and the mesh pass on Direct3D 12: command processing, vertex work and rasterization | Whether mesh shaders (rank 3) or a rasterizer in compute is the next cut |
+| Idle time in one frame | An Nsight GPU trace of one route frame at 2560 by 1440: idle shading units and the busiest unit for each pass, and across the probe and bake chains | How much background work a second queue runs for free (rank 5), and whether the frame's own passes or the probe chain are worth restructuring (the watch list) |
+| A warm start's fill-in | `world.residency` once `all-resident` is no longer `pending`: the store's read and decode thread-seconds, `load-span`, `all-landed`, `near-ninety-at` and `landing-bytes` | Whether reading and decoding, or the landing cap, sets the time (rank 14) |
+
+**Rejected, or watched.** Each row says what would take it up.
+
+| Technique | Verdict | Why |
+|---|---|---|
+| The frame's own compute passes spread over two queues | Watched | Possibly a few milliseconds, but no source gives a figure and it needs images shared across queues. The GPU trace of idle time decides it, after rank 5 |
+| Direct3D 12 work graphs for the probe chain and the bake's narrowing samples | Watched | No figure, and a second implementation of the chain. Rank 5 takes the wait out on every device first. The RTX 2060 is absent from NVIDIA's list (<https://developer.nvidia.com/blog/advancing-gpu-driven-rendering-with-work-graphs-in-direct3d-12/>), and whether a work graph runs on a compute queue is unverified |
+| Work graphs with mesh nodes | Watched | A preview when read (<https://devblogs.microsoft.com/directx/d3d12-mesh-nodes-in-work-graphs/>); its release status is unverified. Rank 3 covers the same passes on all three devices |
+| The GPU choosing a pipeline for each item (`VK_EXT_device_generated_commands`) | Watched | Adds little to decision 4. Its use is decision 13's authored shading programs. Driver support is unverified on all three devices (<https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_device_generated_commands.html>) |
+| A rasterizer in compute for small triangles | Watched | A second rasterizer with unknown gain. For shadow depth it needs only 32-bit atomics. The 64-bit atomics other plans call unconfirmed are required on buffers at Puck's shader model on Direct3D 12 (<https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_Int64_and_Float_Atomics.html>). On Vulkan they are an optional feature: "If the VK_KHR_shader_atomic_int64 extension is not supported, support for the shaderBufferInt64Atomics feature is optional" (<https://docs.vulkan.org/refpages/latest/refpages/source/VK_VERSION_1_2.html>). Puck would have to require it at device creation and add it to `VulkanShaderCapabilities`, which enables none of them today, and it is unconfirmed on the bar devices. So the atomic width is not the obstacle on Direct3D 12, and is an open reading on Vulkan. The split of one shadow pass decides it |
+| Ambient occlusion by ray | Watched | The planned screen-space march covers most of it, and rays need a denoiser. Taken up if presented frames show what the screen cannot see |
+| Clustered and partitioned acceleration structures | Watched | A preview on Direct3D 12 (<https://devblogs.microsoft.com/directx/clas-ptlas-preview/>), and NVIDIA-only on Vulkan (<https://developer.nvidia.com/blog/nvidia-rtx-mega-geometry-now-available-with-new-vulkan-samples/>). Taken up when rank 4 shows that building structures is the limit |
+| Reordering ray shading on the GPU | Watched | It works only in a ray generation shader (<https://microsoft.github.io/hlsl-specs/proposals/0027-shader-execution-reordering>), which Puck has none of, and it does nothing for rays traced inside compute. Taken up if rank 8 grows shading that differs at each hit |
+| Opacity micromaps | Rejected | They speed up alpha-tested geometry, and no mesh pass alpha-tests. Reconsidered if foliage cards with alpha enter the trace |
+| Displaced micro-meshes | Rejected | One vendor's format for geometry the bake already produces as triangles |
+| Hardware variable rate shading | Rejected | It reaches only raster passes, and the depth rate stays full. The views pass is compute, which rank 1 answers |
+| Vulkan's newer barriers, render passes without framebuffer objects, and descriptor heaps | Watched | No gain on Direct3D 12. All are in Vulkan 1.3, which Puck requires, or in the open driver (the features list above). Taken up when a trace of the Vulkan backend names barriers or descriptor writes |
+| The drivers' low-latency modes | Watched | No latency to remove while the host is slower than the GPU. Rank 12's record shows when that changes |
+| HDR metadata | Not proposed | The `colour` lane owns HDR output, and it waits for an HDR display |
+| Shader cache sessions and pipeline binaries | Rejected for now | Both backends already cache pipelines. Reconsidered if a trace of edit-to-running time shows pipeline creation |
+
+Four of those rows need Microsoft's Agility SDK, which ships a newer
+Direct3D 12 runtime beside the program: clustered structures, ray
+reordering, opacity micromaps and mesh nodes. Whether a lane of the first
+wave also needs it is unverified. The `direct3d` lane's preferred way to
+drop the draw's constant (rank 2) needs the second tier of indirect
+execution, reported in `D3D12_FEATURE_D3D12_OPTIONS21`, and its other way
+needs Shader Model 6.8. Microsoft's post on Agility SDK 1.613 lists both
+as that release's features, "Incrementing Constants in ExecuteIndirect"
+and, under Shader Model 6.8, "Start Vertex/Instance Location"
+(<https://devblogs.microsoft.com/directx/agility-sdk-1-613-0/>). It says
+nothing about either being in the Windows runtime, and Puck ships no
+Agility SDK. So whether the Windows runtime exposes the tier and the shader
+model is unverified, and it is part of the capability reading that takes no
+build (the table above). The `direct3d` lane's root-constant drop depends
+on that reading. If the runtime lacks them, both ways of dropping the
+constant need the SDK, and shipping it
+([the owner's call](#what-the-owner-settled-1)) then blocks a lane of the
+first wave. Whether ray queries need it is also unverified; the researcher
+infers the operating system's runtime is enough.
+
+**Text elsewhere that still lets one device decide.** These passages were
+written before the ruling. Each is corrected by the lane that takes up the
+work it describes, in that lane's change:
+
+- [Illumination](illumination.md#after-the-gpu-trace): the frame bar "with
+  no lower quality tier as a fix", "per-pixel hardware RT stays out of the
+  frame", the neural caches rejected because "the Deck has no tensor
+  hardware", and the ray query step, which that page says no other page
+  schedules. The `rays` lane and the shadows by ray.
+- [Transmission](transmission.md): ray-traced shadows left out because
+  "The Steam Deck carries the baseline without them". The shadows by ray.
+- [Virtual geometry](virtual-geometry.md#d10-hardware-reach): that nothing
+  may depend on a capability the three devices do not share, the Proton
+  leg, which a native Linux build does not need, and clusters admitted only
+  when the RTX 2060 or the Deck is limited by geometry. The mesh shader
+  lane.
+- [Visibility](visibility.md): the work graph, mesh shader and software
+  rasterizer rows, each tied to a reading on the RTX 2060 and the Deck.
+  The mesh shader lane.
+- [The SDF reference's rejections](../rendering/sdf/reference/negative-results-and-rejections.md),
+  which treat hardware ray tracing only as a replacement for field rays.
+  The `rays` lane.
+
 ### Tracks
 
 A track is a chain in which order is real. Tracks run beside each other, and
@@ -1883,29 +2630,34 @@ inside a track an item waits only for the one before it.
 | Track | The chain |
 |---|---|
 | Frame thread | The lift's steps and the breakdown of produce. Then the capture order (decision 2), after the withdrawn picture, which changes the same binding code. Beside it the job system's own order: bounded waits, the thread pool, the tick's partitions |
-| Shading | The shading pass at the bar's size. The colour conversion, then terrain programs, then one shading path |
+| Shading | The shading pass at the bar's size, then shading at the rate each tile needs. The colour conversion, then terrain programs, then one shading path |
 | Image history | The split history, then the smaller per-pixel records |
 | Shadows | Maps by role with the cascade set's shape, then the far shadow map, then the filter sized in metres, then casters culled by reader in every map |
 | Indirect light | The allowance that follows free GPU time, then the grant for each second, then the work list on the GPU. One sky, then light stored for each group of sources with area emitters, then shared surface lighting, then one pool across worlds |
+| Rays | A kernel variant that depends on a device's capability, then acceleration structures, then the probe trace and relight by ray query. Then shadows by ray where no map reaches, after maps by role. Then reflections by ray |
+| GPU queues | A completion signal for each background job, then a compute queue of its own for background work, with uploads on it |
 | Bake | The sector's bound and the relief mask, then the relief operation and its caps. The moving cutter's steps G1 to G4. The contour count, then the contour rule. Keys by stage, then the first speed fix |
-| Memory | The cap as an engine input. The floor, then eviction, then the backing that returns memory, then keeping what was observed in use. The chain of meshes after its counters |
-| Draw submission | Uploads only for instances that changed, then the compacted command list, then commands grouped by geometry and level, then indexed draws as an experiment |
+| Memory | The cap as an engine input. The floor, then eviction, then the backing that returns memory, then keeping what was observed in use, read from what the selection kernel drew. The chain of meshes after its counters |
+| Draw submission | Direct3D 12's draw command without its constant. Uploads only for instances that changed, then the compacted command list, then commands grouped by geometry and level, then indexed draws as an experiment. Mesh shaders over meshlets after the compacted list, which is their fallback |
 | Water | Depth over the bed, the eye in water, flow that varies and simulation-only rows. Then the falls, the pool and the reservoir's looks, then the particle pool |
 | Worlds and disclosure | The withdrawn picture, then results reused between viewers by what each was delivered, then the bets on merged worlds, shared products, light through openings and the visible part of a world |
 | Measurement and presentation | The benchmark at the bar's size with the device's table, then the remote route driver, then a record for every present, then the present queue's admission rule |
 
 ### Lanes in flight
 
-One lane is already dispatched. No lane below repeats it, and each keeps
-out of its files.
-
-| Lane | What it is doing | Keep out of |
-|---|---|---|
-| `vkalloc` | Vulkan's allocation in each frame: about 41 MB an iteration against Direct3D 12's 5 MB | The Vulkan backend's per-frame paths (`src/Puck.Vulkan`, `src/Puck.Vulkan.Presentation`) |
+No lane is in flight. The one lane dispatched ahead of the waves,
+`vkalloc`, has landed on the integration branch: Vulkan's recording path
+and the lighting's snapshot no longer allocate in each frame. Its files in
+`src/Puck.Vulkan` and `src/Puck.Vulkan.Presentation` are free for the
+lanes below. What its trace left open is the second wave's shared
+allocation lane, and [the hand-off](open-items.md#hand-off) lists it.
 
 ### The first wave
 
-Twelve lanes start now and run at once. None waits for another to begin.
+Fifteen lanes start now and run at once. None waits for another to begin.
+Twelve came from the research round on the renderer, and three from
+[the round on GPU capabilities](#gpu-capabilities-puck-does-not-use-yet):
+`direct3d`, `signal` and `rays`, whose files none of the twelve owns.
 Each owns the files its entry names. Where two lanes meet in a file, the
 merge order is given after the entries, and the later lane merges the
 integration tip before it hands back.
@@ -1929,6 +2681,9 @@ point. The lead may give a Codex slot a `specialist` brief when one is free.
 | `floor` | A shape in reach always has a mesh | Gap 3 | Opus |
 | `water` | Depth over the bed, the eye in water, flow that varies | Gaps 5, 6, 9 and 14 | Codex |
 | `contour` | Each failing bake named, and the first defect fixed | Gap 7 | Sonnet |
+| `direct3d` | Direct3D 12 draws without a constant in each command, and one barrier model | The shadow maps' 2.4 ms between the backends | Sonnet |
+| `signal` | A background job is known finished when it finishes | Decision 4 | Opus |
+| `rays` | A kernel that can depend on a device's capability, and probe rays on the GPU's ray hardware | The lighting's rays, and shadows where no map reaches | Opus |
 
 **`views`: the shading pass at its share.**
 
@@ -2180,10 +2935,117 @@ masked.**
   meshes of the world, and the exhibits it names pass their audit, seen
   from the sides that failed.
 
+**`direct3d`: Direct3D 12 draws without a constant in each command, and
+one barrier model.**
+
+- *Outcome.* Two things in the Direct3D 12 backend
+  ([ranks 2 and 10](#gpu-capabilities-puck-does-not-use-yet)). First the
+  shadow maps, which take 5.0 ms on Direct3D 12 and 2.6 ms on Vulkan for
+  the same passes. The lane reads each shadow pass's commands, draws and
+  vertices beside its time on both backends. It then gives Direct3D 12 an
+  indirect command that holds the draw alone, with the draw's identity
+  read from the record as Vulkan reads it, and takes the reading again.
+  That step depends on the capability reading showing that the Windows
+  runtime exposes the second tier of indirect execution, or Shader Model
+  6.8, without the Agility SDK; if it shows neither, the step waits on the
+  owner's question about the SDK and the lane does only the barrier
+  change. Second, every texture transition goes through enhanced barriers, and the
+  older transition path is deleted.
+- *Owns.* In `src/Puck.DirectX`: `DirectXPipelineLayout*.cs`,
+  `DirectXGpuRecorder*.cs`, `DirectXBarriers.cs`, and the capability reads
+  of `DirectXFeatureSupport` with the fields they add to
+  `GpuDeviceCapabilities`. Also the draw's identity in
+  `frame/sdf-mesh-raster.hlsli`.
+- *Needs.* A GPU grant: the reading is the work.
+- *Model.* Sonnet `implementer`. The lead moves the lane to a `specialist`
+  if tracking the layout of the swap chain's images turns out to carry the
+  barrier change.
+- *Finish line.* The reading before and after, at the hero spawn and the
+  lobby at 2560 by 1440, is in the hand-back with its commands. In the
+  benchmark report the shadow passes on Direct3D 12 fall toward Vulkan's at
+  equal command counts. If they do not, the hand-back gives a PIX capture's
+  split of one shadow pass into command processing, vertex work and
+  rasterization, and the command change stays only if it removed code. A
+  route run on Direct3D 12 with `--debug-layers` prints no barrier message,
+  no texture reaches `DirectXBarriers.Transition`, and presented frames on
+  the route show nothing new.
+
+**`signal`: a background job is known finished when it finishes.**
+
+- *Outcome.* A background job with 1 to 2 ms of GPU work is seen as done
+  about 25 ms later, because inside the frame's batch its fence answers
+  from the frame's completion signal
+  ([rank 6](#gpu-capabilities-puck-does-not-use-yet)). The lane gives each
+  fenced background entry its own signal inside the batch, on both
+  backends, and that entry's fence answers from it.
+- *Owns.* `GpuSubmissionBatch.cs`, `GpuBatchedSubmissionFence.cs` and
+  `GpuQueueWork.cs` in `src/Puck.Abstractions/Gpu/Device`,
+  `src/Puck.DirectX/DirectXGpuQueueSubmitter.cs`, and
+  `VulkanSubmissionBatch.cs` and `VulkanQueueSubmitter.cs` in
+  `src/Puck.Vulkan`. It keeps out of the point where a finished job
+  installs its result, which `withdrawn` owns.
+- *Needs.* Nothing. Whether a job is answered a frame sooner when the GPU
+  limits the frame is a timing request to the lead.
+- *Model.* Opus `specialist`, with an adversarial review. The batch's rule
+  that everything put on the queue follows every earlier submission
+  carries the change, and it changes when a fence answers.
+- *Finish line.* On a running debug world at 2560 by 1440, the
+  `gpu.queue.executes` counters show one more hand-over and signal in a
+  frame that carries a background job, and no more than that. A counter
+  the lane adds shows every job submitted inside a batch answered before
+  the batch's owner. A route run prints nothing under `--debug-layers` on
+  either backend. Lighting still converges after a switch of the sun
+  ([the convergence checks](../../.claude/skills/rendering/references/mesh-gi.md#lighting-switch-convergence-checks)).
+
+**`rays`: a kernel that can depend on a device's capability, and probe
+rays on the GPU's ray hardware.**
+
+- *Outcome.* Three steps
+  ([rank 4](#gpu-capabilities-puck-does-not-use-yet)), and the first two
+  land on their own. First, a device's optional capabilities become
+  something a kernel variant can depend on. The engine reads them into
+  `GpuDeviceCapabilities`, a variant compiles only for a device that has
+  what it needs, and a row of the device's quality table turns it on. The
+  first capability is ray queries. Second, acceleration structures: one
+  for each baked geometry, built once as a background job and compacted,
+  and one over the scene's instances, rebuilt when the scene changes.
+  Third, the probe trace and the relight's shadow test compiled with a ray
+  query in place of the software walk's two entry points, and rays per
+  second read both ways. This is the illumination plan's ray query step,
+  taken ahead of its place there because shadows by ray stand on it.
+- *Owns.* A neutral acceleration-structure interface in
+  `src/Puck.Abstractions/Gpu` with its two backends, the ray tracing
+  fields of `GpuDeviceCapabilities`, the optional extensions of the Vulkan
+  device (`VulkanLogicalDeviceFactory`, `VulkanShaderCapabilities`),
+  `SdfMeshIrradianceScene*.cs`, `SdfMeshProbeGpuWork.Scene.cs`,
+  `shade/sdf-probe-trace.hlsli`, and the step in
+  [illumination](illumination.md#after-the-gpu-trace), which it rewrites as
+  built.
+- *Needs.* A GPU grant on both backends.
+- *Model.* Opus `specialist`, with an adversarial review of the
+  structures' lifetimes: a structure is retired with its mesh tier while a
+  queue may still be tracing it.
+- *Finish line.* The hand-back gives rays per second for the software walk
+  and for ray queries on the RTX 4070, on Direct3D 12 and on Vulkan, from
+  `world.counters sdf.mesh-gi` against the trace dispatch's GPU time, with
+  the commands. Both walks return the same hits within the device law's
+  tolerance, and presented frames at the teal corner and the stairwell show
+  no light through a thin wall. With the table's row off, and with the
+  capability withheld by a switch, the software walk runs and nothing else
+  changes. The bytes the structures hold are reported at the hero spawn,
+  the painting wing and the garden. If ray queries do not beat the
+  software walk for probe rays, the probes keep the software walk, and the
+  structures stay for the second wave's shadows by ray.
+
 Where lanes meet, and who merges first:
 
 - **The quality presets** (`worlds/standard/quality.puck` and their rows in
-  the schema): `bench`, then `shadows`, then `colour`.
+  the schema): `bench`, then `shadows`, then `colour`, then `rays`, which
+  adds the row that turns ray queries on.
+- **The device's capabilities** (`GpuDeviceCapabilities` and
+  `DirectXFeatureSupport`): `direct3d`, then `rays`.
+- **Where a mesh sits on the GPU** (`SdfWorldTables.MeshRegion.cs`, which
+  the lighting's scene reads placements from): `floor`, then `rays`.
 - **The view's graph** (`SdfWorldPackage.cs`): `history`, then `views`,
   then `colour`, which merges last because it retunes every place.
 - **The shading includes** (`shade/sdf-light.hlsli` and what the views pass
@@ -2215,11 +3077,16 @@ carries the change, Sonnet where the result is specified.
 
 | Lane | Outcome | Unlocked by | Owning plan | Model |
 |---|---|---|---|---|
-| Far shadows (gap 3) | Ridges cast shadows on the far walls, from a map that is refreshed only when the sun or a static draw changes | `shadows`: the far map is one more entry in its cascade set | [The terrain pass](terrain-pass.md#order-of-work), step 7 | Opus |
+| Far shadows (gap 3) | Ridges cast shadows on the far walls, from a map that is refreshed only when the sun or a static draw changes. It is the path for a device whose table leaves shadows by ray off | `shadows`: the far map is one more entry in its cascade set | [The terrain pass](terrain-pass.md#order-of-work), step 7 | Opus |
+| Shadows by ray where no map reaches (gap 3) | On a device with ray queries, a pixel past the last cascade traces one ray toward the sun, and each shadowed local light in reach traces one ([its entry](#the-capability-lanes-of-the-second-wave)) | `rays`, for the structures. `shadows`, which owns the files it changes. `floor`, for the meshes it traces | [Illumination](illumination.md) | Opus, with a look critic |
 | Terrain programs (gap 2) | The terrain template with slope, altitude, curvature and breakup masks on every wall | `colour` | [The terrain pass](terrain-pass.md#slope-altitude-and-curvature-materials), step 6 | Opus, with a look critic |
 | The capture order | Decision 2's order: upkeep, the list sealed after the cameras, readers found while captures run, minimums in place of the hidden render, state keyed by view | `withdrawn`, which changes the same binding code. `frame`'s breakdown ranks its smaller cuts and does not hold it | [Streaming and memory](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render) | Opus |
 | The background allowance | The allowance follows the GPU time the frame leaves free, bake jobs are cut to it, and lighting is granted work for each second (decision 4, steps 1 to 3) | A free slot. The first to take one: at 20 frames a second the lighting gets a third of its work | [Illumination](illumination.md) | Opus |
-| Casters culled by reader | Uploads only for instances that changed, the compacted command list, and shadow casters culled in every map (decision 11, steps 1 to 3) | `shadows`, for the cascade set, and `floor`, which changes how a draw names its mesh | [Visibility](visibility.md) | Opus |
+| The background queue | Background jobs run on a compute queue of their own and are answered when they finish, and mesh uploads' copies move onto it ([its entry](#the-capability-lanes-of-the-second-wave)) | `signal`, which changes the same submitters, and `withdrawn`, which owns where a job's result is installed. It merges after the background allowance, because both change `SdfGpuWork` | [Illumination](illumination.md), with decision 4 | Opus, with an adversarial review |
+| Casters culled by reader | Uploads only for instances that changed, the compacted command list, and shadow casters culled in every map (decision 11, steps 1 to 3). If `direct3d`'s reading shows empty commands are what Direct3D 12 pays for, the compacted list is taken first | `shadows`, for the cascade set, and `floor`, which changes how a draw names its mesh | [Visibility](visibility.md) | Opus |
+| Mesh shaders over meshlets | On a device with mesh shaders, a cascade's casters are transformed once for both of its layers, in meshlets the GPU culls, with no empty commands ([its entry](#the-capability-lanes-of-the-second-wave)) | `direct3d`, whose reading says what a shadow pass's time is made of. `rays`, for a variant that depends on a capability. `shadows` and `floor`, as for casters culled by reader, whose compacted list is the fallback | [Visibility](visibility.md) and [virtual geometry](virtual-geometry.md#d10-hardware-reach) | Opus |
+| Shading at the rate each tile needs | The views pass shades one sample for a tile of up to 2 by 2 pixels where a rate image allows ([its entry](#the-capability-lanes-of-the-second-wave)) | `views`, which splits the pass and owns its files, and `history`, whose surface the rate reads | [Author shaders](author-shaders.md), with decision 13 | Opus, with a look critic |
+| Demand counted from what was drawn | A group nothing sees stops holding its finest tier ([its entry](#the-capability-lanes-of-the-second-wave)) | `floor`, whose counters and tiers it reads | [Streaming and memory](streaming-and-memory.md#step-8-observed-use) | Sonnet |
 | The overlay | The interface overlay as clipped geometry with text from an atlas (decision 15) | A free slot | [The UI overhaul](ui.md) | Sonnet |
 | The relief operation and its caps (gaps 1 and 4) | The terrain's relief operation carries the mask, and relief and smooth blends are capped relative to the stamp | `terrain` | [The terrain pass](terrain-pass.md#order-of-work), steps 3 and 4 | Opus |
 | The moving cutter, continued (gap 8) | Relief with a cutter (G2), source tiles keyed by the cutter's reach (G3), then the glacier retreating by a cut (G4) | `cutter`. G4 also needs `terrain`, for the cradle's mask | [Moving blends](moving-blends.md#steps-each-with-its-check) | Opus |
@@ -2233,12 +3100,134 @@ carries the change, Sonnet where the result is specified.
 | Keys by stage | An edit to the simplifier rebakes with no field sampling (decision 10) | `cutter` and `contour`, which change the same bake code | [Bake proportional to change](open-items.md#bake-proportional-to-change) | Opus |
 | Where the tick runs | A design that weighs the arrangements of decision 3, each with its time from input to display | `frame`'s cost of one more world | [The job system plan](engine-job-system.md#open-questions) | Fable |
 | The shadow filter in metres | A prototype behind a switch, compared with a brute-force filter (decision 6) | `shadows` | [Transmission](transmission.md#implementation-steps) | Opus |
-| A record for every present | Whether each frame was shown, skipped or dropped, and the time from input to display (decision 15) | The research on display timing, which is owed | [The benchmark](benchmark.md) | Sonnet |
+| A record for every present | Whether each frame was shown, skipped or dropped, and the time from input to display (decision 15). On Vulkan it reads the present-timing extension and the driver's latency report where the device has them, with the input sample marked where a tick's commands are sampled ([rank 12](#gpu-capabilities-puck-does-not-use-yet)) | A free slot. The research on display timing is answered for the RTX 4070's driver, and the lane's first step reads each extension from the device. The Steam Deck's driver version is still owed | [The benchmark](benchmark.md) | Sonnet |
 | The bets' prototypes | The second bet after the capture order's minimums. The fifth after `floor`. The first only if `frame`'s breakdown shows the cost | As named | [The bets](#the-bets) | As each bet's memo names |
 
 The job system's own order (bounded waits, then the thread pool, then the
 tick's partitions) runs beside both waves on
 [its plan](engine-job-system.md#6-build-order) and is not repeated here.
+
+#### The capability lanes of the second wave
+
+Five rows of the table come from
+[the round on GPU capabilities](#gpu-capabilities-puck-does-not-use-yet),
+and no other plan holds their steps yet. Each is given in full here, in
+the first wave's form. Each one's path is turned on by a row of a device's
+quality table, and today's path runs when the row is off or the device
+lacks the capability.
+
+**Shading at the rate each tile needs.**
+
+- *Outcome.* A small pass writes a rate for each tile of pixels from what
+  the history and the visibility record already hold. The views pass
+  shades one sample for a coarse tile and writes it to the tile's pixels
+  (rank 1). The coarsest rate a device may use is a row of its table.
+- *Owns.* The views kernels and `sdf-views-stage.hlsli` once `views` has
+  landed, the new pass with its declaration in
+  `src/Puck.Shaders.Model/Graph/SdfWorldPackage.cs`, and the rate's rows in
+  the quality presets.
+- *Needs.* A GPU grant: the look in motion is the work.
+- *Model.* Opus `specialist`, with a look critic for at most two rounds.
+- *Finish line.* `sdf.world$views` falls on both backends in the benchmark
+  report at 2560 by 1440, and the report counts the share of tiles at each
+  rate. Presented frames in motion on the route show no shimmer on thin or
+  specular features and no loss of detail against the pass at full rate.
+  With the row at full rate the pass draws what it draws today.
+
+**The background queue.**
+
+- *Outcome.* Background jobs run on a compute queue of their own with
+  their own completion timeline, at a priority no higher than the frame's,
+  and the copies that land a mesh move onto it (rank 5). A result reaches
+  the rows the frame reads through one copy on the frame's queue, behind a
+  wait on the job, so the background queue writes only its own buffers.
+  A job may then be larger than a frame's share, up to a bound the
+  allowance still meters.
+- *Owns.* A second submitter and timeline behind `IGpuQueueSubmitter` and
+  `GpuQueueTimeline`, with the queue as a dimension of `GpuQueueWork`. The
+  queue's creation in `DirectXDeviceContext` and
+  `VulkanLogicalDeviceFactory`. The rule in `SdfGpuWork.Enter` that
+  background work submits on the frame's queue, which it replaces. The row
+  of the quality presets that turns the queue on. It corrects
+  `IGpuQueueSubmitter.SubmitAndWait`'s description, which on Direct3D 12
+  waits for the whole device and so for background work too.
+- *Needs.* A GPU grant on both backends.
+- *Model.* Opus `specialist`, with an adversarial review: one queue reads
+  what another wrote, and a resource is retired while either may hold it.
+- *Finish line.* On the route at 2560 by 1440 the queue's counters show
+  background lists on the second queue and none on the frame's. A counter
+  shows each job answered when its own queue finishes it. A route run
+  prints nothing under `--debug-layers` on either backend. Lighting
+  converges after a switch of the sun, and a cold arrival still lands its
+  meshes. With the row off, the frame's queue carries the work as before.
+  The frame's GPU time with the queue on and off is a request to the lead.
+
+**Mesh shaders over meshlets.**
+
+- *Outcome.* Three steps (ranks 3 and 13). First the instrument: a count
+  of vertex shader invocations from a pipeline statistics query, and the
+  shadow pass's fragment count from an occlusion query, with its fragment
+  stage removed. Second, meshlets as a stage of the bake with its own key.
+  Third, the shadow maps drawn by an amplification and a mesh shader, which
+  cull meshlets and send each caster's triangles to both layers of a
+  cascade in one pass. The mesh and glass passes follow when the shadow
+  maps show the gain.
+- *Owns.* The mesh and amplification stages in `ShaderStage` and a shader
+  model for each stage in `src/Puck.Shaders.Model/Compiler`. Mesh
+  pipelines and an indirect mesh draw on `IGpuRecorder` and both backends.
+  The meshlet stage beside the simplifier in the bake. `SdfMeshRasterPass`,
+  `SdfMeshOcclusion` and its kernel, the cascades' depth as a two-slice
+  array, and the shadow shaders. The passages of
+  [virtual geometry](virtual-geometry.md#d10-hardware-reach) and
+  [visibility](visibility.md) that tie mesh shaders to all three devices.
+- *Needs.* A GPU grant on both backends.
+- *Model.* Opus `specialist`.
+- *Finish line.* The hand-back gives the shadow passes' vertex invocations,
+  commands and GPU time at 2560 by 1440 before and after, on Direct3D 12
+  and on Vulkan. Presented frames on the route show the same shadows, with
+  no caster missing under a moving sun. Meshlets are counted as bytes of
+  the mesh store, and a second boot rebuilds none. With the row off, or
+  the capability withheld by a switch, the indirect path draws.
+
+**Shadows by ray where no map reaches.**
+
+- *Outcome.* On a device with ray queries, a pixel past the last cascade
+  traces one any-hit ray toward the sun against the floor's meshes, and
+  each shadowed point or spot light in reach traces one (rank 7). The ray
+  starts past the bound a level records for its deviation from the field,
+  so a coarse mesh does not shadow itself. Rays for each pixel are capped,
+  and a pixel over the cap is counted.
+- *Owns.* `shade/sdf-light.hlsli` and `passes/sdf-surface-stage.hlsli`
+  once `shadows` has landed, the band where rays meet the cascades, the
+  rows of the quality presets that turn each kind of ray on, and the
+  passages of [illumination](illumination.md) and
+  [transmission](transmission.md) that keep rays out of the frame.
+- *Needs.* A GPU grant.
+- *Model.* Opus `specialist`, with a look critic for at most two rounds a
+  place.
+- *Finish line.* Presented frames at `valley-rim` show ridge shadows on
+  the far walls with no far-map draws. At a place with a shadowed point
+  light, which the lane names, the shadow meets the foot of its caster.
+  The band where rays meet the cascades shows no
+  edge while the camera moves. The pass's GPU cost at 2560 by 1440 and the
+  count of pixels over the cap are in the hand-back. With the rows off,
+  the probes' answer past the maps stands as `shadows` left it.
+
+**Demand counted from what was drawn.**
+
+- *Outcome.* For each group it draws, the selection kernel records the
+  finest level the error rule wanted, and retention reads that in place of
+  a box's size on screen (rank 11). The signal decides only what is kept.
+  Arrivals stay predicted, and the signal never enters a mesh's key.
+- *Owns.* `sdf-mesh-occlusion.comp.hlsl`, `SdfMeshOcclusion.cs`,
+  `SdfMeshDemand.cs`, and the retention rule of the residency once `floor`
+  has landed.
+- *Needs.* Nothing.
+- *Model.* Sonnet `implementer`.
+- *Finish line.* On a running debug world at 2560 by 1440, at the hero
+  spawn, the painting wing and the garden, the bytes held by tiers no pass
+  drew fall against `floor`'s counter. A walk with a cut and a turn shows
+  no presented frame with a coarser mesh than the same walk showed before.
 
 ### After the second wave
 
@@ -2266,6 +3255,19 @@ Each item names the landing it needs. None waits for a wave to close.
   [its row](#the-bets) says.
 - **The bake's first speed fix** (decision 10). It needs one cold bake that
   records what limits it, taken after keys by stage.
+- **Reflections by ray on glass and water**
+  ([rank 8](#gpu-capabilities-puck-does-not-use-yet)). They need `rays`,
+  the shadows by ray, whose lighting at a hit they reuse, and `water`,
+  which changes the glass pass.
+- **A vendor's upscaler as an authored alternative to the resolve**
+  (rank 9). It needs `history`, a reading of its cost at native size on
+  the RTX 4070, a register entry, and the owner's word on shipping a
+  vendor's binary.
+- **Mesh landing decoded on the GPU** (rank 14). It needs the reading of a
+  warm start, which may name Puck's own landing rate first, and the
+  background queue.
+- **The frame's own passes on two queues.** It needs the background queue
+  and a GPU trace that shows idle time in the frame.
 
 **Then the other devices.** Testing on the RTX 2060, the Steam Deck and
 an HDR display starts when the RTX 4070 meets both bars. By then each
@@ -2341,8 +3343,20 @@ topologies and the order of devices are ruled. Sharpening stays ahead of
 bloom, as the register rules. And the hardware is not needed until the
 RTX 4070 meets its bars.
 
-No owner question blocks a lane of either wave. One design question is
-open and is not the owner's yet: where the tick runs. The job-system plan
+Two questions from the round on GPU capabilities are the owner's, and
+neither is asked until its technique is taken up, after the second wave.
+Both ask whether a build may carry another company's binary. One is a GPU
+vendor's upscaler beside Puck's own resolve. The other is Microsoft's
+Agility SDK, a newer Direct3D 12 runtime shipped beside the program, which
+four watched features need
+([GPU capabilities](#gpu-capabilities-puck-does-not-use-yet)). The SDK
+question may come sooner: if the capability reading finds that the Windows
+runtime lacks the second tier of indirect execution and Shader Model 6.8,
+the `direct3d` lane's root-constant drop needs the SDK too, and the
+question then blocks that step of a first-wave lane.
+
+Otherwise no owner question blocks a lane of either wave. One design
+question is open and is not the owner's yet: where the tick runs. The job-system plan
 owns it, the first wave measures what it needs, and it reaches the owner
 only if the design it settles on adds latency for the world the player
 acts in ([decision 3](#3-shorten-the-tick-and-settle-where-it-runs)).
@@ -2377,6 +3391,18 @@ full list is in [the step designs](rendering-research/step-designs.md#what-would
 - **A cold bake does not fit a weak device.** The floor bake is cut until
   it does, because every device keeps a local floor. Fetched products
   shorten the wait, and the fourth and fifth bets move up.
+- **Direct3D 12's shadow maps do not fall when the constant leaves the
+  draw command.** The split of one shadow pass then says where the 2.4 ms
+  between the backends goes, and it ranks mesh shaders against a
+  rasterizer in compute.
+- **Ray queries do not beat the software walk for probe rays.** The probes
+  keep the software walk. The structures stay only if the shadows by ray
+  are taken up, and are deleted otherwise.
+- **A GPU trace shows little idle time in a frame.** The background queue
+  then gives only the shorter wait, and spreading the frame's own passes
+  over two queues is dropped.
+- **Shading at a coarser rate shows in motion.** The rate is held at full
+  wherever it shows, and the shading row loses that claim.
 
 ## Where the rest is
 

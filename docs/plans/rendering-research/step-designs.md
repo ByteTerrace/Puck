@@ -1074,24 +1074,30 @@ the lighting worker effective would create.
   measures a root search on the GPU. Dreams ran a hierarchical GPU
   evaluator on a console, which is the nearest precedent.
 - *A second GPU queue for background compute*. It would stop
-  long jobs delaying the frame behind them. The only figure is a Khronos
-  sample's 21.8 ms against 22.9 ms. That sample is about tile-based mobile
-  GPUs and shows two workloads overlapping. It does not show that a queue
-  can be pre-empted on the bar devices. It stays an experiment with a stop
-  rule, and steps 1 and 2 have to hold without it.
+  long jobs delaying the frame behind them. This page held it as an
+  experiment because no source shows that a queue can be pre-empted on
+  every bar device. Under the owner's ruling that a device without a
+  capability never vetoes a technique, that objection no longer decides
+  it. It is now a lane of the plan's second wave, judged by what it gives
+  the RTX 4070, with the frame's queue as the path for a device whose
+  table leaves it off
+  ([GPU capabilities Puck does not use yet](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)).
+  Steps 1 and 2 still have to hold without it: they are the rule on the
+  frame's queue, and they bound how much a background queue may take.
 
 **Evidence.** *Checked in the code:* the one-at-a-time admission, the blocking
 coordinator, the per-frame grant, the slot count and the shared budget, how
 the service's report computes its occupancy, the bake's batch size and fixed
 cost per sample, the allowance and bank constants, the dynamic resolution
 controller and its dead band, the scheduler's unset pass-pixel ceiling, the
-relight's predicted charge against what the kernel tests, and the pump ahead
-of the prepares. *Also checked:* the commit message that recorded the 25 ms
+relight's predicted charge against what the kernel tests, the pump ahead
+of the prepares, and that the pump's submissions go into the frame's open
+batch, whose completion signal each hand-over's fences answer from, owned by
+the last entry handed over (`GpuSubmissionBatch.Split`, `RenderGraphRuntime`). *Also checked:* the commit message that recorded the 25 ms
 round trip, the 0.05 occupancy, the 44 s age, the second switch and the delay
 before the version moved, and the bake medians. *Not checked (from the
-research pass's map of this area):* the shape of a group's bake, the 4.4
-million-ray timeout, and that the pump after an upload runs inside the frame's
-open batch, whose completion signals are shared with the batch's owner.
+research pass's map of this area):* the shape of a group's bake and the 4.4
+million-ray timeout.
 *Measured once on the lead machine, not repeated:* about 4 s of GPU work in 68
 s, and the 12.6 ms root frame, whose reading records no window size.
 *Reasoned, not measured:* twenty round trips falling to four, 32 ms for a full
@@ -1583,9 +1589,11 @@ Whether a receiver between two panes shows the glass sum's limit.
 **Options we did not take.**
 
 - *Cached or sparse virtual shadow maps, refitting the projection every
-  frame, moment shadow maps, and ray-traced sun shadows*. Each
-  fails on the moving sun, on the wind, or on the baseline hardware
-  ([outside techniques not taken](#outside-techniques-not-taken)).
+  frame, and moment shadow maps*. Each fails on the moving sun or on the
+  wind ([outside techniques not taken](#outside-techniques-not-taken)).
+  Sun shadows by ray are no longer among them: on a device with ray
+  queries they are the plan's answer where no map reaches
+  ([GPU capabilities Puck does not use yet](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)).
 
 **Evidence.** *Checked in the code:* the cascade test, the texel clamp and the
 fully-lit return, the search on the light's plane, the per-view cascade flag,
@@ -4442,7 +4450,12 @@ Each item names the work that needs it. Research holds only that work.
 - **Display timing on the bar devices**, before the record for every
   present is designed. Which present-timing and present-id extensions each
   device's driver exposes, and which stages of a present each surface can
-  time, read from the device.
+  time, read from the device. Answered in part by the round on GPU
+  capabilities: NVIDIA's Windows driver and the open driver's main branch
+  both list the present-timing extension
+  ([its entry on present timing](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)).
+  Still owed: the read from each device, and which driver version the
+  Steam Deck ships.
 - **Linux and the Steam Deck**, for the Deck's bring-up and for decision
   15's timing work. Presentation-time and tearing protocols, the
   compositor's frame limiter, timer wake-up jitter, and the driver's
@@ -4530,11 +4543,12 @@ them. The last column says what would reopen each.
 | Sparse shadow pages without caching | Waits for a measurement | The culling half is the receiver mask Puck already has. The storage half is unmeasured | The occupied share of a cascade's cells measured to be small |
 | Refitting the projection every frame, scrolling cascades, static slices for the sun, baked time-of-day visibility | Rejected | Each gives up the snapped, held fit, or assumes a still light or a fixed world | Nothing, while the day clock is authored |
 | Moment, variance and exponential shadow maps | Rejected for opaque shadows. Open for glass | Light bleeds between storeys. For translucent casters, the moment paper's experiments blend sorted geometry and name unsorted alternatives such as stochastic transparency (unverified). So sorting is one implementation and not a requirement. Puck's sum of optical depth is exact in any draw order, but only for the whole span down to the first opaque surface. It cannot say how much glass lies in front of a receiver that stands between two panes, which is what storage by depth answers | The check decision 6 names: a receiver in front of, between and behind two panes |
-| Sun shadows by ray tracing or by marching the field | Rejected for the baseline | It puts a field march in the frame, or it is a second implementation with no stable baseline to match | Decision 6 landed, and a measurement on the RTX 4070 |
+| Sun shadows by marching the field | Rejected | It puts a field march in the frame | The seventh bet's number |
+| Sun shadows by ray tracing | Taken up where no map reaches, on a device with ray queries | The plan's second wave, after decision 6's maps by role ([GPU capabilities](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)) | Its measurement on the RTX 4070 |
 | A cluster hierarchy traversed on the GPU. A simplifier library as a dependency | Watched | A second builder beside the one mesher. Weak on aggregates of small things. Puck is independent work | The virtual geometry plan's cluster measurement (G9) |
-| Mesh shaders | Enhancement only, and not built | The visibility plan records the feature as present on both RTX cards' generations and enabled by the Steam Deck's open driver, with the actual drivers unqualified. So the reason is not that the hardware lacks it. Puck's backends have no mesh-shader path, and it would be a second way to draw | The feature read from each bar device, the baseline holding, and the path measured to pay with a fallback |
-| Work graphs, device-generated commands | Enhancement only | Work graphs are absent on the RTX 2060 and the Steam Deck and have no Vulkan equivalent. Device-generated commands were not read on any bar device | The baseline holds, and the path is measured to pay, with a fallback |
-| A rasterizer written in compute | Deferred | Hardware rasterization is the qualified baseline. The cited benchmark's depth-only variant runs on mobile parts with 32-bit atomics (unverified), so a portable subset exists. A visibility id with depth, clipping and depth ties, and Puck's cost on it, are unqualified. No pass has been shown to be limited by what it would replace | A bar device measured to be limited by rasterizing small triangles, with the atomic width or other feature the chosen variant needs named |
+| Mesh shaders | Taken up as a lane of the plan's second wave, on a device that has them | Puck's backends have no mesh-shader path, and it is a second way to draw, so it keeps the indirect path as its fallback and stays only where measured to pay ([GPU capabilities](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)) | The split of one shadow pass on the RTX 4070 showing that commands and vertex work are not what it pays for |
+| Work graphs, device-generated commands | Watched | A second implementation of a chain the background queue shortens on every device first. Device-generated commands were not read on any bar device | A GPU trace of the probe and bake chains on the RTX 4070 showing idle time between their dispatches |
+| A rasterizer written in compute | Watched | A second rasterizer with unknown gain. A depth-only variant needs only 32-bit atomics. 64-bit atomics on buffers are required at Puck's shader model on Direct3D 12, but optional on Vulkan, where Puck would have to require them at device creation and add them to `VulkanShaderCapabilities` (unconfirmed on the bar devices). A visibility id with depth, clipping and depth ties, and Puck's cost on it, are unqualified. No pass has been shown to be limited by what it would replace | The split of one shadow pass on the RTX 4070 showing rasterization of small triangles is what it pays for |
 | Arrivals requested by the GPU alone, pages below the mesh, slabs | Rejected | Decision 9: a group that is not in memory cannot report | Nothing |
 | Hints for refinement from geometry already in memory | Held as an experiment | Decision 9: prediction keeps arrivals and camera turns, and the hint uses the observation channel | Over-fetching or slow refinement still measured once observation decides what is kept |
 | Transition cells between tiers, geomorphing | Rejected | Both tie a tile to its neighbour's tier or add a position per vertex | Pops shown in motion after decision 8 |
@@ -4543,7 +4557,7 @@ them. The last column says what would reopen each.
 | An error measure for the collapse that includes attributes (quadrics with attributes) | Open to a measurement, inside the one collapse | It can model creases: the method penalizes moving a vertex off a sharp edge, though it does not promise every seam survives. As a second simplifier it stays rejected | It is tried inside the existing collapse, under its crease and material rules, and judged by deviation from the field, thin features and bake time |
 | Radiance caches fed from the screen or by reservoirs, and per-pixel gathers, as whole systems | Rejected, with ideas taken | They are per view, stochastic or dependent on history, which breaks a reproducible drain | A sparse cache whose behaviour from cold is measured to be no worse |
 | Hysteresis, random rotation, moment-based visibility, probes switched off, frozen lighting, a drain started warm | Rejected | The relight is a fixed quadrature, and stale light is the defect being fixed | Nothing |
-| Hardware ray queries for probe rays | Deferred | Decision 7 removes most of the rays it would speed up | Shadow rays still dominating after shared surface lighting |
+| Hardware ray queries for probe rays | Taken up in the plan's first wave (`rays`) | Decision 7 removes most of the probe rays it would speed up, but the same structures carry shadows by ray where no map reaches, which nothing else removes. Its first reading is rays per second against the software walk ([GPU capabilities](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)) | Ray queries no faster than the software walk for probe rays, in which case probes keep the software walk |
 | Ray-traced supersampling of edges, cone-traced supersampling, resolve weights that follow exposure | Rejected, or not judged | The first needs hardware ray tracing. The second is a paper nobody read. The third has no source | A shimmer on a bright edge in a moving capture |
 | A visibility record of 4 to 8 bytes | Rejected | It moves work into a kernel that is already limited by registers | Nothing |
 | A bloom threshold, exposure kept on the GPU, local tonemapping in image space, glare, a default grading table, fused post passes | Rejected or deferred | The bloom decision is settled. Exposure has consumers on the CPU. Local tonemapping makes halos. A grade or a glare is a look, which an author adds as data and the engine does not default | A measured need for the mechanism, or an author's program for the look |

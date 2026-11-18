@@ -35,8 +35,11 @@ The rendering plan is the active programme, and another session orchestrates
 it. Read this, then [the plan's first wave](rendering-research.md#the-first-wave).
 The next lead rewrites this section when it hands off in turn.
 
-- **Start here:** dispatch the plan's first wave of twelve lanes at once, in
-  the merge order the plan gives where lanes meet. The evidence bar is
+- **Start here:** dispatch the plan's first wave of fifteen lanes at once, in
+  the merge order the plan gives where lanes meet. Three of them come from
+  the round on [GPU capabilities Puck does not use yet](rendering-research.md#gpu-capabilities-puck-does-not-use-yet),
+  which ranks each technique by what it gives the RTX 4070 and names the
+  path every other device runs. The evidence bar is
   building what a lane touched and running it in the debug world at 2560 by
   1440, never a test suite. Measurement runs beside the lanes. Adversarial
   review is only for the classes [hazards](../development/hazards.md#silent-invariants)
@@ -62,9 +65,9 @@ The next lead rewrites this section when it hands off in turn.
     misses;
   - the lift allocates in spikes (frame thread 2.2 MB mean against 60 KB
     median).
-- **In flight:** nothing from this session. The GPU capabilities research
-  round adds its section to the rendering plan when it lands; if it has not,
-  re-run it from the plan's first wave context.
+- **In flight:** nothing. The GPU capabilities research round is in the
+  rendering plan: its ranked list, its three first-wave lanes and its five
+  second-wave lanes.
 - **Settled this round and recorded in their homes:** the frame bar's sizes,
   topologies and device order (AGENTS.md); deployed data is scratch
   (AGENTS.md); named engine gaps are filled first, and a material improvement
@@ -165,7 +168,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
     and visibility packets above, run as lanes side by side and not as
-    stages. Its [first wave](rendering-research.md#the-first-wave) is twelve
+    stages. Its [first wave](rendering-research.md#the-first-wave) is fifteen
     lanes that start now, each with its files, its model and its finish
     line; its [second wave](rendering-research.md#the-second-wave) names
     what unlocks each lane. Its
