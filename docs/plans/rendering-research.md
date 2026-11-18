@@ -163,55 +163,72 @@ So "highest quality" on a device means that device's authored table. The
 standard package authors the three tables, and any world can override
 them. The engine's work is the mechanism that selects a table by device.
 
-The table below is the budget each decision claims against. The measured
-column is the RTX 4070 as read so far. Every figure in it was taken in a
-window of 1280 by 900 or smaller, so it understates the cost at the bar's
-size. The budget columns are targets this page sets. Stage 0 replaces the
-measured column with readings at 2560 by 1440, and the targets are
-restated once if those readings show a row was set wrongly.
+The table below splits the RTX 4070's frame so each decision can say
+which part it moves and by how much. Its figures are a forcing function,
+in the sense of the owner's velocity rulings: they keep the work honest
+and make a regression visible, they are not finish lines, and a change is
+judged by what it does for a player moving through the world, never by
+whether it crosses a row. The split is provisional. Every measured figure
+was taken in a window of 1280 by 900 or smaller, so it understates the cost
+at 2560 by 1440. Stage 0's first readings at the bar's size replace the
+measured column, and the split is then set from those readings and from
+the gains each decision claims, with the reasoning written beside each row.
+Until then, the targets below show the shape of the frame, not commitments.
 
-| Part of the frame | RTX 4070, measured at a smaller window | RTX 4070 budget at 2560 by 1440 | RTX 2060 target at 1920 by 1080 | Steam Deck target at its panel |
-|---|---|---|---|---|
-| The whole frame | Misses: about 25 ms on the frame thread | 16.7 ms | 16.7 ms | 22.2 ms |
-| Tick, authority in process | About 8 ms | 4 ms | 4 ms | 6 ms |
-| Applying a delivery, authority remote | Not measured | 1.5 ms | 1.5 ms | 2 ms |
-| Produce | About 17 ms | 9 ms | 9 ms | 12 ms |
-| GPU: drawing the meshes | 1.7 ms at the lobby | 1.5 ms | 1.5 ms | 2.0 ms |
-| GPU: shadow maps | 3.9 ms at the lobby | 2.5 ms | 2.5 ms | 3.3 ms |
-| GPU: shading | 3.7 ms at the lobby | 4.5 ms | 4.5 ms | 6.0 ms |
-| GPU: glass and nested views | Not split out | 2.0 ms | 2.0 ms | 2.7 ms |
-| GPU: image history, bloom, encode and the overlay | Overlay 0.9 ms with the benchmark panel | 2.0 ms | 2.0 ms | 2.7 ms |
-| GPU: background work (lighting, bake, uploads) | An allowance of 4.2 ms, of which the share used is unknown | At least 1.5 ms | At least 1.5 ms | At least 2.0 ms |
-| GPU: margin | None: about 12.6 ms for the main view alone, before nested views | 2.7 ms | 2.7 ms | 3.5 ms |
+| Part of the RTX 4070's frame at 2560 by 1440 | Measured so far, at a smaller window | Provisional share | What the share assumes |
+|---|---|---|---|
+| The whole frame | Misses: about 25 ms on the frame thread | 16.7 ms | The bar |
+| Tick, authority in process | About 8 ms, every world instance stepped in series | 4 ms | The parallel tick (the job-system plan) halves it; see the note on world count |
+| Applying a delivery, authority remote | Not measured | 1.5 ms | Stage 0 measures it on the Azure deployment |
+| Produce | About 17 ms | 9 ms | Decisions 2 and 4: work follows change, and view recording runs in parallel |
+| GPU: drawing the meshes | 1.7 ms at the lobby | 1.5 ms | Caster culling and compaction offset the larger window |
+| GPU: shadow maps | 3.9 ms at the lobby | 2.5 ms | Shadow maps do not grow with the window; caster culling cuts them |
+| GPU: shading | 3.7 ms at the lobby | 4.5 ms | About 3.2 times the pixels of the measured window, so this assumes the shading pass gets about 2.6 times faster per pixel; unproven, and the row most likely to move |
+| GPU: glass and nested views | Not split out | 2.0 ms | One nested view in frame; see the note on views |
+| GPU: image history, bloom, encode and the overlay | Overlay 0.9 ms with the benchmark panel | 2.0 ms | Decision 13's smaller history |
+| GPU: background work (lighting, bake, uploads) | An allowance of 4.2 ms, of which the share used is unknown | At least 1.5 ms | Decision 5: the allowance follows the GPU time the frame leaves free |
+| GPU: margin | None: about 12.6 ms for the main view alone, before nested views | 2.7 ms | |
 
-| Store | Today on the RTX 4070 | RTX 4070 budget | RTX 2060 target | Steam Deck target |
-|---|---|---|---|---|
-| All GPU memory | Not measured as one figure | 8 GB of the card's 12 | 4.5 GB of the card's 6 | 10 GB for the process and the GPU together |
-| Baked meshes | About 3 GB, growing toward 4 GiB and never shrinking | 3 GB | 1.5 GB | 2 GB |
-| Image history | 188 bytes a pixel for each frame in flight: about 2.1 GB at 2560 by 1440 | 0.9 GB | 0.5 GB | 0.25 GB |
-| Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB for one shared pool | 0.4 GB | 0.4 GB |
-| Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | 0.25 GB | 0.25 GB |
-| The bake's own memory while baking | More than 10 GB of private memory in a cold bake | Not a play-time cost | Not a play-time cost | 6 GB at its peak, or the Deck fetches products |
+| Store on the RTX 4070 | Today | Provisional cap | What the cap assumes |
+|---|---|---|---|
+| All GPU memory | Not measured as one figure | 8 GB of the card's 12 | Room for the system and other programs (Puck plays nice with its host) |
+| Resident baked meshes | About 3 GB, growing toward 4 GiB and never shrinking | 3 GB resident around the viewer | Residency evicts by distance and view; the cap is independent of how large the world is |
+| Image history | 188 bytes a pixel for each frame in flight: about 2.1 GB at 2560 by 1440 | 0.9 GB | Decision 13 |
+| Lighting probes | About 72 MB a table in up to four copies, and a hit cache of about 90 MB, for every world shown | 0.6 GB in one shared pool | One pool for every world in view, not a pool per world |
+| Shadow maps | 96 MiB for the cascades, and 144 MB of glass storage for each shadowed view at the highest tier | 0.4 GB | Glass storage shared across views |
+| The bake's own memory while baking | More than 10 GB of private memory in a cold bake | Not a play-time cost, but bounded | The bake's peak must fall far enough that a player's machine can derive (see the fourth principle) |
 
-Four notes on reading it.
+Notes on reading it.
 
-- The image history's 2.1 GB is arithmetic, not a reading: 188 bytes times
-  the pixels of 2560 by 1440, times three copies in flight. It is the
+- **Every cap is per viewer, never per world.** At the scale Puck is
+  built for, the world a player stands in is unbounded and many worlds can
+  be in view through portals. A memory cap is therefore a cap on what is
+  resident around the viewer, and a store whose size follows world size or
+  world count is a defect against this table, whatever its total today.
+- **Views and worlds in frame.** The nested-view row and the tick row
+  assume one nested view and today's few worlds. Each extra view in frame
+  and each extra world stepped costs more, so stage 0 measures the cost of
+  one more view and one more world, and the design states how that cost is
+  bounded (by screen coverage, by distance, by a cap on views stepped at
+  full rate). Every world instance stepping in series on the frame thread
+  (`WorldInstanceHost.StepInstances`) does not scale to many visible
+  worlds; the [job-system plan](engine-job-system.md) owns that question.
+- **The image history's 2.1 GB is arithmetic, not a reading**: 188 bytes
+  times the pixels of 2560 by 1440, times three copies in flight. It is the
   single largest effect of the owner's size ruling on this plan, and it
   moves the history split ([decision 13](#13-shade-through-one-path-and-shrink-the-image-history))
   from last to early.
-- The Steam Deck's 10 GB is the streaming plan's existing figure. The
-  other memory bars are proposed here and are
-  [a question for the owner](#questions-for-the-owner).
-- The frame-thread targets for the RTX 2060 assume a processor like the
-  lead machine's. They are restated when that machine is known.
-- A budget in milliseconds cannot be checked without the device. So each
-  pass also gets a budget in counted work: draws, vertices, shaded pixels,
-  shadow texels and dispatches. Counted work is deterministic and reads
-  the same on every machine. A device's quality table sets its counts
-  (its size, its shadow tier, its probe tier), and a change is checked
-  against the weaker devices' counts on the lead machine while their
-  hardware is absent.
+- **The other devices are not given milliseconds here.** Under the owner's
+  ruling their testing waits until the RTX 4070 meets its bars, and their
+  hardware differs too much for borrowed figures to mean anything: the
+  Steam Deck's GPU has a small fraction of the RTX 4070's throughput. Each
+  device's quality table (its window, shadow tier, probe tier and detail)
+  is authored so that its counted work fits a share of its frame, and is
+  checked on the lead machine by counted work: draws, vertices, shaded
+  pixels, shadow texels and dispatches, which are deterministic and read
+  the same on every machine. The memory bars for the RTX 2060 (4.5 GB of
+  its 6) and the Steam Deck (10 GB for the process and GPU together, the
+  streaming plan's figure) are [a question for the owner](#questions-for-the-owner).
 
 Each decision below states what it claims against this table. Stage 1's
 fixes add GPU work: an encode pass for a single view, shadows for nested
