@@ -44,8 +44,8 @@ public static partial class BenchmarkCommand {
         public readonly Option<bool> Uncapped = new("--uncapped") { Description = "Boot with the present mode that does not wait for the display (immediate), for a throughput trend; never a frame bar. The report says it ran uncapped and a comparison refuses to set it beside a paced run." };
         public readonly Option<double?> Budget = CliOptions.Amount("--budget", "The host work, in milliseconds, past which an iteration is over (default 16.667, one 60 Hz period).", 0.1);
         public readonly Option<int> Timeout = CliOptions.Count("--timeout-seconds", $"The run's wall-time limit (1..7200, default {DefaultTimeoutSeconds}): a run that passes it ends itself and keeps a partial report. The verb waits a further {BudgetGraceSeconds} s for the boot and collection.", 1, DefaultTimeoutSeconds, 7200);
-        public readonly Option<int> Width = CliOptions.Count("--width", "Window width (default 1280).", 1, 1280, 16384);
-        public readonly Option<int> Height = CliOptions.Count("--height", "Window height (default 720).", 1, 720, 16384);
+        public readonly Option<int> Width = CliOptions.Count("--width", "Window width (default 2560, the frame bar's size on the RTX 4070).", 1, 2560, 16384);
+        public readonly Option<int> Height = CliOptions.Count("--height", "Window height (default 1440).", 1, 1440, 16384);
         public readonly Option<string?> Cache = new("--cache-dir") { Description = "The mesh cache directory the World uses." };
         public readonly Option<string?> Artifact = new("--world-artifact") { Description = "A World build's Puck.World.dll to play in place of the checkout's own build." };
         public readonly Option<string?> Output = new("--output") { Description = "Parent of a unique run directory that receives report.json (puck.bench.v1), each backend's run.json and frames.csv, and its logs." };
