@@ -215,20 +215,12 @@ public sealed partial class ShaderPipelineRenderNode {
         )) {
             return;
         }
-        if ((m_lastSubmissionFence is { } fence) && !Signaled(fence: fence)) {
-            m_retired.Add(item: new RetiredGraph(
-                afterSubmission: m_submissions,
-                bytes: 0UL,
-                fence: fence,
-                allocation: new HeldBindingRetirement(lease: lease),
-                passes: [],
-                preview: null,
-                resources: []
-            ));
-        } else {
-            lease.Retire();
-        }
+        QueueRetirement(new RetiredGraph(afterSubmission: m_submissions, bytes: 0UL,
+            allocation: new HeldBindingRetirement(lease: lease), passes: [], preview: null, resources: []));
+        // As with a graph retirement, transfer ownership without querying a device an install may be replacing.
+        ReleaseCompletedRetirements();
     }
+
     // Retires the hold on every binding the installed graph no longer declares as external.
     private void ReleaseUndeclaredBindingHolds() {
         if (m_bindingHolds.Count == 0) {

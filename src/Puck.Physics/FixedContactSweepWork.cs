@@ -15,14 +15,9 @@ namespace Puck.Physics;
 /// <see cref="WorkClass.Deterministic"/>: the same world and input spend the same work on every run and host. A host
 /// registers <see cref="Process"/>; a law hands its solver a ledger of its own, so a sibling test running in parallel
 /// cannot move its counts.</remarks>
-public sealed class FixedContactSweepWork : IWorkCounterSource {
+public sealed class FixedContactSweepWork : WorkLedger<ShardedWorkCounterSet> {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.sweep";
-
-    private readonly ShardedWorkCounterSet m_counts = new(
-        kinds: [Sweeps, BoundsQueries, Contacts, Exhausted],
-        name: SourceName
-    );
 
     /// <summary>Gets the kind counting certified sweeps: one per core sphere of each collider volume a moving body
     /// sweeps.</summary>
@@ -40,17 +35,18 @@ public sealed class FixedContactSweepWork : IWorkCounterSource {
     /// it is created.</summary>
     public static FixedContactSweepWork Process { get; } = new();
 
-    /// <inheritdoc/>
-    public string Name => m_counts.Name;
-    /// <inheritdoc/>
-    public ReadOnlySpan<WorkKind> WorkKinds => m_counts.WorkKinds;
+    /// <summary>Initializes a new instance of the <see cref="FixedContactSweepWork"/> class, every kind at zero.</summary>
+    public FixedContactSweepWork() : base(counters: new(
+        kinds: [Sweeps, BoundsQueries, Contacts, Exhausted],
+        name: SourceName
+    )) { }
 
     /// <summary>Counts one finished sweep.</summary>
     /// <param name="boundsQueries">The bounds queries it spent.</param>
     /// <param name="contact">Whether it stopped at a possible contact.</param>
     /// <param name="exhausted">Whether it ended undecided, out of budget or refused.</param>
     public void Count(int boundsQueries, bool contact, bool exhausted) {
-        var shard = m_counts.ThreadShard;
+        var shard = Counters.ThreadShard;
 
         shard.Count(kind: Sweeps);
         shard.Add(amount: boundsQueries, kind: BoundsQueries);
@@ -63,10 +59,4 @@ public sealed class FixedContactSweepWork : IWorkCounterSource {
             shard.Count(kind: Exhausted);
         }
     }
-    /// <summary>Reads the current total of one of this ledger's kinds.</summary>
-    /// <param name="kind">One of this ledger's kinds.</param>
-    /// <returns>The total counted so far.</returns>
-    public long Read(WorkKind kind) => m_counts.Read(kind: kind);
-    /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind: kind, value: out value);
 }

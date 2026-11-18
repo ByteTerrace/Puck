@@ -80,7 +80,7 @@ public readonly record struct ArenaColumnRange(StateLane Lane, RowShape Shape, C
 /// runtime-state field a row or cell carries.
 /// </summary>
 /// <remarks>
-/// A host-owned row (<see cref="StateRow.HostOwned"/>) is laid out with a descriptor and no cell slots: the arena
+/// A host-owned row (<see cref="StateRowShape.HostOwned"/>) is laid out with a descriptor and no cell slots: the arena
 /// answers nothing for it, and its owning facet does.
 /// <para>Offsets are a function of the catalog and the authored rows alone, so two runs of the same document lay
 /// out identically and a hash folded in layout order compares across hosts.</para>

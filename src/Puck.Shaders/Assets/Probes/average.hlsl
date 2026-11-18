@@ -19,15 +19,11 @@ RWStructuredBuffer<uint> Accumulate : register(u0);
 RWStructuredBuffer<float> Channels : register(u1);
 RWTexture2D<float4> Output : register(u2);
 
-static const uint MaxAccumulateScale = 1024;
+#include "probe-accumulate.hlsli"
 
 groupshared uint GroupRed;
 groupshared uint GroupGreen;
 groupshared uint GroupBlue;
-
-uint AccumulateScale(uint width, uint height) {
-    return min(MaxAccumulateScale, 0xFFFFFFFFu / max(width * height, 1u));
-}
 
 [numthreads(8, 8, 1)]
 void accumulate(uint3 dispatchId : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {

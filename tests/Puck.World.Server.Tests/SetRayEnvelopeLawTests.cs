@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>A <c>setRay</c> transform's write value goes through the SAME <see cref="StateRow.TryAdmitWrite"/> door
+/// <summary>A <c>setRay</c> transform's write value goes through the SAME <see cref="StateRowShape.TryAdmitWrite"/> door
 /// as every other write (ENGINE CONTRACT A): on a bounded row declaring <see cref="StateOverflow.Saturate"/> the
 /// whole accepted prefix is clamped to the declared ceiling, and on a bounded row declaring the default
 /// <see cref="StateOverflow.Refuse"/> an out-of-range value refuses the write outright — never a half-written ray —

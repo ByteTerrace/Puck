@@ -31,7 +31,7 @@ public readonly struct EffectiveBehavior {
     /// <summary>Resolves <paramref name="cell"/>'s effective behavior against its carrying <paramref name="row"/>:
     /// the cell's own trait when it declares one, none when the cell opts out with
     /// <see cref="StateCellBehavior.None"/>, else the row's own default. A cell keyed
-    /// <see cref="StateRow.SlotKey"/> — a slot row's one cell — never carries an override of its own; its
+    /// <see cref="StateRowShape.SlotKey"/> — a slot row's one cell — never carries an override of its own; its
     /// behavior is always the row's default.</summary>
     /// <param name="row">The carrying row.</param>
     /// <param name="cell">The cell, or <see langword="null"/> for one that does not exist yet (a bare row read, or

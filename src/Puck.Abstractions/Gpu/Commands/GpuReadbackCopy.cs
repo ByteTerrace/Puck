@@ -39,9 +39,7 @@ public static class GpuReadbackCopy {
             sourceAccessMask: sourceAccess, destinationAccessMask: GpuAccess.TransferRead,
             sourceStageMask: sourceStages, destinationStageMask: GpuStage.Transfer);
         recorder.CopyImageToBuffer(bufferHandle: destinationBufferHandle, commandBufferHandle: commandBuffer, footprint: in footprint, imageHandle: imageHandle);
-        recorder.TransitionBuffer(bufferHandle: destinationBufferHandle, commandBufferHandle: commandBuffer,
-            destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer);
+        MakeHostVisible(recorder: recorder, commandBuffer: commandBuffer, destinationBufferHandle: destinationBufferHandle);
         recorder.TransitionImageLayout(commandBufferHandle: commandBuffer, imageHandle: imageHandle,
             oldLayout: GpuImageLayout.TransferSource, newLayout: sourceLayout,
             sourceAccessMask: GpuAccess.TransferRead, destinationAccessMask: sourceAccess,
@@ -68,8 +66,21 @@ public static class GpuReadbackCopy {
             destinationAccessMask: GpuAccess.TransferRead, destinationStageMask: GpuStage.Transfer,
             sourceAccessMask: sourceAccess, sourceStageMask: sourceStage);
         recorder.CopyBuffer(commandBufferHandle: commandBuffer, destinationBufferHandle: destination.BufferHandle, sizeBytes: sizeBytes, sourceBufferHandle: source.BufferHandle);
-        recorder.TransitionBuffer(bufferHandle: destination.BufferHandle, commandBufferHandle: commandBuffer,
+        MakeHostVisible(recorder: recorder, commandBuffer: commandBuffer, destinationBufferHandle: destination.BufferHandle);
+    }
+    /// <summary>Records the barrier that makes a copy into a readback buffer visible to the host once the submission
+    /// completes: from the copy's write at <see cref="GpuStage.Transfer"/> to <see cref="GpuAccess.HostRead"/> at
+    /// <see cref="GpuStage.Host"/>. A caller whose copy has its own source barriers and offsets (a timestamp resolve, a
+    /// pass's readback range) records this one barrier after it.</summary>
+    /// <param name="recorder">The recorder.</param>
+    /// <param name="commandBuffer">The command buffer being recorded.</param>
+    /// <param name="destinationBufferHandle">The readback buffer the copy wrote.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="recorder"/> is <see langword="null"/>.</exception>
+    public static void MakeHostVisible(IGpuRecorder recorder, nint commandBuffer, nint destinationBufferHandle) {
+        ArgumentNullException.ThrowIfNull(recorder);
+
+        recorder.TransitionBuffer(bufferHandle: destinationBufferHandle, commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.HostRead, destinationStageMask: GpuStage.Host,
-            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer);
+            sourceAccessMask: GpuAccess.CopyWrite, sourceStageMask: GpuStage.Transfer);
     }
 }

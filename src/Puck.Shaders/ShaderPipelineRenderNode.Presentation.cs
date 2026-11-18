@@ -10,7 +10,6 @@ public sealed partial class ShaderPipelineRenderNode {
         var slot = ((int)((m_frame - 1) % m_inFlight));
         var selected = m_resourceLookup[(m_selectedOutput ?? m_pipeline!.Plan.DefaultOutput)];
 
-        m_latestSlot = slot;
         PrepareFrameCommands();
         var commands = m_commands;
         var command = BeginFrameCommands(slot: slot);
@@ -42,7 +41,7 @@ public sealed partial class ShaderPipelineRenderNode {
         commands.Add(item: command);
         SubmitCounted(
             commands: commands,
-            fence: m_slots[slot].Fence!
+            slot: slot
         );
         if (previewed) { m_preview!.Submitted(slot: slot); }
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);

@@ -2070,6 +2070,61 @@ acquisition wall has one owner, D0b1, extended by D0b2–D0b3 for their consumer
 Where [records and pools](records-and-pools.md) meet this work, future policy
 enters through the one disclosure predicate; scopes do not admit pools yet.
 
+### D0b1 implementation checkpoint
+
+D0b1 remains open. The sec1 change introduces a sealed `StateRowDeclaration`
+beside the seeded `StateRow`; both use `StateRowShape` for domain and value
+rules. A declaration carries neither cells nor storage cursors, a phase
+sequence, a draw secret, an arena or a live value binder. `StateReadAccess`
+checks whole-row admission before each operation, gives restricted callers
+local row and key identities, copies vector payloads, and retains an unavailable
+fault for its lifetime. Missing and withheld row acquisitions throw the same
+failure. `StateReader.ReduceRaw` and `DomainOrdinals` use these operations for
+authority and restricted access alike.
+Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
+and disclosure images.
+
+The first consumer is `world.state.cell.set`: `TryAcquireWriteDeclaration`
+checks the existing conservative write footprint before the parser asks for
+the row kind. Numeric, text and vector parsing therefore cannot select a
+different branch for a withheld row and an absent row. This closes that parser
+path only; it does not close the other console preflights in W6.
+
+`CommandDefinition.OperatorWithWireArgs` receives a registry-minted
+`OperatorContext`. `WorldServer.AcquireOperatorAuthority` and the resulting
+`WorldOperatorAuthority` check the addressed world's live Operate grant.
+`world.state.hash` now uses this route, including its component digests. An
+ordinary command context cannot acquire that capability. Other operator
+commands and composition roots have not yet migrated.
+
+The whole-preparation invariant is **not enforced**. The remaining D0b1 work
+is the transaction-only mint of `WorldPreparedMutation`, the world-wide
+declarations carrier, compiler/evaluator migration (including removal of
+`IStateReader.Arena`), removal of preparation materialization and lazy authority
+binders, raw server surface closure, and DISC001 with its complete negative
+fixtures. In particular, `WorldDocument.TryPrepareMutation` still takes a raw
+definition, `RuleCompileContext` still owns seeded rows, and
+`WorldConsoleAuthorityExtensions.TryResolveServer` still exposes a server. A sticky read
+fault currently prevents further reads through that access; no transaction
+completion consumes it yet. These primitives must not be treated as a closed
+acquisition wall or as permission to start D0b2–D0b4.
+
+The checkpoint passed Release builds of `Puck.State.Tests`,
+`Puck.World.Server.Tests` and `Puck.Cli`, each with zero warnings and errors.
+Fifty focused state cases passed, including seven `StateReadAccessLawTests`
+cases and the existing cell-value and pool-read controls. Eighteen filtered
+server cases passed: the three missing/withheld parser pairs, operator
+acquisition and revocation, and existing diagnostic, hash and vector-disclosure
+controls. The parser fixture
+observes the simulation command's settled result, not its enqueue
+acknowledgement. A headless debug World completed `world.state.hash`,
+`world.state.hash authoritative` and `world.state.hash components`, then
+stopped with exit code zero, including a recheck after merging the integration
+tip. The subsequent shared-copy refactor was checked by the focused laws.
+Documentation links passed. These checks cover
+the checkpoint's stated invariants; the complete D0a witness packet and
+D0b1's build-negative/public-surface fixtures remain open.
+
 Step 3's completed run compares every pair of variants, not only each with its base:
 all 46 pairs over the five fixtures have identical write-door transcripts, including echoes
 and complete typed outcomes. The probe's baseline differed at `echo`, `world.state.act`,

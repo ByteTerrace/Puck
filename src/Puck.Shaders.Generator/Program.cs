@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.SdfVm;
 using Puck.Shaders;
 using Puck.Shaders.Generator;
@@ -40,7 +41,7 @@ if (stamp is not null) {
 
     Directory.CreateDirectory(path: Path.GetDirectoryName(path: stamp)!);
     File.WriteAllLines(
-        contents: interfaces.Concat(second: owned).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).Select(selector: path => Path.Combine(path1: root, path2: path).Replace(newChar: '/', oldChar: Path.DirectorySeparatorChar)),
+        contents: interfaces.Concat(second: owned).Distinct(comparer: StringComparer.Ordinal).Order(comparer: StringComparer.Ordinal).Select(selector: path => PortablePath.Slashed(path: Path.Combine(path1: root, path2: path))),
         path: stamp
     );
 }

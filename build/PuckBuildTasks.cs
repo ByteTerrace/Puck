@@ -515,10 +515,11 @@ public sealed class PuckCollectDirect3D11Kernels : Task {
 /// a kernel is created from bytecode there and nothing compiles at run time. Each item's <c>Entries</c> metadata lists
 /// its entry points; entry <c>e</c> of <c>kernel.hlsl</c> is written to <c>kernel.e.dxbc</c> beside the source, the
 /// name <c>ProbeKindManifest.KernelBytecodePath</c> and <c>Win32D3D11CameraFrameConverter</c> read. The compiler is
-/// <c>D3DCompile</c> from <c>d3dcompiler_47.dll</c>, which every supported Windows ships; a source with an
-/// <c>#include</c> is refused, because the compile resolves none.
+/// <c>D3DCompile</c> from <c>d3dcompiler_47.dll</c>, which every supported Windows ships. The compile is handed no include
+/// handler, so the task expands each quoted <c>#include</c> alone on its line, relative to the file that names it, before
+/// the compile; any other <c>#include</c> is refused.
 /// </summary>
-/// <remarks>An output newer than its source is kept, so an unchanged kernel compiles once.</remarks>
+/// <remarks>An output newer than its source and every file it includes is kept, so an unchanged kernel compiles once.</remarks>
 public sealed class PuckCompileDirect3D11Kernels : Task {
     /// <summary>The kernel sources; each carries <c>Entries</c>, its entry points separated by semicolons.</summary>
     [Required]
@@ -543,12 +544,17 @@ public sealed class PuckCompileDirect3D11Kernels : Task {
         foreach (var source in Sources) {
             var sourcePath = source.GetMetadata(metadataName: "FullPath");
             var entries = source.GetMetadata(metadataName: "Entries").Split(options: StringSplitOptions.RemoveEmptyEntries, separator: new[] { ';' });
-            var bytes = File.ReadAllBytes(path: sourcePath);
+            var files = new List<string>();
+            byte[] bytes;
 
-            if (Encoding.UTF8.GetString(bytes: bytes).Contains(value: "#include")) {
-                Log.LogError(message: $"Kernel '{sourcePath}' includes a file; a Direct3D 11 kernel compiles alone.");
+            try {
+                bytes = Encoding.UTF8.GetBytes(s: Expand(depth: 0, files: files, path: sourcePath));
+            } catch (Exception exception) when (exception is InvalidOperationException or IOException) {
+                Log.LogError(message: $"Kernel '{sourcePath}': {exception.Message}");
                 continue;
             }
+
+            var newest = files.Max(selector: static file => File.GetLastWriteTimeUtc(path: file));
 
             foreach (var entry in entries) {
                 var output = Path.Combine(
@@ -558,7 +564,7 @@ public sealed class PuckCompileDirect3D11Kernels : Task {
 
                 if (
                     !File.Exists(path: output) ||
-                    (File.GetLastWriteTimeUtc(path: output) < File.GetLastWriteTimeUtc(path: sourcePath))
+                    (File.GetLastWriteTimeUtc(path: output) < newest)
                 ) {
                     if (!Compile(
                         entry: entry.Trim(),
@@ -579,6 +585,39 @@ public sealed class PuckCompileDirect3D11Kernels : Task {
         return !Log.HasLoggedErrors;
     }
 
+    private const int MaximumIncludeDepth = 8;
+
+    // A quoted include alone on its line, which the compile expands in place: the compiler is handed no include handler,
+    // so the task resolves each include itself, relative to the file that names it.
+    private static readonly System.Text.RegularExpressions.Regex IncludeLine = new System.Text.RegularExpressions.Regex(
+        pattern: "^[ \\t]*#include[ \\t]+\"(?<path>[^\"\\r\\n]+)\"[ \\t]*\\r?$",
+        options: (System.Text.RegularExpressions.RegexOptions.CultureInvariant | System.Text.RegularExpressions.RegexOptions.Multiline)
+    );
+
+    // The file's text with each quoted include replaced by the included file's own expansion, framed by #line directives so
+    // the compiler's messages name the file a line is in. Every file read is added to files.
+    private static string Expand(string path, List<string> files, int depth) {
+        if (depth > MaximumIncludeDepth) {
+            throw new InvalidOperationException(message: $"'{path}' is included more than {MaximumIncludeDepth} levels deep.");
+        }
+
+        files.Add(item: path);
+
+        var text = File.ReadAllText(path: path);
+        var directory = Path.GetDirectoryName(path: path)!;
+        var expanded = IncludeLine.Replace(input: text, evaluator: match => {
+            var include = Path.GetFullPath(path: Path.Combine(path1: directory, path2: match.Groups["path"].Value));
+            var line = (text.Take(count: match.Index).Count(predicate: static character => (character == '\n')) + 2);
+
+            return $"#line 1 \"{include.Replace(oldValue: "\\", newValue: "/")}\"\n{Expand(depth: (depth + 1), files: files, path: include)}\n#line {line} \"{path.Replace(oldValue: "\\", newValue: "/")}\"";
+        });
+
+        if (expanded.IndexOf(value: "#include", comparisonType: StringComparison.Ordinal) >= 0) {
+            throw new InvalidOperationException(message: $"'{path}' has an #include other than a quoted file on a line of its own; a Direct3D 11 kernel resolves only those.");
+        }
+
+        return expanded;
+    }
     private static IntPtr Slot(IntPtr instance, int slot) =>
         Marshal.ReadIntPtr(ptr: Marshal.ReadIntPtr(ptr: instance), ofs: (slot * IntPtr.Size));
     private static void Release(IntPtr blob) {

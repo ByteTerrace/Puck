@@ -4,14 +4,14 @@ namespace Puck.State;
 
 /// <summary>
 /// A <see cref="StateRow"/>'s declared cell domain — the closed answer to "which keys does this row's storage
-/// admit" that <see cref="StateRow.IsKeyed"/>/<see cref="StateRow.IsSlot"/>/<see cref="StateRow.CellCeiling"/>
+/// admit" that <see cref="StateRowShape.IsKeyed"/>/<see cref="StateRowShape.IsSlot"/>/<see cref="StateRowShape.CellCeiling"/>
 /// switch over, replacing the five hand-kept discriminators (a null <c>Board</c>, <c>Tokens</c>, <c>Zone</c>,
 /// <c>KeysFrom</c>, or <c>History</c> facet) inference used to read the same shape off of. Orthogonal traits — a
-/// row's <see cref="StateRow.Advance"/>/<see cref="StateRow.Dynamics"/>/<see cref="StateRow.Cycle"/>/
-/// <see cref="StateRow.Draw"/>/<see cref="StateRow.Visibility"/>/<see cref="StateRow.Knowledge"/>/
-/// <see cref="StateRow.Phase"/>/<see cref="StateRow.PhaseOf"/>/
-/// <see cref="StateRow.Evicts"/>/<see cref="StateRow.Min"/>/<see cref="StateRow.Max"/>/
-/// <see cref="StateRow.Overflow"/> — are unaffected by which case a row declares; every combination the
+/// row's <see cref="StateRowShape.Advance"/>/<see cref="StateRowShape.Dynamics"/>/<see cref="StateRowShape.Cycle"/>/
+/// <see cref="StateRow.Draw"/>/<see cref="StateRowShape.Visibility"/>/<see cref="StateRowShape.Knowledge"/>/
+/// <see cref="StateRow.Phase"/>/<see cref="StateRowShape.PhaseOf"/>/
+/// <see cref="StateRowShape.Evicts"/>/<see cref="StateRowShape.Min"/>/<see cref="StateRowShape.Max"/>/
+/// <see cref="StateRowShape.Overflow"/> — are unaffected by which case a row declares; every combination the
 /// validator already refused (a lattice row carrying <c>advance</c>, a phase row carrying <c>capacity</c>) is refused
 /// the identical way with the case substituted for the old field.
 /// </summary>
@@ -30,7 +30,7 @@ namespace Puck.State;
 public abstract record StateDomain {
     private StateDomain() { }
 
-    /// <summary>One cell, keyed <see cref="StateRow.SlotKey"/> — a scalar row. An omitted key addresses it.
+    /// <summary>One cell, keyed <see cref="StateRowShape.SlotKey"/> — a scalar row. An omitted key addresses it.
     /// Carries no data, so <see cref="StateRow.InferDomain"/> answers with the single <see cref="Instance"/>
     /// rather than allocating one per unauthored row.</summary>
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -40,7 +40,7 @@ public abstract record StateDomain {
     }
     /// <summary>Explicit author-keyed cells (<c>StateRow.Capacity</c> and <c>Cells</c> carry the shape); no
     /// omitted-key address exists. The token-domain declaration row (the old dedicated <c>tokens</c> facet) is simply
-    /// a row of this case whose <see cref="StateRow.Capacity"/> is the domain's token-count ceiling — other rows
+    /// a row of this case whose <see cref="StateRowShape.Capacity"/> is the domain's token-count ceiling — other rows
     /// address its keys through <see cref="KeysOf"/> rather than through a second facet of their own. Carries no
     /// data, so <see cref="StateRow.InferDomain"/> answers with the single <see cref="Instance"/> rather than
     /// allocating one per unauthored keyed row.</summary>
@@ -60,7 +60,7 @@ public abstract record StateDomain {
     /// <summary>One value per cell of a named <c>state.lattices</c> topology — the old <c>board</c> and <c>lattice</c>
     /// facets' shared shape. Which of the two storage strategies a row actually gets (sparse cells overlaying
     /// <see cref="Empty"/>, or the dense physical-field composite) is an implementation choice keyed on the row's own
-    /// <see cref="StateRow.Kind"/> — a <see cref="CellKind.Fixed"/> row over a <c>Field</c>-kind topology
+    /// <see cref="StateRowShape.Kind"/> — a <see cref="CellKind.Fixed"/> row over a <c>Field</c>-kind topology
     /// compiles into the host's dense field storage, every other combination is the sparse board —
     /// never two authored traits.</summary>
     /// <param name="Topology">The <c>state.lattices</c> topology this row lies over.</param>

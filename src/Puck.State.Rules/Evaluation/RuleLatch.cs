@@ -61,22 +61,21 @@ public sealed class RuleLatch : IJournalParticipant {
     }
     /// <summary>One rule name's share of the latch: its edge bits, which are simulation state, and the scheduler's
     /// per-binding caches beside them, which are not and are never hashed, flattened or restored. An evaluator
-    /// resolves it once per rule and tick, so evaluating a binding costs one lookup into each table.</summary>
+    /// resolves it once per rule and tick; one binding lookup serves the bit and its schedule.</summary>
     public sealed class RuleState {
         internal RuleState() { }
 
         // Where the latch lists the state: what a journal record names it by.
         internal int Ordinal;
 
-        /// <summary>Gets whether the gate held at the last evaluation, per binding: the hashed and checkpointed half.</summary>
-        public Dictionary<LatchKey, bool> Held { get; } = [];
+        internal readonly Dictionary<LatchKey, BindingEntry> Bindings = [];
+
+        /// <summary>Returns whether the binding's gate held at its last evaluation.</summary>
+        /// <param name="binding">The binding.</param>
+        public bool IsHeld(LatchKey binding) => Bindings.TryGetValue(binding, out var entry) && entry.Held == true;
         /// <summary>Gets what the evaluator spent on the rule.</summary>
         public RuleSpent Spent { get; } = new();
 
-        internal readonly Dictionary<LatchKey, BindingSchedule> Scheduling = [];
-
-        // The binding of a rule evaluated once per tick, kept out of the table it would be the only entry of.
-        internal BindingSchedule? Once;
         // The evaluator and compiled rule the read schedules below were derived for: a schedule is a function of
         // both, so either changing derives them again.
         internal object? ScheduleEvaluator;
@@ -87,15 +86,16 @@ public sealed class RuleLatch : IJournalParticipant {
 
         internal int ScheduleEpoch;
 
-        internal BindingSchedule Binding(LatchKey binding) {
-            if (binding.Equals(other: LatchKey.None)) {
-                return (Once ??= new BindingSchedule());
-            }
-
-            ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Scheduling, exists: out _, key: binding);
-
-            return (entry ??= new BindingSchedule());
+        internal BindingEntry Binding(LatchKey binding) {
+            ref var entry = ref CollectionsMarshal.GetValueRefOrAddDefault(dictionary: Bindings, exists: out _, key: binding);
+            return (entry ??= new BindingEntry());
         }
+    }
+
+    // Absence of the bit is distinct from a closed bit. Merely allocating a schedule never creates simulation state.
+    internal sealed class BindingEntry {
+        public bool? Held;
+        public readonly BindingSchedule Schedule = new();
     }
 
     // The scheduler's caches for one binding: the sweep that last touched it, the row versions its gate observed when
@@ -151,7 +151,7 @@ public sealed class RuleLatch : IJournalParticipant {
             var count = 0;
 
             foreach (var state in m_byRule.Values) {
-                count += state.Held.Count;
+                foreach (var entry in state.Bindings.Values) { if (entry.Held.HasValue) { count++; } }
             }
 
             return count;
@@ -183,33 +183,7 @@ public sealed class RuleLatch : IJournalParticipant {
                 continue;
             }
 
-            m_hashScratch.Clear();
-            foreach (var (binding, held) in state.Held) {
-                m_hashScratch.Add(item: new HashEntry(
-                    Binding: binding,
-                    Held: held,
-                    Left: LeftIdentity(
-                        binding: binding,
-                        keyNames: keyNames
-                    )
-                ));
-            }
-
-            var ordered = CollectionsMarshal.AsSpan(list: m_hashScratch);
-
-            ordered.Sort(comparison: static (left, right) => {
-                var result = left.Left.CompareTo(value: right.Left);
-
-                if (result != 0) {
-                    return result;
-                }
-                result = left.Binding.Right.CompareTo(value: right.Binding.Right);
-                if (result != 0) {
-                    return result;
-                }
-                result = left.Binding.LeftGeneration.CompareTo(value: right.Binding.LeftGeneration);
-                return ((result != 0) ? result : left.Binding.RightGeneration.CompareTo(value: right.Binding.RightGeneration));
-            });
+            var ordered = OrderedBindings(state, keyNames);
             hash.Add(value: ((uint)ordered.Length));
 
             foreach (var entry in ordered) {
@@ -222,6 +196,25 @@ public sealed class RuleLatch : IJournalParticipant {
                     : 0)));
             }
         }
+    }
+
+    // Hashing and checkpoints share one canonical binding order; scheduler-only entries never enter either.
+    private Span<HashEntry> OrderedBindings(RuleState state, IReadOnlyList<CellName>? keyNames) {
+        m_hashScratch.Clear();
+        foreach (var (binding, entry) in state.Bindings) {
+            if (entry.Held is not { } held) { continue; }
+            m_hashScratch.Add(new HashEntry(binding, held, LeftIdentity(binding, keyNames)));
+        }
+        var ordered = CollectionsMarshal.AsSpan(m_hashScratch);
+        ordered.Sort(comparison: static (left, right) => {
+            var result = left.Left.CompareTo(right.Left);
+            if (result != 0) { return result; }
+            result = left.Binding.Right.CompareTo(right.Binding.Right);
+            if (result != 0) { return result; }
+            result = left.Binding.LeftGeneration.CompareTo(right.Binding.LeftGeneration);
+            return ((result != 0) ? result : left.Binding.RightGeneration.CompareTo(right.Binding.RightGeneration));
+        });
+        return ordered;
     }
 
     // The layout-free identity of a binding's left side: the key name's own digest for a key-bound entry, the index
@@ -276,23 +269,11 @@ public sealed class RuleLatch : IJournalParticipant {
         ArgumentNullException.ThrowIfNull(argument: journal);
         ArgumentNullException.ThrowIfNull(argument: state);
 
-        ref var slot = ref CollectionsMarshal.GetValueRefOrAddDefault(
-            dictionary: state.Held,
-            exists: out var existed,
-            key: binding
-        );
-
-        Record(
-            binding: binding,
-            journal: journal,
-            previous: (existed
-                ? (slot
-                    ? WasOpen
-                    : WasClosed)
-                : WasAbsent),
-            state: state
-        );
-        slot = held;
+        var entry = state.Binding(binding);
+        Record(binding: binding, journal: journal, previous: entry.Held switch {
+            true => WasOpen, false => WasClosed, null => WasAbsent
+        }, state: state);
+        entry.Held = held;
     }
 
     private void Record(ArenaJournal journal, RuleState state, LatchKey binding, long previous) {
@@ -314,25 +295,11 @@ public sealed class RuleLatch : IJournalParticipant {
             RightGeneration: words[4]
         );
 
-        if (words[5] == WasAbsent) {
-            _ = state.Held.Remove(key: binding);
-        } else {
-            state.Held[binding] = (words[5] == WasOpen);
-        }
-
+        var entry = state.Binding(binding);
+        entry.Held = words[5] switch { WasAbsent => null, WasOpen => true, _ => false };
         // A verdict cached against the bit the rewind just replaced is stale.
         SchedulerEpoch++;
-        if (binding.Equals(other: LatchKey.None)) {
-            Forget(schedule: state.Once);
-        } else if (state.Scheduling.TryGetValue(key: binding, value: out var schedule)) {
-            Forget(schedule: schedule);
-        }
-
-        static void Forget(BindingSchedule? schedule) {
-            if (schedule is not null) {
-                schedule.GateOwner = null;
-            }
-        }
+        entry.Schedule.GateOwner = null;
     }
 
     // The lifecycle writers that cannot be undone refuse to run inside a scope: only a firing's write is recorded, so one
@@ -347,7 +314,7 @@ public sealed class RuleLatch : IJournalParticipant {
     // Removes one binding's edge bit, recording what it held when a scope is open so the scope's rewind brings it back:
     // what a sweep's end, a partial sweep and a candidate's reset do. Between scopes the removal is the writer's own.
     private void RemoveHeld(ArenaJournal journal, RuleState state, LatchKey binding) {
-        if (!state.Held.TryGetValue(key: binding, value: out var held)) {
+        if (!state.Bindings.TryGetValue(key: binding, value: out var entry) || entry.Held is not { } held) {
             return;
         }
         if (journal.ScopeOpen) {
@@ -361,7 +328,7 @@ public sealed class RuleLatch : IJournalParticipant {
             );
         }
 
-        _ = state.Held.Remove(key: binding);
+        entry.Held = null;
     }
 
     /// <summary>Forgets every bound entry and every cached verdict while keeping the storage each rule has grown,
@@ -375,23 +342,9 @@ public sealed class RuleLatch : IJournalParticipant {
 
         SchedulerEpoch++;
         foreach (var state in m_byRule.Values) {
-            if (journal.ScopeOpen) {
-                foreach (var pair in state.Held) {
-                    Record(
-                        binding: pair.Key,
-                        journal: journal,
-                        previous: (pair.Value
-                            ? WasOpen
-                            : WasClosed),
-                        state: state
-                    );
-                }
-            }
-
-            state.Held.Clear();
-            Forget(schedule: state.Once);
-            foreach (var schedule in state.Scheduling.Values) {
-                Forget(schedule: schedule);
+            foreach (var (binding, entry) in state.Bindings) {
+                RemoveHeld(journal, state, binding);
+                Forget(schedule: entry.Schedule);
             }
         }
 
@@ -428,7 +381,10 @@ public sealed class RuleLatch : IJournalParticipant {
         ArgumentNullException.ThrowIfNull(argument: name);
         RefuseInsideScope(journal: journal);
 
-        Rule(name: name).Held.Clear();
+        foreach (var entry in Rule(name: name).Bindings.Values) {
+            entry.Held = null;
+            entry.Schedule.GateOwner = null;
+        }
         SchedulerEpoch++;
     }
 
@@ -468,9 +424,8 @@ public sealed class RuleLatch : IJournalParticipant {
     public void InvalidateScheduler() {
         SchedulerEpoch++;
         foreach (var state in m_byRule.Values) {
-            Invalidate(schedule: state.Once);
-            foreach (var schedule in state.Scheduling.Values) {
-                Invalidate(schedule: schedule);
+            foreach (var entry in state.Bindings.Values) {
+                Invalidate(schedule: entry.Schedule);
             }
         }
 
@@ -497,32 +452,25 @@ public sealed class RuleLatch : IJournalParticipant {
         ArgumentNullException.ThrowIfNull(argument: journal);
 
         // Dictionary.Remove does not invalidate an in-flight enumerator.
-        foreach (var pair in state.Held) {
-            if (!Touched(state: state, binding: pair.Key)) {
-                RemoveHeld(
-                    binding: pair.Key,
-                    journal: journal,
-                    state: state
-                );
-            }
-        }
-        foreach (var pair in state.Scheduling) {
-            if (pair.Value.Touched != m_sweep) {
-                _ = state.Scheduling.Remove(key: pair.Key);
+        foreach (var (binding, entry) in state.Bindings) {
+            if (entry.Schedule.Touched != m_sweep) {
+                Forget(state, binding, journal);
             }
         }
     }
+
     /// <summary>Appends every entry as its rule name, its binding, and whether the gate held — what
     /// <see cref="Restore"/> reads back.</summary>
-    /// <param name="into">The list to append to.</param>
+    /// <param name="into">The list to append to, in ordinal rule-name order and the hash's binding order.</param>
+    /// <param name="keyNames">Key names by ordinal for key-bound entries, as in <see cref="AppendStateHash"/>.</param>
     /// <remarks>A binding's <see cref="LatchKey.Left"/> is an interned ordinal for a key-bound entry, so a caller
     /// persisting this must carry the key's NAME and re-intern it before restoring under another catalog.</remarks>
-    public void Flatten(List<(string Rule, LatchKey Binding, bool Held)> into) {
+    public void Flatten(List<(string Rule, LatchKey Binding, bool Held)> into, IReadOnlyList<CellName>? keyNames = null) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        foreach (var (name, state) in m_byRule) {
-            foreach (var (binding, held) in state.Held) {
-                into.Add(item: (name, binding, held));
+        foreach (var (name, state) in m_byRule.OrderBy(static row => row.Key, StringComparer.Ordinal)) {
+            foreach (var entry in OrderedBindings(state, keyNames)) {
+                into.Add(item: (name, entry.Binding, entry.Held));
             }
         }
     }
@@ -537,8 +485,8 @@ public sealed class RuleLatch : IJournalParticipant {
             return false;
         }
 
-        foreach (var held in state.Held.Values) {
-            if (held) {
+        foreach (var entry in state.Bindings.Values) {
+            if (entry.Held == true) {
                 return true;
             }
         }
@@ -594,7 +542,8 @@ public sealed class RuleLatch : IJournalParticipant {
 
         foreach (var state in m_byRule.Values) {
             m_remapScratch.Clear();
-            foreach (var (binding, held) in state.Held) {
+            foreach (var (binding, entry) in state.Bindings) {
+                if (entry.Held is not { } held) { continue; }
                 if ((binding.Left < 0) || (binding.Left >= from.Count)) {
                     m_remapScratch.Add(item: (binding, held));
                 } else if (to.TryResolve(name: from.Names[binding.Left], key: out var key)) {
@@ -602,11 +551,10 @@ public sealed class RuleLatch : IJournalParticipant {
                 }
             }
 
-            state.Held.Clear();
+            state.Bindings.Clear();
             foreach (var (binding, held) in m_remapScratch) {
-                state.Held[binding] = held;
+                state.Binding(binding).Held = held;
             }
-            state.Scheduling.Clear();
         }
 
         m_remapScratch.Clear();
@@ -625,7 +573,7 @@ public sealed class RuleLatch : IJournalParticipant {
         ArgumentNullException.ThrowIfNull(argument: name);
         RefuseInsideScope(journal: journal);
 
-        Rule(name: name).Held[binding] = held;
+        Rule(name: name).Binding(binding).Held = held;
         SchedulerEpoch++;
     }
     /// <summary>Marks a binding as evaluated in the open sweep.</summary>
@@ -634,7 +582,7 @@ public sealed class RuleLatch : IJournalParticipant {
     public void Touch(RuleState state, LatchKey binding) {
         ArgumentNullException.ThrowIfNull(argument: state);
 
-        state.Binding(binding: binding).Touched = m_sweep;
+        state.Binding(binding: binding).Schedule.Touched = m_sweep;
     }
 
     internal void Touch(BindingSchedule schedule) => schedule.Touched = m_sweep;
@@ -648,10 +596,9 @@ public sealed class RuleLatch : IJournalParticipant {
             journal: journal,
             state: state
         );
-        _ = state.Scheduling.Remove(key: binding);
+        _ = state.Bindings.Remove(key: binding);
     }
 
-    private bool Touched(RuleState state, LatchKey binding) => (binding.Equals(other: LatchKey.None)
-        ? (state.Once?.Touched == m_sweep)
-        : (state.Scheduling.TryGetValue(key: binding, value: out var schedule) && (schedule.Touched == m_sweep)));
+    private bool Touched(RuleState state, LatchKey binding) =>
+        state.Bindings.TryGetValue(binding, out var entry) && entry.Schedule.Touched == m_sweep;
 }

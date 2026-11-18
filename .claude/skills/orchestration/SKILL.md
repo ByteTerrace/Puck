@@ -984,8 +984,8 @@ how hard and open the work is, what an undetected error costs, cost and speed
 per task, family diversity between author and reviewer, the environment the
 work needs, and measured results on that kind of task. No model is conserved
 by standing rule, and the brief states the one-line reason for its choice.
-Codex's two models are Astra (`gpt-6-astra`, the frontier model, Fable's
-counterpart) and Sol (`gpt-6.1-sol`, OpenAI's intended counterpart of Opus
+Codex's two models are Astra (`gpt-6.2-astra`, the frontier model, Fable's
+counterpart) and Sol (`gpt-6.2-sol`, OpenAI's intended counterpart of Opus
 5.5, even where benchmarks score it lower); pass `--model` and `--effort` on every launch
 ([`review-passes`](../review-passes/SKILL.md#before-launching)). Use Codex
 slots both to implement and to review Claude authors' changes
@@ -1073,8 +1073,8 @@ worktree of it can call `puck_worlds` and the rest.
 
 | Codex model | Id | Role | Effort |
 |---|---|---|---|
-| Astra | `gpt-6-astra` | The frontier model, Fable's counterpart: designs, spirals, the hardest diagnosis | `low` to `max`; refuses `none` |
-| Sol | `gpt-6.1-sol` | The default Codex model, Opus 5.5's counterpart: implementation, diagnosis, review | `low` to `max`, default `medium`; refuses `none` and `minimal` |
+| Astra | `gpt-6.2-astra` | The frontier model, Fable's counterpart: designs, spirals, the hardest diagnosis; OpenAI positions it as stronger at making and testing changes in an existing project | `low` to `max`; refuses `none` |
+| Sol | `gpt-6.2-sol` | The default Codex model, Opus 5.5's counterpart: implementation, diagnosis, review; OpenAI reports it within half a point of Astra on a coding benchmark at about a fifth of the cost, an unverified vendor claim | `low` to `max`, default `medium`; refuses `none` and `minimal` |
 
 The companion's `--effort` stops at `xhigh`; `max` needs `codex exec -c
 model_reasoning_effort='"max"'`, which the Codex CLI applies (its header prints

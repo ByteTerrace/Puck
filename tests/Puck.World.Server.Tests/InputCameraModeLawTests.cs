@@ -52,6 +52,8 @@ public sealed class InputCameraModeLawTests {
             Assert.Equal(epoch, owner.Epoch);
             Assert.Contains(collection: publication.SeatStates.ToArray(), filter: cell => ((cell.Family == "camera") && (cell.State == "seat")));
             Assert.DoesNotContain(collection: fixture.Server.GrantTable.Applications(principal: principal), filter: row => (row.Target == GrantSubject.Body(index: camera)));
+            Assert.DoesNotContain(collection: fixture.Server.GrantRows(principal), filter: row =>
+                row.Capability == WorldCapability.Drive && row.Subject == GrantSubject.Body(camera));
             return;
         }
         Assert.Equal((epoch + 1), owner.Epoch);
@@ -66,5 +68,16 @@ public sealed class InputCameraModeLawTests {
         Assert.Equal((epoch + 2), owner.Epoch);
         Assert.Equal(new ulong[] { 20 }, owner.LastSwitch.ConsumedActivations.ToArray());
         Assert.DoesNotContain(collection: fixture.Server.GrantTable.Applications(principal: principal), filter: row => (row.Target == GrantSubject.Body(index: camera)));
+        Assert.DoesNotContain(collection: fixture.Server.GrantRows(principal), filter: row =>
+            row.Capability == WorldCapability.Drive && row.Subject == GrantSubject.Body(camera));
+
+        // Both requests carry the same camera state. The authority toggles twice without any client publication
+        // between them, so a round trip cannot turn two presses into one.
+        Assert.True(fixture.Server.Input.TrySetSeatState(principal, "camera", "free", 21, out reason, actor, toggle: true), reason);
+        Assert.True(fixture.Server.Input.TrySetSeatState(principal, "camera", "free", 22, out reason, actor, toggle: true), reason);
+        Assert.Equal(epoch + 4, owner.Epoch);
+        Assert.Contains(fixture.Server.Input.Publish().Span[0].SeatStates.ToArray(), cell => cell.Family == "camera" && cell.State == "seat");
+        Assert.DoesNotContain(fixture.Server.GrantTable.Applications(principal), row => row.Target == GrantSubject.Body(camera));
+        Assert.DoesNotContain(fixture.Server.GrantRows(principal), row => row.Capability == WorldCapability.Drive && row.Subject == GrantSubject.Body(camera));
     }
 }

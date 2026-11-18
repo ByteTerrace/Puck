@@ -40,7 +40,7 @@ public sealed partial class AddonInstance {
         }).ToArray();
 
         return JsonSerializer.SerializeToUtf8Bytes(new Image(m_hash?.ToString(), m_memory.GetSpan(address: 0, length: checked((int)m_memory.GetLength())).ToArray(),
-            m_memory.GetSize(), globals, m_state, m_fault, m_admitted, m_store.Fuel, m_lastFuelConsumed), CheckpointJsonContext.Default.Image);
+            m_memory.GetSize(), globals, m_state, m_fault, m_admitted, RemainingFuel, m_lastFuelConsumed), CheckpointJsonContext.Default.Image);
     }
     /// <summary>Restores a captured guest into a freshly instantiated and admitted copy of the same pinned module.</summary>
     /// <param name="checkpoint">The opaque image captured by this implementation.</param>
@@ -81,6 +81,6 @@ public sealed partial class AddonInstance {
         }
         image.Memory.CopyTo(destination: m_memory.GetSpan(address: 0, length: image.Memory.Length));
         m_state = image.State; m_fault = image.Fault; m_admitted = image.Admitted;
-        m_store.Fuel = image.Fuel; m_lastFuelConsumed = image.LastFuel; m_lastCount = 0;
+        SetFuel(fuel: image.Fuel, store: m_store); m_lastFuelConsumed = image.LastFuel; m_lastCount = 0;
     }
 }

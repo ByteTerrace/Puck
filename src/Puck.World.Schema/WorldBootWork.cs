@@ -21,18 +21,13 @@ namespace Puck.World;
 /// its counts.
 /// </para>
 /// </summary>
-public sealed class WorldBootWork : IWorkCounterSource {
+public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "world.boot";
 
     private static readonly AsyncLocal<WorldBootWork?> Attributed = new();
     private static readonly AsyncLocal<bool> Compiling = new();
     private static readonly WorkKindRegistry Registry = new();
-
-    private readonly WorkCounterSet m_counts = new(
-        kinds: Kinds,
-        name: SourceName
-    );
 
     /// <summary>Gets the ledger every work site counts into when no flow has attributed one of its own — the one a
     /// host registers as its <c>world.boot</c> source.</summary>
@@ -150,12 +145,11 @@ public sealed class WorldBootWork : IWorkCounterSource {
     public static ReadOnlySpan<WorkKind> Kinds =>
         Registry.Kinds;
 
-    /// <inheritdoc/>
-    ReadOnlySpan<WorkKind> IWorkCounterSource.WorkKinds =>
-        Kinds;
-
-    /// <summary>Gets the name a counters report heads this source's section with, <see cref="SourceName"/>.</summary>
-    public string Name => SourceName;
+    /// <summary>Initializes a new instance of the <see cref="WorldBootWork"/> class, every kind at zero.</summary>
+    public WorldBootWork() : base(counters: new(
+        kinds: Kinds,
+        name: SourceName
+    )) { }
 
     /// <summary>Makes <paramref name="work"/> the ledger the calling flow and every flow it starts count into until
     /// the returned scope is disposed, which restores the ledger the flow counted into before.</summary>
@@ -197,21 +191,9 @@ public sealed class WorldBootWork : IWorkCounterSource {
     /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="amount"/> is negative.</exception>
     public void Add(WorkKind kind, long amount) =>
-        m_counts.Add(
+        Counters.Add(
             amount: amount,
             kind: kind
-        );
-    /// <summary>Reads the current total of one of this ledger's kinds.</summary>
-    /// <param name="kind">The kind to read.</param>
-    /// <returns>The total counted so far.</returns>
-    /// <exception cref="ArgumentException"><paramref name="kind"/> is not one of <see cref="Kinds"/>.</exception>
-    public long Read(WorkKind kind) =>
-        m_counts.Read(kind: kind);
-    /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) =>
-        m_counts.TryRead(
-            kind: kind,
-            value: out value
         );
 
     /// <summary>Ends an <see cref="Attribute"/> when disposed.</summary>

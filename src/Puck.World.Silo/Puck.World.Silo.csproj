@@ -13,7 +13,7 @@
         <!-- The health listener and release control endpoint are ASP.NET Core minimal hosts. -->
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
         <PackageReference Include="Microsoft.Orleans.Server" Version="[10.*, )" />
-        <PackageReference Include="System.CommandLine" Version="[2.*,)" />
+        <PackageReference Include="System.CommandLine" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Commands/Puck.Commands.csproj" />

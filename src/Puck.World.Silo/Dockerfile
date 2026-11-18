@@ -5,7 +5,7 @@ FROM scratch AS shader-cache
 
 FROM rust:1.96.0 AS rust-toolchain
 
-FROM mcr.microsoft.com/dotnet/sdk:11.0.100-rc.3 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100 AS build
 WORKDIR /source
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup

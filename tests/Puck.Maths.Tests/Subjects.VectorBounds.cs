@@ -25,10 +25,10 @@ internal static partial class Subjects {
             [left[0], Nudge(value: left[1], step: -1L), left[2]],
             [left[0], left[1], Nudge(value: left[2], step: 1L)],
         ];
-        var vector = Vector(raws: left);
+        var vector = RawVectors.Of(lanes: left);
 
         foreach (var partner in partners) {
-            var other = Vector(raws: partner);
+            var other = RawVectors.Of(lanes: partner);
             var expected = Oracles.SquaredNorm(raws: left).CompareTo(other: Oracles.SquaredNorm(raws: partner));
             var actual = vector.CompareLengthTo(other: other);
 
@@ -50,11 +50,4 @@ internal static partial class Subjects {
 
         return null;
     }
-
-    private static FixedVector3 Vector(long[] raws) =>
-        new(
-            X: Raw(value: raws[0]),
-            Y: Raw(value: raws[1]),
-            Z: Raw(value: raws[2])
-        );
 }

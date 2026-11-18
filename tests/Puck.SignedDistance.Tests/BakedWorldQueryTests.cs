@@ -1,5 +1,6 @@
 using Puck.Maths;
 using Puck.SignedDistance.Queries;
+using Puck.Testing;
 using Xunit;
 
 namespace Puck.SignedDistance.Tests;
@@ -84,11 +85,7 @@ public sealed class BakedWorldQueryTests {
             z: z
         );
     private static FixedPosition Position(double x, double y, double z) =>
-        FixedPosition.FromLocal(local: new FixedVector3(
-            X: FixedQ4816.FromDouble(value: x),
-            Y: FixedQ4816.FromDouble(value: y),
-            Z: FixedQ4816.FromDouble(value: z)
-        ));
+        FixedTestValues.Position(x: x, y: y, z: z);
     private static BakedWorldQuery Query(int width, int height, params (int Column, int Row)[] blocked) =>
         new(artifact: Artifact(
             blocked: blocked,

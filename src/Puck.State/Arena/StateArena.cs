@@ -15,7 +15,7 @@ namespace Puck.State;
 /// storage invalidates on it.</para>
 /// <para>A host-owned row has a descriptor and no columns: every read answers <see langword="false"/> and every
 /// write refuses by name, because its facet owns it.</para>
-/// <para>Every value entering a row decides through <see cref="StateRow.TryAdmitWrite"/>, the one admission door:
+/// <para>Every value entering a row decides through <see cref="StateRowShape.TryAdmitWrite"/>, the one admission door:
 /// a write, a ring push, a mint, the landing of a transfer, an imported row, and the authored section a
 /// construction seeds from all carry their operand through it, against the same envelope, overflow policy, and
 /// symbolic domain. Construction is a load of the section's own rows, so a value the document could not write is

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="StateRow.TryAdmitWrite"/> is the one door every write path decides
+/// <summary>CONTRACT UNDER TEST: <see cref="StateRowShape.TryAdmitWrite"/> is the one door every write path decides
 /// through — refuse or saturate at an authored bound, at <see cref="long.MinValue"/>/<see cref="long.MaxValue"/> on
 /// a side that declares none, for <see cref="StateWriteKind.Set"/> and <see cref="StateWriteKind.Add"/> alike, on a
 /// row carrying both bounds, one bound, or none at all. Every expectation here is derived independently in

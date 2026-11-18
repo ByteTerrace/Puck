@@ -418,6 +418,8 @@ public sealed partial class WorldPopulation {
             return;
         }
 
+        m_actionStateLane.Input?.DepartBody(slot);
+
         if (m_reconnectGraceTicks.IsNever) {
             entry.Parked = true;
             entry.ParkedUntilTick = null;
@@ -1203,6 +1205,7 @@ public sealed partial class WorldPopulation {
             return false;
         }
 
+        m_actionStateLane.Input?.DepartBody(slot);
         profile = body.Profile;
         entry.Body = null;
         entry.Active = false;

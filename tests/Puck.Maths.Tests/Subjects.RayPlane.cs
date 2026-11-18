@@ -9,23 +9,23 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? RayPlaneMatchesOracle(long[] left, long[] right) {
         var hit = FixedVector3.TryIntersectPlane(
-            direction: Space(
+            direction: RawVectors.Of(
                 x: left[3],
                 y: left[4],
                 z: left[5]
             ),
             distance: out var distance,
-            origin: Space(
+            origin: RawVectors.Of(
                 x: left[0],
                 y: left[1],
                 z: left[2]
             ),
-            planeNormal: Space(
+            planeNormal: RawVectors.Of(
                 x: right[3],
                 y: right[4],
                 z: right[5]
             ),
-            planePoint: Space(
+            planePoint: RawVectors.Of(
                 x: right[0],
                 y: right[1],
                 z: right[2]
@@ -108,7 +108,7 @@ internal static partial class Subjects {
 
         return null;
 
-        static FixedVector3 Whole(long[] lanes) => Space(
+        static FixedVector3 Whole(long[] lanes) => RawVectors.Of(
             x: (lanes[0] << 16),
             y: (lanes[1] << 16),
             z: (lanes[2] << 16)

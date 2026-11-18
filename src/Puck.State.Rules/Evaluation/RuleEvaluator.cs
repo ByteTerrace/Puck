@@ -38,6 +38,7 @@ public interface IRuleOwner {
     /// <param name="evaluator">The evaluator driving the family.</param>
     /// <param name="rule">The compiled rule.</param>
     /// <param name="latch">The family's edge latch.</param>
+    /// <param name="bindings">The already resolved state of this rule.</param>
     /// <param name="stepTicks">How many engine ticks the simulation step spans.</param>
     /// <param name="applied">Whether any effect moved the arena.</param>
     /// <param name="outcome">What the host's evaluations did as a whole, by the precedence
@@ -45,7 +46,7 @@ public interface IRuleOwner {
     /// <returns><see langword="true"/> when the host evaluated the rule; <see langword="false"/> hands it to the
     /// library's own iterate-or-once evaluation.</returns>
     [Replaces(root: typeof(StateArena))]
-    bool TryEvaluateOwn(RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, ulong stepTicks, out bool applied, out RuleOutcome outcome);
+    bool TryEvaluateOwn(RuleEvaluator evaluator, CompiledRule rule, RuleLatch latch, RuleLatch.RuleState bindings, ulong stepTicks, out bool applied, out RuleOutcome outcome);
     /// <summary>Returns whether <see cref="TryEvaluateOwn"/> claims a rule: the same answer it gives for that rule on
     /// every tick. A due list visits a claimed rule every tick, since only the host knows what it reads.</summary>
     /// <param name="rule">The compiled rule.</param>
@@ -516,6 +517,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         if (
             (m_owner is { } owner) &&
             owner.TryEvaluateOwn(
+            bindings: bindings,
             applied: out var own,
             evaluator: this,
             latch: latch,
@@ -729,12 +731,10 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             rule: rule,
             tick: tick
         );
-        var held = state.Held;
-        var existed = held.TryGetValue(
-            key: binding,
-            value: out var wasOpen
-        );
-        var scheduling = state.Binding(binding: binding);
+        var entry = state.Binding(binding: binding);
+        var existed = entry.Held.HasValue;
+        var wasOpen = entry.Held == true;
+        var scheduling = entry.Schedule;
         // Scheduling never runs under a trace: a traced evaluation wants every binding and conjunct computed fresh.
         var schedule = ((SchedulingEnabled && (trace is null))
             ? Schedule(rule: rule, state: state)

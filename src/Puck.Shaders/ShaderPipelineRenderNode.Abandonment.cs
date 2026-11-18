@@ -56,6 +56,9 @@ public sealed partial class ShaderPipelineRenderNode {
                 WaitSlot(slot: other);
             }
         }
+        // The abandoned submission did not execute, and every other slot has now been waited. This settles
+        // resource use, without certifying the abandoned render or its readbacks as completed.
+        m_completedSubmissions = Math.Max(m_completedSubmissions, m_slots[slot].Submission);
     }
     private int SlotOf(IGpuSubmissionFence fence) {
         for (var slot = 0; (slot < m_slots.Length); slot++) {
