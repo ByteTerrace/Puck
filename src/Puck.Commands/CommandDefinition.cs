@@ -285,6 +285,41 @@ public sealed record CommandDefinition {
         };
     }
 
+    /// <summary>Creates an operator command. Only the registry can mint the capability its handler receives;
+    /// ordinary command handlers receive only their ingress-stamped invocation.</summary>
+    /// <param name="name">The command name.</param>
+    /// <param name="description">The command's help text.</param>
+    /// <param name="handler">The operator handler.</param>
+    /// <param name="bindability">Whether authored bindings may name the command.</param>
+    /// <param name="map">The command map.</param>
+    /// <param name="routing">The dispatch phase.</param>
+    /// <param name="ackOnly">Whether success is only an acknowledgement.</param>
+    /// <param name="valueKind">The binding value kind.</param>
+    /// <param name="inputScope">The input focus requirement.</param>
+    /// <param name="held">Whether the command consumes held edges.</param>
+    /// <param name="forms">The command's argument forms.</param>
+    public static CommandDefinition OperatorWithWireArgs(
+        string name,
+        string description,
+        Func<OperatorContext, WireArgs, CommandResult> handler,
+        CommandBindability bindability,
+        string map = CommandMaps.Global,
+        CommandRouting routing = CommandRouting.Immediate,
+        bool ackOnly = false,
+        CommandValueKind valueKind = CommandValueKind.Digital,
+        CommandInputScope inputScope = CommandInputScope.Focused,
+        bool held = false,
+        CommandForms? forms = null
+    ) {
+        ArgumentNullException.ThrowIfNull(handler);
+        return WithWireArgs(name: name, description: description, bindability: bindability,
+            audience: CommandAudience.Operator, map: map, routing: routing, ackOnly: ackOnly,
+            valueKind: valueKind, inputScope: inputScope, held: held, forms: forms,
+            handler: (context, args) => handler(
+                (context.Registry ?? throw new InvalidOperationException("Operator dispatch requires its registry."))
+                    .MintOperatorContext(context), args));
+    }
+
     // A verb's forms belong to that verb and appear in its description, which is what keeps help and the refusals to
     // one spelling.
     private static void RequireDescribedForms(string description, CommandForms? forms, string name) {

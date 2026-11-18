@@ -51,7 +51,7 @@ If `coins` declared `overflow: Saturate`, the same write would store 99.
 ### How a write is decided
 
 Every path that writes a number decides through one method,
-`StateRow.TryAdmitWrite`: the rule evaluator, the mutation pipeline, ring pushes,
+`StateRowShape.TryAdmitWrite`: the rule evaluator, the mutation pipeline, ring pushes,
 board combines, write sets, the evaluator's no-op test, and the rule compiler's
 constant checks. Because they share one decision, they always agree. The method
 works like this:
@@ -71,7 +71,7 @@ works like this:
 The decision depends only on the stored value, the operand, and the envelope, so
 replaying the same operand always lands on the same stored value.
 
-`StateRow.ClampToEnvelope` is a separate method that clamps computed reads, such
+`StateRowShape.ClampToEnvelope` is a separate method that clamps computed reads, such
 as an accumulating value's live reading. Writes never use it.
 
 ## Cap a table and evict the oldest entry
@@ -136,13 +136,13 @@ var mana = new StateRow(
     Name: CellName.Parse(candidate: "mana"),
     Kind: CellKind.Int,
     Advance: new StateAdvance(PerSecondNumerator: 60L, PerSecondDenominator: 1L),
-    Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(value: 10L))]);
+    Cells: [new StateCell(Key: StateRowShape.SlotKey, Value: CellValue.Int(value: 10L))]);
 var section = new StateSection(Rows: [mana]);
 var catalog = StateCatalog.Compile(section: section);
 var arena = new StateArena(catalog: catalog, section: section, time: ArenaTime.Origin);
 
 catalog.TryResolve(lane: StateLane.Document, name: "mana", handle: out var handle);
-catalog.Keys.TryResolve(name: StateRow.SlotKey, key: out var slot);
+catalog.Keys.TryResolve(name: StateRowShape.SlotKey, key: out var slot);
 
 var oneSecond = ArenaTime.At(tick: 60UL, engineTick: 50_400UL);
 

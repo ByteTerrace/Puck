@@ -8,7 +8,7 @@ namespace Puck.State;
 /// separately.</summary>
 [JsonConverter(typeof(StrictEnumConverter<RowShape>))]
 public enum RowShape : byte {
-    /// <summary>One cell, keyed <see cref="StateRow.SlotKey"/>; an omitted key addresses it.</summary>
+    /// <summary>One cell, keyed <see cref="StateRowShape.SlotKey"/>; an omitted key addresses it.</summary>
     Slot,
 
     /// <summary>Author-chosen keys whose order carries no gameplay meaning.</summary>

@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Puck.State.Tests;
 
-/// <summary>CONTRACT UNDER TEST: <see cref="StateRow.TryAdmitKind"/> refuses a <see cref="CellValue"/> whose own
+/// <summary>CONTRACT UNDER TEST: <see cref="StateRowShape.TryAdmitKind"/> refuses a <see cref="CellValue"/> whose own
 /// case differs from the row's declared <see cref="CellKind"/>, and refuses a carrier holding no case at all —
 /// admitting only a value whose <see cref="CellValue.Kind"/> is exactly the row's own. The arena's cell import door
 /// (<c>ArenaImport.TryAdmitImport</c>) decides every imported cell through this same method.</summary>

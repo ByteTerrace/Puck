@@ -26,7 +26,7 @@ namespace Puck.State;
 /// <c>setState</c>/<c>addState</c> effect against an advancing row's slot cell is an explicit write, so it rebases —
 /// a rule that writes the same row every tick overrides this trait's accumulation with its own.</para>
 /// <para><see cref="PerSecondNumerator"/>/<see cref="PerSecondDenominator"/> is an exact fraction of the row's own
-/// displayed unit per second — the unit its <c>value</c>, <see cref="StateRow.Min"/>, and <see cref="StateRow.Max"/>
+/// displayed unit per second — the unit its <c>value</c>, <see cref="StateRowShape.Min"/>, and <see cref="StateRowShape.Max"/>
 /// are authored in, not raw storage — evaluated against the engine's fixed 50,400-tick-per-second clock
 /// (<see cref="FixedTickConversion.TicksPerSecond"/>, the same base <c>valueSeconds</c> duration authoring already
 /// uses), never against the world's own <c>simulation.rateHz</c>. At a constant simulation rate this reproduces the
@@ -41,7 +41,7 @@ namespace Puck.State;
 /// <para>The rate may be negative (decay/drain); a negative rate is the exact mirror of its positive twin, not a
 /// floor of the signed affine function — <see cref="Puck.Maths.DiscreteMeasure"/> accepts only a non-negative rate,
 /// so this type floors the magnitude and negates it. Decay and regen at equal magnitude stay symmetric.</para>
-/// <para>A declared <see cref="StateRow.Min"/>/<see cref="StateRow.Max"/> clamps the computed value on every read;
+/// <para>A declared <see cref="StateRowShape.Min"/>/<see cref="StateRowShape.Max"/> clamps the computed value on every read;
 /// it never rewrites the stored base or epoch. A value that must wrap is a <see cref="StateCycle"/>, not an
 /// advance.</para>
 /// </remarks>

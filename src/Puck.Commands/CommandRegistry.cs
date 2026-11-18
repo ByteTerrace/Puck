@@ -933,11 +933,19 @@ public sealed partial class CommandRegistry {
         return result;
     }
     // The one audience check, ahead of both handler boundaries: a verb never runs for a principal its audience does not
-    // admit (an operator verb for anyone but the console, a local verb for anyone but the console or a seat), whichever
+    // admit (an operator verb without a live Operate hold, a local verb for anyone but the console or a seat), whichever
     // door the line arrived through.
     private readonly ICommandAuthority? m_authority;
     /// <summary>Checks the addressed world at dispatch time.</summary>
     public bool IsOperator(CommandContext context) => m_authority?.IsOperator(context) == true;
+    // The operator factory reaches this only after ordinary audience admission. Recheck here so changing a
+    // definition's audience or retaining a context cannot turn an ordinary handler into an acquisition door.
+    internal OperatorContext MintOperatorContext(CommandContext context) {
+        if (!ReferenceEquals(context.Registry, this) || !IsOperator(context)) {
+            throw new InvalidOperationException("The invocation has no current operator authority.");
+        }
+        return new OperatorContext(context);
+    }
     private CommandResult? AudienceRefusal(CommandDefinition definition, CommandContext context) => (definition.Audience.Admits(principal: context.Principal, operates: IsOperator(context))
         ? null
         : CommandResult.Error(output: ((definition.Audience == CommandAudience.Operator)

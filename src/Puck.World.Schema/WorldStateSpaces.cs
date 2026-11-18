@@ -6,21 +6,8 @@ public static class WorldStateSpaces {
     /// <param name="spaces">The declared spaces.</param>
     /// <param name="name">The space name.</param>
     /// <returns>The resolved <see cref="StateSpace"/>, or <see langword="null"/> if not found.</returns>
-    public static StateSpace? Find(IReadOnlyList<StateSpace>? spaces, string name) {
-        if (spaces is null) {
-            return null;
-        }
-
-        for (var index = 0; (index < spaces.Count); index++) {
-            var space = spaces[index];
-
-            if ((space is not null) && string.Equals(a: space.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
-                return space;
-            }
-        }
-
-        return null;
-    }
+    public static StateSpace? Find(IReadOnlyList<StateSpace>? spaces, string name) =>
+        Puck.Abstractions.NamedRows.Find(spaces, name, static space => space.Name.Value);
     /// <summary>Finds a vector space by name in a state section.</summary>
     /// <param name="state">The world state section.</param>
     /// <param name="name">The space name.</param>
@@ -41,7 +28,7 @@ public static class WorldStateSpaces {
     /// <param name="space">The resolved space, on success.</param>
     /// <param name="reason">The failure reason, on failure.</param>
     /// <returns><see langword="true"/> when the space resolves; otherwise <see langword="false"/>.</returns>
-    public static bool TryResolveSpace(IReadOnlyList<StateSpace>? spaces, StateRow row, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StateSpace? space, out string reason) {
+    public static bool TryResolveSpace(IReadOnlyList<StateSpace>? spaces, StateRowShape row, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out StateSpace? space, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         space = null;

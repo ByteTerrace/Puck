@@ -19,7 +19,7 @@ namespace Puck.World;
 /// without re-authoring its shape, dispatching on the row's own declared kind (a numeric/bool token, or a raw-tail
 /// string for an already-live text-kind row); <c>world.state.cell.remove</c> removes one, <c>world.generate</c>
 /// redraws a draw site, and <c>world.state</c> reads all three grains back (every row, one row with its cells, one
-/// cell alone). A slot is a row with one cell keyed <see cref="StateRow.SlotKey"/>, so there is no separate verb
+/// cell alone). A slot is a row with one cell keyed <see cref="StateRowShape.SlotKey"/>, so there is no separate verb
 /// family for it. A cell set settles with its typed authoritative accept/reject receipt, including numeric, text and vector forms; no empty submission is a success receipt. Every write verb routes
 /// <see cref="CommandRouting.Simulation"/> (buffers, applies at the tick
 /// boundary, the stdin barrier serializes a following read); <c>world.state</c> is an
@@ -542,10 +542,6 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             _ => "0",
         })
     );
-    private static WorldStateRow? FindRow(WorldRecipientView view, string name) => WorldDefinitionRows.FindStateRow(
-        rows: view.Definition.State,
-        name: name
-    );
     // Row existence, row KIND (for the same-batch-declare edge case below), and the bool+add refusal are ALL asked
     // at compose too (WorldServer's UpsertStateCell arm) — a verb-level check can settle the COMMON case (the row
     // is already live) but not the same-batch "world.row.set state declaring <row> a line ago, still draining"
@@ -561,10 +557,9 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
         }
 
         var rowName = args[0].ToString();
-        var row = FindRow(
-            name: rowName,
-            view: server.ReadView(context)
-        );
+        if (!server.TryAcquireWriteDeclaration(context, rowName, out var row, out var refusal)) {
+            return CommandResult.Error(output: $"[world.state.cell.set: {refusal}]");
+        }
 
         if (
             (row is { Kind: CellKind.Vector }) &&
@@ -1149,13 +1144,12 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             },
             routing: CommandRouting.Immediate
         );
-        yield return CommandDefinition.WithWireArgs(
-            audience: CommandAudience.Operator,
+        yield return CommandDefinition.OperatorWithWireArgs(
             bindability: CommandBindability.Unbindable,
             name: "world.state.hash",
             description: $"Reads an operator-only live deterministic state hash (Immediate): {WorldStateHashForms.Spelling}. The default capture scope matches capture manifests; authoritative includes rule latches, body and identity action state, and field-lattice cells; components reads each authoritative component's own digest, which names the component two runs disagree in.",
             forms: WorldStateHashForms,
-            handler: (context, args) => authority.TryResolveServer(context: context, error: out var error, server: out var server, verb: "world.state.hash")
+            handler: (context, args) => authority.TryResolveOperator(context: context, error: out var error, world: out var server, verb: "world.state.hash")
                 ? DescribeHash(server: server, args: args) : error,
             routing: CommandRouting.Immediate
         );

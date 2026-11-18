@@ -281,7 +281,7 @@ public class RuleCompileContext : IRuleCostContext {
     /// <inheritdoc/>
     /// <remarks>Every price reads a row's room here, and the answer is a function of declarations alone: a slot is one
     /// cell, a lattice its topology's cells, a ring its declared length, and a keyed or ordered row its declared
-    /// <see cref="StateRow.CellCeiling"/>, bounded for a row keyed over a token domain by the domain row's own room,
+    /// <see cref="StateRowShape.CellCeiling"/>, bounded for a row keyed over a token domain by the domain row's own room,
     /// since its keys are the domain's. A keyed row without a capacity is priced at the ceiling it may grow to, never
     /// at the cells it holds or the room the arena has reserved for it, so neither a growth nor a write to any row
     /// moves a price (the work sheet and a search's allowance are text a recipient can be told).</remarks>
