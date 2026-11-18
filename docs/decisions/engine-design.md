@@ -591,6 +591,21 @@ Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.
 
+A product that leaves the machine that made it carries a second name beside its
+local key (the owner's ruling, confirming the rendering plan's
+[design](../plans/rendering-research.md#how-a-shared-product-is-named-and-trusted)).
+The local key stays as above, computed from everything including the deriving
+code. The shared name says what the product means: its source program, its
+authored parameters, and a format version that covers what the bytes mean, not
+only their layout. No one bumps it by hand; the decoder refuses a format it
+does not know. A received or retained product is trusted only after the
+receiver checks it against the analytic source at the tolerance and coverage
+the receiver needs, over every attribute it carries, and an inconclusive check
+means the receiver derives it. So a baker patch does not invalidate every
+shared product, and a producer cannot pass a loose one. Fetching only shortens
+a wait: every device keeps a local floor bake, because a miss is always derived
+again.
+
 The AGB BIOS and Rust addon guests follow the same rule. LLVM (`clang` and
 `ld.lld`) and Rust with `wasm32-unknown-unknown` are machine requirements,
 installed at pinned versions in CI; see [machine setup](../development/contributing.md#setting-up-a-machine).

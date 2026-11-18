@@ -299,12 +299,6 @@ Open calls, each with its sides:
 - **The chase camera with its back to the stair wall**: swing the boom, rise
   over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
-- **The rendering research's four engine questions**, each with a default
-  the work proceeds on: how a derived product shared between machines is
-  named and trusted, the memory bar's figures for each device, whether a
-  device's quality table may lower the render scale, and whether a world
-  that shows a viewer only pictures publishes them once for an audience
-  ([the page's questions](rendering-research.md#questions-for-the-owner)).
 - **GameInput**: ship or require its redistributable, which the Share button,
   the Elite paddles and more than four pads need, or stay on the inbox runtime
   ([input](#input-channels)).
