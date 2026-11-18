@@ -137,7 +137,7 @@ section Runtime Async, and the pull requests under dotnet/runtime's
   work into helpers where that reads better. Do not flatten helpers or remove
   an `await` to avoid a state machine or an intermediate task.
 - **In Puck.** No project sets the feature. The post's stated goal for
-  .NET 11 is parity with the compiler's lowering, and it names cases that are
+  .NET 11 is parity with .NET 10's async performance, and it names cases that are
   still slower, so an opt-in is judged by allocated bytes per request or tick
   (`AllocationWindow`, `host.memory`) on the server, silo and networking
   paths, read before and after. The opt-in and that measurement are filed in

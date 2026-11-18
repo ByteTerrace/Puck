@@ -73,11 +73,11 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **Native AOT:** preinit accepts idiomatic cctors (spans, cross-type statics); identical generic bodies fold; size-optimized LINQ regained high-value specializations.
 - **Added by .NET 11** (no timings here; the references cite the post's section for each):
   - *Checks:* constant-index reads share one bounds check; a span sliced forward in a vector loop is check-free; indices from narrowing casts, bit counts and ORs are proven in range; `checked` arithmetic and narrowing casts lose provably redundant overflow checks. (jit-and-codegen.md)
-  - *Dispatch and allocation:* generic virtual methods devirtualize on a known receiver type; `Enum.Equals` on a generic enum is an integer compare; nullable boxes and constrained-call receivers stop escaping; a struct comparer on a span sort is no longer boxed; delegates are 8 bytes smaller. (jit-and-codegen.md, collections-and-linq.md)
+  - *Dispatch and allocation:* generic virtual methods devirtualize on a known receiver type; `Enum.Equals` on a generic enum is an integer compare; nullable boxes and constrained-call receivers stop escaping; a struct comparer on a span sort is no longer boxed; delegates are 8 bytes smaller. (jit-and-codegen.md, collections-and-linq.md, runtime-aot-reflection-diagnostics.md)
   - *Stores:* exact-type array stores skip the covariance check; mixed struct copies to the heap use vector stores; neighbouring field stores merge. (jit-and-codegen.md)
   - *GC:* old `ConditionalWeakTable` entries are skipped by young collections. (data-and-memory.md)
   - *Numerics:* `BigInteger` is largely rewritten on pointer-width limbs; scalar `Half` casts and the `Dot` methods lower to cheaper instructions. (numerics-simd-threading.md)
-  - *I/O, JSON, text:* a child's redirected output is overlapped I/O on Windows; `Utf8JsonReader` skips whitespace runs in vector steps; ASCII casing is fast under invariant globalization; compiled regexes gain a cleanup pass. (io-network-json-crypto.md, strings-text-search.md)
+  - *I/O, JSON, text:* a child's redirected output is overlapped I/O on Windows; `Utf8JsonReader` skips whitespace runs in vector steps; ASCII casing is fast under invariant globalization; compiled and source-generated regexes gain a cleanup pass. (io-network-json-crypto.md, strings-text-search.md)
   - *Startup and waits:* ReadyToRun precompiles default comparers; `Monitor.Wait`/`Pulse` drop a table lookup. (runtime-aot-reflection-diagnostics.md, numerics-simd-threading.md)
   - These move Puck's own readings across the SDK change; [measured changes](measured-changes.md#a-runtime-move-shifts-the-baseline) lists which reading each one moves.
 
@@ -105,7 +105,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 **Async, waits & low-lock**
 - Write async code for how it reads: helpers where they clarify, `Task` or `ValueTask` chosen by the API. Runtime async (`<Features>$(Features);runtime-async=on</Features>`, opt-in per project, not set in Puck) removes the intermediate task and the per-frame exception rethrow from a chain of directly awaited methods; judge an opt-in by allocated bytes. (references/runtime-aot-reflection-diagnostics.md)
 - Time out a task with `task.WaitAsync(timeout[, timeProvider])`, never `Task.WhenAny(task, Task.Delay(timeout))` with the delay left running (CA2027). (references/numerics-simd-threading.md)
-- Mark a field `volatile` only when no lock or `Interlocked` operation already orders its reads; a redundant one blocks JIT optimization on x64. (references/numerics-simd-threading.md)
+- Mark a field `volatile` only when no lock or `Interlocked` operation already orders its reads; a redundant one can constrain JIT optimization on x64. (references/numerics-simd-threading.md)
 - Drain a child process's output with async reads; they are overlapped I/O on Windows and hold no thread. (references/io-network-json-crypto.md)
 
 **Searching & spans**
@@ -205,7 +205,7 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 - **`Task.WhenAny(task, Task.Delay(timeout))` as a timeout.** It leaves the timer alive after the task wins; `WaitAsync` does not (CA2027).
 - **A stream wrapped around a `MemoryStream` to zlib an in-memory payload.** The .NET 11 encoder and decoder types work span to span.
 - **Hand-written `(uint)(x - a) <= b` range tests, packed neighbouring field writes, and `Unsafe.As` enum comparisons.** The JIT produces each from the readable spelling on .NET 11.
-- **`volatile` on every shared field "to be safe".** Redundant where a lock or `Interlocked` orders the access, and it blocks JIT optimization.
+- **`volatile` on every shared field "to be safe".** Redundant where a lock or `Interlocked` orders the access, and it can constrain JIT optimization.
 - **Reordering `&&` guards / hand-hoisting `Length` to appease the bounds-check eliminator.** Assertion merging is order-independent; `x[0]`/`x[^1]` is single-check.
 - **"Spans don't get loop cloning — use `T[]` in the hottest loops."** Span loops clone like array loops now.
 - **"Methods with `lock`/`using`/try-finally can't inline — flatten them."** try/finally no longer blocks inlining; provably-non-throwing try/catch is deleted outright.

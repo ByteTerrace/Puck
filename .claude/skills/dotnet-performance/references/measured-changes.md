@@ -80,7 +80,7 @@ cited by section and pull request).
 | Puck reading | What moves it | Post section; pull request |
 |---|---|---|
 | Allocated bytes that include a delegate | Every CoreCLR delegate is 8 bytes smaller | Deabstraction; dotnet/runtime#99200 |
-| Allocated bytes of a span sort with a struct comparer | The comparer is not boxed, and `Compare` inlines. By the post's account the irradiance hierarchy's median split (`CentroidOrder`) boxed its comparer once per split node on .NET 10; its trace has not been retaken | Strings and Spans; dotnet/runtime#116109 |
+| Allocated bytes of a span sort with a struct comparer | The comparer is not boxed, and `Compare` inlines. Since .NET 10 boxed a struct comparer on every span sort (per the post), the irradiance hierarchy's median split (`CentroidOrder`) boxed its comparer once per split node; its trace has not been retaken | Strings and Spans; dotnet/runtime#116109 |
 | A gen0 pause | Young collections skip old `ConditionalWeakTable` entries | Write Barriers and Garbage Collection; dotnet/runtime#78746 |
 | `puck bench startup` | ReadyToRun precompiles default comparer initialization, and the host builds its assembly list with less work | Startup and Deployment; dotnet/runtime#126204, #123568, #123919, #125251 |
 | Thread-pool threads while a child process runs | Redirected stdout and stderr are overlapped reads on Windows, so `ChildProcess`'s two pumps hold no thread | I/O; dotnet/runtime#125643 |
@@ -90,7 +90,7 @@ cited by section and pull request).
 | Bake and capture float | Scalar `Half` casts and the `Dot` methods lower to cheaper instructions | Intrinsics; dotnet/runtime#127094, #125666 |
 | Arbitrary-width arithmetic | `BigInteger` runs on pointer-width limbs with better multiply, divide and `ModPow` | Numerics; dotnet/runtime#125799 |
 | Invariant casing of ASCII text | A managed ASCII path | Globalization; dotnet/runtime#120685 |
-| Tooling regexes (`puck docs`, the scan analyzers) | A final cleanup pass, whole-literal prefix search, switch dispatch under `Compiled` | Strings and Spans; dotnet/runtime#125289, #124736, #122959 |
+| Puck's regexes (mostly `[GeneratedRegex]`, in tooling, engine and World code; the switch dispatch reaches only the `Compiled` minority) | A final cleanup pass, whole-literal prefix search, switch dispatch under `Compiled` | Strings and Spans; dotnet/runtime#125289, #124736, #122959 |
 | Launching a child on Linux | Arguments and environment are marshalled into one native block each | Diagnostics; dotnet/runtime#126201 |
 
 ## Know what the change changed
