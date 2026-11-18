@@ -31,10 +31,9 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
     // Defers a submission to the device's open batch with the waits it carries, spending them; false when no batch is
     // open or the submission is empty.
     private bool Defers(ReadOnlySpan<nint> commandBufferHandles, VulkanGpuSubmissionFence? fence) {
-        var batch = deviceContext.LogicalDevice.Batch;
-
-        if (!batch.IsOpen || commandBufferHandles.IsEmpty) { return false; }
-        _ = batch.TryDefer(entries: [new VulkanBatchedSubmission(CommandBuffers: commandBufferHandles.ToArray(), WaitSemaphores: WaitSemaphores.ToArray(), WaitValues: WaitValues.ToArray())], fence: fence, lists: commandBufferHandles.Length);
+        if (!deviceContext.LogicalDevice.Batch.TryDefer(commandBuffers: commandBufferHandles, fence: fence, waitSemaphores: WaitSemaphores, waitValues: WaitValues)) {
+            return false;
+        }
         m_waitCount = 0;
 
         return true;

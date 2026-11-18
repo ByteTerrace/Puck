@@ -180,6 +180,14 @@ outside this contract and takes the references as written.
   with stacks; `AllocationKind` separates small from large objects) beside
   `host.frames`' per-iteration collections and pauses, and pool or keep a
   build's workspace rather than letting it die young.
+- A benchmark's `frames.allocatedBytesPerIteration` counts every thread, and in
+  a moving chapter the mesh bake's workers dominate it. The bake identity
+  includes the kernels' bytecode, so Direct3D 12 and Vulkan keep separate mesh
+  store sets, and a chapter that bakes on one backend while it loads on the
+  other reads several times the allocation without any per-frame difference.
+  Before comparing backends or builds, read the chapter's `[sdf.mesh-bake] done`
+  dispatches in each run's `stderr.log`, and compare the frame thread's own
+  churn from `frameThreadAllocatedBytes` in each run's `frames.csv`.
 - Start with a profile, benchmark, allocation trace or demonstrated hot path. A
   suspected hot path is not one; ask for the evidence. A change is kept when it
   wins on a measured metric (time, bytes, work counters) or when it simplifies,

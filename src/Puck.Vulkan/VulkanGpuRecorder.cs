@@ -20,6 +20,8 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
     // The open runs of barriers (BeginBarriers), by command buffer; a command buffer records on one thread at a time.
     private readonly Dictionary<nint, BarrierBatch> m_batches = [];
+    // Closed runs, emptied and kept for the next BeginBarriers, so recording a frame allocates no run.
+    private readonly Stack<BarrierBatch> m_freeBatches = [];
     private readonly Lock m_batchGate = new();
 
     private static uint ToVulkanAccess(GpuAccess access) {
@@ -450,7 +452,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
     public void BeginBarriers(nint commandBufferHandle) {
         lock (m_batchGate) {
             if (!m_batches.TryGetValue(key: commandBufferHandle, value: out var batch)) {
-                batch = new BarrierBatch();
+                batch = (m_freeBatches.TryPop(result: out var free) ? free : new BarrierBatch());
                 m_batches.Add(key: commandBufferHandle, value: batch);
             }
             batch.Depth++;
@@ -466,8 +468,17 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
                 closed = batch;
             }
         }
-        if (closed is not null) {
+        if (closed is null) {
+            return;
+        }
+        try {
             Flush(batch: closed, commandBufferHandle: commandBufferHandle);
+        } finally {
+            // A run whose recording failed still returns empty, so the next one never inherits its barriers.
+            closed.Clear();
+            lock (m_batchGate) {
+                m_freeBatches.Push(item: closed);
+            }
         }
     }
     // The open run of barriers on a command buffer, or null.
