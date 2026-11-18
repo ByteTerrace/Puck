@@ -43,16 +43,14 @@ public static partial class WorldDefinitionValidator {
             row.Name.Value,
             errors
         );
-        if (
-            (row.Draw is { Secret: { } secret } draw) &&
-            (secret.IsEmpty || (row.Kind != CellKind.Int) || !GeneratorEngine.TryResolveSource(
-            definition.Generators,
-            draw,
-            out var generator,
-            out _
-        ) || (generator.Source != GeneratorSource.StreamDraw) || (generator.Mode != GeneratorMode.WithReplacement))
-        ) {
-            errors.Add(item: $"state row {row.Name}: secret requires a nonzero key and an integer streamDraw source with replacement.");
+        if (row.Draw is { } draw) {
+            if (draw.Secret is { } secret && (!draw.PrivateStream || secret.IsEmpty)) {
+                errors.Add(item: $"state row {row.Name}: a draw secret requires privateStream and a nonzero key.");
+            }
+            if (draw.PrivateStream && (!GeneratorEngine.TryResolveSource(definition.Generators, draw, out var generator, out _) ||
+                !GeneratorEngine.SupportsSecret(generator, row.Kind))) {
+                errors.Add(item: $"state row {row.Name}: privateStream requires an integer streamDraw source with replacement.");
+            }
         }
         foreach (var cell in (row.Cells ?? [])) {
             if (cell is null) {

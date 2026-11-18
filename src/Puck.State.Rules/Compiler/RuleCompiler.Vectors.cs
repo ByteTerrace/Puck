@@ -290,7 +290,7 @@ public static partial class RuleCompiler {
             space: space
         );
     }
-    private static (StateRow Row, int RowOrdinal, CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where) {
+    private static (StateRowDeclaration Row, int RowOrdinal, CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveVectorDestination(string intoSpelling, RuleCompileContext context, string ruleName, string where) {
         intoSpelling = intoSpelling.Trim();
 
         var bracketIndex = intoSpelling.IndexOf(value: '[');

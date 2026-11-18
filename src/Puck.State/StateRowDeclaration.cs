@@ -60,6 +60,11 @@ public sealed record StateRowDeclaration(
         ArgumentNullException.ThrowIfNull(row);
         return Declarations.GetValue(row, static source => Create(source));
     }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IReadOnlyList<StateRow>, IReadOnlyList<StateRowDeclaration>> RowLists = new();
+    /// <summary>Projects an immutable expanded row list in catalog order.</summary>
+    public static IReadOnlyList<StateRowDeclaration> FromRows(IReadOnlyList<StateRow> rows) =>
+        RowLists.GetValue(rows, static source => Array.AsReadOnly(source.Select(From).ToArray()));
+
     private static StateRowDeclaration Create(StateRow row) {
         return new(
             Name: row.Name,
@@ -70,7 +75,7 @@ public sealed record StateRowDeclaration(
             Overflow: row.Overflow,
             Evicts: row.Evicts,
             Advance: row.Advance,
-            Draw: row.Draw is { } draw ? new StateDrawDeclaration(draw.Source, draw.Generator, draw.Timing, draw.Skip) : null,
+            Draw: row.Draw is { } draw ? new StateDrawDeclaration(draw.Source, draw.Generator, draw.Timing, draw.Skip, draw.PrivateStream) : null,
             Dynamics: row.Dynamics,
             Cycle: row.Cycle,
             Domain: row.EffectiveDomain,
@@ -93,4 +98,5 @@ public sealed record StateRowDeclaration(
 /// <param name="Generator">The inline generator declaration, when present.</param>
 /// <param name="Timing">When the site may draw.</param>
 /// <param name="Skip">The authored seek.</param>
-public sealed record StateDrawDeclaration(CellName? Source, StateGenerator? Generator, DrawTiming Timing, long Skip);
+/// <param name="PrivateStream">Whether the site declares keyed sampling.</param>
+public sealed record StateDrawDeclaration(CellName? Source, StateGenerator? Generator, DrawTiming Timing, long Skip, bool PrivateStream = false);

@@ -165,7 +165,7 @@ public static partial class RuleCompiler {
             refusal: RuleRefusal.EffectKindInadmissible,
             ruleName: ruleName
         );
-        StateRow Row(string name) => (context.FindRow(name: name) ?? throw Invalid(message: $"unknown state row '{name}'"));
+        StateRowDeclaration Row(string name) => (context.FindRow(name: name) ?? throw Invalid(message: $"unknown state row '{name}'"));
         int Ordinal(string name) => ResolveRowOrdinal(
             context: context,
             name: name
@@ -650,9 +650,9 @@ public static partial class RuleCompiler {
                         target,
                         targetBoard.Empty,
                         targetTopology,
-                        out _,
-                        out _,
-                        out _,
+                        out var combineDirection,
+                        out var combineElement,
+                        out var combineValue,
                         out var combineReason
                     )) {
                         throw Invalid(message: combineReason);
@@ -701,16 +701,6 @@ public static partial class RuleCompiler {
                         reads.Add(item: Ordinal(name: sourceName));
                     }
 
-                    _ = BoardCombination.TryValidate(
-                        combine: combine,
-                        direction: out var combineDirection,
-                        element: out var combineElement,
-                        empty: targetBoard.Empty,
-                        reason: out _,
-                        row: target,
-                        topology: targetTopology,
-                        value: out var combineValue
-                    );
                     writes.Add(item: Ordinal(name: combineRow));
                     resolved = new ArenaTransform.BoardCombine(
                         Direction: combineDirection,
@@ -941,7 +931,7 @@ public static partial class RuleCompiler {
         return RuleWork.Known(units: Walk(expression: set.Set));
     }
     // A board row's cell count, read from its topology; zero for a row that is not a board.
-    private static int BoardCells(RuleCompileContext context, StateRow? row) => (((row?.EffectiveDomain is StateDomain.CellsOf board) && (context.FindTopology(name: board.Topology) is { } topology))
+    private static int BoardCells(RuleCompileContext context, StateRowDeclaration? row) => (((row?.EffectiveDomain is StateDomain.CellsOf board) && (context.FindTopology(name: board.Topology) is { } topology))
         ? topology.CellCount
         : 0
     );

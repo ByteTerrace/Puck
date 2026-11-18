@@ -245,7 +245,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
 
             return false;
         }
-        if (!GeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveExecutableSource(
             draw: draw,
             generator: out var generator,
             generators: m_generators,

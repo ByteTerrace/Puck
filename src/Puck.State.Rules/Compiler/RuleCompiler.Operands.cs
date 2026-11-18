@@ -33,14 +33,14 @@ public static partial class RuleCompiler {
     /// <param name="key">The literal cell key.</param>
     /// <param name="context">The compile context the board's topology resolves in.</param>
     /// <returns><see langword="true"/> when a read of the cell can see a value.</returns>
-    public static bool DeclaresCell(StateRow row, string key, RuleCompileContext context) {
+    public static bool DeclaresCell(StateRowDeclaration row, string key, RuleCompileContext context) {
         ArgumentNullException.ThrowIfNull(argument: row);
         ArgumentNullException.ThrowIfNull(argument: context);
 
         return context.DeclaresCell(key: key, row: row);
     }
 
-    private static IRuleOperand CreateCellRead(RuleCompileContext context, StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) {
+    private static IRuleOperand CreateCellRead(RuleCompileContext context, StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) {
         var operand = context.CreateCellRead(key: key, keyFrom: keyFrom, row: row, rowOrdinal: rowOrdinal);
 
         context.Needs.AddFact(fact: operand);
@@ -587,7 +587,7 @@ public static partial class RuleCompiler {
         if (
             (key is not null) ||
             (tokens.Length != 2) ||
-            (context.FindRow(name: tokens[1])?.Phase is null)
+            (context.FindRow(name: tokens[1])?.HasPhase != true)
         ) {
             throw new RuleException(
                 detail: "phase query requires $phase:<row>, without key",

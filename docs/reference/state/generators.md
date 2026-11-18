@@ -370,8 +370,9 @@ draw of the same source may run while its stream is open.
 
 ## Keep draws private
 
-A site may declare a `secret`, a 256-bit key the authority provisions before
-simulation. Each sample of a secret site is an HMAC-SHA256 of the seed, the
+A site declares `privateStream: true` for keyed sampling. The authority
+provisions its 256-bit `secret` before the site executes. The declaration
+sets the work price even when an observer has no key. Each sample of a secret site is an HMAC-SHA256 of the seed, the
 stream id, and the cursor under that key, so a client that knows the document
 and the seed still can't predict the draws. The secret is never sent in
 observations. A secret site must be an `Int` site over a `StreamDraw` source

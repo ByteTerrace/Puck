@@ -11,7 +11,7 @@ public static partial class ArenaTransforms {
             (((uint)rowOrdinal) >= ((uint)context.Arena.Rows.Count)) ||
             (context.Arena.Rows[rowOrdinal].Draw is not { Timing: not DrawTiming.Boot } declared) ||
             (context.Arena.Layout[rowOrdinal].Kind != CellKind.Int) ||
-            !GeneratorEngine.TryResolveSource(
+            !GeneratorEngine.TryResolveExecutableSource(
             draw: declared,
             generator: out var generator,
             generators: context.Generators,

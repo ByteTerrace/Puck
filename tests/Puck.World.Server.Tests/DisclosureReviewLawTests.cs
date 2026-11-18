@@ -15,12 +15,14 @@ public sealed class DisclosureReviewLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 CellName.Parse("dice"), CellKind.Int,
                 Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw),
-                    Timing: DrawTiming.Event, Secret: secret),
+                    Timing: DrawTiming.Event, PrivateStream: true, Secret: secret),
                 Visibility: restricted ? new StateVisibility(Readers: ["seat1"]) : null)])
         };
         using var fixture = Fixtures.FreshServer(definition);
         var replica = View(fixture.Server, Principal.Seat(1));
-        Assert.Null(Assert.Single(replica.Definition.AuthoredState).Draw!.Secret);
+        var observed = Assert.Single(replica.Definition.AuthoredState).Draw!;
+        Assert.True(observed.PrivateStream);
+        Assert.Null(observed.Secret);
         var operated = new WorldRecipientView(() => fixture.Server.Definition, () => fixture.Server.Arena,
             Principal.Seat(1), WorldDisclosureTier.Replica, () => true, new WorldDisclosureImages(),
             fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime, () => true);

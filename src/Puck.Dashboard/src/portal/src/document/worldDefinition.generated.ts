@@ -13115,7 +13115,7 @@ export type WorldSeatModeState = {
    */
   name: string;
   /**
-   * The control application this state drives, or null for an ordinary state (the seat drives its own body normally). "camera" is the only admitted value: entering the state possesses the seat's declared camera body (see CameraPlacementIdPrefix) through the ordinary Engage door (PlayerCommandModule.Mode.cs), diverting the seat's own body intent to Idle and resolving its view through views.cameraRig instead.
+   * The control application this state drives, or null for an ordinary state (the seat drives its own body normally). "camera" is the only admitted value: entering the state possesses the seat's declared camera body (see CameraPlacementIdPrefix) through the authority's input runtime and ordinary Engage door, diverting the seat's own body intent to Idle and resolving its view through views.cameraRig instead.
    */
   target?: string | null;
 };
@@ -13533,15 +13533,15 @@ export type WorldStateRow = {
     };
   }[];
   /**
-   * The row-wide declared lower bound every cell's Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max — a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.
+   * The lower bound in the kind's raw encoding, when declared.
    */
   min?: number | string;
   /**
-   * The row-wide declared upper bound, raw-encoded per Kind, or null for none. Independent of Min; see its remarks. Omitted from the wire when null.
+   * The upper bound in the kind's raw encoding, when declared.
    */
   max?: number | string;
   /**
-   * The row's own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell — declaring a capacity is declaring table intent. Omitted from the wire when null.
+   * The declared cell limit, when present.
    */
   capacity?: number;
   /**
@@ -13557,7 +13557,7 @@ export type WorldStateRow = {
    */
   overflow?: "Refuse" | "Saturate";
   /**
-   * Whether this row is a bounded, FIFO-evicting table. Ordinarily a Capacity is a hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds and, if it added a new key past capacity, evicts the row's oldest surviving cell. Eviction runs as a pure function of the candidate cells inside the compose step, so replay reproduces the identical victim, and the dropped key is named on the mutation's apply echo. Eviction is by insertion position, not recency of touch: a new key is appended to the end of Cells and eviction always drops index 0. Re-writing an existing key updates it in place without moving it — true FIFO, never LRU. Legitimate only together with a declared Capacity. Default false.
+   * Whether growth at capacity evicts the oldest member.
    */
   evicts?: boolean;
   advance?: StateAdvance;
@@ -13585,6 +13585,10 @@ export type WorldStateRow = {
      * An authored seek, non-negative, default 0: a rebuild advances the generator by skip + cursor rather than cursor. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site's does.
      */
     skip?: number;
+    /**
+     * Whether samples use the keyed algorithm. Observers can price it without the authority key.
+     */
+    privateStream?: boolean;
   };
   /**
    * How many raw words this site's Draw has consumed, including rejections. Resuming seeks directly to that position rather than replaying earlier results. Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.
@@ -13600,7 +13604,7 @@ export type WorldStateRow = {
   historyCursor?: number;
   visibility?: StateVisibility;
   /**
-   * Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.
+   * Whether the declaration permits per-cell audience policies.
    */
   cellVisibility?: boolean;
   /**
@@ -13630,11 +13634,11 @@ export type WorldStateRow = {
     sequence?: number;
   };
   /**
-   * The phase row required on external gameplay transforms that write this row.
+   * The required phase protocol's row name.
    */
   phaseOf?: string;
   /**
-   * The discrete topology whose cell ordinals this row's integer values name — a value-typing trait, independent of Domain (legitimate only alongside a KeysOf domain over Int cells).
+   * The topology whose cell ordinals the values name.
    */
   valuesFrom?: string;
   /**
@@ -13658,11 +13662,11 @@ export type WorldStateRow = {
   cycle?: StateCycle;
   clock?: ShapeNonNullable57;
   /**
-   * The vector space this row belongs to; required for Vector, refused for every other kind.
+   * The vector space name.
    */
   space?: string;
   /**
-   * The StateEnum this row's integer values name, or null for a row whose values carry no symbolic domain. Legitimate only for Int cells, and only naming an enum the section declares.
+   * The integer values' symbolic domain.
    */
   enum?: CellName;
   /**

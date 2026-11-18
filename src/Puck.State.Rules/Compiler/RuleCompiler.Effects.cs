@@ -325,7 +325,7 @@ public static partial class RuleCompiler {
             ? candidates[0].RowOrdinal
             : -1);
     }
-    private static (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveDestination(StateRow row, StateChannelRef? key, string verb, string ruleName, RuleCompileContext context) {
+    private static (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) ResolveDestination(StateRowDeclaration row, StateChannelRef? key, string verb, string ruleName, RuleCompileContext context) {
         if (TryResolveDynamicKey(
             cell: out var dynamicKey,
             context: context,
@@ -1029,7 +1029,7 @@ public static partial class RuleCompiler {
         }
         return new InstanceFieldWriteEffect(pool: binding.Pool, field: field, bindingSlot: binding.Slot, write: write, source: source, text: null, describe: $"{verb} {binding.Name}.{field.Name}");
     }
-    private static IRuleEffect ResolveVectorWrite(StateRow row, int rowOrdinal, (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) destination, string? vector, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? value, decimal? valueSeconds, string? text, ExpressionProgram? expression, StateWriteKind write, string ruleName, RuleCompileContext context, string verb) {
+    private static IRuleEffect ResolveVectorWrite(StateRowDeclaration row, int rowOrdinal, (CellKey Key, CompiledCellRef? KeyFrom, string Spelling) destination, string? vector, StateChannelRef? fromState, StateChannelRef? fromKey, decimal? value, decimal? valueSeconds, string? text, ExpressionProgram? expression, StateWriteKind write, string ruleName, RuleCompileContext context, string verb) {
         var rowName = row.Name.Value;
 
         if (write != StateWriteKind.Set) {

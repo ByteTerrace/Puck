@@ -730,7 +730,7 @@ public static partial class RuleCompiler {
     /// <param name="verb">The authored verb, for refusal text.</param>
     /// <param name="keyFieldLabel">The field the key was spelled in, for refusal text.</param>
     /// <returns>The resolved key name.</returns>
-    public static string ResolveKey(StateRow row, string? key, string ruleName, string verb, string keyFieldLabel) {
+    public static string ResolveKey(StateRowDeclaration row, string? key, string ruleName, string verb, string keyFieldLabel) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         if (key is { } authored) {
@@ -765,7 +765,7 @@ public static partial class RuleCompiler {
     /// <param name="malformed">The refusal category for an undeclared or text row.</param>
     /// <param name="channel">The authored spelling, for refusal text.</param>
     /// <returns>The declared row.</returns>
-    public static StateRow ResolveNumericRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel) => ResolveRequiredRow(
+    public static StateRowDeclaration ResolveNumericRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel) => ResolveRequiredRow(
         channel: channel,
         context: context,
         malformed: malformed,
@@ -884,7 +884,7 @@ public static partial class RuleCompiler {
             values: spellings.Select(selector: static spelling => $"'{spelling}'")
         );
     }
-    private static StateRow ResolveRequiredRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel, bool requireNumeric = false) {
+    private static StateRowDeclaration ResolveRequiredRow(string name, string ruleName, RuleCompileContext context, bool requireKeyed, Enum malformed, string channel, bool requireNumeric = false) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
         var row = (context.FindRow(name: name)

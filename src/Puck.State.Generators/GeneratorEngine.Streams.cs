@@ -251,6 +251,10 @@ public static partial class GeneratorEngine {
         }
     }
 
+    /// <summary>Whether the site may use a provisioned draw secret.</summary>
+    public static bool SupportsSecret(StateGenerator generator, CellKind targetKind) =>
+        targetKind == CellKind.Int && generator.Source == GeneratorSource.StreamDraw && generator.Mode == GeneratorMode.WithReplacement;
+
     // The admission every positioned draw shares: a non-negative cursor and seek, a defined mode, a source that may
     // write the site's kind, and a secret only on an integer streamDraw site drawing with replacement.
     private static bool TryCheckFire(StateGenerator generator, CellKind targetKind, long cursor, long skip, ClosedBitset256? secret, out string reason) {
@@ -279,9 +283,7 @@ public static partial class GeneratorEngine {
         if (
             (secret is { } key) &&
             (key.IsEmpty ||
-            (generator.Source != GeneratorSource.StreamDraw) ||
-            (targetKind != CellKind.Int) ||
-            (generator.Mode != GeneratorMode.WithReplacement))
+            !SupportsSecret(generator, targetKind))
         ) {
             reason = "secret draws require a nonzero key and an integer streamDraw source with replacement";
 

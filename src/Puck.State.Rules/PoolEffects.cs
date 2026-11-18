@@ -11,12 +11,12 @@ internal static class PoolEffectWork {
         : 1L
     );
     public static long InsertWidth(StatePoolDescriptor pool, IRuleCostContext context) {
-        var units = ((pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L, rowOrdinal: pool.DomainRowOrdinal, context: context));
+        var units = ((pool.IsPair ? 3L : 1L) * RowMutationWidth(valueWidth: 1L, metadata: 0L));
 
         foreach (var field in pool.Fields) {
             units = BinaryIntegerFunctions.AddSaturating(
                 left: units,
-                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field), rowOrdinal: field.RowOrdinal, context: context)
+                right: RowMutationWidth(valueWidth: FieldJournalWidth(field: field), metadata: TransformWork.MetadataWidth((context as RuleCompileContext)?.FindRowAt(field.RowOrdinal)))
             );
         }
         return units;
@@ -27,19 +27,7 @@ internal static class PoolEffectWork {
         BinaryIntegerFunctions.AddSaturating(left: InsertWidth(context: context, pool: pool), right: 1L);
 
     // Member key, presence and count, plus clearing and initializing only the payload and metadata held by the row.
-    private static long RowMutationWidth(long valueWidth, int rowOrdinal, IRuleCostContext context) {
-        var metadata = 9L;
-
-        if ((context is RuleCompileContext compiler) && (compiler.FindRowAt(rowOrdinal: rowOrdinal) is { } row)) {
-            metadata = 0L;
-            var columns = ArenaLayout.ColumnsOf(row: row);
-
-            foreach (var column in new[] { ArenaColumn.ClockEpochTick, ArenaColumn.ClockEpochEngineTick,
-                ArenaColumn.ClockY0, ArenaColumn.ClockV0, ArenaColumn.ClockSubstepTicks, ArenaColumn.ClockSet,
-                ArenaColumn.Behavior, ArenaColumn.Visibility, ArenaColumn.Observation }) {
-                if ((columns & (1UL << ((int)column))) != 0UL) { metadata++; }
-            }
-        }
+    private static long RowMutationWidth(long valueWidth, long metadata) {
         return BinaryIntegerFunctions.AddSaturating(left: 3L,
             right: BinaryIntegerFunctions.MultiplySaturating(left: 2L, right: (valueWidth + metadata)));
     }

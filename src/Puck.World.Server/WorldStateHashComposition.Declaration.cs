@@ -259,6 +259,8 @@ public static partial class WorldStateHashComposition {
             hash: ref hash
         );
         hash.Add(value: ((byte)draw.Timing));
+        hash.Add(value: draw.Skip);
+        hash.Add(value: (byte)(draw.PrivateStream ? 1 : 0));
         hash.Add(value: ((byte)((draw.Secret is null)
             ? 0
             : 1)));

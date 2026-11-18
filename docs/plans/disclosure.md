@@ -2123,6 +2123,11 @@ transferring ownership of the journal mark or staged document resources. A
 refusal rewinds the mark or disposes the plans. Exact-change guards take both
 samples through the transaction's read access.
 
+Rule row lookup returns sealed declarations for authored and generated rows.
+Transform prices read the declared sampling algorithm and bound cell metadata
+without examining stored cells. A private stream keeps the same price when
+its observation omits the key. Execution requires a matching provisioned key.
+
 The whole-preparation invariant remains open. Document staging still exports
 the arena, and classification, validators and transform kernels still have raw
 access. The world-wide declarations carrier, compiler and evaluator migration

@@ -252,6 +252,24 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
         what: "observe"
     );
     [Fact]
+    public void PrivateSamplingIsPricedFromTheDeclarationAndRequiresTheKeyToExecute() {
+        var section = Section();
+        var key = new ClosedBitset256(1, 2, 3, 4);
+        var row = section.Rows!.Single(row => row.Draw is not null);
+        var declared = row.Draw! with { PrivateStream = true };
+        long Cost(Draw draw) {
+            var updated = section with { Rows = section.Rows!.Select(item => item == row ? item with { Draw = draw } : item).ToArray() };
+            return Compile(Context(updated), new StateTransform.Shuffle(Draw: "coin", Row: "deck")).Price.Units;
+        }
+
+        Assert.True(Cost(declared) > Cost(row.Draw!));
+        Assert.Equal(Cost(declared), Cost(declared with { Secret = key }));
+        Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), declared, out _, out _));
+        Assert.True(GeneratorEngine.TryResolveExecutableSource(Generators(), declared with { Secret = key }, out _, out _));
+        Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), row.Draw! with { Secret = key }, out _, out _));
+    }
+
+    [Fact]
     public void AShuffleIsAdmittedAtLeastItsSwapsAndItsSamples() => Holds(
         least: Members,
         transform: new StateTransform.Shuffle(Draw: "coin", Row: "deck"),
