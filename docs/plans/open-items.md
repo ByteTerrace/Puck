@@ -68,7 +68,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
 8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
-   proof, built by [Water](#water)'s lanes A2 to A5.
+   proof, built by [Water](#water)'s lanes A3 to A5.
 9. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
 10. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
@@ -1722,8 +1722,8 @@ intent is in its guide.
 
 - [high] The caldera water fails its reference
   ([caldera pack](../game/art/caldera-water-pack/README.md), intent in
-  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is a row of
-  smooth ellipsoid lumps in two flat colours; the falls are a flat translucent
+  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is one swept
+  tongue and calved blocks that read as a plain white sausage from the rim; the falls are a flat translucent
   slab with visible tile seams and an opaque white impact disc; the pool is
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
@@ -1809,28 +1809,18 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: lane A2 changes approach (below), then A3 to A5, R3 and P1
-last. The plan owns the feature end to end; these are the defects it does not.
+ordinary · Next: [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+P1 last. The plan owns the feature end to end; these are the defects it does not.
 
-- [high] Lane A2 (the lake and the glacier) failed two look-critic rounds on
-  every heading, so a third round on the same footing is not allowed
-  (AGENTS.md "Puck's purpose"). Its work is parked on `lane/wa2`, unmerged.
-  What failed: the lake is a flat-bottomed slab whose vertical side shows at
-  the near rim, with no depth grading from shallows to teal, stones that read
-  as discs and eggs, a busy ripple and no outlet sill; the glacier reads as
-  stacked bevelled tiles with an arcade toe and loose cubes, and it retreats
-  by dropping plates into fragments; the bare trough is a pale U-channel with
-  raised ladder-like blades and no moraine. The critic's direction: a lake
-  bounded by the bowl's own field (depth from zero at the bank), a calm flow
-  that speeds only at a rock sill carrying the falls' top, clustered sunk
-  stones; one smooth-blended tongue with a convex section, curved transverse
-  crevasses and a continuous gauge-bound retreat cut; a warm scoured floor
-  with cut grooves and moraine ridges. The changed approach, decided with the
-  owner: a written reference sheet for the lake, the glacier and the cradle
-  first (proportions, per-view silhouette targets, cited sources), then a
-  principal or Codex art lane against it. Open engine questions: a continuous
-  retreat cut inside a baked creation (a moving cutter does not re-carve the
-  group's mesh today), and caustics on submerged stones; both unverified.
+- [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
+  calm drift cannot speed up over the sill that the falls start from (panel 2 wants the water to move only there). It
+  needs a flow whose velocity is read from a field or a course (the river's winding course is the same gap, in
+  [the plan](water.md#the-rivers-channel-as-built)), or a second authored sheet over the sill. Caustics on the
+  submerged stones are not built, and are unverified against the glass pass.
+- [medium] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
+  from the valley floor (`worlds/debug/glacier-site.puck`): the sector's cell at that distance is coarser than the
+  trough's grooves. A near cell for the trough, or a creation of its own for the cradle, would carry the detail
+  without baking the whole wall finely.
 
 - [high] A swimmer cannot leave a walled channel: the swim hold (`swimHold`,
   `worlds/standard/kits.puck`) floats the body 1.25 m under the surface and
@@ -1865,6 +1855,30 @@ last. The plan owns the feature end to end; these are the defects it does not.
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
+- [medium] A cutter that moves against its group's baked mesh does not
+  re-carve it: the glacier's retreat as one cutter walking up the ice (the
+  moving half-space the stage table describes) showed no change at any pose, so
+  the ice melts by plates sinking into the trough's floor. The settle rebake
+  (`SdfMeshPathBake.Settle`) is the mechanism the moving-blends plan owns; a
+  moving subtraction would give a true retreating front and thinning. A slide is
+  also capped at four creation units, so a long travel rides four slides a plate
+  or a chain of carriers.
+- [medium] The ice carries no relief noise: a `noise` facet is refused on an
+  animated creation, and the glacier is animated. It is authored from chamfered
+  plates and wedge cuts instead; relief would break their planes into
+  hummocks.
+- [medium] Small stones in a wall sector bake at the sector's coarse cell, so the
+  trough's moraine and grooves read as flat-shaded polygons; the lake's
+  stones are creations of their own for that reason, at a preview cost of
+  about 650 000 triangles for the cobbles and boulders.
+- [medium] The falls ribbon beside the trough (`fallsRibbon`, lane A3) is a flat
+  rectangle with a segment seam that rises into the sky at its top and tilts
+  clear of the ground when the falls ebb. It needs to be a channel cut into the
+  ground with conforming water.
+- [low] `world.reload` of the debug world refuses once a lane's edit passes 16 MiB
+  as a whole rebuild ("Rebuild payload is 19239407 bytes; cap is 16777216");
+  the delta path reloads an edit of a few rows but a wall-sector edit that
+  moves many prototypes falls back to the rebuild.
 - [low] `water.speed 60` also runs the day clock, so stage captures come out
   at night; the tour's rows must pin the day.
 - [low] A stage checkpoint: a verb that saves and restores a live arena with

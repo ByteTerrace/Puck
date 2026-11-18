@@ -17,15 +17,25 @@ let valleySectors = [
 // The fraction of each main mass's vertical half-extent below the floor plane (terrainMass's sink).
 let valleySink = 0.3
 
-// A sector's main mass in its own frame (author +Z out from the ring's centre), on its axis: the distance from the centre
-// of the wall's face at height y, from the mass's ellipse (exponent 2) as terrainMass places it. The face stands this far
-// out at the floor (the sector's foot) and leans back as it rises, to the mass's centre at the peak.
-function sectorFace(sector, y) = (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink)) -
+// The main mass's height as a fraction of its vertical half-extent, measured from the mass's centre, at height y.
+function sectorFaceRise(sector, y) = (y + (sector.peak / (1 - valleySink)) * valleySink) /
+  (sector.peak / (1 - valleySink))
+
+// A sector's main mass in its own frame (author +Z out from the ring's centre), `x` along the ring from its axis: the
+// distance from the centre of the wall's face at height y, from the mass's ellipsoid (exponent 2) as terrainMass places it.
+// The face stands this far out at the floor (the sector's foot) and leans back as it rises, to the mass's centre at the peak.
+function sectorFaceAt(sector, y, x) = (sector.foot + sector.radial * squareRoot(1 - valleySink * valleySink)) -
   sector.radial * squareRoot(
-    1 -
-      ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink))) *
-        ((y + (sector.peak / (1 - valleySink)) * valleySink) / (sector.peak / (1 - valleySink)))
+    1 - sectorFaceRise(sector, y) * sectorFaceRise(sector, y) - (x / sector.across) * (x / sector.across)
   )
+// The face on the sector's axis.
+function sectorFace(sector, y) = sectorFaceAt(sector, y, 0)
+// How far the face at `x` stands further out per metre it rises at height y (dr/dy of `sectorFaceAt`): the face's slope,
+// from which a piece resting on it takes its tilt and its normal.
+function sectorFaceSlopeAt(sector, y, x) = sector.radial * sectorFaceRise(sector, y) / ((sector.peak /
+  (1 - valleySink)) * squareRoot(
+  1 - sectorFaceRise(sector, y) * sectorFaceRise(sector, y) - (x / sector.across) * (x / sector.across)
+))
 // The height of the same face at distance r from the centre, on the side facing it.
 function sectorHeight(sector, r) = (sector.peak / (1 - valleySink)) * squareRoot(
   1 -

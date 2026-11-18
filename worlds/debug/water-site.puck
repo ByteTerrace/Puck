@@ -4,6 +4,7 @@
 // The pool is a square basin sunk into the lawn at the end of the stream, west of the spawn and 8 m past the end of the
 // lawn's west path. The floor is one slab 0.4 m thick, so the basin reaches 2.4 m under the lawn from the opening.
 
+import "../standard/shading"
 import "valley-form"
 
 // The rest of the water stands on the north-west wall (compass 315, foot 205 m), which the spawn faces left of the hall.
@@ -11,16 +12,107 @@ import "valley-form"
 // run down the face from the lake's outlet at the crest to the floor, where the stream begins. The north-west sector's
 // own face gives the heights: `sectorFace` is how far out the face stands at a height.
 let wallSector = filter(valleySectors, s => s.name == "north-west")[0]
-let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 44 }
+let lakeSite = { lateral: 0, radial: 440, surface: 324.5, radius: 39, depth: 6.5 }
+// The lake's bowl, an ellipsoid (centre height and half-extents) that `valleyBasins` cuts and the lake's water fills.
+let lakeBowl = { y: 336, radii [46, 17, 46] }
+// The height of the bowl's floor at `r` metres from its centre.
+function lakeBowlFloor(r) = lakeBowl.y -
+  lakeBowl.radii[1] * squareRoot(1 - (r / lakeBowl.radii[0]) * (r / lakeBowl.radii[0]))
+// The lake's outlet: a cut through the lip whose own floor rises to the lake's surface where it meets the bowl's, so the two
+// cuts' floors cross at a sill at `lakeSite.surface` and fall away from it to the face. It is `outletRadii[0]` wide,
+// `outletRadii[2]` long about `outletRadial`, and its floor lowest (`outletRadial`, `outletY - outletRadii[1]`) at the face.
+let outletRadial = 393
+let outletRadii = [14, 8, 34]
+let outletY = 331.9
 // The bowls cut into the valley's masses, per sector (valley.puck).
 let valleyBasins = [
-  { sector: "north-west", label: "lake-basin", lateral: 0, radial: lakeSite.radial, y: 336, radii [46, 17, 46] }
+  {
+    sector: "north-west"
+    label: "lake-basin"
+    lateral: 0
+    radial: lakeSite.radial
+    y: lakeBowl.y
+    radii: lakeBowl.radii
+  }
   // A real cut through the lip, shared by the terrain mesh and its collider.
-  { sector: "north-west", label: "lake-outlet", lateral: 0, radial: 408, y: 330, radii [7, 8, 34] }
+  { sector: "north-west", label: "lake-outlet", lateral: 0, radial: outletRadial, y: outletY, radii: outletRadii }
 ]
 // The falls' profile from the outlet to the floor, [r, y] in the sector frame: the face at each height.
 let fallsHeights = [323, 300, 275, 250, 225, 200, 175, 150, 125, 100, 75, 50, 30, 14, -1]
 let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
+
+// A golden-ratio fraction of k, in [0, 1): a scatter that places the stones without a seed.
+function siteScatter(k, ratio) = shadeFrac(k * ratio)
+
+// The stones in the lake's bowl and on its bank, in the lake's own frame (its placement turns by the wall's yaw, so +z is out
+// from the ring's centre, toward the glacier's trough, and -z toward the outlet): cobbles that collect in clusters over the
+// bowl's floor, each sunk a third into it and tilted off level, and larger warm boulders along the waterline. Neither lies on
+// the trough side or the outlet's, which the glacier's ramp and the sill own. A stone is { position, radii, yaw, tilt
+// (degrees), material }.
+let lakeStonePalette = [
+  { color: "#C2AC86", roughness: 0.92, specular: 0.02 }
+  { color: "#A39683", roughness: 0.9, specular: 0.02 }
+  { color: "#9C6A4E", roughness: 0.9, specular: 0.03 }
+  { color: "#6F5F52", roughness: 0.9, specular: 0.03 }
+]
+// The lining laid over the bowl's floor under the water (`lakeStones`' `beds`): how thick it is, and the height, under the lake's
+// lowest surface, where it ends. Stones lie on its top.
+let lakeBedThickness = 1.2
+let lakeBedCut = -0.35
+// A point at `r` metres from the lake's centre and `deg` degrees from +z toward +x, on the bowl's floor `lift` over it,
+// relative to the lake's surface.
+function lakeBedPoint(r, deg, lift) = [
+  r * sine(deg * 0.017453292519943295),
+  minimum(lakeBowlFloor(r) - lakeSite.surface + lakeBedThickness, lakeBedCut) + lift,
+  r * cosine(deg * 0.017453292519943295)
+]
+// Where the cobbles gather: { r, deg } from the lake's centre.
+let lakeStoneClusters = [
+  { r: 29, deg: 95 }
+  { r: 25, deg: 128 }
+  { r: 30, deg: 218 }
+  { r: 22, deg: 262 }
+  { r: 31, deg: 286 }
+  { r: 15, deg: 118 }
+  { r: 13, deg: 244 }
+  { r: 26, deg: 64 }
+]
+// Where the boulders heap on the bank, in degrees from +z: clear of the trough and the outlet.
+let lakeBoulderDegrees = [70, 98, 128, 232, 262, 292]
+// A cobble's size: most are small, a few large.
+function cobbleSize(k) = 0.3 + 1.7 * siteScatter(k, 0.569840) * siteScatter(k, 0.569840) * siteScatter(k, 0.569840)
+let lakeBedStones = concat(
+  map(range(0, 84), k => {
+    position: lakeBedPoint(
+      lakeStoneClusters[k % length(lakeStoneClusters)].r + 6 * (siteScatter(k, 0.754878) - 0.5),
+      lakeStoneClusters[k % length(lakeStoneClusters)].deg + 22 * (siteScatter(k, 0.618034) - 0.5),
+      0 - 0.32 * cobbleSize(k) * (0.5 + 0.5 * siteScatter(k, 0.381966))
+    )
+    radii [
+      cobbleSize(k)
+      cobbleSize(k) * (0.4 + 0.3 * siteScatter(k, 0.381966))
+      cobbleSize(k) * (0.7 + 0.5 * siteScatter(k, 0.896491))
+    ]
+    yaw: 360 * siteScatter(k, 0.430159)
+    tilt: 24 * (siteScatter(k, 0.236068) - 0.5)
+    material: floor(4 * siteScatter(k * 13 + 5, 0.618034))
+  }),
+  map(range(0, 18), k => {
+    position: lakeBedPoint(
+      31.8 + 2.6 * siteScatter(k, 0.754878),
+      lakeBoulderDegrees[k % length(lakeBoulderDegrees)] + 16 * (siteScatter(k, 0.618034) - 0.5),
+      0.1
+    )
+    radii [
+      1.0 + 2.6 * siteScatter(k, 0.569840) * siteScatter(k, 0.569840) + 0.6 * (k % 3)
+      1.0 + 1.5 * siteScatter(k, 0.381966)
+      1.0 + 2.0 * siteScatter(k, 0.896491)
+    ]
+    yaw: 360 * siteScatter(k, 0.430159)
+    tilt: 36 * (siteScatter(k, 0.236068) - 0.5)
+    material: 2 + floor(2 * siteScatter(k * 7 + 3, 0.754878))
+  })
+)
 
 // The opening in the floor, [minX, minZ, maxX, maxZ] in world X/Z, and the basin's floor under it.
 let poolHole = [-66, -22, -46, -2]

@@ -150,22 +150,39 @@ let fallsGlass = waterGlass with { scattering: 0.8 }
 // pattern along the bank.
 let lakeFlowLayer = {
   velocity [0.3, 0, 0.2]
-  scale: 0.8
-  stretch: 1.5
-  cycle: 3
-  tilt: 0.12
+  scale: 2.4
+  stretch: 2
+  cycle: 4
+  tilt: 0.07
   coverage: 0
   softness: 0.1
   frame: World
   surface: waterFoam
   seed: 5
 }
-// A lake disc is a slab over its bowl, so it scatters more per metre, and its contact reaches less than its thickness.
-let lakeGlass = waterGlass with { scattering: 3, contact { reach: 0.2, coverage: 0.7 } }
-// Glacier ice: a pale blue body and a whiter weathered face.
+// A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
+// the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
+let lakeGlass = waterGlass with { scatter: "#1FA5AD", scattering: 0.24, contact { reach: 0.5, coverage: 0.9 } }
+// Glacier ice creeps: a slow world-space drift whose pattern is the weathered, matt surface of old ice against the blue
+// beneath, broad and not stretched so it follows no face's slope.
+let iceFlowLayer = {
+  frame: World
+  velocity [0.01, -0.02, 0.01]
+  scale: 0.13
+  stretch: 1.2
+  cycle: 4
+  tilt: 0.25
+  coverage: 0.28
+  softness: 0.5
+  surface { color: "#C9DDEA", roughness: 0.6, metal: 0 }
+  seed: 31
+}
+// Glacier ice: a blue body and a paler weathered face, each broken by the creep's pattern, and the cobalt of a crevasse's or
+// a channel's walls.
 let icePalette = [
-  { color: "#CFE8F2", roughness: 0.3, specular: 0.4, wrap: 0.3 }
-  { color: "#EEF6FA", roughness: 0.5, specular: 0.2, wrap: 0.4 }
+  flowed({ color: "#4F8DBB", roughness: 0.3, specular: 0.2, wrap: 0.05 }, iceFlowLayer)
+  flowed({ color: "#8DB6D1", roughness: 0.45, specular: 0.15, wrap: 0.05 }, iceFlowLayer)
+  { color: "#16477F", roughness: 0.25, specular: 0.3, wrap: 0.05 }
 ]
 // Stone for a bridge and its banks.
 let stonePalette = [
@@ -278,31 +295,149 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
     }
   }
 }
-// Ice shrinks uniformly about the authored origin; sizeBy reads the authority state that sets melt volume.
-// Zero parks the creation and removes its contact, leaving no crowns above the cradle.
-template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
+// The orientation, as a quaternion [x, y, z, w], of a piece lying on a slope whose climb makes an angle with +Z of cosine
+// `c`, then turned `yaw` degrees about the slope's own normal: the falls' sheets' tilt, so a piece's +Z runs up the slope and
+// its +Y stands off it.
+function onSlope(c, yaw) = [
+  0 - halfTurnSine(c) * cosine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * sine(yaw * 0.008726646259971648),
+  0 - halfTurnSine(c) * sine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
+]
+
+// A glacier is a tongue of ice lying in a trough: `lumps` overlapped into one body (each a superellipsoid, blended with the
+// neighbours it overlaps by `smooth` metres, so the surface runs on across them and the relief noise hides the seams), the
+// `furrows` swept out of its surface (crevasses and melt channels, each a tube of `radius` that swells by `bulge` along its
+// length, so it opens in the middle and closes at its ends), and fBm `relief` over the composed ice. The ice melts by shrinking
+// with the gauge `state.<gauge>` (the linear fraction of the melt clock left, so the volume is its cube) about `origin`: put
+// the origin at the glacier's head on its bed and the toe retreats up the valley as the ice thins. The relief keeps its size
+// under that scale. A lump is { position, half, cosine, yaw, exponent, material }, a furrow { position, b, c, cosine, yaw,
+// radius, bulge, material } whose tube runs from `position` by the Bezier controls `b` and `c` (relative to it, in the
+// furrow's own frame). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads them.
+template glacierMass(id, lumps, furrows, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette, smooth = 0.5, relief = { frequency: 0.12, amplitude: 0.5, octaves: 4, seed: 31 }) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
       sizeBy: $"state.{gauge}"
+      noise {
+        frequency: relief.frequency
+        amplitude: relief.amplitude
+        octaves: relief.octaves
+        gain: 0.5
+        lacunarity: 2
+        seed: relief.seed
+      }
       for (lump, i) in lumps {
         shape Superellipsoid $"ice-{i}" {
-          material: i % 2
-          exponent: 2.4
-          position [lump.position[0] - origin[0], lump.position[1] - origin[1], lump.position[2] - origin[2]]
-          scale: lump.radii
+          material: lump.material
+          blend: i == 0 ? Union : SmoothUnion
+          smooth: smooth
+          exponent: lump.exponent
+          position [
+            lump.position[0] - origin[0],
+            lump.position[1] - origin[1],
+            lump.position[2] - origin[2]
+          ]
+          scale: lump.half
+          rotation: onSlope(lump.cosine, lump.yaw)
           group: 1
+        }
+      }
+      for (furrow, i) in furrows {
+        shape Sweep $"furrow-{i}" {
+          blend: Subtraction
+          material: furrow.material
+          position [
+            furrow.position[0] - origin[0],
+            furrow.position[1] - origin[1],
+            furrow.position[2] - origin[2]
+          ]
+          rotation: onSlope(furrow.cosine, furrow.yaw)
+          group: 1
+          curve {
+            a [0, 0, 0]
+            b: furrow.b
+            c: furrow.c
+            radiusStart: furrow.radius
+            radiusEnd: furrow.radius
+            bulge: furrow.bulge
+          }
         }
       }
     }
   }
 }
 
-// A lake's surface: a flat turquoise disc of `radius` that rises and falls with the gauge `state.<gauge>` by `rise` metres
-// a unit above `rest`, the gauge's value at the lake's outlet, its shading rippled by `flow`.
-template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
+// Stones lying in a lake's bowl and on its bank, in the lake's own frame: each { position, radii, yaw, tilt, material } is a
+// rounded block (a superellipsoid of `exponent`) turned about the vertical by `yaw` degrees and rocked off level by `tilt`,
+// half sunk in the rock, so the floor and shore read through the water and the stones cross the waterline. A light relief
+// over the group breaks the smooth faces. Each of `beds` ({ y, radii, thickness, cut, material }) is a lining under the water: the
+// bowl's own ellipsoid (centred `y`, the bowl's `radii`) less the same ellipsoid raised by `thickness`, a shell that thick
+// everywhere vertically and cut off at height `cut` (under the lake's lowest surface), where it thins to nothing. The floor
+// the stones lie on is then the authored bowl rather than whatever the terrain's relief leaves of it.
+template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = { frequency: 0.25, amplitude: 0.06, octaves: 2, seed: 17 }) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: palette
+      noise {
+        frequency: relief.frequency
+        amplitude: relief.amplitude
+        octaves: relief.octaves
+        gain: 0.5
+        lacunarity: 2
+        seed: relief.seed
+      }
+      for (bed, i) in beds {
+        shape Superellipsoid $"bed-{i}" {
+          material: bed.material
+          exponent: 2
+          position [0, bed.y, 0]
+          scale: bed.radii
+        }
+        shape Superellipsoid $"bed-hollow-{i}" {
+          blend: Subtraction
+          material: bed.material
+          exponent: 2
+          position [0, bed.y + bed.thickness, 0]
+          scale: bed.radii
+        }
+        shape Box $"bed-top-{i}" {
+          blend: Intersection
+          material: bed.material
+          position [0, bed.cut - 50, 0]
+          scale [200, 50, 200]
+        }
+      }
+      for (stone, i) in stones {
+        shape Superellipsoid $"stone-{i}" {
+          material: stone.material
+          exponent: exponent
+          position: stone.position
+          scale: stone.radii
+          rotation [
+            sine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            0 - sine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)
+          ]
+        }
+      }
+    }
+  }
+}
+
+// A lake's water: the body of water the bowl holds. A cylinder of the bowl's `depth` and `radius` whose top is the surface,
+// intersected with the bowl itself (`bowl`, { y, radii }: the ellipsoid, in the lake's frame, that the terrain cut for it,
+// grown by `reach` metres so the water meets the rock rather than stopping short of it). The water therefore ends where the
+// bowl's own floor rises to the level, in a shore of zero depth, and no water side stands bare at a sill or a rim: the floor
+// shows through it by its depth and the shore is where the rock meets the level. The surface rises and falls with the gauge
+// `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the bowl rides it, so no seam
+// stretches.
+template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -311,13 +446,23 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]
-      shape Cylinder "surface" {
+      shape Cylinder "water" {
         material: 0
-        position [0, 0, 0]
-        scale [radius, 0.12, radius]
+        group: 1
+        position [0, 0 - depth / 2, 0]
+        scale [radius, depth / 2, radius]
         slides [
           { driver: "level", axis [0, 1, 0], amplitude: rise, phase: 0 - rest, wave: "linear" }
         ]
+      }
+      shape Superellipsoid "bowl" {
+        blend: Intersection
+        exponent: 2
+        material: 0
+        group: 1
+        parent: "water"
+        position [0, bowl.y, 0]
+        scale [bowl.radii[0] + reach, bowl.radii[1] + reach, bowl.radii[2] + reach]
       }
     }
   }
