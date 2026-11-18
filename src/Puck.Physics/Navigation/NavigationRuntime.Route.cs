@@ -342,7 +342,7 @@ public sealed partial class NavigationRuntime {
             var position = Position(node: node);
 
             return ((Tuning.Kind == NavigationKind.Surface)
-                ? (position with { Y = ((position.Y - Tuning.AgentRadius) - ClearanceEpsilon) })
+                ? (position with { Y = (position.Y - Tuning.AgentRadius) })
                 : position);
         }
         /// <summary>Returns whether a world position lies in this domain's footprint and, for a surface domain, inside
@@ -359,7 +359,7 @@ public sealed partial class NavigationRuntime {
 
             var height = (position.Y - Tuning.Origin.Y);
 
-            return ((height >= -Tuning.ProbeDown) && (height <= ((Tuning.ProbeUp + Tuning.AgentRadius) + (ClearanceEpsilon * FixedQ4816.FromInteger(value: 2)))));
+            return ((height >= -Tuning.ProbeDown) && (height <= (Tuning.ProbeUp + Tuning.AgentRadius)));
         }
         // Writes the cells one step from a cell that a route may take, with each step's length in millimetres.
         internal int RouteSteps(int node, Span<int> next, Span<int> cost) {

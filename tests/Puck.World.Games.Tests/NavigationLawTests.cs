@@ -559,10 +559,10 @@ public sealed partial class NavigationLawTests {
             expected: expected
         );
     }
-    // Raising the far-below floor into the domain changes its occupancy, so only a domain with nothing baked may be
-    // retained.
+    // Raising the far-below floor into the domain changes the geometry it reads, so a domain whose bake ran ahead (a
+    // navigating kit starts it at install) or that a restored route baked is rebuilt.
     [Fact]
-    public void ASolidRebuildRetainsAnUnroutedDomainButRebuildsARestoredRoutesChangedDomain() {
+    public void ASolidRebuildThatChangesADomainsGeometryRebuildsItsBake() {
         var floored = WithFloor(definition: NavigationDocument(domain: VolumeDomain()));
         var definition = floored with {
             PlacementsRaw = floored.PlacementsRaw! with {
@@ -602,11 +602,11 @@ public sealed partial class NavigationLawTests {
             unrouted.Step();
             RaiseFloor(fixture: unrouted);
             Assert.Equal(
-                expected: 1,
+                expected: 0,
                 actual: unrouted.Server.Population.NavigationRetainedDomainCount
             );
             Assert.Equal(
-                expected: 0,
+                expected: 1,
                 actual: unrouted.Server.Population.NavigationRebuiltDomainCount
             );
         }

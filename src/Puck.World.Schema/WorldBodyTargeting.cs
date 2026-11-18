@@ -252,17 +252,16 @@ public static class WorldTargetSelection {
         return false;
     }
 
-    /// <summary>Returns whether any navigation domain, designation envelope, sensed source, or world-rule
-    /// <c>$los:</c> operand requires the deterministic solid field — the one gate
-    /// <c>Server.WorldPopulation.CompileFixedTables</c> reads to decide whether to build that field at all.
-    /// Navigation compiles collision-clear cells and swept edges from it. A world rule's <c>$los:</c> channel rides the same
+    /// <summary>Returns whether any designation envelope, sensed source, or world-rule <c>$los:</c> operand requires
+    /// the deterministic solid field: the one gate <c>Server.WorldPopulation.CompileSolidConsumers</c> reads to decide
+    /// whether to build that field at all. Navigation never asks for it, since it plans against the static contact
+    /// geometry the bodies collide with. A world rule's <c>$los:</c> channel rides the same
     /// <c>Server.WorldPopulation.HasLineOfSight</c> primitive a sensed target's own check does, and that primitive
     /// reads a field the population would otherwise never build if nothing else in the document asked for one —
     /// admitting it here is what keeps a rules-only <c>$los:</c> authoring from silently reading "always false"
     /// forever.</summary>
     public static bool RequiresLineOfSight(WorldDefinition definition) =>
         (definition.TargetRegisters.Any(predicate: register => register.RequiresLineOfSight)
-        || (definition.Navigation.Rows.Count != 0)
         || definition.Kits.Any(predicate: kit => kit.Producers.Values.Any(predicate: parameters => (parameters?.Flock?.RequiresLineOfSight == true)))
         || definition.BodyMotionPrograms.Any(predicate: program => (program.Target is BodyTargetSource.Sensed { RequiresLineOfSight: true }))
         || RulesReferenceLineOfSight(rules: definition.Rules));

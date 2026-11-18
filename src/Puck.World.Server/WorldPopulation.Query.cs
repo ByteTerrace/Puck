@@ -278,9 +278,13 @@ public sealed partial class WorldPopulation {
                 : ",shared=none"
             );
 
-            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
+            var work = domain.BakeWork;
+
+            rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} edges={work.Edges} bake=grounds:{work.Grounds},occupancies:{work.Occupancies},edgeProofs:{work.EdgeProofs},allocated:{work.AllocatedBytes} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
         }
-        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount} cells={m_navigation.CellCount} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
+        var total = m_navigation.BakeWork;
+
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
             separator: "; ",
             values: rows
         )}]";
@@ -290,9 +294,15 @@ public sealed partial class WorldPopulation {
     public int NavigationRetainedDomainCount => m_navigation.RetainedDomainCount;
     /// <summary>Gets the number of navigation domains rebuilt by the most recent population compile.</summary>
     public int NavigationRebuiltDomainCount => m_navigation.RebuiltDomainCount;
-    /// <summary>Gets the number of navigation domains whose occupancy and edges have been baked. A domain bakes on its
-    /// first route request or read-back, never at compile; reading this never bakes.</summary>
+    /// <summary>Gets the number of navigation domains whose occupancy and edges have been baked. A domain bakes when a
+    /// route, a read-back or a following body first needs it, or ahead of that on the thread pool
+    /// (<see cref="BeginNavigationBakes"/>); reading this never bakes or waits.</summary>
     public int NavigationBakedDomainCount => m_navigation.BakedDomainCount;
+    /// <summary>Gets whether every navigation domain's bake has finished, so no navigation read waits for one. Reading
+    /// it never bakes or waits.</summary>
+    public bool NavigationBaked => m_navigation.IsBaked;
+    /// <summary>Starts every unbaked navigation domain's bake on the thread pool, off the authority's tick.</summary>
+    public void BeginNavigationBakes() => m_navigation.BeginBakes();
     /// <summary>Gets the number of compiled navigation domains.</summary>
     public int NavigationDomainCount => m_navigation.Count;
     /// <summary>Gets the compiled navigation cell total.</summary>

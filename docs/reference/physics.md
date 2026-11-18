@@ -542,34 +542,41 @@ representation. `Puck.World.Server.WorldPopulation` is today's host: it
 compiles `navigation.domains` rows and bridges the field lattice below
 through that seam (see [its README](../../src/Puck.World.Server/README.md#navigation)).
 
-A domain's constructor only sizes its workspace arrays: the occupancy sweep
-and edge bake against the host's query run once, lazily, the first time a
-route request, an off-grid locomotion check, a `WalkableCellCount` read, or a
-host's `EnsureBaked` call genuinely needs the answer. A host calls `EnsureBaked`
-when it restores a stored route or search result, including a failed search with
-an empty path: the recorded domain, goal, and status depend on a bake the kernel
-cannot see. A domain a host never routes through never sweeps the query, including
-across query replacements. Restoring a shared-navigation
-checkpoint with no resident trees preserves that deferral. Scheduler and empty-slot
-shape checks still run; a resident tree triggers the bake to validate its recorded
-successor edges.
-Restoring resident trees directly through `Domain.RestoreShared` also establishes
-the bake before those trees can be retained across a query replacement.
+A domain reads the host's static contact geometry, the `IContactField` its
+bodies collide with without the solids that move each tick, through the same
+resolve, swept resolve and support-distance queries a body's own step runs, so
+a route the kernel plans is one a body of the domain's agent can walk. When the
+geometry is an `IRegionalContactField` (`FixedStaticContactField`), each domain
+reads only the part its footprint's region can reach (`Within`), and that part
+identifies the domain's bake. A domain's constructor only sizes its search
+arrays; its occupancy sweep and edge bake (`NavigationDomainBake`) run once,
+on the thread pool after `BeginBakes`, or on the reader's thread the first
+time a route request, an off-grid locomotion check, a `WalkableCellCount` read
+or a host's `EnsureBaked` call needs it while no bake is in flight. A reader
+that needs a bake still in flight waits for it, and the bake reads only the
+domain's tuning and its geometry part, so no answer depends on which thread
+baked or when. A host calls `EnsureBaked` when it restores a stored route or
+search result, including a failed search with an empty path: the recorded
+domain, goal, and status depend on a bake the kernel cannot see. Restoring a
+shared-navigation checkpoint with no resident trees preserves the deferral.
+Scheduler and empty-slot shape checks still run; a resident tree triggers the
+bake to validate its recorded successor edges.
 
-A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
-the first surface under its probe's start (origin height plus `probeUp`, so an
-author keeps that start under the lintels a walker passes beneath), proving
-clearance from `maxStepHeight` over the ground up to the head (the step rule
-admits anything lower, so a stair's next riser does not refuse a tread's
-cell), slope, and step limits; every admitted edge is
-proven with swept spheres from `maxStepHeight` above the foot up to the head
-(the step rule already admits anything lower, and a sphere sweeping the floor
-it stands on advances one contact skin per march step) and stored in one
-26-bit mask per cell. `Volume` and `Medium` domains use the same swept-sphere
-edge proof in three dimensions. A `Medium` domain additionally resolves its
-field name to an ordinal once and checks the agent clearance volume at each
-live node plus half-cell-or-shorter swept boxes on search and before
-following the next cached edge, through `INavigationMediumField`; every
+A `Surface` domain stands its agent as a capsule of its `agentHeight` and
+`agentRadius`. A cell's ground is where a small probe sphere lowered from its
+probe's start (origin height plus `probeUp`, so an author keeps that start under
+the lintels a walker passes beneath) first comes to rest; the cell is walkable
+where the capsule standing on that ground, its underside raised by
+`maxStepHeight` (the step rule admits anything lower, so a stair's next riser
+does not refuse a tread's cell), meets nothing. An edge passes the slope and
+step limits and then sweeps the same raised capsule between the two cells at the
+higher cell's ground, so it proves the room a body standing on either end needs
+over the step it may climb; admitted edges are stored in one 26-bit mask per
+cell. `Volume` and `Medium` domains prove a sphere of `agentRadius` at each cell
+and swept between cells in three dimensions. A `Medium` domain additionally
+resolves its field name to an ordinal once and checks the agent clearance
+volume at each live node plus half-cell-or-shorter swept boxes on search and
+before following the next cached edge, through `INavigationMediumField`; every
 intersected voxel's free surface is checked, including dry caps between wet
 layers, so field evolution never needs rebaking static solids.
 
@@ -579,15 +586,13 @@ expansion/path ceilings. Domain search workspace allocates once at
 construction; per-body route storage is a host concern, so a steady-state
 search allocates nothing here.
 
-When a host replaces its solid query, an unbaked domain is retained without
-sampling either provider: nothing cached depends on the old one, and its later
-bake samples the replacement. A baked domain workspace may be retained only
-after the replacement provider returns the same ground, occupancy, clearance,
-and every static edge result for the domain's complete grid. The retained
-workspace forwards later off-grid segment checks to the replacement provider;
-medium domains also require the same field revision. A failed proof compiles a
-fresh domain, and shared destination trees remain with the workspace only when
-that proof succeeds.
+When a host replaces its document, a domain keeps its workspace when its tuning
+and capacity are unchanged and it is neither baked nor baking, or when its
+geometry part compares equal to the one its bake read: equal parts answer every
+query the bake asked identically, so the bake (finished or in flight) and its
+shared destination trees carry over without sampling anything. Medium domains
+also require the same field revision. Any other domain compiles fresh, and a
+prior domain no runtime keeps has its bake in flight cancelled.
 
 A domain carrying `Shared` runs queued reverse-Dijkstra searches instead,
 with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance

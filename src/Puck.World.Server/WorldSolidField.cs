@@ -160,7 +160,27 @@ public sealed class WorldSolidField : IContactField {
             sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
             sweepWork: FixedContactSweepWork.Process
         );
+        // The authored program alone, without the lattice's columns or the moving roots: geometry that never changes
+        // while this field lives, so navigation can bake against it off the authority's tick.
+        StaticField = new FixedFieldContactSolver(
+            contactSkin: tuning.ContactSkin,
+            field: m_field,
+            gradientProbe: tuning.GradientProbe,
+            gradientUp: tuning.GradientUp,
+            groundedThreshold: tuning.GroundedThreshold,
+            maxIterations: tuning.MaxIterations,
+            query: ((IWorldQuery?)m_banded ?? evaluator),
+            sweep: ((sweepBounds is null) ? null : new CertifiedFieldSweep(field: sweepBounds)),
+            bounds: sweepBounds,
+            sweepBoundsQueryBudget: FixedFieldContactSolver.DefaultSweepBoundsQueryBudget,
+            sweepWork: FixedContactSweepWork.Process
+        );
     }
+
+    /// <summary>Gets the authored solids alone as a contact field, without the field lattice's columns or the moving
+    /// roots: geometry that never changes while this field lives and may be read from any thread, so navigation bakes
+    /// against it off the authority's tick.</summary>
+    public IContactField StaticField { get; }
 
     /// <summary>Gets the analytic collider census measured from the same definition, so the read-back is comparable
     /// whichever provider the world selected, carrying this field's <see cref="WorldContactCensus.SolidBakeHash"/>.</summary>

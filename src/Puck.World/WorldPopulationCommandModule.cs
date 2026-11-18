@@ -31,12 +31,15 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
     private static readonly CommandForms WorldPopulationForms = CommandForms.Of(verb: "world.population", "[count] [idle|producer:<name>]");
     private static readonly CommandForms WorldNavigationForms = CommandForms.Of(verb: "world.navigation", "[route <from> <to> [path]]", "map <domain> [<column> <row> <columns> <rows>]");
 
-    // The world.navigation read-back, a domain's drawing, or one checked route between two endpoints.
+    // The world.navigation read-back, a domain's drawing, or one checked route between two endpoints. Every form reads
+    // baked domains, so an unbaked runtime bakes on the thread pool while the session holds, never on the pump: the
+    // answer comes once every bake has finished, or the answer deadline refuses it and the bakes run on.
     private CommandResult Navigation(CommandContext context, WireArgs args) {
+        Func<CommandResult> answer;
+
         if (args.Count == 0) {
-            return new CommandResult(Output: population.DescribeNavigation());
-        }
-        if (args[0].ToString() == "map") {
+            answer = () => new CommandResult(Output: population.DescribeNavigation());
+        } else if (args[0].ToString() == "map") {
             if ((args.Count is not (2 or 6)) ||
                 ((args.Count == 6) && !(args.TryInt(index: 2, value: out _) && args.TryInt(index: 3, value: out _) && args.TryInt(index: 4, value: out _) && args.TryInt(index: 5, value: out _)))) {
                 return WorldNavigationForms.Refuse();
@@ -46,6 +49,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             var z0 = 0;
             var columns = 256;
             var rows = 256;
+            var name = args[1].ToString();
 
             if (args.Count == 6) {
                 _ = args.TryInt(index: 2, value: out x0);
@@ -53,16 +57,33 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
                 _ = args.TryInt(index: 4, value: out columns);
                 _ = args.TryInt(index: 5, value: out rows);
             }
-
-            return new CommandResult(Output: population.DescribeNavigationMap(depth: rows, name: args[1].ToString(), width: columns, x0: x0, z0: z0));
-        }
-        if ((args.Count is < 3 or > 4) || (args[0].ToString() != "route") || ((args.Count == 4) && (args[3].ToString() != "path"))) {
+            answer = () => new CommandResult(Output: population.DescribeNavigationMap(depth: rows, name: name, width: columns, x0: x0, z0: z0));
+        } else if ((args.Count is < 3 or > 4) || (args[0].ToString() != "route") || ((args.Count == 4) && (args[3].ToString() != "path"))) {
             return WorldNavigationForms.Refuse();
-        }
+        } else {
+            var from = args[1].ToString();
+            var to = args[2].ToString();
+            var path = (args.Count == 4);
 
+            answer = () => Route(context: context, from: from, path: path, to: to);
+        }
+        if (population.NavigationBaked) {
+            return answer();
+        }
+        population.BeginNavigationBakes();
+        if (context.TextSession is not { } session) {
+            return answer();
+        }
+        session.HoldWhile(
+            hold: () => !population.NavigationBaked,
+            released: deadlinePassed => (deadlinePassed
+                ? CommandResult.Error(output: $"[world.navigation: {population.NavigationBakedDomainCount}/{population.NavigationDomainCount} domains baked at the answer deadline; the rest bake on, ask again]")
+                : answer()),
+            publishResult: true);
+        return new CommandResult(Output: $"[world.navigation: baking {population.NavigationDomainCount - population.NavigationBakedDomainCount} domain(s) off the tick]");
+    }
+    private CommandResult Route(CommandContext context, string from, string to, bool path) {
         var definition = server.ReadView(context).Definition;
-        var from = args[1].ToString();
-        var to = args[2].ToString();
 
         if (!TryEndpoint(token: from, definition: definition, point: out var fromPoint, within: out var fromShape, reason: out var reason) ||
             !TryEndpoint(token: to, definition: definition, point: out var toPoint, within: out var toShape, reason: out reason)) {
@@ -85,7 +106,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var walls = new List<FixedVector3>();
         var status = population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, route: route, samples: out var samples, walls: walls, work: out var work);
 
-        return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: (args.Count == 4))) {
+        return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: path)) {
             IsError = (route.Count == 0),
         };
     }

@@ -73,8 +73,9 @@ public sealed partial class WorldColliderSet : IContactField {
     private readonly WorldSolidScale[] m_sampledScales;
     private readonly int[] m_scaleSlots;
     private readonly FixedStaticCollider[] m_colliders;
-    // m_colliders with each one's world bounds, compiled once: what every solve runs over.
-    private readonly FixedStaticColliderSet m_staticSet;
+    // m_colliders with their bounds and grid, compiled once: what every solve runs over, and the static geometry
+    // navigation plans against (StaticField).
+    private readonly FixedStaticContactField m_static;
 
     // m_attachedColliders with each one's world bounds, published from it at the end of every refresh or restore that
     // rebuilds it, which are the only writers between solves.
@@ -104,18 +105,6 @@ public sealed partial class WorldColliderSet : IContactField {
     internal readonly ref struct RideSweep(WorldColliderSet owner) {
         public void Dispose() => owner.m_rideExcludedRow = -1;
     }
-
-    // A uniform grid over world X and Z of those bounds, so a sweep visits the colliders near its move rather than
-    // all of them. A collider without bounds, or one spanning more than GridCellLimit cells, joins every query.
-    private const int GridCellShift = 18;
-    private const int GridCellLimit = 64;
-
-    private static readonly FixedQ4816 RegionMargin = FixedQ4816.One;
-
-    private readonly Dictionary<(int X, int Z), int[]> m_colliderGrid;
-    private readonly int[] m_unboundedColliders;
-
-    private readonly List<int> m_candidates = [];
 
     public IReadOnlyList<WorldDiagnosticCollider> DiagnosticColliders { get; private set; } = [];
 
@@ -154,8 +143,6 @@ public sealed partial class WorldColliderSet : IContactField {
     private WorldColliderSet(FixedStaticCollider[] colliders, FixedStaticCollider[] holdableColliders, bool[] holdableGrantedByOverride, FixedWorldCollision tuning, IReadOnlyList<MovingSolidRow> attachedRows, bool movingOnly, bool defaultGrip) {
         m_defaultGrip = defaultGrip;
         m_colliders = colliders;
-        m_staticSet = new FixedStaticColliderSet(colliders: colliders);
-        (m_colliderGrid, m_unboundedColliders) = BuildGrid(boxes: m_staticSet.Boxes);
         m_holdableColliders = holdableColliders;
         m_holdableGrantedByOverride = holdableGrantedByOverride;
         m_attachedRows = attachedRows;
@@ -189,8 +176,14 @@ public sealed partial class WorldColliderSet : IContactField {
             GroundedThreshold: tuning.GroundedThreshold,
             MaxIterations: tuning.MaxIterations
         );
+        m_static = new FixedStaticContactField(colliders: colliders, solver: m_solver);
         ContactReach = tuning.ContactReach;
     }
+
+    /// <summary>Gets the static colliders alone as a contact field: what a body collides with here apart from the
+    /// attached solids that move each tick. It never changes and may be read from any thread, so navigation bakes
+    /// against it off the authority's tick.</summary>
+    public FixedStaticContactField StaticField => m_static;
 
     /// <summary>Gets a counter that advances whenever <see cref="RefreshAttached"/> finds an attached solid row at a
     /// different resolved pose than the snapshot it replaces — never on a call that leaves every collider unchanged.
@@ -1132,141 +1125,30 @@ public sealed partial class WorldColliderSet : IContactField {
         return (found && (displacement != FixedVector3.Zero));
     }
 
-    // The cells a world-axis box covers, inclusive: GridCellShift makes each cell 4 m of Q48.16 raw units.
-    private static (int X0, int X1, int Z0, int Z1) CellRange(in FixedAabb box) =>
-        (((int)(box.Minimum.X.Value >> GridCellShift)), ((int)(box.Maximum.X.Value >> GridCellShift)),
-         ((int)(box.Minimum.Z.Value >> GridCellShift)), ((int)(box.Maximum.Z.Value >> GridCellShift)));
-    private static long CellCount((int X0, int X1, int Z0, int Z1) range) =>
-        (((((long)range.X1) - range.X0) + 1L) * ((((long)range.Z1) - range.Z0) + 1L));
-    private static (Dictionary<(int X, int Z), int[]> Grid, int[] Unbounded) BuildGrid(ReadOnlySpan<FixedAabb> boxes) {
-        var cells = new Dictionary<(int X, int Z), List<int>>();
-        var unbounded = new List<int>();
-
-        for (var index = 0; (index < boxes.Length); index++) {
-            ref readonly var box = ref boxes[index];
-
-            if (box.IsEverywhere) {
-                unbounded.Add(item: index);
-                continue;
-            }
-            var range = CellRange(box: in box);
-
-            if (CellCount(range: range) > GridCellLimit) {
-                unbounded.Add(item: index);
-                continue;
-            }
-            for (var x = range.X0; (x <= range.X1); x++) {
-                for (var z = range.Z0; (z <= range.Z1); z++) {
-                    if (!cells.TryGetValue(key: (x, z), value: out var list)) {
-                        list = [];
-                        cells.Add(key: (x, z), value: list);
-                    }
-                    list.Add(item: index);
-                }
-            }
-        }
-        var grid = new Dictionary<(int X, int Z), int[]>(capacity: cells.Count);
-
-        foreach (var (cell, list) in cells) {
-            grid.Add(key: cell, value: [.. list]);
-        }
-        return (grid, [.. unbounded]);
-    }
-    // The colliders a move can reach: those near the body's bounds at both ends of the move, grown by a margin for the
-    // pushes it meets on the way. The solver checks every collider once the body's bounds leave that region, so the
-    // margin trades only speed, never the result.
-    private FixedColliderCandidates Candidates(in FixedVector3 previousPosition, in FixedVector3 position, in FixedQuaternion orientation,
-        ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-        if (volumes.IsEmpty) { return default; }
-        var swept = FixedAabb.Empty;
-
-        foreach (ref readonly var volume in volumes) {
-            foreach (var at in ((ReadOnlySpan<FixedVector3>)[previousPosition, position])) {
-                swept = swept.Enclose(other: FixedColliderBounds.WorldBounds(orientation: in orientation, position: at, volume: in volume));
-            }
-        }
-        var region = swept.Grow(margin: RegionMargin);
-        var reach = region.Grow(margin: m_solver.ContactSkin);
-        var range = CellRange(box: in reach);
-
-        if (CellCount(range: range) > GridCellLimit) { return default; }
-        m_candidates.Clear();
-        var boxes = m_staticSet.Boxes;
-
-        foreach (var index in m_unboundedColliders) {
-            if (boxes[index].Intersects(other: in reach)) {
-                m_candidates.Add(item: index);
-            }
-        }
-        for (var x = range.X0; (x <= range.X1); x++) {
-            for (var z = range.Z0; (z <= range.Z1); z++) {
-                if (!m_colliderGrid.TryGetValue(key: (x, z), value: out var cell)) { continue; }
-                foreach (var index in cell) {
-                    if (boxes[index].Intersects(other: in reach)) {
-                        m_candidates.Add(item: index);
-                    }
-                }
-            }
-        }
-        m_candidates.Sort();
-        var span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_candidates);
-        var count = 0;
-
-        for (var read = 0; (read < span.Length); read++) {
-            if ((count == 0) || (span[(count - 1)] != span[read])) { span[count++] = span[read]; }
-        }
-        return new FixedColliderCandidates(indices: span[..count], region: region);
-    }
+    // Every solve runs the static field's own query with the attached solids as its per-tick colliders: RefreshAttached
+    // recomputes them once per tick, never here, since a solve runs once per body.
 
     /// <inheritdoc/>
     public ContactResolution Resolve(ref FixedVector3 position, ref FixedVector3 velocity, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        // ATTACHED solid rows ride the second span: RefreshAttached recomputes them once per tick, never here (Resolve
-        // runs once PER BODY, so refreshing here would repeat that recompute for every other body in the world).
-        m_solver.Resolve(
-            colliders: m_staticSet,
-            dynamicColliders: QueryAttachedSet,
-            orientation: in orientation,
-            position: ref position,
-            up: in up,
-            velocity: ref velocity,
-            volumes: volumes,
-            candidates: Candidates(orientation: in orientation, position: position, previousPosition: position, volumes: volumes)
-        );
+        m_static.Resolve(dynamicColliders: QueryAttachedSet, orientation: in orientation, position: ref position, up: in up, velocity: ref velocity, volumes: volumes);
     /// <inheritdoc/>
     public int CollectContacts(in FixedVector3 position, in FixedQuaternion orientation, in FixedBodyColliderVolume volume, FixedQ4816 margin,
-        Span<FixedSurfaceContact> destination) {
-        var reach = new FixedVector3(X: margin, Y: margin, Z: margin);
-
-        return m_solver.CollectContacts(
-            candidates: Candidates(orientation: in orientation, position: (position + reach), previousPosition: (position - reach), volumes: [volume]),
-            colliders: m_staticSet,
-            destination: destination,
-            dynamicColliders: QueryAttachedSet,
-            margin: margin,
-            orientation: in orientation,
-            position: position,
-            volume: in volume
-        );
-    }
+        Span<FixedSurfaceContact> destination) =>
+        m_static.CollectContacts(destination: destination, dynamicColliders: QueryAttachedSet, margin: margin, orientation: in orientation, position: in position, volume: in volume);
     /// <inheritdoc/>
     public ContactSupportWitness? SupportWitness(ReadOnlySpan<FixedSurfaceContact> contacts, in FixedVector3 position, in FixedQuaternion orientation,
         in FixedBodyColliderVolume volume, in FixedVector3 up) =>
-        m_solver.SupportWitness(colliders: m_staticSet, contacts: contacts, dynamicColliders: QueryAttachedSet, orientation: in orientation,
-            position: position, up: in up, volume: in volume);
+        m_static.SupportWitness(contacts: contacts, dynamicColliders: QueryAttachedSet, orientation: in orientation, position: in position, up: in up, volume: in volume);
     /// <inheritdoc/>
     public ContactResolution ResolveSweep(in FixedVector3 previousPosition, ref FixedVector3 position, ref FixedVector3 velocity,
         in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes, in FixedVector3 up) =>
-        m_solver.ResolveSweep(colliders: m_staticSet,
-            dynamicColliders: QueryAttachedSet,
-            previousPosition: in previousPosition, position: ref position, velocity: ref velocity,
-            orientation: in orientation, volumes: volumes, up: in up,
-            candidates: Candidates(orientation: in orientation, position: position, previousPosition: in previousPosition, volumes: volumes));
+        m_static.ResolveSweep(dynamicColliders: QueryAttachedSet, orientation: in orientation, position: ref position, previousPosition: in previousPosition,
+            up: in up, velocity: ref velocity, volumes: volumes);
     /// <inheritdoc/>
     public bool TrySupportDistance(in FixedVector3 position, in FixedQuaternion orientation, ReadOnlySpan<FixedBodyColliderVolume> volumes,
         in FixedVector3 up, FixedQ4816 reach, out FixedQ4816 descent) =>
-        m_solver.TrySupportDistance(colliders: m_staticSet, dynamicColliders: QueryAttachedSet, position: in position,
-            orientation: in orientation, volumes: volumes, up: in up, reach: reach, descent: out descent,
-            candidates: Candidates(orientation: in orientation, position: (position - (up * reach)), previousPosition: in position, volumes: volumes));
+        m_static.TrySupportDistance(descent: out descent, dynamicColliders: QueryAttachedSet, orientation: in orientation, position: in position,
+            reach: reach, up: in up, volumes: volumes);
     /// <inheritdoc/>
     // Searches the static and sampled moving holdable subsets, with a zero
     // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.

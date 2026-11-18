@@ -81,13 +81,11 @@ public readonly record struct NavigationDomainInput(
 /// <summary>Representation ceilings a host names when constructing a <see cref="NavigationRuntime"/>. The kernel
 /// parses no document, so it cannot own these as its own constants; a host's values here must equal whatever its
 /// own authoring ceiling declares, or a checkpoint round-trip and the host's own validator disagree.</summary>
-/// <param name="MaxSurfaceClearanceSweeps">The greatest number of parallel sphere sweeps used to prove one tall
-/// surface-agent transition.</param>
 /// <param name="MaxMediumSegmentSubdivisions">The greatest number of equal subsegments checked along one live
 /// medium edge.</param>
 /// <param name="MaxConcurrentRequesters">The greatest number of distinct bodies that can hold a pending shared-tree
 /// request at once; bounds a domain's per-tree pending-request list.</param>
-public readonly record struct NavigationCapacity(int MaxSurfaceClearanceSweeps, int MaxMediumSegmentSubdivisions, int MaxConcurrentRequesters);
+public readonly record struct NavigationCapacity(int MaxMediumSegmentSubdivisions, int MaxConcurrentRequesters);
 /// <summary>The live-medium field seam a medium navigation domain reads through. A host's own field-lattice
 /// representation implements this narrow view rather than the kernel depending on that representation directly.</summary>
 public interface INavigationMediumField {
