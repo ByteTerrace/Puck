@@ -11,6 +11,9 @@ approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 # Live web search for research, as the Claude agents have; Codex defaults to cached results.
 web_search = "live"
+# Codex reads at most project_doc_max_bytes of AGENTS.md into a session (32 KiB by default), which cut the rules
+# file mid-rule, before the Git, no-push and stop-order rules. Every lane must read all of it.
+project_doc_max_bytes = 131072
 
 # MXC is the Windows sandbox that enforces a profile's network permission without administrator setup.
 [features]
