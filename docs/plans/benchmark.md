@@ -178,26 +178,94 @@ share a prefix, played in declaration order.
   box**, so a world edit breaks one chapter, reported off course by name, and
   the run goes on. A pose is a line of the program, and the seat's grant to
   pose is the world author's, as it is for the headless test.
+- **A chapter's start establishes the seat's input, whatever came before
+  it**, so it arrives from a warm loop's state as from the boot's. On the
+  chapter's first tick the runner releases every control the chapter before
+  it left held, through the seat's door and ahead of the chapter's own lines.
+  The program then chooses its view and poses the body. A pose zeroes the
+  body's momentum and contact state, and in first person, where the look is
+  the facing the seat steers the body to, it lands the look level on the
+  posed heading (`WorldSeatViewState.ObserveBody`); the intent of the tick the
+  pose lands in was composed against the pose the body left, so its facing
+  does not turn the posed body (`WorldBody.SnapYawToPlanarIntent`). A
+  recenter after the pose is not a substitute: in first person the body
+  turns to a carried look within a tick, and a recenter then centres on the
+  turned body. A button an earlier chapter held through a crossing re-arms
+  once its router reports it up (`WorldSeatInput.AcknowledgeReleasedButtons`),
+  so the next chapter's press of it acts.
 - **Inside a chapter nothing stops.** A chapter that stands still does so
   because standing is what it measures.
-- **A run lets go what it held.** The runner tracks each control its
-  `player.signal` lines leave pressed or deflected and releases every one,
-  through the same door, when the run ends or is stopped.
+- **A run lets go what it held.** When the run ends, is stopped or passes its
+  limit, the runner folds the seat lines that reached the seat, in order, into
+  the controls they left pressed or deflected and releases each one through
+  the same door; a line the run dropped pressed nothing.
 
-What the first build leaves open, as stage 4:
+### The route is places, played by an authored seat program (stage 4)
 
-- **A `route` block and a `routes` section**, so a route is content of the
-  world's own document, is found without naming a source file, carries
-  **marks** (a named tick where something is expected to show) and an
-  authored order, and so a seat can start it. The block lowers through the
-  `test` emitter's own tick, principal and settle logic to the same rows.
-  `puck test` then runs each chapter as it runs a `test` today. Ordinary test
-  fixtures keep their setup and verdict machinery and do not become shipping
-  routes.
-- **Recording a played chapter**: a tap where `InputRouter` drains its one
-  per-tick stream, writing `player.signal` lines with pointer motion summed
-  per tick. Its check replays the recording from its initial state and
-  compares the accepted input per tick.
+The first build's chapters are stick deflections pinned to ticks. They carry
+the walker only while every tick it relied on repeats: they were measured
+against lockstep, they cannot tell which room the walker stands in, and a
+body shrunk by wonderland or a wall it brushes takes the rest of the program
+somewhere else. The owner's direction is that everything a chapter needs to
+know is already defined by the world's own documents, so stage 4 reads it
+from them. In this order:
+
+1. **Places.** A place is a named region of the world: the stage, the valley,
+   the hall's entrance, the lobby, the east wing and its portal, the painting
+   room, the wonderland threshold, the lift and each gallery level. Places are
+   region placements authored in `worlds/debug/` (a placement's region facet,
+   the sensing volume `WorldEventFeed` watches for enter and exit and rules
+   read as occupancy), which gains an oriented box beside its sphere so a room
+   is one region. A place query (`body.place [<body>]`) answers which places a
+   body stands in, innermost first, headless included, and the benchmark names
+   the place of every hitch and of each chapter's end.
+2. **Navigation.** The debug world authors surface navigation domains over the
+   valley and each gallery level (`navigation.domains`, as the pond's `plot`
+   does), compiled at boot from the solid field and answered by
+   `world.navigation`.
+3. **A chapter is goals, not ticks.** A chapter lists where to go and how: a
+   place or waypoint to reach at a pace (walk, run, dash), a rest (stand for a
+   time, facing a heading), an interaction (the context button at a spot, then
+   wait for a state the world answers, such as the lift car arriving), and a
+   crossing. The chapter lowers to one canonical goal list in the document's
+   `routes` section, which `world.benchmark` plays and `puck test` runs.
+4. **An authored seat program plays it.** A seat-driving controller program,
+   authored as camera and motion programs are and evaluated in fixed point
+   each tick from the authority's delivered pose and the navigation domain's
+   route, emits the seat's own input (the left stick toward the next path
+   point, the right stick turning the camera onto it, the run and dash
+   buttons) through the seat's ingress, the door `player.signal` uses. Load
+   therefore still runs through the router, the bindings and intent
+   composition, and a shed tick, a scale change or a nudge re-plans from where
+   the body is instead of carrying the rest of the chapter off course.
+5. **A chapter fails where a player would see it fail.** Any wall contact
+   while driven (the body's latched obstruction witness, `world.contacts`) and
+   leaving the current goal's corridor of places each fail the chapter, named
+   with the place and the tick.
+
+The owner's recorded walkthroughs (`replay.record` tapes with a
+`world.view.trace`) are the source of the debug world's goals: recording a
+played chapter reduces a tape to the places it passed, the rests it made and
+the interactions it used, rather than to its stick samples.
+
+Each step's check, run headless unless named:
+
+| Step | Check |
+|---|---|
+| Places | `body.place` names the stage, the hall's entrance, the lobby, the east wing's portal and the wonderland threshold at the owner's waypoints; a benchmark hitch lists its place |
+| Navigation | `world.navigation` lists each domain with its compiled cell count; a route search from the stage to the hall's entrance returns a path that never leaves a domain; the boot's added cost is read from `host.frames` boot |
+| Goals and the seat program | A chapter from the stage into the hall arrives with no wall contact at 1× pace, with ticks shed under load, and with the body at wonderland's 0.25 scale; `puck test` and `world.benchmark` give the same accepted input per chapter tick |
+| Failure | A chapter whose goal lies behind a wall fails, naming the wall contact's place and tick; one sent out of its corridor fails naming the place it left |
+| The owner watches | A windowed `puck benchmark --loops 2` of the debug route, both backends, every chapter arriving |
+
+What exists and is reused: the region facet and its occupancy
+(`WorldPlacementRegion`, `WorldEventFeed.IsOccupant`), navigation domains and
+their bounded route search (`WorldNavigationDomain`, the producers'
+`navigated(domain, register)` target the pond's spiders follow), the latched
+obstruction witness, `WorldSeatViewState`'s camera yaw, and `player.signal`'s
+ingress. A producer program is not the driver: it writes a body's intent on
+the server, which skips the seat's input path the benchmark exists to load.
+A scoped replay (`replays`) writes state cells, not seat input.
 
 ### Where a run starts
 
@@ -322,8 +390,11 @@ measurement request.
 **Bounds.** A run ends at its wall-time limit (`timeout`) as it ends at
 `stop`: its armed lines are dropped, its held controls released, its pacing
 restored and a partial report written that names the reason and marks each
-chapter ended, unfinished or unreached. The route's simulated length is a
-content target and bounds nothing.
+chapter ended, unfinished or unreached, every requested loop listed, the
+loops never armed with their chapters unreached. A World that shuts down
+while a run plays ends it the same way (`WorldBenchmarkCommandModule.Shutdown`,
+on the host's stopped notification), arming no release. The route's
+simulated length is a content target and bounds nothing.
 
 ### Comparing runs
 
@@ -582,7 +653,7 @@ closes it:
 | Stage | Lane | Builds | Done when |
 |---|---|---|---|
 | 3. The command, windowed | Lead's GPU window | Nothing new for the command (`puck benchmark`, `puck benchmark compare`, `puck measure` admitting it, the hitch list, GPU passes, counters and `boot` span are built headless); what remains is the pacer's lift of the presentation target for `--uncapped` (`PresentPacingPolicy.Resolve` caps an explicit target at the display) | A windowed `puck benchmark` of one seam chapter on each backend finishes complete with GPU passes per chapter and a `boot` span from the renderer's first iteration, and `--against` its own report compares clean on each; an `--uncapped` run presents past the display's rate, or the open item that records why not is closed |
-| 4. The route in the document | World and language; headless | The `route` block and `routes` section lowered through the `test` emitter's logic; marks; waypoints and the numeric pose samples; chapter and capture identity; the per-tick hash sequence; the seat-started, bindable run; recording a played chapter; the debug world's nine chapters | A denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable; a recorded chapter replayed from its start gives the recorded per-tick input, pointer motion included |
+| 4. The route in the document | World and language; headless | [Places, navigation, goal chapters played by an authored seat program, and their failures](#the-route-is-places-played-by-an-authored-seat-program-stage-4), in that order; then the `routes` section's chapter and capture identity, waypoint coverage and the numeric pose samples, the per-tick accepted-input and state hash sequence, the seat-started bindable run, and a recorded walkthrough reduced to goals | Each step's check in that section; a denied seat action, a seat 2 chapter and a step at a portal boundary each give the same accepted input sequence headless and live; a chapter that arrives after a shortcut or after looking away is a changed workload, and an intentional content edit that keeps its waypoints is comparable |
 | 5. The results panel | UI | The published table and retained series on the UI overhaul's runtime collections | An imported panel shows a newly authored route's chapter names and a variable number of rows with no C# change |
 | 6. Motion and presentation samples | World client | A recording sink on `WorldSeatMotionTrace`; `WorldPresentationProbe` under display pacing with numeric samples | A hitch older than 240 frames is in the report; a smooth authored dash and a rest are not called stalls or jumps; a run at twice and at half the tick rate both read complete coverage |
 | 7. The exhibits route | Debug world authoring and CLI | The walkthrough plan's open steps: coverage derived from the document's exhibits, a rest per exhibit, a presented series judged against the plaque, the inspection pass over every creation, plaque fit and floor light patches made mechanical | Adding an exhibit to the row it is derived from turns coverage amber with its name until a chapter rests at it; each mechanical check lights at a defect the owner flagged by hand |

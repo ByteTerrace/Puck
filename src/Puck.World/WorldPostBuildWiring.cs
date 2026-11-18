@@ -516,6 +516,10 @@ public static class WorldPostBuildWiring {
         // THE SCHEDULE DRAIN, every boot shape: a run that ended before its export tick must leave a manifest
         // saying where it got to rather than an empty directory a reader cannot tell from a crash.
         services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: scheduleRunner.Drain);
+        // A route world.benchmark is playing when the World shuts down ends as `stop` ends it, with its partial report.
+        foreach (var benchmark in services.GetServices<ICommandModule>().OfType<WorldBenchmarkCommandModule>()) {
+            _ = services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopped.Register(callback: benchmark.Shutdown);
+        }
 
         // THE RENDER-CAPACITY PRE-FLIGHT, every boot shape: the boot scene counted on the CPU (WorldSceneEnvelope) — the
         // boot document's own rows, the stamp pool, the avatar catalog and one reservation per adjacency band — so a
