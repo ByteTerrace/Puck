@@ -8,7 +8,7 @@ public sealed class WorldAuthorityRecoveryLawTests {
     [Fact]
     public async Task RecoveryUsesItsCapturedDefinitionPinWhenRootChangesImmediatelyAfterRead() {
         var blobs = new SwapAfterRootReadStore();
-        var target = new DirectoryObjectStorageTarget(rootPath: "fake-store");
+        var target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: "fake-store");
         var store = new WorldAuthorityBlobStore(
             store: blobs,
             target: target,

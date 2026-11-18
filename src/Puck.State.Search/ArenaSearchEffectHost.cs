@@ -16,57 +16,37 @@ namespace Puck.State;
 /// </remarks>
 public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
-    private Draw?[]? m_imagined;
+    private PrivateDrawSample? m_imagined;
     private ulong m_imaginedSeed;
-    private ulong m_boundSeed;
-    private IReadOnlyList<StateRow>? m_checkedRows;
-    private bool m_hasPrivate;
 
     /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
     public int SearchPly { get; set; }
 
-    /// <summary>Gets each catalog ordinal's draw declaration with every private site bound to the sampler the current
-    /// imagination seed keys (<see cref="Imagine"/>), so a candidate samples words no authority issued; a host whose
-    /// catalog declares no private site samples with the arena's own declarations.</summary>
-    protected override IReadOnlyList<Draw?>? CandidateDraws {
-        get {
-            if (!ReferenceEquals(objA: m_checkedRows, objB: Arena.Rows)) {
-                m_checkedRows = Arena.Rows;
-                m_hasPrivate = Arena.Rows.Any(predicate: static row => (row.Draw?.PrivateStream == true));
-                m_imagined = null;
-            }
-            if (!m_hasPrivate) {
-                return null;
-            }
-            if ((m_imagined is null) || (m_boundSeed != m_imaginedSeed)) {
-                Bind();
-            }
-
-            return m_imagined;
-        }
-    }
+    /// <summary>Gets the sampler every private draw site a candidate samples draws from, keyed by the current
+    /// imagination seed (<see cref="Imagine"/>): words no authority issued, so a candidate never reads the
+    /// authority's stream, its read count or its timeline.</summary>
+    protected override PrivateDrawSample? ImaginedSampler => (m_imagined ??= Key(seed: m_imaginedSeed));
 
     /// <summary>Keys every private draw site a candidate samples to <paramref name="seed"/>, the seed the job imagines
     /// with at its current inputs.</summary>
     /// <param name="seed">The imagination seed.</param>
-    public void Imagine(ulong seed) => m_imaginedSeed = seed;
-    private void Bind() {
-        var generator = Puck.Maths.Pcg32XshRr.Create(state: m_imaginedSeed, stream: 0UL);
-        var key = new ClosedBitset256(
-            Word0: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
-            Word1: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
-            Word2: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
-            Word3: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()
-        );
-        var rows = Arena.Rows;
-        var draws = new Draw?[rows.Count];
-
-        for (var ordinal = 0; (ordinal < draws.Length); ordinal++) {
-            draws[ordinal] = rows[ordinal].Draw?.Imagined(key: key);
+    public void Imagine(ulong seed) {
+        if ((m_imagined is not null) && (seed == m_imaginedSeed)) {
+            return;
         }
 
-        m_imagined = draws;
-        m_boundSeed = m_imaginedSeed;
+        m_imaginedSeed = seed;
+        m_imagined = null;
+    }
+    private static PrivateDrawSample Key(ulong seed) {
+        var generator = Puck.Maths.Pcg32XshRr.Create(state: seed, stream: 0UL);
+
+        return PrivateDrawStream.Imagined(key: new ClosedBitset256(
+            Word0: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word1: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word2: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word3: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32())
+        ));
     }
 
     /// <summary>Initializes a host over the arena a search opens its candidate scopes on.</summary>
@@ -77,7 +57,7 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     /// <param name="documentSeed">The document's own reroll lever, folded into every draw site's seed.</param>
     /// <param name="instanceIdentity">The running instance's identity, folded into every draw site's seed.</param>
     /// <param name="sites">The site descriptor per catalog ordinal, the same table the live host draws with, so a
-    /// candidate reproduces public draws while private samples remain unknown; <see langword="null"/>
+    /// candidate reproduces public draws while it draws a private site from its own imagined sampler; <see langword="null"/>
     /// names each site by its catalog row name.</param>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog

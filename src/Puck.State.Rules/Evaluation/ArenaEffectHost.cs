@@ -19,6 +19,7 @@ public interface IArenaTransformHost {
 /// <remarks>The host is the reader every operand answers from, so a caller advances it to the tick it wants
 /// (<see cref="Advance"/>) before evaluating.</remarks>
 public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost {
+    private readonly PrivateDrawAuthority? m_drawAuthority;
     private readonly HashSet<string> m_rewoundUndoGroups = new(comparer: StringComparer.Ordinal);
     private readonly StateInstanceHandle[] m_instanceBindings = new StateInstanceHandle[StateCapacity.MaxInstanceBindings];
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
@@ -50,7 +51,9 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog
     /// ordinal of <paramref name="arena"/>.</exception>
-    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null) {
+    /// <param name="drawAuthority">The credential for private sites this host executes.</param>
+    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null, PrivateDrawAuthority? drawAuthority = null) {
+        m_drawAuthority = drawAuthority;
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         if ((sites is not null) && (sites.Count != arena.Catalog.Count)) {
@@ -153,7 +156,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             Arena: Arena,
             Generators: m_generators,
             Seeds: m_seeds,
-            Draws: CandidateDraws,
+            Imagined: ImaginedSampler,
+            DrawAuthority: m_drawAuthority,
             Time: Time
         );
 
@@ -232,17 +236,17 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
 
         return changed;
     }
-    /// <summary>Gets the draw declaration of every catalog ordinal this host samples with, or <see langword="null"/>
-    /// for the arena's own. A hypothetical host returns each private site bound to a sampler it owns
-    /// (<see cref="Draw.Imagined"/>), so a candidate never reads the authority's stream.</summary>
-    protected virtual IReadOnlyList<Draw?>? CandidateDraws => null;
+    /// <summary>Gets the sampler this host draws every private site from in place of the site's own, or
+    /// <see langword="null"/> to draw a private site only through the authority that issued it. A hypothetical host
+    /// (a search candidate's) returns one keyed by its own seed, so it never reads the authority's stream.</summary>
+    protected virtual PrivateDrawSample? ImaginedSampler => null;
 
     private bool ApplyGenerate(in Mutation mutation, out EffectRefusal refusal) {
         var ordinal = mutation.RowOrdinal;
 
         if (
             (((uint)ordinal) >= ((uint)Arena.Rows.Count)) ||
-            (new ArenaTransformContext(Arena: Arena, Time: Time, Draws: CandidateDraws).DrawAt(rowOrdinal: ordinal) is not { } draw)
+            (Arena.Rows[ordinal].Draw is not { } draw)
         ) {
             refusal = EffectRefusal.Of(
                 code: RuleEffectRefusal.MutationRejected,
@@ -253,6 +257,9 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
         }
         if (!GeneratorEngine.TryResolveExecutableSource(
             draw: draw,
+            authority: m_drawAuthority,
+            imagined: ImaginedSampler,
+            sample: out var sample,
             generator: out var generator,
             generators: m_generators,
             reason: out var resolveReason
@@ -270,7 +277,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             reason: out var fireReason,
             result: out var fired,
             rowOrdinal: ordinal,
-            secret: draw.Secret,
+            secret: sample,
             seed: m_seeds[ordinal],
             skip: draw.Skip
         )) {

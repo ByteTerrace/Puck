@@ -25,14 +25,14 @@ public sealed class DrawStreamLawTests {
             Script: [7L, 11L]
         )
     );
-    private static PrivateDrawStream Secret() => PrivateDrawFixture.Raw(new(
+    private static PrivateDrawSample Secret() => PrivateDrawFixture.Raw(new(
         Word0: 0x1234_5678UL,
         Word1: 0UL,
         Word2: 0UL,
         Word3: 1UL
     ));
     // The single-fire path, one arena write per sample: the reference the stream is held to.
-    private static (long[] Values, long Hash) Fired(StateGenerator generator, PrivateDrawStream? secret) {
+    private static (long[] Values, long Hash) Fired(StateGenerator generator, PrivateDrawSample? secret) {
         var (_, arena) = TopologyArenaFixture.Build();
         var values = new long[Samples];
 
@@ -51,7 +51,7 @@ public sealed class DrawStreamLawTests {
 
         return (values, ((long)arena.ComputeHash()));
     }
-    private static (long[] Values, long Hash) Streamed(StateGenerator generator, PrivateDrawStream? secret) {
+    private static (long[] Values, long Hash) Streamed(StateGenerator generator, PrivateDrawSample? secret) {
         var (_, arena) = TopologyArenaFixture.Build();
         var values = new long[Samples];
 
@@ -75,7 +75,7 @@ public sealed class DrawStreamLawTests {
 
         return (values, ((long)arena.ComputeHash()));
     }
-    private static void Agrees(StateGenerator generator, PrivateDrawStream? secret = null) {
+    private static void Agrees(StateGenerator generator, PrivateDrawSample? secret = null) {
         var fired = Fired(generator: generator, secret: secret);
         var streamed = Streamed(generator: generator, secret: secret);
 

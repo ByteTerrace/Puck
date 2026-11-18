@@ -10,20 +10,16 @@ internal static class WorldAuthorityRootReader {
             Owner: owner,
             World: world
         );
-        var rootAddress = WorldAuthorityBlobStore.RootAddress(identity: identity);
-        var rootContent = await store.ReadAsync(
-            address: rootAddress,
-            cancellationToken: cancellationToken,
-            target: target
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (rootContent is not { } rootBlob) { return null; }
-        if (!WorldAuthorityRootCodec.TryDecode(
-            rootBlob.Content.Span,
-            out var root,
-            out var reason
-        )) {
-            throw new InvalidDataException(message: $"'{rootAddress.Key}' is corrupt — {reason}");
+        var rootAddress = WorldAuthorityBlobStore.RootAddress(identity);
+        var contentAtRoot = await store.ReadAsync(target, rootAddress, cancellationToken).ConfigureAwait(false);
+        if (contentAtRoot is not { } blob) { return null; }
+        if (!WorldAuthorityRootCodec.TryDecode(blob.Content.Span, out var root, out var reason, out var retiredFields, migrating: true)) {
+            throw new InvalidDataException($"'{rootAddress.Key}' is corrupt — {reason}");
+        }
+        if (retiredFields) {
+            var authority = new WorldAuthorityBlobStore(store, target);
+            if (await authority.LoadRootAsync(identity, cancellationToken).ConfigureAwait(false) is not { } snapshot) { return null; }
+            root = snapshot.Root;
         }
         if (root.DefinitionHash is not { Length: > 0 } hash) { return null; }
         var address = WorldAuthorityBlobStore.DefinitionCandidateAddress(

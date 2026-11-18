@@ -173,7 +173,7 @@ internal static partial class Fixtures {
             machineId: Guid.NewGuid(),
             narrationHub: catalogNarration
         );
-        drawKeys ??= WorldPrivateDrawKeys.Preview;
+        drawKeys ??= WorldPrivateDrawKeys.ForScenario();
         var server = new WorldServer(
             drawKeys: drawKeys,
             definition: definition,

@@ -104,6 +104,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     // assets and diffs it against the captured declarations.
     private Prepared Prepare(string path, WorldSourceWatch.Reads? reads, WorldDefinition basis, WorldDocumentVersion version, IWorldDocumentSource? documents, string instanceIdentity, IWorldNeighbourResolver? neighbours) {
         bool Load(out WorldDefinitionAdmission? admission, out string contentHash, out string reason) => WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: WorldPrivateDrawKeys.Preview,
             admission: out admission,
             catalog: machineCatalog,
             contentHash: out contentHash,

@@ -61,7 +61,7 @@ public static partial class GeneratorEngine {
         private CellKind m_targetKind;
         private Pcg32XshRr m_base;
         private CompiledSource? m_extended;
-        private PrivateDrawStream? m_secret;
+        private PrivateDrawSample? m_secret;
         private ulong m_seedState;
         private ulong m_stream;
         private long m_start;
@@ -94,7 +94,7 @@ public static partial class GeneratorEngine {
         /// <param name="skip">The site's authored seek; never applied to a secret draw.</param>
         /// <returns><see langword="true"/> when the stream is positioned.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="generator"/> is <see langword="null"/>.</exception>
-        public static bool TryOpen(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, out DrawStream stream, out string reason, PrivateDrawStream? secret = null, long skip = 0L) {
+        public static bool TryOpen(StateGenerator generator, CellKind targetKind, DrawSeed seed, long cursor, IReadOnlyList<ClosedBitset256>? masks, out DrawStream stream, out string reason, PrivateDrawSample? secret = null, long skip = 0L) {
             ArgumentNullException.ThrowIfNull(argument: generator);
 
             stream = default;
@@ -175,7 +175,7 @@ public static partial class GeneratorEngine {
             }
             if (Cursor == long.MaxValue) { value = 0; reason = "draw cursor would overflow"; return false; }
             if (m_secret is { } key) {
-                value = key.Sample(
+                value = key(
                     cursor: Cursor,
                     seed: m_seedState,
                     stream: m_stream
@@ -256,7 +256,7 @@ public static partial class GeneratorEngine {
 
     // The admission every positioned draw shares: a non-negative cursor and seek, a defined mode, a source that may
     // write the site's kind, and a secret only on an integer streamDraw site drawing with replacement.
-    private static bool TryCheckFire(StateGenerator generator, CellKind targetKind, long cursor, long skip, PrivateDrawStream? secret, out string reason) {
+    private static bool TryCheckFire(StateGenerator generator, CellKind targetKind, long cursor, long skip, PrivateDrawSample? secret, out string reason) {
         if (cursor < 0) {
             reason = $"cursor {cursor} is negative — a draw cursor is a non-negative raw-word count";
 

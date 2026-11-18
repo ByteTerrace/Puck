@@ -59,16 +59,9 @@ public sealed partial class WorldAuthorityBlobStore {
         ).ConfigureAwait(continueOnCapturedContext: false) is not null) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "fixture creation requires a new world with no existing authority root");
         }
-        var fixtureKeys = WorldPrivateDrawKeys.Create();
-        if (captured.Server.DrawPositions is not null || captured.Server.BaseDrawPositions is not null) {
-            checkpointBytes = WorldAuthorityCheckpointCodec.Encode(captured with {
-                Server = captured.Server with { DrawAuthority = fixtureKeys.Identity }
-            });
-        }
         var checkpointHash = WorldDefinitionFileSource.ComputeContentHash(content: checkpointBytes);
         var ordinal = checked((detached.Source.Root.CheckpointOrdinal + 1));
         var root = detached.Source.Root with {
-            DrawSeed = Convert.ToBase64String(fixtureKeys.SerializeAuthorityState()!),
             // Qualification is an isolated copy with disposable authority identities, not a live rewind point.
             RewindBoundary = null,
             Epoch = checked((detached.Source.Root.Epoch + 1)),
@@ -212,7 +205,7 @@ public sealed partial class WorldAuthorityBlobStore {
         var snapshot = new WorldAuthorityReceiptSnapshot(
             identity.Owner,
             identity.World.Value,
-            source.WithoutSeed(),
+            source,
             index,
             nodes
         );

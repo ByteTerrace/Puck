@@ -246,29 +246,43 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         )
     ).ConfigureAwait(continueOnCapturedContext: false);
     private async Task<WorldAuthorityRootSnapshot?> ReadRootSnapshotAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var content = await ReadAsync(
-            address: RootAddress(identity: identity),
-            cancellationToken: cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
+            var content = await ReadAsync(RootAddress(identity), cancellationToken).ConfigureAwait(false);
+            if (content is not { } found) { return null; }
+            if (found.VersionToken is not { Length: > 0 } token) { throw new InvalidDataException("authority root has no CAS version token"); }
+            if (!WorldAuthorityRootCodec.TryDecode(found.Content.Span, out var root, out var reason, out var retiredFields, migrating: true)) {
+                throw new InvalidDataException($"authority root is corrupt — {reason}");
+            }
+            if (!retiredFields) { return new(root, token); }
 
-        if (content is not { } found) return null;
-        if (found.VersionToken is not { Length: > 0 } token) throw new InvalidDataException(message: "authority root has no CAS version token");
-        if (!WorldAuthorityRootCodec.TryDecode(
-            found.Content.Span,
-            out var root,
-            out var reason
-        )) throw new InvalidDataException(message: $"authority root is corrupt — {reason}");
-        return new WorldAuthorityRootSnapshot(
-            Root: root,
-            VersionToken: token
-        );
+            root = await MigratePrivateDrawCheckpointAsync(identity, root, cancellationToken).ConfigureAwait(false);
+            var result = await WriteRootAsync(identity, root, token, ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
+            if (result.Succeeded && result.VersionToken is { Length: > 0 } migrated) { return new(root, migrated); }
+            if (!result.PreconditionFailed) { throw new IOException("Could not publish the migrated authority root."); }
+        }
+        throw new IOException("Authority root moved during private-draw migration.");
+    }
+    private async Task<WorldAuthorityRoot> MigratePrivateDrawCheckpointAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
+        // Publish the replacement checkpoint before the CAS. A lost race leaves the winning root intact.
+        if (root.CheckpointHash is { } oldHash) {
+            var blob = await ReadCheckpointBlobAsync(identity, root, oldHash, cancellationToken).ConfigureAwait(false);
+            if (!WorldAuthorityCheckpointCodec.TryDecodeCore(blob.Encoded.Span, migrating: true, out var checkpoint, out var reason, m_documentDirectory)) {
+                throw new InvalidDataException($"cannot migrate private-draw checkpoint — {reason}");
+            }
+            var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
+            var hash = WorldDefinitionFileSource.ComputeContentHash(bytes);
+            var put = await PutImmutableAsync(CheckpointCandidateAddress(identity, root.CheckpointOrdinal, hash), bytes, cancellationToken).ConfigureAwait(false);
+            if (!put.Ok) { throw new IOException(put.Detail); }
+            root = root with { CheckpointHash = hash };
+        }
+        return root;
     }
     private async Task<ObjectBlobWriteResult> WriteRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, string? ifMatchVersion, ObjectBlobWriteMode mode, CancellationToken cancellationToken) => await UnderTimeoutAsync(
         cancellationToken: cancellationToken,
         op: ct => m_store.WriteAsync(
             m_target,
             RootAddress(identity: identity),
-            JsonSerializer.SerializeToUtf8Bytes(WorldAuthorityRootCodec.SerializeAuthorityState(root)),
+            JsonSerializer.SerializeToUtf8Bytes(root, WorldAuthorityRootCodec.Options),
             mode,
             ifMatchVersion,
             ct
@@ -379,7 +393,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
 
     /// <inheritdoc/>
     public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) =>
-        (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false))?.WithoutSeed();
+        (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false));
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> CaptureRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
         ValidateRecoveryRequest(
@@ -617,9 +631,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             snapshot: present
         )
         ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
-        var restored = saved.Root with {
-            DrawSeed = present.Root.DrawSeed,
-            DrawGeneration = checked(Math.Max(saved.Root.DrawGeneration, present.Root.DrawGeneration) + 1),
+        var basis = saved.RequiresDrawMigration ? await MigratePrivateDrawCheckpointAsync(identity, saved.Root, cancellationToken).ConfigureAwait(false) : saved.Root;
+        var restored = basis with {
             Epoch = checked((Math.Max(
             val1: present.Root.Epoch,
             val2: saved.Root.Epoch
@@ -674,8 +687,6 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             var root = current?.Root ?? WorldAuthorityRoot.Empty;
             var nextToken = Guid.NewGuid();
             var next = root with {
-                DrawGeneration = root.Epoch > 0 ? checked(root.DrawGeneration + 1) : root.DrawGeneration,
-                DrawSeed = root.Epoch == 0 && root.DrawSeed is null ? Convert.ToBase64String(WorldPrivateDrawKeys.Create().SerializeAuthorityState()!) : root.DrawSeed,
                 Epoch = checked(root.Epoch + 1),
                 FenceToken = nextToken,
                 Sequence = checked(root.Sequence + 1)
@@ -968,8 +979,31 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         return (entries, hash);
     }
 
+    private async Task<WorldAuthorityCheckpointBlob> ReadCheckpointBlobAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, string hash, CancellationToken cancellationToken) {
+        var content = await ReadAsync(
+            address: CheckpointCandidateAddress(
+                identity,
+                root.CheckpointOrdinal,
+                hash
+            ),
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (content is not { } found) throw new InvalidDataException(message: "root names a missing checkpoint blob");
+        if (!string.Equals(
+            a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
+            b: hash,
+            comparisonType: StringComparison.Ordinal
+        )) throw new InvalidDataException(message: "checkpoint blob does not match the root content pin");
+        return new WorldAuthorityCheckpointBlob(
+            Encoded: found.Content,
+            Ordinal: root.CheckpointOrdinal,
+            Tick: root.CheckpointTick
+        );
+    }
+
     /// <inheritdoc/>
-    public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
+    public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys = null) {
         var snapshot = await ReadRootSnapshotAsync(
             cancellationToken: cancellationToken,
             identity: identity
@@ -979,26 +1013,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         WorldAuthorityCheckpointBlob? checkpoint = null;
 
         if (rooted.Root.CheckpointHash is { Length: > 0 } hash) {
-            var content = await ReadAsync(
-                address: CheckpointCandidateAddress(
-                    identity,
-                    rooted.Root.CheckpointOrdinal,
-                    hash
-                ),
-                cancellationToken: cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (content is not { } found) throw new InvalidDataException(message: "root names a missing checkpoint blob");
-            if (!string.Equals(
-                a: WorldDefinitionFileSource.ComputeContentHash(content: found.Content.Span),
-                b: hash,
-                comparisonType: StringComparison.Ordinal
-            )) throw new InvalidDataException(message: "checkpoint blob does not match the root content pin");
-            checkpoint = new WorldAuthorityCheckpointBlob(
-                Encoded: found.Content,
-                Ordinal: rooted.Root.CheckpointOrdinal,
-                Tick: rooted.Root.CheckpointTick
-            );
+            checkpoint = await ReadCheckpointBlobAsync(identity, rooted.Root, hash, cancellationToken).ConfigureAwait(false);
         }
         var journal = await ReadJournalForRootAsync(
             identity,
@@ -1026,7 +1041,6 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         }
         WorldDefinitionAdmission? admission = null;
 
-        var keys = rooted.Root.DrawSeed is { } seed ? WorldPrivateDrawKeys.FromAuthorityState(Convert.FromBase64String(seed), rootGeneration: rooted.Root.DrawGeneration) : WorldPrivateDrawKeys.Missing;
         if (definitionBytes is { } bytes) {
             var resolver = new WorldStorageNeighbourResolver(
                 m_store,
@@ -1041,7 +1055,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity.World.Value,
                 resolver.ResolveHostedAsync,
                 cancellationToken,
-                keys: keys,
+                keys: drawKeys ?? WorldPrivateDrawKeys.Preview,
                 catalog: m_machines,
                 documentDirectory: m_documentDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1050,13 +1064,13 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             admission = loaded.Admission;
         }
         return new WorldAuthorityRecovery(
-            rooted.WithoutSeed(),
+            rooted,
             checkpoint,
             new WorldAuthorityJournalTail(
                 CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
                 Entries: journal.Entries
             )
-        ) { Admission = admission, DrawKeys = keys };
+        ) { Admission = admission };
     }
 
     private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {

@@ -297,6 +297,7 @@ public sealed partial class WorldServer {
             definition: definition
         );
         m_arenaHost = new WorldArenaHost(
+            drawAuthority: DrawKeys,
             arena: m_arena,
             documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
             dynamics: definition.Dynamics,

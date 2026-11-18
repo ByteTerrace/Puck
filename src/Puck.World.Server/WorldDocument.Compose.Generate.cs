@@ -10,7 +10,7 @@ public sealed partial class WorldDocument {
     // document, which is what makes world.undo rewind a draw bit-identically with no bookkeeping to reconcile. The
     // sampling itself lives in Puck.World.Schema because the BOOT resolver — which runs before this server exists —
     // must reach the identical code.
-    private static bool TryComposeGenerate(WorldDefinition current, WorldMutation.Generate mutation, string instanceIdentity, out WorldDefinition candidate, out string reason) {
+    private static bool TryComposeGenerate(WorldDefinition current, WorldMutation.Generate mutation, string instanceIdentity, PrivateDrawAuthority sampler, out WorldDefinition candidate, out string reason) {
         candidate = current;
 
         if (WorldDefinitionRows.FindStateRow(
@@ -87,6 +87,7 @@ public sealed partial class WorldDocument {
 
         if (siteRow.IsKeyed) {
             if (!WorldDrawBootResolver.TryFillKeyedSite(
+                authority: sampler,
                 definition: current,
                 worldSeed: (current.Generation?.WorldSeed ?? 0UL),
                 instanceIdentity: instanceIdentity,
@@ -117,6 +118,8 @@ public sealed partial class WorldDocument {
         }
 
         if (!GeneratorEngine.TryResolveExecutableSource(
+            authority: sampler,
+            sample: out var sample,
             generators: current.Generators,
             draw: draw,
             generator: out var generator,
@@ -141,7 +144,7 @@ public sealed partial class WorldDocument {
             cursor: siteRow.DrawCursor,
             masks: siteRow.DrawnMasks,
             result: out var fired,
-            secret: draw.Secret,
+            secret: sample,
             reason: out var fireReason,
             skip: draw.Skip
         )) {

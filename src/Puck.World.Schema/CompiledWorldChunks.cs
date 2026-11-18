@@ -43,7 +43,7 @@ public sealed record CompiledWorldProduct(ReadOnlyMemory<byte> Payload, IReadOnl
 /// keys, the instance its draws are seeded for, the document it stands for, and the products chunks have produced so
 /// far.</summary>
 public sealed class CompiledWorldContext {
-    internal WorldPrivateDrawKeys? DrawKeys { get; set; }
+    internal WorldDrawSampler? DrawKeys { get; set; }
     private readonly Lazy<WorldDefinition> m_authored;
 
     /// <summary>Initializes a new instance of the <see cref="CompiledWorldContext"/> class.</summary>
