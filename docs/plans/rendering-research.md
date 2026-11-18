@@ -2595,7 +2595,7 @@ No lane is in flight. The one lane dispatched ahead of the waves,
 and the lighting's snapshot no longer allocate in each frame. Its files in
 `src/Puck.Vulkan` and `src/Puck.Vulkan.Presentation` are free for the
 lanes below. What its trace left open is the second wave's shared
-allocation lane, and the merge's message lists it.
+allocation lane, and [the hand-off](open-items.md#hand-off) lists it.
 
 ### The first wave
 
