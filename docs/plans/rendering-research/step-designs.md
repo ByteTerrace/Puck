@@ -1092,8 +1092,8 @@ cost per sample, the allowance and bank constants, the dynamic resolution
 controller and its dead band, the scheduler's unset pass-pixel ceiling, the
 relight's predicted charge against what the kernel tests, the pump ahead
 of the prepares, and that the pump's submissions go into the frame's open
-batch, whose one completion signal every fence in the batch answers from
-(`GpuSubmissionBatch`, `RenderGraphRuntime`). *Also checked:* the commit message that recorded the 25 ms
+batch, whose completion signal each hand-over's fences answer from, owned by
+the last entry handed over (`GpuSubmissionBatch.Split`, `RenderGraphRuntime`). *Also checked:* the commit message that recorded the 25 ms
 round trip, the 0.05 occupancy, the 44 s age, the second switch and the delay
 before the version moved, and the bake medians. *Not checked (from the
 research pass's map of this area):* the shape of a group's bake and the 4.4
@@ -4548,7 +4548,7 @@ them. The last column says what would reopen each.
 | A cluster hierarchy traversed on the GPU. A simplifier library as a dependency | Watched | A second builder beside the one mesher. Weak on aggregates of small things. Puck is independent work | The virtual geometry plan's cluster measurement (G9) |
 | Mesh shaders | Taken up as a lane of the plan's second wave, on a device that has them | Puck's backends have no mesh-shader path, and it is a second way to draw, so it keeps the indirect path as its fallback and stays only where measured to pay ([GPU capabilities](../rendering-research.md#gpu-capabilities-puck-does-not-use-yet)) | The split of one shadow pass on the RTX 4070 showing that commands and vertex work are not what it pays for |
 | Work graphs, device-generated commands | Watched | A second implementation of a chain the background queue shortens on every device first. Device-generated commands were not read on any bar device | A GPU trace of the probe and bake chains on the RTX 4070 showing idle time between their dispatches |
-| A rasterizer written in compute | Watched | A second rasterizer with unknown gain. A depth-only variant needs only 32-bit atomics, and 64-bit atomics on buffers are required at Puck's shader model, so the atomic width is not the obstacle. A visibility id with depth, clipping and depth ties, and Puck's cost on it, are unqualified. No pass has been shown to be limited by what it would replace | The split of one shadow pass on the RTX 4070 showing rasterization of small triangles is what it pays for |
+| A rasterizer written in compute | Watched | A second rasterizer with unknown gain. A depth-only variant needs only 32-bit atomics. 64-bit atomics on buffers are required at Puck's shader model on Direct3D 12, but optional on Vulkan, where Puck would have to require them at device creation and add them to `VulkanShaderCapabilities` (unconfirmed on the bar devices). A visibility id with depth, clipping and depth ties, and Puck's cost on it, are unqualified. No pass has been shown to be limited by what it would replace | The split of one shadow pass on the RTX 4070 showing rasterization of small triangles is what it pays for |
 | Arrivals requested by the GPU alone, pages below the mesh, slabs | Rejected | Decision 9: a group that is not in memory cannot report | Nothing |
 | Hints for refinement from geometry already in memory | Held as an experiment | Decision 9: prediction keeps arrivals and camera turns, and the hint uses the observation channel | Over-fetching or slow refinement still measured once observation decides what is kept |
 | Transition cells between tiers, geomorphing | Rejected | Both tie a tile to its neighbour's tier or add a position per vertex | Pops shown in motion after decision 8 |

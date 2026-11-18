@@ -1924,12 +1924,20 @@ The round ran under the owner's ruling
 enhances") that a target which lacks a capability never vetoes a technique: "We
 can optionally enable/disable features as needed by target hardware." So
 each technique is judged first by what it gives the RTX 4070, and each
-entry says what the other devices run. Four rules hold for all of them:
+entry says what the other devices run. Five rules hold for all of them:
 
 - **The engine reads a capability from the device, never from a device's
   name.** A row of the device's authored quality table then says whether to
-  use it (`worlds/standard/quality.puck`, which the first wave's `bench`
-  lane builds). Each device's bar is read at its own table.
+  use it (`worlds/standard/quality.puck`, which exists and to which the
+  first wave's `bench` lane adds the per-device table). Each device's bar
+  is read at its own table.
+- **A capability a device's table enables counts toward that device
+  meeting its bar** (the owner's ruling, in the same place of AGENTS.md: a
+  target that lacks a capability never vetoes a technique, and features are
+  enabled per target). A device's bar is met by the path its table selects,
+  so the RTX 4070 meets its bar with ray queries, mesh shaders or a
+  background queue on, and a device whose table leaves one off meets its
+  own bar without it.
 - **Today's path stays as the fallback.** It is taken automatically where
   the capability is missing or the table leaves it off.
 - **A path that only some devices run is a second implementation.** It
@@ -1971,14 +1979,14 @@ technique makes possible for the ones after it.
 | 1 | Shading at the rate each tile needs, in compute | The shading pass: 10.5 ms against a share of 5 ms | About 3 ms, inferred from another engine's 30% | Second wave, after `views` and `history` |
 | 2 | A Direct3D 12 draw command with no constant ahead of the draw | Shadow maps on Direct3D 12: 5.0 ms against Vulkan's 2.6 ms | Up to about 2.6 ms on Direct3D 12 if the hypothesis holds. Unverified | First wave, `direct3d` |
 | 3 | Mesh shaders over meshlets | Shadow maps, the mesh pass, glass and nested views | Bounded by the 5.0 ms shadow row and part of the 1.3 ms mesh row. Unmeasured, and it overlaps rank 2 | Second wave |
-| 4 | Ray queries for the probe trace and the relight | Background lighting rays, and every ray technique below | Unmeasured on Puck. The RTX 4070's ray hardware tests triangles at four times the rate of the RTX 2060's | First wave, `rays` |
+| 4 | Ray queries for the probe trace and the relight | Background lighting rays, and every ray technique below | Unmeasured on Puck. Each RT core of the RTX 4070's generation tests triangles at four times the rate of the RTX 2060's generation | First wave, `rays` |
 | 5 | A compute queue of its own for background work | A background job's wait, and how large a job may be | A job is answered in about its own 1 to 2 ms, not about 25 ms later. Read from the code. The share of work that then runs for free is unmeasured | Second wave |
 | 6 | A completion signal for each background job | The same wait, on every device and on the frame's queue | The CPU learns a job is done 1 to 2 ms after the frame is handed over, not about 25 ms after. Read from the code | First wave, `signal` |
 | 7 | Shadows by ray where no map reaches | Gap 3 on the RTX 4070, and local lights, which have no shadow maps today | A look. Its cost follows the distant share of the screen. Unmeasured | Second wave |
 | 8 | Reflections by ray on glass and water | Glass and water, which reflect only the sky and the probes | A look. One ray for each reflective pixel. Unmeasured | After the second wave |
 | 9 | A vendor's upscaler as an authored alternative to the resolve | The resolve's 3.0 ms and the image history's 1.4 GB | 1 to 2 ms and about 1 GB by arithmetic. Its cost at native size on the RTX 4070 is unverified | After the second wave, with an owner's question |
 | 10 | Texture transitions through enhanced barriers | The gaps between the frame's compute passes on Direct3D 12 | Under half a millisecond, a guess. The sure gain is one barrier model in place of two | First wave, `direct3d` |
-| 11 | Demand counted from what was drawn | The finest tier of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
+| 11 | Demand counted from what was drawn | The finest level of the resident meshes: about 1.1 GB of the 3 GB, almost never drawn | Memory and bake time, not frame time. Unmeasured | Second wave |
 | 12 | Present timing and the drivers' latency reports | Decision 15's record for every present | No frame time. It is the instrument that reads when a frame showed | Second wave, the record for every present |
 | 13 | Shadow depth with no fragment stage, and pipeline statistics | Shadow passes, and the missing count of vertex work | Small and unverified. The statistics are the counter decision 8 lacks | Second wave, as the first step of mesh shaders |
 | 14 | Mesh landing decoded on the GPU | Warm starts and arrivals. Nothing in a loop whose meshes are resident | Unmeasured. Puck's own landing rate may be the limit first | After the second wave, behind a reading |
@@ -2007,11 +2015,15 @@ Each technique in turn.
   supersampled mean. No engine the round read has that last input.
 - *Evidence.* id Software's DOOM: The Dark Ages has a pipeline of the same
   shape: a visibility buffer, deferred texturing and deferred lighting. It
-  reports about 30% off its heaviest deferred passes, 1 to 2 ms of a 60 Hz
-  frame, in Microsoft's article on variable-rate compute shaders in that
-  game. Activision's software variable rate shading (Drobot, 2020) is the
-  earlier source. The researcher gave no address for either. By inference,
-  30% of 10.5 ms is about 3 ms. Nothing was measured on Puck.
+  reports "commonly around ~30% reduction in the heaviest deferred passes"
+  and "~1–2 ms GPU frame time saved in a 60 Hz title", in Microsoft's
+  article on variable-rate compute shaders in that game
+  (<https://developer.microsoft.com/en-us/games/articles/2026/04/variable-rate-compute-shaders-doom-the-dark-ages/>).
+  That 30% applies to the heaviest deferred passes at about 85% dynamic
+  resolution. Activision's software variable rate shading (Drobot, 2020) is
+  the earlier source; the researcher gave no address for it and it was not
+  checked. By inference, 30% of 10.5 ms is about 3 ms. Nothing was measured
+  on Puck.
 - *On each device.* It is ordinary compute, so all three bar devices run
   it. The coarsest rate a device may use is a row of its table.
 - *Fallback.* Every tile at full rate, which is today's pass.
@@ -2063,8 +2075,11 @@ Each technique in turn.
   for each stage, so the first is preferred.
 - *On each device.* The RTX 4070 reaches Shader Model 6.8 according to a
   comment in `DirectXDeviceContext.EnsureShaderModelFloor`; the device was
-  not read this round. The RTX 2060's shader model and its tier of indirect
-  execution are unverified. The Steam Deck runs the Vulkan backend, which
+  not read this round. Whether the Windows runtime exposes the second tier
+  of indirect execution and Shader Model 6.8 without the Agility SDK is
+  unverified, and both ways above depend on it (the note on the Agility
+  SDK under the watched techniques below). The RTX 2060's shader model and
+  its tier of indirect execution are unverified. The Steam Deck runs the Vulkan backend, which
   already draws without the constant.
 - *Fallback.* Today's command, chosen where the device does not report the
   tier.
@@ -2156,13 +2171,23 @@ through it, and it works inside a compute kernel.
   compiles the same kernel with the hardware walk in their place, so it
   never becomes a second relight. The software triangle test uses small
   tolerances and can miss a ray that passes exactly along an edge.
-- *Evidence.* The RTX 4070's generation tests triangles at twice the rate
-  of the generation before it and four times the RTX 2060's (NVIDIA's Ada
-  whitepaper, page 16,
+- *Evidence.* Each RT core of the RTX 4070's generation tests triangles at
+  twice the rate of the generation before it and four times the rate of the
+  RTX 2060's generation: the whitepaper says "double the throughput for
+  ray-triangle intersection testing over Ampere (and 4x faster than the
+  first-generation RT Core used in Turing GPUs)" (NVIDIA's Ada whitepaper,
+  page 16,
   <https://images.nvidia.com/aem-dam/Solutions/geforce/ada/nvidia-ada-gpu-architecture.pdf>).
-  Hardware intersection closes the edge case by specification: "The
-  implementation must use a ray-triangle intersection that is watertight".
-  It is repeatable on one device and driver: "multiple identical TraceRay()
+  It compares generations of core, not the two cards, which differ in RT
+  core count and clocks. Hardware intersection closes the edge case inside
+  one acceleration structure: "The implementation must use a ray-triangle
+  intersection that is watertight". The specification limits that
+  guarantee: "The scope of 'sharing' for this definition of watertightness
+  spans only a given bottom level acceleration structure for geometries
+  that have matching transforms." The plan builds one structure for each
+  baked geometry, and a chunk holds up to 131,072 triangles
+  (`SdfMeshChunks.WholeTriangles`), so an edge shared between chunks,
+  groups or instances is not covered. It is repeatable on one device and driver: "multiple identical TraceRay()
   or RayQuery::TraceRayInline() calls produce identical results on the same
   device and driver"
   (<https://microsoft.github.io/DirectX-Specs/d3d/Raytracing.html>). Two
@@ -2178,8 +2203,10 @@ through it, and it works inside a compute kernel.
   note that claims it for that card was seen only in a search result). On
   the Steam Deck the open driver's page describes software emulation for
   older parts (<https://docs.mesa3d.org/drivers/radv.html>), from which the
-  researcher infers the Deck's part exposes them natively. That is not
-  confirmed on the device, and the illumination plan expects its ray
+  researcher infers the Deck's part exposes them natively. Mesa's feature
+  list is a closer source: it lists `VK_KHR_ray_query` as done for
+  "radv/gfx10.3+", and the Deck's part is gfx10.3 (the feature list in Mesa's
+  documentation on its main branch). That is not confirmed on the device, and the illumination plan expects its ray
   hardware to be about ten times slower. The Deck's table takes whichever
   walk its own measurement favours. On Vulkan a ray query needs
   `VK_KHR_acceleration_structure`
@@ -2253,8 +2280,10 @@ CPU thread reads to learn that work on a queue has finished.
   before another family reads it
   (<https://docs.vulkan.org/refpages/latest/refpages/source/VkSharingMode.html>).
   The streaming plan's leases already hold on any queue.
-- *Risks.* Priority does not protect the frame on NVIDIA hardware: queue
-  priorities "only determine which queue's commands are consumed first".
+- *Risks.* Priority does not protect the frame on NVIDIA hardware: "The
+  interface simply dictates the queue from which the commands are consumed
+  first", and it "does not affect warp priorities in any meaningful way"
+  (<https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap>).
   So a heavy trace kernel can still take shading units from the views pass,
   and the allowance keeps metering measured GPU time. A read on one queue
   of what another wrote is a class only review catches. NVIDIA says work
@@ -2269,27 +2298,39 @@ CPU thread reads to learn that work on a queue has finished.
   refuse it, and it takes the GPU from other programs. And uploads: a mesh
   landing is a copy kernel on the frame's queue today, about 0.8 ms for an
   8 MiB job by Puck's own estimate (`SdfGpuWork.UploadCopyBytesPerSecond`).
-  NVIDIA suggests doing such copies on the compute queue.
+  NVIDIA says: "To avoid extra synchronizations and resource barriers,
+  asynchronous copy/transfer work can be done in compute queue"
+  (<https://developer.nvidia.com/blog/advanced-api-performance-synchronization/>).
 
 **6. A completion signal for each background job.**
 
 - *What it speeds up.* The other half of the same wait, on every device.
   The frame defers its submissions into one batch
-  (`GpuSubmissionBatch`). The batch's last fenced submission owns its
-  completion signal, and every other fence in the batch answers from that
-  one. Background jobs are submitted first in the batch, ahead of every
-  render (`RenderGraphRuntime`). So a job's commands run first on the GPU,
-  yet the CPU sees the job finish only when the whole frame's 25 ms of work
-  retires.
+  (`GpuSubmissionBatch`). Each hand-over of the batch gives the entries it
+  carries one completion signal, owned by the last of them
+  (`GpuSubmissionBatch.Split` takes the last fence of the entries handed
+  over), and every other fence in that hand-over answers from it. Background
+  jobs are submitted first in the batch, ahead of every render
+  (`RenderGraphRuntime`). So unless something hands the batch over earlier,
+  a job's commands run first on the GPU, yet the CPU sees the job finish
+  only when the whole frame's 25 ms of work retires. Any split between the
+  pump and the frame's end (a read of the queue door, a wait on a deferred
+  fence, a drain) already gives the earlier jobs an earlier signal, so this
+  premise holds only if nothing splits the frame. The `gpu.queue.executes`
+  counters, broken down by cause, show whether anything does.
 - *How.* The batch is handed over in two parts where a fenced background
   entry ends, with that entry's own signal between them. On Direct3D 12 a
   signal "occurs after all other operations on the command queue have been
   completed"
-  (<https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12commandqueue-signal>).
-  On Vulkan each entry of one submit call is its own batch with its own
-  signal
-  (<https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html>).
-  The batch can already be handed over in parts (`GpuSubmissionBatch.Split`).
+  (<https://learn.microsoft.com/en-us/windows/win32/direct3d12/user-mode-heap-synchronization>).
+  On Vulkan a submit call has one fence, so the batch's owner fence is the
+  one the submit arms (`VulkanSubmissionBatch`). Each entry of one submit
+  call has its own semaphores
+  (<https://docs.vulkan.org/refpages/latest/refpages/source/vkQueueSubmit.html>),
+  but Puck's completion signal is a `VkFence`. So on Vulkan the per-job
+  signal means a second `vkQueueSubmit`, which is what
+  `GpuSubmissionBatch.Split` already does, or moving the fences to timeline
+  semaphores. It is not a free signal for each entry.
 - *The gain.* The CPU learns a job is done 1 to 2 ms after the frame is
   handed over. It shows mainly once frames are limited by the GPU: at
   today's 41 ms frames the previous batch has probably retired by the next
@@ -2371,9 +2412,11 @@ CPU thread reads to learn that work on a queue has finished.
 - *Evidence.* NVIDIA's DLSS programming guide gives 95 to 204 MB of
   internal memory at a 2560 by 1440 output
   (<https://github.com/NVIDIA/DLSS/raw/main/doc/DLSS_Programming_Guide_Release.pdf>).
-  Its timing table has no RTX 4070 row, and the rows for a faster card
-  could not be read cleanly, so its cost on the RTX 4070 at native size is
-  unverified. AMD's open upscaler costs 0.8 ms at 1440p in its native mode
+  Its timing table has no RTX 4070 row. The RTX 4070 Ti row reads 0.45 to
+  1.46 ms at a 2560 by 1440 output, depending on the preset, but those rows
+  are for Performance mode, with a quarter-size input, not native size. So
+  its cost on the RTX 4070 at native size is unverified. The memory figure
+  is for the RTX 40 series; the RTX 30 and 20 series reach 207 MB. AMD's open upscaler costs 0.8 ms at 1440p in its native mode
   on an RX 7900 XTX
   (<https://gpuopen.com/fidelityfx-super-resolution-3/>). By arithmetic,
   not measurement, the gain at native size is 1 to 2 ms and about 1 GB.
@@ -2420,11 +2463,11 @@ CPU thread reads to learn that work on a queue has finished.
 **11. Demand counted from what was drawn.**
 
 - *What it speeds up.* Memory and bake time. Resident meshes are about 3
-  GB, and the finest tier, about 1.1 GB of it, is almost never drawn
+  GB, and the finest level, about 1.1 GB of it, is almost never drawn
   (decision 8). Demand today asks for every group whose box is large enough
   on screen, with no test for whether anything hides it
   (`SdfMeshDemand.Observe`). A group behind a wall therefore asks for its
-  finest tier.
+  finest level.
 - *How.* The selection kernel already decides what each pass draws. For
   each group it draws, it records the finest level its error rule wanted,
   with a 32-bit atomic maximum. The words come back the way the kernel's
@@ -2511,7 +2554,7 @@ three themselves. The rest go to the lead's quiet window and hold no lane.
 | Shadow passes on both backends | Each cascade's time beside `world.counters gpu pass 'sdf.world$shadow-*'` (commands, draws, vertices) at the hero spawn and the lobby, before and after Direct3D 12's command changes | Whether the 2.4 ms between the backends is the draw command (rank 2). The `direct3d` lane |
 | Rays per second | `world.counters sdf.mesh-gi` against the trace dispatch's GPU time, with the software walk and with ray queries | Whether probes take the hardware walk on a device (rank 4). The `rays` lane |
 | A job answered inside its frame | The `gpu.queue.executes` counters and the background work's report of jobs answered, before and after the signal | Whether a job is answered a step sooner once frames are limited by the GPU (rank 6). The `signal` lane, with the timing as a request |
-| Capabilities, read from the device with no build | On Direct3D 12 the ray tracing tier, the mesh shader tier, the tier of indirect execution and the highest shader model. On Vulkan the ray query, acceleration structure, mesh shader and present-timing extensions, 64-bit atomics on buffers, and the queue families. Later `vulkaninfo` on the Steam Deck | Which paths the RTX 4070's table may turn on (ranks 2, 3, 4, 5 and 12) |
+| Capabilities, read from the device with no build | On Direct3D 12 the ray tracing tier, the mesh shader tier, the tier of indirect execution and the highest shader model, each as the Windows runtime reports it with no Agility SDK shipped: whether it reports tier 1.1 in `D3D12_FEATURE_D3D12_OPTIONS21` and Shader Model 6.8 is unverified. On Vulkan the ray query, acceleration structure, mesh shader and present-timing extensions, 64-bit atomics on buffers, which are optional, and the queue families. Later `vulkaninfo` on the Steam Deck | Which paths the RTX 4070's table may turn on (ranks 2, 3, 4, 5 and 12). Whether the `direct3d` lane's root-constant drop needs the Agility SDK, and so whether the owner's question blocks it |
 | One shadow pass split by kind of work | A PIX capture of the far shadow pass and the mesh pass on Direct3D 12: command processing, vertex work and rasterization | Whether mesh shaders (rank 3) or a rasterizer in compute is the next cut |
 | Idle time in one frame | An Nsight GPU trace of one route frame at 2560 by 1440: idle shading units and the busiest unit for each pass, and across the probe and bake chains | How much background work a second queue runs for free (rank 5), and whether the frame's own passes or the probe chain are worth restructuring (the watch list) |
 | A warm start's fill-in | `world.residency` once `all-resident` is no longer `pending`: the store's read and decode thread-seconds, `load-span`, `all-landed`, `near-ninety-at` and `landing-bytes` | Whether reading and decoding, or the landing cap, sets the time (rank 14) |
@@ -2524,7 +2567,7 @@ three themselves. The rest go to the lead's quiet window and hold no lane.
 | Direct3D 12 work graphs for the probe chain and the bake's narrowing samples | Watched | No figure, and a second implementation of the chain. Rank 5 takes the wait out on every device first. The RTX 2060 is absent from NVIDIA's list (<https://developer.nvidia.com/blog/advancing-gpu-driven-rendering-with-work-graphs-in-direct3d-12/>), and whether a work graph runs on a compute queue is unverified |
 | Work graphs with mesh nodes | Watched | A preview when read (<https://devblogs.microsoft.com/directx/d3d12-mesh-nodes-in-work-graphs/>); its release status is unverified. Rank 3 covers the same passes on all three devices |
 | The GPU choosing a pipeline for each item (`VK_EXT_device_generated_commands`) | Watched | Adds little to decision 4. Its use is decision 13's authored shading programs. Driver support is unverified on all three devices (<https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_device_generated_commands.html>) |
-| A rasterizer in compute for small triangles | Watched | A second rasterizer with unknown gain. For shadow depth it needs only 32-bit atomics. The 64-bit atomics other plans call unconfirmed are required on buffers at Puck's shader model (<https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_Int64_and_Float_Atomics.html>) and are a Vulkan 1.2 feature, so they are not the obstacle. The split of one shadow pass decides it |
+| A rasterizer in compute for small triangles | Watched | A second rasterizer with unknown gain. For shadow depth it needs only 32-bit atomics. The 64-bit atomics other plans call unconfirmed are required on buffers at Puck's shader model on Direct3D 12 (<https://microsoft.github.io/DirectX-Specs/d3d/HLSL_SM_6_6_Int64_and_Float_Atomics.html>). On Vulkan they are an optional feature: "If the VK_KHR_shader_atomic_int64 extension is not supported, support for the shaderBufferInt64Atomics feature is optional" (<https://docs.vulkan.org/refpages/latest/refpages/source/VK_VERSION_1_2.html>). Puck would have to require it at device creation and add it to `VulkanShaderCapabilities`, which enables none of them today, and it is unconfirmed on the bar devices. So the atomic width is not the obstacle on Direct3D 12, and is an open reading on Vulkan. The split of one shadow pass decides it |
 | Ambient occlusion by ray | Watched | The planned screen-space march covers most of it, and rays need a denoiser. Taken up if presented frames show what the screen cannot see |
 | Clustered and partitioned acceleration structures | Watched | A preview on Direct3D 12 (<https://devblogs.microsoft.com/directx/clas-ptlas-preview/>), and NVIDIA-only on Vulkan (<https://developer.nvidia.com/blog/nvidia-rtx-mega-geometry-now-available-with-new-vulkan-samples/>). Taken up when rank 4 shows that building structures is the limit |
 | Reordering ray shading on the GPU | Watched | It works only in a ray generation shader (<https://microsoft.github.io/hlsl-specs/proposals/0027-shader-execution-reordering>), which Puck has none of, and it does nothing for rays traced inside compute. Taken up if rank 8 grows shading that differs at each hit |
@@ -2538,11 +2581,23 @@ three themselves. The rest go to the lead's quiet window and hold no lane.
 
 Four of those rows need Microsoft's Agility SDK, which ships a newer
 Direct3D 12 runtime beside the program: clustered structures, ray
-reordering, opacity micromaps and mesh nodes. No lane of either wave needs
-it. Whether ray queries need it is unverified; the researcher infers the
-operating system's runtime is enough. Shipping it is
-[the owner's call](#what-the-owner-settled-1) when one of the four is
-taken up.
+reordering, opacity micromaps and mesh nodes. Whether a lane of the first
+wave also needs it is unverified. The `direct3d` lane's preferred way to
+drop the draw's constant (rank 2) needs the second tier of indirect
+execution, reported in `D3D12_FEATURE_D3D12_OPTIONS21`, and its other way
+needs Shader Model 6.8. Microsoft's post on Agility SDK 1.613 lists both
+as that release's features, "Incrementing Constants in ExecuteIndirect"
+and, under Shader Model 6.8, "Start Vertex/Instance Location"
+(<https://devblogs.microsoft.com/directx/agility-sdk-1-613-0/>). It says
+nothing about either being in the Windows runtime, and Puck ships no
+Agility SDK. So whether the Windows runtime exposes the tier and the shader
+model is unverified, and it is part of the capability reading that takes no
+build (the table above). The `direct3d` lane's root-constant drop depends
+on that reading. If the runtime lacks them, both ways of dropping the
+constant need the SDK, and shipping it
+([the owner's call](#what-the-owner-settled-1)) then blocks a lane of the
+first wave. Whether ray queries need it is also unverified; the researcher
+infers the operating system's runtime is enough.
 
 **Text elsewhere that still lets one device decide.** These passages were
 written before the ruling. Each is corrected by the lane that takes up the
@@ -2890,7 +2945,11 @@ one barrier model.**
   vertices beside its time on both backends. It then gives Direct3D 12 an
   indirect command that holds the draw alone, with the draw's identity
   read from the record as Vulkan reads it, and takes the reading again.
-  Second, every texture transition goes through enhanced barriers, and the
+  That step depends on the capability reading showing that the Windows
+  runtime exposes the second tier of indirect execution, or Shader Model
+  6.8, without the Agility SDK; if it shows neither, the step waits on the
+  owner's question about the SDK and the lane does only the barrier
+  change. Second, every texture transition goes through enhanced barriers, and the
   older transition path is deleted.
 - *Owns.* In `src/Puck.DirectX`: `DirectXPipelineLayout*.cs`,
   `DirectXGpuRecorder*.cs`, `DirectXBarriers.cs`, and the capability reads
@@ -3290,10 +3349,14 @@ Both ask whether a build may carry another company's binary. One is a GPU
 vendor's upscaler beside Puck's own resolve. The other is Microsoft's
 Agility SDK, a newer Direct3D 12 runtime shipped beside the program, which
 four watched features need
-([GPU capabilities](#gpu-capabilities-puck-does-not-use-yet)).
+([GPU capabilities](#gpu-capabilities-puck-does-not-use-yet)). The SDK
+question may come sooner: if the capability reading finds that the Windows
+runtime lacks the second tier of indirect execution and Shader Model 6.8,
+the `direct3d` lane's root-constant drop needs the SDK too, and the
+question then blocks that step of a first-wave lane.
 
-No owner question blocks a lane of either wave. One design question is
-open and is not the owner's yet: where the tick runs. The job-system plan
+Otherwise no owner question blocks a lane of either wave. One design
+question is open and is not the owner's yet: where the tick runs. The job-system plan
 owns it, the first wave measures what it needs, and it reaches the owner
 only if the design it settles on adds latency for the world the player
 acts in ([decision 3](#3-shorten-the-tick-and-settle-where-it-runs)).
