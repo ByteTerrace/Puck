@@ -169,8 +169,8 @@ between stages 1 and 4), which the tour pins by holding the day clock; the
 pool's camera at the path's end stands inside the pavilion's terrace, so the
 place and the pavilion overlap (A4, A5 settle the layout together); a camera
 inside a water body renders a flat wash, since the glass pass has no
-inside-the-medium case (an engine gap the swimmer's own view meets, recorded
-under R4's enhancements as the first thing a swimmer's camera needs).
+inside-the-medium case (an engine gap the swimmer's own view meets, first in
+[the order](#order)).
 [Rendering research decision 14](rendering-research.md#14-treat-a-nested-view-as-the-same-view-at-another-size)
 says how it is built: the glass pass's sum for each pixel is started with
 the medium the eye is in, and each ray is cut at its own exit.
@@ -408,7 +408,26 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 
 ### Order
 
-The simulation is the feature's truth and every look binds to it. A2 to A5 run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
+**Engine gaps first.** Six of the engine gaps in the
+[rendering plan's list](rendering-research.md#engine-gaps-filled-first) stop
+the water reaching its look, and each is filled before the look work that
+would tune around it (the owner's ruling,
+[AGENTS.md](../../AGENTS.md#pucks-purpose)). Three are this plan's to build;
+three belong to other plans and hold lanes here.
+
+| Gap | In this plan's terms | Owner |
+|---|---|---|
+| 5. Water's colour and opacity do not follow depth over the bed | The glass medium is a function of the path length along the view ray (`sdfGlassThicknessAt`), with one scatter colour and one coefficient per material, and nothing gives shading the water's depth over its bed. The lake, pool, river and plunge read as one flat colour, with no clear shallows and the stones invisible | This plan, as a mechanism under the water |
+| 6. A flow layer carries one velocity | `PaletteFlowDocument` has one `Velocity` for a whole surface, so the lake's outlet sill, the river's winding course and the falls cannot each move at their own speed | This plan, as a mechanism under the water |
+| 9. A camera inside water sees a flat wash | The glass pass has no case for an eye inside a medium ([decision 14](rendering-research.md#14-treat-a-nested-view-as-the-same-view-at-another-size)). It was filed under R4's enhancements and is first | This plan |
+| 8. A moving cutter does not re-carve a baked group | The glacier cannot retreat by a cut and melts by sinking, so lane A2's glacier waits on it | [Moving blends](moving-blends.md#engine-gaps-first) |
+| 1 and 4. Terrain bakes coarser than it declares, and relief cannot be masked | The glacier's trough and moraines stair-step and relief buries the lake's bowl, so lane A2's lake and glacier wait on them | [The terrain pass](terrain-pass.md#order-of-work) |
+
+Gaps 5, 6 and 9 start now, ahead of the look work of lanes A3 to A5. Lane A2
+is built and awaits its look critic; its remaining misses are gaps 1, 4 and
+8, so no further sculpting of the lake or glacier runs until they land. The
+rest of the order follows. The simulation is the feature's truth and every look binds to
+it. A3 to A5 then run in parallel (A5's pane acceptance waits on the two-glass-layers lane). R3 next, since it adds a pass. P1 lands with the last authoring lane. R4 and D1 after the integration acceptance.
 
 ## The mechanisms under the water
 
