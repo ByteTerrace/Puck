@@ -382,7 +382,7 @@ public static class WorldStateDisclosure {
             recipient: recipient,
             unrestricted: unrestricted
         );
-        definition = WorldPrivateDrawKeys.WithLast(definition, 0);
+        definition = WorldDrawSampler.WithLast(definition, 0);
         var rows = new WorldStateRow[definition.AuthoredState.Count];
         var withheld = new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal);
 
@@ -423,7 +423,7 @@ public static class WorldStateDisclosure {
         var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
         // A draw key belongs only to authority persistence, even when every current cell reads whole.
         // Both initial replica documents and refreshed image skeletons pass this boundary.
-        if (row.Draw is { Secret: not null } draw) { row = row with { Draw = draw.WithoutStream() }; }
+        if (row.Draw is { Secret: not null } draw) { row = row with { Draw = draw.WithoutStream(), BeforePrivatePreview = null }; }
 
         withheld = null;
         if (observer.TryRow(ordinal: out var ordinal, row: row) && !observer.ReadsWhole(rowOrdinal: ordinal)) {

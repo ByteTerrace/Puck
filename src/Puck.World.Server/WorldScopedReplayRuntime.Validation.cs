@@ -35,6 +35,10 @@ public sealed partial class WorldScopedReplayRuntime {
             }
             return true;
         }
+        if (!Ordered(checkpoint.Words.Select(input => input.Tick)) ||
+            checkpoint.Words.Any(input => input.Tick >= checkpoint.Hashes.Count || !m_drawSites.Contains(input.Word.Installation))) {
+            Refuse("invalid scoped private draw inputs");
+        }
         if (!Ordered(ticks: checkpoint.Inputs.Select(selector: input => input.Tick)) || checkpoint.Inputs.Any(predicate: input => (!Within(mutation: input.Mutation) || !m_source.Seats.Contains(value: input.Mutation.Principal)))) { Refuse(detail: "invalid or unordered cell inputs"); }
         if (!Ordered(ticks: checkpoint.Commands.Select(selector: input => input.Tick)) || checkpoint.Commands.Any(predicate: input =>
             ((input.Command is not (WorldCommand.SnapPose or WorldCommand.PressChannel or WorldCommand.EnqueueSegment or WorldCommand.Stop or WorldCommand.RigidImpulse)) ||

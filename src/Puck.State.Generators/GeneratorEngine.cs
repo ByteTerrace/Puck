@@ -566,7 +566,7 @@ public static partial class GeneratorEngine {
     // Named rather than Enum.IsDefined, which reads a type cache the runtime holds only weakly and allocates it again
     // after every collection, on a check every firing makes.
     private static bool IsDefinedMode(GeneratorMode mode) => (mode is (GeneratorMode.WithReplacement or GeneratorMode.WithoutReplacement or GeneratorMode.RestartOnExhaustion));
-    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawStream? secret = null) {
+    private static bool TryRunBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, int sampleCount, bool writeValues, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) {
         masksAfter = null;
         advances = 0;
         if (sampleCount < 0) { reason = $"sample count {sampleCount} is negative"; return false; }
@@ -777,7 +777,7 @@ public static partial class GeneratorEngine {
     /// <param name="masksAfter">The drawn masks after the pass, or <see langword="null"/> when the source never exhausts.</param>
     /// <param name="reason">Why the pass was refused, on failure.</param>
     /// <returns><see langword="true"/> when all samples were consumed.</returns>
-    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, PrivateDrawStream? secret = null) => TryRunBatch(
+    public static bool TryAdvanceBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, int sampleCount, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, PrivateDrawSample? secret = null) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -1316,7 +1316,7 @@ public static partial class GeneratorEngine {
     /// <param name="secret">Optional authority secret; admitted only for integer streamDraw sources.</param>
     /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
     /// <c>(skip + cursor)</c> raw advances rather than <c>cursor</c> alone. Never applied to a secret draw.</param>
-    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, PrivateDrawStream? secret = null, long skip = 0L) {
+    public static bool TryFire(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, out FireResult result, out string reason, PrivateDrawSample? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: generator);
 
         result = default;
@@ -1398,7 +1398,7 @@ public static partial class GeneratorEngine {
     /// <param name="skip">The site's authored seek (see <see cref="Draw.Skip"/>); a rebuild advances by
     /// <c>(skip + cursor)</c> raw advances rather than <c>cursor</c> alone.</param>
     /// <returns><see langword="true"/> when every cell was filled.</returns>
-    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawStream? secret = null) => TryRunBatch(
+    public static bool TryFireBatch(StateGenerator generator, CellKind targetKind, ulong seedState, ulong stream, long cursor, IReadOnlyList<ClosedBitset256>? masks, Span<long> values, out IReadOnlyList<ClosedBitset256>? masksAfter, out long advances, out string reason, long skip = 0L, PrivateDrawSample? secret = null) => TryRunBatch(
         generator: generator,
         targetKind: targetKind,
         seedState: seedState,
@@ -1520,9 +1520,10 @@ public static partial class GeneratorEngine {
     }
 
     /// <summary>Resolves a site for execution and verifies its declared sampler has the required credential.</summary>
-    public static bool TryResolveExecutableSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, out StateGenerator generator, out string reason) {
+    public static bool TryResolveExecutableSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, PrivateDrawAuthority? authority, out PrivateDrawSample? sample, out StateGenerator generator, out string reason) {
         ArgumentNullException.ThrowIfNull(draw);
-        if (draw.PrivateStream != (draw.Secret is not null)) {
+        sample = draw.Secret?.Open(authority);
+        if (draw.PrivateStream != (sample is not null)) {
             generator = null!;
             reason = "the declared draw sampler and its provisioned key do not agree";
             return false;

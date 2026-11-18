@@ -29,7 +29,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldReload reload, WorldStateRoot stateRoot) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldReload reload) : ICommandModule {
     private static readonly CommandForms WorldKitDefaultForms = CommandForms.Of(verb: "world.kit.default", "<name>");
     private static readonly CommandForms WorldGrantSetForms = CommandForms.Of(verb: "world.grant.set", WorldGrantCommandModule.GrantForm);
     private static readonly CommandForms WorldGrantRemoveForms = CommandForms.Of(verb: "world.grant.remove", WorldGrantCommandModule.RevokeForm);
@@ -245,7 +245,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // below) — both reuse server.Neighbours, the ONE live-session resolver this repository wires (a
                 // document SWAP, not a per-mutation check; see WorldServer.Neighbours' own remarks).
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(
-            keys: WorldPrivateDrawKeys.Preview,
+                    keys: WorldPrivateDrawKeys.Preview,
                     admission: out var admission,
                     catalog: machineCatalog,
                     contentHash: out var contentHash,
@@ -339,7 +339,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
             audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
             name: "world.save",
-            description: $"Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): {WorldSaveForms.Spelling}. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
+            description: $"Writes a SESSION SNAPSHOT of the live world to a file in canonical form (stable member order, invariant numbers, LF newlines, one trailing newline) and compacts the journal (the saved definition becomes the new base, dirty → 0): {WorldSaveForms.Spelling}. The snapshot is the AUTHORED document: the live definition (mutations included), with a moved session lever folded into the section it belongs to when the document authors that section (render levers into render, the master volume into audio, the present target into host, the peer-source default into bodies, magazine selectors into screens) and the host's named machine declarations into machines; a section the document omits stays omitted, and an untouched section is written as authored. No argument writes back to the loaded world file. A .puck target is saved into its source tree: each changed authored node is rewritten in the source that authors it (an import's in the import, a value read from a let in the let), unrelated text is retained, the simulation's state stays as authored, and the recomposed snapshot is proved before writing. A template, compile-time for or module-generated row refuses by name; a generated duplicate requires an authored id. A private-draw source saves its complete live snapshot atomically beside the source, including generated rows. A refused edit can be saved to a JSON target declaring the source as its basis. A target file naming a basis stays a delta: the write is the proved minimal difference over its composed basis chain, and the echo names the preserved basis (or why the save degraded to flat).",
             forms: WorldSaveForms,
             handler: (context, args) => {
                 if (scheduleRoot.RefuseInsideArmedRun(
@@ -384,7 +384,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     );
 
                     return WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, server, machineCatalog,
-                        WorldBootComposition.MachineCatalogFingerprint(machineCatalog), stateRoot, out var result)
+                        WorldBootComposition.MachineCatalogFingerprint(machineCatalog), out var result)
                         ? new CommandResult(Output: $"[world.save: {result}]")
                         : CommandResult.Error(output: $"[world.save: {result}]");
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)) {

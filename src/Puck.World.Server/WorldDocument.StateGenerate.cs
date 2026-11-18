@@ -12,13 +12,13 @@ public sealed partial class WorldDocument {
             (arena.Rows[row.Ordinal].Draw is not { Timing: not DrawTiming.Boot } draw)) {
             reason = "generate requires a redrawable draw site"; return false;
         }
-        if (!GeneratorEngine.TryResolveExecutableSource(m_definition.Generators, draw, out var generator, out reason)) { return false; }
+        if (!GeneratorEngine.TryResolveExecutableSource(m_definition.Generators, draw, Host.DrawKeys, out var sample, out var generator, out reason)) { return false; }
         var site = WorldDrawSites.StateRow(rowName: arena.Rows[row.Ordinal].Name);
         var seed = new DrawSeed(State: GeneratorEngine.ComputeSeedState(documentSeed: (m_definition.Generation?.WorldSeed ?? 0UL), instanceIdentity: Host.InstanceIdentity, site: site), Stream: GeneratorEngine.ComputeStreamId(site: site));
 
         if (!arena.Rows[row.Ordinal].IsKeyed) {
             if (mutation.Keys is not null) { reason = "keys select cells of a keyed draw site alone"; return false; }
-            if (!ArenaDraws.TryFire(arena, row.Ordinal, generator, seed, out var fired, out reason, draw.Secret, draw.Skip)) { return false; }
+            if (!ArenaDraws.TryFire(arena, row.Ordinal, generator, seed, out var fired, out reason, sample, draw.Skip)) { return false; }
             var key = arena.Keys.Intern(name: StateRow.SlotKey);
 
             return ((fired.Text is { } text) ? arena.TryWriteText(row.Ordinal, key, text, out reason)
@@ -39,7 +39,7 @@ public sealed partial class WorldDocument {
         var values = new long[selected.Count];
 
         if (!GeneratorEngine.TryFireBatch(generator, arena.Layout[row.Ordinal].Kind, seed.State, seed.Stream, before, masks,
-            values, out var after, out var advances, out reason, draw.Skip, draw.Secret)) { return false; }
+            values, out var after, out var advances, out reason, draw.Skip, sample)) { return false; }
         if (!ArenaDraws.TryWrite(arena, row.Ordinal, checked((before + advances)), GeneratorEngine.MasksAfter(fired: after, generator: generator, previous: masks), out reason)) { return false; }
         for (var i = 0; (i < selected.Count); i++) {
             if (!arena.TryWriteLive(row.Ordinal, selected[i], values[i], StateWriteKind.Set, time, out reason)) { return false; }

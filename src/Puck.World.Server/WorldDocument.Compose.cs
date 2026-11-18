@@ -1187,6 +1187,7 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.TransformState m:
                 return WorldArenaTransforms.TryApply(
+                    sampler: sampler,
                     actor: m.Principal,
                     candidate: out candidate,
                     definition: current,
@@ -1410,6 +1411,7 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.Generate m:
                 return TryComposeGenerate(
+                    sampler: sampler,
                     candidate: out candidate,
                     current: current,
                     instanceIdentity: instanceIdentity,

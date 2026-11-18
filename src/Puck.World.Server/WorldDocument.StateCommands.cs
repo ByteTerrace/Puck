@@ -27,7 +27,7 @@ public sealed partial class WorldDocument {
                 return TryGenerateState(mutation: generate, reason: out reason, time: in time);
             case WorldMutation.TransformState transform:
                 return WorldArenaTransforms.TryApply(definition: m_definition, transform: transform.Transform, actor: transform.Principal,
-                    tick: time.Tick, engineTick: time.EngineTick, instance: Host.InstanceIdentity, candidate: out _, reason: out reason, guard: transform.Guard, live: Host.Arena);
+                    tick: time.Tick, engineTick: time.EngineTick, instance: Host.InstanceIdentity, candidate: out _, reason: out reason, guard: transform.Guard, live: Host.Arena, sampler: Host.DrawKeys);
             case WorldMutation.UpsertStateRow replace:
                 var existing = WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: replace.Row.Name.Value);
                 if (StateRows.IsGeneratedRowName(name: replace.Row.Name.Value, rows: m_definition.State)) {

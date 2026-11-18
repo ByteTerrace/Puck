@@ -508,8 +508,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         );
         writer.WriteNullableString(value: section.AuthorityIdentity);
-        writer.WriteNullableString(section.DrawAuthority);
-        writer.WriteInt64(section.DrawGeneration);
         WriteDrawPositions(writer, section.DrawPositions);
         WriteDrawPositions(writer, section.BaseDrawPositions);
 
@@ -608,14 +606,14 @@ public static partial class WorldAuthorityCheckpointCodec {
         return positions;
     });
 
-    private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServerCheckpoint section) => TryDecodeSection(
+    private static bool TryDecodeServer(byte[] bytes, string definitionHash, ushort version, out string reason, out WorldServerCheckpoint section) => TryDecodeSection(
         bytes: bytes,
         name: "server",
-        read: (ref WireReader reader) => ReadServer(definitionHash: definitionHash, reader: ref reader),
+        read: (ref WireReader reader) => ReadServer(definitionHash, ref reader, version),
         reason: out reason,
         section: out section
     );
-    private static WorldServerCheckpoint ReadServer(string definitionHash, ref WireReader reader) {
+    private static WorldServerCheckpoint ReadServer(string definitionHash, ref WireReader reader, ushort version) {
         var definitionJson = reader.ReadBlock(
             field: "server definition",
             maxBytes: MaxSectionBytes
@@ -644,13 +642,13 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         var baseOrigin = ReadBaseOrigin(reader: ref reader);
         var arena = ReadArena(reader: ref reader);
-        var scopedReplays = reader.ReadArray(field: "scoped replays", maximum: MaxCollectionCount, readItem: ReadScopedReplay);
+        var scopedReplays = reader.ReadArray(field: "scoped replays", maximum: MaxCollectionCount, readItem: (ref WireReader r) => ReadScopedReplay(ref r, version < SupportedVersion));
         var undo = reader.ReadOptionalClass(
             readValue: ReadUndoHistory
         );
         var journal = reader.ReadArray(
             field: "server journal",
-            readItem: static (ref WireReader r) => {
+            readItem: (ref WireReader r) => {
                 var tick = r.ReadUInt64();
                 var engineTick = r.ReadUInt64();
                 var mutation = ReadLeafBlock<WorldMutation>(
@@ -659,7 +657,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     tryDecode: WorldSubmissionCodec.TryDecodeCommittedMutation
                 );
 
-                return new WorldJournalEntry(tick, engineTick, mutation!) { DrawHistory = ReadDrawHistory(ref r) };
+                return new WorldJournalEntry(tick, engineTick, mutation!) { DrawHistory = version == 35 ? null : ReadDrawHistory(ref r) };
             },
             maximum: MaxCollectionCount
         );
@@ -823,15 +821,16 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
 
-        var drawAuthority = reader.ReadNullableString("private draw authority", 64);
-        var generation = reader.ReadInt64();
-        if (generation < 0 || (drawAuthority is not null && !Puck.Assets.ContentPin.TryParseHex(drawAuthority, out _))) {
-            reader.Fail(WireRefusal.PayloadMalformed, "invalid private draw authority reference or generation");
+        if (version == 35) {
+            _ = reader.ReadOptionalClass(static (ref WireReader r) => r.ReadBlock("retired draw seed", 32));
+        } else if (version == 36) {
+            _ = reader.ReadNullableString("retired authority reference", 64);
+            _ = reader.ReadInt64();
         }
         var positions = ReadDrawPositions(ref reader);
         var basePositions = ReadDrawPositions(ref reader);
         return new WorldServerCheckpoint(
-            DrawAuthority: drawAuthority, DrawGeneration: generation, DrawPositions: positions, BaseDrawPositions: basePositions,
+            DrawPositions: positions, BaseDrawPositions: basePositions,
             Arena: arena,
             AuthorityIdentity: authorityIdentity,
             BaseDefinitionJson: baseDefinitionJson,

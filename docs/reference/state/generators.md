@@ -377,13 +377,13 @@ declaration derives a key for the new declaration. The authored schema
 refuses `draw.secret`, including on operator row writes. Observers see the
 declaration and can price its work.
 
-A world receives a random 256-bit seed at authority installation. Each new private site takes the next installation ordinal. Removing a site and declaring it again allocates a fresh ordinal. A matching row edit or rebuild retains the live cursor and masks.
+A world receives a random 256-bit seed at authority installation. Each new private site takes the next installation ordinal. Removing a site and declaring it again allocates a fresh ordinal. A matching row edit retains the live cursor and masks. A file reload restores the positions in the saved document under a fresh generation.
 
-The local authority save lives under `world-authorities/` in the state directory. Its name identifies the absolute source path and composition entry. A fresh local boot or instance gets a fresh seed. Saving writes the seed, generation, allocation counter and site ordinals before the document. The document supplies cells, masks and cursors on resume, including edits an author made after saving. Reopening the save reserves a generation before drawing, since a previous session may have continued playing after it saved.
+Each local boot and fenced hosted activation creates its seed in memory. A saved document owns the current cells, masks and cursors. Opening it on another machine installs a fresh stream at those positions. For a private-draw `.puck` source, `world.save` replaces one adjacent `.puck.save.world.json` snapshot containing the deck and hands together. Open that snapshot explicitly to resume. Opening the source reads the authored world.
 
-A hosted activation takes the seed from its fenced authority root and reserves a fresh generation. An acknowledged mutation in the recovery journal reuses its recorded private inputs. Its checkpoint identifies that authority and carries stream positions. Rewinding the world, restoring an earlier release or branching from history advances the private stream generation. Document undo restores earlier row state and also advances the generation because another participant may already have seen a later value. A compiled world carries the undrawn source for private first fills.
+Each private word is an HMAC-SHA256 sample addressed by the public seed ladder and cursor under the site's generation-specific key. A rewind retires the previous generation. Hosted journal recovery, whole-session replay and scoped replay use the words captured at the original addresses. An exhausting generator's mask or a deck's remaining tokens exclude previously dealt entries. A with-replacement stream may emit the same numeric value again.
 
-Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site's generation-specific key. Search treats private samples as unknown. Only explicit authoring previews use the deterministic preview sampler. Replay reads the words captured by the authority. Private sites support neither skip nor an extended table.
+Search treats private samples as unknown. Only explicit authoring previews use the deterministic preview sampler. Private sites support neither skip nor an extended table.
 
 ## Extend a source's equidistribution
 
@@ -464,7 +464,7 @@ and the authoring language: decisions](../../decisions/state-and-language.md).
 | `StateGenerator`, `GeneratorRow`, `GeneratorSource`, `GeneratorMode` | `Puck.State` | An authored source, its named row, its shape, and how it consumes entries. |
 | `GeneratorContext`, `GeneratorAlternative`, `GeneratorWeightedNumeric`, `GeneratorExtended` | `Puck.State` | The parts of a source. |
 | `GeneratorCapacity` | `Puck.State` | The source ceilings. |
-| `ClosedBitset256` | `Puck.State` | A drawn mask, and a site's secret. |
+| `ClosedBitset256` | `Puck.State` | A drawn mask or an in-memory site key. |
 | `GeneratorEngine`, `GeneratorEngine.DrawStream` | `Puck.State.Generators` | Seeding, seeking, every source's emission, and a site's samples drawn in order after one seek. |
 | `DrawSeed`, `ArenaDrawSeeds` | `Puck.State.Generators` | A site's starting state and stream id, and a host's table of them folded once. |
 | `ArenaDraws` | `Puck.State.Generators` | A site's cursor and masks read from and written to the arena. |

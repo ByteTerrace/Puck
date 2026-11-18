@@ -1,3 +1,4 @@
+using Puck.Storage;
 using Puck.World.Protocol;
 using Puck.Testing;
 using System.Numerics;
@@ -267,7 +268,29 @@ public sealed class WorldHostedOriginLawTests {
         );
     }
     [Fact]
-    public async Task UncheckpointedReactivationKeepsItsSeedAndRetiresItsOpeningStream() {
+    public async Task FirstReadRewritesARootWithRetiredDrawFieldsOnce() {
+        using var directory = new TemporaryDirectory();
+        var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
+        var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("table"));
+        var blobs = PuckStorageTestComposition.BuildStore();
+        var store = new WorldAuthorityBlobStore(blobs, target);
+        var token = TestContext.Current.CancellationToken;
+        var address = new ObjectBlobAddress(identity.Owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/table/authority/root");
+        var image = System.Text.Json.JsonSerializer.SerializeToNode(WorldAuthorityRoot.Empty)!.AsObject();
+        image["drawSeed"] = Convert.ToBase64String(Enumerable.Repeat((byte)7, 32).ToArray());
+        image["drawGeneration"] = 14;
+        Assert.True((await blobs.WriteAsync(target, address, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(image), ObjectBlobWriteMode.CreateOnly, cancellationToken: token)).Succeeded);
+        var migrated = Assert.IsType<WorldAuthorityRootSnapshot>(await store.LoadRootAsync(identity, token));
+        Assert.Equal(WorldAuthorityRoot.Empty, migrated.Root);
+        var persisted = (await blobs.ReadAsync(target, address, token))!.Value;
+        var clean = System.Text.Json.Nodes.JsonNode.Parse(persisted.Content.Span)!.AsObject();
+        Assert.False(clean.ContainsKey("drawSeed"));
+        Assert.False(clean.ContainsKey("drawGeneration"));
+        Assert.Equal(migrated, await store.LoadRootAsync(identity, token));
+    }
+
+    [Fact]
+    public async Task UncheckpointedReactivationOpensAnIndependentStream() {
         using var directory = new TemporaryDirectory();
         var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
@@ -278,20 +301,14 @@ public sealed class WorldHostedOriginLawTests {
             Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)));
         var document = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] };
         Assert.True((await first.PublishDefinitionAsync(identity, document, token)).Ok);
-        var missing = await Assert.ThrowsAsync<InvalidDataException>(async () => await first.LoadRecoveryAsync(identity, token));
-        Assert.Contains("PrivateDrawSeedMissing", missing.Message);
         Assert.NotNull(await first.AcquireActivationAsync(identity, token));
-        var live = (await first.LoadRecoveryAsync(identity, token))!.Value;
+        var liveKeys = WorldPrivateDrawKeys.Create();
+        var live = (await first.LoadRecoveryAsync(identity, token, liveKeys))!.Value;
         var second = Open();
         Assert.NotNull(await second.AcquireActivationAsync(identity, token));
-        var recovered = (await second.LoadRecoveryAsync(identity, token))!.Value;
-        var stream = live.Definition!.AuthoredState[0].Draw!.Secret!;
-        var resumed = recovered.Definition!.AuthoredState[0].Draw!.Secret!;
-        Assert.NotNull(live.DrawKeys!.SerializeAuthorityState());
-        Assert.Equal(live.DrawKeys.SerializeAuthorityState(), recovered.DrawKeys!.SerializeAuthorityState());
-        Assert.NotEqual(live.DrawKeys.SerializeAuthorityState(), WorldPrivateDrawKeys.Create().SerializeAuthorityState());
-        Assert.True(recovered.DrawKeys.RootGeneration > live.DrawKeys.RootGeneration);
-        Assert.NotEqual(Enumerable.Range(0, 8).Select(i => stream.Sample(3, 5, i)), Enumerable.Range(0, 8).Select(i => resumed.Sample(3, 5, i)));
+        var recoveredKeys = WorldPrivateDrawKeys.Create();
+        var recovered = (await second.LoadRecoveryAsync(identity, token, recoveredKeys))!.Value;
+        Assert.NotEqual(live.Definition!.AuthoredState[0].Cells![0].Value, recovered.Definition!.AuthoredState[0].Cells![0].Value);
     }
 
     [Fact]
@@ -307,8 +324,9 @@ public sealed class WorldHostedOriginLawTests {
         var document = Fixtures.BuildDocument().WithWorldState([new WorldStateRow(CellName.Parse("dice"), CellKind.Int,
             Draw: new Draw(PrivateStream: true, Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)))]) with { Rules = [] };
         Assert.True((await source.PublishDefinitionAsync(identity, document, token, fence)).Ok);
-        var live = (await source.LoadRecoveryAsync(identity, token))!.Value;
-        using var running = Fixtures.FreshServer(live.Definition!, drawKeys: live.DrawKeys);
+        var liveKeys = WorldPrivateDrawKeys.Create();
+        var live = (await source.LoadRecoveryAsync(identity, token, liveKeys))!.Value;
+        using var running = Fixtures.FreshServer(live.Definition!, drawKeys: liveKeys);
         Assert.True(running.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
         var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
         Assert.True((await source.WriteCheckpointAsync(identity, bytes, checkpoint!.Server.LastCompletedTick, token, fence)).Ok);
@@ -316,25 +334,23 @@ public sealed class WorldHostedOriginLawTests {
         var point = (await source.CaptureRecoveryRootAsync(identity, operation, token))!.Value;
         var receipts = await source.CaptureReceiptSnapshotAsync(identity, (await source.LoadRootAsync(identity, token))!.Value, token);
         Assert.True((await qualification.CreateReleaseFixtureAsync(identity, WorldDefinitionSerialization.Serialize(document), bytes, receipts, token)).Ok);
-        var qualified = (await qualification.LoadRecoveryAsync(identity, token))!.Value;
+        var qualifiedKeys = WorldPrivateDrawKeys.Create();
+        var qualified = (await qualification.LoadRecoveryAsync(identity, token, qualifiedKeys))!.Value;
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(qualified.Checkpoint!.Value.Encoded.Span, out var detached, out reason), reason);
-        Assert.Equal(qualified.DrawKeys!.Identity, detached!.Server.DrawAuthority);
-        Assert.NotEqual(live.DrawKeys!.Identity, qualified.DrawKeys.Identity);
-        var mismatch = Assert.Throws<InvalidDataException>(() => running.Server.RestoreCheckpoint(detached));
-        Assert.Contains("PrivateDrawAuthorityMismatch", mismatch.Message);
+        Assert.Equal(bytes, WorldAuthorityCheckpointCodec.Encode(detached!));
         Assert.True((await source.RestoreRecoveryRootAsync(identity, point.Pin, operation, fence, token)).Ok);
-        var restored = (await source.LoadRecoveryAsync(identity, token))!.Value;
-        Assert.Equal(live.DrawKeys.Identity, restored.DrawKeys!.Identity);
-        Assert.True(restored.DrawKeys.RootGeneration > live.DrawKeys.RootGeneration);
-        static uint[] Future(WorldDefinition d) => Enumerable.Range(0, 4).Select(i => d.AuthoredState[0].Draw!.Secret!.Sample(3, 5, i)).ToArray();
-        Assert.NotEqual(Future(live.Definition!), Future(restored.Definition!));
-        Assert.NotEqual(Future(live.Definition!), Future(qualified.Definition!));
+        var restoredKeys = WorldPrivateDrawKeys.Create();
+        var restored = (await source.LoadRecoveryAsync(identity, token, restoredKeys))!.Value;
+        var first = live.Definition!.AuthoredState[0].Cells![0].Value;
+        Assert.NotEqual(first, restored.Definition!.AuthoredState[0].Cells![0].Value);
+        Assert.NotEqual(first, qualified.Definition!.AuthoredState[0].Cells![0].Value);
 
         // The durable mutation tail covers one draw. The next draw was visible before the host crashed.
         var activeFence = (await source.AcquireActivationAsync(identity, token))!.Value;
-        var active = (await source.LoadRecoveryAsync(identity, token))!.Value;
+        var activeKeys = WorldPrivateDrawKeys.Create();
+        var active = (await source.LoadRecoveryAsync(identity, token, activeKeys))!.Value;
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(active.Checkpoint!.Value.Encoded.Span, out var start, out reason), reason);
-        using var prior = Fixtures.FreshServer(active.Definition!, drawKeys: active.DrawKeys);
+        using var prior = Fixtures.FreshServer(active.Definition!, drawKeys: activeKeys);
         prior.Server.RestoreCheckpoint(start!);
         static long Deal(WorldFixture f) {
             f.Server.EnqueueMutation(new WorldMutation.Generate(Puck.Commands.Principal.Console, "dice"));
@@ -350,12 +366,12 @@ public sealed class WorldHostedOriginLawTests {
         Assert.True((await source.AppendJournalAsync(identity, tail, token, activeFence)).Ok);
         var discarded = Deal(prior);
         Assert.NotNull(await source.AcquireActivationAsync(identity, token));
-        var restarted = (await source.LoadRecoveryAsync(identity, token))!.Value;
-        Assert.True(restarted.DrawKeys!.RootGeneration > active.DrawKeys!.RootGeneration);
-        using var successor = Fixtures.FreshServer(restarted.Definition!, drawKeys: restarted.DrawKeys);
+        var restartedKeys = WorldPrivateDrawKeys.Create();
+        var restarted = (await source.LoadRecoveryAsync(identity, token, restartedKeys))!.Value;
+        using var successor = Fixtures.FreshServer(restarted.Definition!, drawKeys: restartedKeys);
         successor.Server.RestoreCheckpoint(start!);
         Assert.True(WorldAuthorityCheckpointCodec.TryDecodeJournalMutation(Assert.Single(restarted.Journal.Entries), out var recorded, out reason), reason);
-        Assert.True(successor.Server.TryRecoverJournalMutation(recorded, restarted.DrawKeys));
+        Assert.True(successor.Server.TryRecoverJournalMutation(recorded, restartedKeys));
         Assert.Equal(committed, successor.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.Raw);
         Assert.NotEqual(discarded, Deal(successor));
     }

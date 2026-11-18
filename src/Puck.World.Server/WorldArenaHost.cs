@@ -16,7 +16,9 @@ public sealed class WorldArenaHost : ArenaEffectHost {
     /// <param name="instanceIdentity">The running instance's identity.</param>
     /// <param name="verdicts">The installed document's verdict rows, or <see langword="null"/> when it declares
     /// none.</param>
-    public WorldArenaHost(StateArena arena, string[] sites, IReadOnlyList<GeneratorRow>? generators, int ticksPerSecond, IReadOnlyList<DynamicsRow>? dynamics, ulong documentSeed, string instanceIdentity, WorldVerdictStamp? verdicts = null) : base(
+    /// <param name="drawAuthority">The authority for private draw sites.</param>
+    public WorldArenaHost(StateArena arena, string[] sites, IReadOnlyList<GeneratorRow>? generators, int ticksPerSecond, IReadOnlyList<DynamicsRow>? dynamics, ulong documentSeed, string instanceIdentity, WorldVerdictStamp? verdicts = null, PrivateDrawAuthority? drawAuthority = null) : base(
+        drawAuthority: drawAuthority,
         arena: arena,
         documentSeed: documentSeed,
         dynamics: dynamics,

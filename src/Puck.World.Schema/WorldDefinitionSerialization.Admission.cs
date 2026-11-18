@@ -15,7 +15,7 @@ public static partial class WorldDefinitionSerialization {
     /// <exception cref="InvalidDataException">The embedded definition is malformed or refused by the host.</exception>
     /// <param name="drawKeys">The receiving authority sampler when restoring a checkpoint.</param>
     /// <param name="positions">Installation ordinals from that checkpoint.</param>
-    public static WorldDefinitionAdmission DeserializeForAdmission(byte[] utf8Json, IMachineValidationCatalog machines, string? documentDirectory = null, WorldPrivateDrawKeys? drawKeys = null, WorldDrawPositions? positions = null) {
+    public static WorldDefinitionAdmission DeserializeForAdmission(byte[] utf8Json, IMachineValidationCatalog machines, string? documentDirectory = null, WorldDrawSampler? drawKeys = null, WorldDrawPositions? positions = null) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
         ArgumentNullException.ThrowIfNull(argument: machines);
         try {

@@ -45,7 +45,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <summary>The one envelope version this codec writes and reads. An envelope of any other version is refused
     /// before its payload is read; there is no compatibility reader. Raise it whenever the envelope or body layout
     /// changes, and never reuse an earlier value.</summary>
-    public const ushort SupportedVersion = 36;
+    public const ushort SupportedVersion = 37;
 
     /// <summary>Encodes a full checkpoint.</summary>
     /// <param name="checkpoint">The checkpoint to encode.</param>
@@ -125,7 +125,11 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <param name="documentDirectory">The captured definition's asset directory, when its paths are relative.</param>
     /// <returns><see langword="true"/> when the blob decoded exactly.</returns>
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) {
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) =>
+        TryDecodeCore(bytes, migrating: false, out checkpoint, out reason, documentDirectory);
+
+    // Only the durable root migration calls this with the retired layout. Every public checkpoint reader stays strict.
+    internal static bool TryDecodeCore(ReadOnlySpan<byte> bytes, bool migrating, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory) {
         checkpoint = null;
 
         var reader = new WireReader(bytes: bytes);
@@ -145,10 +149,10 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         if (
             !reader.Failed &&
-            (version != SupportedVersion)
+            (migrating ? version is not (35 or 36) : version != SupportedVersion)
         ) {
             reader.Fail(
-                detail: $"checkpoint version {version} is not the supported version {SupportedVersion}",
+                detail: migrating ? $"checkpoint version {version} is not a retired private-draw layout" : $"checkpoint version {version} is not the supported version {SupportedVersion}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
@@ -240,6 +244,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         if (!TryDecodeServer(
+            version: version,
             bytes: serverBytes,
             definitionHash: definitionHash,
             reason: out reason,

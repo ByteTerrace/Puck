@@ -34,10 +34,12 @@ public static class WorldDrawBootResolver {
 
     private static void Narrate(string site, string instanceIdentity, string settled) =>
         Console.Error.WriteLine(value: $"[world.draw: settled {site} instance={instanceIdentity} -> {settled}]");
-    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
+    private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, PrivateDrawAuthority? authority, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
         if (!GeneratorEngine.TryResolveExecutableSource(
+            authority: authority,
+            sample: out var sample,
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,
@@ -60,7 +62,7 @@ public static class WorldDrawBootResolver {
             cursor: cursor,
             masks: masks,
             result: out fired,
-            secret: draw.Secret,
+            secret: sample,
             reason: out var fireReason,
             skip: draw.Skip
         )) {
@@ -165,7 +167,8 @@ public static class WorldDrawBootResolver {
     /// <param name="filled">The row with its drawn values, cursor, and drawn masks.</param>
     /// <param name="reason">Why the fill refused, on failure.</param>
     /// <returns><see langword="true"/> when every selected cell drew.</returns>
-    public static bool TryFillKeyedSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys, out WorldStateRow filled, out string reason) {
+    /// <param name="authority">The credential for a private site.</param>
+    public static bool TryFillKeyedSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, WorldStateRow row, IReadOnlyList<string>? keys, out WorldStateRow filled, out string reason, PrivateDrawAuthority? authority = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: row);
 
@@ -182,6 +185,8 @@ public static class WorldDrawBootResolver {
         }
 
         if (!GeneratorEngine.TryResolveExecutableSource(
+            authority: authority,
+            sample: out var sample,
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,
@@ -243,7 +248,7 @@ public static class WorldDrawBootResolver {
                 advances: out var advances,
             reason: out var fireReason,
             skip: draw.Skip,
-            secret: draw.Secret
+            secret: sample
         )) {
             reason = $"{site} {fireReason}";
 
@@ -277,14 +282,14 @@ public static class WorldDrawBootResolver {
     /// <param name="restore">The installation ordinals of a restored journal document.</param>
     /// <param name="keys">The authority credential, or the isolated preview sampler for an authoring read.</param>
     /// <returns><see langword="true"/> when every first-fill site resolved.</returns>
-    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null, WorldDefinition? previous = null, WorldDrawPositions? restore = null) {
+    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldDrawSampler? keys = null, WorldDefinition? previous = null, WorldDrawPositions? restore = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        keys ??= WorldPrivateDrawKeys.Missing;
+        keys ??= WorldDrawSampler.Missing;
         try {
             definition = restore is not null ? keys.Install(definition, restore: restore) :
-                previous is null ? keys.InstallAtBoot(definition) : keys.Install(definition, previous);
+                keys.Install(definition, previous);
         } catch (InvalidDataException error) {
             resolved = definition;
             reason = error.Message;
@@ -312,6 +317,7 @@ public static class WorldDrawBootResolver {
 
             if (row.IsKeyed) {
                 if (!TryFillKeyedSite(
+                    authority: keys,
                     definition: definition,
                     filled: out var filledRow,
                     instanceIdentity: instanceIdentity,
@@ -324,13 +330,14 @@ public static class WorldDrawBootResolver {
                 }
 
                 state ??= new List<WorldStateRow>(collection: authored);
-                state[index] = filledRow;
+                state[index] = keys.IsPreview && draw.PrivateStream ? filledRow with { BeforePrivatePreview = row } : filledRow;
                 changed = true;
 
                 continue;
             }
 
             if (!TryDrawSite(
+                authority: keys,
                 definition: definition,
                 worldSeed: worldSeed,
                 instanceIdentity: instanceIdentity,
@@ -367,6 +374,7 @@ public static class WorldDrawBootResolver {
             );
             state ??= new List<WorldStateRow>(collection: authored);
             state[index] = row with {
+                BeforePrivatePreview = keys.IsPreview && draw.PrivateStream ? row : null,
                 Cells = [cell],
                 DrawCursor = (row.DrawCursor + fired.Advances),
                 DrawnMasks = GeneratorEngine.MasksAfter(

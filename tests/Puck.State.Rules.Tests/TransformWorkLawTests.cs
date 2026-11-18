@@ -264,8 +264,8 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
 
         Assert.True(Cost(declared) > Cost(row.Draw!));
         Assert.Equal(Cost(declared), Cost(authority.Bind(declared, 1)));
-        Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), declared, out _, out _));
-        Assert.True(GeneratorEngine.TryResolveExecutableSource(Generators(), authority.Bind(declared, 1), out _, out _));
+        Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), declared, authority, out _, out _, out _));
+        Assert.True(GeneratorEngine.TryResolveExecutableSource(Generators(), authority.Bind(declared, 1), authority, out _, out _, out _));
         Assert.Throws<ArgumentException>(() => authority.Bind(row.Draw!, 1));
     }
 
