@@ -178,6 +178,14 @@ agent works in that mode by default, without asking:
   real mouse and foreground window) is left out through one list,
   `build/CoverageHardwareOnly.txt`.
 - The owner's velocity rulings:
+  - Waits are judged by what a reasonable player, author and developer expects
+    (the owner's ruling): one long first start is acceptable (a first boot, a
+    loading screen, a cold bake), but a wait to see or validate a simple change
+    destroys productivity ("if they have to wait 5 minutes to witness/validate
+    a simple change then they lose all productivity"), so the time from a
+    change to seeing it outranks every cold-start figure. The numeric targets
+    below are soft forcing functions, not bars to stop at: without them bake
+    times once drifted to nearly an hour.
   - Edit to running: under 30 seconds from changing a C# or HLSL file in the
     engine to seeing it in the running debug world.
   - Cold bake: the debug world's meshes bake from an empty store in one minute
