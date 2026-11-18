@@ -648,7 +648,11 @@ row into a `NavigationDomainInput` once at resolve time, mapping the
 document's own kind/connectivity enums onto the kernel's, and
 `NavigationMediumFieldAdapter` bridges `FieldLattice` to the kernel's
 `INavigationMediumField` seam so a medium-kind domain never needs the
-lattice's own representation.
+lattice's own representation. `FindCheckedRoute` searches one route across the
+domains (`NavigationRuntime.FindRoute`) to a cell or a place
+(`WorldNavigationPlaceGoal`, a region's volume) and stands the default seat
+kit's body along it in the contact field, the read-back `world.navigation
+route` prints; `TryRouteEndpoint` picks a route's start.
 
 A domain's own occupancy sweep and edge bake are lazy: `Domain`'s constructor
 only sizes its workspace arrays, and the kernel samples the solid field the

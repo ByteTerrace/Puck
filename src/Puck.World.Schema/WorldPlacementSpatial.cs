@@ -76,6 +76,45 @@ public readonly record struct FixedSpatialShape(
     public FixedVector3 Center => Box.Center;
     /// <summary>Gets a box's half-extents along its own axes; zero for a sphere.</summary>
     public FixedVector3 HalfExtents => Box.HalfExtents;
+    /// <summary>Gets the shape's world-axis-aligned bounds.</summary>
+    public FixedAabb Bounds => ((Kind == FixedSpatialShapeKind.Sphere)
+        ? FixedAabb.Around(center: Center, radius: Radius)
+        : FixedAabb.FromCenter(center: Center, extent: Box.WorldExtent));
+
+    /// <summary>Builds a sphere.</summary>
+    /// <param name="center">The world-space center.</param>
+    /// <param name="radius">The radius, world units.</param>
+    /// <returns>The sphere, its <see cref="Box"/> a world-axis box of zero extent at its center.</returns>
+    public static FixedSpatialShape OfSphere(FixedVector3 center, FixedQ4816 radius) => new(
+        Box: FixedOrientedBox.AxisAligned(center: center, halfExtents: FixedVector3.Zero),
+        Kind: FixedSpatialShapeKind.Sphere,
+        Radius: radius
+    );
+    /// <summary>Builds an oriented box.</summary>
+    /// <param name="center">The world-space center.</param>
+    /// <param name="rotation">The unit box-to-world rotation.</param>
+    /// <param name="halfExtents">The half-extents along the box's own axes, world units.</param>
+    /// <returns>The box.</returns>
+    public static FixedSpatialShape OfBox(FixedVector3 center, FixedQuaternion rotation, FixedVector3 halfExtents) => new(
+        Box: FixedOrientedBox.FromRotation(center: center, halfExtents: halfExtents, rotation: rotation),
+        Kind: FixedSpatialShapeKind.Box,
+        Radius: FixedQ4816.Zero
+    );
+    /// <summary>Returns whether the shape's closed volume holds a point.</summary>
+    /// <param name="point">The world-space point.</param>
+    /// <returns><see langword="true"/> when the point lies within the sphere's radius or every box-local half-extent;
+    /// <see langword="false"/> when it lies outside or its offset from the center does not fit the carrier.</returns>
+    public bool Contains(FixedVector3 point) {
+        if (Kind == FixedSpatialShapeKind.Sphere) {
+            return (FixedVector3.TrySubtract(
+                difference: out var delta,
+                left: point,
+                right: Center
+            ) && delta.IsWithin(radius: Radius));
+        }
+
+        return Box.Contains(point: point);
+    }
 }
 
 /// <summary>One compiled named volume and its broadphase envelope.</summary>
@@ -282,18 +321,6 @@ public sealed class WorldSpatialQueryIndex {
         );
         return nodeIndex;
     }
-    // Whether a shape's closed volume holds a point; a point whose offset leaves the carrier is outside.
-    private static bool Contains(in FixedSpatialShape shape, FixedVector3 point) {
-        if (shape.Kind == FixedSpatialShapeKind.Sphere) {
-            return (FixedVector3.TrySubtract(
-                difference: out var delta,
-                left: point,
-                right: shape.Center
-            ) && delta.IsWithin(radius: shape.Radius));
-        }
-
-        return shape.Box.Contains(point: point);
-    }
     private static bool IsBlockingPair(WorldPlacementSpatialRole candidate, WorldPlacementSpatialRole existing) =>
         (((candidate == WorldPlacementSpatialRole.Occupation) && (existing is WorldPlacementSpatialRole.Occupation or WorldPlacementSpatialRole.Clearance)) ||
         ((candidate == WorldPlacementSpatialRole.Clearance) && (existing == WorldPlacementSpatialRole.Occupation)));
@@ -351,10 +378,7 @@ public sealed class WorldSpatialQueryIndex {
             var providerCovers = false;
 
             do {
-                providerCovers |= Contains(
-                    volume.Shape,
-                    target
-                );
+                providerCovers |= volume.Shape.Contains(point: target);
                 order++;
                 if (order >= m_influenceOrder.Length) {
                     break;
@@ -531,38 +555,24 @@ public static class WorldSpatialQueryCompilation {
     private static readonly ConditionalWeakTable<WorldPlacementsSection, CompiledIndex> Cache = new();
     private static readonly WorldSpatialQueryIndex Empty = new([]);
 
-    private static FixedAabb BoundsFor(FixedSpatialShape shape) => ((shape.Kind == FixedSpatialShapeKind.Sphere)
-        ? FixedAabb.Around(center: shape.Center, radius: shape.Radius)
-        : FixedAabb.FromCenter(center: shape.Center, extent: shape.Box.WorldExtent));
     private static FixedSpatialShape CompileShape(WorldSpatialShape authored, CompiledPlacementFrame frame) {
         var center = checked((frame.FixedPosition + Rotate(
             vector: checked((FixedVector3.FromVector3(value: authored.Center.Value) * frame.FixedScale)),
             yaw: frame.FixedYawRadians
         )));
         var yaw = checked((frame.FixedYawRadians + FixedQ4816.FromDegrees(degrees: authored.YawDegrees)));
-        var rotation = Yaw(radians: yaw);
 
         if (authored.Kind == WorldSpatialShapeKind.Sphere) {
-            return new FixedSpatialShape(
-                Box: FixedOrientedBox.AxisAligned(
-                    center: center,
-                    halfExtents: FixedVector3.Zero
-                ),
-                Kind: FixedSpatialShapeKind.Sphere,
-                Radius: checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.FixedScale))
+            return FixedSpatialShape.OfSphere(
+                center: center,
+                radius: checked((FixedQ4816.FromDouble(value: authored.Radius) * frame.FixedScale))
             );
         }
 
-        var extents = checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.FixedScale));
-
-        return new FixedSpatialShape(
-            Box: FixedOrientedBox.FromRotation(
-                center: center,
-                halfExtents: extents,
-                rotation: rotation
-            ),
-            Kind: FixedSpatialShapeKind.Box,
-            Radius: FixedQ4816.Zero
+        return FixedSpatialShape.OfBox(
+            center: center,
+            halfExtents: checked((FixedVector3.FromVector3(value: authored.HalfExtents.Value) * frame.FixedScale)),
+            rotation: Yaw(radians: yaw)
         );
     }
     private static FixedVector3 Rotate(FixedVector3 vector, FixedQ4816 yaw) {
@@ -607,7 +617,7 @@ public static class WorldSpatialQueryCompilation {
                 return false;
             }
 
-            bounds = BoundsFor(shape: shape);
+            bounds = shape.Bounds;
             reason = string.Empty;
             return true;
         } catch (OverflowException) {

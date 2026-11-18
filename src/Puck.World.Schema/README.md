@@ -672,7 +672,7 @@ A rejected candidate does not renumber surviving shared-instance identities.
 **Placement facets.** A `WorldPlacement` row (the `placements` section) is a
 creation stamp plus optional facets—`Solid`, `Emission`, `Inhabit`,
 `FaceSources`, `Region` (`WorldPlacementRegion`): a NAMED VOLUME, a
-sphere centered on the placement's own position and addressed by the
+sphere or an oriented box in the placement's resolved frame (`WorldPlacementRegion.ShapeAt`), addressed by the
 placement's own `Id`, that `Server/WorldEventFeed.cs` watches for body
 enter/exit edges (see the puck-world skill's `addons.md`, "World events"); and
 `Attach` (`WorldPlacementAttach`, new): binds the row's resolved world pose to

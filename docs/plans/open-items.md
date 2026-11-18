@@ -2942,8 +2942,9 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: stage 4's places, then
-navigation domains, goal chapters and the seat program that plays them
+Owner: one benchmark lane per stage · high · Next: stage 4's goal chapters,
+the seat program that plays them and wall-contact failure, on the places and
+navigation domains built
 ([the route is places](benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)),
 beside the lead's windowed reading of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
@@ -2951,6 +2952,41 @@ beside the lead's windowed reading of `puck benchmark` on both backends
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
+
+- [high] Baking the debug world's navigation domains costs minutes of one
+  thread: `world.navigation` bakes all eight (99,183 cells) in about 170 s of
+  wall time on the lead machine, a timing lead whose attribution is a sampled
+  trace of the bake: about 69% proving edges (`Domain.HasClearTransition`'s
+  sphere casts) and 31% sampling cells, and inside each distance most of the
+  time in `SdfFieldEvaluator.WalkPoints`, the whole-world field's per-point
+  cull walk, with the valley's relief noise (`Pcg3dLatticeNoise.Fbm3`) the
+  largest shape cost. The domains read the derived solid field
+  (`WorldSolidField.Query`), a second geometry beside the analytic contact
+  provider the Moth collides with, and their rows make every boot compile that
+  field (`WorldTargetSelection.RequiresLineOfSight` counts navigation rows). A
+  route's first search bakes what it reaches on the authority's thread. Fix at
+  the cause: plan against the contact provider the bodies use (an
+  `IWorldQuery` over `WorldColliderSet`, so planning and walking read one
+  geometry and no boot compiles a whole-world field for navigation), or give
+  the field query a spatial partition, then bake off the tick. The seat
+  program lane needs this before routes play live.
+- [medium] The route contact check (`WorldPopulation.FindCheckedRoute`) and the
+  bake disagree near (-4.7, 5.2) on the spawn's ground: `world.navigation route
+  place-stage place-camera-course` answers `walls=3/239` there, a route the
+  field bake admits meeting the analytic contact field (likely a lawn group's
+  contact facet the derived solid field does not hold; unconfirmed). Name the
+  placement (`world.debug-view report contacts`) and fix whichever side is
+  wrong; planning on the contact provider (above) closes the class.
+- [medium] The desktop in the lobby (`place-desktop`, `desktop.puck`) has no
+  walkable navigation cell around the desk and chair, though `debug.go
+  desktop` stands the Moth behind the chair: the field bake blocks about
+  4 x 3.5 m there (`world.navigation map grounds 98 100 12 14`). Find which
+  shape the field holds that the contact provider does not.
+- [medium] The baseline route's third chapter goes off course headless at
+  (24.1, 33.53) in `place-east-wing`, with or without navigation domains: its
+  places visited show it reaching `place-wonderland-threshold` and turning back
+  into the lobby without crossing the painting. Stage 4's goal chapters replace
+  its tick-pinned stick program.
 
 - [high] The same route runner is built four times: the tour's route stops
   (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and

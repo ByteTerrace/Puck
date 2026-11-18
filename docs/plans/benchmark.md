@@ -210,19 +210,34 @@ somewhere else. The owner's direction is that everything a chapter needs to
 know is already defined by the world's own documents, so stage 4 reads it
 from them. In this order:
 
-1. **Places.** A place is a named region of the world: the stage, the valley,
-   the hall's entrance, the lobby, the east wing and its portal, the painting
-   room, the wonderland threshold, the lift and each gallery level. Places are
-   region placements authored in `worlds/debug/` (a placement's region facet,
-   the sensing volume `WorldEventFeed` watches for enter and exit and rules
-   read as occupancy), which gains an oriented box beside its sphere so a room
-   is one region. A place query (`body.place [<body>]`) answers which places a
-   body stands in, innermost first, headless included, and the benchmark names
-   the place of every hitch and of each chapter's end.
-2. **Navigation.** The debug world authors surface navigation domains over the
-   valley and each gallery level (`navigation.domains`, as the pond's `plot`
-   does), compiled at boot from the solid field and answered by
-   `world.navigation`.
+1. **Places** (built). A place is a named region of the world: the stage, the
+   valley, the hall's entrance, the lobby, the east wing and its looping
+   portal, the painting room and its paintings, the wonderland threshold, the
+   machines and the mouse hole beyond it, the stairs, the lift, each lift
+   landing and gallery level, the board room and the valley's areas. Places are
+   region placements (`place-*` in `worlds/debug/places.puck`): a placement's
+   region facet, the sensing volume `WorldEventFeed` watches for enter and
+   exit and rules read as occupancy, is a sphere or an oriented box
+   (`WorldPlacementRegion.ShapeAt`, contained by `FixedSpatialShape.Contains`,
+   the shape the placement spatial index uses too), so a room is one region.
+   `body.place [<body>]` answers which places a body stands in, innermost
+   (smallest) first, from the same occupancy latches, headless included, and
+   answers from the instance a seat stands in after a portal; the reading
+   `seat.<n>.place` gives a HUD the boot world's innermost place. The
+   benchmark reads it at each chapter's start and end and every pose sample:
+   a chapter reports `startPlaces`, `endPlaces` and `placesVisited`, and every
+   hitch its `places`.
+2. **Navigation** (built). The debug world authors surface navigation domains
+   over its walkable spaces (`worlds/debug/navigation.puck`): the ground
+   around the spawn with the hall's level 0 and Wonderland, the valley floor,
+   each upper gallery level and the stairwell of each storey, the last because
+   the switchback stairs repeat every storey and one ground per column cannot
+   hold a level and the flights over and under it. `world.navigation route
+   <from> <to>` searches one route across every domain
+   (`NavigationRuntime.FindRoute`), joined where two aligned grids share a
+   walkable cell, to a place, a spawn point, a body or a point, and checks it
+   against the contact field the Moth collides with; `world.navigation map`
+   draws a domain's cells.
 3. **A chapter is goals, not ticks.** A chapter lists where to go and how: a
    place or waypoint to reach at a pace (walk, run, dash), a rest (stand for a
    time, facing a heading), an interaction (the context button at a spot, then
@@ -252,8 +267,8 @@ Each step's check, run headless unless named:
 
 | Step | Check |
 |---|---|
-| Places | `body.place` names the stage, the hall's entrance, the lobby, the east wing's portal and the wonderland threshold at the owner's waypoints; a benchmark hitch lists its place |
-| Navigation | `world.navigation` lists each domain with its compiled cell count; a route search from the stage to the hall's entrance returns a path that never leaves a domain; the boot's added cost is read from `host.frames` boot |
+| Places | `body.place` names the stage, the hall's entrance, the lobby, the east wing's portal and the wonderland threshold at the owner's waypoints; a benchmark hitch lists its place, and a chapter its places visited |
+| Navigation | `world.navigation` lists each domain with its compiled and clear cell counts; `world.navigation route place-stage <place>` returns a route to every place with `walls=0/<samples>`; the bake's cost is read from `world.navigation` and `host.memory` |
 | Goals and the seat program | A chapter from the stage into the hall arrives with no wall contact at 1× pace, with ticks shed under load, and with the body at wonderland's 0.25 scale; `puck test` and `world.benchmark` give the same accepted input per chapter tick |
 | Failure | A chapter whose goal lies behind a wall fails, naming the wall contact's place and tick; one sent out of its corridor fails naming the place it left |
 | The owner watches | A windowed `puck benchmark --loops 2` of the debug route, both backends, every chapter arriving |

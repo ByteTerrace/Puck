@@ -13,6 +13,7 @@ documentId: "night"
 import "moth-controls"
 import "suit"
 import "size"
+import "place-kit"
 
 // The night field draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -77,6 +78,23 @@ placements {
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
+  }
+
+  // The night field's places (place-kit.puck): the field along the lanterns to the crystal, and the ground before the
+  // arrival frame a crossing walks out onto.
+  placement "place-night-field" {
+    prototype: "place"
+    position [0, 1.5, -24]
+    region {
+      halfExtents [12, 3, 22]
+    }
+  }
+  placement "place-night-arrival" {
+    prototype: "place"
+    position [0, 1.5, -8]
+    region {
+      halfExtents [2, 2, 2]
+    }
   }
 
   // The night painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way

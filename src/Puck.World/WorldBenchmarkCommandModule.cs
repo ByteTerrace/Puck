@@ -86,6 +86,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public IReadOnlyList<string> Gates => Program.Gates;
         public List<(WorldTickScript.Line Line, bool Refusal, int Slot)> Steps { get; } = [];
         public List<WorldTickScript.Line> Poses { get; } = [];
+        public List<WorldTickScript.Line> Places { get; } = [];
+        public WorldTickScript.Line? StartPlace { get; set; }
+        public WorldTickScript.Line? EndPlace { get; set; }
         public List<WorldTickScript.Line> OpenReads { get; } = [];
         public List<WorldTickScript.Line> CloseReads { get; } = [];
         public Dictionary<string, (double Sum, double Max, int Count)> Gpu { get; } = new(comparer: StringComparer.Ordinal);
@@ -142,12 +145,14 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private static partial Regex Pose();
     [GeneratedRegex(pattern: @"facts=(?<facts>[^\s\]]+)", options: RegexOptions.CultureInvariant)]
     private static partial Regex Facts();
+    [GeneratedRegex(pattern: @"places=(?<places>[^\s\]]+)", options: RegexOptions.CultureInvariant)]
+    private static partial Regex PlaceList();
     [GeneratedRegex(pattern: @"^player\.signal (?<source>\S+) (?<value>.+)$", options: RegexOptions.CultureInvariant)]
     private static partial Regex Signal();
 
-    // The lines one loop of the programs arms: each program's rows, its marks, the arrival reads, the two readings
-    // taken at both ends and the samples between.
-    private static int LinesOf(IReadOnlyList<Program> programs) => programs.Sum(selector: static program => (program.Rows.Count + Held(lines: program.Rows.Select(selector: static row => (row.Command, row.Slot))).Count + 5 + (2 * ChapterReads.Length) + (2 * (program.Duration / SampleTicks))));
+    // The lines one loop of the programs arms: each program's rows, its marks, the arrival reads, the places at its start
+    // and end, the two readings taken at both ends and the pose, place and mark samples between.
+    private static int LinesOf(IReadOnlyList<Program> programs) => programs.Sum(selector: static program => (program.Rows.Count + Held(lines: program.Rows.Select(selector: static row => (row.Command, row.Slot))).Count + 7 + (2 * ChapterReads.Length) + (3 * (program.Duration / SampleTicks))));
 
     private CommandResult Run(string reference, string prefix, ulong? at, double budget, int timeout, int loops, string? output) {
         if (m_running) {
@@ -275,6 +280,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 var chapter = new Chapter(loop: loop, program: program, start: next);
                 var index = m_chapters.Count;
                 var where = $"body.where {program.Body.ToString(provider: CultureInfo.InvariantCulture)}";
+                var place = $"body.place {program.Body.ToString(provider: CultureInfo.InvariantCulture)}";
                 // The chapter before this one in the run, whose program may end with controls still held: a chapter
                 // starts from released input whatever came before it, so those are let go on its first tick, ahead of
                 // its own lines.
@@ -294,14 +300,18 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                     chapter.Steps.Add(item: (step, row.Refusal, row.Slot));
                     m_signals.Add(item: (step, row.Slot));
                 }
+                // The chapter's first tick poses the body, so its start place is read on the tick after.
+                chapter.StartPlace = Pin(tick: (next + 1UL), line: place);
                 for (var offset = SampleTicks; (offset < program.Duration); offset += SampleTicks) {
                     chapter.Poses.Add(item: Pin(tick: (next + (ulong)offset), line: where));
+                    chapter.Places.Add(item: Pin(tick: (next + (ulong)offset), line: place));
                     _ = Pin(tick: (next + (ulong)offset), line: $"world.benchmark sample {index}");
                 }
 
                 var end = (next + (ulong)program.Duration);
 
                 chapter.Where = Pin(tick: end, line: where);
+                chapter.EndPlace = Pin(tick: end, line: place);
                 chapter.Hash = Pin(tick: end, line: "world.state.hash");
                 foreach (var read in ChapterReads) {
                     chapter.CloseReads.Add(item: Pin(tick: end, line: read, raw: true));
@@ -550,7 +560,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var disturbed = Disturbances(chapter: chapter, statistics: statistics);
         var arrival = (!read ? "arrival unmeasured (no body pose was read)" : ((failed.Count > 0) ? $"OFF COURSE: {string.Join(separator: "; ", values: failed)}" : ((unjudged.Count > 0) ? $"arrived ({unjudged.Count} gate(s) only the headless test judges)" : "arrived")));
 
-        return $"{arrival}{((disturbed.Count > 0) ? $"; DISTURBED: {string.Join(separator: "; ", values: disturbed)}" : string.Empty)}{((statistics is null) ? string.Empty : $"; {Frames(statistics: statistics)}")}{((chapter.Shed > 0) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; {chapter.Shed} tick(s) shed") : string.Empty)}";
+        var from = PlacesOf(line: chapter.StartPlace) is { Count: > 0 } start ? start[0]!.GetValue<string>() : "none";
+        var to = PlacesOf(line: chapter.EndPlace) is { Count: > 0 } end ? end[0]!.GetValue<string>() : "none";
+
+        return $"{arrival} ({from} to {to}){((disturbed.Count > 0) ? $"; DISTURBED: {string.Join(separator: "; ", values: disturbed)}" : string.Empty)}{((statistics is null) ? string.Empty : $"; {Frames(statistics: statistics)}")}{((chapter.Shed > 0) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; {chapter.Shed} tick(s) shed") : string.Empty)}";
     }
 
     private string Frames(HostFrameStatistics statistics) => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{statistics.Frames} iterations in {statistics.Seconds:0.00} s ({statistics.AverageRate:0.0}/s), interval avg {statistics.Interval.Mean:0.00} p99 {statistics.Interval.P99:0.00} max {statistics.Interval.Max:0.00} ms, work avg {statistics.Work.Mean:0.00} p99 {statistics.Work.P99:0.00} max {statistics.Work.Max:0.00} ms, {statistics.Over} over {m_budget:0.0} ms ({statistics.OverTwice} over twice it)");

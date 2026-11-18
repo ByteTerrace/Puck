@@ -27076,13 +27076,40 @@
             ],
             "properties": {
               "radius": {
-                "description": "The sensing radius, world units. Must be finite and positive (validated).",
-                "type": "number"
+                "description": "The sensing sphere\u0027s radius in world units, or zero for a box. A sphere\u0027s radius must be finite and positive (validated).",
+                "type": "number",
+                "default": 0
+              },
+              "halfExtents": {
+                "description": "The sensing box\u0027s half-extents in world units along its own axes, or absent for a sphere. Each must be finite and positive (validated).",
+                "default": null,
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "center": {
+                "description": "The volume\u0027s center in the placement\u0027s frame, world units (yawed with it, never scaled).",
+                "default": [
+                  0,
+                  0,
+                  0
+                ],
+                "type": "array",
+                "items": {
+                  "type": "number"
+                },
+                "minItems": 3,
+                "maxItems": 3
+              },
+              "yawDegrees": {
+                "description": "A box\u0027s yaw about \u002BY in degrees, added to the placement\u0027s resolved yaw. Ignored by a sphere.",
+                "type": "number",
+                "default": 0
               }
             },
-            "required": [
-              "radius"
-            ],
             "additionalProperties": false,
             "default": null,
             "title": "WorldPlacementRegion"

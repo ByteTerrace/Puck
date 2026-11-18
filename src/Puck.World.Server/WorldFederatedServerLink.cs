@@ -208,6 +208,7 @@ public sealed class WorldFederatedServerLink(IWorldRoutedRequests authority) : I
             WorldQuery.PlayerChannels channels => channels.Index,
             WorldQuery.PlayerInput input => input.Index,
             WorldQuery.PlayerAffordances affordances => affordances.Index,
+            WorldQuery.PlayerPlace place => place.Index,
             WorldQuery.PlayerState state => state.Index,
             WorldQuery.PlayerTargets targets => targets.Index,
             WorldQuery.Contacts contacts => (contacts.Index - 1),

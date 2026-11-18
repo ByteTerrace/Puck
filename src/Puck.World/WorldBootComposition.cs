@@ -796,6 +796,14 @@ public static class WorldBootComposition {
         services.AddSingleton(implementationFactory: static sp => {
             var readings = new PresentationReadings();
             sp.GetService<HostFrameTimeline>()?.RegisterReadings(readings);
+            // Each local seat body's innermost place in the boot world (body.place's `at`), for a HUD template to bind.
+            if (sp.GetService<WorldServer>() is { } server) {
+                for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {
+                    var slot = seat;
+
+                    readings.Register(name: $"seat.{(seat + 1)}.place", read: () => new(PresentationReadingState.Present, Text: (server.Events.SeatPlace(seat: slot) ?? "none")));
+                }
+            }
             return readings;
         });
         services.AddSingleton<IHudBindingResolver>(implementationFactory: static sp => new WorldHudBindingResolver(

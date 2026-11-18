@@ -147,6 +147,14 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
+            name: "body.place",
+            description: "Echoes the places a body stands in — [body.place: body:<n> at=<innermost>|none places=<id>,<id>…|none] — every placement whose region facet (a sphere or an oriented box) holds the body's foot point as of the authority's latest tick, innermost (smallest volume) first, read from the same occupancy latches region events and $region: rules use: " + BodyPlaceForms.Spelling + " (optional body index 0..4095, default 0). A local seat's body answers from the instance the seat stands in, so a body that crossed a portal names that world's places. A trailing instance:<name> reads a named instance's seat (slot 1..WorldBodiesLimits.LocalSeatCount).",
+            forms: BodyPlaceForms,
+            handler: PlaceHandler
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Bindable,
             name: "body.rig",
             description: "Echoes a body's current input mode, named action types/values and continuation alongside its live creation-look rig state: [body.rig: body:<n> creation=<id> speed=s.ss drivers=<count> effectors=<count> driver:<name> phase=p.pp weight=w.ww … effector:<name> weight=w.ww planted=yes|no|stepping target=(x.xx, y.yy, z.zz)|none …]. speed= is the eased rendered speed the moving/still gate tokens test; a driver's phase= is radians in [0, 2pi) and weight= its eased gate value; an effector's target= is the WORLD point its tip is being asked for this frame, so a scripted run can fence twice and assert a planted foot's target is unchanged while body.where moved; planted=stepping is a resting plant mid-step to a new point. An effector whose chain resolved to too few bones prints bones=<count> and is inert. " + BodyRigForms.Spelling + " (optional body index 0..4095, default 0 — 0..3 local seats, 4..4095 simulated entries; a shape name after the index appends shape:<name> parent=<name>|root delta=(x.xx, y.yy, z.zz) turn=r.rr, the parent its motion chains under and the rigid delta the last frame composed for it in creation units and radians, so a live parent or swings edit can be read back, or shape:<name> none when the creation has no such shape). Without a creation rig, including headlessly, input still reads back and creation-rig=none names the absent animation data. A trailing instance:<name> reads that instance with the same zero-based body index.",
             forms: BodyRigForms,
@@ -445,7 +453,7 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldPopu
     // Text mutations enter the same tick snapshots as physical input. Read-only inspection stays immediate so an
     // operator can inspect the last completed tick even while no simulation step is currently due.
     private static CommandDefinition Route(CommandDefinition command) =>
-        ((command.Name is "body.where" or "body.rig" or "player.sticks" or "body.channels" or "body.state" or "body.tether")
+        ((command.Name is "body.where" or "body.place" or "body.rig" or "player.sticks" or "body.channels" or "body.state" or "body.tether")
             ? command
             : command with { Routing = CommandRouting.Simulation }
         );

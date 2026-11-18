@@ -129,7 +129,7 @@
             }
           },
           "min": {
-            "description": "The row-wide declared lower bound every cell\u0027s Value must satisfy, raw-encoded per Kind (raw FixedQ4816 bits for Fixed), or null for none. Independent of Max \u2014 a one-sided range (a floor with no ceiling, or the reverse) is legal; when both are present Min must be less than Max. Legitimate only for Int/Fixed. Omitted from the wire when null. A timer is represented as Int with this at zero.",
+            "description": "The lower bound in the kind\u0027s raw encoding, when declared.",
             "anyOf": [
               {
                 "type": "integer"
@@ -140,7 +140,7 @@
             ]
           },
           "max": {
-            "description": "The row-wide declared upper bound, raw-encoded per Kind, or null for none. Independent of Min; see its remarks. Omitted from the wire when null.",
+            "description": "The upper bound in the kind\u0027s raw encoding, when declared.",
             "anyOf": [
               {
                 "type": "integer"
@@ -151,7 +151,7 @@
             ]
           },
           "capacity": {
-            "description": "The row\u0027s own cell-count ceiling (1..MaxCellsPerRow), or null to fall back to the implicit ceiling. A row declaring Capacity can never be a slot (IsSlot), even if it happens to carry exactly one cell \u2014 declaring a capacity is declaring table intent. Omitted from the wire when null.",
+            "description": "The declared cell limit, when present.",
             "type": "integer"
           },
           "cellSlots": {
@@ -175,7 +175,7 @@
             ]
           },
           "evicts": {
-            "description": "Whether this row is a bounded, FIFO-evicting table. Ordinarily a Capacity is a hard ceiling and a write that would exceed it is refused by name; with this set, such a write instead succeeds and, if it added a new key past capacity, evicts the row\u0027s oldest surviving cell. Eviction runs as a pure function of the candidate cells inside the compose step, so replay reproduces the identical victim, and the dropped key is named on the mutation\u0027s apply echo. Eviction is by insertion position, not recency of touch: a new key is appended to the end of Cells and eviction always drops index 0. Re-writing an existing key updates it in place without moving it \u2014 true FIFO, never LRU. Legitimate only together with a declared Capacity. Default false.",
+            "description": "Whether growth at capacity evicts the oldest member.",
             "type": "boolean"
           },
           "advance": {
@@ -242,7 +242,7 @@
             "$ref": "./common.schema.json#/$defs/StateVisibility"
           },
           "cellVisibility": {
-            "description": "Reserves per-cell audience policies even when no seeded cell declares one. Row visibility alone never enables per-cell restrictions.",
+            "description": "Whether the declaration permits per-cell audience policies.",
             "type": "boolean"
           },
           "knowledge": {
@@ -285,11 +285,11 @@
             "additionalProperties": false
           },
           "phaseOf": {
-            "description": "The phase row required on external gameplay transforms that write this row.",
+            "description": "The required phase protocol\u0027s row name.",
             "type": "string"
           },
           "valuesFrom": {
-            "description": "The discrete topology whose cell ordinals this row\u0027s integer values name \u2014 a value-typing trait, independent of Domain (legitimate only alongside a KeysOf domain over Int cells).",
+            "description": "The topology whose cell ordinals the values name.",
             "type": "string"
           },
           "domain": {
@@ -419,11 +419,11 @@
             "$ref": "./common.schema.json#/$defs/ShapeNonNullable57"
           },
           "space": {
-            "description": "The vector space this row belongs to; required for Vector, refused for every other kind.",
+            "description": "The vector space name.",
             "type": "string"
           },
           "enum": {
-            "description": "The StateEnum this row\u0027s integer values name, or null for a row whose values carry no symbolic domain. Legitimate only for Int cells, and only naming an enum the section declares.",
+            "description": "The integer values\u0027 symbolic domain.",
             "type": "string",
             "title": "CellName"
           },
