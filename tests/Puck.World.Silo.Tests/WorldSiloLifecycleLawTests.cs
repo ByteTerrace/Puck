@@ -280,10 +280,9 @@ public sealed class WorldSiloLifecycleLawTests {
             identity.World.Value,
             out var active
         ));
+        // The subject is the declared authority namespace or the world's stable name, never the endpoint.
         Assert.Equal(
-            (colocated
-            ? identity.World.Value
-            : "localhost:7825"),
+            identity.World.Value,
             active!.Federation.Subject
         );
         Assert.Equal(

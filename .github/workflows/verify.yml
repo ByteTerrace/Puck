@@ -57,6 +57,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install the pinned .NET SDK
         uses: ./.github/actions/setup-dotnet
+      # The AGB battery derives its BIOS with clang and ld.lld at the pinned floor; the runner's own clang is older.
+      - name: Install native product toolchains
+        uses: ./.github/actions/setup-toolchains
       - name: Restore corpus cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
