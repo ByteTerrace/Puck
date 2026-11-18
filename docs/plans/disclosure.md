@@ -2088,6 +2088,13 @@ authority and restricted access alike.
 Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
 and disclosure images.
 
+Private draw sites install their keys at authority load and whole-row
+composition through `WorldPrivateDrawKeys.TryInstall`. An operator editing
+a row reads its replica declaration. Submitting that declaration preserves
+the installed key, and the source contract refuses a submitted secret.
+The [generator reference](../reference/state/generators.md#keep-draws-private)
+describes authority recovery and what a published world carries.
+
 `world.state.cell.set` now acquires only the addressed submission link. It
 sends the raw operand for every row kind, and compose interprets it after
 admission against the candidate produced by earlier writes. A console handler

@@ -149,7 +149,7 @@ public sealed class StateReadAccessLawTests {
     [Fact]
     public void StreamSecretsAndProtocolSequencesNeverEnterTheDeclaration() {
         var row = new StateRow(CellName.Parse("draw"), CellKind.Int, Domain: StateDomain.Keys.Instance,
-            Draw: new Draw(Source: CellName.Parse("source"), PrivateStream: true, Secret: new ClosedBitset256(Word0: 7)),
+            Draw: new Draw(Source: CellName.Parse("source"), PrivateStream: true) { Secret = new ClosedBitset256(Word0: 7) },
             Phase: new StatePhase(19), DrawCursor: 8, HistoryCursor: 23);
         var changed = row with {
             Draw = row.Draw! with { Secret = new ClosedBitset256(Word0: 97) },

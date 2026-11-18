@@ -228,10 +228,9 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
         return new CompiledWorldChunks(chunks: [.. m_chunks, chunk]);
     }
 }
-/// <summary>The <c>DEFN</c> chunk: the drawn, resolved definition (<see cref="WorldDefinitionLoader.TryDraw"/>) as
-/// compact canonical JSON (<see cref="WorldDefinitionSerialization.SerializeCompact"/>). It reads nothing beyond the
-/// definition the header keys, so it records no inputs; loading it parses the JSON and resolves its state references,
-/// in place of drawing the authored definition again.</summary>
+/// <summary>The <c>DEFN</c> chunk stores the resolved definition as compact canonical JSON. When the world
+/// declares private draws, it stores the undrawn source so the loading authority performs its own first fills.
+/// Its only input is the definition identified by the header.</summary>
 public sealed class DefinitionChunk : ICompiledWorldChunk {
     private DefinitionChunk() { }
 
@@ -261,7 +260,9 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
         context.Drawn = (drawn with { DocumentDirectory = context.DocumentDirectory });
         product = new CompiledWorldProduct(
             Inputs: [],
-            Payload: WorldDefinitionSerialization.SerializeCompact(definition: drawn)
+            // A compiled product can ship to players. Private first fills belong to the loading authority.
+            Payload: WorldDefinitionSerialization.SerializeCompact(definition:
+                context.Authored.AuthoredState.Any(row => row.Draw?.PrivateStream == true) ? context.Authored : drawn)
         );
         return true;
     }
@@ -290,6 +291,11 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
             return false;
         }
 
+        if (drawn!.AuthoredState.Any(row => row.Draw?.PrivateStream == true)) {
+            if (!WorldDefinitionLoader.TryDraw(drawn, context.SourceName, context.InstanceIdentity, out var installed, out reason)) { return false; }
+            context.Drawn = installed with { DocumentDirectory = context.DocumentDirectory };
+            return true;
+        }
         if (!WorldStateDocumentValues.TryResolve(
             definition: drawn!,
             reason: out var referenceReason,

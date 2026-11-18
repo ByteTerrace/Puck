@@ -28,7 +28,8 @@ public static class TransformWork {
     private const long PrivateSample = 512L;
     // Pcg32Extended ticks its table once every 2^16 base draws, a mixed-radix increment over all k words.
     private const long TableTickPeriod = 65_536L;
-    // A live store into a traited row also rebases the cell's six clock lanes (StateArena.WriteClockAt).
+    // A cell can override the row's behavior. Price the six clock lanes a live write may rebase
+    // without inspecting current members, including on an authored row with no row-level trait.
     private const long ClockEntries = 6L;
 
     /// <summary>Returns the work one board cell store costs.</summary>

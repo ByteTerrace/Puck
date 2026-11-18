@@ -377,6 +377,9 @@ public static class WorldStateDisclosure {
         );
     }
     internal static WorldStateDisclosed DiscloseDocument(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted, DisclosedFields? fields) {
+        if (definition.Generation is { DrawOwner: not null } generation) {
+            definition = definition with { Generation = generation with { DrawOwner = null } };
+        }
         var observer = new Observer(
             arena: arena,
             recipient: recipient,

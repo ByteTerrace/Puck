@@ -84,6 +84,13 @@ public static class WorldCommandArguments {
         return tail.ToString();
     }
 
+    internal static string CellOperand(string raw, bool numeric, out bool add) {
+        var tail = raw.AsSpan();
+        var separator = numeric ? EndOfToken(tail) : -1;
+        add = separator >= 0 && string.Equals(Unwrap(tail[separator..].Trim()), "add", StringComparison.OrdinalIgnoreCase);
+        return Unwrap(add ? tail[..separator] : tail);
+    }
+
     /// <summary>Strips the verb token alone.</summary>
     /// <param name="context">The invoking context, whose <see cref="CommandContext.Text"/> carries the raw line.</param>
     /// <param name="args">The tokenized arguments, the fallback when no raw line exists (a bound or programmatic call).</param>

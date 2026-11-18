@@ -51,7 +51,6 @@ public enum DrawTiming : byte {
 /// declared one.</param>
 /// <param name="Timing">When this site draws and whether it may be redrawn (see <see cref="DrawTiming"/>).</param>
 /// <param name="PrivateStream">Whether samples use the keyed algorithm. Observers can price it without the authority key.</param>
-/// <param name="Secret">An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.</param>
 /// <param name="Skip">An authored seek, non-negative, default <c>0</c>: a rebuild advances the generator by
 /// <c>skip + cursor</c> rather than <c>cursor</c>. Authored data, the same class as the seed ladder's
 /// own rungs — it never writes the persisted <see cref="StateRow.DrawCursor"/>, which keeps counting raw words from
@@ -61,7 +60,10 @@ public sealed record Draw(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CellName? Source = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateGenerator? Generator = null,
     DrawTiming Timing = DrawTiming.Boot,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ClosedBitset256? Secret = null,
     long Skip = 0L,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PrivateStream = false
-);
+) {
+    /// <summary>The installed authority key. Authority snapshots serialize this member.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClosedBitset256? Secret { get; init; }
+}

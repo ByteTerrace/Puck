@@ -5,6 +5,57 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed class DisclosureReviewLawTests {
+    [Fact]
+    public void PrivateDrawEditSaveAndReloadResumeTheAuthorityStream() {
+        var row = new WorldStateRow(CellName.Parse("dice"), CellKind.Int,
+            Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event, PrivateStream: true));
+        var source = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [], Generation = new WorldGenerationDefaults(42) };
+        Assert.True(WorldDefinitionLoader.TryDraw(source, "law", "boot", out var drawn, out var reason), reason);
+        Assert.True(WorldDefinitionLoader.TryDraw(source, "law", "boot", out var repeat, out reason), reason);
+        Assert.Equal(drawn.AuthoredState[0].Cells![0].Value, repeat.AuthoredState[0].Cells![0].Value);
+        using var fixture = Fixtures.FreshServer(drawn);
+        var server = fixture.Server;
+        var visible = View(server, Principal.Console).Definition.AuthoredState[0];
+        Assert.Null(visible.Draw!.Secret);
+        var key = drawn.AuthoredState[0].Draw!.Secret;
+        Assert.NotNull(key);
+        Assert.False(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, drawn.AuthoredState[0])));
+        Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, visible with { Max = long.MaxValue })));
+        Assert.Equal(key, server.ExportDefinition().AuthoredState[0].Draw!.Secret);
+        var generate = new WorldMutation.Generate(Principal.Console, "dice");
+        Assert.True(Apply(server, generate));
+        var saved = server.ExportDefinition();
+        Assert.True(WorldDefinitionLoader.TryLoad(WorldDefinitionSerialization.SerializeAuthored(saved), "save", out var loaded, out reason), reason);
+        using var resumed = Fixtures.FreshServer(loaded);
+        for (var i = 0; i < 3; i++) {
+            Assert.True(Apply(server, generate));
+            Assert.True(Apply(resumed.Server, generate));
+            var expected = server.ExportDefinition().AuthoredState[0];
+            var actual = resumed.Server.ExportDefinition().AuthoredState[0];
+            Assert.Equal(expected.DrawCursor, actual.DrawCursor);
+            Assert.Equal(expected.Cells![0].Value, actual.Cells![0].Value);
+        }
+        Assert.False(WorldDefinitionLoader.TryLoad(WorldDefinitionSerialization.Serialize(saved), "source", out _, out reason));
+        Assert.Contains("secret", reason, StringComparison.OrdinalIgnoreCase);
+        var replacement = visible with { Draw = visible.Draw with { Timing = DrawTiming.TickPeriod } };
+        Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, replacement)));
+        Assert.NotEqual(key, server.ExportDefinition().AuthoredState[0].Draw!.Secret);
+        Assert.True(Apply(server, generate));
+    }
+
+    [Fact]
+    public void QuotedNumericAddUsesTheCommandOperandBoundaries() {
+        var row = new WorldStateRow(CellName.Parse("score"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(7))]);
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] });
+        var mutation = new WorldMutation.UpsertStateCell(Principal.Console, "score", StateRow.SlotKey.Value, 0, WorldDocumentWriteKind.Set,
+            RawToken: "\"5\" add");
+        Assert.True(Apply(fixture.Server, mutation));
+        Assert.Equal(12, fixture.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.Raw);
+    }
+
+    private static bool Apply(WorldServer server, WorldMutation mutation) =>
+        server.TryApplyMutation(mutation, server.CompletedTick, server.CompletedEngineTicks, SubmissionEnvelope.LocalConnectionId, 0, false);
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -15,7 +66,7 @@ public sealed class DisclosureReviewLawTests {
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 CellName.Parse("dice"), CellKind.Int,
                 Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw),
-                    Timing: DrawTiming.Event, PrivateStream: true, Secret: secret),
+                    Timing: DrawTiming.Event, PrivateStream: true) { Secret = secret },
                 Visibility: restricted ? new StateVisibility(Readers: ["seat1"]) : null)])
         };
         using var fixture = Fixtures.FreshServer(definition);

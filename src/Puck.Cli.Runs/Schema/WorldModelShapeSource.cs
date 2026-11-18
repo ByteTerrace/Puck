@@ -21,7 +21,7 @@ public static class WorldModelShapeSource {
 
     // The resolver's description of a type, unconfigured; null when the context does not describe it.
     public static JsonTypeInfo? Describe(Type type) {
-        var options = WorldJsonContext.Default.Options;
+        var options = WorldJsonContext.Authored.Options;
         JsonTypeInfo? info;
 
         try {

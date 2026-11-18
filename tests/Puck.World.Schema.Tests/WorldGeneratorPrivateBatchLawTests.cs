@@ -9,7 +9,7 @@ public sealed class WorldGeneratorPrivateBatchLawTests {
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
         var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
         var row = new WorldStateRow(Name: CellName.Parse(candidate: "privateTray"), Kind: CellKind.Int, Capacity: 2,
-            Draw: new Draw(Generator: source, Timing: DrawTiming.Event, PrivateStream: true, Secret: key),
+            Draw: new Draw(Generator: source, Timing: DrawTiming.Event, PrivateStream: true) { Secret = key },
             Cells: [new StateCell(CellName.Parse(candidate: "a"), CellValue.Int(value: 0)), new StateCell(CellName.Parse(candidate: "b"), CellValue.Int(value: 0))]);
         var definition = new WorldDefinition(StateRaw: new WorldStateSection(World: [row]));
         var seed = GeneratorEngine.ComputeDrawSeed(documentSeed: 42, instanceIdentity: "law", site: "state.privateTray");

@@ -1214,9 +1214,13 @@ public sealed partial class WorldDocument {
                         return false;
                     }
 
+                    if (!WorldPrivateDrawKeys.Authority.TryInstall(current, instanceIdentity, m.Row, previousRow, out var installed, out reason)) {
+                        candidate = current;
+                        return false;
+                    }
                     var declared = current.WithWorldState(rows: Upsert(
                         list: current.AuthoredState,
-                        item: m.Row,
+                        item: installed,
                         keyOf: static row => row.Name
                     ));
                     var time = ComposeTime(

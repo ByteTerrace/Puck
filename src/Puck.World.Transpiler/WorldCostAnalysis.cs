@@ -15,7 +15,7 @@ public static class WorldCostAnalysis {
         if (!WorldJsonPayload.TryParse(
             deferDrawSites: true,
             json: compilation.RequireJson().ToJsonString(),
-            info: WorldJsonContext.Default.WorldDefinition,
+            info: WorldJsonContext.Authored.WorldDefinition,
             value: out var definition,
             error: out var reason)) {
             throw new InvalidOperationException(message: reason);
@@ -23,7 +23,7 @@ public static class WorldCostAnalysis {
         if ((definition.Basis is not null) || (definition.Imports is { Count: > 0 })) {
             throw new InvalidOperationException(message: "Cost analysis requires the complete composed document, not a source with unresolved basis or imports.");
         }
-        if (!WorldDrawBootResolver.TryResolve(definition: definition, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out reason, resolved: out var drawn)
+        if (!WorldDrawBootResolver.TryResolve(definition: definition, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out reason, resolved: out var drawn, keys: WorldPrivateDrawKeys.Preview)
             || !WorldStateDocumentValues.TryResolve(definition: drawn, reason: out reason, resolved: out var resolved)) {
             throw new InvalidOperationException(message: reason);
         }

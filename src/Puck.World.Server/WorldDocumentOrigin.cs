@@ -258,6 +258,7 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
             instanceIdentity,
             neighbours.ResolveHostedAsync,
             cancellationToken,
+            drawOwner: m_owner,
             documentDirectory: m_documentDirectory
         ).ConfigureAwait(continueOnCapturedContext: false);
 
