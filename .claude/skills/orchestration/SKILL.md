@@ -293,6 +293,8 @@ Duplicates kept arriving after every agent was told to watch for them, because
 nothing in the flow checked: lanes search by name and miss the copy under
 another name, a `private` helper looks local, parallel worktrees merge
 cleanly, and the lead trusted **Systems considered** and filed what it found.
+After every merge that changes code a World runs (the authority, the schema, rules, state, search, input), the lead boots the merged tip headless and asks it `body.where` before pushing; a compile or `compile --validate` proves the document, not the boot. A merge once passed every build and validation and stopped the debug world from constructing, because a search change recompiled every rule against a projected document at boot; the next lane's review found it, not the landing.
+
 So the lead checks at landing. Before merging a writing lane, run
 `puck scan --only duplicates --against <integration> --head <branch>` from a
 checkout of the integration tip. It lists the types and methods the branch adds
