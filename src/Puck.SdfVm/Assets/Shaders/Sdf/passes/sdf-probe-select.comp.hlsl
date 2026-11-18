@@ -58,7 +58,9 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     uint phase = sdfProbeInput[at] >> 2;
     bool phaseDue = (asuint(cadence.w) + phase) % (uint)cadence.y == 0;
     bool forced = cadence.z > 0 && age >= cadence.z;
-    bool due = essential || forced || (sweep != asuint(state.w) && (cadence.x == 0 || phaseDue));
-    bool stale = !due && (lighting != asuint(state.z) || sweep != asuint(state.w));
+    // A probe relit in this sweep waits for the next one unless the lighting it was relit under has been replaced.
+    bool behind = lighting != asuint(state.z) || sweep != asuint(state.w);
+    bool due = essential || forced || (behind && (cadence.x == 0 || phaseDue));
+    bool stale = !due && behind;
     sdfProbeHitsRW[id.x] = (trace ? 1u : 0u) | (due ? 2u : 0u) | (stale ? 4u : 0u);
 }
