@@ -1006,9 +1006,9 @@ remaining reds and the Moth's shin groups share.
   the same edges. The one detail rule exposes the defect and does not cause
   it.
 - [high] [Moving blends](moving-blends.md) steps 4 and 5: paints, insets and
-  lanes across a blended seam, then retiring the settle rebake for dynamic
-  groups that are not rest skins, with the quiet-window cost of a skinned
-  close-up and a crowd on both backends.
+  lanes across a blended seam, then the quiet-window cost of a skinned
+  close-up and a crowd on both backends. Retiring the settle rebake moved to
+  gap 8's step G1.
 - [medium] The curvature gate refines sharp creases as turns (toes and soles
   about twice over): the samples cannot tell a crease from a fillet narrower
   than a cell. A measured cell whose fine samples are two affine faces takes
@@ -1888,18 +1888,12 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
-- [high] A cutter that moves against its group's baked mesh does not
-  re-carve it: the glacier's retreat as one cutter walking up the ice (the
-  moving half-space the stage table describes) showed no change at any pose, so
-  the ice melts by plates sinking into the trough's floor. The settle rebake
-  (`SdfMeshPathBake.Settle`) is the mechanism the moving-blends plan owns; a
-  moving subtraction would give a true retreating front and thinning. A slide is
-  also capped at four creation units, so a long travel rides four slides a plate
-  or a chain of carriers.
-- [high] The ice carries no relief noise: a `noise` facet is refused on an
-  animated creation, and the glacier is animated. It is authored from chamfered
-  plates and wedge cuts instead; relief would break their planes into
-  hummocks.
+- [high] The glacier wastes back only by scaling about its head (`sizeBy` in
+  the standard's `glacierMass`), which the look critic rejected. A cutter that
+  moves against the ice keeps the cut it makes at rest, and a creation with such
+  a cutter refuses its relief. Both are
+  [moving blends' gap 8](moving-blends.md#gap-8-a-cutter-that-moves-against-the-surface-it-cuts),
+  whose step G4 rebuilds the glacier's retreat as a cut.
 - [high] Small stones in a wall sector bake at the sector's coarse cell, so the
   trough's moraine and grooves read as flat-shaded polygons; the lake's
   stones are creations of their own for that reason, at a preview cost of

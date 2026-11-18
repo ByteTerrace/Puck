@@ -691,8 +691,8 @@ laws exercise that boundary.
   share group-relative dual quaternions and corrected normals (`frame/sdf-mesh-skin.hlsli`). See
   [moving blends](../SKILL.md#moving-blends) for the complete contract and checks.
 - **Rest skins never settle-rebake.** `SdfMeshPathBake.Settle` excludes rest-pose skins. The older
-  non-rest dynamic path and `SdfMeshSettle` counters remain until step 5 of the moving-blends plan
-  deletes them. Material coordinates still use the nearest member until step 4; geometry continuity
+  non-rest dynamic path and `SdfMeshSettle` counters remain until gap 8's step G1 of the moving-blends plan
+  deletes them; no emitter writes a non-rest skin today, so its watch lists no group. Material coordinates still use the nearest member until step 4; geometry continuity
   alone does not prove that paints and lanes follow the seam.
 - **A landing mesh rebuilds the draws.** A group that bakes again draws the mesh
   it replaces until its own lands, so it counts as drawn already; `Land` and

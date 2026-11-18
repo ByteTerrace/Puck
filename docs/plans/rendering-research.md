@@ -1378,7 +1378,7 @@ rebuilt lake and glacier.
 | 5. Water's colour and opacity do not follow depth over the bed | The lake, the pool, the river and the plunge: one flat colour, no clear shallows, stones invisible | The water's medium is a function of the path length along the view ray to the first opaque surface (`sdfGlassThicknessAt`), with one scatter colour and one coefficient for the material. Nothing gives shading the water's depth over its bed | The lake over its bowl and stones | [Water](water.md) | Starts now |
 | 6. A flow layer carries one velocity | The lake's outlet sill, the river's winding course and the falls | A palette's flow layer has one `Velocity` for the whole surface (`PaletteFlowDocument`) | The lake's sill, where the water should speed up and nowhere else | [Water](water.md) | Starts now |
 | 7. A feature thinner than the bake's cell is lost or faceted | Six of the fourteen blend exhibits, the Moth's shin rims, the swallow's streamers, and every grass blade | A tip thinner than about one and a half cells stops short, and a cell that cannot resolve its faces is contoured wrongly (decision 10) | The blend exhibits' mesh audit, and the swallow's streamers | [Bake detail](open-items.md#bake-detail) | Starts now, with the count of flagged cells. The contour rule follows the count, and builds its own check first: an audit of every stored mesh |
-| 8. A moving cutter does not re-carve a baked group, and an animated creation takes no relief | The glacier: it cannot retreat by a cut, so it melts by sinking, and its ice carries no relief | The bake watches only skinned groups for a second bake at their settled pose (`SdfMeshPathBake`), and a slide is capped at four units | The glacier across the stages of its retreat | [Moving blends](moving-blends.md) | Starts now |
+| 8. A cutter that moves against the surface it cuts keeps its rest cut, and a creation with one takes no relief | The glacier: it wastes back only by scaling about its head (`sizeBy`), which the look critic rejected; its relief works only because nothing in it moves apart. Also a door carved into rock, and erosion | A cut across motion owners splits the group and each part borrows the cutter at its authored pose (`CreationMotionPlan.Borrows`), and relief refuses any independently moving shape (`CreationMotionPlan`, PUCK030) | The glacier retreating by a cut up its trough | [Moving blends](moving-blends.md#gap-8-a-cutter-that-moves-against-the-surface-it-cuts), designed | Starts now, with step G1 |
 | 9. A camera inside water sees a flat wash | The four water places, whenever the player swims | The glass pass has no case for an eye inside a medium (decision 14) | A dive in the pool | [Water](water.md) | Starts now |
 | 10. A paint does not follow a blended seam between parts that move | The Moth and the swallow | Material coordinates across a blended seam are not blended | A painted marking on a rigged head | [Moving blends](moving-blends.md), its step 4 | Starts now. The two creations themselves wait for the owner's pair session |
 | 11. A primitive under a non-uniform scale gives a bound, not a distance | Any stretched cutter, the lake's bowl among them: it frays the surface it cuts | The scaled primitive answers a bound on distance | A stretched ellipsoid cut | [Rendering](rendering.md#bake-quality). The design is decided | Starts now |
@@ -1389,14 +1389,13 @@ order below: the missing colour conversion, the shadow maps held by an
 unlit light, and nested views with no shadows.
 
 Checked for this table: the relief's fields and its cap, the smooth cap,
-the switch and its default, the flow layer's one velocity, the slide's
-cap, the settle watch's condition, the glass thickness the medium reads,
-and the light count. Not checked: the 2.8 m and 1.56 m cells and the
-120 m split are the terrain plan's readings, the thin-tip limit and the
-unblended paint are the modeling plan's, and that a cut group is not
-watched for a second bake is inferred from the watch's condition and
-from the lane's observation that a moving cutter changed nothing. None
-of the gaps was reproduced for this page.
+the switch and its default, the flow layer's one velocity, the glass
+thickness the medium reads, and the light count. Gap 8's cause was read in
+the code and reproduced at compile time by its design
+([moving blends](moving-blends.md#what-the-gap-is-in-the-code)). Not
+checked: the 2.8 m and 1.56 m cells and the 120 m split are the terrain
+plan's readings, and the thin-tip limit and the unblended paint are the
+modeling plan's. No other gap was reproduced for this page.
 
 ### Work that starts now
 

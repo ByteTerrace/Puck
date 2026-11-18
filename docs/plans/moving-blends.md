@@ -12,8 +12,9 @@ blend past its admitted envelope is split and bakes as a crease, which PUCK122
 reports. The rendering skill's
 [mesh-bake reference](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)
 owns the built contract. What remains is step 4 (paints and lanes across the
-seam), step 5 (the settle mechanism's deletion and the cost reading) and the
-envelope published as a bound. The tags (F1) to (F9) in the headings name the
+seam), step 5 (the cost reading), the envelope published as a bound, and gap 8
+(a cutter that moves against the surface it cuts), whose first step deletes the
+settle mechanism. The tags (F1) to (F9) in the headings name the
 design review's findings each section answers.
 
 ## The invariants any answer keeps
@@ -256,17 +257,11 @@ it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)):
   next step of this plan, and it goes first. The two creations wait for the
   owner's pair session, so the step's own check is the striped palette across a
   moving neck, not either creation.
-- **Gap 8: a moving cutter does not re-carve a baked group, and an animated
-  creation takes no relief.** The bake watches only skinned groups for a
-  second bake at their settled pose (`SdfMeshPathBake.Settle`), and a carve
-  that moves against the surface it cuts keeps its rest cut
-  (`CreationMotionPlan.Borrows`). The glacier therefore cannot retreat by a
-  cut and melts by sinking, and its ice carries no relief. This plan's design
-  does not yet cover it (see [the scope](#scope-it-does-not-cover)), so its
-  first action is a design that says how a moving cutter re-carves a group and
-  whether an animated creation can take relief, with a check on the glacier's
-  retreat. Step 5 deletes the settle rebake, which is the mechanism this gap's
-  answer may reuse, so step 5 waits for that design.
+- **Gap 8: a cutter that moves against the surface it cuts keeps its rest
+  cut, and a creation with such a cutter takes no relief.** The design is
+  [its own section below](#gap-8-a-cutter-that-moves-against-the-surface-it-cuts).
+  Its first step deletes the settle rebake, so step 5 shrinks to its cost
+  window.
 
 ## Steps, each with the check that shows it worked
 
@@ -375,10 +370,10 @@ lead's eval window.
    weathering, and blended lanes, in the opaque and glass passes. Check: a
    striped palette across a moving neck, captured in a presented burst, shows
    stripes fixed to the surface.
-5. **Settle retired and cost measured.** Delete the settle rebake and its
-   counters once steps 1 to 3 hold. Then run the quiet window above. Checks:
-   `world.counters sdf.mesh-settle` no longer exists, and the frame bar holds in
-   the close-up and the crowd on both backends.
+5. **Cost measured.** Gap 8's step G1 deletes the settle rebake and its
+   counters ([below](#relation-to-step-5-the-settle-rebake)). Then run the quiet
+   window above. Check: the frame bar holds in the close-up and the crowd on
+   both backends.
 
 6. **The envelope as a bound.** The group's admitted separation `D` is published
    in the mesh and its record, so a blended draw's box can be its members' boxes
@@ -387,14 +382,336 @@ lead's eval window.
    vertex of a blended group against that box and prints the largest excursion
    beside `D`; none exceeds it.
 
+## Gap 8: a cutter that moves against the surface it cuts
+
+A cutter is a shape that removes material: a subtraction, or an intersection,
+in the creation's field (`SdfBoundAlgebra.Carves`). The gap is a cutter whose
+motion differs from the surface it cuts: a glacier's front walking up its ice,
+a door carved into rock that opens, erosion eating a bank. This section says
+what blocks it in the code, then designs a fix that re-bakes only the part of
+the surface the cutter actually reaches, and resolves the conflict with step 5.
+
+### What the gap is in the code
+
+The rendering plan's table describes the glacier as melting by sinking and
+carrying no relief. Both descriptions are stale. The glacier is the standard
+template `glacierMass` (`worlds/standard/water.puck`), placed by
+`worlds/debug/water-scenery.puck`. Its ice is overlapping superellipsoid lumps
+with swept furrows cut out of them, under a `noise` relief, and it shrinks by
+`sizeBy: state.glacierLength` about its head, so the toe retreats as the whole
+creation scales. Relief on a creation that moves as a whole already works: the
+pooled emitter bakes such a creation as one composed field in the root's units
+(`WorldPlacementStamper.EmitRootSurface`). The look critic rejected that
+shrink, because it reads as an object shrinking, not ice wasting back. Ice that
+wastes back needs a cut that moves up the ice, and two restrictions stop that
+today.
+
+1. **A moving cutter turns off relief.** `CreationMotionPlan` throws when a
+   creation has `noise` and any shape moves independently ("Noise relief
+   requires every shape to ride the creation root; independently moving parts
+   cannot share its field."), and the world validator refuses the same document
+   (PUCK030). A probe (a relieved box with a sphere cutter sliding through it)
+   gives, under `puck compile --validate`:
+
+   ```text
+   error PUCK030: prototypes[507].doc.noise requires motion of the creation as a whole — frames, shape drivers or effectors that move its parts cannot share one relief field.
+   ```
+
+2. **A moving cutter keeps the cut it makes at rest.** A hard subtraction has
+   no continuous share between its two sides, so its envelope is refused
+   (`CreationMotion.Envelope`, "blend has no continuous share") and the group
+   splits by motion owner (`CreationMotion.CreasedGroups`, then the partition
+   in `CreationMotionPlan`). Each partition borrows the other owner's cutter
+   and emits it riding the partition's own slot (`CreationMotionPlan.Borrows`,
+   used by `WorldCreationInstances.EmitGroup`), so the surface's group bakes
+   the cutter where it was authored and never reads where the cutter is now.
+   The same probe without relief validates with only this warning:
+
+   ```text
+   warning PUCK122: prototypes[507].doc.shapes[1].blend: creation 'gap8-slab' joins shape 'cutter' to group 1's shape 'ice' by Subtraction: theta=Infinity deg (limit 60), D=Infinity (limit 0); bakes as a crease; a smooth skin requires bounded motion and a CPU-readable field (blend has no continuous share).
+   ```
+
+Three things the gap entry named are not the cause:
+
+- **The settle watch.** It lists only groups with a skin that are not rest
+  skins (`SdfMeshPathBake.WatchSettles`). Every dynamic instance the pooled
+  emitter writes is a rest skin (`WorldCreationInstances.EmitGroup` and its
+  siblings pass `restPoseSkin: true`), and the other dynamic emitters
+  (`WorldPlacementStamper.EmitRootSurface`, `WorldRigCatalog`) read only their
+  own slot, so no group has a skin to watch. Inferred from the emitters, not
+  read from a running World: `world.counters sdf.mesh-settle` would read zero
+  on the debug world if the inference holds. A partition that borrows a cutter
+  reads no other slot either, so the watch would not see it in any case.
+- **A static group that reads a moving slot.** Such a group exists in the
+  geometry (`SdfMeshGeometryBuilder.ReadsSlots`), but it is planned again only
+  when a new program arrives (`SdfMeshPathBake.Restart`), never as the slot
+  moves.
+- **The slide cap.** A slide's amplitude is capped at four creation units
+  (`ShapeSlideDocument.MaxAmplitude`) because a slide past it would leave the
+  placement's render bound. A `linear` wave on a `state.<row>` driver already
+  reaches any distance through the driver's cadence, so the cap is an authoring
+  nuisance. It also has no reason to apply to a cutter: a cut never grows the
+  surface it cuts.
+
+The proportional answer matters because the glacier is one group. A CPU bake
+of it (`puck mesh audit --cpu --world worlds/debug/debug.puck --prototype
+glacier --tier 6`) plans one dynamic, unchunked group and reports about 5.3
+million samples and 262,000 triangles at the 64 mm tier, the tier a view from
+the valley floor asks for. Re-baking that whole group every time a cutter
+moves one cell would cost as much as baking the glacier from scratch, each
+time.
+
+### Options
+
+| Option | Why not, or why |
+|---|---|
+| Bind the cutter's position to state, so each write rebuilds the document | A program rebuild per state write, and every group the cutter's program touches bakes whole again. Rejected |
+| Rebake when the pose holds still (the settle rebake) | A retreat never holds still, so it never rebakes. Rejected |
+| Skin the cut face to the cutter's slot | A hard cut has no share to blend by. The cut face would ride the cutter while its rim stays on the ice, so it stretches. Rejected |
+| Splice re-contoured cells into the old mesh | The contour is not local: refinement budgets the whole group (`SdfSampledLattice.Refine`), planar regions grow across it (`SdfMeshPlanarMerge`) and collapse orders it globally (`SdfMeshCollapse`). Rejected |
+| The cutter as an input of the surface's group, the group re-planned when the input moves (G1) | Correct and simple, and reuses the bake's existing re-plan of a moved input. On its own it re-bakes the whole group per step. Kept as the first step |
+| G1 over source tiles, with each tile keyed by the cutter only where the cutter reaches it (G3) | Work follows the change: only the tiles the cutter's reach meets bake again. Recommended |
+
+### The design
+
+**A moving cutter becomes an operand of the surface's group.** An operand is a
+cutter that rides its own motion owner's slot inside the group of the surface
+it cuts, where today it is borrowed at rest. The group's field is the surface
+with the cutter where the cutter is now, so a bake of the group is a correct
+bake of the carved surface. An operand is not a skin member: no vertex rides
+it, and the group's mesh is drawn rigid in the group's own frame. Every vertex
+of the cut face lies on the surface's owner, so the cut face stays still while
+the cutter moves; only a new bake moves it.
+
+- `CreationMotionPlan` classifies an owner as an operand owner when it and
+  every shape it carries cut (`SdfBoundAlgebra.Carves`). An operand owner still
+  gets a slot. It does not partition a group, it does not count as part motion
+  for relief, and its cutter is emitted inside the group that holds the
+  surface, on its own slot.
+- The emitter marks the cutter's read of its slot as an operand
+  (`SdfOp.TransformDynamic` with an operand flag, or the instance's list of
+  operand slots; the implementing lane picks the one the kernel needs no change
+  for, since the bake kernel already samples any slot through the group's pose
+  rows).
+- `SdfMeshGeometryBuilder` is the one door. It hashes an operand slot's pose,
+  relative to the group's own frame and snapped to the group's re-carve step,
+  as a fact of the geometry. It writes that snapped pose into the pose rows the
+  bake samples through, and it keeps operand slots out of the count of skin
+  members (`SdfMeshBakeGroup.Seal`), so an operand alone never gives a group a
+  skin. A rest-skin group (`RestPoseSkin`) freezes its member slots at the
+  identity but never an operand slot.
+
+The invariant: **a group's mesh is a function of its geometry, and an operand's
+snapped pose is part of that geometry.** It is enforced in two places that
+already exist. The geometry builder is the only place a pose enters the hash,
+and the bake samples a group only through the pose rows its geometry wrote
+(`SdfMeshBakeGroup.PoseRows`), never the frame's live transforms. A new caller
+cannot get around either, because no other path feeds a pose to the bake
+kernel. The guarantee stops at the step: a mesh shows the cut at the snapped
+pose, up to one step behind the cutter.
+
+**The step is the group's tier cell.** An operand's position snaps to the
+group's tier cell (`SdfMeshTier.Cell` of the group's `Tier`). Its orientation
+snaps to the angle that moves the farthest corner of the cutter's box by one
+such cell about the cutter's own origin. A group drawn at its demanded tier
+already carries an error under half a display pixel at the nearest demand
+point (`SdfMeshTier.PixelShare`), so a swap between two steps moves the surface
+by no more than the error the bake already accepts there. This is the seamless
+guarantee, and it holds while the bake keeps up: while the cutter moves less
+than one step in the time a re-carve takes to land. A cutter faster than that
+lands its newest pose each time, a larger jump, and the counters below say
+so.
+
+**Which changes re-bake.** The bake already re-plans a group when a frame input
+its geometry read has moved: a sampled field's snapshot
+(`SdfMeshPathBake.Resample`). It visits only the groups that read one
+(`m_sampledReaders`), keeps one bake in flight per group, and holds the newest
+plan as the group's successor until that bake lands (`Promote`, `Succeed`). An
+operand's pose is the same kind of input, so G1 extends that door rather than
+writing a second one:
+
+- The bake lists the groups whose geometry reads an operand beside the sampled
+  readers.
+- Each frame, for each such group, it snaps the operand's current relative
+  pose at the group's step and compares it with the pose the geometry hashed.
+  The cost is one snap and compare a reader group a frame, and none for any
+  other group.
+- A group whose operand moved a step is planned again
+  (`SdfMeshBakeGroup.Refresh`) and placed through `Succeed`, or held as the
+  successor of a bake still in flight, exactly as a resampled group is.
+
+The same door can later admit the other inputs the geometry already hashes but
+the bake never revisits: the lanes a lane erosion (`SdfOp.LaneErode`) or a
+morph reads (`SdfMeshGeometryBuilder.AppendLanes`). That would let `erode` show
+state live, which [sdf-authoring](../../.claude/skills/sdf-authoring/SKILL.md#binding-to-state)
+says it cannot. It is listed as step G6, not built with G1.
+
+**Work proportional to the change: source tiles and reach-clipped keys.** G1
+re-bakes the whole group per step, and the glacier is one large group. The
+unit that divides a large group already has a design:
+[the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule).
+A placement declares a tile size, and the emitter writes one instance per tile,
+the field cut by the tile's box grown by an overlap. Each tile is an ordinary
+group and a closed surface whose closing face lies inside its neighbour, so
+neighbours at different tiers or different steps overlap and never open a
+hole. G3 builds that unit (it is not built yet; the streaming plan's step 10
+then reuses it for terrain) for both emitters: the static stamper, as the
+streaming plan describes, and the pooled root surface
+(`WorldPlacementStamper.EmitRootSurface`), where each tile is a dynamic
+instance that bakes separately on the root's slot. A tile holds only the shapes
+whose box (`CreationStampEmitter.ShapeStampBox`), grown by their blend's reach
+and the relief's amplitude, meets the tile's box.
+
+A cutter that moves must stay in every tile it can reach, so its instructions
+are in many tiles, and a plain pose key would re-bake all of them on every
+step. The key is therefore clipped to the operand's reach:
+
+- The operand's reach box is its box at the snapped pose, grown by its blend's
+  growth (`SdfBoundAlgebra.Growth`) and smooth radius, the relief's amplitude
+  (`CreationNoiseDocument.Amplitude`), and the distance at which a changed
+  sample can still change the contour at the tile's tier: a fixed number of
+  final cells and the gradient taps' spacing
+  (`SdfMeshBakeRequest.TapSpacing`), which G3 derives from the contour's
+  tests.
+- The geometry hashes the operand's snapped pose only when that reach box
+  meets the group's box. Otherwise it hashes "absent", so a tile the cutter
+  does not reach keeps its key, and its mesh, as the cutter moves elsewhere.
+
+The invariant: **in a tile the operand's reach misses, the field the bake reads
+is the same at every pose the operand can take outside it.** For a
+subtraction, the field changes only where the cutter is nearer than the
+surface. Outside the cutter, signs never change. Inside the solid, a value can
+rise toward zero, but only to minus the distance to the cutter, so a sample
+farther than the reach keeps its sign and stays above every threshold the
+contour reads by magnitude. This argument is not checked in code. G3's first
+check measures it: bake one tile with the operand at two poses outside its
+reach and compare the meshes. The guarantee stops at an intersection operand,
+whose field changes everywhere outside it, so every tile is in its reach.
+
+**How the swap stays clean.** A re-carved group is placed through the existing
+replacement path. The old mesh keeps drawing while the new one bakes
+(`SdfMeshPathBake.ShowReplaced`). The new mesh lands beside it in the mesh
+region before any draw names it (`SdfWorldTables.NameMeshesAhead`), and the
+draws move only once every piece stands (`SdfWorldTables.MeshStands`), with a
+wave of replacements handing over together (`SdfMeshTier.HandFrames`). So no
+frame draws a hole or a missing group. Between two tiles, one may show step n
+while its neighbour shows step n+1. The overlap rule keeps that seam closed,
+and the step between them is at most one step plus the two tiles' own errors,
+which is the seam rule's own bound.
+
+**Contact.** Contact never reads a baked mesh, so no swap disturbs it. It reads
+the authored field (`CreationStampEmitter.EmitContact`), which today emits
+every shape at its authored pose. The glacier is not solid, so it needs
+nothing. A solid placement whose cutter moves (the door carved into rock)
+collides with the rest cut today and still would after G1, which is silently
+wrong. Step G5 closes that the way `sizeBy` already works. An operand whose pose
+is a pure function of authority state (a `state.<row>` driver with a `linear`
+or curve wave, and no `dynamics`, weight or blend time) is sampled by the
+authority at the tick in fixed point, published in the tick's snapshot as the
+solid's sampled size is (`WorldColliderSet.RefreshAttached`,
+`WorldSnapshot.SolidScales`), and read by both contact and the draw. The drawn
+cut then trails contact by at most one step plus the re-carve's landing time.
+An operand driven by presentation (time, travel, a driver with dynamics) never
+enters contact; on a solid placement PUCK122 says the cut collides at rest.
+
+**Relief.** An operand owner composes one field per bake, so relief no longer
+needs every shape to ride the root. G2 narrows the refusal in
+`CreationMotionPlan` and the validator (PUCK030) to owners that are not operand
+owners, and the relief then covers the cut face as it covers the rest of the
+ice. Relief across a skinned or creased group stays refused, because each
+partition or skin pose would draw a different relief at the seam.
+
+**Determinism and cost.** Everything here is presentation: the cutter's pose
+comes from a presentation driver and the meshes are caches keyed by their
+inputs. The code change changes the bake identity once, through the bake's code
+closure (`SdfMeshBakeClosure`). After that, a geometry's key moves only with the
+operand's snapped pose, and no recorded hash or file is involved. The cost of a
+change is:
+
+- per frame, one snap and compare for each group that reads an operand;
+- per step, a bake of each tile the operand's reach meets, at that tile's tier;
+- at most one bake in flight and one successor per group, so a cutter that
+  moves faster than its bakes land costs no more bakes, only a larger jump.
+
+The bound: re-carves of a tile in a second are at most the cutter's speed over
+the step, and never more than its bakes can land. For the glacier at
+`water.speed 60` the front moves about 0.5 m a second against a 64 mm step,
+about eight steps a second for each tile the front touches. Whether its tiles
+land that fast is a measurement for the lead's quiet window (below).
+
+### Relation to step 5: the settle rebake
+
+The design replaces the settle rebake and keeps the parts of it that are
+general. Its watch is empty today (above), and its rule of waiting for
+stillness is wrong for an operand, which may never hold still. What it built
+that an operand needs lives outside it: a pose keyed at snapped steps
+(`SdfMeshGeometryBuilder.Snap` and its other-slot pose fact), planning one
+group again at a pose (`SdfMeshBakeGroup.PlanSlot`), and the replacement path
+(`StartReplacement`, `FinishReplacements`), which tiers also use. G1 deletes
+the rest in the same change: `SdfMeshSettle` and its `sdf.mesh-settle`
+counters, the settle partial (`SdfMeshPathBake.Settle.cs`), and the group
+state only it reads (`Blocked`, `StillSince`, the still and baked pose
+arrays). Step 5 then keeps only its cost window. One name needs care: the
+bake's ticket method `Settle(SdfMeshBakeBatch, int, SdfMeshBakeTicket)`, which
+`Complete` and `Abandon` call, is unrelated and stays; G1 renames it so the
+two are no longer confused.
+
+### Steps, each with its check
+
+- **G1. Operands, re-planned as frame inputs; the settle rebake deleted.**
+  `CreationMotionPlan` classifies operand owners, the pooled emitter emits a
+  cutter of one inside its surface's group on its own slot, the geometry
+  builder keys it at the tier step, and `Resample`'s door re-plans its
+  readers. Checks: the probe without relief (a world on the debug basis with
+  one creation: a box `ice` in group 1 and a sphere `cutter` in group 1 with
+  `blend: Subtraction` and a `linear` slide along X) validates with PUCK122
+  reporting the cutter as an operand, not a crease; `puck mesh audit --cpu
+  --pose` extended to operand slots bakes the ice group at two poses a few
+  steps apart and prints two geometry keys, a cut that moved by the pose's
+  offset, zero open edges and zero skin vertices; in a World,
+  `world.counters` shows the operand re-plans while the cutter moves and no
+  `sdf.mesh-settle` source.
+- **G2. Relief with operands.** Check: the probe with relief validates with
+  no PUCK030, and `puck mesh preview` of it shows the relief on the cut face.
+- **G3. Source tiles and reach-clipped keys**, for the static stamper and the
+  pooled root surface. Checks: one tile baked with the operand at two poses
+  outside its reach gives equal geometry keys and identical mesh bytes (the
+  reach is widened until it does, and the number of cells it takes is
+  recorded in the commit); `puck mesh audit` over every tile group of the
+  glacier reads no open and no non-manifold edge, and neighbours overlap by
+  the margin; with the cutter moving, the bake's start lines name only the
+  tiles its reach meets.
+- **G4. The proof exhibit: the glacier retreating by a cut.** `glacierMass`
+  drops `sizeBy` and gains a retreat cutter, a rounded mass whose face is the
+  retreat front, sliding up the trough by `state.glacierLength`, and the
+  glacier's placement declares a tile size. The look is the authors': the
+  front's shape, and whether a second operand thins the ice. Check (a
+  verification request for the lead): with `water.speed 60`, presented bursts
+  from the valley floor and from the lake shore show the toe wasting back up
+  the trough with relief on the cut face, and no visible pop at the front;
+  `world.counters` shows re-carves only on the tiles at the front.
+- **G5. Contact for state-posed operands on solid placements** (with the
+  physics skill). Check: a probe of a door cut into a solid block, its cutter
+  driven by a state row; `body.where` walks through the opening after the
+  state write, the sweep is refused at the old wall position, and
+  `puck test --reproduce` agrees on two runs.
+- **G6. Lanes as frame inputs.** A lane erosion and a morph re-plan their
+  groups when the lanes they read move. Check: a part that erodes by a state
+  lane shows its new erosion without a program rebuild.
+
+G1, G2, G3 and G4 run in that order. G5 and G6 each need only G1. The lead's
+quiet-window measurement for G4: at `water.speed 60`, the re-carve latency of
+a front tile (start to hand-over) and the front's lag behind the cutter,
+before and after G3, on Direct3D 12 and Vulkan.
+
 ## Scope it does not cover
 
 Contact reads the authored field (`CreationStampEmitter.EmitContact`, the
 field colliders), not the posed mesh. A pooled creation's seam is presentation.
 A solid creation that needs posed contact needs its own design. Skinned meshes
 keep no coarser levels (`SdfMeshCollapse.Levels`); a pose-aware level error is a
-later step. A cutter that moves against its group's baked mesh, which gap 8
-above names, has no design here yet.
+later step. A cutter that moves against its group's baked mesh is gap 8's
+design, below the steps.
 
 ## Systems considered
 
