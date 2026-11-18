@@ -73,10 +73,11 @@ public sealed partial class StateArena {
     /// <summary>Exports one document row as <see cref="ToRows"/> would: the row the arena was built over with its
     /// stored columns written back, or the row as declared when a host owns its values.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="include">When supplied, select each member before reading its stored value.</param>
     /// <param name="previous">An earlier export whose unchanged immutable cells may be shared, or null.</param>
     /// <returns>The row.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="rowOrdinal"/> names no document row.</exception>
-    public StateRow ToRow(int rowOrdinal, StateRow? previous = null) {
+    public StateRow ToRow(int rowOrdinal, StateRow? previous = null, Func<CellKey, bool>? include = null) {
         if (
             (((uint)rowOrdinal) >= ((uint)m_layout.RowCount)) ||
             (m_catalog.Descriptors[rowOrdinal].Lane != StateLane.Document)
@@ -95,10 +96,11 @@ public sealed partial class StateArena {
             ? ExportRow(
                 layout: layout,
                 previous: previous,
+                include: include,
                 row: row,
                 rowOrdinal: rowOrdinal
             )
-            : row
+            : include is null ? row : row with { Cells = row.Cells?.Where(cell => include(m_keys.TryResolve(cell.Key, out var key) ? key : default)).ToArray() }
         );
     }
 
@@ -127,7 +129,7 @@ public sealed partial class StateArena {
             Visibility: m_visibilities?[slot]
         );
     }
-    private IReadOnlyList<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous) {
+    private IReadOnlyList<StateCell>? ExportCells(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous, Func<CellKey, bool>? include) {
         ImmutableArray<StateCell>.Builder? cells = null;
         var traits = AuthoredTraits(
             layout: layout,
@@ -135,10 +137,11 @@ public sealed partial class StateArena {
         );
 
         var cursor = 0;
-        var prior = (previous ?? row).Cells;
+        var prior = include is null ? (previous ?? row).Cells : null;
         var index = 0;
 
         while (TryNextCell(cursor: ref cursor, key: out var key, rowOrdinal: rowOrdinal)) {
+            if (include is not null && !include(key)) { continue; }
             var old = (((prior is not null) && (index < prior.Count)) ? prior[index] : null);
             var cell = ExportCell(layout: in layout, name: m_keys[key],
                 slot: CellSlotAt(layout: layout, position: (cursor - 1)), traits: traits, previous: old);
@@ -221,10 +224,11 @@ public sealed partial class StateArena {
         }
         return slots;
     }
-    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null) => (row with {
+    private StateRow ExportRow(int rowOrdinal, in ArenaRowLayout layout, StateRow row, StateRow? previous = null, Func<CellKey, bool>? include = null) => (row with {
         CellSlots = ExportCellSlots(layout: layout),
         ReservedCapacity = ((row.Capacity is null) && UsesLinks(layout: layout)) ? layout.CellCapacity : null,
         Cells = ExportCells(
+        include: include,
         layout: layout,
         previous: previous,
         row: row,

@@ -684,6 +684,13 @@ public static partial class WorldDefinitionFileSource {
         reason: out reason
     );
 
+    /// <summary>The live save beside a source world. Imports always resolve to the authored source.</summary>
+    public static string SourceSavePath(string path) => path + ".save.world.json";
+
+    /// <summary>Resolves a source opened as a live world to its last complete save, if any.</summary>
+    public static string LiveDocumentPath(string path) =>
+        path.EndsWith(".puck", StringComparison.OrdinalIgnoreCase) && File.Exists(SourceSavePath(path)) ? SourceSavePath(path) : path;
+
     // The composition and content pin every file read shares: the admission door draws, settles and admits what it
     // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
     // admit or carry before the draw.
@@ -691,6 +698,7 @@ public static partial class WorldDefinitionFileSource {
         string catalogFingerprint, IMachineValidationCatalog? catalog, IWorldDocumentSource? documents = null, string? displayName = null) {
         // What a refusal calls the document: the name its caller gave it for display, or its path when it gave none.
         var shown = (displayName ?? path);
+        path = LiveDocumentPath(path);
 
         definition = null;
         contentHash = string.Empty;

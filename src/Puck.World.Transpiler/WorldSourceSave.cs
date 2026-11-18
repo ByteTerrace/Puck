@@ -55,8 +55,26 @@ public static class WorldSourceSave {
         bytesWritten = 0;
         written = [];
 
-        var target = JsonNode.Parse(utf8Json: WorldDefinitionSerialization.SerializeBeside(definition: definition, path: path))!.AsObject();
+        var snapshot = WorldDefinitionSerialization.SerializeBeside(definition, path);
 
+        var save = WorldDefinitionFileSource.SourceSavePath(path);
+        if (File.Exists(save) || definition.AuthoredState.Any(row => row.Draw?.PrivateStream == true)) {
+            var newSource = !File.Exists(path);
+            Puck.Confinement.AtomicFile.WriteAllBytesDurably(save, snapshot);
+            bytesWritten = snapshot.Length;
+            written = [PuckPaths.Normalize(save)];
+            if (newSource) {
+                // Publish the entry only after its complete snapshot. This never asks the decompiler to invent names.
+                var basis = JsonValue.Create(Path.GetFileName(save)[..^".world.json".Length])!.ToJsonString();
+                var entry = Encoding.UTF8.GetBytes($"schema: \"{WorldDefinition.SchemaVersion}\"\nbasis: {basis}\n");
+                Puck.Confinement.AtomicFile.WriteAllBytesDurably(path, entry);
+                bytesWritten += entry.Length;
+                written = [PuckPaths.Normalize(path), PuckPaths.Normalize(save)];
+            }
+            reason = string.Empty;
+            return true;
+        }
+        var target = JsonNode.Parse(snapshot)!.AsObject();
         if (!File.Exists(path: path)) {
             return TryCreate(bytesWritten: out bytesWritten, catalog: catalog, catalogFingerprint: catalogFingerprint, path: path, reason: out reason, target: target, written: out written);
         }
@@ -76,7 +94,7 @@ public static class WorldSourceSave {
             return false;
         }
 
-        KeepAuthoredSimulation(authored: canonical!, target: target, keepState: !definition.AuthoredState.Any(row => row.Draw?.PrivateStream == true));
+        KeepAuthoredSimulation(authored: canonical!, target: target);
 
         var delta = WorldDocumentBasis.Diff(basis: canonical!, target: target);
 
@@ -111,8 +129,8 @@ public static class WorldSourceSave {
 
     // A source writes the world as it starts, so what the simulation writes keeps its authored value: the `state`
     // section, and the response mask (`holding`) the sweep writes on a placement row from that state.
-    private static void KeepAuthoredSimulation(JsonObject authored, JsonObject target, bool keepState) {
-        if (keepState) { Keep(authored: authored, name: "state", target: target); }
+    private static void KeepAuthoredSimulation(JsonObject authored, JsonObject target) {
+        Keep(authored: authored, name: "state", target: target);
         if ((target["placements"]?["rows"] is not JsonArray rows) || (authored["placements"]?["rows"] is not JsonArray authoredRows)) {
             return;
         }

@@ -154,6 +154,8 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// <see cref="SearchMethod.MonteCarlo"/>, whose outcome backprop alternates sign along the path.</param>
 /// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
+/// <param name="Actor">The recipient whose information this job may use. Omitted jobs use public information.</param>
+/// <param name="DrawSeed">The independent seed for hypothetical draws and hidden values.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -176,7 +178,9 @@ public sealed record WorldSearchRow(
     WorldSearchChance? Chance = null,
     string? Scores = null,
     string? Enabled = null,
-    string? Revision = null
+    string? Revision = null,
+    Puck.Commands.Principal? Actor = null,
+    ulong DrawSeed = 0
 ) {
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
@@ -1592,14 +1596,6 @@ public static class WorldSearchCompilation {
             scores[index] = compiledScore;
             if (!ArenaSearchPlan.TryResolve(plan!, definition.StateCatalog, out var resolved, out reason)) { return false; }
             resolvedPlans[index] = resolved!;
-            try {
-                RuleCompiler.RequireEnclosedAudience(
-                    resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore)), resolved.Outputs(),
-                    rows[index].Name, context, RuleRefusal.SearchWidensAudience);
-            } catch (RuleException exception) {
-                reason = exception.Message;
-                return false;
-            }
         }
 
         var outputs = new HashSet<int>();

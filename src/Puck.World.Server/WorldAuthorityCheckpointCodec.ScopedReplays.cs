@@ -60,6 +60,10 @@ public static partial class WorldAuthorityCheckpointCodec {
         writer.WriteArray(items: scope.Hashes, writeItem: static (w, hash) => w.WriteUInt64(value: hash));
         writer.WriteInt32(value: scope.Cursor); writer.WriteInt32(value: scope.InputCursor);
         writer.WriteBoolean(value: scope.Recording); writer.WriteBoolean(value: scope.Active); writer.WriteBoolean(value: scope.Diverged);
+        writer.WriteArray(scope.Words, static (w, input) => {
+            w.WriteInt32(input.Tick);
+            WorldReplaySnapshot.WritePrivateWord(w, input.Word);
+        });
         writer.WriteArray(items: scope.Commands, writeItem: static (w, input) => {
             w.WriteInt32(value: input.Tick);
             w.WriteBlock(value: EncodeLeafBlock<WorldCommand>(tryEncode: WorldSubmissionCodec.TryEncodeCommand, value: input.Command, what: "scope command"));
@@ -84,6 +88,8 @@ public static partial class WorldAuthorityCheckpointCodec {
         var hashes = reader.ReadArray(field: "scope hashes", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => r.ReadUInt64());
         var cursor = reader.ReadInt32(); var inputCursor = reader.ReadInt32();
         var recording = reader.ReadBoolean(); var active = reader.ReadBoolean(); var diverged = reader.ReadBoolean();
+        var words = reader.ReadArray("scope draw inputs", static (ref WireReader r) =>
+            (r.ReadInt32(), WorldReplaySnapshot.ReadPrivateWord(ref r)), MaxCollectionCount);
         var commands = reader.ReadArray(field: "scope commands", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => {
             var tick = r.ReadInt32();
             var command = ReadLeafBlock<WorldCommand>(field: "scope command", reader: ref r, tryDecode: WorldSubmissionCodec.TryDecodeCommand);
@@ -94,7 +100,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             var tick = r.ReadInt32(); return (tick, WorldWireCodec.ReadIntentSubmission(reader: ref r));
         });
 
-        return new(Active: active, Bodies: bodies, Commands: commands, Cursor: cursor, Diverged: diverged, Hashes: hashes, InputCursor: inputCursor, Inputs: inputs, Intents: intents, InteractionGateHeld: interactionLatch, Name: name, Recording: recording, RuleGateHeld: ruleLatch,
+        return new(Words: words, Active: active, Bodies: bodies, Commands: commands, Cursor: cursor, Diverged: diverged, Hashes: hashes, InputCursor: inputCursor, Inputs: inputs, Intents: intents, InteractionGateHeld: interactionLatch, Name: name, Recording: recording, RuleGateHeld: ruleLatch,
             RuleGroups: groups, Start: start, StartHash: startHash);
     }
 }

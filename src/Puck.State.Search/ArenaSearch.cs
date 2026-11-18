@@ -265,7 +265,15 @@ public sealed partial class ArenaSearch {
         }
     }
 
-    private readonly StateArena m_arena;
+    private readonly StateArena m_live;
+    private StateArena m_arena;
+
+    private void SelectArena(StateArena arena) {
+        if (ReferenceEquals(arena, m_arena)) { return; }
+        m_arena = arena;
+        ResolveArenaKeys();
+    }
+
     private readonly Action<string, string>? m_narrate;
     private readonly List<ArenaSearchWrite> m_outputs = [];
 
@@ -287,7 +295,7 @@ public sealed partial class ArenaSearch {
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     public ArenaSearch(StateArena arena, Action<string, string>? narrate = null) {
         ArgumentNullException.ThrowIfNull(argument: arena);
-        m_arena = arena;
+        m_live = m_arena = arena;
         m_narrate = narrate;
 
         ResolveArenaKeys();
@@ -319,7 +327,7 @@ public sealed partial class ArenaSearch {
     }
 
     /// <summary>Gets the arena every candidate scope opens on.</summary>
-    public StateArena Arena => m_arena;
+    public StateArena Arena => m_live;
     /// <summary>Gets how many jobs are installed.</summary>
     public int Count => m_jobs.Length;
 
@@ -364,14 +372,7 @@ public sealed partial class ArenaSearch {
             )) {
                 return false;
             }
-            if (!ReferenceEquals(
-                objA: judge.Arena,
-                objB: m_arena
-            )) {
-                reason = $"search '{plan.Name}' was handed a judge over another arena";
-
-                return false;
-            }
+            SelectArena(judge.Arena);
             if (
                 plan.Scored &&
                 !judge.Scores
@@ -468,13 +469,13 @@ public sealed partial class ArenaSearch {
             return false;
         }
 
-        var ledger = LedgerFold();
         var stamps = m_stepStamps;
         var busy = 0;
 
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
 
+            SelectArena(job.Judge.Arena);
             if (!AdmitsAudience(job) || (job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
@@ -482,7 +483,7 @@ public sealed partial class ArenaSearch {
                 job: job,
                 stateStamp: InputStamp(
                     job: job,
-                    ledger: ledger
+                    ledger: LedgerFold()
                 )
             );
             if ((job.Stamp != stamps[index]) || job.Running || !job.Done) {
@@ -498,6 +499,7 @@ public sealed partial class ArenaSearch {
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
 
+            SelectArena(job.Judge.Arena);
             if (
                 job.DisclosureRefused || ((job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) ||
                 ((job.Stamp == stamps[index]) && !job.Running && job.Done)
@@ -600,10 +602,11 @@ public sealed partial class ArenaSearch {
     /// both moves the arena's own hash and never this. A transposition key also folds the move ply supplied to a
     /// judge, because a search-only rule may read it.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> addresses no installed job.</exception>
-    public ulong PositionKey(int index) => PositionKey(
-        job: JobAt(index: index),
-        movePly: 0
-    );
+    public ulong PositionKey(int index) {
+        var job = JobAt(index);
+        SelectArena(job.Judge.Arena);
+        return PositionKey(job, 0);
+    }
     /// <summary>Returns one job's progress.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The status.</returns>
@@ -986,6 +989,12 @@ public sealed partial class ArenaSearch {
         job.TtValue?.AsSpan().Clear();
         job.TokenCount = m_arena.CellCount(rowOrdinal: job.Plan.TokensOrdinal);
 
+        if (job.TokenCount != job.TokenKeys.Length) {
+            job.TokenKeys = new CellKey[job.TokenCount];
+            job.Counts = new long[job.TokenCount];
+            job.Legal = new long[job.TokenCount];
+            if (job.Wide is not null) { job.Wide = new long[job.TokenCount * WideWordsPerToken(job.Plan.CellCount)]; }
+        }
         for (var index = 0; (index < job.TokenKeys.Length); index++) {
             if (!m_arena.TryKeyAt(
                 key: out job.TokenKeys[index],
@@ -1141,6 +1150,14 @@ public sealed partial class ArenaSearch {
         }
         if (m_outputs.Count == 0) {
             return false;
+        }
+        if (!ReferenceEquals(m_arena, m_live)) {
+            for (var i = m_outputs.Count - 1; i >= 0; i--) {
+                if (m_outputs[i] is ArenaSearchWrite.Cell cell) {
+                    if (m_live.Keys.TryResolve(m_arena.Keys[cell.Key], out var key)) { m_outputs[i] = cell with { Key = key }; }
+                    else { m_outputs.RemoveAt(i); }
+                }
+            }
         }
         if (apply(m_outputs)) {
             return true;

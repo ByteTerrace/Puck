@@ -267,24 +267,32 @@ public static class WorldDrawBootResolver {
 
         return true;
     }
+    /// <summary>Recovers the submitted rows before serializing a file reload or installing it on the live authority.</summary>
+    public static WorldDefinition FileInputs(WorldDefinition definition) =>
+        definition.AuthoredState.Any(row => row.BeforePrivatePreview is not null)
+            ? definition.WithWorldState(definition.AuthoredState.Select(row => row.BeforePrivatePreview ?? row).ToArray())
+            : definition;
+
     /// <summary>Resolves every first-fill draw site in <paramref name="definition"/>.</summary>
     /// <param name="definition">The freshly parsed document after validation of its boot draw inputs.</param>
     /// <param name="instanceIdentity">The running instance's own identity — the seed ladder's INSTANCE rung.</param>
     /// <param name="resolved">The document with every first-fill site resolved, on success. The input instance
     /// is retained when neither a draw site nor a boot-time row read changes the document.</param>
     /// <param name="reason">Why a site refused, on failure.</param>
+    /// <param name="freshDocument">Whether a new file admission must replace the preview’s first fills.</param>
     /// <param name="previous">The live state when installing a writer’s rebuild.</param>
     /// <param name="restore">The installation ordinals of a restored journal document.</param>
     /// <param name="keys">The authority credential, or the isolated preview sampler for an authoring read.</param>
     /// <returns><see langword="true"/> when every first-fill site resolved.</returns>
-    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null, WorldDefinition? previous = null, WorldDrawPositions? restore = null) {
+    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldDrawSampler? keys = null, WorldDefinition? previous = null, WorldDrawPositions? restore = null, bool freshDocument = false) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        keys ??= WorldPrivateDrawKeys.Missing;
+        keys ??= WorldDrawSampler.Missing;
+        if (freshDocument) { definition = FileInputs(definition); }
         try {
             definition = restore is not null ? keys.Install(definition, restore: restore) :
-                previous is null ? keys.InstallAtBoot(definition) : keys.Install(definition, previous);
+                keys.Install(definition, previous);
         } catch (InvalidDataException error) {
             resolved = definition;
             reason = error.Message;
@@ -324,7 +332,7 @@ public static class WorldDrawBootResolver {
                 }
 
                 state ??= new List<WorldStateRow>(collection: authored);
-                state[index] = filledRow;
+                state[index] = keys.IsPreview && draw.PrivateStream ? filledRow with { BeforePrivatePreview = row } : filledRow;
                 changed = true;
 
                 continue;
@@ -367,6 +375,7 @@ public static class WorldDrawBootResolver {
             );
             state ??= new List<WorldStateRow>(collection: authored);
             state[index] = row with {
+                BeforePrivatePreview = keys.IsPreview && draw.PrivateStream ? row : null,
                 Cells = [cell],
                 DrawCursor = (row.DrawCursor + fired.Advances),
                 DrawnMasks = GeneratorEngine.MasksAfter(

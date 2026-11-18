@@ -24,6 +24,25 @@ public sealed partial class WorldScopedReplayTests {
     }
 
     [Fact]
+    public void ScopedPrivateRollsMatchAtEveryTick() {
+        var document = Document();
+        var draw = new Draw(PrivateStream: true, Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw));
+        document = document.WithWorldState(document.AuthoredState.Select(row => row.Name.Value == "counter" ? row with { Draw = draw } : row).ToArray()) with {
+            Rules = [new WorldRule(Name: CellName.Parse("roll"), Effects: [new ActionEffect.Generate("counter")],
+                Gate: new ActionPredicate.CompareState(State: "control", Key: "status", Comparison: ExpressionOp.Greater, Value: 0),
+                Mode: ActionTriggerMode.Level)]
+        };
+        using var fixture = Fixtures.FreshServer(document, drawKeys: WorldPrivateDrawKeys.Create());
+        Request(fixture, 4);
+        for (var run = 0; run < 2; run++) {
+            Request(fixture, 1);
+            for (var tick = 0; tick < 6; tick++) { fixture.Step(); }
+            Assert.Equal(run == 0 ? 3 : 4, Read(fixture, "control", "status"));
+            Assert.NotEmpty(fixture.Server.ScopedReplays[0].Checkpoint().Words);
+        }
+    }
+
+    [Fact]
     public void ARefusedScopeRestoreEndsItsDriveAndCanBeStartedAgain() {
         using var fixture = Fixtures.FreshServer(GrowingInventory());
         Request(fixture, 4);
