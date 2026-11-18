@@ -1221,7 +1221,12 @@ correction before writing it (the owner's ruling): name the behaviour the
 correction points at, write the principle that prevents the whole pattern, and
 keep the incident only as its case. A rule that patches the one symptom named
 lets the next symptom of the same pattern through, and two narrow rules for one
-pattern are a sign the principle was missed.
+pattern are a sign the principle was missed. Write the intent in your own words
+rather than quoting the owner as the rule (the owner's ruling): a quoted number
+or phrase becomes a literal bar agents stop at or chase past sense, the way
+"one minute" became a bake-time obsession and "bit-identical" became a
+byte-for-byte one. A figure is recorded as the forcing function it is, beside
+the purpose it serves, so judgement in context decides.
 
 ## No bad loops
 
