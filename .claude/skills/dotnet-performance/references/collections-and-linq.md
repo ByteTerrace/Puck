@@ -97,7 +97,7 @@ Distilled from the BCL rewrites above — these apply to any code you write:
 
 ### Frozen collections: `GetAlternateLookup` GVM cost amortized into a delegate
 - **What changed:** dotnet/runtime#108732. The alternate-lookup path (e.g. `ReadOnlySpan<char>` lookups into a `string`-keyed `FrozenDictionary`) no longer executes a generic virtual method (GVM) per lookup; a GVM now returns a *delegate* once, and per-lookup calls are plain delegate invocations.
-- **Mechanism:** GVMs are notoriously hard to optimize (slow dispatch, no devirtualization). Moving the GVM from per-call to per-acquisition amortizes it to one hit at `GetAlternateLookup` time.
+- **Mechanism:** A GVM reached through a base or interface reference dispatches slowly through a runtime helper. .NET 11 devirtualizes one only where the call site knows the receiver's exact type ([JIT reference](jit-and-codegen.md#2-interfacevirtual-dispatch-without-the-cost)), which a lookup through the abstract frozen type does not. Moving the GVM from per-call to per-acquisition amortizes it to one hit at `GetAlternateLookup` time.
 - **Magnitude:** ~1.6x (133.46 ns → 81.39 ns) for 12 span-keyed lookups including acquisition.
 - **Adoption:** FREE.
 - **Guidance:** Use span-keyed alternate lookups freely to avoid allocating `string` lookup keys; the GVM tax that ate the gains in .NET 9 is largely gone. Hoist `GetAlternateLookup` out of tight loops — acquisition still pays the GVM cost once. API-design lesson: if you must expose a GVM, make it a "get me a worker delegate" factory, not the hot-path operation.
@@ -109,6 +109,11 @@ Distilled from the BCL rewrites above — these apply to any code you write:
 - **Adoption:** FREE.
 - **Guidance:** `dict["literal"]` / `TryGetValue("literal", ...)` is now the fast path. Do NOT cache literal keys in locals/fields "to help the dictionary" — that hides the constant from the JIT and defeats the optimization. Don't replace string-keyed dictionaries with switch-on-string for speed at small scale without measuring; the gap has narrowed sharply.
 - **Caveats:** Requires a JIT-visible constant key (literal or `const`) and the lookup to inline; runtime-computed keys see no change.
+
+### Value-type keys: the default comparer takes a path with no comparer call
+- **What changed:** `Dictionary<TKey, TValue>` keyed by a value type with the default comparer runs a streamlined loop that makes no virtual comparer call, for lookup and insertion and, on .NET 11, for `Remove` as well ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), Collections and LINQ; dotnet/runtime#125884). Reference-type keys and custom comparers take the general path.
+- **What it means here:** a custom `IEqualityComparer<TKey>`, even a sealed stateless one, costs an interface call for the hash and for each equality probe. Guarded devirtualization can remove that call on a PGO host; the World runs without it, so there the call stays (an inference from the mechanism, to be confirmed in disassembly).
+- **The trade:** `PackedIntPairComparer` exists because `long`'s default hash folds the two packed words together, and it buys better spread at the price of that dispatch. A key struct that implements `IEquatable<T>` with the same Fibonacci hash would keep the spread and take the default-comparer path. That alternative is this skill's inference, not something the post states: adopt it only on counted or traced evidence from a hot user (the bake's edge maps, the arena's undo set), and keep the hash in `Puck.Maths`, its one home.
 
 ### `OrderedDictionary<,>`: index-returning `TryAdd`/`TryGetValue`
 - **What changed:** dotnet/runtime#109324 adds `TryAdd(key, value, out int index)` and `TryGetValue(key, out value, out int index)`; the index works with `SetAt(index, value)`/`GetAt(index)`.
@@ -129,6 +134,12 @@ Distilled from the BCL rewrites above — these apply to any code you write:
 ---
 
 ## Building and mutating collections
+
+### .NET 11: a span sort with a struct comparer neither boxes nor dispatches
+- **What changed:** `MemoryExtensions.Sort<T, TComparer>` was shaped to take a struct comparer, but up to .NET 10 the implementation boxed it into an `IComparer<T>`: one allocation per call and an interface call per comparison. .NET 11 carries the value-type comparer through, specializes the sort for it and inlines `Compare` ([.NET 11 post](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/), Strings and Spans, Searching and Comparing; dotnet/runtime#116109).
+- **Adoption:** FREE where a struct comparer is already passed, as the irradiance hierarchy's median split does (`CentroidOrder` in `SdfMeshIrradianceScene`). The specialization is generic code over a value type, so it should not depend on dynamic PGO and should hold in the World; that is an inference, so read the disassembly before relying on it.
+- **Pattern:** sort a span with a small `readonly struct` comparer. For a `List<T>`, sort `CollectionsMarshal.AsSpan(list)` the same way. A `Comparison<T>` lambda, `List<T>.Sort(Comparison<T>)` and a class comparer still pay a delegate or interface call per comparison.
+- **Caveats (the post's):** each comparer type gets its own copy of the sort's code, and a large comparer struct costs more to copy. The change is aimed at small stateless or lightly stateful comparers.
 
 ### `List<T>.InsertRange`: no more double-copy on growth
 - **What changed:** dotnet/runtime#107683. When an insert forces growth, the list no longer copies all elements to the new array and *then* shifts to make room; it copies the below/above segments directly to their final positions, then fills the gap.
@@ -262,6 +273,8 @@ The design underneath all of these: LINQ's internal concrete iterator types (`Ar
 - **"Hand-roll a switch or lookup array instead of a dictionary for enum keys."** For long-lived read-mostly maps, `FrozenDictionary` with a dense enum/integral key *is* an array lookup (~0.9 ns).
 - **"Alternate lookups on frozen collections aren't worth it because of GVM overhead."** The per-call GVM cost is gone; span-keyed lookups into string-keyed frozen collections are a win again.
 - **"Cache dictionary string literals in static fields / avoid repeated literal-key lookups."** Constant-string keys are now the *specially optimized* path through `TryGetValue`; the literal IS the optimization — hoisting it hides the constant from the JIT.
+- **"A struct comparer on `span.Sort` buys nothing over a `Comparison<T>` lambda."** That held up to .NET 10, which boxed the struct. On .NET 11 the struct comparer allocates nothing and `Compare` inlines, and the lambda still costs a delegate call per comparison.
+- **"A sealed stateless comparer on a dictionary costs nothing."** It moves a value-type key off the default-comparer path and adds an interface call per hash and per probe.
 - **"Never insert at the front of a `List<T>` during construction; build backwards instead."** The growth-path double copy is fixed (non-growth inserts remain O(n) shifts, as ever).
 - **"`Clear()` on a presized `ConcurrentDictionary` throws away your capacity, so recreate the dictionary instead."** `Clear` now retains the constructor-requested capacity.
 - **"Avoid `BitArray` for anything performance-sensitive; copy bits out to an array first."** `CollectionsMarshal.AsBytes` gives direct vectorizable access; delete the per-bit-indexer and CopyTo-to-temp workarounds.

@@ -2,6 +2,18 @@
 
 **TL;DR for this domain.** The .NET 11 JIT flattens abstraction through a compounding pipeline: dynamic PGO → guarded devirtualization → inlining → (conditional) escape analysis → stack allocation → range/assertion analysis → dead-check elimination. Inlining is the gateway — nearly every win below requires the relevant callee to be inlined so the JIT can see through it. Safety checks (bounds, null, GC write barriers, covariance, EH scaffolding) are now "pay only when unprovable." Practical consequence: idiomatic C# — interfaces, `foreach`, lambdas, spans, `params`, `^1`, switch-on-length, `is 'a' or 'b'` — is increasingly the fast path, and most .NET 9-era hand-optimizations are now dead weight to delete. Almost everything here is FREE on retarget to .NET 11 with tiered compilation + dynamic PGO left at their defaults.
 
+**How to read an entry.** An entry headed ".NET 11" comes from Stephen Toub's
+[Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/)
+and names the post's section and the pull request (`dotnet/runtime#N` is
+`https://github.com/dotnet/runtime/pull/N`). The other entries arrived with .NET 10
+and still hold. The .NET 11 entries carry no timings: the post's benchmark tables
+are where to read a magnitude, and a change in Puck is judged by its own
+disassembly and counts. Each one also says which kind of win it is. A *static*
+win rests on a proof the JIT makes from the code alone (a value range, an exact
+type, an object that provably does not escape), so it holds in the World. A win
+that *rides PGO* needs the profile the World runs without
+([repository constraints](../SKILL.md#apply-repository-constraints)).
+
 ## Contents
 1. [Eliminating allocations via escape analysis](#1-eliminating-allocations-via-escape-analysis)
 2. [Interface/virtual dispatch without the cost (devirtualization & PGO)](#2-interfacevirtual-dispatch-without-the-cost)
@@ -13,7 +25,8 @@
 8. [Block layout & PGO plumbing](#8-block-layout--pgo-plumbing)
 9. [New instruction-set support](#9-new-instruction-set-support)
 10. [Runtime plumbing with codegen effects](#10-runtime-plumbing-with-codegen-effects)
-11. [Folklore to delete](#folklore-to-delete)
+11. [Codegen facts the repository relies on](#11-codegen-facts-the-repository-relies-on-in-net-11)
+12. [Folklore to delete](#folklore-to-delete)
 
 ---
 
@@ -44,6 +57,13 @@ Escape analysis + stack allocation now covers delegates, arrays, refs threaded t
 **Inlining boosts targeting allocation removal** (dotnet/runtime#114806 small-fixed-array-returning methods, #110596 boxing methods) — FREE
 - Heuristic boosts buy the inline that unlocks stack allocation / box elision in caller context. Small factory helpers (`=> new[] { a, b }`) no longer need `AggressiveInlining` for this reason alone. Boosts, not guarantees.
 
+**.NET 11: more temporaries stop escaping** (post: Deabstraction) — FREE, static unless marked
+- A `T?` value tested against an interface in generic code (`value is IFormattable f`) used to box through a runtime helper that hid the box from escape analysis. The JIT now expands the box itself and removes it when it does not escape (dotnet/runtime#122167). A method that returns the box still allocates it.
+- A freshly allocated object passed to `EqualityComparer<T>.Default.Equals` no longer counts as escaping merely because the constrained call took its address (dotnet/runtime#121918).
+- A reference the JIT spills into a temporary keeps its exact class, so a call that was devirtualizable stays devirtualizable and the box around a struct passed through an interface goes with it (dotnet/runtime#128485).
+- `ArgumentNullException.ThrowIfNull(value)` on a struct `T` no longer boxes at tier 0 (dotnet/runtime#129392). Optimized code never allocated there. What changes is a tier-0 allocation trace and startup, which lose that noise.
+- Rides PGO: an enumerator whose `GetEnumerator()` returns another collection's enumerator is now stack-allocated like the direct case (dotnet/runtime#122946). The wrapper a collection expression gets when converted to `IEnumerable<T>` has that shape. It is the guarded-devirtualization pipeline above, so it does not apply in the World.
+
 ## 2. Interface/virtual dispatch without the cost
 
 **Array interface-method devirtualization** (dotnet/runtime#108153, #109209, #109237, #116771) — FREE
@@ -59,8 +79,10 @@ Escape analysis + stack allocation now covers delegates, arrays, refs threaded t
 - Magnitude: `foreach` sum over a 5-element static readonly field ~16.3 ns / 32 B → ~2.1 ns / 0 B (~8x, alloc-free).
 - Pattern: prefer `static readonly` (over mutable statics) for constant collections — it's now a devirtualization enabler. Field must be initialized by the time the consumer re-JITs at tier 1.
 
-**Methods calling generic virtual methods can be inlined** (dotnet/runtime#116773) — FREE
-- Calling a GVM no longer makes the *caller* un-inlinable; dispatch is expressed via `VirtualDispatchHelpers.VirtualFunctionPointer` in the inlined body. The GVM call itself is still helper-mediated indirect dispatch.
+**Generic virtual methods: the caller inlines, and the call devirtualizes when the receiver's type is known** (dotnet/runtime#116773; .NET 11 post, Deabstraction: dotnet/runtime#120866, #122023, #128702, #123183, #130202) — FREE, static
+- Calling a generic virtual method (GVM) no longer makes the *caller* un-inlinable (#116773).
+- .NET 11 devirtualizes the call itself when the JIT knows the receiver's exact type: an object it just allocated, a sealed class, a `static readonly` field. The call becomes direct and can inline. This covers shared generic instantiations and default interface methods (#122023, #128702), and ReadyToRun and Native AOT resolve more non-shared GVM calls when the image is built (#123183, #130202). The proof needs no profile, so it applies in the World, whose published build is ReadyToRun.
+- When the call site does not know the receiver's type, the call is still an indirect dispatch through a runtime helper. Puck's GVMs (`IGpuStorageBuffer.Write`, `CartridgeBase.TransferRegisters`) are reached through an interface or a base reference, so keep a GVM off a per-element path unless the disassembly shows the direct call ([collections](collections-and-linq.md#frozen-collections-getalternatelookup-gvm-cost-amortized-into-a-delegate)).
 
 **Repeated late inlining pass** (dotnet/runtime#110827) — FREE
 - An extra inlining pass runs after later devirtualization phases, so interface call → devirtualized → *now also inlined* chains collapse fully. Enabler that compounds with everything above.
@@ -89,6 +111,22 @@ Bounds-check elimination has moved from "recognize special shapes" to "propagate
 **Known intrinsic result maxima** (dotnet/runtime#113790) — FREE
 - The JIT knows e.g. `ulong.Log2 ≤ 63`; indexing a ≥64-entry table with it is check-free. Exactly the `FormattingHelpers.CountDigits` pattern — its unsafe workaround was reverted to plain span indexing, simpler *and* faster.
 
+**.NET 11: more ranges known without a guard** (post: Assertion Propagation, Bounds Checks; dotnet/runtime#119474, #124415, #124711, #128620, #122263) — FREE, static
+- A value carries the range of its own type or conversion. A `(byte)` cast is 0 to 255, so it indexes a table of 256 or more entries with no check and no guarding `if` (#119474, #124415).
+- `BitOperations.LeadingZeroCount`, `TrailingZeroCount` and `PopCount` results have known ranges (#128620). The post's example indexes a 33-entry table with `LeadingZeroCount(uint)`, whose result is 0 to 32. By the same reasoning, not measured here, a `ulong` count needs 65 entries. A table of 32 or 64 entries indexed by a bit count keeps its check unless something else bounds the count, so read the disassembly before assuming.
+- The OR of two bounded values is bounded (#122263), beside the AND and shift ranges above.
+- An operation that completed proves a fact the JIT uses afterwards: a created array's length was not negative, a covariant array store's index was in range, a division's divisor was not zero (#124711).
+
+**.NET 11: range facts delete overflow checks too** (post: Bounds Checks; dotnet/runtime#124147, #124184) — FREE, static
+- `checked` add, subtract and multiply compile to plain instructions when the operands' ranges show the result cannot overflow, and a `checked((byte)value)` narrowing cast under such a guard loses its check as well. Keep `checked` on bounded quantities (counts, lengths, indices a comparison constrained). Puck writes it widely, and it costs nothing exactly where it is provably redundant.
+
+**.NET 11: guards the JIT reads in full** (post: Bounds Checks; dotnet/runtime#125056, #124242, #125235, #129268, #129303, #124571, #121273, #121527) — FREE, static
+- Inside `(uint)i < (uint)span.Length` the JIT records the lower bound as well as the upper, so `span[i - 1]` under `i != 0` is check-free (#125056).
+- A lookahead guard written `(uint)(i + 2) < (uint)span.Length` clears `span[i + 1]` and `span[i + 2]` (#124242, #125235). The post demonstrates this unsigned spelling. Puck's parsers mostly write the signed `(at + 1) < source.Length`, which these changes are not shown to cover, so read the disassembly before relying on it there.
+- A loop that ends on `i != bound` clones like one that ends on `<` when its stride is exactly 1 or -1 (#129268). Where it cannot clone, the JIT still knows a tighter range for `i` (#129303).
+- `arr[^4]` followed by `arr[^3]` reuses the first check (#124571).
+- A constant excluded from the edge of a known range tightens that range, which is what the comparisons a C# list pattern lowers to need (#121273). A fact established earlier in the same basic block is used later in it: `arr[i] = 0; i++; if (i < arr.Length) arr[i] = 0;` has one check (#121527).
+
 **Implied non-emptiness** (dotnet/runtime#116105) — FREE
 - After `x[0]`, `x[^1]` needs no second check (`Length >= 1` ⇒ `Length - 1` in bounds). Write the idiomatic `x[0] == x[^1]`; don't hand-hoist `Length`.
 
@@ -108,7 +146,7 @@ Bounds-check elimination has moved from "recognize special shapes" to "propagate
 - Inside `case 3:` of `switch (x)` the JIT knows `x == 3`. The idiomatic `switch (span.Length) { case 1: return span[0]; case 2: return span[0] + span[1]; ... }` pattern loses ALL per-case bounds checks (example: six checks → zero, 103 → 70 B). Prefer it over unsafe reads for small fixed-length handling.
 
 **Cloning of straight-line array-write sequences** (dotnet/runtime#112595) — FREE
-- The JIT can't legally coalesce bounds checks (partial writes before a throw are observable), but it *can* clone: `arr[0]=..; ... arr[7]=..;` gets one upfront `length > 7` check guarding a check-free fast path, checked original as cold fallback. Bonus: stores coalesce in the fast path (eight 4-byte movs → four 8-byte movs).
+- A run of *writes* cannot share one strengthened check, because the writes that ran before a throw are observable. The JIT clones instead: `arr[0]=..; ... arr[7]=..;` gets one upfront `length > 7` check guarding a check-free fast path, with the checked original as the cold fallback. Bonus: stores coalesce in the fast path (eight 4-byte movs → four 8-byte movs). Reads are a different case, covered next.
 ```csharp
 // .NET 9 folklore: write highest index first so one check dominates
 arr[7] = 55; arr[0] = 2; /* ... */
@@ -116,6 +154,25 @@ arr[7] = 55; arr[0] = 2; /* ... */
 arr[0] = 2; arr[1] = 3; /* ... */ arr[7] = 55;
 ```
 - Caveat: cloning duplicates code (114 → 179 B in the example); a size heuristic gates it.
+
+**.NET 11: constant-index reads share one check, and a `return` expression clones** (post: Bounds Checks; dotnet/runtime#127439, #124705) — FREE, static
+- Reads at constant indices in one basic block, with no side effect between them (`a[0] + a[1] + a[2] + a[3]`), coalesce: the first check is strengthened to the largest index and the others are removed (#127439). A read leaves nothing behind when a later one throws, which is what keeps writes on the cloning path.
+- An expression inside a `return` statement is eligible for range-check cloning (#124705), so an expression-bodied `=> a[0] + a[1] + a[2] + a[3]` gets the guarded fast path it missed on .NET 10.
+- Reading the largest index first, or adding an early `Length` test, to earn one check is folklore for reads as it already was for writes.
+
+**.NET 11: a span sliced forward in a loop keeps its length facts** (post: Bounds Checks; dotnet/runtime#122040, #127117, #127488, #127429) — FREE, static
+```csharp
+// The loop condition is the only length test per iteration: Vector128.Create(data) repeats none.
+while (data.Length >= Vector128<int>.Count)
+{
+    sum += Vector128.Create(data);
+    data = data.Slice(Vector128<int>.Count);
+}
+foreach (int value in data) { tail += value; }
+```
+- Reading a fixed-size value from the end of a span behind a length guard, `BinaryPrimitives.ReadInt32BigEndian(span.Slice(span.Length - 4))` under `span.Length >= 4`, drops both `Slice`'s check and the reader's (#127488).
+- The runtime rewrote its own vectorized `Enumerable.Sum` from `MemoryMarshal.GetReference`, `Vector.LoadUnsafe` and `Unsafe.Add` to this safe shape, and the safe shape was faster (#127429). A `LoadUnsafe` or `Unsafe.Add` walk whose only purpose is to avoid bounds checks records what an older JIT could not prove. Write the safe form, compare the two disassemblies through `puck bench kernels`, and keep the unsafe one only where it still measures faster; the post asks for such a case to be reported upstream with a repro. Puck's candidates are filed in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
+- An unsafe read that a mask or a count the JIT cannot see keeps in range (a table indexed through a mask held in a field) is not covered by any of this and stays until the disassembly says otherwise.
 
 **Loop cloning extended to `Span<T>`** (dotnet/runtime#113575) — FREE
 - `for (int i = 0; i < count; i++) span[i] = i;` with `count` unrelated to `span.Length` gets the array treatment: one upfront `count <= Length` check selects a check-free clone. Per-iteration branch count halved. Don't convert span loops back to array loops or hand-slice (`span.Slice(0, count)`) to earn cloning.
@@ -161,6 +218,12 @@ Person GetPerson() => new(_firstName, _lastName, _address, _city);
 **Arm64 write-barrier rework** (dotnet/runtime#111636, #106191) — FREE
 - Arm64 gains an x64-style `WriteBarrierManager` selecting among barrier variants with region-aware card marking: each barrier slightly dearer, far fewer cards marked → less GC scan work; #106191 trims hot-path instructions. Arm64 only; nothing to do.
 
+**.NET 11: array stores, heap struct copies and neighbouring stores** (post: Write Barriers and Garbage Collection; dotnet/runtime#126547, #128238, #128542, #130535, #126562, #130107) — FREE, static
+- A store into a reference array is expanded into its covariance check and its write barrier, where the JIT can see both. When it knows the array's exact type (a sealed element type, a `new T[]` in view), the covariance check goes and the barrier gets cheaper (#126547). This extends the sealed-element rule above from generic fields to any array whose type is known.
+- Copying a struct that mixes references and plain data into a heap location uses barriered stores for the references and vector stores for the rest, in place of a helper that copied one reference field at a time (#128238, #128542).
+- Stores to adjacent fields merge into fewer, wider stores: in small reference-free struct copies (#130535), in a promoted struct local whose fields are assigned one by one (#126562), and in adjacent static fields (#130107).
+- Do not pack neighbouring field writes into one `ulong` or an `Unsafe` write by hand; the JIT merges them. The [copy less](data-and-memory.md#copy-less) rule still stands: a copy costs its size however it is emitted.
+
 **GCD-based strength reduction for multiple induction variables** (dotnet/runtime#110222) — FREE
 - Loops indexing differently-sized elements from one counter (`char[]` stride 2 + `int[]` stride 4) get a single GCD-based induction variable; per-iteration multiplies fold into addressing modes; loop becomes counted `dec/jne` form. No manual pointer arithmetic or `ref`-increment tricks needed. Supported by CSE/SSA integration (dotnet/runtime#106637), which makes .NET 9's strength reduction fire reliably.
 
@@ -176,6 +239,15 @@ The idiomatic spelling is now the optimized spelling. Write for readability; the
 
 **Bit-test recognition for `is`/`switch` set checks** (dotnet/runtime#107831, #111979) — FREE / PATTERN
 - `c is ' ' or '\t' or '\r' or '\n' or '.'` compiles to a single bit test: 0.4537 → 0.1304 ns (~3.5x). The hand-written `(Mask & (1 << (int)value)) != 0` idiom also now emits `bt` instead of shift+test. New code should use the pattern-matching form. Members must fit a machine-word bitmask.
+
+**.NET 11: equality chains, an implicit `else` and power-of-two tests reduce to one form** (post: Simplification; dotnet/runtime#124567, #128524, #124738, #128533) — FREE, static
+- A chain of equality tests over contiguous constants becomes one unsigned range check, whether it starts at zero (`x == 0 || x == 1 || x == 2`, #124567) or at any base (`x == 3 || x == 4 || x == 5` compiles as `(uint)(x - 3) <= 2`, #128524).
+- `bool x = false; if (c) x = true;` is if-converted like an explicit `else` (#124738).
+- `(a & bit) == bit` and `(a & bit) != 0` are one canonical form when `bit` is a power of two (#128533).
+- Write the readable spelling; the hand-written `(uint)(x - a) <= b` buys nothing. None of this lifts the limit on if-conversion inside a loop ([section 11](#11-codegen-facts-the-repository-relies-on-in-net-11)).
+
+**.NET 11: `Enum.Equals` in generic code is an integer compare** (post: Intrinsics; dotnet/runtime#122779, #123086) — FREE, static
+- `a.Equals(b)` with `T : Enum` boxed both operands and made a virtual call on .NET 10. The JIT folds it to a comparison of the underlying integers, in JIT-compiled code and under Native AOT, which deleted its own IL rewrite for the same purpose. A generic enum helper calls `Equals` directly; an `Unsafe.As` or underlying-type detour written to avoid the boxes is folklore.
 
 **Dead-branch elimination from comparison implications** (dotnet/runtime#111766) — FREE
 - After `if (x < 16) return;`, a later `if (x < 8) ...` is proven unreachable and deleted — cascading until the example method is 1 byte (`ret`). Layered/defensive range checks that become redundant after inlining are increasingly free — don't strip them at the cost of safety.
@@ -205,12 +277,15 @@ All FREE; the actionable takeaway is to STOP hand-restructuring code for branch 
 
 All FREE on capable hardware unless marked API; existing binaries speed up when new CPUs arrive.
 
-- **Intel APX** (dotnet/runtime#106557, #108796, #113237 encodings; #108799 32 GPRs; #116035 push/pop; #111072, #112153, #116445 `ccmp`): 16 → 32 general-purpose registers (fewer spills) and conditional-compare instructions (fewer branches). Nothing to do; existing binaries benefit on APX hardware.
+- **Intel APX** (dotnet/runtime#106557, #108796, #113237 encodings; #108799 32 GPRs; #116035 push/pop; #111072, #112153, #116445 `ccmp`): 16 → 32 general-purpose registers (fewer spills) and conditional-compare instructions (fewer branches). .NET 11 completes the support (post: Intrinsics; dotnet/runtime#127536), adding the instruction forms that leave the condition flags untouched and `CTEST`/`CFCMOV`. Nothing to do; existing binaries benefit on APX hardware.
 - **AVX512 batch**: EVEX embedded broadcasts in more places (#109258, #109267, #108824); `Vector.Max/Min` (#116117); widening-intrinsic containment (#109474, #110736, #111778); `Vector128/256/512.Dot` (#111853); better k-mask handling (#110195, #110307, #117118); 32-byte fallback in frame zeroing (#115981); `ExtractMostSignificantBits` for `short`/`ushort`/`char` via EVEX masks (#110662 — feeds core-library `IndexOf` and friends); `ConditionalSelect` without masks (#113864). Guidance: prefer portable `Vector128/256/512` APIs — they keep inheriting better AVX512 codegen for free.
 - **AVX10.2** (dotnet/runtime#111209; #112535 FP min/max; #111775 FP conversions): single-instruction FP min/max with proper NaN semantics and conversions. FREE + API for the new intrinsics.
 - **GFNI intrinsics** (dotnet/runtime#109537) — API. GF(2^8) hardware ops for Reed-Solomon/erasure coding/AES-adjacent transforms; check these before table-based implementations.
 - **VPCLMULQDQ intrinsics** (dotnet/runtime#109137) — API. Vectorized carry-less multiply — the core CRC/GHASH primitive.
-- **Arm SVE build-out** (dotnet/runtime#115775 `BitwiseSelect`, #117711 `MaxPairwise`/`MinPairwise`, #117051 `VectorTableLookup`) — API, **still experimental** in 10.0; portable vector code remains the safe default.
+- **Arm SVE build-out** (dotnet/runtime#115775 `BitwiseSelect`, #117711 `MaxPairwise`/`MinPairwise`, #117051 `VectorTableLookup`) — API, **still experimental**: scalable `Vector<T>` stays experimental and off by default in .NET 11 (post: Intrinsics; dotnet/runtime#129852), so portable vector code remains the safe default.
+- **.NET 11 portable lane APIs** (post: Intrinsics; dotnet/runtime#129627) — API. `Vector128`, `Vector256` and `Vector512` gain `CreateAlternatingSequence`, `CreateGeometricSequence`, `CreateHarmonicSequence`, the four `ConcatLowerLower`-style half concatenations, `Zip`/`ZipLower`/`ZipUpper`, `Unzip`/`UnzipEven`/`UnzipOdd` and `Reverse`, each recognized by the JIT. The names are read from the net11.0 reference assembly; the post describes the operations without naming them. Check for one of these before writing a per-ISA permute. They do not replace a byte table lookup inside a lane (`Ssse3.Shuffle` and its wider forms).
+- **.NET 11 SIMD lowering** (post: Intrinsics) — FREE, static. `Vector128.Dot`, `Plane.Dot` and `Quaternion.Dot` use a multiply, add and permute reduction in place of the dedicated dot-product instruction (dotnet/runtime#125666); the post does not name `Vector3.Dot` or `Vector4.Dot`, so read their disassembly before claiming the same. `Vector256.Sum` and `Vector512.Sum` reduce at full width (dotnet/runtime#127329). A scalar cast between `Half` and `float` is one F16C instruction when AVX2 is enabled (dotnet/runtime#127094). A named-field struct reinterpreted as a vector through `Unsafe.BitCast` stays in a vector register (dotnet/runtime#129563). Prefer the BCL method to a hand-written intrinsic sequence in each case.
+- **AVX-512 Bit Matrix Multiply** (`Avx512Bmm`, post: Intrinsics; dotnet/runtime#124804) and **`AvxVnni.V512`** (dotnet/runtime#128365) — API. Bit matrix multiply is a candidate for GF(2) linear maps and CRC beside GFNI and VPCLMULQDQ; `AvxVnni.V512` widens the small-integer multiply-accumulate to 512 bits. Hardware required.
 - **Arm64 compound instructions** (dotnet/runtime#111893, #111904, #111452, #112235, #111797): compare+branch fused into e.g. `cbz`; denser codegen for ordinary `if (x == 0)` code.
 
 ## 10. Runtime plumbing with codegen effects
@@ -224,7 +299,9 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 
 ## 11. Codegen facts the repository relies on in .NET 11
 
-`Math.BigMul(ulong, ulong, out ulong)` and the signed overload now lower to one `MUL`/`IMUL` that returns both halves in registers (dotnet/runtime#117261), so the 128-bit product needs no `UInt128` detour or hand-split halves. RyuJIT still if-converts a select only outside loops (dotnet/runtime#96380, milestone 12.0), so an in-loop `CMOV` still needs the `NoInlining` leaf pattern the [`maths-usage` prime kernel notes](../../maths-usage/references/prime-kernels.md) describe.
+`Math.BigMul(ulong, ulong, out ulong)` and the signed overload lower to one `MUL`/`IMUL` that returns both halves in registers (post: Numerics; dotnet/runtime#117261), so the 128-bit product needs no `UInt128` detour or hand-split halves. `FusedArithmetic.Product` widens through `Int128` instead, on an earlier measurement that its own remark asks to repeat before the form is replaced; the re-measurement on .NET 11 is filed in the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
+
+RyuJIT if-converts a select only outside loops (dotnet/runtime#96380, milestone 12.0), so an in-loop `CMOV` still needs the `NoInlining` leaf pattern the [`maths-usage` prime kernel notes](../../maths-usage/references/prime-kernels.md) describe. .NET 11 does not lift this: the runtime marked its own `Random.InternalSample` helper `NoInlining` for the same reason (post: Numerics; dotnet/runtime#131714).
 
 ---
 
@@ -232,14 +309,18 @@ All FREE on capable hardware unless marked API; existing binaries speed up when 
 
 Hand-optimizations .NET 11 makes obsolete (or actively harmful — they add unsafety and obscure code for zero or negative gain). Confirm with disassembly when it matters, but the default is: delete.
 
-- **"Use `Unsafe.Add`/pointers to skip bounds checks on masked/shifted or `Log2`-bounded table indices."** The JIT proves these in range; the BCL deleted its own unsafe versions (`Log2SoftwareFallback`, `CountDigits`) and got simpler *and* faster.
+- **"Use `Unsafe.Add`/pointers to skip bounds checks on masked/shifted or `Log2`-bounded table indices."** The JIT proves these in range; the BCL deleted its own unsafe versions (`Log2SoftwareFallback`, `CountDigits`) and got simpler *and* faster. .NET 11 adds indices from a narrowing cast, a bit count or an OR of bounded values.
+- **"Walk a span with `MemoryMarshal.GetReference`, `LoadUnsafe` and `Unsafe.Add` so a vector loop pays no bounds checks."** A span sliced forward under `while (data.Length >= Count)` is check-free on .NET 11; the runtime's own `Enumerable.Sum` got faster in that safe form.
+- **"Hand-write `(uint)(x - a) <= b` for a run of equal-to-constant tests"** and **"pack neighbouring field writes into one wide store."** The JIT does both from the readable spelling.
+- **"Compare generic enums through `Unsafe.As` or their underlying type because `Equals` boxes."** `Enum.Equals` on `T : Enum` is an integer compare.
+- **"A generic virtual method can never be a direct call."** It is one when the call site knows the receiver's exact type. Through an interface or base reference it is still indirect.
 - **"Lambdas/`Func<>` in hot paths always cost a 64 B delegate allocation."** Non-escaping delegates with inlined consumers are elided. (Captured-state display classes still allocate — that half survives.)
 - **"Never pass a temporary `new T[]{...}` / `params` array in hot code."** Often stack-allocated now; span overloads are the guarantee, not the only remedy.
 - **"Never take `IEnumerable<T>`; add concrete overloads to avoid enumerator allocation and interface dispatch."** Dominant-type call sites (and `static readonly` fields) get devirtualized, inlined, alloc-free enumeration.
 - **"`for` + indexer beats `foreach`" and its .NET 9 inversion "`foreach` beats `for` on `ReadOnlyCollection<T>`."** Both dead — array interface devirtualization restored sane ordering and sped up both.
 - **"Reorder `&&` guard clauses so the JIT elides the bounds check."** Assertion merging is order-independent.
 - **"Hand-hoist `Length` / restructure first-last checks."** `x[0] == x[^1]` is single-check.
-- **"Write the highest array index first (`arr[7]` before `arr[0]`) to make one bounds check dominate."** Sequence cloning gives natural-order writes the guarded fast path automatically.
+- **"Touch the highest array index first (`arr[7]` before `arr[0]`), or test `Length` early, to make one bounds check dominate."** Sequence cloning gives natural-order writes the guarded fast path, and on .NET 11 constant-index reads in one block coalesce into a single check.
 - **"Manually clone `if (arr.Length >= N) { fast } else { same code }`."** The JIT does this transform itself, for arrays *and* spans.
 - **"Spans don't get loop cloning — use `T[]` in the hottest loops."** Fixed.
 - **"Avoid `Slice` re-validation via `MemoryMarshal.CreateSpan` / pointer arithmetic."** Dominating accesses fold `Slice`'s validation.

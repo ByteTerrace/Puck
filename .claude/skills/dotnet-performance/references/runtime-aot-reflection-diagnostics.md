@@ -7,6 +7,7 @@
 - [Shrinking and speeding Native AOT binaries](#shrinking-and-speeding-native-aot-binaries)
 - [Accessing non-public or cross-assembly members fast](#accessing-non-public-or-cross-assembly-members-fast)
 - [Reflection & metadata costs that just dropped](#reflection--metadata-costs-that-just-dropped)
+- [Runtime async (.NET 11, opt-in)](#runtime-async-net-11-opt-in)
 - [Runtime/VM baseline costs (all free)](#runtimevm-baseline-costs-all-free)
 - [GC and GC handles](#gc-and-gc-handles)
 - [Making diagnostics, tracing, and logging cheap](#making-diagnostics-tracing-and-logging-cheap)
@@ -107,7 +108,70 @@ All FREE unless noted.
 
 ---
 
+## Runtime async (.NET 11, opt-in)
+
+Source: [Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/),
+section Runtime Async, and the pull requests under dotnet/runtime's
+`runtime-async` label.
+
+- **What it is.** The JIT, in place of the C# compiler, turns an `async`
+  method into its suspend-and-resume form. The compiler emits a small method
+  marked async, and the runtime decides what must survive each suspension and
+  builds the continuation. Behaviour is meant to be identical: the post calls
+  any observable difference a bug.
+- **How to opt in.** Set `<Features>$(Features);runtime-async=on</Features>`
+  in the project. It needs no `LangVersion` or preview switch. Most of the
+  shared framework is already built this way, so the framework's own async
+  methods use it whatever a Puck project sets.
+- **What it saves.** When one runtime-async method directly awaits another, the
+  result comes back as a plain value, and only the outermost caller that needs
+  a `Task` gets one. An exception that crosses frames with no handler is not
+  caught and stored again at each frame. The assembly carries no state-machine
+  type per method, so it is smaller. A task that the code stores, combines or
+  attaches a continuation to is still allocated.
+- **What it does not cover.** `async void`, async iterators and custom
+  task-like return types with their own builders keep the compiler's state
+  machine.
+- **How to write async code.** Choose `Task` or `ValueTask` by the API's
+  completion pattern and how callers use the result, as before. Split async
+  work into helpers where that reads better. Do not flatten helpers or remove
+  an `await` to avoid a state machine or an intermediate task.
+- **In Puck.** No project sets the feature. The post's stated goal for
+  .NET 11 is parity with the compiler's lowering, and it names cases that are
+  still slower, so an opt-in is judged by allocated bytes per request or tick
+  (`AllocationWindow`, `host.memory`) on the server, silo and networking
+  paths, read before and after. The opt-in and that measurement are filed in
+  the [refactoring packet](../../../../docs/plans/open-items.md#refactoring-campaign).
+- **Profiling async code.** .NET 11 adds a compact async-profiler event stream
+  that lets a profiler join CPU samples to the logical async call chain, for
+  runtime-async methods (dotnet/runtime#127238) and for compiler-generated
+  state machines (dotnet/runtime#129043). It needs a profiler that reads it;
+  Puck's `dotnet-trace` recipes do not use it yet.
+
+---
+
 ## Runtime/VM baseline costs (all free)
+
+### .NET 11: startup and process plumbing
+
+All from the .NET 11 post; none needs a source change, and each moves a Puck
+reading ([a runtime move](measured-changes.md#a-runtime-move-shifts-the-baseline)).
+
+- **ReadyToRun compiles default comparers ahead of time.** Initializing
+  `Comparer<T>.Default` and `EqualityComparer<T>.Default` went through a
+  reflection-based helper whose concrete comparer type a ReadyToRun image could
+  not know, so the comparer could fall back to the interpreter at startup.
+  .NET 11 uses helpers the image can precompile and includes the comparer types
+  (post: Startup and Deployment; dotnet/runtime#126204). The published World is
+  ReadyToRun, so `puck bench startup --world-artifact` sees it.
+- **The host starts with less work.** Reading the application's dependency
+  manifest and building the trusted assembly list no longer scale with assets
+  the host does not probe (post:
+  Startup and Deployment; dotnet/runtime#123568, #123919, #125251).
+- **Every delegate is 8 bytes smaller** in a 64-bit CoreCLR process (post:
+  Deabstraction; dotnet/runtime#99200), and the smaller layout gives delegate
+  equality and hashing more direct access to the method they compare. An
+  allocation ceiling that counts delegates moves down.
 
 ### Unboxing helpers rewritten from C to C#
 - **What:** dotnet/runtime#108167, #109135 port runtime unboxing helpers (e.g. `(T?)o` to `Nullable<T>` in generic code) from native C to C# `CastHelpers.Unbox_Nullable` in CoreLib.
@@ -254,7 +318,8 @@ dotnet/runtime#112171 exposes the already-formatted buffered text as `ReadOnlySp
 - **"Avoid generics under Native AOT because every instantiation bloats the binary."** Weakened: identical generic bodies fold, and non-user-visible generic-method metadata is stripped.
 - **"`try`/`finally` carries heavy register save/restore — structure code to avoid it."** The x64 funclet contract moved non-volatile register preservation into the runtime; handler scaffolding is cheap. (Throwing exceptions is still expensive — that folklore stands.)
 - **"Wrapping one delegate type in another is free."** It costs a call per invocation — removing one wrapper from `ActivatorUtilities.CreateFactory` was worth ~18%. Construct the target delegate type directly.
-- **"Buffer compressed output in a `MemoryStream`, then copy to the destination."** Anti-pattern the BCL deleted from itself — wrap the compression stream around the final destination.
+- **"Buffer compressed output in a `MemoryStream`, then copy to the destination."** Anti-pattern the BCL deleted from itself — wrap the compression stream around the final destination, or, when input and output are both in memory, call the .NET 11 one-shot encoder or decoder ([I/O](io-network-json-crypto.md#net-11-zlib-deflate-and-gzip-encoders-and-decoders-without-a-stream--new-api)).
+- **"Flatten async helpers into one method, or return the inner task without `await`, to avoid state machines and intermediate tasks."** Runtime async removes those costs for a chain of directly awaited methods, and the post asks that source not be contorted for them. Until a project opts in and measures, the helpers still cost what they did; that is a reason to measure the opt-in, not to flatten.
 - **Untyped `GCHandle` everywhere.** `GCHandle<T>`/`PinnedGCHandle<T>`/`WeakGCHandle<T>` are safer *and* ~18% cheaper.
 - **"Source-generated `[LoggerMessage]` makes logging call sites free."** The generated `IsEnabled` guard cannot protect argument computation at the call site. CA1873 flags this; guard expensive argument construction yourself.
 - **"Leaving types unsealed doesn't matter."** `NullLogger` was sealed specifically to make `is NullLogger` checks JIT better. Sealing remains a cheap, recurring perf lever.

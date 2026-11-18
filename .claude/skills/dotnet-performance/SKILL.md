@@ -1,6 +1,6 @@
 ---
 name: dotnet-performance
-description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layout, false sharing, stackalloc, LINQ, Vector<T>, tiering, AllocationWindow, puck bench, AOT (IL2026). Numerics: maths-usage."
+description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layout, false sharing, stackalloc, LINQ, Vector<T>, async, tiering, AllocationWindow, puck bench, AOT (IL2026). Numerics: maths-usage."
 ---
 
 # .NET 11 performance
@@ -30,13 +30,19 @@ wrapper hides the member or input that needs fixing.
 | Strings, spans, search, regex, UTF-8, encoding | [references/strings-text-search.md](references/strings-text-search.md) |
 | Numerics, SIMD, tensor APIs, randomness, threading | [references/numerics-simd-threading.md](references/numerics-simd-threading.md) |
 | I/O, compression, networking, JSON, crypto | [references/io-network-json-crypto.md](references/io-network-json-crypto.md) |
-| AOT, reflection, GC handles, diagnostics, DI, runtime | [references/runtime-aot-reflection-diagnostics.md](references/runtime-aot-reflection-diagnostics.md) |
+| AOT, reflection, GC handles, diagnostics, DI, runtime, runtime async | [references/runtime-aot-reflection-diagnostics.md](references/runtime-aot-reflection-diagnostics.md) |
 
 Read only the files relevant to the code under review. The references describe
 .NET 11 in general, with magnitudes measured on 10.0 that 11 keeps unless a
 section says otherwise; resolve their advice through
 [`Directory.Build.props`](../../../Directory.Build.props) and the affected
-project file before changing code.
+project file before changing code. An entry headed ".NET 11" is something
+.NET 11 itself changed. It cites Stephen Toub's
+[Performance Improvements in .NET 11](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/)
+by section and pull request and copies none of its timings: read a magnitude
+in the post, and judge a change in Puck by its own disassembly and counts.
+Code the post makes worth revisiting is filed in the
+[refactoring packet](../../../docs/plans/open-items.md#refactoring-campaign).
 
 ## Apply repository constraints
 
@@ -60,6 +66,16 @@ project file before changing code.
   PGO (guarded devirtualization, stack-allocated `foreach` enumerators over
   `IEnumerable<T>`, hot and cold splitting) describes other hosts; for code the
   World runs, read the disassembly of the actual build before relying on it.
+  Advice that rests on a static proof holds in the World: range analysis and
+  the bounds and overflow checks it removes, devirtualization from a known
+  receiver type, escape analysis with no profile guard, and generic
+  specialization over a struct. Most of what .NET 11 adds is of this kind, and
+  the references mark each such entry static or PGO-dependent.
+- **No project opts into runtime async.** .NET 11 can have the JIT lower
+  `async` methods, per project, through the `runtime-async=on` compiler
+  feature. Until a project sets it and its allocation counts are compared, the
+  compiler's state machines are what runs
+  ([runtime async](references/runtime-aot-reflection-diagnostics.md#runtime-async-net-11-opt-in)).
 - **Test hosts shape allocation evidence.** Test projects run blocking server GC
   (no background GC) so `GC.GetAllocatedBytesForCurrentThread` stays exact, and
   several suites set `System.Runtime.TieredCompilation` to `false` so allocation
@@ -108,6 +124,10 @@ project file before changing code.
   produce IL. Compare the exact published artifact with `puck bench startup
   --world-artifact <path>` and account for its larger assemblies. The World
   README owns the publish recipe; CI retains its compile-once contract.
+- **A runtime or SDK change moves the baseline.** Startup, gen0 pauses,
+  delegate and comparer allocations and several waits shift with the runtime
+  alone. Rebuild the base commit on the new SDK before comparing, and read
+  [which reading each .NET 11 change moves](references/measured-changes.md#a-runtime-move-shifts-the-baseline).
 
 ## Determinism outranks throughput
 
@@ -150,7 +170,10 @@ outside this contract and takes the references as written.
   into the method's, so a recursive builder allocated a display class on every
   node (`SdfMeshIrradianceScene.Hierarchy.BuildNode`'s median sort, most of the
   small-object garbage a meadow arrival made). Pass a struct comparer to the
-  generic span sort, or move the lambda into a method of its own.
+  generic span sort, or move the lambda into a method of its own. The struct
+  comparer is fully free only on .NET 11: earlier runtimes boxed it on every
+  sort call and compared through an interface
+  ([collections](references/collections-and-linq.md#net-11-a-span-sort-with-a-struct-comparer-neither-boxes-nor-dispatches)).
 - Background workers' garbage stops the frame thread: every young-generation
   collection suspends every managed thread. Read a worker's allocations with an
   EventPipe trace of `Microsoft-Windows-DotNETRuntime:0x1:5` (allocation ticks
