@@ -2104,6 +2104,24 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high, unconfirmed] A route change does not withdraw a picture already
+  published. When a viewer's disclosure narrows (a full replica becomes a
+  private view, or observation is revoked while a second viewer keeps the
+  shared residency alive), route settlement leaves the shared scene and
+  package freshness goes false, but nothing withdraws the published image. A
+  cadence hold, a budget deferral, an unscheduled screen read, or a paused
+  node returning its last surface can show the old pixels
+  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
+  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
+  Enforce the current viewer's disclosure at publication and reuse,
+  previous-frame reads, aliases and retained composites included. Invalidate
+  that viewer's old output at once, and show an authorized replacement or an
+  authored fallback while the private graph builds. The other viewer's
+  publication stays usable. Verify on the first delivered frame of both cases
+  with a detail visible only in the full replica. Found by the rendering
+  research's decision-2 review; the code paths are cited there and not yet
+  reproduced.
+
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
   hidden hand), and search refuses private draws (an AI can never choose to
