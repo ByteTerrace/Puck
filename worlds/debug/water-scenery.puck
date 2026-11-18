@@ -99,7 +99,12 @@ prototypes {
     furrows: glacierFurrows,
     origin: glacierOrigin
   )
-  lakeStones(id: "lake-stones", stones: lakeBedStones, palette: lakeStonePalette)
+  lakeStones(
+    id: "lake-stones",
+    stones: lakeBedStones,
+    palette: lakeStonePalette,
+    beds: [{ y: lakeBowl.y - lakeSite.surface, radii: lakeBowl.radii, thickness: lakeBedThickness, cut: lakeBedCut, material: 0 }]
+  )
   lakeSurface(
     id: "lake",
     radius: lakeSite.radius,

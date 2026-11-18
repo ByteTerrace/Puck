@@ -44,6 +44,33 @@ silhouettes and material hierarchy; derive measured scale and sight lines from
 the authored world. At spawn, the lake should read as a narrow edge behind
 its sill. The rim close-up supplies the surface and channels hidden from below.
 
+## The lake, the glacier and the cradle
+
+The sheet the rim view is built and judged against. Every proportion is the
+authored world's own number (`worlds/debug/water-site.puck`,
+`worlds/debug/glacier-site.puck`); the real references say what each trait must
+look like, and panel 2 sets the palette and the composition.
+
+References opened for it: the Wikipedia pages on
+[crevasses](https://en.wikipedia.org/wiki/Crevasse) (transverse crevasses form
+where a valley steepens and stretch across the flow; splaying crevasses run out
+from the margins and are concave up-glacier),
+[moraines](https://en.wikipedia.org/wiki/Moraine) (lateral moraines are
+parallel ridges of debris along the sides of a valley glacier, steepest next to
+the ice; terminal moraines follow the snout) and
+[Peyto Lake](https://en.wikipedia.org/wiki/Peyto_Lake) (a turquoise proglacial
+lake coloured by glacial rock flour), with panel 2 for the palette.
+
+| Part | Reads as | Targets, from the world |
+|---|---|---|
+| Lake | A clear shallow rim over stones, turquoise at middle depth, teal at the centre, calm and flat, moving only at the outlet sill | Water fills the bowl's own ellipsoid to the level, so depth runs from nothing at the bank to 5 to 6 m at the centre; no water side stands bare. Cobbles gather in clusters, a third sunk in the floor, with larger warm boulders along the waterline; the sill is where the bowl's floor and the outlet's cross. |
+| Glacier | One broad tongue of blue-white ice with a convex section, widest in its basin and narrowing to a lobed toe at the lake; fractured by arcs of cobalt crevasses in belts and one melt channel; a matt weathered skin | About 95 m up a 40 degree ramp and 40 m across at its widest, 7 to 12 m thick over the trough's floor; the section stands over the margins; lumps blend into one body and a relief noise breaks the surface at 1 m. It melts by shrinking toward its head, so the toe retreats up the valley as the ice thins. |
+| Cradle | A scoured U-shaped trough in warm rock, with grooves down its floor, banked by lateral moraine on both lips | The trough is 36 m across with a rounded floor; moraine ridges of heaped debris run along both lips (up to 15 m long, 3 to 5 m high) in a lighter and a darker grit; bare at the end of the melt, when the floor and its grooves are what is left. |
+
+Views the sheet must hold: from the valley floor looking up at the rim
+(`look -230 345 230 -311 324.5 311`), from the lake's near bank at the toe, and
+along the trough from above the head.
+
 ## The visible melt
 
 | Stage | Visible change |

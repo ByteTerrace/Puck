@@ -55,11 +55,15 @@ let lakeStonePalette = [
   { color: "#9C6A4E", roughness: 0.9, specular: 0.03 }
   { color: "#6F5F52", roughness: 0.9, specular: 0.03 }
 ]
+// The lining laid over the bowl's floor under the water (`lakeStones`' `beds`): how thick it is, and the height, under the lake's
+// lowest surface, where it ends. Stones lie on its top.
+let lakeBedThickness = 1.2
+let lakeBedCut = -0.35
 // A point at `r` metres from the lake's centre and `deg` degrees from +z toward +x, on the bowl's floor `lift` over it,
 // relative to the lake's surface.
 function lakeBedPoint(r, deg, lift) = [
   r * sine(deg * 0.017453292519943295),
-  lakeBowlFloor(r) - lakeSite.surface + lift,
+  minimum(lakeBowlFloor(r) - lakeSite.surface + lakeBedThickness, lakeBedCut) + lift,
   r * cosine(deg * 0.017453292519943295)
 ]
 // Where the cobbles gather: { r, deg } from the lake's centre.
@@ -73,6 +77,8 @@ let lakeStoneClusters = [
   { r: 13, deg: 244 }
   { r: 26, deg: 64 }
 ]
+// Where the boulders heap on the bank, in degrees from +z: clear of the trough and the outlet.
+let lakeBoulderDegrees = [70, 98, 128, 232, 262, 292]
 // A cobble's size: most are small, a few large.
 function cobbleSize(k) = 0.3 + 1.7 * siteScatter(k, 0.569840) * siteScatter(k, 0.569840) * siteScatter(k, 0.569840)
 let lakeBedStones = concat(
@@ -93,17 +99,17 @@ let lakeBedStones = concat(
   }),
   map(range(0, 18), k => {
     position: lakeBedPoint(
-      32.4 + 1.6 * siteScatter(k, 0.754878),
-      (k % 2 == 0 ? 62 + 95 * siteScatter(k, 0.618034) : 205 + 95 * siteScatter(k, 0.618034)),
+      31.8 + 2.6 * siteScatter(k, 0.754878),
+      lakeBoulderDegrees[k % length(lakeBoulderDegrees)] + 16 * (siteScatter(k, 0.618034) - 0.5),
       0.1
     )
     radii [
-      1.7 + 1.7 * siteScatter(k, 0.569840)
-      1.0 + 0.8 * siteScatter(k, 0.381966)
-      1.5 + 1.4 * siteScatter(k, 0.896491)
+      1.0 + 2.6 * siteScatter(k, 0.569840) * siteScatter(k, 0.569840) + 0.6 * (k % 3)
+      1.0 + 1.5 * siteScatter(k, 0.381966)
+      1.0 + 2.0 * siteScatter(k, 0.896491)
     ]
     yaw: 360 * siteScatter(k, 0.430159)
-    tilt: 30 * (siteScatter(k, 0.236068) - 0.5)
+    tilt: 36 * (siteScatter(k, 0.236068) - 0.5)
     material: 2 + floor(2 * siteScatter(k * 7 + 3, 0.754878))
   })
 )

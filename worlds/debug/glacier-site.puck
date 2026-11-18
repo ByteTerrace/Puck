@@ -63,14 +63,14 @@ let valleyCuts = concat(
       material: 1
     }
   ],
-  map(range(0, 3), g => {
+  map(range(0, 2), g => {
     sector: "north-west"
     label: $"glacier-groove-{g}"
-    position: rampPoint(46, (g - 1) * 6, 0.3)
-    half [1.5, 1.8, 46]
+    position: rampPoint(46, (g * 2 - 1) * 7.5, 0.6)
+    half [2.4, 2.2, 46]
     rotation: onSlope(rampCos, 0)
-    rounding: 0.4
-    material: 3
+    rounding: 1.2
+    material: 1
   })
 )
 
@@ -86,7 +86,7 @@ let valleyMounds = flatMap(
       ridgeGround(484 + 11 * k, (side * 2 - 1) * (troughHalf + 5)) - 0.4,
       484 + 11 * k
     ]
-    radii [3.6 + 1.6 * siteScatter(k + side * 7, 0.618034), 3.0, 11 + 4 * siteScatter(k + side * 7, 0.754878)]
+    radii [5 + 2 * siteScatter(k + side * 7, 0.618034), 3.6, 14 + 5 * siteScatter(k + side * 7, 0.754878)]
     rotation: onSlope(
       1 / squareRoot(
         1 +
@@ -99,7 +99,7 @@ let valleyMounds = flatMap(
       ),
       8 * (siteScatter(k + side * 7, 0.430159) - 0.5)
     )
-    material: (k + side) % 2 + 2
+    material: siteScatter(k + side * 7, 0.236068) > 0.7 ? 3 : 2
   })
 )
 
@@ -165,7 +165,7 @@ let glacierFurrows = concat(
       { p0 [75, -12], p1 [78, -1], bow [0, -2.5], radius: 1.4 }
       { p0 [83, 2], p1 [81, 13], bow [0, -2], radius: 1.0 }
     ],
-    f => furrowBetween(f.p0, f.p1, f.bow, 0.4, f.radius * 1.3, 1.3)
+    f => furrowBetween(f.p0, f.p1, f.bow, 0.3, 0.35, f.radius * 1.4)
   ),
-  [furrowBetween([44, 9], [4, 10], [3, 0], 0.7, 0.8, 0.5)]
+  [furrowBetween([44, 9], [4, 10], [3, 0], 0.5, 0.3, 0.9)]
 )
