@@ -201,34 +201,6 @@ public readonly struct FixedWorldCollider {
     /// <summary>Gets the body-local primitive volumes, empty for a default collider.</summary>
     public ReadOnlySpan<FixedBodyColliderVolume> Volumes => m_volumes;
 
-    private static FixedBodyColliderVolume Box(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation) =>
-        new(
-            Kind: FixedBodyColliderKind.Box,
-            Center: center,
-            Endpoint: FixedVector3.Zero,
-            HalfExtents: halfExtents,
-            Rotation: rotation,
-            Radius: FixedQ4816.Zero
-        );
-    private static FixedBodyColliderVolume Capsule(FixedVector3 lower, FixedVector3 upper, FixedQ4816 radius) =>
-        new(
-            Kind: FixedBodyColliderKind.Capsule,
-            Center: lower,
-            Endpoint: upper,
-            HalfExtents: FixedVector3.Zero,
-            Rotation: FixedQuaternion.Identity,
-            Radius: radius
-        );
-    private static FixedBodyColliderVolume Sphere(FixedVector3 center, FixedQ4816 radius) =>
-        new(
-            Kind: FixedBodyColliderKind.Sphere,
-            Center: center,
-            Endpoint: FixedVector3.Zero,
-            HalfExtents: FixedVector3.Zero,
-            Rotation: FixedQuaternion.Identity,
-            Radius: radius
-        );
-
     /// <summary>Compiles authored collider floats and creation primitive copies to fixed point.</summary>
     public static FixedWorldCollider? Compile(WorldCollider? collider, IReadOnlyList<WorldPrototype> creations) {
         if (collider is null) {
@@ -241,7 +213,7 @@ public readonly struct FixedWorldCollider {
             case WorldCollider.Sphere sphere: {
                     var radius = FixedQ4816.FromDouble(value: sphere.Radius);
 
-                    volumes.Add(item: Sphere(
+                    volumes.Add(item: FixedBodyColliderVolume.Sphere(
                         center: new FixedVector3(
                             X: FixedQ4816.Zero,
                             Y: radius,
@@ -259,7 +231,7 @@ public readonly struct FixedWorldCollider {
                         Z: FixedQ4816.Zero
                     );
 
-                    volumes.Add(item: Capsule(
+                    volumes.Add(item: FixedBodyColliderVolume.Capsule(
                         lower: lower,
                         upper: (lower + FixedVector3.FromVector3(value: capsule.Endpoint)),
                         radius: radius
@@ -269,7 +241,7 @@ public readonly struct FixedWorldCollider {
             case WorldCollider.Box box: {
                     var halfExtents = FixedVector3.FromVector3(value: box.HalfExtents);
 
-                    volumes.Add(item: Box(
+                    volumes.Add(item: FixedBodyColliderVolume.Box(
                         center: new FixedVector3(
                             X: FixedQ4816.Zero,
                             Y: halfExtents.Y,
@@ -308,7 +280,7 @@ public readonly struct FixedWorldCollider {
                             ) {
                                 var sphere = SdfSolidGeometry.GetLocalBounds(type: SdfSolidPrimitive.Sphere);
 
-                                volumes.Add(item: Sphere(
+                                volumes.Add(item: FixedBodyColliderVolume.Sphere(
                                     center: copy.Center,
                                     radius: (FixedQ4816.FromDouble(value: sphere.HalfExtents.X) * copy.UniformScale)
                                 ));
@@ -317,7 +289,7 @@ public readonly struct FixedWorldCollider {
                                     Center: copy.Center, Endpoint: FixedVector3.Zero, HalfExtents: copy.LocalHalfExtents,
                                     Rotation: copy.Rotation, Radius: FixedQ4816.Zero));
                             } else {
-                                volumes.Add(item: Box(
+                                volumes.Add(item: FixedBodyColliderVolume.Box(
                                     center: copy.Center,
                                     halfExtents: copy.LocalHalfExtents,
                                     rotation: copy.Rotation

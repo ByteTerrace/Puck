@@ -107,8 +107,6 @@ public static class WorldNavigationCapacity {
     public const int MaxSharedExpandedPerTick = 65_536;
     /// <summary>The greatest resident destination-tree count per shared domain.</summary>
     public const int MaxSharedGoals = 16;
-    /// <summary>The greatest number of parallel sphere sweeps used to prove one tall surface-agent transition.</summary>
-    public const int MaxSurfaceClearanceSweeps = 16;
 }
 /// <summary>The stable authored-name to navigation-domain ordinal table.</summary>
 public sealed class WorldNavigationDomainTable {

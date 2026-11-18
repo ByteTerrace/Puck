@@ -1401,11 +1401,11 @@ step that meets it.
 
 1. Whether the rigid contact generation (`WorldBody.ProbeRigidSurface`, one
    contact-field query per body) can partition ahead of the serial
-   `FixedRigidWorld` step: it reads the collider set's shared `m_candidates`
-   scratch (`WorldColliderSet.Candidates`); T2's first task.
-2. Whether `FixedStaticContactSolver` (`WorldColliderSet.cs:112`) and
-   `FixedFieldContactSolver` (`FixedFieldContactSolver.cs:32`) keep working
-   scratch beyond `m_candidates` (`WorldColliderSet.cs:73`); T2.
+   `FixedRigidWorld` step: the static colliders' candidate scratch is per
+   thread (`FixedStaticContactField`), but the attached set the collider set
+   refreshes each tick is shared; T2's first task.
+2. Whether `FixedStaticContactSolver` and `FixedFieldContactSolver` keep
+   working scratch beyond the candidate lists; T2.
 3. The background unit bound (2 ms), the cap's hysteresis window (60 frames)
    and margin (1 ms) are set by measurement in J1, not by this memo.
 4. Which queued bake actions exceed the unit bound; J1 measures each kind.

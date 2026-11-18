@@ -641,7 +641,7 @@ of wrapping, and a later Replace remains an ordinary assignment.
 
 The A*/shared-search kernel—`Puck.Physics.Navigation.NavigationRuntime`—is
 Physics vocabulary; see [the navigation reference](../../docs/reference/physics.md#navigation-kernel-navigation)
-for the algorithm, the swept-sphere edge proof, and the shared-tree checkpoint
+for the algorithm, the swept-agent edge proof, and the shared-tree checkpoint
 shapes. `WorldPopulation` owns the document seam: `CompileNavigationDomains`
 (`WorldPopulation.Navigation.cs`) compiles each authored `navigation.domains`
 row into a `NavigationDomainInput` once at resolve time, mapping the
@@ -654,15 +654,20 @@ domains (`NavigationRuntime.FindRoute`) to a cell or a place
 kit's body along it in the contact field, the read-back `world.navigation
 route` prints; `TryRouteEndpoint` picks a route's start.
 
-A domain's own occupancy sweep and edge bake are lazy: `Domain`'s constructor
-only sizes its workspace arrays, and the kernel samples the solid field the
-first time something genuinely needs the answer—a route request, an
-off-grid locomotion check, a direct `WalkableCellCount` read (including the
-`world.navigation` read-back), or a checkpoint restore of a stored route or search
-result. Failed searches with empty paths also restore the bake, so a later geometry
-edit invalidates their recorded domain, goal, and status as it would before restore. A domain
-nobody ever routes through never sweeps the field, even across solid-field rebuilds;
-`puck bench world`'s construction row measures this.
+Navigation plans against the static part of the contact provider the bodies
+collide with (`NavigationGeometry` in `WorldPopulation.Resolve.cs`): the analytic
+set's `WorldColliderSet.StaticField`, or the field provider's
+`WorldSolidField.StaticField`, both without the attached solids that move each
+tick, so a planned route and a walked one meet the same surfaces and a bake reads
+geometry that never changes. No world compiles a solid field because it authors
+navigation rows (`WorldTargetSelection.RequiresLineOfSight` does not count them).
+A domain bakes off the authority's tick: its bakes start on the thread pool at
+install when a kit's target or flock names a domain (`NavigationBakesAhead`), and
+`world.navigation` starts any left and holds its session until they finish rather
+than baking on the pump. A tick, read-back or checkpoint restore that needs a
+domain whose bake is still in flight waits for it; one whose bake never started
+bakes on the spot. A rebuild keeps a domain's bake when the geometry part it read
+compares equal (the kernel reference has the rule).
 
 A domain's optional `parent` resolves its local origin and X/Z axes through the placement frame compilation;
 surface probes remain vertical. `world.navigation` includes the resolved origin and yaw. Moving a court thus

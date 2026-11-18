@@ -769,10 +769,13 @@ and the influence reads: `worlds/debug/granaries.md` ("Reading the board").
 A volume whose extents bind a state row is compiled into the index again when
 the row changes (`WorldSpatialQueryCompilation.Resolve`).
 
-`WorldNavigation.cs` owns named finite domains. `surface` samples SDF ground,
-step/slope limits, a vertical capsule, and swept neighbour edges from
-`maxStepHeight` above the foot to the head; `volume`
-uses swept-sphere cells and edges in three dimensions; `medium` adds a named
+`WorldNavigation.cs` owns named finite domains, proved against the static part
+of the contact provider the bodies collide with and baked off the tick
+([server README](../../../../src/Puck.World.Server/README.md#navigation)).
+`surface` finds each cell's ground with a small probe, then proves the agent's
+capsule, its underside raised by `maxStepHeight`, standing there and swept to
+each neighbour under step/slope limits; `volume`
+uses sphere cells and swept edges in three dimensions; `medium` adds a named
 `state.world` lattice row carrying `lattice.medium`, checked live at nodes and
 half-cell-or-shorter swept boxes so field evolution can invalidate a cached edge.
 Each piece checks every intersected voxel and its local free surface (at most 27),

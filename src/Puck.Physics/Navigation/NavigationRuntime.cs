@@ -15,31 +15,37 @@ public enum NavigationStatus : byte {
     Pending,
     CapacityLimited,
 }
-/// <summary>A deterministic, bounded A*/shared-search kernel over a set of navigation domains compiled from a
-/// host's own solid-field query and optional live-medium field. Reads no document; every domain's tuning arrives
-/// pre-compiled as a <see cref="NavigationDomainInput"/>.</summary>
+/// <summary>A deterministic, bounded A*/shared-search kernel over a set of navigation domains, each proved against the
+/// static contact geometry its bodies collide with and an optional live-medium field. Reads no document; every
+/// domain's tuning arrives pre-compiled as a <see cref="NavigationDomainInput"/>.</summary>
+/// <remarks>A domain bakes its occupancy and static edges once (<see cref="NavigationDomainBake"/>), on whichever thread
+/// first needs it or on the thread pool ahead of that need (<see cref="BeginBakes"/>). The bake reads only the domain's
+/// tuning and its geometry, which never changes, so its result is the same whichever thread ran it and whenever: a caller
+/// that needs a bake still in flight waits for it, and no answer ever depends on when it finished.</remarks>
 public sealed partial class NavigationRuntime {
     private readonly Domain[] m_domains;
     private readonly bool[] m_retained;
 
     /// <summary>Compiles a runtime over the given domains.</summary>
     /// <param name="domains">The compiled domain tunings, in stable authored order.</param>
-    /// <param name="query">The deterministic solid-field query provider; required when <paramref name="domains"/>
-    /// is non-empty.</param>
+    /// <param name="geometry">The static contact geometry bodies collide with; required when
+    /// <paramref name="domains"/> is non-empty. It must never change and must answer from any thread, since bakes read it
+    /// off the caller's thread. An <see cref="IRegionalContactField"/> gives each domain the part its footprint can
+    /// reach, which identifies the domain's bake.</param>
     /// <param name="fields">The live-medium field a medium-kind domain reads through; optional when no domain is
     /// medium-kind.</param>
     /// <param name="capacity">Representation ceilings the host's own authoring vocabulary declares.</param>
-    /// <param name="previous">The prior runtime, when a host is replacing its document-derived query provider.
-    /// An unbaked domain with compatible tuning adopts the replacement query without sampling either provider.
-    /// A baked domain must prove that its occupancy, ground, clearance, and static-edge results are unchanged.
-    /// Reused domains forward all future queries to <paramref name="query"/>; medium domains also require the
-    /// same field provider and synchronized revision.</param>
-    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IWorldQuery? query, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null) {
+    /// <param name="previous">The prior runtime, when a host is replacing its document. A domain whose tuning, capacity
+    /// and geometry part are equal to a prior domain's keeps that domain's workspace, its bake (finished or in flight)
+    /// included; a medium domain also requires the same field provider at the same revision.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="domains"/> is non-empty and
+    /// <paramref name="geometry"/> is <see langword="null"/>.</exception>
+    public NavigationRuntime(IReadOnlyList<NavigationDomainInput> domains, IContactField? geometry, INavigationMediumField? fields, NavigationCapacity capacity, NavigationRuntime? previous = null) {
         if (
             (domains.Count != 0) &&
-            (query is null)
+            (geometry is null)
         ) {
-            throw new InvalidOperationException(message: "navigation domains require the deterministic solid-field query provider.");
+            throw new InvalidOperationException(message: "navigation domains require the static contact geometry.");
         }
 
         m_domains = new Domain[domains.Count];
@@ -47,6 +53,8 @@ public sealed partial class NavigationRuntime {
         var retained = 0;
 
         for (var index = 0; (index < domains.Count); index++) {
+            var row = domains[index];
+            var part = Domain.PartOf(geometry: geometry!, row: in row);
             Domain? reused = null;
 
             if (previous is not null) {
@@ -54,10 +62,10 @@ public sealed partial class NavigationRuntime {
                     var candidate = previous.m_domains[oldIndex];
 
                     if (
-                        (candidate.Name == domains[index].Name) &&
+                        (candidate.Name == row.Name) &&
                         candidate.TryRebind(
-                        row: domains[index],
-                        query: query!,
+                        row: row,
+                        geometry: part,
                         fields: fields,
                         capacity: capacity
                     )
@@ -68,12 +76,18 @@ public sealed partial class NavigationRuntime {
                 }
             }
             m_domains[index] = (reused ?? new Domain(
-                row: domains[index],
-                query: query!,
+                row: row,
+                geometry: part,
                 fields: fields,
                 capacity: capacity
             ));
             if (reused is not null) { m_retained[index] = true; retained++; }
+        }
+        // A prior domain nothing kept has no reader left: stop its bake rather than let it run on.
+        if (previous is not null) {
+            foreach (var old in previous.m_domains) {
+                if (Array.IndexOf(array: m_domains, value: old) < 0) { old.AbandonBake(); }
+            }
         }
         RetainedDomainCount = retained;
         RebuiltDomainCount = (domains.Count - retained);
@@ -84,8 +98,22 @@ public sealed partial class NavigationRuntime {
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
     public int RebuiltDomainCount { get; }
-    /// <summary>Gets the number of domains whose occupancy and edges have been baked. Reading it never bakes.</summary>
+    /// <summary>Gets the number of domains whose bake has finished. Reading it never waits for a bake.</summary>
     public int BakedDomainCount => m_domains.Count(predicate: static domain => domain.IsBaked);
+    /// <summary>Gets whether every domain's bake has finished, so no read of this runtime waits for one. Reading it never
+    /// waits for a bake.</summary>
+    public bool IsBaked => m_domains.All(predicate: static domain => domain.IsBaked);
+    /// <summary>Gets the work of every finished bake. Reading it never waits for a bake.</summary>
+    public NavigationBakeWork BakeWork {
+        get {
+            var total = default(NavigationBakeWork);
+
+            foreach (var domain in m_domains) {
+                if (domain.IsBaked) { total += domain.BakeWork; }
+            }
+            return total;
+        }
+    }
     public long CellCount => m_domains.Sum(selector: static domain => ((long)domain.CellCount));
     public long WalkableCellCount => m_domains.Sum(selector: static domain => ((long)domain.WalkableCellCount));
     public long WorkspaceBytes => m_domains.Sum(selector: static domain => domain.WorkspaceBytes);
@@ -94,49 +122,47 @@ public sealed partial class NavigationRuntime {
 
     /// <summary>Gets whether the domain at <paramref name="index"/> retained its compiled workspace from the prior install.</summary>
     public bool WasRetained(int index) => m_retained[index];
+    /// <summary>Starts every unbaked domain's bake on the thread pool, so a later read finds it finished or in flight
+    /// rather than baking on the reader's thread. A domain already baked or baking is left as it is.</summary>
+    public void BeginBakes() {
+        foreach (var domain in m_domains) { domain.BeginBake(); }
+    }
 
     public sealed partial class Domain {
         private const int StraightCost = 1_000;
         private const int DiagonalCost = 1_414;
         private const int SpaceDiagonalCost = 1_732;
 
-        // The SDF provider accepts a cast within 0.001 units of contact. Keep the route's clearance centers one
-        // representable margin beyond that band so a sphere proven non-overlapping is not immediately reported as
-        // a conservative time-zero sweep hit by the same provider.
-        private static readonly FixedQ4816 ClearanceEpsilon = FixedQ4816.FromDouble(value: 0.002);
         private static readonly FixedQ4816 SquareRootTwo = FixedQ4816.FromDouble(value: 1.4142135623730951);
 
         private readonly int[] m_closedStamp;
         private readonly int[] m_cost;
-        private readonly uint[] m_edges;
-        private readonly FixedQ4816[] m_ground;
         private readonly NodeHeap m_open;
         private readonly int[] m_openStamp;
         private readonly int[] m_parent;
 
         private int m_searchStamp;
 
-        private readonly bool[] m_walkable;
-
-        // Whether this domain's occupancy and edges have been sampled against m_query yet. Bake is deferred past
-        // construction to whichever caller genuinely needs the answer first — a route request (FindPath/TryCell/
-        // AdmitsLocomotion/IsTraversableEdge/RequestShared, all through IsWalkable), a direct read-back
-        // (WalkableCellCount), resident shared-tree validation, or a host restoring a route (EnsureBaked) — so a
-        // domain nobody ever routes through never pays its own sweep of the solid field. While false, no cached
-        // state depends on the bake, which is what lets TryRebind adopt a replacement query without proof.
-        private bool m_baked;
-        private int m_walkableCellCount;
+        // The adopted bake's arrays: empty until EnsureBaked adopts one, never written afterwards.
+        private bool[] m_walkable = [];
+        private FixedQ4816[] m_ground = [];
+        private uint[] m_edges = [];
+        private NavigationDomainBake? m_bake;
+        // A bake running on the thread pool. Only the owner's thread reads or replaces it; the bake itself reads only
+        // the immutable tuning, agent volumes and geometry part.
+        private Task<NavigationDomainBake>? m_pending;
+        private CancellationTokenSource? m_cancellation;
         private INavigationMediumField? m_fields;
 
         private readonly int m_mediumField;
 
-        private IWorldQuery m_query;
+        private IContactField m_geometry;
         private NavigationCapacity m_capacity;
 
         private readonly FixedQuaternion m_rotation;
         private readonly FixedQuaternion m_inverseRotation;
 
-        public Domain(NavigationDomainInput row, IWorldQuery query, INavigationMediumField? fields, NavigationCapacity capacity) {
+        public Domain(NavigationDomainInput row, IContactField geometry, INavigationMediumField? fields, NavigationCapacity capacity) {
             Name = row.Name;
             Tuning = row;
             var up = new FixedVector3(
@@ -154,8 +180,10 @@ public sealed partial class NavigationRuntime {
                 -row.YawRadians
             );
             m_fields = fields;
-            m_query = query;
+            m_geometry = geometry;
             m_capacity = capacity;
+            m_agent = AgentVolumes(tuning: in row, lift: out m_lift);
+            m_groundProbe = [FixedBodyColliderVolume.Sphere(center: new FixedVector3(X: FixedQ4816.Zero, Y: -GroundProbeRadius, Z: FixedQ4816.Zero), radius: GroundProbeRadius)];
             m_mediumField = (((Tuning.Kind == NavigationKind.Medium) && (fields is not null) && fields.TryFieldIndex(
                 name: Tuning.Medium!,
                 field: out var mediumField
@@ -163,72 +191,91 @@ public sealed partial class NavigationRuntime {
                 ? mediumField
                 : -1
             );
-            var count = checked(((Tuning.Width * Tuning.Depth) * Tuning.Layers));
-
-            m_ground = new FixedQ4816[count];
-            m_walkable = new bool[count];
-            m_edges = new uint[count];
-            m_cost = new int[count];
-            m_parent = new int[count];
-            m_openStamp = new int[count];
-            m_closedStamp = new int[count];
-            m_open = new NodeHeap(cells: count);
+            CellCount = checked(((Tuning.Width * Tuning.Depth) * Tuning.Layers));
+            m_cost = new int[CellCount];
+            m_parent = new int[CellCount];
+            m_openStamp = new int[CellCount];
+            m_closedStamp = new int[CellCount];
+            m_open = new NodeHeap(cells: CellCount);
 
             Sharing = row.Shared;
             InitializeSharing();
         }
 
-        /// <summary>Runs the occupancy sweep and static edge bake against the current query, once.</summary>
-        /// <remarks>Every kernel read that depends on the bake calls this itself. A host calls it only when it
-        /// restores state computed from a bake the kernel cannot see — a stored route or a failed search result —
-        /// so a later query replacement must prove its geometry unchanged before retaining the domain.</remarks>
-        public void EnsureBaked() {
-            if (m_baked) {
+        /// <summary>Returns the part of a geometry one domain's queries can reach: the
+        /// <see cref="IRegionalContactField.Within"/> part of its footprint's region, or the whole geometry.</summary>
+        internal static IContactField PartOf(IContactField geometry, in NavigationDomainInput row) =>
+            ((geometry is IRegionalContactField regional)
+                ? regional.Within(region: Region(tuning: in row, rotation: FixedQuaternion.FromAxisAngle(FixedVector3.UnitY, row.YawRadians)))
+                : geometry);
+
+        /// <summary>Starts this domain's bake on the thread pool unless it is baked or baking.</summary>
+        public void BeginBake() {
+            if ((m_bake is not null) || (m_pending is not null)) {
                 return;
             }
-            // Set before the sweep: the edge build below reads the walkable census, which itself ensures the bake.
-            m_baked = true;
-            for (var node = 0; (node < CellCount); node++) {
-                if (TrySampleCell(
-                    node: node,
-                    query: m_query,
-                    routeY: out var ground
-                )) {
-                    m_ground[node] = ground;
-                    m_walkable[node] = true;
-                    m_walkableCellCount++;
-                }
+            var geometry = m_geometry;
+            var cancellation = new CancellationTokenSource();
+
+            m_cancellation = cancellation;
+            m_pending = Task.Run(cancellationToken: CancellationToken.None, function: () => Bake(cancellation: cancellation.Token, geometry: geometry));
+        }
+        // Stops a bake in flight for a domain no runtime reads any more; its fault is observed here, never left for the
+        // unobserved-task handler.
+        internal void AbandonBake() {
+            if ((m_pending is not { } pending) || (m_cancellation is not { } cancellation)) {
+                return;
             }
-            BuildEdges();
+            cancellation.Cancel();
+            _ = pending.ContinueWith(
+                cancellationToken: CancellationToken.None,
+                continuationAction: static (task, state) => {
+                    _ = task.Exception;
+                    ((CancellationTokenSource)state!).Dispose();
+                },
+                continuationOptions: TaskContinuationOptions.None,
+                scheduler: TaskScheduler.Default,
+                state: cancellation
+            );
+            m_pending = null;
+            m_cancellation = null;
+        }
+        /// <summary>Adopts this domain's occupancy sweep and static edge bake, once: a bake in flight is waited for, and
+        /// with none in flight the bake runs on the calling thread.</summary>
+        /// <remarks>Every kernel read that depends on the bake calls this itself. A host calls it only when it restores
+        /// state computed from a bake the kernel cannot see, such as a stored route.</remarks>
+        public void EnsureBaked() {
+            if (m_bake is not null) {
+                return;
+            }
+            Adopt(bake: ((m_pending is { } pending)
+                ? pending.GetAwaiter().GetResult()
+                : Bake(cancellation: CancellationToken.None, geometry: m_geometry)));
+        }
+        private void Adopt(NavigationDomainBake bake) {
+            m_bake = bake;
+            m_pending = null;
+            m_cancellation?.Dispose();
+            m_cancellation = null;
+            m_walkable = bake.Walkable;
+            m_ground = bake.Ground;
+            m_edges = bake.Edges;
         }
 
-        // A retained workspace is safe only when its fixed occupancy and edge bake means the same thing under the
-        // replacement provider. Dynamic off-grid locomotion is deliberately forwarded to the replacement provider;
-        // retaining a workspace never retains a stale geometry query. Medium revisions are part of the proof because
-        // IsWalkable/edge admission consults the live field in addition to the solid provider.
-        internal bool TryRebind(NavigationDomainInput row, IWorldQuery query, INavigationMediumField? fields, NavigationCapacity capacity) {
+        // A retained workspace is safe only when its bake means the same thing under the replacement: equal tuning and
+        // an equal geometry part, which answers every query the bake asked as the old part did. A domain neither baked
+        // nor baking holds nothing the geometry decided, so it adopts any replacement part. Medium revisions are part of
+        // the proof because IsWalkable/edge admission consults the live field beside the geometry.
+        internal bool TryRebind(NavigationDomainInput row, IContactField geometry, INavigationMediumField? fields, NavigationCapacity capacity) {
             if (
                 (row != Tuning) ||
                 (capacity != m_capacity) ||
-                ((Tuning.Kind == NavigationKind.Medium) && !SameMediumRevision(fields: fields))
+                ((Tuning.Kind == NavigationKind.Medium) && !SameMediumRevision(fields: fields)) ||
+                (((m_bake is not null) || (m_pending is not null)) && !Equals(objA: m_geometry, objB: geometry))
             ) {
                 return false;
             }
-            // Only a baked domain holds occupancy/edge data (and shared trees or host routes built from it) that the
-            // candidate provider could invalidate, so only a baked domain whose query reference changed pays the
-            // geometry proof. An unbaked domain has nothing cached: adopting the candidate leaves it exactly as a
-            // fresh compile would, and its eventual bake samples the candidate instead of the provider it replaces.
-            if (
-                m_baked &&
-                !ReferenceEquals(
-                objA: m_query,
-                objB: query
-            ) &&
-                !HasSameStaticGeometry(query: query)
-            ) {
-                return false;
-            }
-            m_query = query;
+            m_geometry = geometry;
             m_fields = fields;
             m_capacity = capacity;
             return true;
@@ -257,130 +304,32 @@ public sealed partial class NavigationRuntime {
                 (m_sharedFieldRevision == fields.ValueRevision(field: field))
             );
         }
-        // Both initial baking and retention proof sample exactly the same clearance geometry.
-        private bool TrySampleCell(IWorldQuery query, int node, out FixedQ4816 routeY) {
-            Coordinates(
-                node: node,
-                x: out var x,
-                y: out var y,
-                z: out var z
-            );
-            var probe = GridPosition(
-                x: x,
-                y: y,
-                z: z
-            );
 
-            routeY = probe.Y;
-            if (Tuning.Kind != NavigationKind.Surface) {
-                return !query.Overlap(
-                    center: FixedPosition.FromLocal(local: probe),
-                    radius: Tuning.AgentRadius
-                );
-            }
-            if (!query.TryGroundHeight(
-                FixedPosition.FromLocal(local: probe),
-                Tuning.ProbeUp,
-                Tuning.ProbeDown,
-                out var ground
-            )) {
-                return false;
-            }
-            // Routes use the lower clearance-sphere center, never the floor surface itself.
-            routeY = ((ground + Tuning.AgentRadius) + ClearanceEpsilon);
-            // The occupancy proof starts maxStepHeight over the ground, as an edge's sweeps do: the step rule admits
-            // anything lower, so a tread's next riser beside the cell does not refuse it.
-            var headY = (((ground + Tuning.AgentHeight) - Tuning.AgentRadius) - ClearanceEpsilon);
-            var foot = new FixedVector3(
-                X: probe.X,
-                Y: FixedQ4816.Min(x: (routeY + FixedQ4816.Max(x: FixedQ4816.Zero, y: Tuning.MaxStepHeight)), y: FixedQ4816.Max(x: routeY, y: headY)),
-                Z: probe.Z
-            );
-
-            if (query.Overlap(
-                center: FixedPosition.FromLocal(local: foot),
-                radius: Tuning.AgentRadius
-            )) { return false; }
-            if (headY <= foot.Y) { return true; }
-            var head = new FixedVector3(
-                X: probe.X,
-                Y: headY,
-                Z: probe.Z
-            );
-            var core = (head - foot);
-
-            return (
-                !query.Overlap(
-                center: FixedPosition.FromLocal(local: head),
-                radius: Tuning.AgentRadius
-            ) &&
-                !query.SphereCast(
-                FixedPosition.FromLocal(local: foot),
-                core,
-                Tuning.AgentRadius,
-                core.Length,
-                out _
-            )
-            );
-        }
-        private bool HasSameStaticGeometry(IWorldQuery query) {
-            for (var node = 0; (node < CellCount); node++) {
-                var walkable = TrySampleCell(
-                    node: node,
-                    query: query,
-                    routeY: out var ground
-                );
-
-                if (
-                    (walkable != m_walkable[node]) ||
-                    (walkable && (ground != m_ground[node]))
-                ) { return false; }
-            }
-            for (var current = 0; (current < CellCount); current++) {
-                foreach (var step in Neighbors(node: current)) {
-                    var next = step.Node;
-
-                    if (next <= current) { continue; }
-                    var candidate = (m_walkable[current] && CanTraverseStatic(
-                        current: current,
-                        dx: step.Dx,
-                        dy: step.Dy,
-                        dz: step.Dz,
-                        next: next,
-                        query: query,
-                        x: step.X,
-                        y: step.Y,
-                        z: step.Z
-                    ));
-                    var currentBit = ((m_edges[current] & NeighborBit(
-                        dx: step.Dx,
-                        dy: step.Dy,
-                        dz: step.Dz
-                    )) != 0U);
-                    var reverseBit = ((m_edges[next] & NeighborBit(
-                        dx: -step.Dx,
-                        dy: -step.Dy,
-                        dz: -step.Dz
-                    )) != 0U);
-
-                    if (
-                        (candidate != currentBit) ||
-                        (candidate != reverseBit)
-                    ) { return false; }
+        public int CellCount { get; }
+        /// <summary>Gets whether this domain's bake has finished, adopting a bake that finished on the thread pool. A bake
+        /// that failed has finished too: the next read that needs it rethrows its failure. Reading it never waits for a
+        /// bake.</summary>
+        public bool IsBaked {
+            get {
+                if ((m_bake is null) && (m_pending is { IsCompletedSuccessfully: true } pending)) {
+                    Adopt(bake: pending.Result);
                 }
+                return ((m_bake is not null) || (m_pending is { IsCompleted: true }));
             }
-            return true;
         }
-
-        public int CellCount => m_walkable.Length;
-        /// <summary>Gets whether this domain's occupancy sweep and static edge bake have run. Reading it never bakes.</summary>
-        public bool IsBaked => m_baked;
+        /// <summary>Gets the work this domain's bake did. Bakes the domain.</summary>
+        public NavigationBakeWork BakeWork {
+            get {
+                EnsureBaked();
+                return m_bake!.Work;
+            }
+        }
         public string Name { get; }
         public NavigationDomainInput Tuning { get; }
         public int WalkableCellCount {
             get {
                 EnsureBaked();
-                return m_walkableCellCount;
+                return (int)m_bake!.Work.Walkable;
             }
         }
         public long WorkspaceBytes => checked(((((long)CellCount) * ((((6L * sizeof(int)) + sizeof(long)) + sizeof(uint)) + sizeof(byte))) + SharedWorkspaceBytes));
@@ -409,27 +358,10 @@ public sealed partial class NavigationRuntime {
                 m_capacity.MaxMediumSegmentSubdivisions
             ))
             ) { return false; }
-            if (
-                m_query.Overlap(
-                center: FixedPosition.FromLocal(local: from),
-                radius: Tuning.AgentRadius
-            ) ||
-                m_query.Overlap(
-                center: FixedPosition.FromLocal(local: to),
-                radius: Tuning.AgentRadius
-            )
-            ) { return false; }
-            var delta = (to - from);
-
             return (
-                (delta == FixedVector3.Zero) ||
-                !m_query.SphereCast(
-                FixedPosition.FromLocal(local: from),
-                delta,
-                Tuning.AgentRadius,
-                delta.Length,
-                out _
-            )
+                !Touches(foot: from, geometry: m_geometry, volumes: m_agent) &&
+                !Touches(foot: to, geometry: m_geometry, volumes: m_agent) &&
+                ((from == to) || !SweepMeets(from: from, geometry: m_geometry, to: to, volumes: m_agent))
             );
         }
         public FixedVector3 Position(int node) {
@@ -715,176 +647,6 @@ public sealed partial class NavigationRuntime {
             );
         }
 
-        private void BuildEdges() {
-            for (var current = 0; (current < CellCount); current++) {
-                if (!m_walkable[current]) {
-                    continue;
-                }
-                foreach (var step in Neighbors(node: current)) {
-                    var next = step.Node;
-
-                    // Each static edge is symmetric. Prove it once, then record each endpoint's local bit.
-                    if (
-                        (next <= current) ||
-                        !CanTraverseStatic(
-                        current: current,
-                        dx: step.Dx,
-                        dy: step.Dy,
-                        dz: step.Dz,
-                        next: next,
-                        x: step.X,
-                        y: step.Y,
-                        z: step.Z
-                    )
-                    ) {
-                        continue;
-                    }
-                    m_edges[current] |= NeighborBit(
-                        dx: step.Dx,
-                        dy: step.Dy,
-                        dz: step.Dz
-                    );
-                    m_edges[next] |= NeighborBit(
-                        dx: -step.Dx,
-                        dy: -step.Dy,
-                        dz: -step.Dz
-                    );
-                }
-            }
-        }
-        private bool CanTraverseStatic(int current, int next, int x, int y, int z, int dx, int dy, int dz) =>
-            CanTraverseStatic(
-                current: current,
-                dx: dx,
-                dy: dy,
-                dz: dz,
-                next: next,
-                query: m_query,
-                x: x,
-                y: y,
-                z: z
-            );
-        private bool CanTraverseStatic(IWorldQuery query, int current, int next, int x, int y, int z, int dx, int dy, int dz) {
-            if (!m_walkable[next]) {
-                return false;
-            }
-            if (Tuning.Kind == NavigationKind.Surface) {
-                var rise = FixedQ4816.Abs(value: (m_ground[next] - m_ground[current]));
-                var maximumSlopeRise = (((dx != 0) && (dz != 0))
-                    ? (Tuning.MaximumSlopeRise * SquareRootTwo)
-                    : Tuning.MaximumSlopeRise
-                );
-
-                if (
-                    (rise > Tuning.MaxStepHeight) ||
-                    (rise > maximumSlopeRise)
-                ) {
-                    return false;
-                }
-            }
-            var axes = ((((dx == 0)
-                ? 0
-                : 1) + ((dy == 0)
-                ? 0
-                : 1)) + ((dz == 0)
-                ? 0
-                : 1));
-
-            if (axes > 1) {
-                if (
-                    (dx != 0) &&
-                    !m_walkable[Index(
-                    x: (x + dx),
-                    y: y,
-                    z: z
-                )]
-                ) {
-                    return false;
-                }
-                if (
-                    (dy != 0) &&
-                    !m_walkable[Index(
-                    x: x,
-                    y: (y + dy),
-                    z: z
-                )]
-                ) {
-                    return false;
-                }
-                if (
-                    (dz != 0) &&
-                    !m_walkable[Index(
-                    x: x,
-                    y: y,
-                    z: (z + dz)
-                )]
-                ) {
-                    return false;
-                }
-            }
-            return HasClearTransition(
-                current: current,
-                next: next,
-                query: query
-            );
-        }
-        // A surface edge sweeps the agent's clearance spheres between the two route points from the step height up
-        // to the head: the lowest sweep's underside sits maxStepHeight above the foot, because the step rule already
-        // admits everything lower, and a sphere sweeping along the floor it stands on can only advance by its own
-        // clearance to that floor per march step. A volume or medium edge sweeps once, at the route points.
-        private bool HasClearTransition(int current, int next) => HasClearTransition(
-            current: current,
-            next: next,
-            query: m_query
-        );
-        private bool HasClearTransition(IWorldQuery query, int current, int next) {
-            var source = Position(node: current);
-            var destination = Position(node: next);
-            var delta = (destination - source);
-            var distance = delta.Length;
-            var sweeps = 1;
-            var lift = FixedQ4816.Zero;
-            var verticalCore = FixedQ4816.Zero;
-
-            if (Tuning.Kind == NavigationKind.Surface) {
-                verticalCore = FixedQ4816.Max(
-                    x: FixedQ4816.Zero,
-                    y: ((Tuning.AgentHeight - (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2))) - (ClearanceEpsilon * FixedQ4816.FromInteger(value: 2)))
-                );
-                lift = FixedQ4816.Min(
-                    x: verticalCore,
-                    y: FixedQ4816.Max(
-                        x: FixedQ4816.Zero,
-                        y: Tuning.MaxStepHeight
-                    )
-                );
-                var span = (verticalCore - lift);
-                var diameter = (Tuning.AgentRadius * FixedQ4816.FromInteger(value: 2));
-
-                sweeps = Math.Min(
-                    val1: m_capacity.MaxSurfaceClearanceSweeps,
-                    val2: checked((((int)(((span.Value + diameter.Value) - 1L) / diameter.Value)) + 1))
-                );
-            }
-            for (var sweep = 0; (sweep < sweeps); sweep++) {
-                var offset = ((sweeps == 1)
-                    ? verticalCore
-                    : (lift + (((verticalCore - lift) * FixedQ4816.FromInteger(value: sweep)) / FixedQ4816.FromInteger(value: (sweeps - 1))))
-                );
-                var origin = source with { Y = (source.Y + offset) };
-
-                if (m_query.SphereCast(
-                    origin: FixedPosition.FromLocal(local: origin),
-                    dir: delta,
-                    radius: Tuning.AgentRadius,
-                    maxDist: distance,
-                    hit: out _
-                )) {
-                    return false;
-                }
-            }
-            return true;
-        }
         private static uint NeighborBit(int dx, int dy, int dz) {
             var ordinal = ((((dy + 1) * 9) + ((dz + 1) * 3)) + (dx + 1));
 

@@ -230,14 +230,16 @@ from them. In this order:
 2. **Navigation** (built). The debug world authors surface navigation domains
    over its walkable spaces (`worlds/debug/navigation.puck`): the ground
    around the spawn with the hall's level 0 and Wonderland, the valley floor,
-   each upper gallery level and the stairwell of each storey, the last because
-   the switchback stairs repeat every storey and one ground per column cannot
-   hold a level and the flights over and under it. `world.navigation route
-   <from> <to>` searches one route across every domain
+   each upper gallery level and each storey's stairwell as two domains, one
+   per flight, because the switchback stairs repeat every storey and one
+   ground per column cannot hold a level and the flights over and under it.
+   The domains plan against the static part of the contact provider the Moth
+   collides with and bake on the thread pool, off the tick.
+   `world.navigation route <from> <to>` searches one route across every domain
    (`NavigationRuntime.FindRoute`), joined where two aligned grids share a
    walkable cell, to a place, a spawn point, a body or a point, and checks it
-   against the contact field the Moth collides with; `world.navigation map`
-   draws a domain's cells.
+   against the full contact field; `world.navigation map` draws a domain's
+   cells.
 3. **A chapter is goals, not ticks.** A chapter lists where to go and how: a
    place or waypoint to reach at a pace (walk, run, dash), a rest (stand for a
    time, facing a heading), an interaction (the context button at a spot, then

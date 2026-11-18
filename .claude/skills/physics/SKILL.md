@@ -50,7 +50,7 @@ same change.
 | A rope that caps distance and keeps swing momentum | `FixedTetherConstraint` (`ResolveAnchor`, `Reel`); host `WorldBody.Tether.cs` | [tether](../../../docs/reference/physics.md#the-tether-constraint) |
 | Climb a wall, grapple, pick an anchor | `FixedSurfaceQuery.TryNearest`, `TryNearestDirected`; `IContactField.TryHoldableSurfaceAlongDirection` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Gravity between many bodies | `GravitySolvers.Create` over `PairwiseGravitySolver` (the oracle), `FastMonopoleGravitySolver`, `AdaptiveFmmGravitySolver` | [choose a solver](../../../docs/reference/physics.md#choose-a-gravity-solver) |
-| Routes, shared goal searches, off-grid checks | `NavigationRuntime` over `NavigationDomainInput`; medium fields through `INavigationMediumField`; host `WorldPopulation.Navigation.cs` | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
+| Routes, shared goal searches, off-grid checks | `NavigationRuntime` over `NavigationDomainInput`, proved with the body's own resolve and sweep against the static contact geometry (`WorldColliderSet.StaticField`, a `FixedStaticContactField`, or `WorldSolidField.StaticField`), each domain baked once on the thread pool (`NavigationDomainBake`, kept across rebuilds while its `IRegionalContactField.Within` part is equal); medium fields through `INavigationMediumField`; host `WorldPopulation.Navigation.cs` | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | One route across several domains (a building's levels and stairwells, the valley), to a cell or a place | `NavigationRuntime.FindRoute` with an `INavigationRouteGoal` (`NavigationCellGoal`, the host's `WorldNavigationPlaceGoal`), joined at aligned grids' shared cells; `world.navigation route` checks it against the contact field, `world.navigation map` draws a domain | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | Evolving scalar fields (water, heat, snow) and their solids | `FieldLattice` (reactions, `IFieldLatticeHost`), `FieldLatticeSolid`, `UnionField`, ordering by `ReadWriteHazard.Conflicts` | [field lattice](../../../docs/reference/physics.md#field-lattice-fields) |
 | Steering samples and flocks | `FixedSpatialNeighborhood` (bounded, never a broadphase), `FixedFlockSteering` | [perception](../../../docs/reference/physics.md#bounded-local-perception) |
@@ -98,8 +98,9 @@ same change.
   new answer's exactness, not by matching old bytes (AGENTS.md rule 4).
 - **Kernels decide nothing.** Walkability, authority, waking and admission
   are the caller's. A kernel returning a correction must not mutate a body.
-- **One mechanism per question.** One rigid solver, one broadphase
-  (`FixedSweepGrid`), one round-core rule
+- **One mechanism per question.** One rigid solver, one body broadphase
+  (`FixedSweepGrid`), one static-collider grid (`FixedColliderGrid`, behind
+  `FixedStaticContactField` and so `WorldColliderSet`), one round-core rule
   (`TryRoundPush`, behind both static spheres and dynamic round pairs), one
   box geometry owner (`FixedOrientedBox`), one approach-removal
   (`FixedVector3.LimitAlong`), one overlap sense for events and contacts.

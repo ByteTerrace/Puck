@@ -188,7 +188,7 @@ public static partial class WorldDefinitionValidator {
                     float.IsFinite(f: domain.AgentRadius) &&
                     (domain.AgentHeight > (32f * domain.AgentRadius))
                 ) {
-                    errors.Add(item: $"{path}.agentHeight ({domain.AgentHeight}) cannot exceed 32 times agentRadius ({domain.AgentRadius}); that bounds transition clearance to {WorldNavigationCapacity.MaxSurfaceClearanceSweeps} parallel sweeps.");
+                    errors.Add(item: $"{path}.agentHeight ({domain.AgentHeight}) cannot exceed 32 times agentRadius ({domain.AgentRadius}); that keeps the agent's capsule within the field contact sweep's {Puck.Physics.FixedFieldContactSolver.MaximumCapsuleSweepPieces} core pieces.");
                 }
             } else {
                 if (domain.Layers <= 0) {

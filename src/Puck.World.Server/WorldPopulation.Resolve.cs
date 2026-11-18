@@ -167,16 +167,32 @@ public sealed partial class WorldPopulation {
         );
         m_navigation = new NavigationRuntime(
             domains: CompileNavigationDomains(definition: definition),
-            query: derivedSolids?.Query,
+            geometry: NavigationGeometry(contact: m_baseContactField),
             fields: ((m_fieldRegions.Count == 0) ? null : new NavigationMediumFieldAdapter(regions: m_fieldRegions)),
             capacity: new NavigationCapacity(
                 MaxConcurrentRequesters: WorldBodiesLimits.CapacityCeiling,
-                MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions,
-                MaxSurfaceClearanceSweeps: WorldNavigationCapacity.MaxSurfaceClearanceSweeps
+                MaxMediumSegmentSubdivisions: WorldNavigationCapacity.MaxMediumSegmentSubdivisions
             ),
             previous: previousNavigation
         );
+        if (NavigationBakesAhead(definition: definition)) {
+            m_navigation.BeginBakes();
+        }
     }
+    // The static part of the contact provider the bodies collide with, which navigation plans against: the analytic
+    // set's static colliders, or the field's authored program, without the attached solids that move each tick (or
+    // the lattice's columns), so a bake reads geometry that never changes and may run off the authority's tick.
+    private static IContactField? NavigationGeometry(IContactField? contact) => contact switch {
+        WorldColliderSet analytic => analytic.StaticField,
+        WorldSolidField field => field.StaticField,
+        _ => null,
+    };
+    // Whether a body may follow a route from its first tick: a kit's target or flock names a navigation domain. Its
+    // domains' bakes then start on the thread pool at install, so the first tick that reads one rarely waits.
+    private static bool NavigationBakesAhead(WorldDefinition definition) =>
+        ((definition.Navigation.Rows.Count != 0) &&
+         (definition.BodyMotionPrograms.Any(predicate: static program => (program.Target is BodyTargetSource.Navigated)) ||
+          definition.Kits.Any(predicate: static kit => kit.Producers.Values.Any(predicate: static parameters => (parameters?.Flock?.MovementDomain is not null)))));
 
     /// <summary>Checks whether the candidate's field runtime can replace the live reaction plan while preserving
     /// the boot-allocated lattice cells.</summary>

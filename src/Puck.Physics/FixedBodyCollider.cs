@@ -27,4 +27,43 @@ public readonly record struct FixedBodyColliderVolume(
     FixedVector3 HalfExtents,
     FixedQuaternion Rotation,
     FixedQ4816 Radius
-);
+) {
+    /// <summary>Creates a sphere volume.</summary>
+    /// <param name="center">The body-local center, in metres.</param>
+    /// <param name="radius">The radius, in metres.</param>
+    /// <returns>The volume.</returns>
+    public static FixedBodyColliderVolume Sphere(FixedVector3 center, FixedQ4816 radius) => new(
+        Kind: FixedBodyColliderKind.Sphere,
+        Center: center,
+        Endpoint: FixedVector3.Zero,
+        HalfExtents: FixedVector3.Zero,
+        Rotation: FixedQuaternion.Identity,
+        Radius: radius
+    );
+    /// <summary>Creates a capsule volume.</summary>
+    /// <param name="lower">The body-local lower endpoint of its core, in metres.</param>
+    /// <param name="upper">The body-local upper endpoint of its core, in metres.</param>
+    /// <param name="radius">The radius, in metres.</param>
+    /// <returns>The volume.</returns>
+    public static FixedBodyColliderVolume Capsule(FixedVector3 lower, FixedVector3 upper, FixedQ4816 radius) => new(
+        Kind: FixedBodyColliderKind.Capsule,
+        Center: lower,
+        Endpoint: upper,
+        HalfExtents: FixedVector3.Zero,
+        Rotation: FixedQuaternion.Identity,
+        Radius: radius
+    );
+    /// <summary>Creates an oriented box volume.</summary>
+    /// <param name="center">The body-local center, in metres.</param>
+    /// <param name="halfExtents">The half-extents, in metres.</param>
+    /// <param name="rotation">The body-local orientation.</param>
+    /// <returns>The volume.</returns>
+    public static FixedBodyColliderVolume Box(FixedVector3 center, FixedVector3 halfExtents, FixedQuaternion rotation) => new(
+        Kind: FixedBodyColliderKind.Box,
+        Center: center,
+        Endpoint: FixedVector3.Zero,
+        HalfExtents: halfExtents,
+        Rotation: rotation,
+        Radius: FixedQ4816.Zero
+    );
+}
