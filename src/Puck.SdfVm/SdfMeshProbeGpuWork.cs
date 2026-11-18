@@ -41,11 +41,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private IDisposable? m_sceneCarry;
     private GpuRegion? m_feedback;
     private IGpuBuffer? m_hitCache;
-    private IGpuBuffer? m_meterCache;
+    private IGpuBuffer? m_cameraSampleCache;
     // Whether a new hit cache's clear, or a new meter cache's fill, is still owed: set as the cache is made and
     // discharged only by the completion of a job that recorded it.
     private bool m_hitCacheOwed;
-    private bool m_meterCacheOwed;
+    private bool m_cameraSampleCacheOwed;
     private int m_feedbackWords;
     private SdfMeshIrradianceScene? m_scene;
     private IReadOnlyDictionary<SdfMesh, SdfMeshRegionMesh> m_scenePlacements = new Dictionary<SdfMesh, SdfMeshRegionMesh>();
@@ -209,8 +209,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[1])); index--) { newer = m_selectNewer[index].Boxes; }
         return (1L + ((long)newer * SdfMeshProbeDepth.HitCount));
     }
-    internal Task<uint[]> Meter(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
-        SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, Meter = true, VolumeWords = words, Geometry = geometry, Window = window });
+    internal Task<uint[]> CameraSample(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
+        SubmitAsync(new Job(scene.Acquire(), origins) { Input = new uint[] { 0 }, Lighting = lighting, CameraSample = true, VolumeWords = words, Geometry = geometry, Window = window });
     private uint[] Submit(Job job) => SubmitAsync(job).GetAwaiter().GetResult();
     private Task<uint[]> SubmitAsync(Job job) {
         lock (m_gate) {
@@ -259,9 +259,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 m_sceneUpload = null;
             }
             if (!m_pending.TryPeek(out var pending)) { return false; }
-            if (!(pending.CommitSource is null && !pending.Meter ? m_volume.KeepsGpuScene(pending.Scene) :
+            if (!(pending.CommitSource is null && !pending.CameraSample ? m_volume.KeepsGpuScene(pending.Scene) :
                 m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window)) ||
-                (pending.Meter && (m_feedback is null || m_feedbackWords != pending.VolumeWords))) {
+                (pending.CameraSample && (m_feedback is null || m_feedbackWords != pending.VolumeWords))) {
                 m_pending.Dequeue();
                 pending.Scene.Dispose();
                 m_volume.Counters.Add(SdfMeshIrradiance.GpuCancelled, 1);
@@ -302,7 +302,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 return false;
             }
             pending.Meshes = meshes;
-            if (pending.Lighting is not null && !pending.Selection && !pending.Meter) {
+            if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample) {
                 if (m_feedbackWords != pending.VolumeWords) {
                     if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                     m_feedback = tables.CreateProbeSceneRegion(pending.VolumeWords * 4);
@@ -330,11 +330,11 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         }
         var slot = m_slots[recording.Slot];
         var compute = query.Lighting is not null;
-        var relight = compute && !query.Selection && !query.Meter;
-        var pipeline = m_tables.Pipeline(query.Meter ? SdfKernel.ProbeMeter : query.Selection ? SdfKernel.ProbeSelect : relight ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace);
+        var relight = compute && !query.Selection && !query.CameraSample;
+        var pipeline = m_tables.Pipeline(query.CameraSample ? SdfKernel.ProbeCameraSample : query.Selection ? SdfKernel.ProbeSelect : relight ? SdfKernel.ProbeRelight : SdfKernel.ProbeTrace);
         var layout = compute ? SdfWorldInterfaces.ProbeRelightLayout : SdfWorldInterfaces.ProbeTraceLayout;
         var set = compute ? slot.RelightSet : slot.Set;
-        var bytes = (ulong)query.Origins.Length * (ulong)(query.Meter ? SdfMeshProbeRelight.MeterOutputWords : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
+        var bytes = (ulong)query.Origins.Length * (ulong)(query.CameraSample ? SdfMeshProbeRelight.CameraSampleOutputWords : query.Selection ? 1 : relight ? SdfMeshProbeRelight.ResultWords : SdfMeshProbeDepth.HitWords) * 4;
         // A relight's slices write their partial sums behind the results and the fault word, where the readback never
         // reaches (sdf-probe-relight, sdf-probe-combine).
         var partialBytes = relight ? (ulong)query.Origins.Length * SdfMeshProbeRelight.Slices * SdfMeshProbeRelight.PartialWords * 4 : 0UL;
@@ -349,20 +349,20 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var work = compute ? recording.DeviceBuffer(part: "work", bytes: (ulong)(query.Origins.Length + 3) * 4, usage: GpuBufferUsage.Storage | GpuBufferUsage.Indirect, sizing: SdfGpuWorkSizing.Fit) : null;
         recording.ReserveReadback(bytes: bytes + 4);
         var command = recording.CommandBuffer;
-        if (query.Meter) {
+        if (query.CameraSample) {
             var cacheBytes = (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
-            if (m_meterCache is null || m_meterCache.SizeBytes < cacheBytes) {
-                m_meterCache?.Dispose();
-                m_meterCache = null;
-                m_meterCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "meter-cache"), sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
-                m_meterCacheOwed = true;
+            if (m_cameraSampleCache is null || m_cameraSampleCache.SizeBytes < cacheBytes) {
+                m_cameraSampleCache?.Dispose();
+                m_cameraSampleCache = null;
+                m_cameraSampleCache = m_gpu.BufferFactory.CreateDeviceLocal(name: Name(part: "camera-sample-cache"), sizeBytes: cacheBytes, usage: GpuBufferUsage.Storage);
+                m_cameraSampleCacheOwed = true;
             }
             // A new cache holds nothing until a meter job that fills it completes (Complete), so until then every job
             // fills it: one handed back unsubmitted leaves the fill owed.
-            if (m_meterCacheOwed) {
+            if (m_cameraSampleCacheOwed) {
                 var origins = query.Origins.Span;
                 for (var i = 0; i < origins.Length; i++) { origins[i].W = 1; }
-                query.FillsMeterCache = true;
+                query.FillsCameraSampleCache = true;
             }
         }
         if (query.HitCapacity != 0) { FitHitCache(query, query.HitCapacity, command); }
@@ -383,8 +383,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             Bind(SdfWorldPackage.MeshIrradiance, m_feedback?.Buffer(0) ?? m_tables.DummyBuffer, 4);
             Bind(SdfKernelInterfaces.ProbeWorkWritten, work!, 4, written: true);
             Bind(SdfKernelInterfaces.ProbeWork, work!, 4);
-            Bind(SdfKernelInterfaces.ProbeCacheWritten, query.Meter ? m_meterCache! : m_hitCache!, 4, written: true);
-            Bind(SdfKernelInterfaces.ProbeCache, query.Meter ? m_meterCache! : m_hitCache!, 4);
+            Bind(SdfKernelInterfaces.ProbeCacheWritten, query.CameraSample ? m_cameraSampleCache! : m_hitCache!, 4, written: true);
+            Bind(SdfKernelInterfaces.ProbeCache, query.CameraSample ? m_cameraSampleCache! : m_hitCache!, 4);
         } else { Bind(SdfKernelInterfaces.ProbeIdentitiesWritten, identities, 8, written: true); }
         var recorder = recording.Recorder;
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: hits.BufferHandle,
@@ -398,8 +398,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: identities.BufferHandle,
             sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
             destinationAccessMask: GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
-        if (query.Meter) {
-            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_meterCache!.BufferHandle,
+        if (query.CameraSample) {
+            recorder.TransitionBuffer(commandBufferHandle: command, bufferHandle: m_cameraSampleCache!.BufferHandle,
                 sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
                 destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
         }
@@ -442,7 +442,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             recorder.Dispatch(command, (uint)query.Origins.Length, 1, 1);
         }
         else { recorder.Dispatch(commandBufferHandle: command,
-            groupCountX: (uint)(query.Meter ? query.Origins.Length : query.Selection ? (query.Origins.Length + SdfMeshProbeRelight.SelectGroupSize - 1) / SdfMeshProbeRelight.SelectGroupSize : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
+            groupCountX: (uint)(query.CameraSample ? query.Origins.Length : query.Selection ? (query.Origins.Length + SdfMeshProbeRelight.SelectGroupSize - 1) / SdfMeshProbeRelight.SelectGroupSize : (query.Origins.Length * SdfMeshProbeDepth.HitCount + SdfMeshProbeTrace.GroupSize - 1) / SdfMeshProbeTrace.GroupSize), groupCountY: 1, groupCountZ: 1); }
         recording.CopyToReadback(hits, bytes + 4);
         if (query.CacheSlots is { } cacheSlots) {
             // The readback left the hits a transfer source; each origin's hits land behind its cache slot's two token
@@ -520,10 +520,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var query = (Job)job;
         // The job ran: what it initialized stands.
         if (query.ClearsHitCache) { m_hitCacheOwed = false; }
-        if (query.FillsMeterCache) { m_meterCacheOwed = false; }
+        if (query.FillsCameraSampleCache) { m_cameraSampleCacheOwed = false; }
         var words = readback.Length / 4;
         var readWords = (words == 0) ? [] : (query.Reuse is { } reuse && (reuse.Length >= words)) ? reuse : new uint[words];
-        var holdsOutput = query.Lighting is not null && !query.Selection && !query.Meter;
+        var holdsOutput = query.Lighting is not null && !query.Selection && !query.CameraSample;
         try { readback.Read(MemoryMarshal.AsBytes(readWords.AsSpan(start: 0, length: words))); }
         catch { readback.Release(); throw; }
         if (holdsOutput) { query.HeldReadback = readback; }
@@ -545,15 +545,15 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             var kind = KindOf(query);
             m_rates[(int)kind].Observe(seconds: seconds, units: UnitsOf(query));
             m_volume.Counters.Add(kind switch {
-                JobKind.Meter => SdfMeshIrradiance.GpuMeterNanoseconds,
+                JobKind.CameraSample => SdfMeshIrradiance.GpuCameraSampleNanoseconds,
                 JobKind.Select => SdfMeshIrradiance.GpuSelectNanoseconds,
                 JobKind.Trace => SdfMeshIrradiance.GpuTraceNanoseconds,
                 _ => SdfMeshIrradiance.GpuRelightNanoseconds,
             }, (long)(seconds * 1e9));
         }
         CountAnswered(query: query);
-        if (query.Meter) {
-            for (var i = SdfMeshProbeRelight.MeterOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.MeterOutputWords) {
+        if (query.CameraSample) {
+            for (var i = SdfMeshProbeRelight.CameraSampleOutputWords - 1; i < result.Length; i += SdfMeshProbeRelight.CameraSampleOutputWords) {
                 if ((result[i] & 4) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraTraces, 1); }
                 if ((result[i] & 2) != 0) { m_volume.Counters.Add(SdfMeshIrradiance.CameraRelights, 1); }
             }
@@ -594,8 +594,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         return text.Append(value: ']').ToString();
     }
     // The kinds of probe job, each with its own measured rate (m_rates, in this order).
-    private enum JobKind { Trace, Relight, Select, Meter, Commit }
-    private static JobKind KindOf(Job query) => (query.CommitSource is not null) ? JobKind.Commit : query.Meter ? JobKind.Meter :
+    private enum JobKind { Trace, Relight, Select, CameraSample, Commit }
+    private static JobKind KindOf(Job query) => (query.CommitSource is not null) ? JobKind.Commit : query.CameraSample ? JobKind.CameraSample :
         query.Selection ? JobKind.Select : (query.Lighting is not null) ? JobKind.Relight : JobKind.Trace;
     // The units a job's rate is measured in: a relight's predicted rays (none for a job of invalid probes alone, which
     // measures nothing), a commit's destinations, a selection's tests (SelectTestsOf), and every other kind's origins.
@@ -656,7 +656,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             var device = bytes.DeviceLocal;
             var host = bytes.HostVisible + m_directions.SizeBytes + m_zero.SizeBytes;
             device += m_feedback?.OwnedBytes.DeviceLocal ?? 0;
-            device += (m_hitCache?.SizeBytes ?? 0) + (m_meterCache?.SizeBytes ?? 0);
+            device += (m_hitCache?.SizeBytes ?? 0) + (m_cameraSampleCache?.SizeBytes ?? 0);
             host += m_feedback?.OwnedBytes.HostVisible ?? 0;
             return new GpuMemoryBytes(DeviceLocal: device, HostVisible: host);
         }
@@ -680,7 +680,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         m_sceneUpload?.Dispose();
         m_feedback?.Dispose();
         m_hitCache?.Dispose();
-        m_meterCache?.Dispose();
+        m_cameraSampleCache?.Dispose();
         m_sceneRegion?.Dispose();
         m_sceneCarry?.Dispose();
         m_scene?.Dispose();
@@ -702,7 +702,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public int VolumeWords;
         public Deltas Updates;
         public bool Selection;
-        public bool Meter;
+        public bool CameraSample;
         public IGpuBuffer? Output;
         public SdfGpuWorkReadback? HeldReadback;
         public Result? CommitSource;
@@ -713,7 +713,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         public long Tests;
         public uint HitCapacity;
         // Whether the job recorded the meter cache's fill or the hit cache's clear, which its completion discharges.
-        public bool FillsMeterCache;
+        public bool FillsCameraSampleCache;
         public bool ClearsHitCache;
         // When a worker submitted the job (SubmitAsync), in Stopwatch ticks; zero for one never submitted.
         public long SubmittedAt;

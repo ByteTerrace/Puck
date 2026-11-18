@@ -228,9 +228,8 @@ or one adds a field the other forgets.
 - The test copies of the bake's sample-position formula, written out in four
   `SdfVm` test helpers and `MeshCpuBake`, now one `SdfMeshBakeRequest.SampleAt`
   (`src/Puck.SdfVm/SdfMeshPathBake.cs`).
-- Five copies of a `NativeMemory`-backed test `IAllocator` named
-  `HeapAllocator` (`tests/Puck.Vulkan.Tests/VulkanIndirectCountLawTests.cs`
-  and four more; [refactoring campaign](../plans/open-items.md#refactoring-campaign)).
+- The test copies of a `NativeMemory`-backed `IAllocator` named
+  `HeapAllocator`, now one `tests/Shared/HeapAllocator.cs`.
 - The Superellipsoid's CPU and GPU formulas disagree at small radii
   (`SdfFieldEvaluator.SdfSuperellipsoid` against
   `mapCore`), and the box cull is written in C# and HLSL

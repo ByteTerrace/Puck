@@ -113,7 +113,7 @@ half of these rules on every command, with no exemptions.
 | [`puck font-atlas`](#puck-font-atlasmanaged-sdf-font-artifacts) | generates loader-compatible SDF metadata and pixels with Puck's production managed font path. |
 | [`puck format`](#puck-formatthe-one-formatter) | formats every source kind Puck owns, C# and `.puck`, to its one canonical form. |
 | [`puck gate`](#puck-gatethe-change-scoped-gate) | the change-scoped gate for a branch: checks the lock files with a locked restore, builds the solution and the file app, copies the CLI it built, and runs the affected suites and the repository checks against the merge base with the target; `--gpu` adds canaries, parity, device suites, all recorded counters workloads and citations. | |
-| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due. |
+| [`puck host`](#puck-host-loadadmission-lines-for-the-machine) | the machine-admission family: `host load` reports the machine's CPU, memory, disk and GPU busyness as `GPU busy`/`GPU idle`, `PRESSURE`, `CAPACITY` and `LOADED` lines an agent admits or holds work by; `--watch` streams each line when due; [`host heap`](#puck-host-heapthe-large-object-heap-of-another-process) names another process's large object heap tenants. |
 | [`puck landing`](#puck-landingthe-leads-landing-checks) | the lead's checks before landing a lane: `landing loss` refuses a commit that silently drops content its author never worked from, and `landing handback` checks a lane branch's commits against the hand-back contract (the `Brief:` line, subjects, trailers, plumbing and docs links). |
 | [`puck lanes`](#puck-lanesone-line-per-worktree) | prints one line per worktree: branch, commits ahead, changes, last commit, newest write, log, lease and stall state; `--watch` prints only the changes. |
 | [`puck laws`](#puck-laws-provea-law-against-its-fix) | `laws prove` shows, in an isolated proof tree, that a law fails with its fix withheld and passes with it, and prints the evidence for a commit body. |
@@ -1140,6 +1140,27 @@ from its command line.
 
 Exit codes: 0 done, 2 refused (invalid thresholds or an interval or window below
 1), 130 cancelled.
+
+## `puck host heap`—the large object heap of another process
+
+`puck host heap --pid <pid> [--min-mib <n>]` names the large object heap's
+tenants of another .NET process from the runtime's own heap dump, the technique
+`dotnet-gcdump` uses. The CLI opens an EventPipe session on the target's
+diagnostics port with the runtime provider's heap-collect and heap-dump
+keywords; the runtime runs one blocking full collection with every managed
+thread suspended and writes each live object and root to the stream, which the
+CLI reads. The target pays the collection's pause and nothing else, so no World
+carries the trace-parsing package. The report starts with the large objects'
+totals (objects of at least 85,000 bytes), then one `tenant` line per type and
+first holder, largest first, for every tenant of at least `--min-mib` MiB
+(default 4); the holder is the type of the first referrer found, or the kind of
+root that keeps it. Reading the stream takes seconds on a heap of a few
+gigabytes, and the pause shows as one long frame in the target's `host.frames`,
+so the verb never runs during a frame-time reading. A World's process id comes
+from `puck_world_start`.
+
+Exit codes: 0 done, 2 refused (the process exposes no diagnostics port or the
+runtime wrote no dump).
 
 ## `puck laws prove`—a law against its fix
 
@@ -4586,7 +4607,7 @@ beside the project), and every restore is locked: `Directory.Build.props` sets
 never rewrites a lock file, so a package or project reference change fails the
 build that made it with NU1004, naming the project, rather than rewriting the
 lock file silently and failing CI's `dotnet restore Puck.slnx --locked-mode`
-later. Package versions float (`[10.*, )`), so locking also makes taking a newer
+later. Package versions float (`[11.*, )`), so locking also makes taking a newer
 package an explicit step.
 
 ```sh
@@ -4595,14 +4616,20 @@ puck locks --update   # also re-evaluate every floating version
 puck locks --check    # report drift by project; write nothing
 ```
 
-- `puck locks` restores the solution with `-p:RestoreLockedMode=false`, the one
-  way to restore unlocked. NuGet rewrites only the lock files that no longer
-  match their projects, re-resolving those projects' floating ranges, and keeps
-  every other lock file as it is. The verb names each lock file it wrote or
-  created.
-- `--update` adds `--force-evaluate`: every project re-resolves its floating
-  ranges and takes the newest packages they admit. This is the dependency
-  update; review the rewritten lock files like any other change.
+- `puck locks` restores the solution with `-p:RestoreLockedMode=false
+  --force-evaluate`, the one way to restore unlocked, so every lock file lists
+  exactly the current project closure (a project entry a removed reference left
+  behind is pruned). The fresh evaluation also resolves every floating range to
+  the newest package, so the verb then takes each package back to the version
+  its lock file pinned (`LockPins.Hold`), wherever the project still asks for
+  the package in the same role and range, and a locked restore judges the
+  result. A new reference that needs a newer package than a pin makes that
+  restore refuse; the lock files then stand as the restore wrote them, and the
+  verb names each package that advanced. The verb names each lock file it wrote
+  or created.
+- `--update` skips the pin step: every project takes the newest packages its
+  floating ranges admit. This is the dependency update; review the rewritten
+  lock files like any other change.
 - `--check` runs `dotnet restore Puck.slnx --locked-mode --force` and reports
   each project whose lock file no longer matches it, with NuGet's reason, and
   each project that has no lock file. `--force` skips NuGet's no-op shortcut,

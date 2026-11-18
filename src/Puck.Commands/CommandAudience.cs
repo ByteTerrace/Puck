@@ -14,8 +14,8 @@ public enum CommandAudience : byte {
     /// world) derives only from that recipient's view: no text, count, tick or byte length of it may depend on a row
     /// the recipient cannot read whole.</summary>
     Anyone = 1,
-    /// <summary>Only <see cref="PrincipalKind.Console"/> may run the command: a developer diagnostic printing
-    /// what the evaluation itself computed, which may derive from state another principal is not shown.</summary>
+    /// <summary>Only a principal holding the addressed world's live operator authority may run the command.
+    /// Its answer may derive from state another principal is not shown.</summary>
     Operator = 2,
     /// <summary>Only a local ingress may run the command: <see cref="PrincipalKind.Console"/> or a
     /// <see cref="PrincipalKind.Seat"/>, never an addon, a peer, a session or the world's own program. For a verb that

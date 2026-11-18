@@ -1793,8 +1793,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     /// (<see cref="StateReader.TryReadHandle"/>)
     /// rather than re-resolving the row by name per cell, or a bespoke scan of <see cref="StateCell.Value"/>. The tick
     /// this resolves at is inert for every row this index can ever hold: <see cref="WorldStateRow.GatesDrive"/>
-    /// requires a declared <see cref="StateRow.Capacity"/> (WorldDefinitionValidator), and
-    /// <see cref="StateRow.Advance"/> — the only trait a read's tick argument affects — refuses beside one, so a gate
+    /// requires a declared <see cref="StateRowShape.Capacity"/> (WorldDefinitionValidator), and
+    /// <see cref="StateRowShape.Advance"/> — the only trait a read's tick argument affects — refuses beside one, so a gate
     /// row can never advance; <c>0</c> reads identically to any other tick. First-in-document-order gate wins a body
     /// (declaration-order tiebreak, the same convention same-tick rule effects resolve by).</summary>
     /// <param name="definition">The live document.</param>

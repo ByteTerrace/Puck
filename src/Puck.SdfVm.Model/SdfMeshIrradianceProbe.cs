@@ -33,7 +33,7 @@ public static class SdfMeshIrradianceProbe {
     public const float OpenGroundShare = 2f;
     /// <summary>The distance in metres within which the meter's camera stands at a probe and casts no visibility ray to
     /// it.</summary>
-    public const float MeterCoincident = 1.0e-3f;
+    public const float CameraSampleCoincident = 1.0e-3f;
     /// <summary>The distance in metres a shadow ray toward a point light ends before the light, so a fixture sunk a little
     /// into its housing is not blocked by it.</summary>
     public const float LightBias = 0.02f;

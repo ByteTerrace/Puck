@@ -50,6 +50,10 @@ public readonly struct CellValue : IEquatable<CellValue>, IUnion {
     /// alone.</summary>
     public bool HasValue => (m_discriminator != 0);
 
+    /// <summary>Copies mutable vector storage so the returned value shares no writable payload with this one.
+    /// Other cases, including the empty value, need no copy.</summary>
+    public CellValue DetachedCopy() => HasValue && Kind == CellKind.Vector ? Vector(m_vector.ToArray()) : this;
+
     object? IUnion.Value => (HasValue
         ? (Kind switch {
             CellKind.Int or CellKind.Fixed => m_number,

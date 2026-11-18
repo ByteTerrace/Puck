@@ -11,14 +11,9 @@ namespace Puck.World.Server;
 /// <remarks>Each count is a monotonic total over the ledger's life, never reset; a reader takes a window by reading
 /// twice and subtracting. None is part of simulation state: nothing hashes, exports or checkpoints them. Each kind
 /// declares its class; neighbour-contact counts depend on untaped delivery timing.</remarks>
-public sealed class WorldBodyWork : IWorkCounterSource {
+public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
     /// <summary>The name a counters report heads this source's section with.</summary>
     public const string SourceName = "physics.bodies";
-
-    private readonly WorkCounterSet m_counts = new(
-        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
-        name: SourceName
-    );
 
     /// <summary>Gets the kind counting simulated body advances: one per non-seat body a tick's integration pass steps.</summary>
     public static WorkKind Advances { get; } = new(name: "physics.bodies.advances", unit: "count", workClass: WorkClass.Deterministic);
@@ -46,21 +41,16 @@ public sealed class WorldBodyWork : IWorkCounterSource {
     /// as it is created.</summary>
     public static WorldBodyWork Process { get; } = new();
 
-    /// <inheritdoc/>
-    public string Name => m_counts.Name;
-    /// <inheritdoc/>
-    public ReadOnlySpan<WorkKind> WorkKinds => m_counts.WorkKinds;
+    /// <summary>Initializes a new instance of the <see cref="WorldBodyWork"/> class, every kind at zero.</summary>
+    public WorldBodyWork() : base(counters: new(
+        kinds: [Advances, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
+        name: SourceName
+    )) { }
 
     /// <summary>Adds to one of this ledger's kinds.</summary>
     /// <param name="kind">One of this ledger's kinds.</param>
     /// <param name="amount">The count to add; zero adds nothing.</param>
     public void Add(WorkKind kind, int amount) {
-        if (amount != 0) { m_counts.Add(amount: amount, kind: kind); }
+        if (amount != 0) { Counters.Add(amount: amount, kind: kind); }
     }
-    /// <summary>Reads the current total of one of this ledger's kinds.</summary>
-    /// <param name="kind">One of this ledger's kinds.</param>
-    /// <returns>The total counted so far.</returns>
-    public long Read(WorkKind kind) => m_counts.Read(kind: kind);
-    /// <inheritdoc/>
-    public bool TryRead(WorkKind kind, out long value) => m_counts.TryRead(kind: kind, value: out value);
 }

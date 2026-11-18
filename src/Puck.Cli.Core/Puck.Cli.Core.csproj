@@ -11,7 +11,7 @@
     <ItemGroup>
         <PackageReference Include="FSharp.Core" Version="[11.*, )" />
         <PackageReference Include="Resharp" Version="[1.*, )" />
-        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../../build/ProjectArchitecture.cs" Link="Architecture/ProjectArchitecture.cs" />

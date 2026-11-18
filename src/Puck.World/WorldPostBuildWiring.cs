@@ -124,8 +124,6 @@ public static class WorldPostBuildWiring {
         // for. Stamped with the seat's own acting principal: the restore targets that seat's own body, which is
         // exactly the authority PrincipalOf reports. Unconditional — Disengage on an already-clear route is the
         // ordinary NotEngaged no-op.
-        var cameraRoster = services.GetRequiredService<PlayerRoster>();
-        var cameraLink = services.GetRequiredService<LoopbackTransport>();
 
         services.GetRequiredService<WorldReplayTape>().TimelineRestored += () => {
             for (var slot = 0; (slot < WorldSeatBindings.SeatCount); slot++) {
@@ -143,12 +141,6 @@ public static class WorldPostBuildWiring {
                 }
             }
         };
-
-        seatBindings.CameraApplicationDropped += slot => WorldCameraApplication.Deactivate(
-            actingPrincipal: cameraRoster.PrincipalOf(slot: slot),
-            link: cameraLink,
-            slot: slot
-        );
 
         // The loader's rule/state proof remains valid for its exact unchanged document. Host vocabulary does not:
         // complete that phase now that command services and every neighbour transport are available.

@@ -187,6 +187,7 @@ public sealed partial class ShaderPipelineRenderNode {
                 message: $"The preview for '{request.Name}' could not be allocated: {failure.Message}"
             );
             SettleReservation();
+            if (failure is DeviceLostException) { throw; }
 
             return;
         }

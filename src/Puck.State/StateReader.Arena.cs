@@ -43,14 +43,14 @@ public static partial class StateReader {
     }
 
     /// <summary>Reduces live cells in member order, without materializing rows.</summary>
-    public static long ReduceRaw(StateArena arena, int rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) {
+    public static long ReduceRaw(StateReadAccess arena, int rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) {
         if (op == StateReduceOp.Count) { return arena.CellCount(rowOrdinal: rowOrdinal); }
         if (op == StateReduceOp.ArrangementRank) {
-            var row = arena.Rows[rowOrdinal];
+            var row = arena.Declaration(rowOrdinal);
             if ((row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) ||
-                !arena.Catalog.TryResolve(lane: StateLane.Document, name: zone.Row, handle: out var domain)) { return -1L; }
+                !arena.TryResolveRow(name: zone.Row, rowOrdinal: out var domain)) { return -1L; }
             Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-            var count = DomainOrdinals(arena: arena, rowOrdinal: rowOrdinal, domainOrdinal: domain.Ordinal, ordinals: ordinals);
+            var count = DomainOrdinals(arena: arena, rowOrdinal: rowOrdinal, domainOrdinal: domain, ordinals: ordinals);
             return count < 0 ? -1L : ArrangementRank(domainOrdinals: ordinals[..count]);
         }
         var time = ArenaTime.At(tick: tick, engineTick: engineTick);

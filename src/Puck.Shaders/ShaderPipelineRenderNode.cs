@@ -1040,7 +1040,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
             }
-            if (!key.Candidate) {
+            if (!key.Candidate || error is DeviceLostException) {
                 throw;
             }
             Refuse(
@@ -1557,6 +1557,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         }
         NoteWaited(fence: fence);
         CompletePackageReadbacks(slot: slot);
+        m_completedSubmissions = Math.Max(m_completedSubmissions, m_slots[slot].Submission);
     }
 
     /// <summary>Binds a host-owned buffer for a named external resource other than a host buffer port, which binds a
@@ -1874,7 +1875,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         exported?.BeginWrite();
         SubmitCounted(
             commands: m_commands,
-            fence: slot.Fence!
+            slot: slotIndex
         );
         if (job.Previewed) { m_preview!.Submitted(slot: slotIndex); }
         CommitCadenceFrame();

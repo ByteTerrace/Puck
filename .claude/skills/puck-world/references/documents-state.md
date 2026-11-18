@@ -32,7 +32,7 @@ is non-serialized; definitions sharing `StateRaw` share its compiled view, and
 inventory, flags, semantic memories, and vector embeddings. **A slot is a table with one
 key, and there is ONE authored spelling for both.** A row names itself,
 declares its `kind` (`Int`, `Fixed`, `Bool`, `Text`, or `Vector`), and carries EITHER a bare `value` — sugar for the one
-cell keyed `StateRow.SlotKey` (`"$value"`) — OR a `cells` array of
+cell keyed `StateRowShape.SlotKey` (`"$value"`) — OR a `cells` array of
 author-keyed `{"key","value"}` objects. Two optional fields, never two
 discriminators: a row carrying both, or a `value` beside a `capacity`
 (declaring a capacity is declaring keyed-row intent), refuses by name.
@@ -145,7 +145,7 @@ must fall inside — the range a HUD gauge bound to `state.<row>` or
 default, or `"Saturate"`) says what a write that would leave that range — or a
 genuine 64-bit arithmetic overflow, even on a row declaring no range at all —
 does: refuse it by name, or clamp it to the crossed bound (or to the storage
-limit on a side with no declared bound). `StateRow.TryAdmitWrite` is the one
+limit on a side with no declared bound). `StateRowShape.TryAdmitWrite` is the one
 method every write path decides through, and it is what the row-shape's own
 `writeSet`/`boardCombine`/ring-push arms and the `UpsertStateCell` compose arm
 all call. Both `min`/`max` and `overflow` are legitimate only on `Int`/`Fixed`

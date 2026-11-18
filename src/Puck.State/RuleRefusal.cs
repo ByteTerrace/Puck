@@ -62,7 +62,7 @@ public enum RuleRefusal : byte {
     [Refusal(door: "state.rule.compile", condition: "another rule already declares this name", kind: RefusalKind.Verdict)]
     NameDuplicated,
 
-    /// <summary>The rule's name carries the reserved <see cref="StateRow.ReservedNamePrefix"/> prefix, which marks
+    /// <summary>The rule's name carries the reserved <see cref="StateRowShape.ReservedNamePrefix"/> prefix, which marks
     /// what the engine mints — and the engine mints no rule.</summary>
     [Refusal(door: "state.rule.compile", condition: "a rule's name carries the reserved '$' prefix, which marks what the engine mints", kind: RefusalKind.Verdict)]
     NameReserved,

@@ -186,7 +186,7 @@ footgun a level-triggered `addState` already carries (see `WorldRule.Mode`'s own
 remarks); a write failure is caught at the tap and narrated on stderr by name,
 never fatal to the tick. Effects and
 predicates address a (row, KEY) PAIR — an omitted key means the row's slot cell,
-and `StateRow.IsKeyed` is the discriminator: one switch over the row's
+and `StateRowShape.IsKeyed` is the discriminator: one switch over the row's
 declared `Domain` (`StateDomain` — `Slot`/`Keys`/`KeysOf`/`CellsOf`/`Ring`;
 an unauthored row infers `Slot` or `Keys` from `cells`/`capacity`/`phase` alone
 (a `phase` row has no single value to read even before its first participant,

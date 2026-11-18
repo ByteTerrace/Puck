@@ -25,7 +25,7 @@ internal static partial class Subjects {
             cellX: cellX,
             cellY: cellY,
             cellZ: cellZ,
-            local: Space(
+            local: RawVectors.Of(
                 x: localX,
                 y: localY,
                 z: localZ
@@ -61,7 +61,7 @@ internal static partial class Subjects {
             representable &= WithinCarrier(value: cell);
         }
 
-        var offset = Space(
+        var offset = RawVectors.Of(
             x: left[0],
             y: left[1],
             z: left[2]
@@ -124,7 +124,7 @@ internal static partial class Subjects {
         // The declared cell size, read as an OBSERVABLE fact rather than as a constant compared with itself: an offset
         // of exactly half a cell carries UP into the next cell, minus half a cell does not, and one raw below half a
         // cell does not — which is what CellSizeLog2 == 20 and FixedQ4816.FractionBitCount == 16 together mean.
-        var atHalf = FixedPosition.FromLocal(local: Space(
+        var atHalf = FixedPosition.FromLocal(local: RawVectors.Of(
             x: HalfCellRaw,
             y: -HalfCellRaw,
             z: (HalfCellRaw - 1L)
@@ -154,7 +154,7 @@ internal static partial class Subjects {
         )) { return "TryCreate refused an offset at the origin cell"; }
         if (FixedPosition.FromLocal(local: offset) != anchored) { return "FromLocal disagrees with TryCreate at the origin cell"; }
 
-        var replacement = Space(
+        var replacement = RawVectors.Of(
             x: left[3],
             y: right[3],
             z: left[0]
@@ -334,7 +334,7 @@ internal static partial class Subjects {
 
         if (PositionTranslateFailure(
             value: value,
-            delta: Space(
+            delta: RawVectors.Of(
                 x: right[0],
                 y: right[1],
                 z: right[2]
@@ -342,7 +342,7 @@ internal static partial class Subjects {
         ) is { } first) { return first; }
         if (PositionTranslateFailure(
             value: value,
-            delta: Space(
+            delta: RawVectors.Of(
                 x: right[3],
                 y: right[4],
                 z: right[5]
@@ -420,7 +420,7 @@ internal static partial class Subjects {
                 localY: 0L,
                 localZ: 0L
             );
-            var delta = Space(
+            var delta = RawVectors.Of(
                 x: deltaRaw,
                 y: 65536L,
                 z: -65536L
@@ -458,12 +458,12 @@ internal static partial class Subjects {
             localY: left[4],
             localZ: left[5]
         );
-        var first = Space(
+        var first = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
         );
-        var second = Space(
+        var second = RawVectors.Of(
             x: right[3],
             y: right[4],
             z: right[5]
@@ -576,7 +576,7 @@ internal static partial class Subjects {
                 cellX: x.Cell,
                 cellY: y.Cell,
                 cellZ: z.Cell,
-                local: Space(
+                local: RawVectors.Of(
                     x: x.LocalRaw,
                     y: y.LocalRaw,
                     z: z.LocalRaw
@@ -586,7 +586,7 @@ internal static partial class Subjects {
                 cellX: x.OriginCell,
                 cellY: y.OriginCell,
                 cellZ: z.OriginCell,
-                local: Space(
+                local: RawVectors.Of(
                     x: x.OriginLocalRaw,
                     y: y.OriginLocalRaw,
                     z: z.OriginLocalRaw
@@ -607,7 +607,7 @@ internal static partial class Subjects {
             cellX: 0L,
             cellY: 0L,
             cellZ: 0L,
-            local: Space(
+            local: RawVectors.Of(
                 x: 65536L,
                 y: 65536L,
                 z: 65536L
@@ -617,7 +617,7 @@ internal static partial class Subjects {
             cellX: 1_000_000_000_000L,
             cellY: 1_000_000_000_000L,
             cellZ: 1_000_000_000_000L,
-            local: Space(
+            local: RawVectors.Of(
                 x: 65536L,
                 y: 65536L,
                 z: 65536L
@@ -673,7 +673,7 @@ internal static partial class Subjects {
             cellX: -5L,
             cellY: 2L,
             cellZ: -9L,
-            local: Space(
+            local: RawVectors.Of(
                 x: -98304L,
                 y: 0L,
                 z: 1L
@@ -865,7 +865,7 @@ internal static partial class Subjects {
             foreach (var translation in RigidTranslationLadder) {
                 var value = FixedRigidTransform.FromRotationTranslation(
                     rotation: QuaternionOf(lanes: rotor.Lanes),
-                    translation: Space(
+                    translation: RawVectors.Of(
                         x: translation[0],
                         y: translation[1],
                         z: translation[2]
@@ -943,7 +943,7 @@ internal static partial class Subjects {
             foreach (var translation in RigidTranslationLadder) {
                 var value = FixedRigidTransform.FromRotationTranslation(
                     rotation: QuaternionOf(lanes: rotor.Lanes),
-                    translation: Space(
+                    translation: RawVectors.Of(
                         x: translation[0],
                         y: translation[1],
                         z: translation[2]
@@ -965,7 +965,7 @@ internal static partial class Subjects {
                 );
 
                 if (0L != expected[3]) { return $"the discarded scalar lane is {expected[3]} on the unit ladder"; }
-                if (value.Translation != Space(
+                if (value.Translation != RawVectors.Of(
                     x: translation[0],
                     y: translation[1],
                     z: translation[2]
@@ -986,7 +986,7 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? RigidFromRotationTranslation(long[] left, long[] right) {
         var rotation = QuaternionOf(lanes: left);
-        var translation = Space(
+        var translation = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -1063,7 +1063,7 @@ internal static partial class Subjects {
             foreach (var translation in RigidTranslationLadder) {
                 var value = FixedRigidTransform.FromRotationTranslation(
                     rotation: rotation,
-                    translation: Space(
+                    translation: RawVectors.Of(
                         x: translation[0],
                         y: translation[1],
                         z: translation[2]
@@ -1087,7 +1087,7 @@ internal static partial class Subjects {
                     if (dual[lane] != halved) { return $"dual lane {lane} is {dual[lane]}, expected {halved} at rotor [{rotor.Lanes[0]},{rotor.Lanes[1]},{rotor.Lanes[2]},{rotor.Lanes[3]}]"; }
                 }
 
-                if (value.Translation != Space(
+                if (value.Translation != RawVectors.Of(
                     x: translation[0],
                     y: translation[1],
                     z: translation[2]
@@ -1098,7 +1098,7 @@ internal static partial class Subjects {
         return null;
     }
     private static string? RigidRotationScaleFreedomFailure() {
-        var translation = Space(
+        var translation = RawVectors.Of(
             x: 131072L,
             y: -65536L,
             z: 65536L
@@ -1395,7 +1395,7 @@ internal static partial class Subjects {
 
         var repaired = FixedRigidTransform.FromRotationTranslation(
             rotation: FixedQuaternion.Identity,
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 131072L,
                 y: 0L,
                 z: 0L
@@ -1515,7 +1515,7 @@ internal static partial class Subjects {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? RigidTransformPointExact(long[] left, long[] right) {
         var value = RigidOf(lanes: left);
-        var point = Space(
+        var point = RawVectors.Of(
             x: right[0],
             y: right[1],
             z: right[2]
@@ -1541,7 +1541,7 @@ internal static partial class Subjects {
         if (FixedRigidTransform.Identity.TransformPoint(point: point) != point) { return "Identity did not fix the point exactly"; }
 
         foreach (var translation in RigidTranslationLadder) {
-            var offset = Space(
+            var offset = RawVectors.Of(
                 x: translation[0],
                 y: translation[1],
                 z: translation[2]
@@ -1562,13 +1562,13 @@ internal static partial class Subjects {
             var image = FixedRigidTransform
                 .FromRotationTranslation(
                 rotation: QuaternionOf(lanes: rotor),
-                translation: Space(
+                translation: RawVectors.Of(
                     x: translation[0],
                     y: translation[1],
                     z: translation[2]
                 )
             )
-                .TransformPoint(point: Space(
+                .TransformPoint(point: RawVectors.Of(
                 x: point[0],
                 y: point[1],
                 z: point[2]
@@ -1581,7 +1581,7 @@ internal static partial class Subjects {
 
         var about = FixedRigidTransform.FromRotationTranslation(
             rotation: QuaternionOf(lanes: RigidUnitRotors[3].Lanes),
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 131072L,
                 y: 0L,
                 z: 0L
@@ -1589,13 +1589,13 @@ internal static partial class Subjects {
         );
         var then = FixedRigidTransform.FromRotationTranslation(
             rotation: QuaternionOf(lanes: RigidUnitRotors[1].Lanes),
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 0L,
                 y: 131072L,
                 z: 0L
             )
         );
-        var probe = Space(
+        var probe = RawVectors.Of(
             x: 65536L,
             y: -32768L,
             z: 16384L
@@ -1621,7 +1621,7 @@ internal static partial class Subjects {
         foreach (var dual in RigidPureTranslationLadder) {
             var value = FixedRigidTransform.Exp(
                 real: FixedVector3.Zero,
-                dual: Space(
+                dual: RawVectors.Of(
                     x: dual[0],
                     y: dual[1],
                     z: dual[2]
@@ -1644,7 +1644,7 @@ internal static partial class Subjects {
             var (logReal, logDual) = value.Log();
 
             if (logReal != FixedVector3.Zero) { return "the rotation-free logarithm's real part is not zero"; }
-            if (logDual != Space(
+            if (logDual != RawVectors.Of(
                 x: dual[0],
                 y: dual[1],
                 z: dual[2]
@@ -1653,12 +1653,12 @@ internal static partial class Subjects {
 
         foreach (var (real, dual, expected, tolerance) in RigidScrewLadder) {
             var value = FixedRigidTransform.Exp(
-                real: Space(
+                real: RawVectors.Of(
                     x: real[0],
                     y: real[1],
                     z: real[2]
                 ),
-                dual: Space(
+                dual: RawVectors.Of(
                     x: dual[0],
                     y: dual[1],
                     z: dual[2]
@@ -1675,7 +1675,7 @@ internal static partial class Subjects {
             }
 
             // The real part is written out twice in the tree; the two must agree BIT-FOR-BIT.
-            if (value.Rotation != FixedQuaternion.Exp(bivector: Space(
+            if (value.Rotation != FixedQuaternion.Exp(bivector: RawVectors.Of(
                 x: real[0],
                 y: real[1],
                 z: real[2]
@@ -1752,12 +1752,12 @@ internal static partial class Subjects {
         var poleTranslation = pole.Translation;
 
         if (poleReal != FixedVector3.Zero) { return "the vector-free pole's logarithm has a non-zero real part"; }
-        if (poleDual != Space(
+        if (poleDual != RawVectors.Of(
             x: 65536L,
             y: -32768L,
             z: 131072L
         )) { return "the vector-free pole's logarithm is not the dual quaternion's vector part"; }
-        if (poleTranslation != Space(
+        if (poleTranslation != RawVectors.Of(
             x: -131072L,
             y: 65536L,
             z: -262144L
@@ -1772,7 +1772,7 @@ internal static partial class Subjects {
     public static string? RigidScLerpEndpointsAndScrew() {
         var target = FixedRigidTransform.FromRotationTranslation(
             rotation: QuaternionOf(lanes: RigidUnitRotors[3].Lanes),
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 131072L,
                 y: 0L,
                 z: 0L
@@ -1917,7 +1917,7 @@ internal static partial class Subjects {
         // translations, which is what "exact for pure translations" means.
         var fromPure = FixedRigidTransform.FromRotationTranslation(
             rotation: FixedQuaternion.Identity,
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 65536L,
                 y: 0L,
                 z: 0L
@@ -1925,7 +1925,7 @@ internal static partial class Subjects {
         );
         var toPure = FixedRigidTransform.FromRotationTranslation(
             rotation: FixedQuaternion.Identity,
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 262144L,
                 y: 131072L,
                 z: 0L
@@ -1941,7 +1941,7 @@ internal static partial class Subjects {
                 Z: Raw(value: 46341L),
                 W: Raw(value: 46341L)
             ),
-            translation: Space(
+            translation: RawVectors.Of(
                 x: 131072L,
                 y: 0L,
                 z: 0L

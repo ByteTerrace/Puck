@@ -403,7 +403,7 @@ public sealed record WorldFieldTopology(
     [JsonIgnore]
     public override TopologyKind Kind => TopologyKind.Field;
 }
-/// <summary>A state row's <c>field</c> trait — carried only by a row whose <see cref="StateRow.Domain"/> is
+/// <summary>A state row's <c>field</c> trait — carried only by a row whose <see cref="StateRowShape.Domain"/> is
 /// <see cref="StateDomain.CellsOf"/> over a <c>Field</c>-kind topology: the row holds one
 /// <see cref="CellKind.Fixed"/> scalar per cell of that topology instead of sparse board cells. Values are authored
 /// DECIMAL (like every lattice quantity), not raw Q48.16 bits; a field row refuses slot/keyed members (<c>cells</c>,

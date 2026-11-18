@@ -85,20 +85,6 @@ internal static class MoveTowardAndEmitterClaims {
             Y: FixedQ4816.FromInteger(value: y),
             Z: FixedQ4816.FromInteger(value: z)
         );
-    /// <summary>Builds a vector from three raw components, bypassing <see cref="FixedQ4816.FromInteger"/>'s own
-    /// scale — the carrier-extreme endpoints below are raws, not integers <see cref="FixedQ4816.FromInteger"/> could
-    /// represent without itself overflowing.</summary>
-    /// <param name="x">The first component's raw.</param>
-    /// <param name="y">The second component's raw.</param>
-    /// <param name="z">The third component's raw.</param>
-    /// <returns>The vector.</returns>
-    private static FixedVector3 VectorRaw(long x, long y, long z) =>
-        new(
-            X: FixedQ4816.FromRawBits(value: x),
-            Y: FixedQ4816.FromRawBits(value: y),
-            Z: FixedQ4816.FromRawBits(value: z)
-        );
-
     /// <summary>Proves <see cref="FixedVector3.MoveToward"/> does not teleport across the carrier at the opposing raw
     /// extremes, where a componentwise <c>target − current</c> wraps: at every carrier-extreme segment and step, the
     /// landing decision matches an independent <c>BigInteger</c> displacement oracle exactly, a non-landing step
@@ -108,12 +94,12 @@ internal static class MoveTowardAndEmitterClaims {
     /// <returns>The counterexample text, or <see langword="null"/> when the claim holds.</returns>
     public static string? MoveTowardCarrierExtremesSurface() {
         foreach (var (currentRaw, targetRaw) in CarrierExtremeVectorSegments) {
-            var current = VectorRaw(
+            var current = RawVectors.Of(
                 x: currentRaw.X,
                 y: currentRaw.Y,
                 z: currentRaw.Z
             );
-            var target = VectorRaw(
+            var target = RawVectors.Of(
                 x: targetRaw.X,
                 y: targetRaw.Y,
                 z: targetRaw.Z

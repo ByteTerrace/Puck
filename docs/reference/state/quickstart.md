@@ -48,12 +48,12 @@ StateRow[] rows = [
     new StateRow(
         Name: CellName.Parse("coins"),
         Kind: CellKind.Int,
-        Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(0L))]),
+        Cells: [new StateCell(Key: StateRowShape.SlotKey, Value: CellValue.Int(0L))]),
     new StateRow(
         Name: CellName.Parse("cards"),
         Kind: CellKind.Int,
         Max: 1,
-        Cells: [new StateCell(Key: StateRow.SlotKey, Value: CellValue.Int(0L))]),
+        Cells: [new StateCell(Key: StateRowShape.SlotKey, Value: CellValue.Int(0L))]),
 ];
 var section = new StateSection(Rows: rows);
 var catalog = StateCatalog.Compile(section: section);
@@ -85,7 +85,7 @@ var latch = new RuleLatch();
 
 catalog.TryResolve(lane: StateLane.Document, name: "coins", handle: out var coins);
 catalog.TryResolve(lane: StateLane.Document, name: "cards", handle: out var cards);
-catalog.Keys.TryResolve(name: StateRow.SlotKey, key: out var slot);
+catalog.Keys.TryResolve(name: StateRowShape.SlotKey, key: out var slot);
 
 for (var tick = 1UL; tick <= 7UL; tick++)
 {
@@ -129,7 +129,7 @@ throughout the manual.
 
 1. **Declare the state.** A `StateRow` names a row of values and says what kind
    of value it holds. Both rows here are **slots**, rows that hold a single value
-   under the reserved key `StateRow.SlotKey`. The `cards` row declares `Max: 1`,
+   under the reserved key `StateRowShape.SlotKey`. The `cards` row declares `Max: 1`,
    so any write that would push it above one is refused. The `StateSection`
    collects the rows, and `StateCatalog.Compile` turns their names into
    **handles**, compact addresses that the compiler and the arena use instead of

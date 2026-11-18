@@ -158,10 +158,11 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         m_resetSubmission = m_submissions;
     }
     // Every node submission goes through here, so m_submissions is the identity the counting submitter just sealed, and
-    // a replaced graph waiting for this submission to retire it is armed with its fence. The frame's leased images are
+    // a replaced graph retires against this count through the slot completion proof. The frame's leased images are
     // sampled by this submission, so the waits they carry are added to it here.
     // It hands the slot's lists over from the recording that began them (HandOverRecording).
-    private void SubmitCounted(List<nint> commands, IGpuSubmissionFence fence) {
+    private void SubmitCounted(List<nint> commands, int slot) {
+        var fence = m_slots[slot].Fence!;
         HandOverRecording();
         m_frameLeases.AddWaits(submitter: m_gpu.QueueSubmitter);
         m_gpu.QueueSubmitter.Submit(
@@ -171,6 +172,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
         m_submissions++;
         m_lastSubmissionFence = fence;
         NoteSubmitted(fence: fence);
-        ArmRetirements(fence: fence);
+        m_latestSlot = slot;
+        m_slots[slot].Submission = m_submissions;
     }
 }

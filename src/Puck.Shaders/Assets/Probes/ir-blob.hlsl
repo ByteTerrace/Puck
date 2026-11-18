@@ -21,17 +21,13 @@ cbuffer ProbeConfig : register(b0) {
 RWStructuredBuffer<uint> Accumulate : register(u0);
 RWStructuredBuffer<float> Channels : register(u1);
 
-static const uint MaxAccumulateScale = 1024;
+#include "probe-accumulate.hlsli"
 
 groupshared uint GroupWeight;
 groupshared uint GroupWeightX;
 groupshared uint GroupWeightY;
 groupshared uint GroupLuminance;
 groupshared uint GroupCount;
-
-uint AccumulateScale(uint width, uint height) {
-    return min(MaxAccumulateScale, 0xFFFFFFFFu / max(width * height, 1u));
-}
 
 [numthreads(8, 8, 1)]
 void accumulate(uint3 dispatchId : SV_DispatchThreadID, uint groupIndex : SV_GroupIndex) {

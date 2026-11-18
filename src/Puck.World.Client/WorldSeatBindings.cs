@@ -109,13 +109,6 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
     private event Action<int?>? Reloading;
 
-    /// <summary>Raised with a 0-based seat slot whose authored mode-family reseed (<see cref="SyncSeat"/>, on a
-    /// world load/reload/reset or a route change) just dropped a published state targeting
-    /// <see cref="WorldSeatModeState.CameraTarget"/> — the state a live camera control application was composed from.
-    /// This type owns the published state, not the possession route, so the composition root closes the teardown
-    /// through the same exit <c>player.mode</c> takes when it leaves such a state.</summary>
-    public event Action<int>? CameraApplicationDropped;
-
     // An overlay's own When (WorldPlacementResponseCondition.StateCondition) gates whether it composes this call —
     // the reveal's carrier: a gated overlay's chords/pages appear only once the fact it names is set. Absence always
     // composes (today's behavior). Unfilled trailing slots stay null, which WorldBindingComposer.Compose already
@@ -430,9 +423,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         m_contextChanged[slot] = reads.Changed;
         m_contextInstalls[slot] = (reads.Mirror?.Installs ?? 0);
     }
-    // Whether the seat's currently published state for any of these families targets the camera control application —
-    // its own activation condition, read against a family list so the caller can ask it either side of a reseed (the
-    // "was on / is no longer" edge CameraApplicationDropped reports).
+    // Whether the authority's mirrored selection targets the camera control application.
     private bool PublishesCameraTarget(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
         foreach (var family in families) {
             if (
@@ -612,11 +603,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             paramName: nameof(channel)
         );
     }
-    // Publishes each named family's authored default for the seat — the one write both the route-change reseed and
-    // the departure reset run.
+    // Presentation families seed locally. Authoritative families are written only from delivered input publications.
     private void SeedSeatModeDefaults(int slot, IReadOnlyList<WorldSeatModeFamily> families) {
         foreach (var family in families) {
-            if (!string.IsNullOrWhiteSpace(value: family.Name)) {
+            if (!string.IsNullOrWhiteSpace(value: family.Name) && !IsAuthoritativeMode(m_definitions[slot], family.Name)) {
                 m_contextStates[slot][family.Name] = family.DefaultState;
             }
         }
@@ -916,19 +906,9 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
 
         return result;
     }
-    // Reseeds a seat's published state for every currently-declared seatModes family to its authored default,
-    // dropping the published state of a family the PREVIOUS definition declared that the new one no longer does —
-    // a route/definition change starts every authored mode fresh rather than carrying a state from a document that
-    // may not even declare the family any more. previous/current are compared by name only (never by reference: a
-    // basis-composed document rebuilds its seatModes list on every load even when the authored content is identical).
+    // Drops removed families and seeds presentation defaults. Authority-owned selections survive reload until the
+    // routed input publication supplies them; this client never changes an application as a side effect of syncing.
     private void SyncSeatModes(int slot, IReadOnlyList<WorldSeatModeFamily> previous, IReadOnlyList<WorldSeatModeFamily> current) {
-        // A reseed can drop the camera-targeting state a live fly application composed from, and nothing in this type
-        // can reach the rig; measure the edge here and let the composition root perform the teardown.
-        var wasCamera = PublishesCameraTarget(
-            families: previous,
-            slot: slot
-        );
-
         foreach (var family in previous) {
             if (string.IsNullOrWhiteSpace(value: family.Name)) {
                 continue;
@@ -958,15 +938,6 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             slot: slot
         );
 
-        if (
-            wasCamera &&
-            !PublishesCameraTarget(
-            families: current,
-            slot: slot
-        )
-        ) {
-            CameraApplicationDropped?.Invoke(obj: slot);
-        }
     }
     // Route-local channel compatibility. Existence and shape belong to the destination world, so a stored profile or
     // session row can be valid where it was authored and unavailable where the seat travels next. Such a row is
@@ -1213,8 +1184,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         slot: slot
     ));
     /// <summary>The seat's currently published state for an authored mode family, or <see langword="null"/> when the
-    /// family has never been published (unreachable once <see cref="SyncSeatModes"/> has seeded it from the routed
-    /// document, which happens before any seat can act).</summary>
+    /// family has never been published. An authoritative family waits for its routed input publication.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="family">The family name.</param>
     public string? ModeState(int slot, string family) => (((((uint)slot) < SeatCount) && m_contextStates[slot].TryGetValue(
@@ -1252,12 +1222,11 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_seats[slot].Reset(slot: slot);
         }
     }
-    /// <summary>Resets every AUTHORED mode family the seat's routed document declares to its default state and
+    /// <summary>Resets every presentation mode family the seat's routed document declares to its default state and
     /// re-derives the seat's active group, so a slot rejoined by a different occupant never inherits the departed
     /// one's published mode (and the group that mode selected). The seat-departure fact
-    /// (<see cref="PlayerRoster.VacateSeat"/>) is its only caller; it raises no <see cref="CameraApplicationDropped"/>
-    /// (a departed seat submits nothing, so any possession route it held goes inert regardless of the published-state
-    /// reset here — the same standing behavior any other possession target's departure already has).</summary>
+    /// (<see cref="PlayerRoster.VacateSeat"/>) is its only caller. Authoritative families are mirrored, never seeded
+    /// here; the authority ends their applications when the body departs.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     public void ResetSeatModes(int slot) {
         if (((uint)slot) >= SeatCount) {
@@ -1435,6 +1404,7 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         )
         );
 
+        m_definitions[slot] = definition;
         if (modesChanged) {
             SyncSeatModes(
                 slot: slot,
@@ -1444,7 +1414,6 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             m_modeSource[slot] = modes;
         }
 
-        m_definitions[slot] = definition;
         m_stateTicks[slot] = CompletedTick(endpointNextInputTick: nextInputTick);
         m_stateEngineTicks[slot] = engineTick;
         m_states[slot] = state;
@@ -1573,16 +1542,10 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
         if (client.Roster.Seat(slot: slot)?.Input is { Admitted: true } input) { m_channels[slot] = input.Channels; }
         if (route.Endpoint.Mirror.TryInput(owner: client.Roster.PrincipalOf(slot: slot), publication: out var publication)) {
             foreach (var cell in publication.SeatStates.Span) {
-                // Presentation-only families remain local; selector cells are published by the authority.
-                if (route.Endpoint.Definition.InputModes is { } modes) {
-                    for (var familyIndex = 0; (familyIndex < modes.Families.Count); familyIndex++) {
-                        var selector = modes.Families[familyIndex].Selector;
-
-                        if ((selector.Kind == WorldInputModeSelectorKind.SeatState) && (selector.Name == cell.Family)) {
-                            SetContextState(slot, cell.Family, cell.State);
-                            break;
-                        }
-                    }
+                // Camera applications and semantic selector families are authority state, even when the
+                // camera family does not select an input tuple. Other presentation families remain local.
+                if (IsAuthoritativeMode(slot, cell.Family)) {
+                    SetContextState(slot, cell.Family, cell.State);
                 }
             }
         }
@@ -1666,6 +1629,28 @@ public sealed class WorldSeatBindings : IInputBindings, IChordEdgeSource, IInput
             ))
         : null
     );
+
+    /// <summary>Returns whether a mode family selects simulation input or a camera control application, so its
+    /// selection and publication belong to the seat's authority.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="family">The family name.</param>
+    public bool IsAuthoritativeMode(int slot, string family) {
+        if (((uint)slot) >= SeatCount) { return false; }
+        return IsAuthoritativeMode(m_definitions[slot], family);
+    }
+    private static bool IsAuthoritativeMode(WorldDefinition definition, string family) {
+        if (FindSeatMode(definition, family) is { } seatMode) {
+            foreach (var state in seatMode.States) {
+                if (state.Target == WorldSeatModeState.CameraTarget) { return true; }
+            }
+        }
+        if (definition.InputModes is { } modes) {
+            foreach (var row in modes.Families) {
+                if (row.Selector.Kind == WorldInputModeSelectorKind.SeatState && row.Selector.Name == family) { return true; }
+            }
+        }
+        return false;
+    }
 
     /// <summary>Gets the built-in editor family as a mode family: <see cref="WorldContextFamilies.EditorPlay"/> and
     /// <see cref="WorldContextFamilies.EditorBuild"/>, starting in play, neither targeting a camera.</summary>

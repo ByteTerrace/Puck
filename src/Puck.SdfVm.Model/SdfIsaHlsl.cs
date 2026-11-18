@@ -297,7 +297,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_PROBE_SELECT_HEADER_ROWS", value: SdfMeshProbeRelight.SelectionHeaderRows);
         declarations.Count(name: "SDF_PROBE_CACHE_WORDS", value: SdfMeshProbeRelight.CacheWords);
         declarations.Count(name: "SDF_PROBE_RELIGHT_RESULT_WORDS", value: SdfMeshProbeRelight.ResultWords);
-        declarations.Count(name: "SDF_PROBE_METER_OUTPUT_WORDS", value: SdfMeshProbeRelight.MeterOutputWords);
+        declarations.Count(name: "SDF_PROBE_CAMERA_SAMPLE_OUTPUT_WORDS", value: SdfMeshProbeRelight.CameraSampleOutputWords);
         declarations.Count(name: "SDF_PROBE_RECORD_INPUT_WORD", value: SdfMeshProbeRelight.RecordInputWord);
         declarations.Count(name: "SDF_PROBE_RELIGHT_PREVIOUS_WORD", value: SdfMeshProbeRelight.PreviousWord);
         declarations.Count(name: "SDF_PROBE_SELECT_GROUP_SIZE", value: SdfMeshProbeRelight.SelectGroupSize);
@@ -309,7 +309,7 @@ public static class SdfIsaHlsl {
         declarations.Real(name: "SDF_MESH_IRRADIANCE_CLEARANCE", value: SdfMeshIrradianceProbe.Clearance);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_INSIDE_SHARE", value: SdfMeshIrradianceProbe.InsideShare);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_OPEN_GROUND_SHARE", value: SdfMeshIrradianceProbe.OpenGroundShare);
-        declarations.Real(name: "SDF_MESH_IRRADIANCE_METER_COINCIDENT", value: SdfMeshIrradianceProbe.MeterCoincident);
+        declarations.Real(name: "SDF_MESH_IRRADIANCE_CAMERA_SAMPLE_COINCIDENT", value: SdfMeshIrradianceProbe.CameraSampleCoincident);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_LIGHT_BIAS", value: SdfMeshIrradianceProbe.LightBias);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_BOX_MARGIN", value: SdfMeshIrradianceProbe.BoxMargin);
         declarations.Real(name: "SDF_MESH_IRRADIANCE_BOX_MARGIN_SHARE", value: SdfMeshIrradianceProbe.BoxMarginShare);
