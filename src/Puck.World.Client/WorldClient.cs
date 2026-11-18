@@ -63,6 +63,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             if (replace) { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment); }
         }
         if (route.Endpoint.Mirror.TryInput(owner: principal, publication: out var publication)) { _ = seat.Input!.Reconcile(publication: publication, router: m_inputRouter, seat: seat, slot: slot); } else { seat.Input!.Admit(route.Endpoint, principal, route.EntityIndex, freshAttachment: false); }
+        if (m_inputRouter is { } router) { seat.Input!.AcknowledgeReleasedButtons(router: router, slot: slot); }
     }
     /// <summary>Delivers committed text to the admitted input owner at its authority's next input tick.</summary>
     public void ObserveText(CommittedTextInput input) {

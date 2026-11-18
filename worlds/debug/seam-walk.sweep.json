@@ -17,8 +17,8 @@
         "note": "The valley floor into the gallery's entrance and lobby and back, walking (5 m/s).",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, walking",
-        "opens": 74,
-        "captures": [{ "at": 260, "name": "door", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 257, "name": "door", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -27,8 +27,8 @@
         "note": "The valley floor into the gallery's entrance and lobby and back, running (10 m/s).",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, running",
-        "opens": 74,
-        "captures": [{ "at": 155, "name": "door", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 152, "name": "door", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -37,8 +37,8 @@
         "note": "The valley floor into the gallery's entrance and lobby and back, running with the dash on each cooldown (0.48 m a tick).",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the valley into the gallery, fastest",
-        "opens": 74,
-        "captures": [{ "at": 120, "name": "door", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 117, "name": "door", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -47,8 +47,8 @@
         "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, walking.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, walking",
-        "opens": 74,
-        "captures": [{ "at": 135, "name": "glass", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 132, "name": "glass", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -57,8 +57,8 @@
         "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, running.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, running",
-        "opens": 74,
-        "captures": [{ "at": 100, "name": "glass", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 97, "name": "glass", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -67,8 +67,8 @@
         "note": "The wing's floor through the garden painting, eight metres into the garden and back through its arrival frame, running with the dash.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the garden painting, fastest",
-        "opens": 74,
-        "captures": [{ "at": 90, "name": "glass", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 87, "name": "glass", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -77,8 +77,8 @@
         "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, walking.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, walking",
-        "opens": 74,
-        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 82, "name": "car", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -87,8 +87,8 @@
         "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, running.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, running",
-        "opens": 74,
-        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 82, "name": "car", "presented": 120 }],
         "after": ["player.camera.view auto"]
       },
       {
@@ -97,8 +97,8 @@
         "note": "Into the gallery's lift car at level 0, up to level 3 and out, back in and down, running with the dash.",
         "lines": [],
         "route": "worlds/debug/walkthrough-tests.puck#seam walk: the lift, fastest",
-        "opens": 74,
-        "captures": [{ "at": 85, "name": "car", "presented": 120 }],
+        "opens": 71,
+        "captures": [{ "at": 82, "name": "car", "presented": 120 }],
         "after": ["player.camera.view auto"]
       }
     ]

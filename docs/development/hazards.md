@@ -83,6 +83,15 @@ until the next writer, shape or case arrives.
   holding old hits for the next larger grid to read. The glass
   passes skip only together with the shading pass that reads them
   (`SdfWorldPasses.GlassSeen`).
+- A seat's intent is composed from client-side view state (`WorldSeatViewState`)
+  and the body's delivered pose, so a teleport must re-establish everything that
+  composition reads, and nothing enforces it. In first person the intent carries
+  the look as the body's facing: the tick a pose lands in snapped the body back
+  to the look the intent was composed with, and the look's offset outlived every
+  pose. The posed tick now takes no facing from that stale intent
+  (`WorldBody.SnapYawToPlanarIntent`) and a first-person look lands on the posed
+  heading (`WorldSeatViewState.ObserveBody`); a new input-relevant field of the
+  view state owes the same pair.
 - The cascades' exit layer assumes a caster encloses a solid
   (`SdfMeshDraw.EnclosesSolid`); a body clipped at a portal's glass is a thin
   caster that shadows its own wrapped side

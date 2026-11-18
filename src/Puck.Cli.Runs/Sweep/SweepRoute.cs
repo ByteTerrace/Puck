@@ -1,9 +1,8 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 
 using Puck.Cli.Motion;
+using Puck.World;
 using Puck.World.Transpiler.Composition;
 
 namespace Puck.Cli.Sweep;
@@ -16,7 +15,7 @@ namespace Puck.Cli.Sweep;
 /// <param name="Steps">The program's lines, each at its offset from the first line's tick.</param>
 /// <param name="Duration">The ticks from the first line to the test's export tick: the program plus its settle.</param>
 /// <param name="Gates">The test's expectations as written, which the arrival is judged by.</param>
-public sealed partial record SweepRoute(string Reference, IReadOnlyList<SweepStep> Steps, int Duration, IReadOnlyList<string> Gates) {
+public sealed record SweepRoute(string Reference, IReadOnlyList<SweepStep> Steps, int Duration, IReadOnlyList<string> Gates) {
     /// <summary>Compiles a route's source and reads its test block.</summary>
     /// <param name="reference">The plan's spelling, <c>&lt;source&gt;#&lt;test name&gt;</c>, the source relative to the
     /// repository root.</param>
@@ -111,47 +110,19 @@ public sealed partial record SweepRoute(string Reference, IReadOnlyList<SweepSte
     public SweepStop Played(SweepStop stop) =>
         stop with { Settle = Duration, Steps = [.. Steps, .. (stop.Steps ?? []), new SweepStep(At: 0, Run: "host.frames reset")] };
 
-    /// <summary>Judges the route's arrival from the windowed body's <c>body.where 0</c> answer at the route's end. The
-    /// gates read here are the test's body position and grounded claims; any other claim is judged by the headless run
-    /// alone and returned as unjudged.</summary>
+    /// <summary>Judges the route's arrival from the windowed body's <c>body.where 0</c> answer at the route's end, by the
+    /// World's own judge (<see cref="WorldRouteArrival"/>): the test's body position and grounded claims about body 0;
+    /// any other claim is judged by the headless run alone and returned as unjudged.</summary>
     /// <param name="where">The <c>body.where 0</c> answer.</param>
     /// <param name="unjudged">The gates this answer cannot judge.</param>
     /// <returns>Each gate the body fails, with the value it read; empty when the body arrived.</returns>
     public IReadOnlyList<string> Arrival(string where, out IReadOnlyList<string> unjudged) {
-        var failures = new List<string>();
-        var skipped = new List<string>();
-        var posed = MotionRig.TryPoseOf(answer: where, position: out var position, yawDegrees: out _);
-        // The body's reading as the plan's rule metrics, so a gate is judged by the sweep's one rule evaluator.
-        var metrics = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
-            ["x"] = position.X.ToString(provider: CultureInfo.InvariantCulture),
-            ["y"] = position.Y.ToString(provider: CultureInfo.InvariantCulture),
-            ["z"] = position.Z.ToString(provider: CultureInfo.InvariantCulture),
-        };
-        var grounded = MotionRig.FactsOf(answer: where).Split(separator: '|').Contains(value: "grounded");
+        WorldRoutePose? pose = (MotionRig.TryPoseOf(answer: where, position: out var position, yawDegrees: out _)
+            ? new WorldRoutePose(Grounded: MotionRig.FactsOf(answer: where).Split(separator: '|').Contains(value: "grounded"), X: position.X, Y: position.Y, Z: position.Z)
+            : null);
 
-        foreach (var gate in Gates) {
-            if (posed && (AxisGatePattern().Match(input: gate) is { Success: true } axis) && SweepRule.TryParse(rule: out var rule, text: $"{axis.Groups["axis"].Value} {axis.Groups["op"].Value} {axis.Groups["value"].Value}")) {
-                if (rule.Holds(metrics: metrics) != true) {
-                    failures.Add(item: $"{gate} (read {metrics[rule.Metric]})");
-                }
-            } else if (GroundedGatePattern().IsMatch(input: gate)) {
-                if (!grounded) {
-                    failures.Add(item: $"{gate} (not grounded)");
-                }
-            } else {
-                skipped.Add(item: gate);
-            }
-        }
-
-        unjudged = skipped;
-
-        return failures;
+        return WorldRouteArrival.Judge(gates: Gates, pose: body => ((body == 0) ? pose : null), unjudged: out unjudged);
     }
-
-    [GeneratedRegex(pattern: @"^bodyPosition\(body, 0, (?<axis>[xyz])\) (?<op>>=|<=|==|!=|>|<) (?<value>-?\d+(?:\.\d+)?)$", options: RegexOptions.CultureInvariant)]
-    private static partial Regex AxisGatePattern();
-    [GeneratedRegex(pattern: @"^fact\(body, 0, Grounded\) == 1$", options: RegexOptions.CultureInvariant)]
-    private static partial Regex GroundedGatePattern();
 }
 /// <summary>What the live World says about one exhibit a route passes: its prototype, the text its creation carries (a
 /// gallery plinth's label and plaque) and the spawn point named after it.</summary>

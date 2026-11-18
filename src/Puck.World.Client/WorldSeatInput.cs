@@ -125,9 +125,36 @@ public sealed class WorldSeatInput {
             router?.ClearToggle(slot, PlayerCommandNames.RoutedChannelCommandName(ordinal: state.Source.Channel));
             // A latch's neutral is its authoritative off decision. The router still requires the opener's real
             // release before a fresh Started edge, independently of this destination-owned lifetime.
-            m_producer.AcknowledgeClearedToggle(handle: state.Source.Handle);
+            m_producer.AcknowledgeNeutral(handle: state.Source.Handle);
         }
         return true;
+    }
+    /// <summary>Reports neutral for every button the authority holds released and awaiting neutral whose physical
+    /// source the router reports up. The router reports a button's edge once, so a release it dispatched where this
+    /// producer could not observe it (the map-change cancellation of a crossing, a release after that cancellation
+    /// ended the command it held) would otherwise leave the button unable to act again until it was pressed and
+    /// released twice.</summary>
+    /// <param name="router">The host's input router.</param>
+    /// <param name="slot">The seat's 0-based slot.</param>
+    public void AcknowledgeReleasedButtons(InputRouter router, int slot) {
+        ArgumentNullException.ThrowIfNull(argument: router);
+
+        if (!m_admitted) {
+            return;
+        }
+
+        var sources = m_producer.Sources;
+
+        for (var index = 0; (index < sources.Length); index++) {
+            var state = sources[index];
+
+            if ((state.RawValue != 0) || !state.AwaitingNeutral || (state.Source.Kind != WorldInputContributionKind.Level) ||
+                (m_catalog.Channels[state.Source.Channel].Shape != ChannelShape.Binary) || m_sources[index].StartsWith(value: '$') ||
+                router.IsSourcePressed(slot: slot, source: m_sources[index])) {
+                continue;
+            }
+            m_producer.AcknowledgeNeutral(handle: state.Source.Handle);
+        }
     }
     /// <summary>Captures a bound source before the host folds away its intermediate transitions.</summary>
     public bool Observe(int channel, in CommandContext context, ulong tick) {
