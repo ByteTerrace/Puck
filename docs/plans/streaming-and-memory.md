@@ -1220,14 +1220,24 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; contiguous fallback retained | Step 3's admission stands; qualification readings need a GPU grant |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
+| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The floor is an engine gap, first among the rows that remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
-| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device | 3; 7 before it claims relief |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
 | [8. Observed use](#step-8-observed-use) | Speculative detail apart from observed | 5 |
 | [9. Lighting on the same demand](#step-9-lighting-on-the-same-demand) | One demand, a lighting floor, placement on the GPU trace | 3; 5 for the floor it traces |
 | [10. Areas, tiles, then the moons](#step-10-areas-tiles-then-the-moons) | Authored areas, the velocity lead, source tiles | 5, 8 |
 | [11. Managed churn](#step-11-managed-churn) | Arrival allocation removed at its sources | Nothing; its trace is taken now |
+
+**The floor is an engine gap, so it goes first.** Nothing stands in for a
+distant shape, and a shape not yet landed or evicted can leave a hole
+([the rendering plan's gap 3](rendering-research.md#engine-gaps-filled-first)
+and its [decision 9](rendering-research.md#9-give-memory-back-and-never-show-a-hole)).
+Step 5 needs only step 3, which is built, and claims relief only after step 7,
+so it lands directly after step 3 and ahead of steps 4 and 7. The rendering
+plan's decision 8 counters, which size a floor, come before it. The terrain
+pass's [far shadow step](terrain-pass.md#order-of-work) is the other half of
+gap 3 and does not wait for this one.
 
 Steps 0, 1 and 2 change no behaviour and run beside any other lane. Step 3 is
 the first that can change a picture, and step 5 the first that changes what a

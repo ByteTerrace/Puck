@@ -182,6 +182,40 @@ painterly: billow, broad warp, fewer octaves).
 
 ## Order of work
 
+**Engine gaps first.** Four of the engine gaps in the
+[rendering plan's list](rendering-research.md#engine-gaps-filled-first) are
+this plan's, and each is filled before work that sculpts or tunes around it
+(the owner's ruling,
+[AGENTS.md](../../AGENTS.md#pucks-purpose)). Each is a step below:
+
+- **Step 4's bound fix, with its relative caps (gap 1).** A creation whose parts
+  carve each other, or that carries relief, is emitted as one instance for the
+  whole creation, so a sector's bound, not its declared spacing, sets its
+  cell, and relief and smooth blends are capped at prop sizes. The first
+  action is the one count the gap entry names: the triangles a bound about the
+  shapes costs.
+- **Step 3's `TerrainRelief` op, carrying a mask (gap 4).** A relief has no
+  region, so it buries anything set into the terrain (the lake's bowl, the
+  pool, the river's channel, the glacier's cradle). The op's design gains a
+  way to mask or flatten the relief over a region, and that is the step's
+  first part. Its CPU side starts now; its kernel edit lands in the bake
+  fundamental's batch of kernel edits (see Risks).
+- **Step 6's terrain programs (gap 2).** The default frame runs the fixed
+  layers, which have no slope or altitude rule, because authored programs
+  sit behind a switch that is left off. The step needs the colour conversion
+  (decision 5 of the rendering plan, which starts now, and which step 1's grey
+  card reads) and the RTX 4070's shading columns, which
+  [the shader plan](author-shaders.md#the-decision-matrix) already holds. The
+  RTX 2060's and the Steam Deck's columns do not hold it back.
+- **Step 7's far shadows (gap 3).** Nothing casts a shadow past 120 m. The step
+  starts when shadow maps are assigned by light role (the rendering plan's
+  work that starts now).
+
+The rows below are in landing order, and a step's number is its name.
+Steps 0 and 1 come first because the gap steps read against them. Steps 2, 5
+and 8 are not gaps and follow: step 8 is the work that would otherwise tune
+around steps 3, 4 and 6.
+
 Stills are the sweep's six `valley` stops (`worlds/debug/sweep.json`), settled
 under `world.lockstep` on both backends, before and after on one build pair.
 The frame bar is read by [the one recipe](streaming-and-memory.md#how-the-bars-are-read)
@@ -193,30 +227,30 @@ the same window as its after, never from a recorded figure.
 |---|---|---|---|
 | 0. Baseline | lead, GPU | GPU free | Six stills on both backends; the frame and per-pass GPU time at each pose; `world.exposure` at each stop after two tour orders on one World. |
 | 1. Image meter's checks | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it (a cut snaps, so the band leaves no history). The composite's added cost with the meter is stated beside the composite alone. |
+| 4. Relative caps, shape bound (gap 1) | authoring/bake D | The bound fix none, and its first action is the triangle count of a bound about the shapes; 3 for relief | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
+| 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them. |
+| 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
+| 7. Far shadows (gap 3) | rendering A, after 1 | 0; shadow maps assigned by light role (the rendering plan's work that starts now) | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
-| 3. `TerrainRelief` op | field/maths C | [bake fundamental](open-items.md#bake-proportional-to-change), kernel edits batched | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. |
-| 4. Relative caps, shape bound | authoring/bake D | 3 for relief; the bound fix none | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
 | 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve serves both contact paths; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and two runs reproduce. No coarser contact cut is allowed. Still open: the 58° face, the rim's creep and clearance close to a slope (packet). |
-| 6. Terrain programs | rendering/shading F | The shader plan's bins on the bar devices ([its matrix](author-shaders.md#the-decision-matrix)) | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
-| 7. Far shadows | rendering A, after 1 | 0 | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
 | 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. Six stills demonstrate each set; the valley wears the painterly set under the owner's ruling. |
 
-Steps 1, 2, 6, and 4's bound fix can run in parallel. Step 3's kernel edit is
-batched behind the bake fundamental. Step 5 belongs to the certified-contact
-packet; terrain integration follows 3, 7 follows 1, and 8 closes. Tiles arrive
-with the streaming plan's step 10 and are not a step here. Steps 1, 2, 6 and 7
-need windowed legs on both backends; 3, 4 and 5 are CPU work until their
-stills.
+Steps 0, 1, 3, 4, 6 and 7 start together: the gap steps do not wait on one
+another, and each waits only on what its row names. Step 3's kernel edit lands
+with the bake fundamental's batch. Step 5 belongs to the certified-contact
+packet and follows 3's relief; step 8 closes. Tiles arrive with the streaming
+plan's step 10 and are not a step here. Steps 1, 2, 6 and 7 need windowed legs
+on both backends; 3, 4 and 5 are CPU work until their stills.
 
 ## Risks and owner calls
 
 Risks:
 
 - **Bake identity churn.** Step 3 edits the field kernel, which rebakes every
-  mesh. Batch step 3 behind the
-  [bake fundamental](open-items.md#bake-proportional-to-change) and land kernel
-  edits together. A relief edit afterwards rebakes its own groups, nearest
-  first.
+  mesh. Land step 3's kernel edit in the
+  [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of
+  kernel edits, so every mesh rebakes once; the rest of step 3 does not wait.
+  A relief edit afterwards rebakes its own groups, nearest first.
 - **Field contact cost.** The certified solve reads the field a few dozen times
   a tick at the rim, each read a few samples per octave, and an identical-box
   cache spares most of its box-bound queries. The next cut is the job system's

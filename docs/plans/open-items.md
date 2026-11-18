@@ -44,18 +44,20 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    ([the disclosure plan](disclosure.md)) is in design.
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
-   agreed with the owner: step 0's baseline legs on both backends in a quiet
+   agreed with the owner: step 5's floor first (an engine gap), then step 0's
+   baseline legs on both backends in a quiet
    window, steps 1, 2 and 3's windowed readings, and step 7's readings (the
    prototype is built: the capability read on this machine and the indexed
    read's paired cost window on both backends,
    [the measurement](streaming-and-memory.md#the-prototype-as-built)), and
    step 3's servicing readings (the slow present and the quiet cold bake,
    [step 3's check](streaming-and-memory.md#step-3-one-reservation)).
-3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
-   by every lattice fact and are still turned from the field (vertices the
-   planes put off the surface, slivers beside a crease, a face narrower than
-   a cell), which keep six blend exhibits and the Moth's shin groups red,
-   then moving blends step 4.
+3. [high] [Bake detail](#bake-detail): its engine gaps first (a feature
+   thinner than a bake cell, a scaled primitive's bound, moving blends step 4),
+   then the contour's triangles that face out by every lattice fact and are
+   still turned from the field (vertices the planes put off the surface,
+   slivers beside a crease, a face narrower than a cell), which keep six blend
+   exhibits and the Moth's shin groups red.
 4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
    seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
@@ -67,8 +69,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
-   proof, built by [Water](#water)'s lanes A3 to A5.
+8. [high] [The visual bar](#the-visual-bar): the engine gaps behind its
+   misses first (the valley's walls, the water, the moving cutter), then the
+   caldera water as its first proof, built by [Water](#water)'s lanes A3 to
+   A5.
 9. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
 10. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
@@ -908,9 +912,16 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: the three kinds of triangle the lattice's facing does not judge, which
-the tour's remaining reds and the Moth's shin groups share, then
-[moving blends](moving-blends.md)' step 4.
+Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): a
+feature thinner than a bake cell is lost or faceted (gap 7), which starts with
+decision 10's count of the failing cells that were ever flagged for finer
+sampling, then its contour rule, built behind an audit of every stored mesh;
+a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
+[rendering](rendering.md#bake-quality)); and, beside them,
+[moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
+three kinds of triangle the lattice's facing does not judge, which the tour's
+remaining reds and the Moth's shin groups share.
 
 - [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
   axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
@@ -1003,9 +1014,10 @@ the tour's remaining reds and the Moth's shin groups share, then
   than a cell. A measured cell whose fine samples are two affine faces takes
   its split as its contour stride
   ([the memo's step 4](bake-demand-tiers.md#steps-and-checks)).
-- [medium] A rim thinner than a group's final cell is lost (`range-window`'s
+- [high] A rim thinner than a group's final cell is lost (`range-window`'s
   2 cm rim): a declared feature narrower than the cell must refine or be
-  reported.
+  reported. This is the engine gap above (gap 7), with the tapered tip of the
+  tapered-tip item below it.
 - [medium] Glyphs have no CPU reference: `SdfFieldEvaluator` has no
   interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
   `puck mesh preview` bake a plaque's text empty and no audit covers text. Add
@@ -1032,7 +1044,7 @@ the tour's remaining reds and the Moth's shin groups share, then
 - [low] A tier between a group's narrowed final cell and its planned one is a
   second key for one mesh (`SdfMeshBakeGroup.CoarsestTier` reads the planned
   box). Measure how many such entries a tour writes before tightening.
-- [low] A tapered tip thinner than about 1.5 bake cells does not bake, so a
+- [high] A tapered tip thinner than about 1.5 bake cells does not bake, so a
   small creation cannot have a needle point (`WorldShapeDetail.FinestDetail`);
   a finer floor for small creations needs its cost measured.
 - [low] No console command names a bake's pending groups or maps a slot to its
@@ -1042,7 +1054,9 @@ the tour's remaining reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 0's baseline legs (`puck benchmark --route seams`, both backends, a
+step 5, the floor, which is an engine gap
+([rendering research](rendering-research.md#engine-gaps-filled-first)) and goes
+first; then step 0's baseline legs (`puck benchmark --route seams`, both backends, a
 quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
 contiguous fallback, shared retirement timeline, destination page proofs,
@@ -1695,12 +1709,13 @@ collider, then the lifecycle lows as one pass.
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
 Next: the engine gaps this packet holds, filled first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)): a
-sector's bound, the relief's caps and a mask for relief inside a basin. Then
-the [terrain pass](terrain-pass.md#order-of-work)'s step 1 checks, with
-step 2 and step 4's bound fix in parallel; step 3's kernel edit is batched
-behind the bake fundamental, and step 6's terrain programs wait on the shader
-plan's bins. Relief contact is
-[certified field contact](#certified-field-contact).
+sector's bound, the relief's caps and a mask for relief inside a basin (the
+[terrain pass](terrain-pass.md#order-of-work)'s steps 4 and 3), then its
+terrain programs and far shadows (steps 6 and 7). They start together with
+step 1's checks; step 3's kernel edit lands in the bake fundamental's batch,
+and step 6 waits on the colour conversion and the RTX 4070's shading columns,
+not on the other devices'. Step 2 and the sets (step 8) follow. Relief
+contact is [certified field contact](#certified-field-contact).
 
 - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal`
   clamps its factor to at least 2, so a small creation declaring a coarse
@@ -1722,8 +1737,16 @@ plan's bins. Relief contact is
 ### The visual bar
 
 Owner: look lanes (sdf-authoring, rendering) with a separate critic, the lead
-scheduling · high · Next: the caldera water's first proof, then the
-per-milestone review across every place. The bar and its judging are in
+scheduling · high · Next: the engine gaps behind this packet's misses, filled
+first and ahead of any look lane that would sculpt around them
+([rendering research](rendering-research.md#engine-gaps-filled-first)): the
+valley's walls wait on [the terrain pass](terrain-pass.md#order-of-work)'s
+steps 4, 3, 6 and 7 (gaps 1 to 4), the caldera water on
+[water](water.md#order)'s gaps 5, 6 and 9 and on
+[moving blends](moving-blends.md#engine-gaps-first)' gap 8, and the Moth and
+the swallow on its gap 10 and on [bake detail](#bake-detail)'s gap 7. Then
+the caldera water's first proof, then the per-milestone review across every
+place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
@@ -1827,7 +1850,7 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   needs a flow whose velocity is read from a field or a course (the river's winding course is the same gap, in
   [the plan](water.md#the-rivers-channel-as-built)), or a second authored sheet over the sill. Caustics on the
   submerged stones are not built, and are unverified against the glass pass.
-- [medium] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
+- [high] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
   from the valley floor (`worlds/debug/glacier-site.puck`): the sector's cell at that distance is coarser than the
   trough's grooves. A near cell for the trough, or a creation of its own for the cradle, would carry the detail
   without baking the whole wall finely.
@@ -1853,7 +1876,7 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   stage 4, so stages 4 and 5 look alike and the stage ticks need revisiting;
   the river groups' vertex count is unshown; a dark strip at the river-pool
   junction is unconfirmed.
-- [medium] A flow that follows a course: a palette flow layer carries one
+- [high] A flow that follows a course: a palette flow layer carries one
   velocity over a surface, so a river that winds needs a flow read per place
   (the course's tangent or a lattice row), a palette-flow and shader change.
 - [medium] The debug-world arc scenario (`worlds/debug/water-arc-tests.puck`)
@@ -1865,7 +1888,7 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
-- [medium] A cutter that moves against its group's baked mesh does not
+- [high] A cutter that moves against its group's baked mesh does not
   re-carve it: the glacier's retreat as one cutter walking up the ice (the
   moving half-space the stage table describes) showed no change at any pose, so
   the ice melts by plates sinking into the trough's floor. The settle rebake
@@ -1873,11 +1896,11 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   moving subtraction would give a true retreating front and thinning. A slide is
   also capped at four creation units, so a long travel rides four slides a plate
   or a chain of carriers.
-- [medium] The ice carries no relief noise: a `noise` facet is refused on an
+- [high] The ice carries no relief noise: a `noise` facet is refused on an
   animated creation, and the glacier is animated. It is authored from chamfered
   plates and wedge cuts instead; relief would break their planes into
   hummocks.
-- [medium] Small stones in a wall sector bake at the sector's coarse cell, so the
+- [high] Small stones in a wall sector bake at the sector's coarse cell, so the
   trough's moraine and grooves read as flat-shaded polygons; the lake's
   stones are creations of their own for that reason, at a preview cost of
   about 650 000 triangles for the cobbles and boulders.
