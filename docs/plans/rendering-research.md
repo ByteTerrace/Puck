@@ -215,6 +215,9 @@ what they rest on:
   `file:line` is a pointer at this revision and may drift.
 - **From an area's map.** Taken from a research pass's map or judgement of
   its area and not reopened for this page.
+- **From a review's reader.** A reader in one of the later reviews opened
+  the code or the source and reported what it says. This page did not
+  reopen it.
 - **Measured.** A measurement from the lead machine, kept in the commit or
   plan passage that recorded it. Each is an assumption until it is measured
   again under the recipe, and none qualifies a device.
@@ -3292,15 +3295,14 @@ places differ for a reason.
 
 ### Out-of-date text found while reading
 
-Each of these is fixed by the step that touches it or by the next
-documentation sweep.
+Two were fixed with this page: the mesh region's size in the rendering
+skill and the mesh-bake reference, and the glass clear's word count in the
+kernels reference. Each of the rest is fixed by the step that touches it or
+by the next documentation sweep.
 
-- The rendering skill and the mesh-bake reference give the mesh region's
-  size as 1.75 GB.
 - The mesh-bake reference and the handbook say the levels keep 11% and 6%
-  of the triangles.
-- The kernels reference says the glass clear zeroes eight words a pixel.
-  `SdfWorldPackage.GlassSumWords` is 16.
+  of the triangles. A later bake reads otherwise, and decision 8's counter
+  settles which is right.
 - The illumination plan's table of rejected options says the cascades take
   48 MiB.
 - The summary on `SdfMeshIrradiance` still says the views pass multiplies

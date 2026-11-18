@@ -806,8 +806,8 @@ laws exercise that boundary.
   jobs of at most `SdfGpuWork.MostUploadJobBytes` under its byte, host-time and
   GPU-share budgets, each a rate of wall time and never a count a pump: a
   per-pump budget lands only as fast as frames come, and a window the
-  compositor throttles to about 8 fps would take some 40 s over the debug
-  world's 1.75 GB region. Jobs take the meshes nearest the views first, each staged into the job's own slot
+  compositor throttles to a few frames a second would take many times
+  longer to land the debug world's mesh region. Jobs take the meshes nearest the views first, each staged into the job's own slot
   of the region (`MeshLandingSlot`, past the upload ring's) and copied in the
   job's command buffer. A mesh leaves `m_meshesOwed` only when every job carrying
   its current placement has completed, and the landing filter in
