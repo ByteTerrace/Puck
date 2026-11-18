@@ -8,9 +8,7 @@ namespace Puck.State;
 /// <param name="Tick">The simulation tick the reads answer as of.</param>
 /// <param name="EngineTick">The engine tick a value-over-time read answers as of.</param>
 /// <param name="Ply">How many plies below the root position the view sits; zero at the root.</param>
-/// <param name="Imagined">The seed the job imagines with at its current inputs: a private draw site a candidate
-/// samples is bound to a sampler under this seed, never to the authority's stream.</param>
-public readonly record struct ArenaSearchView(StateArena Arena, ulong Tick, ulong EngineTick, int Ply, ulong Imagined = 0UL) {
+public readonly record struct ArenaSearchView(StateArena Arena, ulong Tick, ulong EngineTick, int Ply) {
     /// <summary>Gets the catalog whose ordinals and keys address the arena.</summary>
     public StateCatalog Catalog => Arena.Catalog;
 }

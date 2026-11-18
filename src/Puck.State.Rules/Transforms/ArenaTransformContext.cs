@@ -8,10 +8,9 @@ namespace Puck.State.Rules;
 /// one.</param>
 /// <param name="Seeds">The seed of every draw site, folded once by the host, or <see langword="null"/> when the host
 /// draws for no site; a random transfer or a shuffle then refuses by name.</param>
-/// <param name="Imagined">The sampler a hypothetical evaluation draws every private site from in place of the site's
-/// own, or <see langword="null"/> to draw a private site only through <paramref name="DrawAuthority"/>.</param>
+/// <param name="Hypothetical">Whether the kernel is evaluating a search candidate with unknown private draws.</param>
 /// <param name="DrawAuthority">The authority for the private sites this transform may consume.</param>
 /// <remarks>The caller's scope is what a refusal rewinds. The scalar transforms open none of their own; the four
 /// vector kernels open one nested inside the caller's and close it before they return, so a caller sees the scope
 /// depth it left.</remarks>
-public readonly record struct ArenaTransformContext(StateArena Arena, ArenaTime Time, IReadOnlyList<GeneratorRow>? Generators = null, ArenaDrawSeeds? Seeds = null, PrivateDrawSample? Imagined = null, PrivateDrawAuthority? DrawAuthority = null);
+public readonly record struct ArenaTransformContext(StateArena Arena, ArenaTime Time, IReadOnlyList<GeneratorRow>? Generators = null, ArenaDrawSeeds? Seeds = null, bool Hypothetical = false, PrivateDrawAuthority? DrawAuthority = null);

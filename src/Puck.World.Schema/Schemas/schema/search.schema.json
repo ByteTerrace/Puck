@@ -385,15 +385,6 @@
               "null"
             ],
             "default": null
-          },
-          "actor": {
-            "description": "Whose sight the job plans over. Omitted, the job sees what the public may read; a principal (seat2), what that principal may read; either way every other cell the job reads holds a value imagined from the plan\u0027s own seed, and every output\u0027s audience must lie inside the actor\u0027s. world plans over the authority\u0027s true state, and every output\u0027s audience must then be one every row the job reads encloses.",
-            "default": null,
-            "title": "Principal",
-            "type": [
-              "string",
-              "null"
-            ]
           }
         },
         "required": [

@@ -13,9 +13,8 @@ public static partial class ArenaTransforms {
             (context.Arena.Layout[rowOrdinal].Kind != CellKind.Int) ||
             !GeneratorEngine.TryResolveExecutableSource(
             authority: context.DrawAuthority,
-            imagined: context.Imagined,
             sample: out var sample,
-            draw: declared,
+            draw: context.Hypothetical ? declared.WithoutStream() : declared,
             generator: out var generator,
             generators: context.Generators,
             reason: out _

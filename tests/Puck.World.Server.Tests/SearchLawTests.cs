@@ -199,10 +199,9 @@ public sealed partial class SearchLawTests {
 
         Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
         Assert.True(condition: (alone.Allowance >= alone.Minimum));
-        // Both jobs fold four cells. Each plans over the public's sight, which none of its rows can withhold from, so it
-        // owes no audience check and imagines nothing.
+        // Both jobs fold four cells, and bound two audience checks over those cells and their three rows.
         Assert.Equal(
-            (alone.Allowance - 4L),
+            (alone.Allowance - (4L + (2L * (4L + 3L)))),
             shared[0].Work.Allowance
         );
         Assert.Equal(

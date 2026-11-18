@@ -1520,18 +1520,9 @@ public static partial class GeneratorEngine {
     }
 
     /// <summary>Resolves a site for execution and verifies its declared sampler has the required credential.</summary>
-    /// <param name="generators">The document's declared sources.</param>
-    /// <param name="draw">The site's facet.</param>
-    /// <param name="authority">The authority whose issued sites the caller may sample.</param>
-    /// <param name="sample">The words a private site draws from, or <see langword="null"/> for a public site.</param>
-    /// <param name="generator">The resolved source, on success.</param>
-    /// <param name="reason">Why resolution was refused, on failure.</param>
-    /// <param name="imagined">The sampler a hypothetical evaluation draws a private site from in place of the site's
-    /// own, or <see langword="null"/> to draw it only through <paramref name="authority"/>; a public site ignores it.</param>
-    /// <returns><see langword="true"/> when the source resolves and a private site has a sampler.</returns>
-    public static bool TryResolveExecutableSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, PrivateDrawAuthority? authority, out PrivateDrawSample? sample, out StateGenerator generator, out string reason, PrivateDrawSample? imagined = null) {
+    public static bool TryResolveExecutableSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, PrivateDrawAuthority? authority, out PrivateDrawSample? sample, out StateGenerator generator, out string reason) {
         ArgumentNullException.ThrowIfNull(draw);
-        sample = ((draw.PrivateStream && (imagined is not null)) ? imagined : draw.Secret?.Open(authority));
+        sample = draw.Secret?.Open(authority);
         if (draw.PrivateStream != (sample is not null)) {
             generator = null!;
             reason = "the declared draw sampler and its provisioned key do not agree";

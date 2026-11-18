@@ -214,7 +214,7 @@ public sealed partial class ArenaSearch {
     // The judge's score of the position the arena holds. An absence scores zero; a fault scores zero too and leaves the
     // step deciding nothing.
     private long ScorePosition(Job job) {
-        var scored = job.Judge.Score(view: View(job: job, ply: MovePly(job: job)));
+        var scored = job.Judge.Score(view: View(ply: MovePly(job: job)));
 
         if (scored.TryFinite(raw: out var score)) {
             return score;

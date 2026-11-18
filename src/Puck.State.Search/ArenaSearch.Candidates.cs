@@ -39,7 +39,7 @@ public sealed partial class ArenaSearch {
     }
     // Judges the position a candidate reached; a judge that faulted leaves the step it met deciding nothing.
     private void JudgeCandidate(Job job, int ply) {
-        var judged = job.Judge.Judge(view: View(job: job, ply: ply));
+        var judged = job.Judge.Judge(view: View(ply: ply));
 
         job.StepFaulted |= judged.Faulted;
     }
@@ -86,8 +86,6 @@ public sealed partial class ArenaSearch {
             m_openScopes--;
             m_arena.Rewind(mark: job.ScopeMark[m_openScopes]);
         }
-
-        CloseVeil();
     }
     // Reopens the scopes a suspended job holds, resolving, applying, and judging each recorded candidate against
     // the position the ones before it built. A candidate that no longer resolves means the job's own cursors no

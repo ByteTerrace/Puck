@@ -147,16 +147,6 @@ public sealed partial class ArenaSearch {
         public long Faults;
         public bool DisclosureRefused;
         public int[] OutputRows = [];
-        // What the job's actor may read, or null for a job that reads the authority's arena; see ArenaSearch.Veil.
-        public IArenaSearchSight? Sight;
-        // The tokens-row members the open veil imagined, which a landing never addresses in the live arena.
-        public readonly HashSet<CellKey> Inserted = [];
-        // An imagined write was refused at the job's current stamp; the job idles until its inputs move.
-        public bool VeilRefused;
-        // The imagination seed, a function of the plan and Stamp, cached for the stamp it was taken at.
-        public ulong Imagined;
-        public ulong ImaginedStamp;
-        public bool ImaginedValid;
 
         public long Alpha { get => Root.Alpha; set => Root.Alpha = value; }
         public long BaseTurn { get => Root.BaseTurn; set => Root.BaseTurn = value; }
@@ -337,16 +327,13 @@ public sealed partial class ArenaSearch {
     /// <param name="plans">Every job's resolved plan, in section order.</param>
     /// <param name="judges">Each plan's judge, parallel to <paramref name="plans"/>.</param>
     /// <param name="reason">Why the job set was refused, or empty on success.</param>
-    /// <param name="sights">Each plan's actor sight, parallel to <paramref name="plans"/>, or <see langword="null"/>
-    /// for every job: a job with a sight plans over what its actor may read, every other cell of its key rows standing
-    /// in a value imagined from its plan's seed; a job without one reads the arena as the authority holds it.</param>
     /// <returns><see langword="true"/> when every plan addresses rows this arena carries and every judge is
     /// admitted to its plan.</returns>
     /// <remarks>Admission is asked once here and never again, so a plan whose rules need a facet the judge's host
     /// does not serve is refused by name before any candidate is judged.</remarks>
     /// <exception cref="ArgumentNullException"><paramref name="plans"/> or <paramref name="judges"/> is
     /// <see langword="null"/>.</exception>
-    public bool Rebuild(ArenaSearchPlan[] plans, IArenaSearchJudge[] judges, out string reason, IArenaSearchSight?[]? sights = null) {
+    public bool Rebuild(ArenaSearchPlan[] plans, IArenaSearchJudge[] judges, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: judges);
         ArgumentNullException.ThrowIfNull(argument: plans);
 
@@ -355,15 +342,8 @@ public sealed partial class ArenaSearch {
 
             return false;
         }
-        if ((sights is not null) && (sights.Length != plans.Length)) {
-            reason = $"the search was handed {sights.Length} sights for {plans.Length} plans";
 
-            return false;
-        }
-
-        CloseVeil();
         ResolveArenaKeys();
-        m_peerPiles = null;
 
         var jobs = new Job[plans.Length];
         var rows = m_arena.Layout.RowCount;
@@ -433,7 +413,6 @@ public sealed partial class ArenaSearch {
                 OutputRows = plan.Outputs(),
                 Ordinal = index,
                 ReachKeys = ResolveReachKeys(plan: plan),
-                Sight = sights?[index],
             };
 
             job.ChanceKeys = ResolveRowKeys(
@@ -496,7 +475,7 @@ public sealed partial class ArenaSearch {
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
 
-            if (((job.Sight is null) && !AdmitsAudience(job)) || (job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
+            if (!AdmitsAudience(job) || (job.Plan.EnabledOrdinal >= 0) && (Slot(rowOrdinal: job.Plan.EnabledOrdinal) == 0L)) {
                 continue;
             }
             stamps[index] = Stamp(
@@ -550,8 +529,7 @@ public sealed partial class ArenaSearch {
             );
             spent += work.Restart;
         }
-        // The veil opens beneath every candidate scope the step replays or pushes, and Suspend rewinds it with them.
-        if (job.Running && OpenVeil(job: job)) {
+        if (job.Running) {
             // A judge rule or score that faults anywhere in the step decides nothing: the step rewinds and restarts as
             // a thrown one does, and lands nothing, so the job's last answer stands.
             job.StepFaulted = false;
@@ -564,7 +542,6 @@ public sealed partial class ArenaSearch {
                         stamp: jobStamp
                     );
                     spent += work.Restart;
-                    _ = OpenVeil(job: job);
                 }
 
                 spent = Walk(
@@ -623,24 +600,10 @@ public sealed partial class ArenaSearch {
     /// both moves the arena's own hash and never this. A transposition key also folds the move ply supplied to a
     /// judge, because a search-only rule may read it.</remarks>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> addresses no installed job.</exception>
-    public ulong PositionKey(int index) {
-        var job = JobAt(index: index);
-        var opened = !m_veilOpen;
-
-        if (!OpenVeil(job: job)) {
-            return 0UL;
-        }
-        try {
-            return PositionKey(
-                job: job,
-                movePly: 0
-            );
-        } finally {
-            if (opened) {
-                CloseVeil();
-            }
-        }
-    }
+    public ulong PositionKey(int index) => PositionKey(
+        job: JobAt(index: index),
+        movePly: 0
+    );
     /// <summary>Returns one job's progress.</summary>
     /// <param name="index">The job's index in the installed set.</param>
     /// <returns>The status.</returns>
@@ -890,15 +853,8 @@ public sealed partial class ArenaSearch {
     // One job's input rows folded in ordinal order with the ledger. A row whose version has not moved holds the bytes
     // it held, so the fold is taken again only when one of the job's rows or the ledger has moved, keeping an idle
     // tick to one counter per row.
-    // A job planning over an actor's sight folds only what that actor may read of each row, and no ledger: the
-    // arena's byte charge counts every row, hidden ones included.
     private ulong InputStamp(Job job, ulong ledger) {
         var rows = job.StampRows;
-
-        if (job.Sight is not null) {
-            ledger = 0UL;
-        }
-
         var moved = (!job.StampFolded || (job.StampLedger != ledger));
 
         for (var index = 0; (index < rows.Length); index++) {
@@ -917,10 +873,9 @@ public sealed partial class ArenaSearch {
         var hash = Fnv1aHash.Create();
 
         foreach (var ordinal in rows) {
-            FoldRow(
+            m_arena.AddRowTo(
                 hash: ref hash,
-                job: job,
-                ordinal: ordinal
+                rowOrdinal: ordinal
             );
         }
 
@@ -943,27 +898,10 @@ public sealed partial class ArenaSearch {
         if (job.Plan.RevisionOrdinal >= 0) {
             _ = rows.Add(item: job.Plan.RevisionOrdinal);
         }
-        // What an actor may read of a row moves with the live reader row its policy, or a containing zone's, names.
-        if (job.Sight is not null) {
-            foreach (var ordinal in job.KeyRows) {
-                AddReaderRow(rows: rows, visibility: m_arena.Rows[ordinal].Visibility);
-                foreach (var zone in m_arena.Catalog.ContainingZones(rowOrdinal: ordinal)) {
-                    AddReaderRow(rows: rows, visibility: m_arena.Rows[zone].Visibility);
-                }
-            }
-        }
 
         _ = rows.RemoveWhere(match: IsOutput);
 
         return [.. rows];
-    }
-    private void AddReaderRow(SortedSet<int> rows, StateVisibility? visibility) {
-        if (
-            (visibility?.ReadersFrom is { } readers) &&
-            m_arena.Catalog.TryResolve(handle: out var handle, lane: StateLane.Document, name: readers)
-        ) {
-            _ = rows.Add(item: handle.Ordinal);
-        }
     }
     // A change to a job's input rows restarts it. The clock changes only restart a job that can observe it, so a
     // world with ordinary search rules does not discard its walk on every tick.
@@ -987,20 +925,16 @@ public sealed partial class ArenaSearch {
         var hash = Fnv1aHash.Create();
 
         foreach (var ordinal in job.KeyRows) {
-            FoldRow(
+            m_arena.AddRowTo(
                 hash: ref hash,
-                job: job,
-                ordinal: ordinal
+                rowOrdinal: ordinal
             );
         }
 
         // A retained orphan name and the arena byte ledger govern whether a judge can mint a later member. They
-        // therefore belong to a candidate's cache identity even when no keyed row presently holds that name. A job
-        // planning over an actor's sight leaves them out: they count rows the actor may not read.
-        if (job.Sight is null) {
-            m_arena.AddKeyLedgerTo(hash: ref hash);
-            hash.Add(value: m_arena.Bytes);
-        }
+        // therefore belong to a candidate's cache identity even when no keyed row presently holds that name.
+        m_arena.AddKeyLedgerTo(hash: ref hash);
+        hash.Add(value: m_arena.Bytes);
 
         // A judge that reads the clock directly, or a row whose value-over-time trait reads it, sees this position
         // only at one tick pair.
@@ -1012,13 +946,6 @@ public sealed partial class ArenaSearch {
         hash.Add(value: movePly);
 
         return hash.Value;
-    }
-    private void FoldRow(Job job, int ordinal, ref Fnv1aHash hash) {
-        if (job.Sight is null) {
-            m_arena.AddRowTo(hash: ref hash, rowOrdinal: ordinal);
-        } else {
-            FoldSeen(hash: ref hash, job: job, ordinal: ordinal);
-        }
     }
     private bool IsOutput(int rowOrdinal) {
         foreach (var job in m_jobs) {
@@ -1036,24 +963,8 @@ public sealed partial class ArenaSearch {
 
         return false;
     }
-    // Reads the restarted position as the job may read it: under the veil for a job planning over a sight.
     private void Restart(Job job, ulong stamp) {
         PopAllScopes(job: job);
-        job.Stamp = stamp;
-        job.VeilRefused = false;
-        job.Running = true;
-        job.Done = false;
-
-        if (!OpenVeil(job: job)) {
-            return;
-        }
-        try {
-            RestartUnderVeil(job: job);
-        } finally {
-            CloseVeil();
-        }
-    }
-    private void RestartUnderVeil(Job job) {
         job.BaseTurn = Slot(rowOrdinal: job.Plan.TurnOrdinal);
         job.Done = false;
         job.Iteration = 0;
@@ -1064,6 +975,8 @@ public sealed partial class ArenaSearch {
             ? job.Plan.Depth
             : 1
         );
+        job.Running = true;
+        job.Stamp = stamp;
         job.TreeActive = false;
         job.PeakStepWork = 0L;
         job.TreeCount = 0;
@@ -1135,71 +1048,14 @@ public sealed partial class ArenaSearch {
         time: Time,
         value: out value
     );
-    private ArenaSearchView View(Job job, int ply) => new(
+    private ArenaSearchView View(int ply) => new(
         Arena: m_arena,
         EngineTick: m_engineTick,
         Ply: ply,
-        Tick: m_tick,
-        Imagined: ImaginedSeed(job: job)
+        Tick: m_tick
     );
     private bool Land(Job job, Func<IReadOnlyList<ArenaSearchWrite>, bool> apply) {
-        if ((job.Sight is null) && !AdmitsAudience(job)) { return false; }
-        if (!OpenVeil(job: job)) { return false; }
-        try {
-            ComposeOutputs(job: job);
-        } finally {
-            CloseVeil();
-        }
-        if (job.Sight is not null) {
-            AddressLiveTokens(job: job);
-        }
-        if (m_outputs.Count == 0) {
-            return false;
-        }
-        if (apply(m_outputs)) {
-            return true;
-        }
-
-        m_narrate?.Invoke(
-            "state.search",
-            $"[state.search: job '{job.Plan.Name}' finished but its outputs were refused by the mutation door]"
-        );
-
-        return false;
-    }
-    // A job planning over a sight walked the tokens as its actor sees them: a member the veil imagined is no live
-    // token, so nothing lands for it, and its best token names the live position of the key it walked, whose place in
-    // the live row a pile's hidden members may shift.
-    private void AddressLiveTokens(Job job) {
-        var plan = job.Plan;
-
-        for (var index = (m_outputs.Count - 1); (index >= 0); index--) {
-            if (m_outputs[index] is not ArenaSearchWrite.Cell cell) {
-                continue;
-            }
-            if (
-                ((cell.RowOrdinal == plan.LegalOrdinal) || (cell.RowOrdinal == plan.CountsOrdinal)) &&
-                (!cell.Key.IsValid || job.Inserted.Contains(item: cell.Key))
-            ) {
-                m_outputs.RemoveAt(index: index);
-            } else if ((cell.RowOrdinal == plan.BestOrdinal) && (cell.Key == m_bestTokenKey)) {
-                m_outputs[index] = cell with { Value = LiveToken(job: job, token: cell.Value) };
-            }
-        }
-    }
-    private long LiveToken(Job job, long token) {
-        if ((token < 0L) || (token >= job.TokenKeys.Length)) {
-            return token;
-        }
-
-        var key = job.TokenKeys[(int)token];
-
-        return ((key.IsValid && !job.Inserted.Contains(item: key) && m_arena.TryPositionOf(key: key, position: out var position, rowOrdinal: job.Plan.TokensOrdinal))
-            ? position
-            : -1L
-        );
-    }
-    private void ComposeOutputs(Job job) {
+        if (!AdmitsAudience(job)) { return false; }
         var plan = job.Plan;
 
         m_outputs.Clear();
@@ -1283,5 +1139,18 @@ public sealed partial class ArenaSearch {
                 }
             }
         }
+        if (m_outputs.Count == 0) {
+            return false;
+        }
+        if (apply(m_outputs)) {
+            return true;
+        }
+
+        m_narrate?.Invoke(
+            "state.search",
+            $"[state.search: job '{plan.Name}' finished but its outputs were refused by the mutation door]"
+        );
+
+        return false;
     }
 }

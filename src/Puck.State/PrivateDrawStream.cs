@@ -18,13 +18,6 @@ public sealed class PrivateDrawStream {
         Owner = owner;
     }
 
-    /// <summary>Returns a sampler under a caller-owned key that no authority issued: the words a hypothetical
-    /// evaluation (a search candidate) draws in place of a private site's own, which read no authority word and move
-    /// no authority's read count or timeline.</summary>
-    /// <param name="key">The sampler's key.</param>
-    /// <returns>The sampler.</returns>
-    public static PrivateDrawSample Imagined(ClosedBitset256 key) => (seed, stream, cursor) => Word(key, seed, stream, cursor);
-
     /// <summary>The nonsecret address used by recorded draws.</summary>
     public long Installation { get; }
 

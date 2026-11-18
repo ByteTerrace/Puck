@@ -383,7 +383,7 @@ Each local boot and fenced hosted activation creates its seed in memory. A saved
 
 Each private word is an HMAC-SHA256 sample addressed by the public seed ladder and cursor under the site's generation-specific key. A rewind retires the previous generation. Hosted journal recovery, whole-session replay and scoped replay use the words captured at the original addresses. An exhausting generator's mask or a deck's remaining tokens exclude previously dealt entries. A with-replacement stream may emit the same numeric value again.
 
-A search candidate samples a private site from a sampler its own job's seed keys, never the authority's stream ([plan over what an actor may see](search.md#plan-over-what-an-actor-may-see)). Only explicit authoring previews use the deterministic preview sampler. Private sites support neither skip nor an extended table.
+Search treats private samples as unknown. Only explicit authoring previews use the deterministic preview sampler. Private sites support neither skip nor an extended table.
 
 ## Extend a source's equidistribution
 

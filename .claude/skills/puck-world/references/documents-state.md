@@ -641,21 +641,14 @@ the one shape is `transfer` (`selector`: `last`/`first`, the zone end a token mu
 the judge reads the moved pile through the arena, which lays an ordered zone out by capacity and moves
 membership without rewriting a row.
 
-Search never declassifies. A job's `actor` names whose sight it plans over:
-omitted is the public's, a principal is that principal's, and `world` is the
-authority's true state. A job over a sight reads hidden cells only as imagined
-values the veil writes beneath its candidate scopes (`ArenaSearch.Veil.cs`,
-asked of `WorldStateDisclosure.SearchSight`), samples private draws from its own
-seed, and `WorldSearchCompilation.TryPlanAll` refuses an output wider than the
-actor (`SearchWidensAudience`). A `world` job shares
-`RuleCompiler.RequireEnclosedAudience` with transforms, refuses
-`SearchWidensAudience` when any dependency's declared row audience fails to
-enclose an output, and `ArenaSearch` repeats that check against live cell and
-containing-zone policies before advancing and landing.
-`ArenaSearchPlan.Dependencies` is the single input inventory for admission,
-stamps, position keys and the veil; it includes candidate-generation and control
-rows as well as judge/score reads. Price a `world` job's checks through
-`RuleCompiler.DisclosureCost`. An explicit rule write may reveal
+Search never declassifies: `WorldSearchCompilation.TryPlanAll` shares
+`RuleCompiler.RequireEnclosedAudience` with transforms and refuses
+`SearchWidensAudience` when any dependency's declared row audience fails
+to enclose an output. `ArenaSearch` repeats the check against live cell and
+containing-zone policies before advancing and landing. `ArenaSearchPlan.Dependencies`
+is the single input inventory for admission, stamps and position keys; it includes
+candidate-generation and control rows as well as judge/score reads. Price the
+checks through `RuleCompiler.DisclosureCost`. An explicit rule write may reveal
 into a side's memory; candidate rules proven live-only (`search(ply) == 0`)
 do not join its speculative judge. Run both skirmish `search evidence` scenarios
 when changing this boundary.

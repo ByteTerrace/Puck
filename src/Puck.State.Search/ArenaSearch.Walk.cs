@@ -23,9 +23,7 @@ public sealed partial class ArenaSearch {
         var cells = plan.CellCount;
         var work = plan.Work;
 
-        // The veil never shows more tokens than the row holds (a pile it re-deals keeps or hides its hidden count), so
-        // only a tokens row grown since the job was installed outruns the cursors' range.
-        if (job.TokenCount > job.Legal.Length) {
+        if (job.TokenCount != job.Legal.Length) {
             job.Running = false;
 
             return spent;
