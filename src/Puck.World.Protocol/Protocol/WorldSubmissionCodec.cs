@@ -295,7 +295,7 @@ public static partial class WorldSubmissionCodec {
                     readItem: WorldWireCodec.ReadInputSource), reader.ReadBoolean());
             case 14:
                 return new WorldCommand.SelectInputState(principal, entity, ReadPrincipal(reader: ref reader),
-                    reader.ReadRequiredString("SelectInputState.Family"), reader.ReadRequiredString("SelectInputState.State"), reader.ReadUInt64());
+                    reader.ReadRequiredString("SelectInputState.Family"), reader.ReadRequiredString("SelectInputState.State"), reader.ReadUInt64(), reader.ReadBoolean());
             case 15:
                 return new WorldCommand.CalibrateInput(principal, entity, reader.ReadFixed());
             default:
@@ -1098,6 +1098,7 @@ public static partial class WorldSubmissionCodec {
                 writer.WriteString(value: value.Family);
                 writer.WriteString(value: value.State);
                 writer.WriteUInt64(value: value.Activation);
+                writer.WriteBoolean(value: value.Toggle);
                 break;
             case WorldCommand.CalibrateInput value:
                 writer.WriteByte(value: 15);

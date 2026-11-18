@@ -217,7 +217,8 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         QueueRetirement(new RetiredGraph(afterSubmission: m_submissions, bytes: 0UL,
             allocation: new HeldBindingRetirement(lease: lease), passes: [], preview: null, resources: []));
-        RetireCompleted();
+        // As with a graph retirement, transfer ownership without querying a device an install may be replacing.
+        ReleaseCompletedRetirements();
     }
 
     // Retires the hold on every binding the installed graph no longer declares as external.

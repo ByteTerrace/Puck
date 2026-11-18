@@ -1132,6 +1132,7 @@ public sealed partial class WorldDocument {
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
         WorldRebuildKind? rebuildKind = null) {
+        Host.Input.PrepareCameraReconfigure(definition);
         authority.Install();
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
 
@@ -1661,7 +1662,7 @@ public sealed partial class WorldDocument {
                 ownsSelection &= (hasSelectionOwner && (selection.EntityIndex == selectionBody));
                 if ((selection.Owner.Kind == PrincipalKind.Session) && !Host.GrantTable.IsLiveSession(principal: selection.Owner)) { ownsSelection = false; }
                 var selectionReason = "input.mode: actor cannot select this owner's state";
-                if (!ownsSelection || !Host.Input.TrySetSeatState(selection.Owner, selection.Family, selection.State, selection.Activation, out selectionReason, selection.Principal)) {
+                if (!ownsSelection || !Host.Input.TrySetSeatState(selection.Owner, selection.Family, selection.State, selection.Activation, out selectionReason, selection.Principal, selection.Toggle)) {
                     Host.Output.Narrate(channel: "input.refused", text: selectionReason);
                 }
                 return;

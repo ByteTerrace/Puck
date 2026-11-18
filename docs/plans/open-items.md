@@ -2196,6 +2196,12 @@ lane's.
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
   stepped machine: the message names a condition that no longer refuses.
+- [low] `RuleGroupState.Flatten` emits dictionary insertion order, while
+  `RuleGroupState.AppendStateHash` reads compiled group order. The checkpoint
+  copies that flattened order in `WorldPersistence.TryCaptureCheckpoint`, so group
+  insertion history can change checkpoint bytes without changing the state hash.
+  Canonicalize group progress as the latch does, including the representation
+  of an absent versus explicitly stored default progress.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.
@@ -3362,13 +3368,12 @@ reversal brake, then a sitting.
 
 ### Input channels
 
-- [medium · unconfirmed] Reconcile camera mode lifecycle reseeding with its
-  authority state: `WorldSeatBindings.SyncSeatModes` resets client defaults and
-  raises `CameraApplicationDropped`, whose composition-root handler sends a
-  dissolve, while `WorldInputRuntime.PrepareOwner` retains a valid seat state.
-  Check a changed document or route while Free Cam is active for a retained
-  `free` state beside a dissolved application. Ordinary F9 entry and exit take
-  the authority path; reload and route teardown still need this focused check.
+- [medium] Free Cam admits only local seat owners: `WorldInputRuntime.TrySetCameraRoute`
+  requires a Seat principal whose index equals its body below LocalSeatCount.
+  Federated, routed peer and session input owners cannot enter the camera state.
+  Resolve the owner's camera placement and application through its admitted body
+  and route, rather than assuming a local seat index; keep the actor's Drive and
+  Control checks at the authority.
 
 Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
