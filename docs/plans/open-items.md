@@ -101,10 +101,11 @@ The next lead rewrites this section when it hands off in turn.
   `lead/authoring` now builds every artifact. Its last fixes (retrying
   downloads, the AGB toolchain, the TraceEvent version, the registry) are on
   the branch; read the latest dispatched run before the owner pushes `main`.
-- **Before the owner pushes `main`:** the [security review](#security-review)'s
-  write-door leaks are a high finding, and AGENTS.md requires each high finding
-  from the riskiest areas to be fixed or explicitly deferred by the owner. The
-  hosted dev store is reset at that deploy. Pushing `main` is the owner's.
+- **Before the owner pushes `main`:** the owner deferred the
+  [security review](#security-review)'s write-door leaks for this push, as
+  AGENTS.md allows for a high finding; they stay high work, ranked first in
+  Next. The hosted dev store is reset at that deploy. Pushing `main` is the
+  owner's.
 - **Restored branches awaiting the owner's word:** `lane/g5` (the
   occlusion-aware rate floor, review answered, needs a merge and its windowed
   check), `lane/toon-3` (a `world.toon off` fix that lands alone),
@@ -120,7 +121,7 @@ built on the engine's systems stresses them, and what it surfaces is fixed at
 the cause. Work whose correctness rests on an invariant is designed and
 reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.md)).
 
-1. [high, before any push to `main`] [Security review](#security-review):
+1. [high; the owner deferred it for the current push to `main`] [Security review](#security-review):
    the write door still tells a withheld row from an absent one at fields
    and paths a per-field enumeration missed (an adversarial review of the
    read-door fix found five high leaks); the structural write door
