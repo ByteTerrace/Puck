@@ -2116,6 +2116,7 @@ documents and refreshed image skeletons; authority persistence keeps it.
 both public and restricted rows before this correction and covers both plus
 operator observations and the persistence control.
 
+The sec2 hand-back closes X1 and F1–F6 only; it does not complete D0b1.
 The whole-preparation invariant is **not enforced**. The remaining D0b1 work
 is the transaction-only mint of `WorldPreparedMutation`, the world-wide
 declarations carrier, compiler/evaluator migration (including removal of
