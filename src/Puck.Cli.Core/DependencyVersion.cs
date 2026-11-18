@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Puck.Cli.Deps;
+namespace Puck.Cli;
 
 /// <summary>A package or tag version the way NuGet, npm and Git tags all spell it: dot-separated numbers (up to any
 /// count), an optional <c>-prerelease</c> suffix and ignored <c>+build</c> metadata. Ordering follows semantic

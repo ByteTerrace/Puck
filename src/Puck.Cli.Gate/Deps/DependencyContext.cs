@@ -41,7 +41,7 @@ public sealed class DependencyFiles {
     public void Track(string path) {
         if (!m_originals.ContainsKey(key: path)) { m_originals[path] = (File.Exists(path: path) ? File.ReadAllBytes(path: path) : null); }
     }
-    /// <summary>Replaces a file's text, keeping its original bytes for <see cref="Restore"/>.</summary>
+    /// <summary>Replaces a file's text, keeping its original bytes for <see cref="Restore()"/>.</summary>
     /// <param name="path">The file's full path.</param>
     /// <param name="text">The new text, written as UTF-8 without a byte-order mark.</param>
     public void Write(string path, string text) {
@@ -50,10 +50,13 @@ public sealed class DependencyFiles {
     }
     /// <summary>Puts every tracked file back as it was first seen.</summary>
     public void Restore() {
-        foreach (var (path, bytes) in m_originals) {
-            if (bytes is not null) { AtomicFile.WriteAllBytes(bytes: bytes, path: path); }
-            else if (File.Exists(path: path)) { File.Delete(path: path); }
-        }
+        foreach (var path in m_originals.Keys) { Restore(path: path); }
+    }
+    /// <summary>Puts one tracked file back as it was first seen.</summary>
+    /// <param name="path">The tracked file's full path.</param>
+    public void Restore(string path) {
+        if (m_originals[path] is { } bytes) { AtomicFile.WriteAllBytes(bytes: bytes, path: path); }
+        else if (File.Exists(path: path)) { File.Delete(path: path); }
     }
 
     /// <summary>Replaces <c>"name": "oldSpec"</c> with <c>"name": "newSpec"</c> in a JSON file's text, wherever that

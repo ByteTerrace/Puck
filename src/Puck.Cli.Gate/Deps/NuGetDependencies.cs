@@ -20,7 +20,7 @@ public static partial class NuGetDependencies {
     // [5.12.0]: an exact pin.
     [GeneratedRegex(pattern: @"^\[(?<version>[^,\]\[()*]+)\]$", options: RegexOptions.CultureInvariant)]
     private static partial Regex ExactPin();
-    [GeneratedRegex(pattern: @"^#:package\s+(?<id>[^@\s]+)@(?<version>\S+)\s*$", options: RegexOptions.CultureInvariant)]
+    [GeneratedRegex(pattern: @"^#:package[^\S\r\n]+(?<id>[^@\s]+)@(?<version>\S+)[^\S\r\n]*\r?$", options: RegexOptions.CultureInvariant | RegexOptions.Multiline)]
     private static partial Regex PackageDirective();
 
     private const string Ecosystem = DependencyEcosystems.NuGet;
@@ -120,18 +120,55 @@ public static partial class NuGetDependencies {
 
             if ((first is null) || !first.StartsWith(value: "#:", comparisonType: StringComparison.Ordinal)) { continue; }
             var text = File.ReadAllText(path: path);
-            var edited = text;
+            var moves = new List<(Group Version, DependencyMove Move)>();
 
-            foreach (var line in text.ReplaceLineEndings(replacementText: "\n").Split(separator: '\n')) {
-                if ((PackageDirective().Match(input: line) is not { Success: true } match) || !DependencyVersion.TryParse(text: match.Groups["version"].Value, version: out var current)) { continue; }
+            foreach (Match match in PackageDirective().Matches(input: text)) {
+                var version = match.Groups["version"];
+                if (!DependencyVersion.TryParse(text: version.Value, version: out var current)) { continue; }
                 var id = match.Groups["id"].Value;
 
                 if (await FloorTargetAsync(context: context, current: current, ecosystem: Ecosystem, holdReason: "a file-based app's pin stays within its major", id: id).ConfigureAwait(continueOnCapturedContext: false) is not { } target) { continue; }
-                edited = edited.Replace(oldValue: $"#:package {id}@{current.Text}", newValue: $"#:package {id}@{target.Text}", comparisonType: StringComparison.Ordinal);
-                context.Report.Add(move: new DependencyMove(Ecosystem: Ecosystem, From: current.Text, Name: $"{id} ({relative})", To: target.Text));
+                moves.Add(item: (version, new DependencyMove(Ecosystem: Ecosystem, From: current.Text, Name: $"{id} ({relative})", To: target.Text)));
             }
-            if (edited != text) { context.Files.Write(path: path, text: edited); }
+            if (moves.Count == 0) { continue; }
+
+            // Work from the end so the positions of the remaining directives stay valid.
+            moves.Reverse();
+            var edited = text;
+            foreach (var (version, move) in moves) { edited = ReplaceVersion(source: edited, version: version, target: move.To); }
+            if (TryRestore(candidate: edited)) {
+                foreach (var (_, move) in moves) { context.Report.Add(move: move); }
+                continue;
+            }
+
+            context.Files.Restore(path: path);
+            var accepted = text;
+            foreach (var (version, move) in moves) {
+                var candidate = ReplaceVersion(source: accepted, version: version, target: move.To);
+
+                if (TryRestore(candidate: candidate)) {
+                    accepted = candidate;
+                    context.Report.Add(move: move);
+                    continue;
+                }
+                if (accepted == text) { context.Files.Restore(path: path); }
+                else { context.Files.Write(path: path, text: accepted); }
+                context.Report.Add(hold: new DependencyHold(Available: move.To, Current: move.From, Ecosystem: move.Ecosystem, Name: move.Name, Reason: "the newest version does not restore from the feed"));
+            }
+
+            // Only report or retain candidates whose complete file-app dependency graph restored.
+            bool TryRestore(string candidate) {
+                context.Files.Write(path: path, text: candidate);
+                return LocksCommand.Restore(
+                    arguments: ["restore", path, "--disable-build-servers"],
+                    cancellationToken: context.CancellationToken,
+                    repositoryRoot: context.RepositoryRoot
+                ).ExitCode == 0;
+            }
         }
+
+        static string ReplaceVersion(string source, Group version, string target) =>
+            string.Concat(source.AsSpan(start: 0, length: version.Index), target, source.AsSpan(start: version.Index + version.Length));
     }
 
     /// <summary>Moves every NuGet dependency the policy allows and reports what moved and what it held.</summary>

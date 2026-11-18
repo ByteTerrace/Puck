@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
+using Puck.Abstractions;
 
-namespace Puck.Cli.Deps;
+namespace Puck.Cli;
 
 /// <summary>The versions nuget.org lists for a package, read from its flat container (the one feed the repository's
 /// <c>nuget.config</c> names). A package the feed does not know has no versions.</summary>
@@ -13,7 +15,7 @@ public sealed class NuGetFeed(HttpClient http) {
     private async Task<string[]> ReadAsync(string id, CancellationToken cancellationToken) {
         using var response = await http.GetAsync(cancellationToken: cancellationToken, requestUri: $"{Container}{id.ToLowerInvariant()}/index.json").ConfigureAwait(continueOnCapturedContext: false);
 
-        if (response.StatusCode == System.Net.HttpStatusCode.NotFound) { return []; }
+        if (response.StatusCode == HttpStatusCode.NotFound) { return []; }
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
         using var document = await JsonDocument.ParseAsync(cancellationToken: cancellationToken, utf8Json: stream).ConfigureAwait(continueOnCapturedContext: false);
@@ -26,7 +28,13 @@ public sealed class NuGetFeed(HttpClient http) {
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The versions as the feed spells them; empty when the feed has no such package.</returns>
     public Task<string[]> VersionsAsync(string id, CancellationToken cancellationToken) =>
-        m_versions.GetOrAdd(key: id, valueFactory: key => ReadAsync(cancellationToken: cancellationToken, id: key));
+        m_versions.GetOrAdd(key: id, valueFactory: key => Retry.RetryAsync(
+            action: () => ReadAsync(cancellationToken: cancellationToken, id: key),
+            attempts: 4,
+            delay: TimeSpan.FromSeconds(seconds: 2),
+            retryable: static error => ((error is HttpRequestException { StatusCode: { } status })
+                && ((status == HttpStatusCode.TooManyRequests) || (((int)status) >= 500)))
+        ));
     /// <summary>Finds the newest stable version of a package the feed holds.</summary>
     /// <param name="id">The package id.</param>
     /// <param name="admits">Which stable versions count; every one when <see langword="null"/>.</param>
