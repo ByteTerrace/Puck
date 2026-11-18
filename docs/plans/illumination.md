@@ -417,12 +417,11 @@ and the job system supplies the policy
 these steps. Gap 3, that nothing casts a shadow past 120 m, is step 1's terrain
 cascade, whose one home is the terrain pass's far-shadow step, and that step
 starts when shadow maps are assigned by light role (the rendering plan's
-decision 6, in its work that starts now, owned here). No step above carries
+decision 6, built by the `shadows` lane of its first wave, owned here). No step above carries
 that assignment yet, so it is added as the first part of step 1.
 Gap 12, that a frame holds at most 128 lights (`SdfLights.MaxLights`), blocks no
 place today, so it keeps its place in step 5: step 5's list measurement runs
-before the rendering plan's stage 4, or as soon as a place authors more lights
-than the cap, whichever comes first.
+as soon as a place authors more lights than the cap.
 
 Steps 4 and 5 share no files with the others and run beside them; step 6 waits
 on step 5; step 7 on the terrain pass's steps 1 and 7 and on step 6. What the

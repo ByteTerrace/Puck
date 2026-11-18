@@ -408,11 +408,11 @@ Deferred to [open items](open-items.md#water) with its mechanism named: a verb t
 
 ### Order
 
-**Engine gaps first.** Six of the engine gaps in the
+**Engine gaps first.** Eight of the engine gaps in the
 [rendering plan's list](rendering-research.md#engine-gaps-filled-first) stop
 the water reaching its look, and each is filled before the look work that
 would tune around it (the owner's ruling,
-[AGENTS.md](../../AGENTS.md#pucks-purpose)). Three are this plan's to build;
+[AGENTS.md](../../AGENTS.md#pucks-purpose)). Five are this plan's to build;
 three belong to other plans and hold lanes here.
 
 | Gap | In this plan's terms | Owner |
@@ -420,10 +420,19 @@ three belong to other plans and hold lanes here.
 | 5. Water's colour and opacity do not follow depth over the bed | The glass medium is a function of the path length along the view ray (`sdfGlassThicknessAt`), with one scatter colour and one coefficient per material, and nothing gives shading the water's depth over its bed. The lake, pool, river and plunge read as one flat colour, with no clear shallows and the stones invisible | This plan, as a mechanism under the water |
 | 6. A flow layer carries one velocity | `PaletteFlowDocument` has one `Velocity` for a whole surface, so the lake's outlet sill, the river's winding course and the falls cannot each move at their own speed | This plan, as a mechanism under the water |
 | 9. A camera inside water sees a flat wash | The glass pass has no case for an eye inside a medium ([decision 14](rendering-research.md#14-treat-a-nested-view-as-the-same-view-at-another-size)). It was filed under R4's enhancements and is first | This plan |
+| 14. A field row that only the simulation needs is drawn | The gap list's S5: the hidden chain under the valley bakes and draws two height fields nobody sees, because a row is drawn when its height scale is above zero and the flow needs that scale to level water | This plan |
+| 15. The falls have no spray or splash | The gap list's L4: the particle pool ([W3](#w3-the-presentation-particle-pool)) is not built | This plan, lane R3 |
 | 8. A moving cutter does not re-carve a baked group | The glacier cannot retreat by a cut and melts by sinking, so lane A2's glacier waits on it | [Moving blends](moving-blends.md#engine-gaps-first) |
 | 1 and 4. Terrain bakes coarser than it declares, and relief cannot be masked | The glacier's trough and moraines stair-step and relief buries the lake's bowl, so lane A2's lake and glacier wait on them | [The terrain pass](terrain-pass.md#order-of-work) |
 
-Gaps 5, 6 and 9 start now, ahead of the look work of lanes A3 to A5. Lane A2
+Gaps 5, 6, 9 and 14 start now, as the `water` lane of the rendering plan's
+[first wave](rendering-research.md#the-first-wave), ahead of the look work
+of lanes A3 to A5. Gap 5's first step is a comparison: one known sloping bed
+seen from overhead and from a low angle, with its geometry, the water's
+thickness along the ray and what the material returned, because the glass
+shader already thickens its haze with the ray's length and that alone does
+not explain why the stones disappear. Gap 15 follows `water`, which changes
+the pass the particles draw through. Lane A2
 is built and awaits its look critic; its remaining misses are gaps 1, 4 and
 8, so no further sculpting of the lake or glacier runs until they land. The
 rest of the order follows. The simulation is the feature's truth and every look binds to

@@ -1365,7 +1365,9 @@ The job system overlaps nothing with the frame's views: the tick is a fork the
 frame thread joins inside the step, before produce, so no input latency is
 added and no tick runs under a produce. The pipelined simulation worker the
 tick-to-produce memo first proposed, and its tick record, are withdrawn with
-it. The one host loop that memo delivered stays (`Puck.Launcher.HostLoop`, one
+it. That is what this memo builds. Whether a world's tick may run on a thread
+of its own is a separate question, and it is open
+([open question 7](#open-questions)). The one host loop that memo delivered stays (`Puck.Launcher.HostLoop`, one
 shell over `WorldHostStep`, the client's arrival-form interpolation fraction).
 That fraction already adds about half a step of presentation latency against
 the old accumulator form, since the inline host stamps a tick's arrival just
@@ -1413,6 +1415,29 @@ step that meets it.
    body, and so move hash under T2; the step re-records them.
 6. Whether the built change-set closure matches a full retrace on a windowed
    World after a wall is removed and after a draw moves; B1's check reads it.
+7. Where the tick runs. This memo keeps the tick ahead of produce on the
+   frame thread and forks its partitions from there. It forks nothing across
+   world instances: every instance steps in series on the frame thread
+   (`WorldInstanceHost.StepInstances`). That serves one world. Puck is built
+   for many worlds in view at once, and a frame that steps all of them before
+   it draws cannot hold its bar however short each step is. So a tick on a
+   thread of its own is not ruled out. It is this plan's design question,
+   and its first input is a measurement the
+   [rendering plan](rendering-research.md#3-shorten-the-tick-and-settle-where-it-runs)
+   takes in its first wave: what one more world in frame costs the frame
+   thread. The design weighs at least three arrangements. Worlds the player
+   is not acting in step on other threads, which adds nothing to the time
+   from input to display. Every world steps on its own thread and the frame
+   reads the latest complete state, which shortens the frame to the longer
+   of tick and produce and can show a tick older than the player's input.
+   And the tick staying where it is. Each is stated with its measured time
+   from input to display beside today's, which nothing measures yet. The
+   register's rule that a frame of latency is never the fix for a missed bar
+   ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation))
+   constrains the answer, so an arrangement that adds latency for the world
+   the player acts in goes to the owner with that measurement. Whether an
+   unseen world may step less often is its authority's choice and is part of
+   the same design.
 
 ---
 
