@@ -146,8 +146,8 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
-            typeof(StateRow),
-            nameof(StateRow.Name),
+            typeof(StateRowShape),
+            nameof(StateRowShape.Name),
             WorldNameKind.State,
             WorldNameRole.Declares
         ),
@@ -244,14 +244,14 @@ public static partial class WorldNameRegistry {
         ),
         // State rows and their traits.
         new(
-            typeof(StateRow),
-            nameof(StateRow.ValuesFrom),
+            typeof(StateRowShape),
+            nameof(StateRowShape.ValuesFrom),
             WorldNameKind.State,
             WorldNameRole.Names
         ),
         new(
-            typeof(StateRow),
-            nameof(StateRow.PhaseOf),
+            typeof(StateRowShape),
+            nameof(StateRowShape.PhaseOf),
             WorldNameKind.State,
             WorldNameRole.Names
         ),
@@ -1419,8 +1419,8 @@ public static partial class WorldNameRegistry {
             "a family name is local to the document that declares the range"
         ),
         new(
-            typeof(StateRow),
-            nameof(StateRow.Enum),
+            typeof(StateRowShape),
+            nameof(StateRowShape.Enum),
             "an enum name is local to the document"
         ),
         new(
