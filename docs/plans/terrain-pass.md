@@ -646,7 +646,7 @@ painterly: billow, broad warp, fewer octaves).
 
 ## Order of work
 
-**Engine gaps first.** Four of the engine gaps in the
+**Engine gaps first.** Five of the engine gaps in the
 [rendering plan's list](rendering-research.md#engine-gaps-filled-first) are
 this plan's, and each is filled before work that sculpts or tunes around it
 (the owner's ruling,
@@ -656,8 +656,11 @@ this plan's, and each is filled before work that sculpts or tunes around it
   carve each other, or that carries relief, is emitted as one instance for the
   whole creation, so a sector's bound, not its declared spacing, sets its
   cell, and relief and smooth blends are capped at prop sizes. The first
-  action is the one count the gap entry names: the triangles a bound about the
-  shapes costs.
+  action is a report for one sector: its bound, the spacing it asked for
+  and the cell it got, and which of the two limits set it (the bound about
+  the creation's origin, or the eight-fold limit on a member's own
+  refinement). The triangles a bound about the shapes costs are counted
+  with it.
 - **Step 3's `TerrainRelief` op, carrying a mask (gap 4).** A relief has no
   region, so it buries anything set into the terrain (the lake's bowl, the
   pool, the river's channel, the glacier's cradle). The step's first part is
@@ -671,9 +674,17 @@ this plan's, and each is filled before work that sculpts or tunes around it
   card reads) and the RTX 4070's shading columns, which
   [the shader plan](author-shaders.md#the-decision-matrix) already holds. The
   RTX 2060's and the Steam Deck's columns do not hold it back.
-- **Step 7's far shadows (gap 3).** Nothing casts a shadow past 120 m. The step
-  starts when shadow maps are assigned by light role (the rendering plan's
-  work that starts now).
+- **Step 7's far shadows (gap 3).** No surface past the standard's 120 m
+  shadow reach is shadowed, and stretching the far map that far would cost
+  precision near the eye. The step has one start: when shadow maps are
+  assigned by light role, which the rendering plan's `shadows` lane builds
+  in its first wave. The far map is one more entry in that lane's cascade
+  set.
+- **Step 2's aerial perspective (gap 13).** Haze's strength is divided by
+  the far distance (`SdfSky.PackAtmosphere`), so changing how far the world
+  draws changes the haze on everything nearer, and with it the distant rock
+  that materials and shadows are judged on. The step starts when the colour
+  conversion lands, because both change the fog's and the haze's colours.
 
 The rows below are in landing order, and a step's number is its name.
 Steps 0 and 1 come first because the gap steps read against them. Steps 2, 5
@@ -694,13 +705,16 @@ the same window as its after, never from a recorded figure.
 | 4. Relative caps, shape bound (gap 1) | authoring/bake D | The bound fix none, and its first action is the triangle count of a bound about the shapes; 3 for relief | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
 | 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them ([its checks](#the-proof-exhibit)). |
 | 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
-| 7. Far shadows (gap 3) | rendering A, after 1 | 0; shadow maps assigned by light role (the rendering plan's work that starts now) | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
-| 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
+| 7. Far shadows (gap 3) | rendering A, after 1 | 0; shadow maps assigned by light role (the rendering plan's `shadows` lane) | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
+| 2. Aerial perspective (gap 13) | rendering B | 0; the colour conversion | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |
 | 5. Certified field contact | physics E | [certified field contact](open-items.md#certified-field-contact), with 3's relief | One certified solve serves both contact paths; the valley witnesses report 0 red, feet stay within skin plus bake error on the 58° face, creep is 0, and two runs reproduce. No coarser contact cut is allowed. Still open: the 58° face, the rim's creep and clearance close to a slope (packet). |
 | 8. The sets and the valley | content G | 3, 4, 6 (2 for the haze presets) | Both sets compile and lint clean under `--strict`. Six stills demonstrate each set; the valley wears the painterly set under the owner's ruling. |
 
-Steps 0, 1, 3, 4, 6 and 7 start together: the gap steps do not wait on one
-another, and each waits only on what its row names. Step 3's kernel edit lands
+Steps 0, 1, 3 and 4 start together. Step 6 and step 2 start when the colour
+conversion lands, and step 7 when shadow maps are assigned by role. The gap
+steps do not wait on one another, and each waits only on what its row names.
+Step 3's mask and step 4's bound fix are one lane of the rendering plan's
+first wave (`terrain`), because they change the same files. Step 3's kernel edit lands
 with the bake fundamental's batch. Step 5 belongs to the certified-contact
 packet and follows 3's relief; step 8 closes. Tiles arrive with the streaming
 plan's step 10 and are not a step here. Steps 1, 2, 6 and 7 need windowed legs
