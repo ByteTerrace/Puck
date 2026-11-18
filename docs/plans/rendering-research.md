@@ -1896,13 +1896,12 @@ inside a track an item waits only for the one before it.
 
 ### Lanes in flight
 
-Two lanes are already dispatched. No lane below repeats them, and each
-keeps out of their files.
+One lane is already dispatched. No lane below repeats it, and each keeps
+out of its files.
 
 | Lane | What it is doing | Keep out of |
 |---|---|---|
 | `vkalloc` | Vulkan's allocation in each frame: about 41 MB an iteration against Direct3D 12's 5 MB | The Vulkan backend's per-frame paths (`src/Puck.Vulkan`, `src/Puck.Vulkan.Presentation`) |
-| `silo10` | Ten failing tests of the silo's release cutover and recovery | The silo's tests and the code they reach |
 
 ### The first wave
 

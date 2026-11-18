@@ -327,7 +327,9 @@ findings is answered where its step is, by the label the review gave it
 
 3. **Serve every residency's upkeep first, captured or not** (D2-07). The
    existing pump stays where it is, ahead of any pack that could change a
-   binding: it collects finished GPU jobs and calls their clients. A
+   binding (`SdfWorldResidency.PumpGpuWork`, called for every residency at
+   the top of `SdfWorldPasses.BeginFrame`): it collects finished GPU jobs
+   and calls their clients. A
    finished job on a hidden residency is owed that callback even when its
    last upload has already completed. Collecting a finished job is kept
    apart from permission to submit the next one. Then uploads are polled,
@@ -387,10 +389,12 @@ findings is answered where its step is, by the label the review gave it
    pending.
 
 6. **Keep visibility read-only while the host composes** (D2-03).
-   Completing the footprints can ask whether a portal is occluded. Today
-   that question can prepare a newly followed residency in the middle of
-   the root capture, before the host has published this frame's cameras
-   and clock, and the later prepare then reuses that result. Visibility
+   Completing the footprints can ask whether a portal is occluded
+   (`SdfWorldPasses.PortalOccluded`). Today that question refreshes the
+   instance's entry, and a refresh can prepare a newly followed residency
+   in the middle of the root capture, before the host has published this
+   frame's cameras and clock. The later prepare then reuses that result,
+   because a residency is prepared once a frame. Visibility
    gets a lookup of occlusion evidence that is already complete and
    prepares nothing. Where the current binding or program cannot be
    established yet, the view is kept. Final view indices are resolved,
