@@ -1747,9 +1747,11 @@ meet and what the engine counts:
   the entry names, on Direct3D 12 and on a windowed Vulkan boot;
 - counters and counted work: draws, dispatches, bytes held, captures,
   refusals;
-- for anything that claims frame time, one report of
-  `puck benchmark --route debug --width 2560 --height 1440` on the lane's
-  build beside one on the build it started from.
+- for anything that claims frame time, the GPU passes, counters and
+  `host.frames` split it moves, read in a short windowed run at 2560 by
+  1440 on the lane's build beside the build it started from. The full
+  `puck benchmark` route is the lead's, run once per integration batch on
+  the merged tip (below), never once per lane.
 
 A lane lands when that evidence holds. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
@@ -1763,6 +1765,29 @@ those in batches. A question about time goes to the lead's quiet window
 (`puck measure request`) with the two builds frozen, and the lane lands on
 its counts meanwhile. No lane waits for a measurement, for a review, or for
 the RTX 2060, the Steam Deck or an HDR display.
+
+**The GPU and the builds are the shared resources, so the work is shaped
+around them.** There is one RTX 4070, and every windowed World holds its
+lease, so windowed time is the wave's scarcest input:
+
+- *At most three GPU-granted lanes hold windowed work at once.* The others
+  work on what needs no window (the change itself, a headless boot,
+  `puck mesh preview` and `puck mesh audit --cpu`, counted work, the capability
+  reading) and take a windowed slot when one frees. A lane waiting for the
+  GPU moves to its next step, never idles. `puck lease gpu` queues the slot;
+  no lane polls for it.
+- *A windowed leg is short.* A boot, the place the lane's entry names, a
+  presented burst while moving and the counters; then the World stops. Two
+  backends means two short runs, not two routes.
+- *Builds stay bounded.* A lane builds the projects it touched; a World start
+  builds `Puck.World` once for that source state; the build lease and the
+  memory gate queue the rest. Concurrency follows measured load
+  ([orchestration](../../.claude/skills/orchestration/SKILL.md)), not a count.
+- *The lead lands in batches.* Ready lanes are merged together, the batch's
+  tip gets one headless boot and one `docs links`, then it is pushed; the
+  full 1440p benchmark route runs once per batch in a quiet window, and its
+  report is the batch's frame-time evidence. A lane never waits for a batch
+  to form: it hands back and starts its next step.
 
 **Review is for what running cannot show.** A change gets an adversarial
 review only when it sits in a class that
