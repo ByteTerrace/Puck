@@ -178,8 +178,10 @@ direction:
     reviewer gets the diff and the author's claim, not the author's reasoning,
     and tries to break it with a repro, a counterexample or a missed caller. A
     class caught twice gets a check or a structure, which retires its review.
-  - The lead checks every claim before merging: it runs what a lane says it
-    proved, and reads a benchmark, harness or counter as code. A measurement
+  - The lead reads every claim at landing and checks it in the batch pass
+    (AGENTS.md, "Code first, verification after"), reading a benchmark,
+    harness or counter as code; it re-runs a single lane's claim before merging
+    only when the claim sits in a hazards class or reads wrong. A measurement
     that cannot fail, or that runs another path, is a defect at the severity of
     the claim it supports.
   - A change justified only by preference is not an improvement (AGENTS.md,
@@ -440,10 +442,11 @@ worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
 the integration branch is checked out in the lead's worktree; it never carries
 work of its own.
 
-A lane is ready when it meets its own focused checks
-([landing bar](../verification/SKILL.md#the-landing-bar)): it builds what it
-touched, its commit body says what it ran to show the change working, and it has
-merged the integration tip. A ready lane joins the integration lane's next batch
+A lane is ready when its code is written, it builds what it touched, it has
+booted the debug world once, its commit body says what it ran, and it has merged
+the integration tip (AGENTS.md, "Code first, verification after"). Windowed
+checks, benchmarks and broad tests are the batch pass's
+([landing bar](../verification/SKILL.md#the-landing-bar)). A ready lane joins the integration lane's next batch
 and is held for nothing else: not another lane, not its review. The integration
 lane merges the batch, builds what the merge touched, runs what the batch
 changed and looks into a red result; the lead fast-forwards the integration
