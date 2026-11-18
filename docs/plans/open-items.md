@@ -35,8 +35,11 @@ The rendering plan is the active programme, and another session orchestrates
 it. Read this, then [the plan's first wave](rendering-research.md#the-first-wave).
 The next lead rewrites this section when it hands off in turn.
 
-- **Start here:** dispatch the plan's first wave of twelve lanes at once, in
-  the merge order the plan gives where lanes meet. The evidence bar is
+- **Start here:** dispatch the plan's first wave of fifteen lanes at once, in
+  the merge order the plan gives where lanes meet. Three of them come from
+  the round on [GPU capabilities Puck does not use yet](rendering-research.md#gpu-capabilities-puck-does-not-use-yet),
+  which ranks each technique by what it gives the RTX 4070 and names the
+  path every other device runs. The evidence bar is
   building what a lane touched and running it in the debug world at 2560 by
   1440, never a test suite. Measurement runs beside the lanes. Adversarial
   review is only for the classes [hazards](../development/hazards.md#silent-invariants)
@@ -46,10 +49,10 @@ The next lead rewrites this section when it hands off in turn.
   machine. The slowest frames are the lift chapter's simulation steps; the
   largest GPU part is the views pass. That run used the debug world's boot
   settings, not a device's `high` table, until the `bench` lane applies one.
-- **In flight:** `vkalloc`, on branch `worktree-agent-afb2961687c8173ec`, hunts
-  Vulkan's per-frame allocation, several times Direct3D 12's at 1440p. If its
-  session ended before it handed back, start it again from the branch's last
-  commit or from scratch, and land it if its evidence holds.
+- **In flight:** nothing. `vkalloc` has landed on the integration branch:
+  Vulkan's recording path and the lighting's snapshot allocate nothing in
+  each frame. What its trace left open is the plan's second-wave shared
+  allocation lane, and the merge's message lists it.
 - **Settled this round and recorded in their homes:** the frame bar's sizes,
   topologies and device order (AGENTS.md); deployed data is scratch
   (AGENTS.md); named engine gaps are filled first, and a material improvement
@@ -150,7 +153,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
     and visibility packets above, run as lanes side by side and not as
-    stages. Its [first wave](rendering-research.md#the-first-wave) is twelve
+    stages. Its [first wave](rendering-research.md#the-first-wave) is fifteen
     lanes that start now, each with its files, its model and its finish
     line; its [second wave](rendering-research.md#the-second-wave) names
     what unlocks each lane. Its
