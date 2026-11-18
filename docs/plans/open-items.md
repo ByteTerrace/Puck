@@ -103,9 +103,12 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     next batch.
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
-    and visibility packets above. Its stage 0 builds the benchmark's route
-    and its reading of the bar before it measures; the lead ranks it at the
-    next batch.
+    and visibility packets above. Its
+    [engine gaps](rendering-research.md#engine-gaps-filled-first) are filled
+    first, ahead of further sculpting around them, and its
+    [work that starts now](rendering-research.md#work-that-starts-now) runs
+    beside its stage 0, which reads the bar on the RTX 4070 at 2560 by 1440;
+    the lead ranks it at the next batch.
 23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -251,10 +254,10 @@ Owner-only actions:
   deleted guards over non-code files return, if any ([tests](#tests-suspended)).
 - **Calling for qualification**, which returns the
   [quarantined gates](#quarantined-gates).
-- **Hardware for the rendering measurements**: an RTX 2060 and a Steam Deck
-  for the device readings, with the Deck needed early because its windowed
-  path has never run on hardware, and an HDR display for the colour check
-  ([rendering research](rendering-research.md#the-owners-calls)).
+- **Hardware for the rendering measurements**: an RTX 2060, a Steam Deck and
+  an HDR display, once the engine meets both bars on the RTX 4070. No
+  fundamental work waits for them
+  ([rendering research](rendering-research.md#the-bars-and-the-budget)).
 
 Sittings, each the owner's eye on a running World:
 
@@ -292,11 +295,12 @@ Open calls, each with its sides:
 - **The chase camera with its back to the stair wall**: swing the boom, rise
   over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
-- **The rendering research's three engine calls**, each with a default the
-  work proceeds on: what a bar device does when the planned gains cannot
-  reach its bar, the window size the frame bar is read at on the desktops,
-  and whether sharpening may act on bloom's scattered light
-  ([the page's calls](rendering-research.md#the-owners-calls)).
+- **The rendering research's four engine questions**, each with a default
+  the work proceeds on: how a derived product shared between machines is
+  named and trusted, the memory bar's figures for each device, whether a
+  device's quality table may lower the render scale, and whether a world
+  that shows a viewer only pictures publishes them once for an audience
+  ([the page's questions](rendering-research.md#questions-for-the-owner)).
 - **GameInput**: ship or require its redistributable, which the Share button,
   the Elite paddles and more than four pads need, or stay on the inbox runtime
   ([input](#input-channels)).
@@ -1689,7 +1693,10 @@ collider, then the lifecycle lows as one pass.
 ### The valley's terrain
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the [terrain pass](terrain-pass.md#order-of-work)'s step 1 checks, with
+Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): a
+sector's bound, the relief's caps and a mask for relief inside a basin. Then
+the [terrain pass](terrain-pass.md#order-of-work)'s step 1 checks, with
 step 2 and step 4's bound fix in parallel; step 3's kernel edit is batched
 behind the bake fundamental, and step 6's terrain programs wait on the shader
 plan's bins. Relief contact is
@@ -1809,7 +1816,10 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+ordinary · Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): depth
+over the bed driving colour, a flow read for each place, a camera inside
+water, and a moving cutter that re-carves. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
 P1 last. The plan owns the feature end to end; these are the defects it does not.
 
 - [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
@@ -3244,7 +3254,7 @@ Looks and rules of play held in engine code:
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
 - [medium] Four looks the rendering research found in engine code, each with
-  the authored home [its looks table](rendering-research.md#looks-are-authored)
+  the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
   names: the filmic curve's constants in `place.comp.hlsl`; the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
   the shares of the display at which a nested view's update rate steps down

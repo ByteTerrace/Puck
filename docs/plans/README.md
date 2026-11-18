@@ -62,7 +62,7 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/residency.md).
 
 - [Rendering](rendering.md): the frame graph's remaining packages: sky vocabulary, wallpaper bounds, hardware observations and follow-ups.
-- [Rendering research](rendering-research.md): the research round's decisions across the renderer's areas, the order their cross-area work depends on, the look values left to authors with the surface that carries each, and the review the page answers.
+- [Rendering research](rendering-research.md): the renderer's plan: what is wrong, the budget for each bar device, the thesis and its bets, fifteen decisions, and a build order that fills engine gaps first; each decision's steps are held in [the step designs](rendering-research/step-designs.md) until the plan that owns them takes them.
 - [Streaming and memory](streaming-and-memory.md): the campaign that builds residency with the memory work inside it, from device readings and pools to areas and the moons; its research round is in `streaming-and-memory/`.
 - [Visibility and submission](visibility.md): retained instances, instance updates proportional to change, geometry reduced at the source, and shared multi-view work.
 - [Virtual geometry](virtual-geometry.md): levels of detail, member boxes, far-field parents and the finest tier as a demand-baked cache.
