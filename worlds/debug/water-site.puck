@@ -45,12 +45,15 @@ let fallsProfile = map(fallsHeights, y => [sectorFace(wallSector, y), y])
 function siteScatter(k, ratio) = shadeFrac(k * ratio)
 
 // The stones in the lake's bowl and on its bank, in the lake's own frame (its placement turns by the wall's yaw, so +z is out
-// from the ring's centre, toward the glacier's trough, and -z toward the outlet): sandy cobbles scattered over the bowl's floor
-// and warm boulders at the waterline, each half sunk where the bowl's rock stands. Neither lies on the trough side or the
-// outlet's, which the glacier's ramp and the sill own. A stone is { position, radii, yaw (degrees), material }.
+// from the ring's centre, toward the glacier's trough, and -z toward the outlet): cobbles that collect in clusters over the
+// bowl's floor, each sunk a third into it and tilted off level, and larger warm boulders along the waterline. Neither lies on
+// the trough side or the outlet's, which the glacier's ramp and the sill own. A stone is { position, radii, yaw, tilt
+// (degrees), material }.
 let lakeStonePalette = [
   { color: "#C2AC86", roughness: 0.92, specular: 0.02 }
-  { color: "#8E7861", roughness: 0.9, specular: 0.03 }
+  { color: "#A39683", roughness: 0.9, specular: 0.02 }
+  { color: "#9C6A4E", roughness: 0.9, specular: 0.03 }
+  { color: "#6F5F52", roughness: 0.9, specular: 0.03 }
 ]
 // A point at `r` metres from the lake's centre and `deg` degrees from +z toward +x, on the bowl's floor `lift` over it,
 // relative to the lake's surface.
@@ -59,30 +62,49 @@ function lakeBedPoint(r, deg, lift) = [
   lakeBowlFloor(r) - lakeSite.surface + lift,
   r * cosine(deg * 0.017453292519943295)
 ]
+// Where the cobbles gather: { r, deg } from the lake's centre.
+let lakeStoneClusters = [
+  { r: 29, deg: 95 }
+  { r: 25, deg: 128 }
+  { r: 30, deg: 218 }
+  { r: 22, deg: 262 }
+  { r: 31, deg: 286 }
+  { r: 15, deg: 118 }
+  { r: 13, deg: 244 }
+  { r: 26, deg: 64 }
+]
+// A cobble's size: most are small, a few large.
+function cobbleSize(k) = 0.3 + 1.7 * siteScatter(k, 0.569840) * siteScatter(k, 0.569840) * siteScatter(k, 0.569840)
 let lakeBedStones = concat(
-  map(range(0, 44), k => {
-    position: lakeBedPoint(5 + 25 * siteScatter(k, 0.754878), 70 + 220 * siteScatter(k, 0.618034), 0.15)
-    radii [
-      1.1 + 1.3 * siteScatter(k, 0.569840)
-      0.7 + 0.5 * siteScatter(k, 0.381966)
-      1.1 + 1.2 * siteScatter(k, 0.896491)
-    ]
-    yaw: 360 * siteScatter(k, 0.430159)
-    material: 0
-  }),
-  map(range(0, 16), k => {
+  map(range(0, 84), k => {
     position: lakeBedPoint(
-      32.2 + 1.6 * siteScatter(k, 0.754878),
-      (k % 2 == 0 ? 62 + 95 * siteScatter(k, 0.618034) : 205 + 95 * siteScatter(k, 0.618034)),
-      0.3
+      lakeStoneClusters[k % length(lakeStoneClusters)].r + 6 * (siteScatter(k, 0.754878) - 0.5),
+      lakeStoneClusters[k % length(lakeStoneClusters)].deg + 22 * (siteScatter(k, 0.618034) - 0.5),
+      0 - 0.32 * cobbleSize(k) * (0.5 + 0.5 * siteScatter(k, 0.381966))
     )
     radii [
-      1.7 + 1.4 * siteScatter(k, 0.569840)
-      1.3 + 0.8 * siteScatter(k, 0.381966)
-      1.5 + 1.2 * siteScatter(k, 0.896491)
+      cobbleSize(k)
+      cobbleSize(k) * (0.4 + 0.3 * siteScatter(k, 0.381966))
+      cobbleSize(k) * (0.7 + 0.5 * siteScatter(k, 0.896491))
     ]
     yaw: 360 * siteScatter(k, 0.430159)
-    material: 1
+    tilt: 24 * (siteScatter(k, 0.236068) - 0.5)
+    material: floor(4 * siteScatter(k * 13 + 5, 0.618034))
+  }),
+  map(range(0, 18), k => {
+    position: lakeBedPoint(
+      32.4 + 1.6 * siteScatter(k, 0.754878),
+      (k % 2 == 0 ? 62 + 95 * siteScatter(k, 0.618034) : 205 + 95 * siteScatter(k, 0.618034)),
+      0.1
+    )
+    radii [
+      1.7 + 1.7 * siteScatter(k, 0.569840)
+      1.0 + 0.8 * siteScatter(k, 0.381966)
+      1.5 + 1.4 * siteScatter(k, 0.896491)
+    ]
+    yaw: 360 * siteScatter(k, 0.430159)
+    tilt: 30 * (siteScatter(k, 0.236068) - 0.5)
+    material: 2 + floor(2 * siteScatter(k * 7 + 3, 0.754878))
   })
 )
 

@@ -150,10 +150,10 @@ let fallsGlass = waterGlass with { scattering: 0.8 }
 // pattern along the bank.
 let lakeFlowLayer = {
   velocity [0.3, 0, 0.2]
-  scale: 0.8
-  stretch: 1.5
-  cycle: 3
-  tilt: 0.25
+  scale: 2.4
+  stretch: 2
+  cycle: 4
+  tilt: 0.07
   coverage: 0
   softness: 0.1
   frame: World
@@ -162,7 +162,7 @@ let lakeFlowLayer = {
 }
 // A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
 // the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
-let lakeGlass = waterGlass with { scatter: "#2CB0B4", scattering: 0.12, contact { reach: 0.5, coverage: 0.9 } }
+let lakeGlass = waterGlass with { scatter: "#1FA5AD", scattering: 0.24, contact { reach: 0.5, coverage: 0.9 } }
 // Glacier ice creeps: a slow world-space drift whose pattern is the weathered, matt surface of old ice against the blue
 // beneath, broad and not stretched so it follows no face's slope.
 let iceFlowLayer = {
@@ -305,139 +305,115 @@ function onSlope(c, yaw) = [
   halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
 ]
 
-// A glacier is a body of ice lying in a trough, in steps of chamfered `plates`, each its own group with the `blocks` that
-// stand on it, the wedge cuts that split it into masses (`wedges`), the melt channels (`cuts`) and the scalloped toe
-// (`scallops`) that carve it; every one names its plate (`plate`, an index) and rides it as its parent, so a plate and what
-// carves it move as one body and no seam stretches. The ice melts by plates sinking into the trough's floor: a plate sinks
-// `sink` metres along `axis` as the gauge `state.<gauge>` falls from one to zero, so with the toe's plates sinking furthest
-// the toe goes first and what remains thins, and the ice never scales (it never reads as an object shrinking). A slide
-// reaches at most four creation units, so a plate rides four. A plate is { position, half, cosine, yaw, chamfer, material,
-// axis, sink }, a block { plate, position, half, cosine, yaw, chamfer, material }, a cut { plate, position, half, cosine,
-// yaw, material }, a wedge { plate, position, half, taper, rotation, material } (a trapezoidal prism extruded across the ice;
-// `rotation` a quaternion that stands its wide side at the surface) and a scallop { plate, position, radius, height, cosine,
-// material } (a cylinder along the slope's normal). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads
-// them, and a cut's `material` is its cut face's.
-template glacierMass(id, plates, blocks, cuts, wedges, scallops, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
+// A glacier is a tongue of ice lying in a trough: `lumps` overlapped into one body (each a superellipsoid, blended with the
+// neighbours it overlaps by `smooth` metres, so the surface runs on across them and the relief noise hides the seams), the
+// `furrows` swept out of its surface (crevasses and melt channels, each a tube of `radius` that swells by `bulge` along its
+// length, so it opens in the middle and closes at its ends), and fBm `relief` over the composed ice. The ice melts by shrinking
+// with the gauge `state.<gauge>` (the linear fraction of the melt clock left, so the volume is its cube) about `origin`: put
+// the origin at the glacier's head on its bed and the toe retreats up the valley as the ice thins. The relief keeps its size
+// under that scale. A lump is { position, half, cosine, yaw, exponent, material }, a furrow { position, b, c, cosine, yaw,
+// radius, bulge, material } whose tube runs from `position` by the Bezier controls `b` and `c` (relative to it, in the
+// furrow's own frame). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads them.
+template glacierMass(id, lumps, furrows, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette, smooth = 0.5, relief = { frequency: 0.12, amplitude: 0.5, octaves: 4, seed: 31 }) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
-      drivers [
-        { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
-      ]
-      for (plate, i) in plates {
-        shape Box $"ice-{i}" {
-          material: plate.material
-          chamfer: plate.chamfer
+      sizeBy: $"state.{gauge}"
+      noise {
+        frequency: relief.frequency
+        amplitude: relief.amplitude
+        octaves: relief.octaves
+        gain: 0.5
+        lacunarity: 2
+        seed: relief.seed
+      }
+      for (lump, i) in lumps {
+        shape Superellipsoid $"ice-{i}" {
+          material: lump.material
+          blend: i == 0 ? Union : SmoothUnion
+          smooth: smooth
+          exponent: lump.exponent
           position [
-            plate.position[0] - origin[0],
-            plate.position[1] - origin[1],
-            plate.position[2] - origin[2]
+            lump.position[0] - origin[0],
+            lump.position[1] - origin[1],
+            lump.position[2] - origin[2]
           ]
-          scale: plate.half
-          rotation: onSlope(plate.cosine, plate.yaw)
-          group: i + 1
-          slides: map(range(0, 4), j => {
-            driver: "melt"
-            axis: plate.axis
-            amplitude: plate.sink / 4
-            phase: -1
-            wave: "linear"
-          })
+          scale: lump.half
+          rotation: onSlope(lump.cosine, lump.yaw)
+          group: 1
         }
       }
-      for (block, i) in blocks {
-        shape Box $"block-{i}" {
-          material: block.material
-          chamfer: block.chamfer
-          position [
-            block.position[0] - origin[0],
-            block.position[1] - origin[1],
-            block.position[2] - origin[2]
-          ]
-          scale: block.half
-          rotation: onSlope(block.cosine, block.yaw)
-          group: block.plate + 1
-          parent: $"ice-{block.plate}"
-        }
-      }
-      for (cut, i) in cuts {
-        shape Box $"cut-{i}" {
+      for (furrow, i) in furrows {
+        shape Sweep $"furrow-{i}" {
           blend: Subtraction
-          material: cut.material
+          material: furrow.material
           position [
-            cut.position[0] - origin[0],
-            cut.position[1] - origin[1],
-            cut.position[2] - origin[2]
+            furrow.position[0] - origin[0],
+            furrow.position[1] - origin[1],
+            furrow.position[2] - origin[2]
           ]
-          scale: cut.half
-          rotation: onSlope(cut.cosine, cut.yaw)
-          group: cut.plate + 1
-          parent: $"ice-{cut.plate}"
-        }
-      }
-      for (wedge, i) in wedges {
-        shape Prism $"wedge-{i}" {
-          blend: Subtraction
-          material: wedge.material
-          taper: wedge.taper
-          position [
-            wedge.position[0] - origin[0],
-            wedge.position[1] - origin[1],
-            wedge.position[2] - origin[2]
-          ]
-          scale: wedge.half
-          rotation: wedge.rotation
-          group: wedge.plate + 1
-          parent: $"ice-{wedge.plate}"
-        }
-      }
-      for (scallop, i) in scallops {
-        shape Cylinder $"scallop-{i}" {
-          blend: Subtraction
-          material: scallop.material
-          position [
-            scallop.position[0] - origin[0],
-            scallop.position[1] - origin[1],
-            scallop.position[2] - origin[2]
-          ]
-          scale [scallop.radius, scallop.height, scallop.radius]
-          rotation: onSlope(scallop.cosine, 0)
-          group: scallop.plate + 1
-          parent: $"ice-{scallop.plate}"
+          rotation: onSlope(furrow.cosine, furrow.yaw)
+          group: 1
+          curve {
+            a [0, 0, 0]
+            b: furrow.b
+            c: furrow.c
+            radiusStart: furrow.radius
+            radiusEnd: furrow.radius
+            bulge: furrow.bulge
+          }
         }
       }
     }
   }
 }
 
-// Stones lying in a lake's bowl and on its bank, in the lake's own frame: each { position, radii, yaw, material } is an
-// ellipsoid half sunk in the rock, so the floor and shore read through the water and the stones cross the waterline.
-template lakeStones(id, stones, palette) {
+// Stones lying in a lake's bowl and on its bank, in the lake's own frame: each { position, radii, yaw, tilt, material } is a
+// rounded block (a superellipsoid of `exponent`) turned about the vertical by `yaw` degrees and rocked off level by `tilt`,
+// half sunk in the rock, so the floor and shore read through the water and the stones cross the waterline. A light relief
+// over the group breaks the smooth faces.
+template lakeStones(id, stones, palette, exponent = 2.6, relief = { frequency: 0.5, amplitude: 0.1, octaves: 3, seed: 17 }) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
+      noise {
+        frequency: relief.frequency
+        amplitude: relief.amplitude
+        octaves: relief.octaves
+        gain: 0.5
+        lacunarity: 2
+        seed: relief.seed
+      }
       for (stone, i) in stones {
-        shape Ellipsoid $"stone-{i}" {
+        shape Superellipsoid $"stone-{i}" {
           material: stone.material
+          exponent: exponent
           position: stone.position
           scale: stone.radii
-          rotation [0, sine(stone.yaw * 0.008726646259971648), 0, cosine(stone.yaw * 0.008726646259971648)]
+          rotation [
+            sine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            0 - sine(stone.tilt * 0.008726646259971648) * sine(stone.yaw * 0.008726646259971648),
+            cosine(stone.tilt * 0.008726646259971648) * cosine(stone.yaw * 0.008726646259971648)
+          ]
         }
       }
     }
   }
 }
 
-// A lake's water: a body of the bowl's `depth` and `radius` whose top is the surface, so the floor shows through it by its
-// depth and the shore is where the rock meets the level. Its rim and floor are buried in the rock, and each of `cuts` (a
-// { position, half } box in the lake's frame) is a subtraction that takes the water away where the rock beyond it is lower
-// than the surface (an outlet's sill), so no water side stands bare. The surface rises and falls with the gauge
-// `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the cuts ride it, so no seam stretches.
-template lakeSurface(id, radius, depth, cuts = [], gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
+// A lake's water: the body of water the bowl holds. A cylinder of the bowl's `depth` and `radius` whose top is the surface,
+// intersected with the bowl itself (`bowl`, { y, radii }: the ellipsoid, in the lake's frame, that the terrain cut for it,
+// grown by `reach` metres so the water meets the rock rather than stopping short of it). The water therefore ends where the
+// bowl's own floor rises to the level, in a shore of zero depth, and no water side stands bare at a sill or a rim: the floor
+// shows through it by its depth and the shore is where the rock meets the level. The surface rises and falls with the gauge
+// `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the bowl rides it, so no seam
+// stretches.
+template lakeSurface(id, radius, depth, bowl, reach = 0.4, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -455,15 +431,14 @@ template lakeSurface(id, radius, depth, cuts = [], gauge = "lakeLevel", rest = 0
           { driver: "level", axis [0, 1, 0], amplitude: rise, phase: 0 - rest, wave: "linear" }
         ]
       }
-      for (cut, i) in cuts {
-        shape Box $"cut-{i}" {
-          blend: Subtraction
-          material: 0
-          group: 1
-          parent: "water"
-          position: cut.position
-          scale: cut.half
-        }
+      shape Superellipsoid "bowl" {
+        blend: Intersection
+        exponent: 2
+        material: 0
+        group: 1
+        parent: "water"
+        position [0, bowl.y, 0]
+        scale [bowl.radii[0] + reach, bowl.radii[1] + reach, bowl.radii[2] + reach]
       }
     }
   }
