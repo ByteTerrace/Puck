@@ -198,7 +198,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null) {
         ArgumentNullException.ThrowIfNull(composed);
         return await PublishDefinitionRootAsync(
-            bytes: WorldDefinitionSerialization.Serialize(definition: composed),
+            bytes: WorldDefinitionSerialization.SerializeAuthored(definition: composed),
             cancellationToken: cancellationToken,
             identity: identity,
             suppliedFence: fence
@@ -1091,6 +1091,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity.World.Value,
                 resolver.ResolveHostedAsync,
                 cancellationToken,
+                drawOwner: identity.Owner,
                 catalog: m_machines,
                 documentDirectory: m_documentDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);

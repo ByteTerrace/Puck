@@ -53,7 +53,7 @@ public static class BrowserParser {
             errors.Add(item: $"the document is not valid UTF-8 text: {exception.Message}");
             return false;
         }
-        if (!WorldJsonPayload.TryParse(deferDrawSites: true, error: out var parseError, info: WorldJsonContext.Default.WorldDefinition, json: json, value: out var parsed)) {
+        if (!WorldJsonPayload.TryParse(deferDrawSites: true, error: out var parseError, info: WorldJsonContext.Authored.WorldDefinition, json: json, value: out var parsed)) {
             errors.Add(item: parseError);
             return false;
         }
@@ -61,7 +61,7 @@ public static class BrowserParser {
             errors.Add(item: $"schema '{(parsed.Schema ?? "(absent)")}' is not '{WorldDefinition.SchemaVersion}'.");
             return false;
         }
-        if (!WorldDrawBootResolver.TryResolve(definition: parsed, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out var drawReason, resolved: out var drawn)) {
+        if (!WorldDrawBootResolver.TryResolve(definition: parsed, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out var drawReason, resolved: out var drawn, keys: WorldPrivateDrawKeys.Preview)) {
             errors.Add(item: drawReason);
             return false;
         }
@@ -99,7 +99,7 @@ public static class BrowserParser {
 
         return new BrowserParseResult(
             Deferred: deferred,
-            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition!)),
+            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.SerializeAuthored(definition: definition!)),
             Errors: null,
             Ok: true
         );
@@ -167,7 +167,7 @@ public static class BrowserParser {
 
         return new BrowserParseResult(
             Deferred: strippedDeferred,
-            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition!)),
+            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.SerializeAuthored(definition: definition!)),
             Errors: null,
             Ok: true
         );

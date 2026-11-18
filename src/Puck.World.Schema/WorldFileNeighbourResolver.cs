@@ -166,7 +166,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
 
         if (!WorldJsonPayload.TryParse(
             json: tree!.ToJsonString(),
-            info: WorldJsonContext.Default.WorldDefinition,
+            info: WorldJsonContext.Authored.WorldDefinition,
             value: out var parsed,
             error: out var parseError,
             deferDrawSites: true

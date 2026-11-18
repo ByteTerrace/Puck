@@ -370,15 +370,28 @@ draw of the same source may run while its stream is open.
 
 ## Keep draws private
 
-A site declares `privateStream: true` for keyed sampling. The authority
-provisions its 256-bit `secret` before the site executes. The declaration
-sets the work price even when an observer has no key. Each sample of a secret site is an HMAC-SHA256 of the seed, the
-stream id, and the cursor under that key, so a client that knows the document
-and the seed still can't predict the draws. The secret is never sent in
-observations. A secret site must be an `Int` site over a `StreamDraw` source
-drawn `WithReplacement`, and neither `skip` nor an `extended` table applies to
-it. The cursor still addresses every sample directly, so resuming stays
-constant-time.
+Declare `privateStream: true` on an `Int` site over a `StreamDraw` source
+drawn `WithReplacement`. The authority installs the site's 256-bit key before
+its first fill. An ordinary row edit preserves it. Changing the draw
+declaration derives a key for the new declaration. The authored schema
+refuses `draw.secret`, including on operator row writes. Observers see the
+declaration and can price its work.
+
+`WorldPrivateDrawKeys` derives each site's key from the native authority's
+private seed, the hosted owner where applicable, the authority namespace,
+document and instance identities, world seed, row name and draw declaration.
+The seed is created once in `authority/private-draw.key` under the Puck
+user directory. Private draws require a per-user application data directory.
+Back up this file with authority state and provision the
+same seed to an authority that will resume its saves or replays. Independent
+authority accounts use independent seeds. Browser and cost previews use a
+separate reproducible sampler.
+
+Each sample is an HMAC-SHA256 of the seed, stream id and cursor under the
+site key. Authority snapshots carry installed keys. Source saves carry the
+cursor and cells and recover the key on load. A compiled world retains the
+undrawn source for a private first fill. Resuming at a cursor takes constant
+time. Private sites support neither `skip` nor an `extended` table.
 
 ## Extend a source's equidistribution
 

@@ -306,12 +306,9 @@ public sealed partial class WorldDocument {
 
         // A kind-neutral console tail can include the numeric add suffix. Interpret it only after admission
         // and row resolution; text keeps that same suffix as text. Share the console's token boundaries.
-        if (row.Kind is not (CellKind.Text or CellKind.Vector) && mutation.RawToken is { } tail) {
-            Span<Range> tokens = stackalloc Range[2];
-            if (Puck.Commands.CommandRegistry.Tokenize(tail, tokens) == 2 &&
-                tail.AsSpan()[tokens[1]].Equals("add", StringComparison.OrdinalIgnoreCase)) {
-                mutation = mutation with { Kind = WorldDocumentWriteKind.Add, RawToken = tail[tokens[0]] };
-            }
+        if (mutation.RawToken is { } tail) {
+            var operandToken = WorldCommandArguments.CellOperand(tail, row.Kind is not (CellKind.Text or CellKind.Vector), out var add);
+            mutation = mutation with { Kind = add ? WorldDocumentWriteKind.Add : mutation.Kind, RawToken = operandToken };
         }
 
         if (

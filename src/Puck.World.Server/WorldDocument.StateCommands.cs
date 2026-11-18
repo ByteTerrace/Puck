@@ -7,7 +7,8 @@ public sealed partial class WorldDocument {
     private bool IsStateCommand(WorldMutation mutation) => mutation switch {
         WorldMutation.UpsertStateCell or WorldMutation.RemoveStateCell or WorldMutation.TransformState => true,
         WorldMutation.Generate generate => (WorldDefinitionRows.FindStateRow(m_definition.State, generate.Row) is { Field: null }),
-        WorldMutation.UpsertStateRow write => ((WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: write.Row.Name.Value) is { } before) && SameComposeDeclaration(row: write.Row, previous: before)),
+        WorldMutation.UpsertStateRow write => write.Row.Draw is not { Secret: not null } and not { PrivateStream: true } &&
+            WorldDefinitionRows.FindStateRow(rows: m_definition.State, name: write.Row.Name.Value) is { } before && SameComposeDeclaration(row: write.Row, previous: before),
         WorldMutation.Batch batch => batch.Mutations.All(predicate: member => IsStateCommand(mutation: member)),
         _ => false,
     };

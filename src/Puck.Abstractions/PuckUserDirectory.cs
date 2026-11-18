@@ -9,25 +9,25 @@ namespace Puck.Abstractions;
 /// </summary>
 public static class PuckUserDirectory {
     /// <summary>Gets the per-user Puck directory. It is not created here; each owner creates what it writes.</summary>
-    public static string Root {
-        get {
-            var local = Environment.GetFolderPath(folder: Environment.SpecialFolder.LocalApplicationData);
+    public static string Root => ResolveRoot(requireUserProfile: false);
 
-            return Path.Join(
-                path1: (string.IsNullOrEmpty(value: local)
-                    ? Path.GetTempPath()
-                    : local),
-                path2: "Puck"
-            );
+    private static string ResolveRoot(bool requireUserProfile) {
+        var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData,
+            requireUserProfile ? Environment.SpecialFolderOption.DoNotVerify : Environment.SpecialFolderOption.None);
+        if (string.IsNullOrEmpty(local)) {
+            if (requireUserProfile) { throw new IOException("The host has no per-user application data directory."); }
+            local = Path.GetTempPath();
         }
+        return Path.Join(local, "Puck");
     }
 
     /// <summary>Returns one owner's subdirectory of <see cref="Root"/>.</summary>
     /// <param name="name">The subdirectory's name: one lower-case path segment, such as <c>compilations</c>.</param>
+    /// <param name="requireUserProfile">Require a per-user application data directory for private state.</param>
     /// <returns>The subdirectory's full path. It is not created here.</returns>
     /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty, white space, or
     /// not one lower-case path segment.</exception>
-    public static string Resolve(string name) {
+    public static string Resolve(string name, bool requireUserProfile = false) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
 
         if (
@@ -39,7 +39,7 @@ public static class PuckUserDirectory {
         }
 
         return Path.Join(
-            path1: Root,
+            path1: ResolveRoot(requireUserProfile),
             path2: name
         );
     }

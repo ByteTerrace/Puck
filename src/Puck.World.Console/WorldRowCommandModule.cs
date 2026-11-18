@@ -340,7 +340,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
         ["state"] = new RowSection(
         RowType: typeof(WorldStateRow),
         Upsert: Upsert(
-            info: WorldJsonContext.Default.WorldStateRow,
+            info: WorldJsonContext.Authored.WorldStateRow,
             toMutation: static (principal, row) => new WorldMutation.UpsertStateRow(
                 Principal: principal,
                 Row: row
@@ -351,7 +351,7 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             Principal: principal
         )),
         Read: ReadRowByKey(
-            info: WorldJsonContext.Default.WorldStateRow,
+            info: WorldJsonContext.Authored.WorldStateRow,
             keyOf: static row => row.Name.ToString(),
             select: static definition => definition.AuthoredState
         )

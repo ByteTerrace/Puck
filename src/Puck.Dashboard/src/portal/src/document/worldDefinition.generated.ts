@@ -1144,8 +1144,6 @@ export type ChannelRole = "MoveAdvance" | "MoveStrafe" | "Turn" | "MoveUp" | "Pi
 
 export type ChannelShape = "Bipolar" | "Unipolar" | "Binary" | "Relative" | "Text";
 
-export type ClosedBitset256 = unknown;
-
 export type CommandPhase = "Started" | "Active" | "Completed" | "Canceled";
 
 export type CommandValue = unknown;
@@ -13837,10 +13835,6 @@ export type WorldStateRow = {
      * When this site draws and whether it may be redrawn (see DrawTiming).
      */
     timing?: DrawTiming;
-    /**
-     * An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.
-     */
-    secret?: ClosedBitset256 | null;
     /**
      * An authored seek, non-negative, default 0: a rebuild advances the generator by skip + cursor rather than cursor. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site's does.
      */

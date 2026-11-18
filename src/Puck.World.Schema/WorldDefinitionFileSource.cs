@@ -1617,7 +1617,7 @@ public static partial class WorldDefinitionFileSource {
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
         if (!WorldJsonPayload.TryRead(
             json: json,
-            info: WorldJsonContext.Default.WorldDefinition,
+            info: WorldJsonContext.Authored.WorldDefinition,
             value: out var parsed,
             refusal: out refusal,
             deferDrawSites: true

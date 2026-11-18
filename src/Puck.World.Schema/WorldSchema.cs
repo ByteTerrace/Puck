@@ -472,7 +472,7 @@ public static partial class WorldSchema {
             run: run
         ),
         };
-        var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
             type: typeof(WorldDefinition)
         );
@@ -1568,7 +1568,7 @@ public static partial class WorldSchema {
             TreatNullObliviousAsNonNullable = true,
         };
 
-        return WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+        return WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
             type: type
         );
@@ -1719,7 +1719,7 @@ public static partial class WorldSchema {
             key: (Nullable.GetUnderlyingType(nullableType: type) ?? type),
             valueFactory: static effectiveType => {
                 try {
-                    return WorldJsonContext.Default.Options.GetConverter(typeToConvert: effectiveType);
+                    return WorldJsonContext.Authored.Options.GetConverter(typeToConvert: effectiveType);
                 } catch (NotSupportedException) {
                     return null;
                 }
@@ -1730,7 +1730,7 @@ public static partial class WorldSchema {
             key: type,
             valueFactory: static type => {
                 try {
-                    return WorldJsonContext.Default.Options.GetTypeInfo(type: type);
+                    return WorldJsonContext.Authored.Options.GetTypeInfo(type: type);
                 } catch (NotSupportedException) {
                     return null;
                 }
@@ -1922,7 +1922,7 @@ public static partial class WorldSchema {
             run: run
         ),
         };
-        var schema = WorldJsonContext.Default.Options.GetJsonSchemaAsNode(
+        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
             type: typeof(WorldProjectionDocument)
         );
@@ -1999,7 +1999,7 @@ public static partial class WorldSchema {
             run: run
         ),
         };
-        var schema = (options ?? WorldJsonContext.Default.Options).GetJsonSchemaAsNode(
+        var schema = (options ?? WorldJsonContext.Authored.Options).GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
             type: type
         );
