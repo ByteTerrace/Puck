@@ -3496,8 +3496,8 @@ puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window
 puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --headless
 ```
 
-`--backend`, `--width` and `--height` select the renderer and window (1280×720
-by default); `--cache-dir` forwards the World cache root. `--timeout-seconds`
+`--backend`, `--width` and `--height` select the renderer and window (2560×1440
+by default, the frame bar's size on the RTX 4070); `--cache-dir` forwards the World cache root. `--timeout-seconds`
 bounds each process and its calls (default 600, 1..7200); `--output` selects a
 parent for a unique report directory. `--json` prints the report. Exit 0 means
 every window completed, 1 keeps incomplete evidence, and 2 refuses arguments

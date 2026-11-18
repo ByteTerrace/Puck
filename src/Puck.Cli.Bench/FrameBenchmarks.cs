@@ -21,8 +21,8 @@ public static partial class FrameBenchmarks {
         public readonly Option<int> Ticks = CliOptions.Count("--ticks", "Simulation ticks in each measured frame window (1..600, default 120).", 1, 120, 600);
         public readonly Option<int> Samples = CliOptions.Count("--samples", "Fresh windowed processes (1..100, default 1).", 1, 1, 100);
         public readonly Option<int> Timeout = CliOptions.Count("--timeout-seconds", "Bound for each process, excluding lease admission (default 600).", 1, 600, 7200);
-        public readonly Option<int> Width = CliOptions.Count("--width", "Window width (default 1280).", 1, 1280, 16384);
-        public readonly Option<int> Height = CliOptions.Count("--height", "Window height (default 720).", 1, 720, 16384);
+        public readonly Option<int> Width = CliOptions.Count("--width", "Window width (default 2560, the frame bar's size on the RTX 4070).", 1, 2560, 16384);
+        public readonly Option<int> Height = CliOptions.Count("--height", "Window height (default 1440).", 1, 1440, 16384);
         public readonly Option<string?> Cache = new("--cache-dir");
         public readonly Option<Puck.World.WorldBackendPreference?> Backend = WorldLaunch.BackendOption("Windowed graphics backend: auto, directx or vulkan.");
         public readonly Option<bool> Json = new("--json");
