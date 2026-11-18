@@ -84,6 +84,12 @@ is corrected in the same change.
   empty keep wins. The barrier (`WorldInputOwner.Switch`) advances the epoch,
   consumes the edge that caused it, and admits fresh input from the next tick;
   a kept hold continues with no new press.
+- A source the barrier released waits for neutral before it can act again, and
+  the router reports a button's edge once. A seat whose registry is rebuilt
+  (every crossing) misses a release the router dispatched elsewhere, so each
+  tick the seat reports neutral for every waiting button its router reports up
+  (`WorldSeatInput.AcknowledgeReleasedButtons`, from `WorldClient.SynchronizeInput`);
+  a button held through a portal then works on its next press.
 - A binding page or `contexts` row changes which binding group a seat uses,
   never simulation eligibility. Install the barrier with the firing's commit,
   before another rule reads channels ([bindings.md](references/bindings.md)).

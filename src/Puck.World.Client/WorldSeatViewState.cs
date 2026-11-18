@@ -442,14 +442,17 @@ public sealed class WorldSeatViewState {
     }
     // The live yaw that seats the camera behind a body heading: nothing under a body-relative reference (the yaw rides
     // the body's own heading), the heading itself under a world one.
-    private static float BehindYaw(float heading, WorldViewDefaults views) => ((views.SeatControl.YawReference == WorldSeatYawReference.Body)
+    private static float BehindYaw(float heading, WorldViewDefaults views) => BehindYaw(heading: heading, yawReference: views.SeatControl.YawReference);
+    private static float BehindYaw(float heading, WorldSeatYawReference yawReference) => ((yawReference == WorldSeatYawReference.Body)
         ? 0f
         : VectorFunctions.WrapAngle(radians: heading));
-    /// <summary>Carries a body that was moved discontinuously (posed, teleported) into the live look: when the pose
-    /// epoch the body is seen at differs from the last one observed under the same authority claim, a world-referenced
-    /// live yaw turns by the heading the body turned by, as it does through a portal (<see cref="Cross"/>), so the camera
-    /// keeps its place around the body; a body-referenced yaw already rides the heading. Every call records the heading
-    /// the next jump is measured from.</summary>
+    /// <summary>Carries a body that was moved discontinuously (posed, teleported, its model switched) into the live
+    /// look, when the pose epoch the body is seen at differs from the last one observed under the same authority claim.
+    /// A first-person look is the body's facing, and the facing it steers the body to, so the teleport's heading
+    /// commands it: the look lands level on that heading and keeps nothing of where it pointed before. A third-person
+    /// world-referenced live yaw turns by the heading the body turned by, as it does through a portal
+    /// (<see cref="Cross"/>), so the camera keeps its place around the body; a body-referenced yaw already rides the
+    /// heading. Every call records the heading the next jump is measured from.</summary>
     /// <param name="routeEpoch">The seat's authority claim epoch; a new claim records the body without turning the look
     /// (a mapped arrival turns it through <see cref="Cross"/>).</param>
     /// <param name="poseEpoch">The body's pose-discontinuity counter.</param>
@@ -457,13 +460,17 @@ public sealed class WorldSeatViewState {
     /// <param name="yawReference">The yaw reference of the world the seat is framed in.</param>
     public void ObserveBody(ulong routeEpoch, int poseEpoch, float heading, WorldSeatYawReference yawReference) {
         lock (m_gate) {
-            if (
-                (yawReference == WorldSeatYawReference.World) &&
-                (m_observedRoute == routeEpoch) &&
-                (m_observedPose != poseEpoch)
-            ) {
-                m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + VectorFunctions.WrapAngle(radians: (heading - m_observedHeading))));
-                CutTickStep();
+            if ((m_observedRoute == routeEpoch) && (m_observedPose != poseEpoch)) {
+                // A carried first-person offset would steer the posed body off its posed heading on the next tick, and
+                // a recenter after that tick centres on the turned body, so the offset would outlive every pose.
+                if (m_viewTransition.LookFirstPerson) {
+                    m_yaw = BehindYaw(heading: heading, yawReference: yawReference);
+                    m_pitch = 0f;
+                    CutTickStep();
+                } else if (yawReference == WorldSeatYawReference.World) {
+                    m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + VectorFunctions.WrapAngle(radians: (heading - m_observedHeading))));
+                    CutTickStep();
+                }
             }
 
             m_observedRoute = routeEpoch;

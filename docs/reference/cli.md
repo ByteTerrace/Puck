@@ -2902,14 +2902,17 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   absolute tick in every run. The report's `start` says `fresh`; a run typed into a running World with `world.benchmark
   run` is `attached`, and its state hashes are informational and never compared. `--loops <n>` (1..16) plays the route
   again from the state the run left, armed as each loop ends, and the report calls the first loop cold, the second warm and
-  the rest steady.
+  the rest steady. A chapter arrives from whatever state the one before it left: its first tick releases every control
+  the chapter before it left held, and its program chooses its view and poses the body, which in first person also lands
+  the look on the posed heading.
 - **Pace.** A run is display-paced with the ordinary lighting budget; nothing in it pauses, settles or waits, and the run
   turns lockstep presentation off at its start and records that it did. `--uncapped` boots with the immediate present mode for a throughput
   trend, and the report records it in the run's conditions; the presentation target itself is the host's own cap (`world.target`
   is bounded by the display), so an uncapped run is bounded only by what the present mode lets the swapchain do.
-  `--timeout-seconds` (default 600) is the run's wall-time limit: a run that passes it, or that `world.benchmark stop`
-  ends, drops its armed lines, lets go the controls its program held and writes a partial report that names the reason and
-  marks each chapter ended, unfinished or unreached. The verb itself waits a further 240 s for the boot and collection.
+  `--timeout-seconds` (default 600) is the run's wall-time limit: a run that passes it, that `world.benchmark stop` ends,
+  or whose World shuts down, drops its armed lines, lets go the controls its lines left held and writes a partial report
+  that names the reason, lists every requested loop and marks each chapter ended, unfinished or unreached. The verb itself
+  waits a further 240 s for the boot and collection.
 - **The report.** `<output>/<run id>/report.json` is a `puck.bench.v1` report (verb `benchmark`) whose `metrics` hold one
   sample of every number of every chapter, named `<backend>.<cold|warm|steady>.<chapter-slug>.<metric>`, and whose
   `benchmark` section holds, for each backend: its `conditions` (backend, shape, size, whether it ran uncapped, budget,

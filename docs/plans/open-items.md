@@ -2891,8 +2891,10 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: the lead's windowed reading
-of `puck benchmark` on both backends
+Owner: one benchmark lane per stage · high · Next: stage 4's places, then
+navigation domains, goal chapters and the seat program that plays them
+([the route is places](benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)),
+beside the lead's windowed reading of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
 
 The owner's words: "it's slow as shit and mostly just static shots that miss
@@ -2902,10 +2904,9 @@ the stages; this packet holds what a stage does not.
 - [high] The same route runner is built four times: the tour's route stops
   (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and
   the motion scenarios, each with its own plan format and parsers. The
-  memo's stage 10 folds the first three into the benchmark. Until then the
-  arrival judge exists twice: `SweepRoute.Arrival` in the CLI and
-  `WorldBenchmarkCommandModule`'s own read of the same two gate forms, which
-  is the one that stays.
+  memo's stage 10 folds the first three into the benchmark. Their arrival
+  judge is already one (`WorldRouteArrival`, which `SweepRoute.Arrival` and
+  `WorldBenchmarkCommandModule` call).
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
@@ -2913,10 +2914,6 @@ the stages; this packet holds what a stage does not.
   (`world.gpu-timing`'s `main$overlay` with the benchmark panel up), more
   than the world's composite and resolve passes; attribute it (the panel's
   two 60-bar plots against the rest of the overlay) and cut it at the cause.
-- [medium] Stopping a World while `world.benchmark` plays leaves no report:
-  `stop` and the wall-time limit write a partial one, a World's shutdown does
-  not. Shutdown ends the run as `stop` does. The report's `gpu` window naming
-  the overlay pass is therefore still unread on a window.
 - [medium] A chapter's first iteration is its slowest by far: the opening
   `body.pose` to a spawn point steps the simulation for well over a 60 Hz
   period and allocates on the order of a hundred megabytes on the frame
@@ -2932,12 +2929,6 @@ the stages; this packet holds what a stage does not.
   way to ask for no target (a `world.target` form, the lever and the policy's
   `Unbounded` basis) and show a windowed uncapped run presents past the
   display's rate.
-- [medium] A run that is stopped mid-chapter releases only the controls its
-  program leaves held at its end (`WorldBenchmarkCommandModule.Hold` keeps the
-  last state of each `player.signal` source), so a control a chapter presses
-  and releases itself is left pressed when `stop` or the wall-time limit lands
-  between the two lines. Track every control any line touched and release each
-  one at the end.
 - [low] The comparer reads the operating system and the logical processor count
   as the machine's identity; it does not read the GPU adapter, the driver or the
   display, and it does not know whether the live overlay was on. Add both when
@@ -3436,6 +3427,16 @@ Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
+- [medium] A seat's intent depends on presentation frames when its view is
+  `auto`: automatic first person (`WorldCameraViewTransition.Advance`, from the
+  chase clearance probe in `WorldSeatViewState.Clear`) advances per presented
+  frame, and `FirstPersonLook` decides whether `WorldClient.ComposeSteer`
+  writes the body's facing from the camera and whether the follow camera runs
+  (`AdvanceSeatView`). A tight space can therefore change the input a windowed
+  seat submits against a headless one, and with the frame rate. An explicit
+  `player.camera.view first|third` is frame-independent. Advance the view's
+  input-relevant decision on the fixed tick, as stick look already is, and
+  leave the boom's easing to the frame.
 - [medium] Free Cam has no entry handoff: the camera body rests where it was left
   (`worlds/standard/free-camera.puck`'s `rest`, 40 m over the debug stage at first),
   because a rule's `pose` effect takes a literal position and nothing copies the
