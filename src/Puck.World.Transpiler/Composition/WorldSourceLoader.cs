@@ -29,7 +29,7 @@ public static class WorldSourceLoader {
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
     /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryLoadForAdmission(string path, byte[] document, out WorldDefinitionAdmission? admission, out string reason, string catalogFingerprint = "",
-        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null, WorldDrawSampler? keys = null) {
+        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null, WorldPrivateDrawKeys? keys = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 

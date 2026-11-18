@@ -414,10 +414,12 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // settings, and the world.quality verb; the resolved source is registered so world.save knows its default target. Any
     // path that will not load ends the boot here — a typo must never quietly run a different world.
     if (!PuckWorldLoader.TryResolveWorld(
+        authority: batchHost is null && connectTarget is null,
         preview: batchHost is not null,
         caches: caches,
         entry: parseResult.GetValue(option: entryOption),
         worldPath: worldPath,
+        stateRoot: stateRoot,
         failure: out var worldFailure,
         source: out var worldSource,
         catalogFingerprint: machineCatalogFingerprint,
@@ -428,7 +430,6 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
 
         return 1;
     }
-    using var compositionWorkspace = worldSource.Staging;
     if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
         // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authorityNamespace absent
         // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key

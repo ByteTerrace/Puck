@@ -15,9 +15,6 @@ public sealed class PrivateDrawStream {
         Owner = owner;
     }
 
-    internal static PrivateDrawStream FromKey(ClosedBitset256 key) =>
-        new((seed, stream, cursor) => Word(key, seed, stream, cursor), 0, null);
-
     /// <summary>The installation ordinal in the authority continuation.</summary>
     public long Installation { get; }
 

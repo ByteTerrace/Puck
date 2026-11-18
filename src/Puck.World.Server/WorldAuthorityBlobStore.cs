@@ -268,7 +268,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         op: ct => m_store.WriteAsync(
             m_target,
             RootAddress(identity: identity),
-            JsonSerializer.SerializeToUtf8Bytes(root, WorldAuthorityRootCodec.Options),
+            JsonSerializer.SerializeToUtf8Bytes(WorldAuthorityRootCodec.SerializeAuthorityState(root)),
             mode,
             ifMatchVersion,
             ct
@@ -379,7 +379,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
 
     /// <inheritdoc/>
     public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) =>
-        (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false));
+        (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false))?.WithoutSeed();
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> CaptureRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
         ValidateRecoveryRequest(
@@ -618,6 +618,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         )
         ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
         var restored = saved.Root with {
+            DrawSeed = present.Root.DrawSeed,
+            DrawGeneration = checked(Math.Max(saved.Root.DrawGeneration, present.Root.DrawGeneration) + 1),
             Epoch = checked((Math.Max(
             val1: present.Root.Epoch,
             val2: saved.Root.Epoch
@@ -672,6 +674,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             var root = current?.Root ?? WorldAuthorityRoot.Empty;
             var nextToken = Guid.NewGuid();
             var next = root with {
+                DrawGeneration = root.Epoch > 0 ? checked(root.DrawGeneration + 1) : root.DrawGeneration,
+                DrawSeed = root.Epoch == 0 && root.DrawSeed is null ? Convert.ToBase64String(WorldPrivateDrawKeys.Create().SerializeAuthorityState()!) : root.DrawSeed,
                 Epoch = checked(root.Epoch + 1),
                 FenceToken = nextToken,
                 Sequence = checked(root.Sequence + 1)
@@ -965,7 +969,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
 
     /// <inheritdoc/>
-    public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys = null) {
+    public async Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
         var snapshot = await ReadRootSnapshotAsync(
             cancellationToken: cancellationToken,
             identity: identity
@@ -1022,6 +1026,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         }
         WorldDefinitionAdmission? admission = null;
 
+        var keys = rooted.Root.DrawSeed is { } seed ? WorldPrivateDrawKeys.FromAuthorityState(Convert.FromBase64String(seed), rootGeneration: rooted.Root.DrawGeneration) : WorldPrivateDrawKeys.Missing;
         if (definitionBytes is { } bytes) {
             var resolver = new WorldStorageNeighbourResolver(
                 m_store,
@@ -1036,7 +1041,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity.World.Value,
                 resolver.ResolveHostedAsync,
                 cancellationToken,
-                keys: drawKeys ?? WorldPrivateDrawKeys.Preview,
+                keys: keys,
                 catalog: m_machines,
                 documentDirectory: m_documentDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1045,13 +1050,13 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             admission = loaded.Admission;
         }
         return new WorldAuthorityRecovery(
-            rooted,
+            rooted.WithoutSeed(),
             checkpoint,
             new WorldAuthorityJournalTail(
                 CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
                 Entries: journal.Entries
             )
-        ) { Admission = admission };
+        ) { Admission = admission, DrawKeys = keys };
     }
 
     private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {

@@ -99,7 +99,7 @@ public sealed record CompiledWorldResolution(string? LoadedFrom, IReadOnlyList<C
 /// the compiled world that holds for it, deriving what does not hold, and records what happened in
 /// <see cref="Resolution"/>.</summary>
 public sealed class CompiledWorldRequest {
-    internal WorldDrawSampler? DrawKeys { get; set; }
+    internal WorldPrivateDrawKeys? DrawKeys { get; set; }
     private readonly CompiledWorldCache m_cache;
 
     internal CompiledWorldRequest(CompiledWorldCache cache, string documentPath, string catalogFingerprint) {

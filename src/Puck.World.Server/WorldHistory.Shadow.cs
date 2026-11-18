@@ -90,7 +90,7 @@ public sealed partial class WorldHistory {
 
             var (server, _) = WorldServer.FromCheckpoint(
                 authorityIdentity: m_server.AuthorityIdentity,
-                checkpoint: checkpoint,
+                checkpoint: checkpoint with { Server = checkpoint.Server with { DrawAuthority = null } },
                 drawKeys: WorldPrivateDrawKeys.Recorded,
                 documentDirectory: documentDirectory,
                 instanceIdentity: m_server.InstanceIdentity,

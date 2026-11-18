@@ -23,7 +23,7 @@ public static class WorldCostAnalysis {
         if ((definition.Basis is not null) || (definition.Imports is { Count: > 0 })) {
             throw new InvalidOperationException(message: "Cost analysis requires the complete composed document, not a source with unresolved basis or imports.");
         }
-        if (!WorldDrawBootResolver.TryResolve(definition: definition, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out reason, resolved: out var drawn, keys: WorldDrawSampler.Preview)
+        if (!WorldDrawBootResolver.TryResolve(definition: definition, instanceIdentity: WorldDefinitionLoader.BootInstanceName, reason: out reason, resolved: out var drawn, keys: WorldPrivateDrawKeys.Preview)
             || !WorldStateDocumentValues.TryResolve(definition: drawn, reason: out reason, resolved: out var resolved)) {
             throw new InvalidOperationException(message: reason);
         }

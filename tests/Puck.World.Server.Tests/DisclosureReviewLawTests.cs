@@ -18,7 +18,8 @@ public sealed class DisclosureReviewLawTests {
         Assert.True(arena.Catalog.TryResolve(StateLane.Document, "dice", out var row));
         var search = new ArenaSearchEffectHost(arena);
         var reads = keys.Reads;
-        Assert.True(search.Apply(Mutation.Generate(row.Ordinal), out var refusal), refusal.Reason);
+        Assert.False(search.Apply(Mutation.Generate(row.Ordinal), out var refusal));
+        Assert.Contains("sampler", refusal.Reason);
         Assert.Equal(reads, keys.Reads);
         Assert.True(Apply(fixture.Server, new WorldMutation.Generate(Principal.Console, "dice")));
         Assert.True(keys.Reads > reads);
@@ -72,25 +73,52 @@ public sealed class DisclosureReviewLawTests {
     }
 
     [Fact]
-    public void SavedDocumentMovesAndResumesWithFreshKeys() {
+    public void InterruptedSaveCannotPairAnOldCursorWithAnAlreadyUsedStream() {
         using var files = new Puck.Testing.TemporaryDirectory();
-        using var fixture = Fixtures.FreshServer(PrivateDice(), drawKeys: WorldPrivateDrawKeys.Create());
+        var path = files.PathOf("table.world.json");
+        var root = new WorldStateRoot(files.PathOf("authority"));
+        var document = PrivateDice();
+        var source = new WorldDefinitionSource(document, path);
+        var keys = WorldDrawSave.Open(root, path, null);
+        var other = WorldDrawSave.Open(root, path, null);
+        Assert.NotEqual(keys.Identity, other.Identity);
+        Assert.False(Directory.Exists(root.FullPath));
+        Assert.False(WorldDefinitionLoader.TryDraw(document, path, "boot", out _, out var reason));
+        Assert.Contains("PrivateDrawSeedMissing", reason);
+        using var fixture = Fixtures.FreshServer(document, drawKeys: keys);
+        var server = fixture.Server;
         var generate = new WorldMutation.Generate(Principal.Console, "dice");
-        Assert.True(Apply(fixture.Server, generate));
-        var saved = fixture.Server.ExportDefinition();
-        var original = files.PathOf("table.world.json");
-        var moved = files.PathOf("moved.world.json");
-        WorldDefinitionSerialization.Save(saved, original);
-        File.Move(original, moved);
-        var keys = WorldPrivateDrawKeys.Create();
-        Assert.True(WorldDefinitionLoader.TryLoadFile(moved, out var loaded, out var reason, keys: keys), reason);
-        using var resumed = Fixtures.FreshServer(loaded, drawKeys: keys);
-        Assert.Equal(saved.AuthoredState[0].Cells![0].Value, resumed.Server.ExportDefinition().AuthoredState[0].Cells![0].Value);
-        Assert.True(Apply(resumed.Server, generate));
-        Assert.True(Apply(fixture.Server, generate));
-        var next = resumed.Server.ExportDefinition().AuthoredState[0];
-        Assert.Equal(saved.AuthoredState[0].DrawCursor + 1, next.DrawCursor);
-        Assert.NotEqual(fixture.Server.ExportDefinition().AuthoredState[0].Cells![0].Value, next.Cells![0].Value);
+        Assert.True(Apply(server, generate));
+        var saved = server.ExportDefinition();
+        using (WorldDrawSave.BeginSave(root, path, source, server, saved)) {
+            WorldDefinitionSerialization.Save(saved, path);
+        }
+        Assert.True(Apply(server, generate));
+        var later = server.ExportDefinition();
+        // Fail after the sidecar's durable rename and before the writer changes the document.
+        Assert.Throws<IOException>((Action)(() => {
+            using var hold = WorldDrawSave.BeginSave(root, path, source, server, later);
+            throw new IOException("injected document write failure");
+        }));
+        var resumed = WorldDrawSave.Open(root, path, null);
+        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var loaded, out reason, keys: resumed), reason);
+        var row = loaded!.AuthoredState[0];
+        Assert.Equal(saved.AuthoredState[0].Cells![0].Value, row.Cells![0].Value);
+        Assert.Equal(saved.AuthoredState[0].DrawCursor, row.DrawCursor);
+        Assert.Equal(saved.AuthoredState[0].Draw!.Secret!.Installation, row.Draw!.Secret!.Installation);
+        Assert.NotEqual(keys.RootGeneration, resumed.RootGeneration);
+        Assert.NotEqual(saved.AuthoredState[0].Draw!.Secret!.Sample(13, 19, row.DrawCursor), row.Draw.Secret.Sample(13, 19, row.DrawCursor));
+        Assert.Equal(keys.Identity, resumed.Identity);
+        Assert.NotEqual(WorldDrawSave.WorldIdentity(path), WorldDrawSave.WorldIdentity(files.PathOf("checkout/table.world.json")));
+        WorldDefinitionSerialization.Save(saved.WithWorldState([saved.AuthoredState[0] with { Cells = [new(StateRow.SlotKey, CellValue.Int(17))] }]), path);
+        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out var edited, out reason, keys: WorldDrawSave.Open(root, path, null)), reason);
+        Assert.Equal(17, edited!.AuthoredState[0].Cells![0].Value.Raw);
+        var file = Directory.GetFiles(root.PathOf("world-authorities"), "*.json").Single();
+        File.WriteAllText(file, "{}");
+        Assert.False(WorldDefinitionLoader.TryLoadFile(path, out _, out reason, keys: WorldDrawSave.Open(root, path, null)));
+        Assert.Contains("PrivateDrawSaveMalformed", reason);
+        WorldDefinitionSerialization.Save(Fixtures.BuildDocument(), path);
+        Assert.True(WorldDefinitionLoader.TryLoadFile(path, out _, out reason, keys: WorldDrawSave.Open(root, path, null)), reason);
     }
 
     [Fact]
@@ -140,7 +168,7 @@ public sealed class DisclosureReviewLawTests {
         var server = fixture.Server;
         Assert.True(Apply(server, new WorldMutation.Generate(Principal.Console, "dice")));
         var before = server.ExportDefinition().AuthoredState[0];
-        Assert.True(WorldDefinitionLoader.TryDraw(document, "foreign", "boot", out var foreign, out var reason, WorldPrivateDrawKeys.Create()), reason);
+        var foreign = WorldPrivateDrawKeys.FromAuthorityState(Enumerable.Repeat((byte)47, 32).ToArray()).Install(document);
         var authored = System.Text.Json.Nodes.JsonNode.Parse(WorldDefinitionSerialization.Serialize(foreign))!;
         authored["state"]!["world"]![0]!["draw"]!["secret"] = "author-supplied";
         Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(authored.ToJsonString())));
@@ -168,11 +196,12 @@ public sealed class DisclosureReviewLawTests {
         var row = new WorldStateRow(CellName.Parse("dice"), CellKind.Int,
             Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event, PrivateStream: true));
         var definition = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] };
-        using var first = Fixtures.FreshServer(definition, drawKeys: WorldPrivateDrawKeys.Create());
-        var secondKeys = WorldPrivateDrawKeys.Create();
-        using var second = Fixtures.FreshServer(definition, drawKeys: secondKeys);
+        var seed = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        using var first = Fixtures.FreshServer(definition, drawKeys: WorldPrivateDrawKeys.FromAuthorityState(seed));
+        using var second = Fixtures.FreshServer(definition, drawKeys: WorldPrivateDrawKeys.FromAuthorityState(seed));
         Assert.True(first.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var start, out var reason), reason);
         var bytes = WorldAuthorityCheckpointCodec.Encode(start!);
+        Assert.Equal(-1, bytes.AsSpan().IndexOf(seed));
         Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var checkpoint, out reason), reason);
         first.Server.RestoreCheckpoint(checkpoint!);
         second.Server.RestoreCheckpoint(checkpoint!);
@@ -191,15 +220,15 @@ public sealed class DisclosureReviewLawTests {
             first.Step();
             second.Step();
             recording.NoteTick();
-            if (i == 1) {
-                first.Server.EnqueueRebuild(new WorldRebuildRequest(WorldRebuildKind.Reset, null, null, true), Principal.Console);
-                first.Step();
-                recording.NoteTick();
-            }
+            Assert.Equal(first.Server.ExportDefinition().AuthoredState[0].Cells![0].Value,
+                second.Server.ExportDefinition().AuthoredState[0].Cells![0].Value);
         }
         var stopped = recording.StopRecording();
         Assert.True(stopped.Verdict!.Passing, stopped.Verdict.Describe());
         var tapeBytes = File.ReadAllBytes(stopped.Path);
+        Assert.Equal(-1, tapeBytes.AsSpan().IndexOf(seed));
+        using var tapeStream = new MemoryStream(tapeBytes);
+        Assert.Null(WorldReplaySnapshot.Read(tapeStream).StartCheckpoint!.Server.DrawAuthority);
         Assert.DoesNotContain("\"secret\"", System.Text.Encoding.UTF8.GetString(WorldStateExport.ToCanonicalJson(first.Server)));
         var destination = verify.PathFor("draw");
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
@@ -210,9 +239,7 @@ public sealed class DisclosureReviewLawTests {
         var ticks = Assert.IsType<WorldReplayTickInput[]>(incomplete.Ticks);
         ticks[0] = ticks[0] with { Authority = [] };
         WorldReplaySnapshot.WriteFile(verify.PathFor("incomplete"), incomplete);
-        var generationBeforeDrive = secondKeys.Generation;
         Assert.True(verify.TryBeginDrive("incomplete", null, null, null, out reason), reason);
-        Assert.True(secondKeys.Generation > generationBeforeDrive);
         var missing = Assert.Throws<InvalidDataException>(() => verify.DriveStep(() => Apply(second.Server, generate)));
         Assert.Contains("MissingPrivateDraw", missing.Message);
         verify.CancelDrive();

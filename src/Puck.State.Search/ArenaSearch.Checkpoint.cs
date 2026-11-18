@@ -168,7 +168,6 @@ public sealed partial class ArenaSearch {
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
             var entry = checkpoint.Jobs![index];
-            SelectArena(job.Judge.Arena);
 
             if (entry is null) {
                 reason = $"the checkpoint carries no progress for the installed job '{job.Plan.Name}'";
@@ -197,7 +196,6 @@ public sealed partial class ArenaSearch {
         for (var index = 0; (index < m_jobs.Length); index++) {
             var job = m_jobs[index];
             var entry = checkpoint.Jobs![index];
-            SelectArena(job.Judge.Arena);
 
             PopAllScopes(job: job);
             entry.Counts.AsSpan().CopyTo(destination: job.Counts);

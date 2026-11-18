@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Puck.Assets;
 
 namespace Puck.World.Server;
@@ -53,13 +54,20 @@ public readonly record struct WorldAuthorityRoot(
         Sequence: 0,
         Version: 1
     );
+    /// <summary>The seed provisioned by the first fenced activation.</summary>
+    internal string? DrawSeed { get; init; }
+    /// <summary>Durable timeline allocated by the rewind root CAS.</summary>
+    [JsonPropertyName("drawGeneration")]
+    public long DrawGeneration { get; init; }
     /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
     [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RewindBoundary { get; init; }
 }
 /// <summary>A root together with the blob version token that must guard its next CAS.</summary>
-public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root, string VersionToken);
+public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root, string VersionToken) {
+    internal WorldAuthorityRootSnapshot WithoutSeed() => this with { Root = Root with { DrawSeed = null } };
+}
 /// <summary>A coherent recovery view. The root was read once and all referenced immutable blobs were verified against
 /// that root, so checkpoint and journal cannot come from different publications.</summary>
 public readonly record struct WorldAuthorityRecovery(
@@ -67,6 +75,8 @@ public readonly record struct WorldAuthorityRecovery(
     WorldAuthorityCheckpointBlob? Checkpoint,
     WorldAuthorityJournalTail Journal
 ) {
+    /// <summary>The sampler that filled the admitted definition.</summary>
+    public WorldPrivateDrawKeys? DrawKeys { get; init; }
     /// <summary>The root-qualified, fully validated definition, or <see langword="null"/> when no definition is published.</summary>
     public WorldDefinition? Definition => Admission?.Definition;
     /// <summary>This read's own validation result for the published definition, or <see langword="null"/> when no
@@ -103,6 +113,11 @@ internal static class WorldAuthorityRootCodec {
     )
     );
 
+    internal static JsonObject SerializeAuthorityState(WorldAuthorityRoot root) {
+        var image = JsonSerializer.SerializeToNode(root, Options)!.AsObject();
+        if (root.DrawSeed is { } seed) { image["drawSeed"] = seed; }
+        return image;
+    }
     public static byte[] EncodeReceipt(WorldAuthorityOperationReceipt receipt, string? previousHash) {
         return JsonSerializer.SerializeToUtf8Bytes(
             new ReceiptNode(
@@ -124,7 +139,7 @@ internal static class WorldAuthorityRootCodec {
             var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) {
                 "version", "epoch", "fence", "sequence", "definition", "checkpoint", "checkpointOrdinal",
                 "checkpointTick", "journal", "journalCount", "journalSequence", "checkpointCoverageSequence",
-                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary",
+                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary", "drawSeed", "drawGeneration",
             };
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -156,13 +171,23 @@ internal static class WorldAuthorityRootCodec {
                 options: Options,
                 utf8Json: bytes
             );
+            if (document.RootElement.TryGetProperty("drawSeed", out var drawSeed)) {
+                var encoded = drawSeed.GetString();
+                Span<byte> seed = stackalloc byte[32];
+                if (encoded is null || !Convert.TryFromBase64String(encoded, seed, out var length) || length != 32 || seed.IndexOfAnyExcept((byte)0) < 0) {
+                    root = default;
+                    reason = "invalid private draw authority seed";
+                    return false;
+                }
+                root = root with { DrawSeed = encoded };
+            }
             if (
                 (root.RewindBoundary is { } boundary) &&
                 !ContentPin.TryParse(pin: out _, text: boundary)
             ) {
                 reason = "rewind boundary is not a full SHA-256 policy pin"; root = default; return false;
             }
-            var scalarFieldsValid = ((root.Version == 1) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
+            var scalarFieldsValid = ((root.DrawGeneration >= 0) && (root.Version == 1) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
             var journalCoverageValid = (scalarFieldsValid && (root.CheckpointCoverageSequence <= root.JournalSequence) &&
                 ((root.JournalHash is null)
                 ? ((root.JournalEntryCount == 0) && (root.JournalSequence == root.CheckpointCoverageSequence))

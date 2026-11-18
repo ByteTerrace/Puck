@@ -382,7 +382,7 @@ public static class WorldStateDisclosure {
             recipient: recipient,
             unrestricted: unrestricted
         );
-        definition = WorldDrawSampler.WithLast(definition, 0);
+        definition = WorldPrivateDrawKeys.WithLast(definition, 0);
         var rows = new WorldStateRow[definition.AuthoredState.Count];
         var withheld = new Dictionary<string, WorldWithheldRow>(comparer: StringComparer.Ordinal);
 
@@ -419,22 +419,46 @@ public static class WorldStateDisclosure {
     // withhold, only the readable cells. Disclose and the shared image table's row refresh both derive a row here, so a
     // refreshed row and a whole composition agree.
     internal static WorldStateRow DiscloseRow(StateArena arena, int index, ref Observer observer, DisclosedFields? fields, out WorldWithheldRow? withheld) {
-        var declaration = arena.Rows[index];
-        var restricted = observer.TryRow(declaration, out var ordinal) && !observer.ReadsWhole(ordinal);
-        var rowReadable = !restricted || observer.Allows(declaration.Visibility);
-        var recipient = observer;
-        var hidden = 0;
-        bool Include(CellKey key) {
-            if (rowReadable && recipient.CanRead(declaration, ordinal, key)) { return true; }
-            hidden++;
-            return false;
+        var exported = arena.ToRow(rowOrdinal: index);
+        var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
+        // A draw key belongs only to authority persistence, even when every current cell reads whole.
+        // Both initial replica documents and refreshed image skeletons pass this boundary.
+        if (row.Draw is { Secret: not null } draw) { row = row with { Draw = draw.WithoutStream() }; }
+
+        withheld = null;
+        if (observer.TryRow(ordinal: out var ordinal, row: row) && !observer.ReadsWhole(rowOrdinal: ordinal)) {
+            var rowReadable = observer.Allows(policy: row.Visibility);
+            var cells = (row.Cells ?? []);
+            var kept = new List<StateCell>(capacity: cells.Count);
+
+            foreach (var cell in cells) {
+                if (
+                    rowReadable &&
+                    observer.CanRead(
+                    key: (arena.Keys.TryResolve(
+                        key: out var interned,
+                        name: cell.Key
+                    )
+                        ? interned
+                        : default),
+                    row: row,
+                    rowOrdinal: ordinal
+                )
+                ) {
+                    kept.Add(item: cell);
+                }
+            }
+
+            withheld = new WorldWithheldRow(
+                Count: (cells.Count - kept.Count),
+                Policy: (row.Visibility?.Hidden ?? HiddenCells.Omit),
+                WholeRow: !rowReadable
+            );
+            // A row that can withhold has one shape whether zero or many cells are withheld now: its storage and cursor
+            // bookkeeping is a reading of the cells withheld from it, so it goes too.
+            row = WithoutStorageMetadata(row: row) with { Cells = kept };
         }
 
-        var exported = arena.ToRow(index, include: restricted ? Include : null);
-        var row = exported as WorldStateRow ?? new WorldStateRow(exported, false, null);
-        if (row.Draw is { Secret: not null } draw) { row = row with { Draw = draw.WithoutStream(), BeforePrivatePreview = null }; }
-        withheld = restricted ? new WorldWithheldRow(hidden, row.Visibility?.Hidden ?? HiddenCells.Omit, !rowReadable) : null;
-        if (restricted) { row = WithoutStorageMetadata(row) with { Cells = row.Cells ?? [] }; }
         return (fields?.Project(row: row) ?? row);
     }
     // The physical-field half of a replica document. Fields are authored in state rows and physical topologies; this

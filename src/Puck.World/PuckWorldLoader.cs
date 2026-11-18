@@ -1,4 +1,5 @@
 using Puck.Abstractions.Machines;
+using Puck.World.Server;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 
@@ -16,23 +17,26 @@ internal static class PuckWorldLoader {
     );
     // A composition source declares several worlds that reach each other across their borders by document name, and
     // a border crossing loads its neighbour from disk. A boot of the source therefore stages every declared world into
-    // a content-addressed directory. Writable per-boot overlays keep the shared documents immutable.
+    // one boot-private directory under the state root, through the staging `puck test` uses, and boots the declared
+    // entry from there. The directory is the source's alone and is restaged whole on every boot, so a world the
+    // source no longer declares cannot be reached.
     private static bool TryBootComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? named, out WorldDefinitionSource source, out string failure, string catalogFingerprint,
-        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldCacheRoots caches, bool preview) {
+        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches, bool authority, bool preview) {
         source = null!;
 
-        using var workspace = new CompositionWorkspace(caches.CompiledWorlds);
-        var staged = workspace.DirectoryPath;
-        var directory = Path.Combine(staged, "local");
+        var directory = Path.Combine(
+            path1: stateRoot.FullPath,
+            path2: "compositions",
+            path3: WorldDrawSave.WorldIdentity(path)
+        );
         var sourceDirectory = (Path.GetDirectoryName(path: path) ?? ".");
 
         if (!WorldStaging.TryStageComposition(
             catalog: catalog,
-            directory: directory,
+            directory: Path.Combine(directory, "staged"),
             entry: named,
             entryName: out var entryName,
-            portable: workspace.AddPortable,
-            entryPath: out _,
+            entryPath: out var entryPath,
             path: path,
             reason: out var stageReason,
             worlds: worlds
@@ -45,22 +49,18 @@ internal static class PuckWorldLoader {
         // The booted world's origin is its staged document, so its borders resolve their neighbours beside it; the
         // origin line names the --world path the boot was asked for, as every --world boot does. Its compiled world
         // belongs to the document `puck compile` writes beside the source.
-        var shared = workspace.Publish();
-        var savedDocument = WorldDocumentName.SidecarFile(path, "." + entryName + ".save.world.json");
-        var entryPath = Path.Combine(staged, WorldDocumentName.DocumentFile(entryName));
-        foreach (var world in worlds) {
-            var name = WorldDocumentName.DocumentFile(world.Name);
-            // Relocated assets resolve from this boot's basis. Path-independent documents read the shared basis directly.
-            var local = Path.Combine(directory, name);
-            var common = Path.Combine(shared, name);
-            var basis = File.ReadAllBytes(local).AsSpan().SequenceEqual(File.ReadAllBytes(common)) && !Directory.EnumerateDirectories(directory).Any()
-                ? shared : directory;
-            var wrapper = world.Name == entryName && File.Exists(savedDocument)
-                ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(savedDocument))!.AsObject()
-                : new System.Text.Json.Nodes.JsonObject();
-            wrapper[WorldDocumentBasis.BasisMemberName] = Puck.Abstractions.PuckPaths.Relative(staged, Path.Combine(basis, world.Name));
-            Puck.Confinement.AtomicFile.WriteAllBytes(Path.Combine(staged, name), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(wrapper));
-        }
+        var staged = Path.GetDirectoryName(entryPath)!;
+        var entryIdentity = worlds.Any(world => world.Entry && world.Name == entryName) ? null : entryName;
+        var savedDocument = Path.Combine(directory, Path.GetFileName(entryPath));
+        // Stage a fresh authored basis each boot. The durable document is an ordinary author-editable delta.
+        var basisName = entryName + "-basis";
+        while (File.Exists(Path.Combine(staged, WorldDocumentName.DocumentFile(basisName)))) { basisName += "-basis"; }
+        File.Move(entryPath, Path.Combine(staged, WorldDocumentName.DocumentFile(basisName)));
+        var overlay = File.Exists(savedDocument)
+            ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(savedDocument))!.AsObject()
+            : new System.Text.Json.Nodes.JsonObject();
+        overlay[WorldDocumentBasis.BasisMemberName] = basisName;
+        Puck.Confinement.AtomicFile.WriteAllBytes(entryPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(overlay));
         var neighbours = new WorldFileNeighbourResolver(
             baseDirectory: () => staged,
             catalog: catalog,
@@ -74,7 +74,7 @@ internal static class PuckWorldLoader {
             )
         );
 
-        var keys = preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Create();
+        var keys = authority ? WorldDrawSave.Open(stateRoot, path, entryIdentity) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
             keys: keys,
             admission: out var loaded,
@@ -100,7 +100,7 @@ internal static class PuckWorldLoader {
         source = new WorldDefinitionSource(
             Definition: loaded!.Definition,
             SourcePath: entryPath
-        ) { Admission = loaded, DrawKeys = keys, CompositionOrigin = (entryPath, savedDocument), Staging = workspace.Transfer() };
+        ) { Admission = loaded, DrawKeys = keys, CompositionOrigin = (entryPath, path, entryIdentity, savedDocument) };
         failure = string.Empty;
 
         return true;
@@ -111,6 +111,8 @@ internal static class PuckWorldLoader {
     /// <param name="worldPath">The <c>--world</c> path.</param>
     /// <param name="source">The loaded definition and source path.</param>
     /// <param name="failure">The named refusal reason, or empty on success.</param>
+    /// <param name="stateRoot">The run's state root, under which a composition source stages its declared
+    /// worlds.</param>
     /// <param name="caches">The compiled-world and bake caches the boot reads and fills.</param>
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog used for provider composition and validation.</param>
@@ -119,8 +121,9 @@ internal static class PuckWorldLoader {
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
     /// <param name="preview">Whether this boot is an isolated deterministic test run.</param>
-    public static bool TryResolveWorld(string worldPath, out WorldDefinitionSource source, out string failure, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
-        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null, bool preview = false) {
+    /// <param name="authority">Whether this boot owns the local world authority save.</param>
+    public static bool TryResolveWorld(string worldPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
+        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null, bool authority = false, bool preview = false) {
         string path;
 
         try {
@@ -147,8 +150,6 @@ internal static class PuckWorldLoader {
             path = entryPath;
         }
 
-        var sourcePath = path;
-        if (entry is null) { path = WorldDefinitionFileSource.LiveDocumentPath(path); }
         if (!path.EndsWith(
             comparisonType: StringComparison.OrdinalIgnoreCase,
             value: ".puck"
@@ -160,8 +161,8 @@ internal static class PuckWorldLoader {
                 return false;
             }
 
-            var documentKeys = preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Create();
-            if (!WorldDefinitionLoader.TryResolve(
+            var documentKeys = authority ? WorldDrawSave.Open(stateRoot, path, null) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
+            return WorldDefinitionLoader.TryResolve(
                 keys: documentKeys,
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
@@ -170,9 +171,7 @@ internal static class PuckWorldLoader {
                 path: path,
                 overrides: overrides,
                 source: out source
-            )) { return false; }
-            source.SourcePath = sourcePath;
-            return true;
+            );
         }
 
         if (!File.Exists(path: path)) {
@@ -208,8 +207,10 @@ internal static class PuckWorldLoader {
 
         if (compiled!.Worlds.Count > 0) {
             return TryBootComposition(
+                authority: authority,
                 preview: preview,
                 caches: caches,
+                stateRoot: stateRoot,
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 failure: out failure,
@@ -233,7 +234,7 @@ internal static class PuckWorldLoader {
             documentPath: path
         );
 
-        var keys = preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Create();
+        var keys = authority ? WorldDrawSave.Open(stateRoot, path, null) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
         if (!WorldSourceLoader.TryLoadForAdmission(
             keys: keys,
             admission: out var loaded,

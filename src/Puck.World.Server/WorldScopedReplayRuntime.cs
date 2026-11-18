@@ -16,9 +16,6 @@ public sealed partial class WorldScopedReplayRuntime {
     private readonly HashSet<int> m_rows = [];
 
     private readonly List<(int Tick, WorldMutation Mutation)> m_inputs = [];
-    private readonly HashSet<long> m_drawSites = [];
-    private readonly SortedDictionary<int, List<PrivateDrawWord>> m_words = [];
-    private IDisposable? m_drawInput;
     private readonly List<ulong> m_hashes = [];
     private readonly List<(int Tick, WorldCommand Command)> m_commands = [];
     private readonly List<(int Tick, IntentSubmission Intent)> m_intents = [];
@@ -63,10 +60,6 @@ public sealed partial class WorldScopedReplayRuntime {
         m_rows.Clear();
         foreach (var name in m_source.Rows) { m_rows.Add(item: Row(arena: arena, name: name)); }
         m_orderedRows = m_rows.Order().ToArray();
-        m_drawSites.Clear();
-        foreach (var ordinal in m_orderedRows) {
-            if (arena.Rows[ordinal].Draw?.Secret is { } stream) { m_drawSites.Add(stream.Installation); }
-        }
         m_allRules = null;
     }
 
@@ -188,7 +181,7 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
-        if (m_drawSites.Count != 0) { m_server.DrawKeys.AdvanceGeneration(); }
+        if (m_rows.Any(row => m_server.Arena.Rows[row].Draw?.PrivateStream == true)) { m_server.DrawKeys.AdvanceGeneration(); }
         RestoreRules();
         // Every body is posed before any contact is restored: a pose passes the discontinuity door, which forgets the
         // contacts other bodies own with the posed one, so a contact restored earlier in the same pass would be lost.
@@ -248,12 +241,6 @@ public sealed partial class WorldScopedReplayRuntime {
             }
         }
         if (!m_active) { return; }
-        if (m_drawSites.Count != 0) {
-            m_drawInput = m_recording ? m_server.DrawKeys.Capture(word => {
-                if (m_drawSites.Contains(word.Installation)) { RecordWord(m_cursor, word); }
-            }) : m_server.DrawKeys.Replay(m_words.GetValueOrDefault(m_cursor) ?? [],
-                address => new InvalidDataException($"MissingPrivateDraw: scoped replay '{Name}' lacks {address}"), sites: m_drawSites);
-        }
         if (m_recording) {
             foreach (var input in m_source.Inputs) {
                 if (input.Tick != m_cursor) { continue; }
@@ -287,12 +274,7 @@ public sealed partial class WorldScopedReplayRuntime {
 
     // Cancellation and refusal both leave a settled, checkpointable runtime. An interrupted first recording
     // has no complete expectation to replay, whereas a previously completed tape remains reusable.
-    internal void CloseDrawInput() {
-        m_drawInput?.Dispose();
-        m_drawInput = null;
-    }
     private void ResetDrive() {
-        CloseDrawInput();
         m_active = false;
         if (m_recording) { ClearTape(); }
         m_recording = false;
@@ -300,7 +282,7 @@ public sealed partial class WorldScopedReplayRuntime {
         StopInput();
     }
     private void ClearTape() {
-        m_wordHash = Fnv1aHash.Create(); m_words.Clear(); m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
+        m_inputs.Clear(); m_hashes.Clear(); m_commands.Clear(); m_intents.Clear();
         m_recordHash = Fnv1aHash.Create(); m_inputHash = Fnv1aHash.Create();
         m_commandHash = Fnv1aHash.Create(); m_intentHash = Fnv1aHash.Create();
     }
@@ -341,7 +323,6 @@ public sealed partial class WorldScopedReplayRuntime {
     }
     /// <summary>Closes a real simulation tick and compares its scope with the corresponding recorded live tick.</summary>
     public void AfterTick() {
-        CloseDrawInput();
         if (!m_active) { return; }
         var actual = Hash();
 
@@ -361,13 +342,6 @@ public sealed partial class WorldScopedReplayRuntime {
     /// <summary>The read-back, including both the live scope hash and the original live recording's tail.</summary>
     public string Describe() => $"{m_source.Name} status {Read(key: "status")} tick {m_cursor}/{m_source.DurationTicks} inputs {m_inputs.Count} start {m_startHash:x16} expected {((m_hashes.Count == 0) ? 0 : m_hashes[^1]):x16} actual {Hash():x16}";
 
-    private void RecordWord(int tick, PrivateDrawWord word) {
-        if (!m_words.TryGetValue(tick, out var inputs)) { m_words.Add(tick, inputs = []); }
-        inputs.Add(word);
-        m_wordHash.Add(tick); m_wordHash.Add(word.Installation); m_wordHash.Add(word.Seed);
-        m_wordHash.Add(word.Stream); m_wordHash.Add(word.Cursor); m_wordHash.Add(word.Value);
-    }
-    private Fnv1aHash m_wordHash = Fnv1aHash.Create();
     private void HashInput(int tick, WorldMutation mutation) {
         if (!WorldSubmissionCodec.TryEncodeCommittedMutation(bytes: out var bytes, failure: out var failure, mutation: mutation)) { throw new InvalidOperationException(message: failure.ToString()); }
         m_inputHash.Add(value: tick); m_inputHash.Add(values: bytes);
@@ -389,13 +363,12 @@ public sealed partial class WorldScopedReplayRuntime {
         hash.Add(value: m_startImageHash);
         hash.Add(value: m_cursor); hash.Add(value: m_inputCursor); hash.Add(value: (m_recording ? 1 : 0)); hash.Add(value: (m_active ? 1 : 0)); hash.Add(value: (m_diverged ? 1 : 0));
         hash.Add(value: m_inputHash.Value); hash.Add(value: m_recordHash.Value);
-        hash.Add(m_wordHash.Value);
         hash.Add(value: m_commandHash.Value); hash.Add(value: m_intentHash.Value);
     }
     /// <summary>Captures the derived tape for a whole-session replay or checkpoint.</summary>
     public WorldScopedReplayCheckpoint Checkpoint() => WorldAuthorityCheckpointCodec.CopyScopedReplay(scope: new(Name, m_start, m_startBodies, m_startHash,
         m_inputs.ToArray(), m_hashes.ToArray(), m_cursor, m_inputCursor, m_recording, m_active, m_diverged, m_commands.ToArray(), m_intents.ToArray(),
-        m_startRuleLatch, m_startInteractionLatch, m_startGroups, m_words.SelectMany(entry => entry.Value.Select(word => (entry.Key, word))).ToArray()));
+        m_startRuleLatch, m_startInteractionLatch, m_startGroups));
     /// <summary>Restores the tape beside an already restored arena and population.</summary>
     public void RestoreCheckpoint(WorldScopedReplayCheckpoint checkpoint) {
         checkpoint = WorldAuthorityCheckpointCodec.CopyScopedReplay(scope: checkpoint);
@@ -403,9 +376,6 @@ public sealed partial class WorldScopedReplayRuntime {
         m_start = checkpoint.Start; m_startBodies = checkpoint.Bodies.ToArray(); m_startHash = checkpoint.StartHash;
         m_startRuleLatch = checkpoint.RuleGateHeld.ToArray(); m_startInteractionLatch = checkpoint.InteractionGateHeld.ToArray(); m_startGroups = checkpoint.RuleGroups.ToArray();
         m_startImageHash = ((checkpoint.Start is null) ? 0 : WorldAuthorityCheckpointCodec.HashScopedReplayStart(scope: checkpoint));
-        CloseDrawInput();
-        m_wordHash = Fnv1aHash.Create(); m_words.Clear();
-        foreach (var (tick, word) in checkpoint.Words) { RecordWord(tick, word); }
         m_inputs.Clear(); m_inputs.AddRange(collection: checkpoint.Inputs); m_hashes.Clear(); m_hashes.AddRange(collection: checkpoint.Hashes);
         m_commands.Clear(); m_commands.AddRange(collection: checkpoint.Commands); m_intents.Clear(); m_intents.AddRange(collection: checkpoint.Intents);
         m_cursor = checkpoint.Cursor; m_inputCursor = checkpoint.InputCursor; m_recording = checkpoint.Recording;

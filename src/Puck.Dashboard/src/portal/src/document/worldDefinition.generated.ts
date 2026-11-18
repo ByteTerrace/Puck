@@ -13106,14 +13106,6 @@ export type WorldSearchRow = {
    * Optional integer slot copied to best.revision with the completed answer.
    */
   revision?: string | null;
-  /**
-   * The recipient whose information this job may use. Omitted jobs use public information.
-   */
-  actor?: Principal | null;
-  /**
-   * The independent seed for hypothetical draws and hidden values.
-   */
-  drawSeed?: number;
 };
 
 export type WorldSearchSection = {

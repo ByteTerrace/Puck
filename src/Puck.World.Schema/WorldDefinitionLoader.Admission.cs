@@ -3,9 +3,6 @@ using Puck.Abstractions.Machines;
 namespace Puck.World;
 
 public static partial class WorldDefinitionLoader {
-    /// <summary>Whether this process admitted the document from a file. A wire definition has no file provenance.</summary>
-    public static bool IsFileAdmission(WorldDefinition definition) => definition.ReadFromFile;
-
     /// <summary>Loads composed bytes and retains the final, draw-resolved document's validation and programs.</summary>
     /// <param name="utf8">The composed JSON bytes.</param>
     /// <param name="sourceName">The origin echoed in refusals.</param>
@@ -26,7 +23,7 @@ public static partial class WorldDefinitionLoader {
     public static bool TryLoadForAdmission(ReadOnlyMemory<byte> utf8, string sourceName,
         out WorldDefinitionAdmission? admission, out string reason, string instanceIdentity = BootInstanceName,
         IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, string? documentDirectory = null, WorldDrawSampler? keys = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, string? documentDirectory = null, WorldPrivateDrawKeys? keys = null) {
         admission = null;
         if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
         if (compiled is null) {
@@ -102,7 +99,7 @@ public static partial class WorldDefinitionLoader {
     public static bool TryProvePublishable(WorldDefinition definition, string sourceName, out string reason, IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         try {
-            return TryPrepareAndAdmit(keys: WorldDrawSampler.Preview, catalog: catalog, definition: definition, instanceIdentity: BootInstanceName, neighbours: null,
+            return TryPrepareAndAdmit(keys: WorldPrivateDrawKeys.Preview, catalog: catalog, definition: definition, instanceIdentity: BootInstanceName, neighbours: null,
                 proveNeighbours: false, reason: out reason, resolved: out _, sourceName: sourceName);
         } catch (Exception exception) {
             reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
@@ -149,7 +146,7 @@ public static partial class WorldDefinitionLoader {
     public static bool TryLoadFileForAdmission(string path, out WorldDefinitionAdmission? admission, out string contentHash, out string reason,
         string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, bool proveNeighbours = true,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null, string? displayName = null, WorldDrawSampler? keys = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null, string? displayName = null, WorldPrivateDrawKeys? keys = null) {
         var shown = (displayName ?? path);
 
         admission = null;
@@ -157,7 +154,7 @@ public static partial class WorldDefinitionLoader {
         try {
             if (!WorldDefinitionFileSource.TryLoadParsed(catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out var parsedHash,
                     definition: out var parsed, displayName: displayName, documents: documents, path: path, reason: out reason) ||
-                !TryPrepareAndAdmit(keys: keys, catalog: catalog, compiled: compiled, definition: parsed! with { ReadFromFile = true }, instanceIdentity: instanceIdentity, neighbours: neighbours,
+                !TryPrepareAndAdmit(keys: keys, catalog: catalog, compiled: compiled, definition: parsed!, instanceIdentity: instanceIdentity, neighbours: neighbours,
                     overrides: overrides, proveNeighbours: proveNeighbours, reason: out reason, resolved: out admission, sourceName: shown)) {
                 return false;
             }

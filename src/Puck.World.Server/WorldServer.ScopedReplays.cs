@@ -27,7 +27,6 @@ public sealed partial class WorldServer {
     public IReadOnlyList<WorldScopedReplayRuntime> ScopedReplays {
         get {
             if (!ReferenceEquals(objA: m_scopedSources, objB: Definition.ReplaysRaw)) {
-                foreach (var scope in m_scopedReplays) { scope.CloseDrawInput(); }
                 m_scopedSources = Definition.ReplaysRaw;
                 m_scopedReplays = (Definition.ReplaysRaw ?? []).Select(selector: source => new WorldScopedReplayRuntime(server: this, source: source)).ToArray();
             }

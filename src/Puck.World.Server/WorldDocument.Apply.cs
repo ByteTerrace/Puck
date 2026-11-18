@@ -546,15 +546,11 @@ public sealed partial class WorldDocument {
         // candidate already holds them.
         if (candidate.AuthoredState.Any(r => r.Draw?.PrivateStream == true) || priorDefinition.StateRaw?.DrawInstallCount > 0) {
             var previous = Host.MaterializeArena();
-            var fileLoad = request.Origin is WorldRebuildOrigin.File && (request.Kind == WorldRebuildKind.Reload || WorldDefinitionLoader.IsFileAdmission(candidate));
-            if (fileLoad) {
-                Host.DrawKeys.AdvanceGeneration();
-                previous = null;
-            } else if (request.Kind == WorldRebuildKind.Reset) {
+            if (request.Kind == WorldRebuildKind.Reset) {
                 Host.DrawKeys.AdvanceGeneration();
                 previous = WorldPrivateDrawKeys.WithLast(new WorldDefinition(), previous.StateRaw?.DrawInstallCount ?? 0);
             }
-            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var drawReason, Host.DrawKeys, previous, freshDocument: fileLoad) ||
+            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var drawReason, Host.DrawKeys, previous) ||
                 !WorldStateDocumentValues.TryResolve(candidate, out candidate, out drawReason)) {
                 RejectRebuild(verb, drawReason, connectionId, correlationId);
                 return false;

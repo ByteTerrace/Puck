@@ -220,9 +220,6 @@ public sealed record WorldStateRow(
     HostOwned,
     CellVisibility
 ) {
-    // The submitted cells before admission preview first filled this site. Never part of a saved row.
-    [JsonIgnore] internal WorldStateRow? BeforePrivatePreview { get; init; }
-
     /// <summary>Initializes a document row over an engine row, adding the world-only traits.</summary>
     /// <param name="row">The engine row.</param>
     /// <param name="gatesDrive">Whether the row is a drive-admission gate.</param>

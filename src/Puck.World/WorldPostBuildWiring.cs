@@ -433,7 +433,7 @@ public static class WorldPostBuildWiring {
                 );
 
                 var saved = WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, worldServer, machineCatalog,
-                    machineCatalogFingerprint, out var result);
+                    machineCatalogFingerprint, services.GetRequiredService<WorldStateRoot>(), out var result);
                 Console.Error.WriteLine(saved ? $"[world.rule: save effect -> {result}]" : $"[world.rule: save effect refused — {result}]");
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)) {
                 Console.Error.WriteLine(value: $"[world.rule: save effect refused — could not write {target} ({exception.Message.ReplaceLineEndings(replacementText: " ")})]");

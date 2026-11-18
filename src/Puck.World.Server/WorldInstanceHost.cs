@@ -1233,7 +1233,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             resolvedPath: resolvedPath
         ));
 
-        var keys = WorldPrivateDrawKeys.Create();
+        var keys = WorldDrawSave.Open(m_stateRoot, resolvedPath, null);
         var admission = prepared?.Admission;
         if (admission?.Definition.AuthoredState.Any(r => r.Draw?.PrivateStream == true) == true) { admission = null; }
 

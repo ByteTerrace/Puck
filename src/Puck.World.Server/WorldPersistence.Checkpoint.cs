@@ -516,7 +516,8 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        var keys = drawKeys ?? WorldPrivateDrawKeys.Create();
+        var keys = checkpoint.Server.OpenDrawKeys(drawKeys);
+        keys.ResumeGeneration(checkpoint.Server.DrawGeneration);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
@@ -682,6 +683,8 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldServerCheckpoint.DocumentBytes(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                DrawAuthority: Host.Configuration.StateRaw?.DrawInstallCount > 0 || Host.Document.Base.StateRaw?.DrawInstallCount > 0 ? Host.DrawKeys.Identity : null,
+                DrawGeneration: Host.DrawKeys.Generation,
                 DrawPositions: WorldPrivateDrawKeys.Positions(Host.Configuration),
                 BaseDrawPositions: WorldPrivateDrawKeys.Positions(Host.Document.Base),
                 AuthorityIdentity: Host.AuthorityIdentity,
@@ -748,7 +751,7 @@ public sealed partial class WorldPersistence {
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
-        var keys = Host.DrawKeys;
+        var keys = checkpoint.Server.OpenDrawKeys(Host.DrawKeys);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
@@ -908,6 +911,7 @@ public sealed partial class WorldPersistence {
         Host.Document.Journal.Clear();
         Host.Document.Journal.AddRange(server.Journal);
         Host.Document.Pending.Clear();
+        keys.ResumeGeneration(server.DrawGeneration);
         Host.Tick.RestoreClock(
             completedEngineTicks: server.LastCompletedEngineTicks,
             completedTick: server.LastCompletedTick,
@@ -1050,7 +1054,6 @@ public sealed partial class WorldPersistence {
         Host.RuleHost.PruneLatches();
         Decisions.Restore(checkpoint: server.Decisions);
         Host.RestoreMachineBindings(entries: server.MachineBindings);
-        Host.RefreshSearchViews();
         if (!Host.Search.TryRestore(
             checkpoint: (checkpoint.Search ?? ArenaSearchCheckpoint.Empty),
             reason: out var searchReason

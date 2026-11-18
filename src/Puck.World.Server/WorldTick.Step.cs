@@ -992,15 +992,11 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             Host.Persistence.RequireAddonsRestored();
             if (Host.AuthorityRetiring) { return; }
-            var scopes = Host.ScopedReplaySpan;
             Host.EnterArenaTick();
             try {
                 StepCore(context: in context);
                 foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
-            } finally {
-                foreach (var scope in scopes) { scope.CloseDrawInput(); }
-                Host.LeaveArenaTick();
-            }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Advances one step from this authority's own checkpointed clock. Hosts and replay drivers use this
@@ -1018,15 +1014,11 @@ public sealed partial class WorldTick {
                 Tick: m_lastCompletedTick
             );
 
-            var scopes = Host.ScopedReplaySpan;
             Host.EnterArenaTick();
             try {
                 StepCore(context: in context);
                 foreach (var scope in Host.ScopedReplaySpan) { scope.AfterTick(); }
-            } finally {
-                foreach (var scope in scopes) { scope.CloseDrawInput(); }
-                Host.LeaveArenaTick();
-            }
+            } finally { Host.LeaveArenaTick(); }
         }
     }
     /// <summary>Submits one envelope into the ordered domain — the single front door every non-intent submission kind

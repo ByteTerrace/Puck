@@ -100,43 +100,6 @@ public sealed partial class SearchLawTests {
         return definition;
     }
 
-    [Fact]
-    public void DrawCandidateUsesOnlyItsPlansWordsAndVisiblePosition() {
-        (long Score, long Target, ulong Position) Decide(long opponent, ulong seed) {
-            var definition = MiniNegamaxWorld(1);
-            var source = new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event, PrivateStream: true);
-            definition = definition.WithWorldState([.. definition.AuthoredState,
-                StateFixtures.IntSlot("roll") with { Draw = source },
-                StateFixtures.IntSlot("hand", opponent) with { Visibility = new StateVisibility(Readers: ["seat2"]), Min = 1, Max = 52 }
-            ]) with {
-                Rules = [
-                    new WorldRule(Name: CellName.Parse("drawOnOne"), Gate: new ActionPredicate.All([
-                        new ActionPredicate.CompareState(State: RuleFacts.SearchPly, Comparison: ExpressionOp.Greater, Value: 0),
-                        new ActionPredicate.CompareState(State: "pieceCell", Key: "a", Comparison: ExpressionOp.Equal, Value: 1)
-                    ]), Effects: [new ActionEffect.Generate("roll")]),
-                    definition.Rules![0] with { Gate = new ActionPredicate.CompareState(State: RuleFacts.SearchPly, Comparison: ExpressionOp.Greater, Value: 0) }
-                ],
-                SearchRaw = new(Jobs: [definition.Search.Jobs![0] with {
-                    Actor = Puck.Commands.Principal.Seat(0), DrawSeed = seed, Score = ExpressionProgram.Parse("roll + hand")
-                }])
-            };
-            var keys = WorldPrivateDrawKeys.Create();
-            using var fixture = Fixtures.FreshServer(definition, drawKeys: keys);
-            var reads = keys.Reads;
-            for (var i = 0; i < 32 && !fixture.Server.SearchStatus()[0].Done; i++) { fixture.Step(); }
-            var status = fixture.Server.SearchStatus()[0];
-            Assert.True(status.Done);
-            Assert.True(status.Count > 0);
-            Assert.Equal(reads, keys.Reads);
-            return (status.BestScore, status.BestTarget, fixture.Server.Search.PositionKey(0));
-        }
-        var answer = Decide(11, 42);
-        Assert.Equal(1, answer.Target);
-        Assert.True(answer.Score > 52);
-        Assert.Equal(answer, Decide(37, 42));
-        Assert.NotEqual(answer.Score, Decide(11, 91).Score);
-    }
-
     // A judge rule draws 'roll' inside every candidate and the score reads it back, so the landed best score is the
     // candidate's draw at cursor 0 (each candidate scope rewinds the cursor). The live rule then snapshots that
     // score and draws the same site at the same cursor 0, which the live world has never advanced.

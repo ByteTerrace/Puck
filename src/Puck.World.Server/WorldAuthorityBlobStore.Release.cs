@@ -167,7 +167,7 @@ public sealed partial class WorldAuthorityBlobStore {
         }
         if (
             (currentRoot.VersionToken != protectedRoot.CapturedRootVersion) ||
-            (currentRoot.Root != protectedRoot.Root)
+            (currentRoot.WithoutSeed().Root != protectedRoot.Root)
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "authority root changed after the protected drain; no state was replaced");
         }
@@ -254,6 +254,7 @@ public sealed partial class WorldAuthorityBlobStore {
 
         if (!prepared.Outcome.Ok) { return prepared.Outcome; }
         var next = currentRoot.Root with {
+            DrawGeneration = operation.ReturnsToPreviousRelease ? checked(currentRoot.Root.DrawGeneration + 1) : currentRoot.Root.DrawGeneration,
             DefinitionHash = definitionHash,
             CheckpointHash = checkpointHash,
             CheckpointOrdinal = ordinal,

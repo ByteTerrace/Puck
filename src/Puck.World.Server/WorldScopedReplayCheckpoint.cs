@@ -12,4 +12,4 @@ public sealed record WorldScopedReplayCheckpoint(string Name, ArenaScopeSnapshot
     IReadOnlyList<(int Tick, IntentSubmission Intent)> Intents,
     IReadOnlyList<WorldRuleLatchEntry> RuleGateHeld,
     IReadOnlyList<WorldRuleLatchEntry> InteractionGateHeld,
-    IReadOnlyList<WorldRuleGroupEntry> RuleGroups, IReadOnlyList<(int Tick, PrivateDrawWord Word)> Words);
+    IReadOnlyList<WorldRuleGroupEntry> RuleGroups);

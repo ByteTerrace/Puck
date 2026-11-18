@@ -67,13 +67,6 @@ public sealed record Draw(
     [JsonIgnore]
     public PrivateDrawStream? Secret { get; internal init; }
 
-    /// <summary>Binds a private site to a hypothetical plan's seed, discarding any installed sampler.</summary>
-    public Draw ForSearch(ulong seed) {
-        if (!PrivateStream) { return this; }
-        var key = new ClosedBitset256(seed);
-        return this with { Secret = PrivateDrawStream.FromKey(key) };
-    }
-
     /// <summary>Returns the authored declaration for a recipient.</summary>
     public Draw WithoutStream() => Secret is null ? this : this with { Secret = null };
 }

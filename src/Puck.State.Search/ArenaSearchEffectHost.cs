@@ -16,7 +16,7 @@ namespace Puck.State;
 /// </remarks>
 public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
-    protected override IReadOnlyList<Draw?> CandidateDraws { get; }
+    protected override bool Hypothetical => true;
 
     /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
     public int SearchPly { get; set; }
@@ -34,9 +34,8 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog
     /// ordinal of <paramref name="arena"/>.</exception>
-    /// <param name="drawSeed">The private samples this plan imagines.</param>
     public ArenaSearchEffectHost(
-        StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null, ulong drawSeed = 0
+        StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null
     ) : base(
         arena: arena,
         documentSeed: documentSeed,
@@ -45,7 +44,7 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
         instanceIdentity: instanceIdentity,
         sites: sites,
         ticksPerSecond: ticksPerSecond
-    ) { CandidateDraws = arena.Rows.Select(row => row.Draw?.ForSearch(drawSeed)).ToArray(); }
+    ) { }
 
     /// <summary>Gets how many arms this host has dropped without firing.</summary>
     public long DiscardedArms { get; private set; }
