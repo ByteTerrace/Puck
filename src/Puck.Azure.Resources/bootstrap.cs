@@ -1,19 +1,19 @@
 #!/usr/bin/env dotnet
 #:sdk Microsoft.NET.Sdk
-#:package Azure.Deployments.Expression@1.765.0
+#:package Azure.Deployments.Expression@1.812.0
 #:package Azure.Identity@1.21.0
 #:package Azure.ResourceManager.Authorization@1.1.7
 #:package Azure.ResourceManager.ManagedServiceIdentities@1.4.1
 #:package Azure.ResourceManager.Resources@1.12.0
-#:package Microsoft.Graph@6.7.0
-#:package Microsoft.Kiota.Abstractions@2.1.2
+#:package Microsoft.Graph@6.10.0
+#:package Microsoft.Kiota.Abstractions@2.2.0
 #:package Microsoft.TeamFoundationServer.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.Client@20.256.2
 #:package Microsoft.VisualStudio.Services.ServiceEndpoints.WebApi@20.256.2
-#:package System.CommandLine@2.0.12
-#:package System.Configuration.ConfigurationManager@10.0.13
-#:package System.Drawing.Common@10.0.13
-#:package System.Security.Cryptography.Xml@10.0.13
+#:package System.CommandLine@3.0.0
+#:package System.Configuration.ConfigurationManager@11.0.0
+#:package System.Drawing.Common@11.0.0
+#:package System.Security.Cryptography.Xml@11.0.0
 /* PowerShell
     dotnet ./bootstrap.cs `
         --application-name '<application-name>' `

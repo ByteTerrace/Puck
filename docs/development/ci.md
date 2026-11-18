@@ -435,6 +435,52 @@ subject mismatch. The workflows run only once they are on `main`.
   service account's API usage, capped by `max-cost-usd`; the results upload as
   an artifact.
 
+## Dependency updates
+
+`deps.yml` (**Update dependencies**) runs every Monday morning (UTC) and on
+manual dispatch. Its one job installs the pinned SDK and the `wasm-tools`
+workload, Node.js and the candidate CLI, runs
+[`puck deps update`](../reference/cli.md#puck-depsupdate-external-dependencies)
+and then `puck deps submit`. The first moves the NuGet packages (through the
+lock policy of `puck locks`), the npm manifests and lock files, the SDK pin in
+`global.json` with every Dockerfile's SDK image, `.config/dotnet-tools.json`
+and the SHA pins of GitHub Actions. The second commits the result to the branch
+`deps/update` and opens or refreshes its pull request, whose description is the
+update's report: what moved from and to, and a **Held** table of newer stable
+versions that a declared range or exact pin kept back.
+
+- **One reviewable pull request.** The branch is rebuilt from the default branch
+  every run and force-pushed, so at most one dependency pull request is open
+  and each run replaces what the last proposed. A run that moves nothing
+  changes nothing. Merging is the owner's, as for any pull request; the
+  workflow never pushes the default branch.
+- **Weekly.** Often enough that a security fix waits days, rarely enough that
+  one pull request is reviewed in one sitting. Dependabot's security alerts
+  stay GitHub's own and arrive as their own branches; `puck deps update`
+  already takes what they propose, since it moves everything to the newest
+  stable version.
+- **Inside declared ranges by default.** A scheduled run never crosses a
+  declared major bound, so the proposal builds green unless a package broke
+  within its range. A dispatch with `major` also moves bounded NuGet ranges,
+  npm ranges, and actions and tools of another major; the **Held** table of a
+  scheduled run names what that dispatch would take. Exact NuGet pins carry their
+  reason in their project and are never moved by the verb.
+- **The same checks as a pull request.** A push or pull request made with the
+  workflow's own token starts no workflow, so `puck deps submit` dispatches the
+  formatting check and Release Azure's validation (`deploy` false) for the
+  branch, as the formatting submitter does for its commits. The pull request is
+  green or red on the builds and tests CI already runs, including the locked
+  restore of every project.
+- **Windows.** The job runs on the image `artifacts.yml` restores on, so lock
+  files are recorded where CI judges them.
+
+The repository setting **Allow GitHub Actions to create and approve pull
+requests** must be on for the job's token to open the pull request; the job
+needs no other secret. Nothing else pins a version outside what the verb
+covers except the Node.js version `setup-node` installs, the native toolchain
+pins in `.github/actions/setup-dxc` and `setup-toolchains`, and container base
+image tags other than the SDK's.
+
 ## Shared repository tooling
 
 Repository tools, verification projects, and the Azure bootstrap file app share

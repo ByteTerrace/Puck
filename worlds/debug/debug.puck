@@ -24,7 +24,9 @@ import "studio"
 import "controls"
 import "devices"
 import "desktop"
-// The free camera's body, ahead of every other inhabitant so it takes the population's highest slot (free-camera.puck).
+// The portal's host-mesh witness takes the added highest slot; every existing body keeps its index.
+import "portal-rows"
+// The free camera's body, ahead of the remaining inhabitants (free-camera.puck).
 import "free-camera"
 // The board game room's card, granary board, Alchemy, Go and Reversi tables, ahead of every other population so their
 // cards, cursors, tokens, stones and discs take the population's top slots (shapes.puck's cardBodies and
@@ -190,7 +192,7 @@ commands: galleryCommands
 // walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies)
+  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1)
 }
 
 placements {

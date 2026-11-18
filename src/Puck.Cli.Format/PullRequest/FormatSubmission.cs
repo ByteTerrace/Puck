@@ -209,31 +209,8 @@ public sealed class FormatSubmission {
         );
         Report(message: "Dispatched formatting and the shared Azure validation graph, including packages and documentation, for the updated branch.");
     }
-    private async Task<JsonNode> GetAsync(string path) {
-        using var response = await m_client.GetAsync(requestUri: path);
-
-        response.EnsureSuccessStatusCode();
-        return JsonNode.Parse(json: await response.Content.ReadAsStringAsync())!;
-    }
-    private async Task<JsonNode?> PostAsync(string path, JsonObject value) {
-        using var content = new StringContent(
-            content: value.ToJsonString(),
-            encoding: Encoding.UTF8,
-            mediaType: "application/json"
-        );
-        using var response = await m_client.PostAsync(
-            content: content,
-            requestUri: path
-        );
-
-        response.EnsureSuccessStatusCode();
-        var text = await response.Content.ReadAsStringAsync();
-
-        return (string.IsNullOrWhiteSpace(value: text)
-            ? null
-            : JsonNode.Parse(json: text)
-        );
-    }
+    private Task<JsonNode> GetAsync(string path) => CliGitHub.GetJsonAsync(client: m_client, path: path);
+    private Task<JsonNode?> PostAsync(string path, JsonObject value) => CliGitHub.SendJsonAsync(client: m_client, method: HttpMethod.Post, path: path, value: value);
     private static async Task<byte[]> ReadBoundedAsync(Stream stream) {
         using (stream) {
             using var output = new MemoryStream();

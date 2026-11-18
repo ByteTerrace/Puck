@@ -178,10 +178,19 @@ agent works in that mode by default, without asking:
   real mouse and foreground window) is left out through one list,
   `build/CoverageHardwareOnly.txt`.
 - The owner's velocity rulings:
-  - Edit to running: under 30 seconds from changing a C# or HLSL file in the
-    engine to seeing it in the running debug world.
-  - Cold bake: the debug world's meshes bake from an empty store in one minute
-    at most per backend on the lead machine.
+  - Waits are judged with judgement about who waits and why (the owner's
+    ruling). People tolerate an occasional long start, as they do a game's first
+    boot or a loading screen, but every wait between making a change and seeing
+    it costs an author or developer their flow, so the iteration loop matters
+    most and a long start still has to stay reasonable for what it is. The two
+    figures below exist to keep both honest, since without a forcing function
+    bake times once drifted to nearly an hour; they are not finish lines, and
+    a change is judged by what it does for the people waiting, not by whether
+    it crosses a number.
+  - Edit to running: about half a minute from changing a C# or HLSL file in
+    the engine to seeing it in the running debug world.
+  - Cold bake: about a minute for the debug world's meshes from an empty store,
+    per backend on the lead machine.
   - Fundamentals, driven by features (the owner's ruling): the engine's
     fundamental problems, those already known and those found along the way
     (frame time against the 60 FPS bar, build and bake times, duplicated
@@ -539,6 +548,7 @@ Pushing `main`, force-pushing, and deleting a remote branch that holds unmerged 
 Decide, don't ask, except for product/taste decisions and owner-only actions: those above, Azure deployment, package publication, or changes outside this repository.
 The owner's Azure subscription ID is not a secret and may appear in committed configuration (the owner's ruling); credentials, keys and tokens never do.
 End runs with **Needs you**, **Changed**, **Found**; state verification and unconfirmed findings.
+Anything a person reads (a plan, a report, a hand-back) passes [write for a person](docs/development/documentation.md#write-for-a-person-not-for-an-agent): a capable engineer new to the code follows it on one plain reading (the owner's ruling against "Claudese").
 
 Documents rot when they copy the code ([keep documents from rotting](docs/development/documentation.md#keep-documents-from-rotting)):
 - derive facts from the code or cite them by symbol, never by retyping them;

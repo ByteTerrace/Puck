@@ -26,6 +26,13 @@ ceiling painting (below).
 portal-garden`, `portal-night`, `portal-link` and `portal-fall` stand it before
 each painting, facing it.
 
+The brass diamond on a teal keel beside the linked paintings is the
+[portal row witness](portal-rows.puck): authored triangles and a field carried
+by one body. The tour holds it across the glass and withdraws it, then does the
+same with the rigid stand-in. They exercise clipping for host, in-place and
+copy rows; [the arrival memo](../../docs/plans/arrival-proportional.md#windowed-r1c-verification-request)
+owns the counter and capture checks.
+
 ## Walk in
 
 Issue each line through the console or the World's MCP attachment.

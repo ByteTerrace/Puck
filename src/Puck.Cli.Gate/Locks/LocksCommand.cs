@@ -11,7 +11,7 @@ public static class LocksCommand {
 
     private static readonly TimeSpan RestoreTimeout = TimeSpan.FromMinutes(minutes: 15);
 
-    private static GateStepResult Restore(string repositoryRoot, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
+    internal static GateStepResult Restore(string repositoryRoot, IReadOnlyList<string> arguments, CancellationToken cancellationToken) {
         var run = CliProcess.RunCaptured(
             arguments: arguments,
             cancellationToken: cancellationToken,

@@ -1,0 +1,71 @@
+name: Update dependencies
+run-name: Dependency update${{ inputs.major && ' (majors)' || '' }}
+
+# One run is one proposal: `puck deps update` moves every external dependency the repository pins (NuGet through the lock
+# policy, npm, the SDK pin and its images, .NET tools, GitHub Actions) to the newest stable version its declared range
+# admits, and `puck deps submit` puts the result on the `deps/update` branch and opens or refreshes its one pull request.
+# The scheduled run stays inside declared ranges, so a major version never arrives unreviewed and the proposal stays
+# green by default; a manual dispatch with `major` also moves range bounds, and the pull request's Held table names what
+# a scheduled run left behind. It runs weekly: often enough that a security fix waits days rather than weeks, rarely
+# enough that one pull request is reviewed in one sitting. Runs on the Windows image artifacts.yml restores on, so the
+# lock files are recorded where CI judges them, and the workload `Puck.World.Browser` locks needs is installed.
+# A push or pull request made with this workflow's token starts no workflow, so `puck deps submit` dispatches the
+# formatting check and the shared validation graph by name.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      major:
+        default: false
+        description: Also move past declared range bounds (bounded NuGet ranges, npm ranges, actions and tools of another major)
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  cancel-in-progress: false
+  group: deps-update
+
+env:
+  CI: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  update:
+    name: Update dependencies and propose the result
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    runs-on: windows-2025
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}\dotnet
+        name: Install the pinned .NET SDK
+        uses: ./.github/actions/setup-dotnet
+        with:
+          cache: "true"
+      - name: Install WebAssembly tools
+        run: dotnet workload install wasm-tools
+      - name: Install Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+      - name: Install the candidate CLI
+        uses: ./.github/actions/setup-puck
+      - env:
+          MAJOR: ${{ inputs.major && '--major' || '' }}
+        name: Update dependencies
+        run: puck deps update $MAJOR --output "$RUNNER_TEMP/deps-report.md"
+        shell: bash
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        name: Propose the update
+        run: puck deps submit --output "$RUNNER_TEMP/deps-report.md"
+        shell: bash
+    timeout-minutes: 60

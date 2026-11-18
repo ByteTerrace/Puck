@@ -1,5 +1,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -17,15 +19,23 @@ namespace Puck.SdfVm;
 /// <param name="CopyPlane">The plane the copy is clipped by: the counterpart's glass, its normal out of the door.</param>
 /// <param name="CopyScale">The uniform scale of that motion: the pair's scale, one for a pair of faces of one
 /// size.</param>
+[StructLayout(LayoutKind.Sequential, Pack = 4)]
 public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 Plane, Quaternion CopyRotation, Vector3 CopyTranslation, Vector4 CopyPlane, float CopyScale = 1f) {
+    /// <summary>Compares the complete clip value, including floating-point bits as the staged-draw oracle does.
+    /// The sequential, four-byte-packed value contains only four-byte-aligned numeric fields and no padding.</summary>
+    public bool SameStagedContent(in SdfSlotClip other) {
+        var value = this;
+
+        return Bitwise.Equal(left: in value, right: in other);
+    }
+
     /// <summary>Clips every draw of a list whose frame slot falls in a run to that run's glass and appends its carried
     /// copy. A draw in no run is left as it is.</summary>
     /// <param name="draws">The draws, clipped in place and extended with the copies.</param>
     /// <param name="clips">The runs.</param>
-    /// <param name="copiedRows">Optional source indices of appended copies, in append order.</param>
     /// <exception cref="ArgumentNullException"><paramref name="draws"/> or <paramref name="clips"/> is
     /// <see langword="null"/>.</exception>
-    public static void Apply(List<SdfMeshDraw> draws, IReadOnlyList<SdfSlotClip> clips, List<int>? copiedRows = null) {
+    public static void Apply(List<SdfMeshDraw> draws, IReadOnlyList<SdfSlotClip> clips) {
         ArgumentNullException.ThrowIfNull(argument: draws);
         ArgumentNullException.ThrowIfNull(argument: clips);
 
@@ -45,28 +55,28 @@ public readonly record struct SdfSlotClip(int FirstSlot, int SlotCount, Vector4 
             for (var clipIndex = 0; (clipIndex < clips.Count); clipIndex++) {
                 var clip = clips[clipIndex];
 
-                if (
-                    (slot < clip.FirstSlot) ||
-                    (slot >= (clip.FirstSlot + clip.SlotCount))
-                ) {
+                if (!clip.Contains(slot: slot)) {
                     continue;
                 }
 
                 draws[index] = (draw with { ClipPlane = clip.Plane });
-                copiedRows?.Add(item: index);
-                draws.Add(item: (draw with {
-                    CarryRotation = clip.CopyRotation,
-                    CarryScale = clip.CopyScale,
-                    CarryTranslation = clip.CopyTranslation,
-                    ClipPlane = clip.CopyPlane,
-                    Identity = Copies.GetValue(key: draw.Identity, createValueCallback: static of => new Copy(Of: of)),
-                    MotionIdentity = Copies.GetValue(key: (draw.MotionIdentity ?? draw.Identity), createValueCallback: static of => new Copy(Of: of)),
-                }));
+                draws.Add(item: clip.Carried(draw: draw));
 
                 break;
             }
         }
     }
+
+    internal bool Contains(int slot) => ((slot >= FirstSlot) && (slot < ((long)FirstSlot + SlotCount)));
+
+    internal SdfMeshDraw Carried(in SdfMeshDraw draw) => draw with {
+        CarryRotation = CopyRotation,
+        CarryScale = CopyScale,
+        CarryTranslation = CopyTranslation,
+        ClipPlane = CopyPlane,
+        Identity = Copies.GetValue(key: draw.Identity, createValueCallback: static of => new Copy(Of: of)),
+        MotionIdentity = Copies.GetValue(key: (draw.MotionIdentity ?? draw.Identity), createValueCallback: static of => new Copy(Of: of)),
+    };
 
     /// <summary>Returns the identity a carried copy was made from.</summary>
     /// <param name="identity">A draw's identity.</param>

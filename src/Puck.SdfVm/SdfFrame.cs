@@ -225,7 +225,7 @@ public sealed record SdfFrame(
     /// <summary>Gets the slot ranges drawn on both sides of a portal this frame (<see cref="SdfSlotClip"/>): the frame's
     /// producer fills it from the stamp pools whose slots the frame carries (a composition from every emitter's
     /// <see cref="ISdfSceneEmitter.SlotClips"/>), and the mesh bake's dressing clips each draw in a range and adds its
-    /// carried copy (<see cref="SdfSlotClip.Apply"/>). Empty when no body straddles a portal.</summary>
+    /// carried copy through <see cref="SdfMeshRows.Writer.SetClips"/>. Empty when no body straddles a portal.</summary>
     public IReadOnlyList<SdfSlotClip> SlotClips { get; set; } = [];
     /// <summary>Per-frame transforms for the scene's moving entities, indexed by dynamic-transform slot. Must supply
     /// at least the program's <see cref="SdfProgram.RequiredDynamicTransformCapacity"/> entries (the render frame

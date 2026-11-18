@@ -104,12 +104,13 @@ and reads host and transform journals through independent cursors. A failed
 publication remains pending; retry starts over through the table, including
 allocations the failed owner never remembered.
 
-R1c still replaces the conservative portal walk. It restores every owner's
-base draw, applies `SdfSlotClip.Apply`, writes through the writer and retains
-one run of carried copies. Its source-index mapping comes from `Apply` itself,
-including a row whose authored plane already equals the clip plane. The pose
-index (`SdfMeshDresser.IndexBinding`) is not a clip index: clips must reach host
-rows and rigid copies too.
+`SdfMeshRows.Writer.SetClips` compares the ordered clip values and visits the
+changed clips' old and new slot chains. The table derives each staged draw
+from its base and the first matching clip, and owns each clip's carried run.
+The slot index includes host, rigid-copy and in-place rows; the dresser's
+pose-binding index is independent. `SdfSlotClip.Apply` remains only in the
+rebuild oracle and laws. [R1c as built](#r1c-as-built) owns the details and
+[its request](#windowed-r1c-verification-request) the observations still owed.
 
 The copy comparisons (`SdfMeshPathBake.SameCopyLayout` and the dresser's input
 snapshot) remain the derivation over instances. The static trace scene still
@@ -297,13 +298,16 @@ as a group drawn in place is. The dresser's binding index stays for poses and
 is not what clips read.
 
 The writer's clip operation takes the frame's `SdfFrame.SlotClips` and compares
-them, by value and in order, with the list the table holds. An unchanged list
+them, by complete staged value and in order, with the list the table holds.
+`SdfSlotClip.SameStagedContent` includes floating-point bits, matching the draw
+oracle, and is shared with the host's retained clip-list comparison. An unchanged list
 costs that comparison. A clip that started, ended, changed or changed its place
 in the list walks the chains of its slots, the ones it held and the ones it
 holds, stages those rows again and journals them; staging a row asks again
 which clip is first for its slot, so overlapping runs resolve as they do today.
 A set of a clipped row's base draw, as when its body moves, stages the row and
-its carried copy inside that set.
+its carried copy inside that set when membership stands. Changed membership
+is reconciled by `SetClips` and again at `Publish`, before the rows are published.
 
 Each clipped row has one carried copy. A clip owns a run of copy rows, one per
 row it clips, allocated when it starts and freed when it ends. A copy row
@@ -424,8 +428,9 @@ dresser then reconciles from the inputs as a first dress does, in a fixed
 order, journaling everything. Allocating in that order from an empty table
 lays the rows out in the canonical order: the host's run, each finished group's
 run in the bake's order, the instances' own meshes, then each clip's copies in
-the order of the rows they copy. That is the order of today's rebuild, at
-today's rebuild's cost. Every row takes a new occupancy.
+the order of the rows they copy, with clips in frame-list order. This is a
+canonical row order across Worlds; the rebuild oracle compares contents as a
+multiset, independently of that order. Every row takes a new occupancy.
 
 **Free rows are bounded.** When free rows inside the extent pass a share of it
 (a policy constant, as `SdfMeshRegionArena.PackedShare` is for mesh words), the
@@ -826,9 +831,14 @@ is in `sdf.rows.check` unless the table names another reading.
 | Lockstep packing | `world.lockstep on`, which exists, across a hand-over that changes a count | Start overs on locked frames; and a locked frame with no allocation or free adds none | R1b |
 | A straddle by a host-drawn body and by a rigid copy | A tour stop that holds one of each across the gallery glass and then withdraws it | Clipped rows by owner kind (host, copy, in place), each non-zero; rows whose clip ended and that stage their base draw again | R1c |
 
-Which debug-world bodies are host-drawn and which are rigid copies at the
-gallery glass is **[unconfirmed]**; R1c's lane reads it from the world and adds
-the stop, with a body of the missing kind if one is missing.
+`worlds/debug/portal-rows.puck` supplies the missing host-mesh witness: the brass
+authored diamond is a host draw, and its teal field keel is an in-place draw.
+Its neutral timeline keeps it in `WorldCreationInstances`; the added highest
+population slot leaves existing indices intact. The idle fuzzer stand-in
+(`worlds/debug/stand-in.puck`, placed by `worlds/debug/fuzzer.puck`) is a rigid
+copy by `WorldRigidAssets.IsRigid`. The tour holds and withdraws each at the
+linked paintings. These are source-confirmed owner kinds; the straddle,
+its picks and its appearance still require the [windowed check](#windowed-r1c-verification-request).
 
 ### The device-free law
 
@@ -1056,8 +1066,7 @@ identity; it shares no observation predicate with the live history.
 The enforcing doors are therefore the writer for row mutation and its journal,
 the allocator ticket for stale frees, `StageMeshDraw` for record/absence/history,
 `Observe` for occupancy, `MeshStands` for landing, and the recorded row epoch for
-picks. The deliberate boundary is unchanged: until R1c, active or ended clips
-visit all base rows through the writer, with all carried copies in one run.
+picks. Clip derivation is now inside the writer, as [R1c](#r1c-as-built) describes.
 The table's `Live` enumeration counts whole walks; disable the diagnostic oracle
 when reading production whole-walk deltas, since the oracle intentionally reads
 every live row. GPU queue ordering and resource lifetime still owe the lead's
@@ -1188,6 +1197,139 @@ tick-exact lockstep stills at the same tick and pinned exposure. A stable locked
 frame adds no start over. The capture and lifetime review belong to the lead;
 this lane's finish line remains headless.
 
+### R1c as built
+
+The invariant is enforced by `SdfMeshRows.Writer`: callers set base draws and
+ordered clips, never staged draws. `SetStaged` and the dresser's portal scratch
+walk are gone. The table's private slot index is maintained by `Set` and `Free`,
+and includes every base row with a frame slot, independently of provenance.
+`StageBase` chooses the first clip holding that slot or the base draw itself;
+the latter restores authored planes and carries even when a plane already
+equalled the portal's. `SdfSlotClip.Contains` and `Carried` share slot membership
+and carried identities with the rebuild oracle; the oracle independently walks
+the original input list through `SdfSlotClip.Apply`.
+
+Each clip owns its carried allocation. Membership is indexed with `GpuRowIndex`
+too; a changed member list is sorted by source row and compared with source
+occupancies before the run is reused. An address freed and reused before the
+next publication therefore replaces its carried run too. Unchanged membership
+lets a base update stage only that row and its carried copy. `SetClips` completes
+membership reconciliation before the dresser's oracle; `Publish` also completes
+it for direct writer callers. The guarantee stops at the writer's own code and
+reflection, as the row-table guarantee does. No public operation accepts a
+derived draw for an existing source row.
+
+`WorldCreationInstances.PackTransforms` now publishes a host mesh's root
+`FrameSlot`; it keeps world material coordinates through `UsesRootMaterialFrame`
+so giving clipping its slot does not change its material frame. The debug
+world's `portal-row-witness` combines a brass authored diamond (host) and a teal
+field keel (in place) under a neutral timeline. It occupies the extra highest
+population slot, body 560; existing bodies, including the rigid stand-in 44,
+keep their indices. `worlds/debug/sweep.json` adds paired straddle/withdrawal
+stops for both witnesses.
+
+`SdfMeshRowsLawTests` covers all three source-owner kinds, an authored plane
+already equal to the portal's, unchanged clip values, base motion under a clip,
+glass accounting, overlapping and reordered clips, reslotting and source-address
+reuse, including a clip whose only difference is a signed-zero bit. It checks the retained contents against `SdfSlotClip.Apply` and checks
+packed records and generations through the existing upload-model device. The
+large unrelated owner stays untouched: clipping adds no whole-row walk and no
+over-chunk rebuild. The headless World confirms the authored population and
+body pose/stop commands. It stages no draw rows and does not register
+`world.rows`; row-work evidence comes from the upload-model laws. Windowed
+counters, picks and appearance remain the lead's verification below.
+
+#### Windowed R1c verification request
+
+Start `worlds/debug` through `puck_world_start` from the merged checkout, with
+`windowed: true`, once with `backend: directx` and once with `backend: vulkan`.
+Use the shared store and stop each through `puck_world_stop` after its captures
+complete. On that World's named Operator attachment:
+
+```text
+world.lockstep off
+world.rows check on
+world.cadence off
+debug.go portal-link
+world.wait ready 600
+world.wait bakes 600
+world.wait residency 600
+world.counters sdf.instances --json
+world.counters sdf.rows.check --json
+body.stop 560
+body.pose 51.5 0.05 34.5 90 0 0 560
+world.wait 30
+view.override camera look 54.5 1.2 33.3 51.33 1 34.5
+world.wait 2
+world.view.pick primary 0.5 0.5
+world.screenshot .claude/scratch/r1c-host-west.png presented 60
+world.wait captures 60
+view.override camera look 66.2 1.2 35.7 69.37 1 34.5
+world.wait 2
+world.view.pick primary 0.5 0.5
+world.screenshot .claude/scratch/r1c-host-east.png presented 60
+world.wait captures 60
+world.counters sdf.instances --json
+world.counters sdf.rows.check --json
+view.override camera look 54.5 1.2 33.3 51.33 1 34.5
+body.pose 53 0.05 34.5 90 0 0 560
+world.wait 30
+world.screenshot .claude/scratch/r1c-host-whole.png presented 60
+world.wait captures 60
+world.counters sdf.instances --json
+body.pose 54.5 0.05 32.5 90 0 0 560
+body.stop 44
+body.pose 51.5 0.05 34.5 90 0 0 44
+world.wait 30
+world.view.pick primary 0.5 0.5
+world.screenshot .claude/scratch/r1c-copy-west.png presented 60
+world.wait captures 60
+view.override camera look 66.2 1.2 35.7 69.37 1 34.5
+world.wait 2
+world.view.pick primary 0.5 0.5
+world.screenshot .claude/scratch/r1c-copy-east.png presented 60
+world.wait captures 60
+world.counters sdf.instances --json
+world.counters sdf.rows.check --json
+view.override camera look 54.5 1.2 33.3 51.33 1 34.5
+body.pose 53 0.05 34.5 90 0 0 44
+world.wait 30
+world.screenshot .claude/scratch/r1c-copy-whole.png presented 60
+world.wait captures 60
+world.counters sdf.instances --json
+world.rows status
+body.pose 56 0.05 -32 0 0 0 44
+view.override camera auto
+debug.go portal-link
+```
+
+Use backend-specific destinations for the second run. Each capture is a
+presented series, with authority advancing. Require `rows.clipped.host`,
+`rows.clipped.copy` and `rows.clipped.in-place` each to advance, then each
+corresponding `rows.restored` count to advance on withdrawal. Require nonzero
+dress/pack/ledger/seed comparisons and zero mismatches. `world.rows status`
+must name no failure. A nonadvancing owner kind means that kind's straddle was
+not exercised; fix its pose from the authored glass and body before accepting
+the check. Picks must identify the witness or its carried surface, not an
+unrelated wall; aim the pick from the inspected geometry if the center ray
+misses the narrow keel.
+
+The west painting's wall is `wingX0` plus `canvasProud` in `paintings.puck`,
+with counterpart on the east wall. The source and carried half must meet their
+respective glass without a lost part, and withdrawal must leave the whole body
+with no carried remnant. Inspect both sides' presented series for holes, pops
+and unstable clipping. Run the new paired tour stops as part of the R1b tour
+request too. Their existence supplies no appearance claim until inspected.
+
+For production work deltas, repeat the holds and withdrawals with
+`world.rows check off` and read `world.counters sdf.instances --json` before and
+after each, followed by 300 unchanged ticks. Unrelated owner rows remain
+standing; `rows.walked-whole` and `frames.over-chunk.rebuild` do not advance for
+clipping, and the steady window adds no `rows.clipped`, `rows.restored` or
+`rows.packed.portal`. Count an independently caused start over separately.
+The oracle is disabled for that window because its comparison deliberately
+walks all live rows. No queued timing is required by R0's crossing reading.
+
 ## R0: the counts and the rule
 
 Every staging passes `SdfWorldTables.StageMeshRegion` and packs through
@@ -1197,7 +1339,7 @@ cause. The original R0 readings selected R1b; the counts now describe the
 retained-row path and never decide simulation state or schedule work.
 
 **The cause of a packed record.** A published start over states rebuild or
-retry beside its captured serial. A portal visit states portal. Those causes
+retry beside its captured serial. A publication with clipped or restored rows states portal. Those causes
 apply only on the first consumption of that publication. Otherwise a row
 returning live is landing, a changed mesh name is hand-over, and the rest is
 pose. A cursor's conservative answer compares through the same staging door;
@@ -1207,7 +1349,7 @@ without a classified producer cause.
 | Cause | Holds when |
 |---|---|
 | `rebuild` | The dresser published a canonical start over |
-| `portal` | The conservative portal walk changed the record |
+| `portal` | The publication changed clipped rows, their carried copies, or restored base rows |
 | `retry` | A failed publication forced a start over |
 | `landing` | A row returns live from absence |
 | `cursor` | An unclassified conservative consumer refresh |
@@ -1223,6 +1365,9 @@ above):
 | `frames.<cause>` | Total | Stagings that packed a record under that cause |
 | `frames.over-chunk.<cause>` | Total | Stagings whose records under that cause number more than the threshold below |
 | `rows.owned.changed` | Total | Unique addresses gained, renamed or freed inside the published extent; counted inside row writes |
+| `rows.written.<owner>` | Total | Changed staged draws set through the writer, by `host`, `copy`, `in-place` or `carried`; frees remain in `rows.owned.changed` |
+| `rows.clipped.<owner>` | Total | Base rows derived under a clip, by `host`, `copy` or `in-place`; an unchanged clip list and unchanged bases add none |
+| `rows.restored.<owner>` | Total | Base rows revisited after their selected clip ended, by the same three owner kinds, including an already equal authored plane |
 | `dress.topology-builds.<reason>` | Total | Start overs by retry, free share, locked order or operator request |
 | `peak.rows.packed.<cause>` | Peak | The most records one staging packed under that cause |
 | `peak.rows.planned` | Peak | The peak of names submitted in one staging |
@@ -1390,8 +1535,8 @@ is a verification request to the lead.
 |---|---|---|---|---|
 | R1h. The hit door's checks | Owed | The resolver is built (`sdfMeshResolveHit`, the kernel kind `gpu.mesh-hits.rejected`, `sdf.instances.targets.stale`, `world.rows force hit-bound`). What remains is its windowed check | The resolver | Zero rejections and zero stale targets across the tour on both backends; rejections counted under the lever with no lost device on Vulkan under GPU-assisted validation |
 | R1a. The staged table is the producer's | Built; windowed check owed | [The implemented doors, levers and device-free evidence](#r1a-as-built) | `StageMeshDraw`; `GpuRowCursor`; the compiler's reader-only frame | 28 focused laws pass; the cold boot's captures, device counts and owed-frame timing on both backends remain the lead's request |
-| R1b. Rows | Headless implementation; windowed verification owed | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law. Until R1c the portal path stays as a visit of every row through the writer, its copies one run | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
-| R1c. Clips are derived | Small to medium | The slot index over every row, the staged draw computed from base and clips, a clip's copies as a run; the portal path's "everything" and the list rewrite deleted | The table's staging of a row | The cross-check through a crossing by a host-drawn body and by a rigid copy, with clipped rows of each owner kind and ended clips counted; a straddling body clipped on both sides and whole again after it withdraws |
+| R1b. Rows | Headless implementation; windowed verification owed | The row table and its writer; runs and occupancies; the arena's row operations; identity by row for picks; claims and glass counted in the writes; the whole-walk count; the start over, used for a failed publication, the free share and a locked frame, and the canonical flag; the scene key and the diagnostic scene as sets; the dress comparison, the ledger's occupancy and the law | The writer; `SdfMeshHistory.Observe` given the occupancy | The cross-check over the tour and a meadow arrival, both backends, with its forcing counts; a presented burst across a hand-over with the group in every frame (the capture [the residency packet](open-items.md#residency-and-streaming) still owes); `world.view.pick` across a hand-over and across the gallery portal; two Worlds' lockstep stills across a count change |
+| R1c. Clips are derived | Headless implementation; windowed verification owed | The table's slot index over every owner, staged draws derived from base and ordered clips, one carried run per clip; the dresser's portal walk and staged-write bypass deleted; source-confirmed host and rigid witnesses and paired tour stops | `SdfMeshRows.Writer.Set`, `SetClips`, `Free` and publication's copy reconciliation | [The exact straddle request](#windowed-r1c-verification-request): clipped and restored rows of each owner kind; both clipped halves and a whole body after withdrawal, on both backends |
 | R2. Piece rows | Large | With the visibility plan's V1b | That plan's | That plan's, and a hand-over's packed records |
 | S2. Clustered top level | Medium | Cells, clusters reused by equal sorted lists, cluster blocks in the arena, the prefix over cells | The cluster's constructor; the one scene publisher | The cross-check's ray set; the irradiance scene laws; a pack rebuilds no cluster; a scene change during an upload abandons without a lost device on Vulkan |
 
@@ -1436,6 +1581,8 @@ then S2.
 | `SdfMeshClaims` | Reused | `SdfMeshClaims.Move` per row, with a claim and a release for a row gained and lost, inside the writer |
 | `SdfDressedPickMap` | Reused as a row-table reader | Resolves owner provenance with the recorded identity epoch, without a per-change map |
 | `SdfSlotClip.Apply` | Replaced by a staged draw the table derives | The one unjournaled writer; its rule (the first clip whose run holds the slot) is kept |
+| `GpuRowIndex` | Reused for the table's slot and selected-clip membership chains | Allocate/set/free own membership; clip changes reach every source-owner kind without a second index implementation |
+| `SdfMeshRegion`'s former generic bit comparison | Moved to `Bitwise.Equal` in `Puck.Maths` | Draw, packer and clip comparisons share the same raw-representation operation; the clip value declares padding-free layout, and partial matrix comparisons remain their own field selections |
 | The dresser's slot index (`SdfMeshDresser.IndexBinding`) | Kept for poses, not used for clips | It lists only bindings drawn in place, and a clip reaches host draws and copies too |
 | The bake's product revision | Rejected as a change signal | Eight writers move it by hand; the dresser's comparison needs none |
 | The background work's readback (`SdfGpuWorkRecording.CopyToReadback`) | Reused for the device comparison | It is how a background job already answers with device bytes at a point in the queue |
@@ -1506,7 +1653,7 @@ then S2.
 |---|---|---|
 | Which changes the arrival's rebuilds were, and how many rows the changed owners held | R0, read by the lead | The counts by cause and the rule |
 | The scene's static draws, entries and prefix bytes at the meadow, and builds per arrival | R0 | The scene's counters and the rule |
-| Which debug-world bodies straddle the gallery glass as host draws and as rigid copies | R1c's lane | The world's documents and a pick at the glass; it adds what is missing to the tour |
+| The source-confirmed host-mesh and rigid witnesses straddle and withdraw correctly at the gallery glass | Lead's windowed R1c check | [The exact request](#windowed-r1c-verification-request): owner-kind clip/restore deltas, picks and presented series from both sides, both backends |
 | The cell size of 3d | S2's lane | Clusters built per scene change and traversal steps per ray, both counted |
 | Runs kept through live program reloads and responding placements | Lead's windowed R1b check | Compare occupancies of unaffected groups across `world.reload` and a responding placement toggle |
 | Whether the row free-share policy needs tuning | Lead's windowed R1b check | `SdfMeshRows.PackingFreeDivisor` bounds the holes; compare `start-over.pack` with `peak.rows.extent` over the arrival before changing it |

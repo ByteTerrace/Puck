@@ -104,6 +104,7 @@ half of these rules on every command, with no exemptions.
 | [`puck creation`](#puck-creationcreation-reads) | the offline twin of `creation.shape`: report a creation's shape budget/feature usage, or read each shape's law (exact, bound or uncertified distance, CPU and contact verdicts). |
 | [`puck declarations`](#puck-declarationsdeclaration-inventory) | declaration inventory read off the parsed syntax, with no build. |
 | [`puck decompile`](#the-puck-dsl-verbs) | renders a world JSON document back as `.puck` source—a one-time import, not a synced mirror; optionally resolves companion vector locks with `--embeddings`. |
+| [`puck deps`](#puck-depsupdate-external-dependencies) | `update` moves every external dependency the repository pins (NuGet through the lock policy, npm, the SDK pin and its images, .NET tools, GitHub Actions) to the newest stable version its declared range admits, and reports what moved and what it held; `submit` puts the result on a branch and opens or refreshes its pull request. The weekly workflow runs both. |
 | [`puck determinism`](#puck-determinismcross-host-determinism-attestation) | boots the scenarios of a determinism manifest headless in-process and records per-tick, per-system state hashes and document-level hashes into a strict stream; `determinism compare` names the first tick and system, or document hash, where two hosts' streams differ. |
 | [`puck disclosure`](#puck-disclosurethe-noninterference-harness) | boots one headless world per variant of a world's `<stem>.disclosure.json` fixture (and the first again as the control), drives the same non-operator principals with the same scripted and seeded inputs in each, and names every principal whose ordered stream of received events differs, where it first differs and at which doors. |
 | [`puck docs`](#puck-docsthe-documentation-family) | the documentation family: `build` stages the website reference, `links` checks relative links and cited repository paths, and `citations` checks the console-verb tokens skills and XML docs cite, including a live `Puck.World` console boot. |
@@ -4645,6 +4646,50 @@ Commit the rewritten lock files with the reference change that moved them.
 `--check` and `--update` together are refused. Exit codes: 0 every lock file
 matches its project (or was recorded); 1 drift was found or the restore failed;
 2 refused.
+
+---
+
+## `puck deps`—update external dependencies
+
+Every external dependency the repository pins moves through one verb, which the
+weekly workflow runs. One rule holds in every ecosystem: a dependency moves to the newest stable version its
+declared range admits, and `--major` also moves the range's major bound. What a
+range or pin kept back is reported as held, never moved silently.
+
+```sh
+puck deps update                  # move everything inside its declared ranges
+puck deps update --check          # compute it all, write nothing, exit 1 if anything would move
+puck deps update --major          # also move major bounds
+puck deps update --only npm --only actions --output report.md
+puck deps submit --output report.md   # branch, commit, pull request (CI only)
+```
+
+| Ecosystem (`--only`) | What moves | Held |
+|---|---|---|
+| `nuget` | Every project's floating ranges, through [`puck locks`](#puck-locksrestore-lock-files)' update (`LockFiles.Record`): lock files list the current project closure and a locked restore judges the result. A plain `Version="1.2.3"` and a file-based app's `#:package Id@Version` (no lock file) move to the newest stable version of their major. File-based app moves must restore, with failed batches retried one move at a time. | A bounded range (`[1.*,2.0)`) whose bound excludes a newer stable package; `--major` rewrites its bound. An exact pin (`[5.12.0]`) is a deliberate hold and is only reported; edit its project to move it. A file-based app move that fails restore is held. |
+| `npm` | Every `package-lock.json`'s `package.json` files, workspaces and `overrides` included. `^`, `~` and exact versions move to the newest stable version they admit (the `latest` tag when the range admits it, as npm picks), keeping their spelling; the lock file follows through `npm update --package-lock-only`. `node_modules` is untouched; `npm ci` installs the result. A spec that is not a plain version (a tarball URL) is left alone. | A `^0.x` range admits no new minor, nor any range a newer major. |
+| `sdk` | `global.json`'s SDK pin to the newest stable SDK of its major (Microsoft's release index; any feature band), its MSBuild SDK packages, and every Dockerfile's `dotnet/sdk` image tag to match the pin. | A stable SDK of a newer major: the target framework moves by hand. |
+| `tools` | The .NET tools of `.config/dotnet-tools.json`, from the NuGet feed. | A tool of a newer major. |
+| `actions` | Every `uses: owner/repo@<sha> # vX.Y.Z` pin of the workflows and composite actions: the newest stable `vX.Y.Z` tag of the action's repository (`git ls-remote --tags`, no token) replaces the SHA and the comment together. A floating major tag is never a pin. | An action of a newer major. |
+
+`--check` runs every step against the checkout and then puts every file back, so
+its report is exactly what a real run would write (the NuGet restore included);
+it exits 1 when anything would move. A run that fails leaves the tree as it
+found it. `--output` writes the report as Markdown, the body of the pull
+request.
+
+`puck deps submit` is the CI half: it commits the tracked changes as the
+Actions bot to the branch `deps/update` (`--branch`), force-pushes it, opens its
+pull request or refreshes the open one, and dispatches the formatting check and
+the shared validation graph for it, since a push made with the workflow's own
+token starts no workflow. The branch belongs to the verb: every run rebuilds it
+from the default branch, so at most one dependency pull request is open. With no
+change in the tree it changes nothing. It needs `GH_TOKEN` and the `GITHUB_*`
+variables of a workflow run. [CI](../development/ci.md#dependency-updates)
+owns the schedule and its permissions.
+
+Exit codes: 0 done (or `--check` found nothing to move); 1 `--check` found a
+move; 2 refused or failed.
 
 ---
 
