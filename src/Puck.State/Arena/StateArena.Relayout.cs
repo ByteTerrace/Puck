@@ -1,6 +1,20 @@
 namespace Puck.State;
 
 public sealed partial class StateArena {
+    // Used only on rows owned by another arena or expanded by a section's pool declarations.
+    private bool TryImportOwnedRows(IReadOnlyList<StateRow> rows, in ArenaTime time, out string reason) {
+        m_poolMutationDepth++;
+        try { return TryLoad(rows, time, out reason); }
+        finally { m_poolMutationDepth--; }
+    }
+
+    /// <summary>Loads the generated pool rows of a projected document section, including allocator and pair state.</summary>
+    public bool TryLoadPools(IStateSection section, in ArenaTime time, out string reason) {
+        var rows = StateCatalog.ExpandRows(section).Where(row =>
+            m_catalog.TryResolve(StateLane.Document, row.Name, out var address) && m_catalog.IsPoolRow(address.Ordinal)).ToArray();
+        return TryImportOwnedRows(rows, time, out reason);
+    }
+
     /// <summary>Rebuilds the arena over a re-declared row set, carrying every value across by row name and cell
     /// key.</summary>
     /// <param name="catalog">The catalog compiled from <paramref name="section"/>.</param>
@@ -63,15 +77,7 @@ public sealed partial class StateArena {
             return false;
         }
 
-        rebuilt.m_poolMutationDepth++;
-        var loaded = rebuilt.TryLoad(
-            reason: out reason,
-            rows: carried,
-            time: in time
-        );
-
-        rebuilt.m_poolMutationDepth--;
-        if (!loaded) {
+        if (!rebuilt.TryImportOwnedRows(carried, in time, out reason)) {
             return false;
         }
         if (!rebuilt.TryRestoreKeys(

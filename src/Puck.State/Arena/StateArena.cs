@@ -217,8 +217,7 @@ public sealed partial class StateArena {
             InitializeMemberLinks(rowOrdinal: ordinal, count: 0);
         }
 
-        m_poolMutationDepth++;
-        var loaded = TryLoad(
+        var loaded = TryImportOwnedRows(
             reason: out reason,
             rows: ((seeded is null)
                 ? m_rows
@@ -227,7 +226,6 @@ public sealed partial class StateArena {
             time: in time
         );
 
-        m_poolMutationDepth--;
         if (loaded) {
             // Construction is not a mutation, so nothing may look changed to a scheduler reading the arena for
             // the first time.

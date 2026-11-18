@@ -498,44 +498,55 @@ public sealed partial class WorldServer {
     // Every search job is one resolved plan and one judge over this server's own arena, admitted at install: a
     // judge whose rules the host cannot serve refuses the plan by name rather than at a tick.
     private void RebuildSearch(WorldDefinition definition) {
-        if (!WorldSearchCompilation.TryPlanAll(
-            compilation: m_ruleCompilation!,
-            judges: out var judgeRules,
-            plans: out var authored,
-            reason: out var planReason,
-            scores: out var scores
-        )) {
-            throw new InvalidOperationException(message: $"search failed to plan after validation: {planReason}");
+        static (SearchPlan[] Plans, CompiledRule[][] Rules, CompiledExpressionToken[]?[] Scores) Plan(WorldRuleCompilation compilation) {
+            if (!WorldSearchCompilation.TryPlanAll(compilation, out var plans, out var rules, out var scores, out var reason)) {
+                throw new InvalidOperationException($"search failed to plan its observed position: {reason}");
+            }
+            return (plans, rules, scores);
         }
 
-        var plans = new ArenaSearchPlan[authored.Length];
-        var judges = new IArenaSearchJudge[authored.Length];
-        var host = new ArenaSearchEffectHost(
-            arena: m_arena,
-            documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
-            dynamics: definition.Dynamics,
-            generators: definition.Generators,
-            instanceIdentity: InstanceIdentity,
-            sites: m_drawSites,
-            ticksPerSecond: definition.SimulationRateHz
-        );
+        var jobs = definition.Search.Rows;
+        var plans = new ArenaSearchPlan[jobs.Count];
+        var judges = new IArenaSearchJudge[jobs.Count];
+        var project = jobs.Count > 0 && m_arena.Rows.Any(r => r.CellVisibility || r.Visibility is { IsPublic: false } || r.Draw?.PrivateStream == true);
+        var shared = project || jobs.Count == 0 ? default : Plan(m_ruleCompilation!);
+        m_searchViews.Clear();
+        for (var index = 0; index < jobs.Count; index++) {
+            var row = jobs[index];
+            var arena = m_arena;
+            var programs = shared;
+            if (project) {
+                var view = new WorldSearchPosition(definition, m_arena, row, m_ruleHost.Time);
+                m_searchViews.Add(view);
+                arena = view.Arena;
+                programs = Plan(WorldRuleCompilation.Compile(view.Definition));
+            }
+            var host = new ArenaSearchEffectHost(
+                arena: arena,
+                drawSeed: row.DrawSeed,
+                documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
+                dynamics: definition.Dynamics,
+                generators: definition.Generators,
+                instanceIdentity: InstanceIdentity,
+                sites: m_drawSites,
+                ticksPerSecond: definition.SimulationRateHz
+            );
 
-        for (var index = 0; (index < authored.Length); index++) {
             if (!ArenaSearchPlan.TryResolve(
-                catalog: m_arena.Catalog,
-                drawSeed: 0UL,
-                plan: authored[index],
+                catalog: arena.Catalog,
+                drawSeed: row.DrawSeed,
+                plan: programs.Plans[index],
                 reason: out var resolveReason,
                 resolved: out var resolved
             )) {
-                throw new InvalidOperationException(message: $"search '{authored[index].Name}' does not resolve against the arena: {resolveReason}");
+                throw new InvalidOperationException(message: $"search '{row.Name}' does not resolve against the arena: {resolveReason}");
             }
 
             plans[index] = resolved;
             judges[index] = new RuleArenaSearchJudge(
                 host: host,
-                rules: judgeRules[index],
-                score: scores[index]
+                rules: programs.Rules[index],
+                score: programs.Scores[index]
             );
         }
 
@@ -715,12 +726,14 @@ public sealed partial class WorldServer {
     // The search jobs advance right after the rules, so a job judges the position this tick's rules settled and a
     // finished job's outputs are delivered with the same tick.
     private ulong m_searchTick;
+    private readonly List<WorldSearchPosition> m_searchViews = [];
 
     /// <summary>Advances every search job, delivering a landed job's writes with the same tick.</summary>
     /// <param name="tick">The simulation tick.</param>
     [Replaces(root: typeof(StateArena))]
     public void StepSearch(ulong tick) {
         m_searchTick = tick;
+        RefreshSearchViews();
 
         if (m_search.Step(
             apply: m_searchApply,
@@ -730,6 +743,10 @@ public sealed partial class WorldServer {
             m_document.DeliverPending();
         }
     }
+    internal void RefreshSearchViews() {
+        foreach (var view in m_searchViews) { view.Refresh(m_ruleHost.Time); }
+    }
+
     /// <summary>Lists every search job's progress.</summary>
     public IReadOnlyList<ArenaSearchStatus> SearchStatus() {
         var status = new ArenaSearchStatus[m_search.Count];

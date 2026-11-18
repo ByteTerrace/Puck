@@ -508,8 +508,6 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         );
         writer.WriteNullableString(value: section.AuthorityIdentity);
-        writer.WriteNullableString(section.DrawAuthority);
-        writer.WriteInt64(section.DrawGeneration);
         WriteDrawPositions(writer, section.DrawPositions);
         WriteDrawPositions(writer, section.BaseDrawPositions);
 
@@ -823,15 +821,10 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
 
-        var drawAuthority = reader.ReadNullableString("private draw authority", 64);
-        var generation = reader.ReadInt64();
-        if (generation < 0 || (drawAuthority is not null && !Puck.Assets.ContentPin.TryParseHex(drawAuthority, out _))) {
-            reader.Fail(WireRefusal.PayloadMalformed, "invalid private draw authority reference or generation");
-        }
         var positions = ReadDrawPositions(ref reader);
         var basePositions = ReadDrawPositions(ref reader);
         return new WorldServerCheckpoint(
-            DrawAuthority: drawAuthority, DrawGeneration: generation, DrawPositions: positions, BaseDrawPositions: basePositions,
+            DrawPositions: positions, BaseDrawPositions: basePositions,
             Arena: arena,
             AuthorityIdentity: authorityIdentity,
             BaseDefinitionJson: baseDefinitionJson,

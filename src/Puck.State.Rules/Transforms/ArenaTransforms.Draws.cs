@@ -9,10 +9,10 @@ public static partial class ArenaTransforms {
 
         if (
             (((uint)rowOrdinal) >= ((uint)context.Arena.Rows.Count)) ||
-            (context.Arena.Rows[rowOrdinal].Draw is not { Timing: not DrawTiming.Boot } declared) ||
+            (context.DrawAt(rowOrdinal) is not { Timing: not DrawTiming.Boot } declared) ||
             (context.Arena.Layout[rowOrdinal].Kind != CellKind.Int) ||
             !GeneratorEngine.TryResolveExecutableSource(
-            draw: context.Hypothetical ? declared.WithoutStream() : declared,
+            draw: declared,
             generator: out var generator,
             generators: context.Generators,
             reason: out _

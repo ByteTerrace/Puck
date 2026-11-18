@@ -23,12 +23,6 @@ public sealed partial class ArenaSearch {
         var cells = plan.CellCount;
         var work = plan.Work;
 
-        if (job.TokenCount != job.Legal.Length) {
-            job.Running = false;
-
-            return spent;
-        }
-
         // A chance node at the root replaces the whole root's move choice, so the root is the chance ply and the
         // job's one pass searches beneath it with whatever score its judge reads.
         var chanceAt = (plan.Chance?.AtDepth ?? -1);

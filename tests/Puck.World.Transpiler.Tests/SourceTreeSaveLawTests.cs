@@ -66,6 +66,49 @@ public sealed class SourceTreeSaveLawTests {
     private static JsonObject Row(JsonObject document, string id) => Rows(document: document).OfType<JsonObject>().Single(predicate: row => (row["id"]!.GetValue<string>() == id));
 
     [Fact]
+    public void PrivateHandsAndDeckShareOneDurableSaveEvenWhenGeneratedInAnImport() {
+        using var files = new TemporaryDirectory();
+        const string Cards = """
+            state { world {
+              row { name:"tokens" kind:Int cells [{key:"a",value:1},{key:"b",value:2}] }
+              pile deck of tokens capacity(2) { a b }
+              for n in ["hand"] {
+                row { name:n kind:Bool capacity:2 domain:keysOf(row:tokens, ordered:true) }
+              }
+            } }
+            """;
+        var module = files.WriteText("cards.puck", Cards);
+        var root = files.WriteText("table.puck", WorldSources.Header + """
+            import "cards"
+            state { world {
+              row { name:"entropy" kind:Int draw { privateStream:true timing:Event generator { source:StreamDraw } } }
+            } }
+            """);
+        var authored = Live(root, _ => { });
+        WorldDefinition Deal(bool second) => authored.WithWorldState(authored.AuthoredState.Select(row => row.Name.Value switch {
+            "deck" => row with { Cells = second ? [] : [new(CellName.Parse("b"), CellValue.Bool(true))] },
+            "hand" => row with { Cells = second ? [new(CellName.Parse("a"), CellValue.Bool(true)), new(CellName.Parse("b"), CellValue.Bool(true))] :
+                [new(CellName.Parse("a"), CellValue.Bool(true))] },
+            _ => row
+        }).ToArray());
+        Assert.True(WorldSourceSave.TrySave(Deal(false), root, out _, out var reason), reason);
+        var save = WorldDefinitionFileSource.SourceSavePath(root);
+        var committed = File.ReadAllBytes(save);
+        if (OperatingSystem.IsWindows()) {
+            using var held = File.Open(save, FileMode.Open, FileAccess.Read, FileShare.Read);
+            Assert.Throws<IOException>(() => WorldSourceSave.TrySave(Deal(true), root, out _, out _));
+        } else {
+            using var interrupted = Puck.Confinement.AtomicFile.StageAllBytes(save, WorldDefinitionSerialization.SerializeBeside(Deal(true), root));
+        }
+        Assert.Equal(committed, File.ReadAllBytes(save));
+        Assert.Equal(Cards, File.ReadAllText(module));
+        Assert.True(WorldDefinitionLoader.TryLoadFileForAdmission(root, out var loaded, out _, out reason, keys: WorldDrawSampler.Preview), reason);
+        var rows = loaded!.Definition.AuthoredState;
+        Assert.Equal("b", Assert.Single(rows.Single(r => r.Name.Value == "deck").Cells!).Key.Value);
+        Assert.Equal("a", Assert.Single(rows.Single(r => r.Name.Value == "hand").Cells!).Key.Value);
+    }
+
+    [Fact]
     public void EachEditLandsInTheSourceThatAuthorsIt() {
         using var files = new TemporaryDirectory();
         var root = files.WriteText(name: "world.puck", text: Root);
@@ -84,8 +127,8 @@ public sealed class SourceTreeSaveLawTests {
         Assert.Equal(expected: (new FileInfo(fileName: props).Length + new FileInfo(fileName: root).Length), actual: bytes);
         Assert.Equal(expected: Props.Replace(oldValue: "let lampX = 4", newValue: "let lampX = 5", comparisonType: StringComparison.Ordinal), actual: File.ReadAllText(path: props));
         Assert.Equal(
-            actual: File.ReadAllText(path: root),
-            expected: Root
+            actual: File.ReadAllText(path: root).ReplaceLineEndings("\n"),
+            expected: Root.ReplaceLineEndings("\n")
                 .Replace(oldValue: "let height = 1.5", newValue: "let height = 2", comparisonType: StringComparison.Ordinal)
                 .Replace(oldValue: "  placement \"spare\" {\n    prototype: \"post\"\n    position [3, 0, 3]\n  }\n", newValue: "", comparisonType: StringComparison.Ordinal)
                 .Replace(oldValue: "    position [0, height, 0]\n  }\n}", newValue: "    position [0, height, 0]\n  }\n  placement \"added\" {\n    prototype: \"post\"\n    position [9, 0, 9]\n  }\n}", comparisonType: StringComparison.Ordinal)

@@ -552,7 +552,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
-        DrawKeys = drawKeys ?? WorldPrivateDrawKeys.Missing;
+        DrawKeys = drawKeys ?? WorldPrivateDrawKeys.Create();
 
         if ((admission is not null) && !admission.AppliesTo(definition: definition, machines: machines.ValidationCatalog)) {
             throw new ArgumentException(message: "The admission result belongs to a different definition or machine catalog.", paramName: nameof(admission));

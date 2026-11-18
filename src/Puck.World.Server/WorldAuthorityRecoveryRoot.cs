@@ -75,7 +75,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
             operationId,
             root.VersionToken,
             DateTimeOffset.UtcNow,
-            WorldAuthorityRootCodec.SerializeAuthorityState(root.WithoutSeed().Root)
+            JsonSerializer.SerializeToNode(root.Root, WorldAuthorityRootCodec.Options)!.AsObject()
         ),
         WorldAuthorityRootCodec.Options
     );

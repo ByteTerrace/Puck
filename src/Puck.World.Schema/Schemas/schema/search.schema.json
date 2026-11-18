@@ -385,6 +385,20 @@
               "null"
             ],
             "default": null
+          },
+          "actor": {
+            "description": "The recipient whose information this job may use. Omitted jobs use public information.",
+            "default": null,
+            "title": "Principal",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "drawSeed": {
+            "description": "The independent seed for hypothetical draws and hidden values.",
+            "type": "integer",
+            "default": 0
           }
         },
         "required": [

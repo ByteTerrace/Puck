@@ -12,24 +12,12 @@ namespace Puck.World;
 /// <see cref="WorldSessionLevers.Fold"/> folds the presentation levers. Both keep every section the session left alone
 /// as its author wrote it, so the snapshot of an untouched world is its authored document.</summary>
 internal static class WorldSaveSnapshot {
-    /// <summary>Writes the authored document and its local authority continuation before compacting the journal.</summary>
+    /// <summary>Writes the live document before compacting the journal.</summary>
     internal static bool TryWrite(WorldDefinition snapshot, string target, WorldDefinitionSource source, WorldServer server,
-        WorldMachineCatalog catalog, string catalogFingerprint, WorldStateRoot stateRoot, out string result) {
-        using var authoritySave = WorldDrawSave.BeginSave(stateRoot, target, source, server, snapshot);
-        try {
-            return WriteDocument(snapshot, target, source, server, catalog, catalogFingerprint, out result);
-        } catch (Exception error) when (authoritySave is not null && error is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or NotSupportedException or System.Text.Json.JsonException) {
-            result = $"authority generation saved before the document write failed: {error.Message}";
-            return false;
-        }
-    }
-
-    private static bool WriteDocument(WorldDefinition snapshot, string target, WorldDefinitionSource source, WorldServer server,
         WorldMachineCatalog catalog, string catalogFingerprint, out string result) {
         if (target.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
             if (!WorldSourceSave.TrySave(definition: snapshot, path: target, catalog: catalog, catalogFingerprint: catalogFingerprint,
                 bytesWritten: out var bytes, written: out var sources, reason: out result)) {
-                if (snapshot.AuthoredState.Any(row => row.Draw?.PrivateStream == true)) { result = $"authority generation saved before the document writer refused: {result}"; }
                 return false;
             }
             var changes = sources.Count == 0 ? "unchanged" : $"{bytes} bytes in {string.Join(", ", sources.Select(WorldDocumentLabel.Of))}";
