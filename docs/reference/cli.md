@@ -4604,7 +4604,7 @@ beside the project), and every restore is locked: `Directory.Build.props` sets
 never rewrites a lock file, so a package or project reference change fails the
 build that made it with NU1004, naming the project, rather than rewriting the
 lock file silently and failing CI's `dotnet restore Puck.slnx --locked-mode`
-later. Package versions float (`[10.*, )`), so locking also makes taking a newer
+later. Package versions float (`[11.*, )`), so locking also makes taking a newer
 package an explicit step.
 
 ```sh

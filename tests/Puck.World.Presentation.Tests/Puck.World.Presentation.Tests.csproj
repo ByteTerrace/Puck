@@ -55,7 +55,6 @@
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
         <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
-        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
         <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
         <Compile Include="../Shared/World/FakeGraphInstances.cs" Link="World/FakeGraphInstances.cs" />
         <Compile Include="../Shared/World/Fixtures.Server.cs" Link="World/Fixtures.Server.cs" />

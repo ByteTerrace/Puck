@@ -4,24 +4,24 @@
     "net11.0": {
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[11.0.0-rc.3.26522.148, )",
-        "resolved": "11.0.0-rc.3.26522.148",
-        "contentHash": "SWnTMx96mhBr9LCOySJg1ETlEFFHVsPGdVT02JnYhtqk1+Vke1J7RU3VkKwEiErBr4FJ42Uu4k7GdOtkRuvs/Q=="
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
       "Microsoft.Extensions.DependencyInjection": {
         "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "2LzcuVjemeXR+WdY9wGIr8iGb7fYsDAit+IScxXX2XJnX0b++mWcE/WO6fEGIqhdMfSQM2ZS5JGMHYZix7YXZg=="
+        "resolved": "11.0.0",
+        "contentHash": "KygQMITBDDPXw7+AAgdwQvVAaTXuDsc1iCAuvhO73ERxKX+d92cdbgZmpoYF7DIUq2hfs/yO2KD87uIreRy3MA=="
       },
       "System.CommandLine": {
         "type": "Transitive",
-        "resolved": "2.0.14",
-        "contentHash": "15fyVO4aG6poR6IKmhM74zf7PUzaU6FZAGm2d3SQSO9yIyGAeo44e6t9qeKjjaqyMEqYdqcb2G1B0gpLoDU2cA=="
+        "resolved": "3.0.0",
+        "contentHash": "swNpSTl0iYJeBuvYYfaY+VxzZ5YC8wklwkqDCNOq2aTQqJzjauJfh/O3Zw93nwxspWrxvZTjT45f8VPR0ParEA=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "lVqovhCt3HlZe7ONG5ydaj6BYwYI004gldVfMMkJl/lR5ueeCtWNpW4nejOX75sPmzm8vXCxB69GqwHaYCnyUQ=="
+        "resolved": "11.0.0",
+        "contentHash": "U+Bv2qCYt6eONi+arSP0QIp4uTO6os6uceBsqiAwruZ+Wo2HrRhO/0tj38M9URJtS+4DhAtT3ka2TGNFYsnhyQ=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
@@ -36,7 +36,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.IO.Hashing": "[10.*, )"
+          "System.IO.Hashing": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Confinement": {
@@ -48,7 +48,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+          "Microsoft.Extensions.DependencyInjection": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.HumbleGamingDeck.Forge": {
@@ -65,7 +65,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.DependencyInjection": "[10.*, )"
+          "Microsoft.Extensions.DependencyInjection": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Maths": {
@@ -77,7 +77,7 @@
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Machines": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
+          "System.CommandLine": "[3.*, )"
         }
       }
     }

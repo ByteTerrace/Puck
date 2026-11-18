@@ -11,7 +11,7 @@
         <RootNamespace>Puck.Commands</RootNamespace>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- Every enum in the binding document carries [JsonConverter(typeof(StrictEnumConverter<T>))] at its own

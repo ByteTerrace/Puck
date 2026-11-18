@@ -64,15 +64,15 @@
       },
       "System.Security.Cryptography.Pkcs": {
         "type": "Direct",
-        "requested": "[10.0.13, 11.0.0)",
-        "resolved": "10.0.13",
-        "contentHash": "a+EovgC1fBnwdlQ6cn3j4JFBfKqiFaFvoAhjisOoSvazLAcIznaBzPQP0oYnvccmeXfqUH1KebVZOxSeH6rMaw=="
+        "requested": "[11.*, 12.0.0)",
+        "resolved": "11.0.0",
+        "contentHash": "G8mTjSWrwaPJ2bJRbKuI4ZqdKUYcANK0KtNH3s8/va3nXiF/Pk/yhv2R17rv5PBKJO5+ZXDyhTnZXh0W9v0J8w=="
       },
       "System.Security.Cryptography.Xml": {
         "type": "Direct",
-        "requested": "[10.0.13, 11.0.0)",
-        "resolved": "10.0.13",
-        "contentHash": "v6/GHhLaHkuN/ISgbKzBeyC7TP7S6Qm/dVyKA+p0ay9nlJyLif+spozjAGclY/FRIv2TC+KNQCo7dSNmupvWtQ=="
+        "requested": "[11.*, 12.0.0)",
+        "resolved": "11.0.0",
+        "contentHash": "RfXWeKcljjYZx5l/4i+6V4G8jP690jbHDhg4Wa/tNdNWvXn/c0WyyQySbpYLTuXB0fqzfttPoBCWMc8DFJNQzA=="
       },
       "Apache.Arrow": {
         "type": "Transitive",

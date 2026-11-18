@@ -4,43 +4,43 @@
     "net11.0": {
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[11.0.0-rc.3.26522.148, )",
-        "resolved": "11.0.0-rc.3.26522.148",
-        "contentHash": "SWnTMx96mhBr9LCOySJg1ETlEFFHVsPGdVT02JnYhtqk1+Vke1J7RU3VkKwEiErBr4FJ42Uu4k7GdOtkRuvs/Q=="
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
       "Microsoft.Extensions.AI": {
         "type": "Transitive",
-        "resolved": "10.11.0",
-        "contentHash": "PtgeWqaC3gQ8/saMgkUiwKeqCBPfDOcjfqDLcXtwJI//pu79gYZqUMPOh7/bFdFWcJihP/rWq9sgQd2xQtEP0A==",
+        "resolved": "11.0.0",
+        "contentHash": "Vn8jo7RCYS3+tD7XOYgwtAPtd6CZIfIpzE20wGkbehAezj+tRY0lZWnEgehP0bLEAno/L54aCa4GnretNoGkXQ==",
         "dependencies": {
-          "Microsoft.Extensions.AI.Abstractions": "10.11.0",
-          "System.Numerics.Tensors": "10.0.13"
+          "Microsoft.Extensions.AI.Abstractions": "11.0.0",
+          "System.Numerics.Tensors": "11.0.0"
         }
       },
       "Microsoft.Extensions.AI.Abstractions": {
         "type": "Transitive",
-        "resolved": "10.11.0",
-        "contentHash": "h4DX/TdJU4fk1GGaf19n6Kujkj6VXbGeL4UEOsQ8+ZJC5fVApPauokCtvBP684BYbczUYZQNfo1mbmyHG4WVSg=="
+        "resolved": "11.0.0",
+        "contentHash": "UYZTudmTrGykWIRzcO/TKauTx/+L/h4MYpUBODCG7aIybRVkv2y6uhVwG6UHRS6uTzRqg0K8IJprC9/QhMZGsw=="
       },
       "System.CommandLine": {
         "type": "Transitive",
-        "resolved": "2.0.14",
-        "contentHash": "15fyVO4aG6poR6IKmhM74zf7PUzaU6FZAGm2d3SQSO9yIyGAeo44e6t9qeKjjaqyMEqYdqcb2G1B0gpLoDU2cA=="
+        "resolved": "3.0.0",
+        "contentHash": "swNpSTl0iYJeBuvYYfaY+VxzZ5YC8wklwkqDCNOq2aTQqJzjauJfh/O3Zw93nwxspWrxvZTjT45f8VPR0ParEA=="
       },
       "System.Formats.Cbor": {
         "type": "Transitive",
-        "resolved": "10.0.15",
-        "contentHash": "8EBB814RXFnm/Klsuil8A6r+n6zvz4L/rQ1ROamxDZDt8lIjUl0tbSGlsYzea1jr/4V3Q6TNQbWfU/C8tjwPDQ=="
+        "resolved": "11.0.0",
+        "contentHash": "2ULEPU67LRt4YVwBnCk1OhjsJspIBzg1JlDkN2hnZm9im3fC9bSbVQorLraOIcLMlA6/8eWQG1fjTpurHkIFZw=="
       },
       "System.IO.Hashing": {
         "type": "Transitive",
-        "resolved": "10.0.14",
-        "contentHash": "lVqovhCt3HlZe7ONG5ydaj6BYwYI004gldVfMMkJl/lR5ueeCtWNpW4nejOX75sPmzm8vXCxB69GqwHaYCnyUQ=="
+        "resolved": "11.0.0",
+        "contentHash": "U+Bv2qCYt6eONi+arSP0QIp4uTO6os6uceBsqiAwruZ+Wo2HrRhO/0tj38M9URJtS+4DhAtT3ka2TGNFYsnhyQ=="
       },
       "System.Numerics.Tensors": {
         "type": "Transitive",
-        "resolved": "10.0.13",
-        "contentHash": "E4JC7KcY4j1yx9uy8tVsHlGThnwLdUWtUz6aLHCqbN/jbtwbwbZgnVEF9atUr/7ynFCbo8Rbij056Y9bWM9ALg=="
+        "resolved": "11.0.0",
+        "contentHash": "thx6y1hMzB6LumB/aLcZoLHWq8wr+dbldk/FiNghyT+4ynxo9u2oCTFfb5iDMDG6hykDXLorXuaf4EPEij2BBg=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",
@@ -55,13 +55,13 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.IO.Hashing": "[10.*, )"
+          "System.IO.Hashing": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
-          "System.Formats.Cbor": "[10.*, )"
+          "System.Formats.Cbor": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Audio": {
@@ -76,7 +76,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
+          "System.CommandLine": "[3.*, )"
         }
       },
       "ByteTerrace.Puck.Confinement": {
@@ -87,7 +87,7 @@
         "dependencies": {
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.State": "[0.1.0-alpha, )",
-          "Microsoft.Extensions.AI": "[10.*, )"
+          "Microsoft.Extensions.AI": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Hosting": {
