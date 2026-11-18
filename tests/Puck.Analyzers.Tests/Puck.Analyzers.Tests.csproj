@@ -18,6 +18,8 @@
     <ItemGroup>
         <!-- The state holders' own sources, compiled in memory by the door cases: a refusal there is the real door's,
              and this suite takes no reference on Puck.State that every other harness compilation would then see. -->
+        <Using Include="Puck.Testing" />
+        <Compile Include="../Shared/FixtureCompiler.cs" Link="FixtureCompiler.cs" />
         <EmbeddedResource Include="../../src/Puck.State/Versions/*.cs" LogicalName="DoorSources.%(Filename)%(Extension)" />
     </ItemGroup>
     <ItemGroup>
