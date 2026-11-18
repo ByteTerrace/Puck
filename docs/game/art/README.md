@@ -90,9 +90,13 @@ most two such rounds per wave. A failure is a defect fixed at its cause,
 including the rendering feature or engine path the work needs: when the cause
 is an engine limit, the builder stops sculpting around it and the gap goes to
 the front of its owning plan ([Puck's purpose](../../../AGENTS.md#pucks-purpose)).
-Work that still misses the bar may land only when it is a material improvement
-on what the tree holds, with its failures and the gaps behind them stated in
-the commit; it is not thereby called a pass.
+Only such work, a creation whose remaining failures rest on a named engine
+limit, may land while it still misses the bar, and only when it is a material
+improvement on what the tree holds, with its failures and the gaps behind them
+stated in the commit; it is not thereby called a pass. Any other look change
+that misses the bar (a global lighting retune, a palette or treatment pass)
+lands only when its captures meet the reference, never on relative
+improvement alone.
 The lead puts current captures beside their references before the owner on a
 regular cadence ([orchestration](../../../.claude/skills/orchestration/SKILL.md#land-in-batches)).
 

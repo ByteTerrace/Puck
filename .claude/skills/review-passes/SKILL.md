@@ -65,8 +65,11 @@ Use [verification](../verification/SKILL.md#what-uses-the-gpu) for private CLI
 copies, granted GPU legs and heavy-work leases.
 
 - A findings-only pass needs no tree of its own: it reads the revisions the
-  brief names through Git's object commands. A findings-only Codex lane still
-  gets a worktree the lead creates, for the fallback findings path
+  brief names through Git's object commands. A findings-only Codex lane
+  launched read-only (below) writes no file, so it returns its findings in
+  full as its final message and the lead saves them from the lane log; one
+  launched with write access gets a worktree the lead creates, for the
+  fallback findings path
   [lane work](../orchestration/references/lane-work.md#delegated-work) names.
 - Run a review-and-fix pass in a worktree of its own, detached at the lane's
   head, so the author's branch and worktree stay untouched and the author keeps working. Push
@@ -148,8 +151,12 @@ Write the parts in this order. Each is short; the hunt list is the longest.
    fixed-point simulation; a render-graph runtime over Vulkan and Direct3D 12;
    federation authority and recipients). Add "thorough" for a large or risky
    lane.
-2. **Tree.** For findings-only, the findings file's absolute path outside the
-   repository and "Change nothing." For review-and-fix, the worktree's absolute
+2. **Tree.** For findings-only, "Change nothing" and where the findings go:
+   the findings file's absolute path outside the repository for a `reviewer`
+   in the lead's checkout or a Codex lane with write access, or "your findings
+   in full in your final message" for a Claude lane with a worktree of its own
+   or a read-only Codex lane, which cannot write a file that outlives them.
+   For review-and-fix, the worktree's absolute
    path and branch, and "Edit only in this tree." Add "don't commit" for
    companion `task`; for a native writer or Claude pass add "commit WIP as
    `review: <lane> pass, unverified`." Name the detached tree's head; its
@@ -251,15 +258,18 @@ These are the reviewer's own rules, whichever family runs the pass.
   that cannot help, and unbounded retention. Where a `puck scan` analyzer
   covers one, run it over the touched paths. A finding of a new shape is also
   a proposal for that page.
-- Write the findings to the path the brief names, outside the repository.
-  Without the Write tool, use PowerShell
+- Deliver the findings where the brief's tree part says. A pass that can
+  write outside any removable worktree (a `reviewer` in the lead's checkout, a
+  Codex lane with write access) writes them to the path the brief names,
+  outside the repository; without the Write tool, use PowerShell
   `Set-Content -LiteralPath <path> -Value @'...'@` (a single-quoted here-string
-  expands nothing). The hand-back repeats them in short and never replaces the
+  expands nothing). Its hand-back repeats them in short and never replaces the
   file, because a read-only lane makes no commit and its hand-back alone can be
-  lost. The one exception is a Claude pass given a worktree of its own: the
-  harness removes that worktree when the pass ends, so its findings go in full
-  in its hand-back
-  ([lane work](../orchestration/references/lane-work.md#delegated-work)).
+  lost. A Claude pass given a worktree of its own, or a Codex pass launched
+  read-only, cannot write such a file (the harness removes that worktree when
+  the pass ends, and the read-only sandbox writes nothing), so it puts its
+  findings in full in its hand-back or final message and writes no findings
+  file ([lane work](../orchestration/references/lane-work.md#delegated-work)).
 - A review-and-fix pass reports every finding with its severity and
   `file:line`, fixes what is local and clear in its own tree, and leaves the
   rest open in its end list, as its instructions block says.
@@ -285,8 +295,11 @@ These are the reviewer's own rules, whichever family runs the pass.
    finding is reported, and its fix, if any, is verified the same way; neither
    ever opens another review, and findings never go back and forth between the
    reviewer and the author. A findings-only pass, or a
-   pass that changes nothing, has no follow-up branch: copy its findings file
-   out of any worktree before that worktree is removed, skip steps 2 to 5, place
+   pass that changes nothing, has no follow-up branch: save its findings the
+   moment they arrive (the full hand-back or final message of a pass that
+   carried them there, whose worktree may already be gone; otherwise its
+   findings file, copied out of any worktree before that worktree is
+   removed), skip steps 2 to 5, place
    its findings in their work packets with their severity and owners, and end.
    Never create an empty WIP.
 2. **Commit the pass as a WIP.** Stage the review worktree's changes
@@ -295,10 +308,11 @@ These are the reviewer's own rules, whichever family runs the pass.
    diff is one unit. Keep every commit that may be rewritten local, including
    verification repairs; never push them before step 5.
 3. **Verify the fixes.** Brief one agent, in the review worktree, to build
-   each touched project with zero warnings, boot the debug world once when a
-   fix reaches code a World runs, run a test only where a finding cannot be
-   settled another way or the brief asks for one, and resolve or report each
-   open finding as verified, repaired, or rejected with the reason. Windowed
+   each touched project with zero warnings, run a test only where a finding
+   cannot be settled another way or the brief asks for one, and resolve or
+   report each open finding as verified, repaired, or rejected with the
+   reason. The boot and the tree scans wait for step 5, so they are taken once,
+   on the merged head. Windowed
    runs, benchmarks and broad tests of the fixes are the lead's batch pass, as
    for any lane (AGENTS.md, "Code first, verification after"). A law a fix added that still passes with the fix withheld pins
    nothing, so a passing law does not make a fix right; a rejected fix is not
@@ -316,7 +330,11 @@ These are the reviewer's own rules, whichever family runs the pass.
    `Co-Authored-By` trailer.
 5. **Hand over.** Only a pass that changed files reaches this step. Merge the
    integration branch's current tip into the follow-up
-   branch and rebuild what it touched. It is then an ordinary ready lane for the
+   branch, then take the hand-over evidence once on that merged head: build
+   what the branch touched, boot the debug world once when a fix reaches code a
+   World runs, and run `puck docs links`, `puck scan --only duplicates --against
+   <tip>` and any check the brief names. A further merge before landing repeats
+   that evidence. It is then an ordinary ready lane for the
    integration lane's next batch ([land in
    batches](../orchestration/SKILL.md#land-in-batches)); a high finding it fixes
    or leaves open is scheduled into that batch. A local lane never pushes; a

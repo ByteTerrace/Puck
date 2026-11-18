@@ -6,8 +6,9 @@ description: "Holds the working contract of every delegated Puck lane: grants, b
 # Working as a delegated lane
 
 You work autonomously: the lead may be offline, and only your commits and your hand-back reach it.
-Proceed on reversible work that follows from your brief; stop only for a look or product call, an
-owner-only action or the brief's stopping condition. [AGENTS.md](../../../AGENTS.md#when-you-are-the-delegate)
+Proceed on reversible work that follows from your brief; stop only for a product call (what the engine
+should do), an owner-only action or the brief's stopping condition. A look value is yours and the
+lead's to decide, never a reason to stop (AGENTS.md, Authors rule). [AGENTS.md](../../../AGENTS.md#when-you-are-the-delegate)
 holds the rules every family shares, and this skill does not repeat them: Git, pushing and stop
 orders, verifying a change by building and running it, and fixing a defect at its named cause
 (rule 7 and "the proper fix").
@@ -148,6 +149,12 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.
+- Take each piece of evidence you report once, on the final content: merge the integration tip
+  last, then build, boot and run the two scans below and any check your brief names, all before your
+  final commit, so no later merge of yours can bring in a duplicate or a broken link unseen. If you
+  merge again after the `Brief:` commit (the lead resumes you after the tip moved), repeat them on
+  the new merged head and report that; a failure the merge brought in goes under **Needs you** with
+  its cause rather than into a second `Brief:` commit.
 - Before your final commit, run `puck scan --only duplicates --against <base>` from your CLI copy
   (`<base>` is the integration tip your brief names; the scan reads the working tree, uncommitted
   files included) and read every `neighbour` and `helper` record
@@ -164,8 +171,8 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
   `Brief: <id> done` or `Brief: <id> blocked: <question>`. Exactly one commit carries it: merges of
-  the integration tip may follow that commit, so a re-check after such a merge adds no second
-  `Brief:` commit (`puck landing handback` refuses two).
+  the integration tip may follow that commit, so the re-check after such a merge (above) adds no
+  second `Brief:` commit (`puck landing handback` refuses two).
 - Commit only with `git commit` over an index you inspected. Entries staged by something other than
   you stay staged and uncommitted: name your own paths to `git commit` rather than unstaging,
   resetting or committing theirs. Never build a commit from plumbing (`git commit-tree`,

@@ -24,12 +24,20 @@ did my change create it, reveal it, or merely walk past it?
 The test is ownership, not effort: a one-line fix to a file outside your change
 is still recorded, not fixed. A finding recorded nowhere was dropped, not left.
 
-Duplicate code is the one exception, by AGENTS.md's vigilance against
-duplication: a second implementation, copied logic or parallel helper you read
-or touch is refactored to one in the same change, with every caller fixed.
-Only a duplicate too large for the change is recorded, in the refactoring
-packet with its file and line, and it is dispatched in the next wave. "Code
-first, verification after" defers verification, never this.
+Two kinds of finding are exceptions to the recorded tier:
+
+- **Duplicate code**, by AGENTS.md's vigilance against duplication: a second
+  implementation, copied logic or parallel helper you read or touch is
+  refactored to one in the same change, with every caller fixed. Only a
+  duplicate too large for the change is recorded, in the refactoring packet
+  with its file and line, and it is dispatched in the next wave. "Code first,
+  verification after" defers verification, never this.
+- **An engine gap**, by AGENTS.md's probe rule: a limit of the engine that
+  your work had to sculpt or tune around (detail the bake cannot hold, lighting
+  no author value controls). It is never only recorded. Fix it when it is in
+  your scope; otherwise stop working around it, hand it back with its
+  evidence, and say that it goes to the front of its owning plan's order, so
+  the lead puts it there in the same landing.
 
 ## Every code change owns a documentation audit
 

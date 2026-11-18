@@ -52,8 +52,9 @@ the whole task, the integration branch, a finish line, a stopping condition,
 and whether it grants the GPU. The finish line is the code written, a build of
 what the lane touched and one boot of the debug world, plus a named command or
 state only where the brief says seeing or measuring it is the work (AGENTS.md,
-"Code first, verification after"). A stopping condition is for a look call or
-an owner-only action; it never protects a file format, replay, checkpoint, ABI
+"Code first, verification after"). A stopping condition is for a product call
+(what the engine should do) or an owner-only action, never a look value, which
+is the lane's and the lead's to decide (AGENTS.md, Authors rule); it never protects a file format, replay, checkpoint, ABI
 or recorded hash, since the owner rules those change freely (AGENTS.md). The
 integrator inspects the combined result and runs the batch's checks; a
 worker's report is evidence to check, not a substitute. Check a reported defect
@@ -63,7 +64,7 @@ one's permission; choose each one's model by fit
 
 A delegate works under the [`delegate` skill](../../delegate/SKILL.md) and
 [AGENTS.md's delegate rules](../../../../AGENTS.md#when-you-are-the-delegate):
-Claude's project agents preload the skill, and a Codex or Antigravity brief
+Claude's project agents other than `scout` and `look-critic` preload the skill, and a Codex or Antigravity brief
 names it to read first. Choose the launch path from the
 [launch capability table](../SKILL.md#launch-capabilities), not from
 assumptions about a model family.
@@ -73,15 +74,18 @@ outlive the lane. A Claude lane with a worktree of its own cannot write
 outside it, and the harness removes a worktree holding only ignored files the
 moment the lane ends, so that lane's findings travel in full in its hand-back
 and the lead saves them on arrival
-([launch capabilities](../SKILL.md#launch-capabilities)). Every other
-read-only lane (a `reviewer` in the lead's checkout, a Codex or Antigravity
-lane) gets a findings path in its brief, outside any worktree Claude may
-remove, and its hand-back repeats the findings in short. A `codex exec`
-lane's command hook sometimes refuses a write outside its worktree; one review
-wrote outside it and another could not. So a Codex review brief names
-`<worktree>/.claude/scratch/<lane>-findings.md` as the fallback, in a worktree
-the lead creates; the lead checks both paths when the lane ends and copies the
-findings out before removing the worktree. A remote partner that pushes uses an
+([launch capabilities](../SKILL.md#launch-capabilities)). A findings-only
+Codex pass launched with `--sandbox read-only` can write no file at all, so
+its brief asks for the findings in full as its final message, and the lead
+saves that message from the lane log when the process exits. Every other
+read-only lane (a `reviewer` in the lead's checkout, a Codex lane launched
+with write access, an Antigravity lane) gets a findings path in its brief,
+outside any worktree Claude may remove, and its hand-back repeats the findings
+in short. A writable `codex exec` lane's command hook sometimes refuses a
+write outside its worktree; one review wrote outside it and another could not.
+So its brief also names `<worktree>/.claude/scratch/<lane>-findings.md` as the
+fallback, in a worktree the lead creates; the lead checks both paths when the
+lane ends and copies the findings out before removing the worktree. A remote partner that pushes uses an
 explicit refspec (`git push origin HEAD:refs/heads/<branch>`).
 
 

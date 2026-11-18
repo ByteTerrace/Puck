@@ -3143,6 +3143,12 @@ runs.
   rerun the integrated tour, standing and walking frame readings and the
   gallery and lift body patrol; history is 47 words per output pixel
   (`HistorySurfaceWords`), so measure the view and slot allocation.
+- [medium] The sweep compares no per-tick allocation: `SweepSignals.ReadFrames`
+  keeps `host.frames`' header and phases and drops its frame thread allocated
+  line, and the `memory` signal reads after a collection. Keep that line as
+  metrics with a relative compare in `worlds/debug/sweep.json`, so the batch's
+  allocation comparison (orchestration, coding lanes and the integration lane)
+  is a sweep signal and not a hand reading.
 
 ### The benchmark
 

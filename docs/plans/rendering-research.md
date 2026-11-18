@@ -1794,7 +1794,9 @@ lease, so windowed time is the wave's scarcest input:
 - *The lead lands in batches.* Ready lanes are merged together, the batch's
   tip gets one headless boot and one `docs links`, then it is pushed; the
   full 1440p benchmark route runs once per batch in a quiet window, and its
-  report is the batch's frame-time evidence. A lane never waits for a batch
+  report is the batch's frame-time evidence for the RTX 4070 with the
+  authority in process; the remote topology waits for the route against a
+  remote authority (decision 1). A lane never waits for a batch
   to form: it hands back and starts its next step.
 
 **Review is for what running cannot show.** A change gets an adversarial
@@ -1819,9 +1821,11 @@ checked by running it and by the area fix passes.
    ([the bets](#the-bets)).
 2. *A look gets at most two rounds with the look critic* for each creation
    or place in a wave. A third miss changes the approach or goes to the
-   owner. A creation that still misses the bar may land when it is a
-   material improvement on what the tree holds, with its failures and the
-   gaps behind them stated in the commit.
+   owner. A creation whose remaining failures rest on a named engine gap
+   may land while it still misses the bar when it is a material improvement
+   on what the tree holds, with its failures and the gaps behind them stated
+   in the commit; another look change that misses does not land on relative
+   improvement alone.
 3. *A named engine gap is fixed, not sculpted around.* A look lane that
    meets a listed gap stops and hands the place to the gap's lane. A lane
    that finds a new gap adds its row here, and the gap goes to the front of

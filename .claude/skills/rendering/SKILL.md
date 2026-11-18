@@ -1233,16 +1233,21 @@ boots a workload on both backends and `puck counters compare <before> <after>`
 holds two reports to each other; a deterministic count must agree on both
 backends. `world.debug-view` lists the diagnostic images.
 
-The frame bar is read at 2560 by 1440 on the RTX 4070, the device the work
-meets first (AGENTS.md, "Upper hardware enhances"), on the benchmark route in
-motion and in both topologies. `puck benchmark` and `bench frames` open that
+On the lead machine the frame bar is read at 2560 by 1440 on the RTX 4070, the
+device the work meets first (AGENTS.md, "Upper hardware enhances"), on the
+benchmark route in motion, and it must hold in both topologies; the RTX 2060
+and the Steam Deck have their own sizes and budgets. `puck benchmark` and `bench frames` open that
 size by default (`BenchmarkCommand`'s `--width` and `--height`); a reading at a
 smaller window says where time goes and is not a bar reading, and it can hide a
 defect that shows only at the bar's size. The route at that
-size runs once per integration batch, in the lead's quiet window; a lane that
-claims frame time shows the passes, counters and `host.frames` split it moves
-in one short windowed run at that size, on its build beside the build it
-started from.
+size runs once per integration batch, in the lead's quiet window, with the
+authority in process: the benchmark has no remote endpoint, so it says nothing
+about the remote topology, and a verdict names the device, size, backend and
+topology it read. A lane that claims frame time names the passes, counters and
+`host.frames` split it expects to move, with frozen builds from before and
+after its change, as a measurement request for that window; it takes the
+windowed before/after readings itself only when its brief grants a GPU leg
+for them.
 
 A technique is judged first by what it gives the RTX 4070, and a target that
 lacks a capability never vetoes it. What the device can do is read at device

@@ -55,8 +55,15 @@ collided runs, while the same expensive work ran eight times).
   `bench frames` under `puck lease quiet`, and a red result goes back to the
   lane that owns it. The full benchmark route runs once per batch on the merged
   tip (`puck benchmark --route debug`, whose default window is the frame bar's
-  2560 by 1440 on the RTX 4070), and its report is the batch's frame-time
-  evidence, never one lane's. A landing never waits for the window.
+  2560 by 1440 on the RTX 4070), never once per lane. Its report is the batch's
+  frame-time reading for what it ran and no more: the RTX 4070 at that size,
+  each backend it played, and the authority in process. The benchmark has no
+  remote endpoint (`BenchmarkCommand`'s options), so it does not read the
+  remote topology, and a verdict on that topology waits for the route against
+  a remote authority ([the benchmark's open items](../../../docs/plans/open-items.md#the-benchmark));
+  every frame-bar verdict the lead reports names the device, the size, the
+  topology and the real-time route it rests on. A landing never waits for the
+  window.
 - **One GPU-measuring lane at a time.** A lane whose work is measuring
   windowed frames or GPU passes holds the GPU for long stretches; two such lanes
   run together starve each other (a caster-culling fix round sat blocked behind a
@@ -289,7 +296,7 @@ brief:
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
-  agents other than `scout` preload it); it owns the lane's own working contract.
+  agents other than `scout` and `look-critic` preload it); it owns the lane's own working contract.
 
 When a lane demonstrates stale-rule behavior, the lead starts a fresh session
 before launching its continuation. Editing a skill alone does not require a new session.
@@ -427,16 +434,23 @@ A look change is judged against
 captures from every side. The builder holds itself to that and keeps
 iterating while it can see a defect its authoring can fix; a defect that is an
 engine limit stops the sculpting, and the gap goes to the front of its owning
-plan's order (AGENTS.md, the probe rule). A change that still misses the bar
-lands only when it is a material improvement on what the tree holds, with its
-failures and the gaps behind them stated in the commit, and is never reported
-as a pass. The lead reads a lane's captures at landing and sends a milestone
+plan's order (AGENTS.md, the probe rule). Only such a creation, one whose
+remaining failures rest on a named engine limit, may land while it still
+misses the bar, and only when it is a material improvement on what the tree
+holds, with its failures and the gaps behind them stated in the commit; it is
+never reported as a pass. Any other look change that misses the bar (a global
+lighting retune, a palette or treatment pass) does not land on relative
+improvement alone. Landing the creation and putting its gap first are separate
+decisions, and the second is made in the same landing. The lead reads a lane's captures at landing and sends a milestone
 or a doubtful case to the `look-critic` agent when fresh eyes pay for
 themselves, not every pass, and at most twice per creation per wave. A change is judged on what
 it owns: a failure the critic attributes to a filed world-wide item (the night
 lighting, a backend colour defect, the world's cel treatment, another
 creation's defect) holds that item, not the change, once the lead has checked
-the attribution and the item is filed or has a lane. The lead never shows the
+the attribution and the item is filed or has a lane. An engine gap is never
+only filed: it has a lane or sits at the front of its owning plan's order,
+because a packet entry behind other work while lanes keep tuning around the
+gap is the case the probe rule forbids. The lead never shows the
 owner a result it knows fails, and never frames one as progress with caveats.
 A lead that iterated a creation in front of the owner and reported it as
 reading right while it knew the throat tore and the eyes faceted is the case. The lead also keeps the bar in front
@@ -446,9 +460,10 @@ captures beside their reference panels with the critic's verdicts, and queues
 a look lane for the worst place. Look work is scheduled as fundamentals are,
 never left until the owner walks past it. A builder's own judgement is not enough: a Moth lane handed
 back judging her as meeting her sheets, and the critic failed her on every heading. So a look lane judges each view
-side by side with the sheet it should match, gets geometry right on `puck mesh preview` (seconds, no GPU) first,
-and the lead sends the preview sheet to the critic before the lane takes a windowed slot, which then serves
-lamps, palette, motion and lighting only. A creation whose parts live in separate documents (a suit and its
+side by side with the sheet it should match and gets geometry right on `puck mesh preview` (seconds, no GPU)
+before it takes a windowed slot, which then serves lamps, palette, motion and lighting only. Sending the preview
+sheet to the critic first is a tool for a milestone or a real doubt, as any critic round is, not a step every
+look lane passes. A creation whose parts live in separate documents (a suit and its
 pilot) is split into lanes by document. A creation with no reference sheet gets one first, as a durable doc
 with its proportions, per-view silhouette targets and cited sources, before any rebuild: six swallow lanes each
 cleared some critic items and surfaced others, because each lane and the critic judged against their own idea
@@ -469,9 +484,10 @@ worktree with `ExitWorktree` (`keep`), confirm the main checkout is clean, run
 the integration branch is checked out in the lead's worktree; it never carries
 work of its own.
 
-A lane is ready when its code is written, it builds what it touched, it has
-booted the debug world once, its commit body says what it ran, and it has merged
-the integration tip (AGENTS.md, "Code first, verification after"). Windowed
+A lane is ready when its code is written, it has merged the integration tip,
+and on that merged head it builds what it touched and has booted the debug
+world once, with its commit body saying what it ran (AGENTS.md, "Code first,
+verification after"); evidence taken before that merge does not count. Windowed
 checks, benchmarks and broad tests are the batch pass's
 ([landing bar](../verification/SKILL.md#the-landing-bar)). The ruling defers
 verification, never code quality: a ready lane has also searched before it
@@ -622,9 +638,17 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   tool is `puck sweep --no-scenarios --baseline <tip report.json>`: its
   headless leg reads `world.counters physics` and `world.counters state` and
   turns a counter red when it moves more than 50% (`relative:0.5` in
-  `worlds/debug/sweep.json`). The lead runs it once per batch; a lane runs it
-  only when its brief makes per-tick cost its finish line, and then names any
-  change over 10%. The lead regenerates the tip's report under the
+  `worlds/debug/sweep.json`). The lead runs it once per batch and reports every
+  counter that moved more than 10%, not only the red ones, naming the lane that
+  owns each move: a 20% rise sits under the red line and is still the batch's
+  to report. The batch also compares per-tick allocation, which the sweep does
+  not: its memory signal compares working set, private bytes and the heap after
+  a collection, which temporary garbage leaves untouched, and its `frames`
+  parser drops the allocation line. The lead reads `host.frames`' frame thread
+  allocated line (bytes per iteration) on a headless boot of this tip and of
+  the previous one, and a rise goes to its lane as a counter jump does.
+  A lane runs the sweep only when its brief makes per-tick cost its finish
+  line, and then names any change over 10%. The lead regenerates the tip's report under the
   main checkout's ignored scratch directory (a `tip-sweep` folder) whenever the tip moves, and briefs
   name that path. Lease, admission and GPU-classification files are shared by
   every CLI copy on the machine, so a change to their meaning is a fleet event:
@@ -1422,12 +1446,14 @@ and not a spiral:
 - A Codex run that ends `Selected model is at capacity` is retried once on the
   other Codex model (Sol to Astra or back), not on the same one.
 - A read-only lane makes no commit, so its findings must outlive it. A lane
-  the lead can copy from (a `reviewer` in the lead's checkout, a Codex or
-  Antigravity lane in a worktree the lead creates) writes them to the path its
-  brief names and repeats them in short in its hand-back, and the lead copies
-  the file out before removing the worktree. A Claude lane with a worktree of
-  its own carries them in full in its hand-back, because the harness removes
-  that worktree the moment the lane ends
+  the lead can copy from (a `reviewer` in the lead's checkout, a Codex lane
+  with write access or an Antigravity lane in a worktree the lead creates)
+  writes them to the path its brief names and repeats them in short in its
+  hand-back, and the lead copies the file out before removing the worktree. A
+  Claude lane with a worktree of its own carries them in full in its hand-back,
+  because the harness removes that worktree the moment the lane ends, and a
+  Codex lane launched `--sandbox read-only` carries them in full in its final
+  message, because it can write no file; the lead saves either on arrival
   ([lane work](references/lane-work.md#delegated-work)).
 
 ## Rule on collisions
