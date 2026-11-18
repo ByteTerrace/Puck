@@ -68,7 +68,8 @@ public static class DepsCommand {
                       the current closure and a locked restore judges the result. A bounded range ([1.*,2.0)) whose
                       bound excludes a newer stable package is held; --major moves its bound. An exact pin ([5.12.0])
                       is a deliberate hold and only reported. A plain version and a file-based app's `#:package`
-                      directive (no lock file) move to the newest stable version of their major.
+                      directive (no lock file) move to the newest stable version of their major. File-based app
+                      moves must restore, with failed batches retried one move at a time.
             npm       Every package-lock.json's package.json files (workspaces and overrides included): ^, ~ and exact
                       versions move to the newest stable version they admit, keeping their spelling, and the lock file
                       follows through `npm update --package-lock-only`. node_modules is untouched; run `npm ci`.

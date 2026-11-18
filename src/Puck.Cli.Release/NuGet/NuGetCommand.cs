@@ -1,6 +1,5 @@
 using System.CommandLine;
 using System.IO.Compression;
-using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -263,17 +262,15 @@ public static class NuGetCommand {
             workingDirectory: root
         );
     }
-    private static async Task<int> PrepareBatchAsync(string input, string output, string selection) {
+    private static async Task<int> PrepareBatchAsync(string input, string output, string selection, CancellationToken cancellationToken) {
         var root = RepositoryPaths.RequireRoot();
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(seconds: 60) };
+        var feed = new NuGetFeed(http: http);
         var manifest = await PrepareAsync(
             commit: await ExpectedCommitAsync(root: root),
             input: input,
             output: output,
-            publishedVersions: id => PublishedVersionsAsync(
-                http: http,
-                id: id
-            ),
+            publishedVersions: id => feed.VersionsAsync(cancellationToken: cancellationToken, id: id),
             selection: selection,
             version: ReadVersion(root: root)
         );
@@ -290,26 +287,6 @@ public static class NuGetCommand {
             value: version
         );
         return 0;
-    }
-    private static async Task<string[]> PublishedVersionsAsync(HttpClient http, string id) {
-        var uri = $"https://api.nuget.org/v3-flatcontainer/{id.ToLowerInvariant()}/index.json";
-
-        // Throttling and a bad gateway are the index catching its breath; every other status is the answer.
-        return await Puck.Abstractions.Retry.RetryAsync(
-            action: async Task<string[]> () => {
-                using var response = await http.GetAsync(requestUri: uri);
-
-                if (response.StatusCode == HttpStatusCode.NotFound) { return []; }
-                response.EnsureSuccessStatusCode();
-                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-
-                return json.RootElement.GetProperty(propertyName: "versions").EnumerateArray().Select(selector: value => value.GetString()!).ToArray();
-            },
-            attempts: 4,
-            delay: TimeSpan.FromSeconds(seconds: 2),
-            retryable: static error => ((error is HttpRequestException { StatusCode: { } status })
-                && ((status == HttpStatusCode.TooManyRequests) || (((int)status) >= 500)))
-        );
     }
     private static async Task<int> PushAsync(string directory) {
         var root = RepositoryPaths.RequireRoot();
@@ -541,7 +518,8 @@ public static class NuGetCommand {
             output: Path.GetFullPath(path: (parseResult.GetValue(option: packOutputOption) ?? "artifacts/packages")),
             root: RepositoryPaths.RequireRoot()
         ));
-        prepare.SetAction(action: (parseResult, _) => PrepareBatchAsync(
+        prepare.SetAction(action: (parseResult, cancellationToken) => PrepareBatchAsync(
+            cancellationToken: cancellationToken,
             input: parseResult.GetRequiredValue(argument: inputArgument),
             output: parseResult.GetRequiredValue(option: outputOption),
             selection: parseResult.GetRequiredValue(argument: selectionArgument)

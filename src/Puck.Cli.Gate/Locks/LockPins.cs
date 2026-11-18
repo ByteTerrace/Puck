@@ -1,7 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Puck.Cli.Deps;
 
 namespace Puck.Cli.Locks;
 
