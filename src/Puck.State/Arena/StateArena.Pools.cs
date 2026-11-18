@@ -537,11 +537,10 @@ public sealed partial class StateArena {
     }
     private StatePoolValue PoolValue(StateInstanceHandle handle, StatePoolFieldDescriptor field, CellValue value) {
         _ = TryPoolKey(slot: handle.Slot, key: out var key);
-        _ = TryReadClock(rowOrdinal: field.RowOrdinal, key: key, epochTick: out var epochTick, epochEngineTick: out var epochEngineTick, y0: out var y0, v0: out var v0, substepTicks: out var substepTicks, set: out var set);
         return new StatePoolValue(
             Field: field.Name,
             Value: value,
-            Clock: (set ? new StateCellClock(EpochEngineTick: epochEngineTick, EpochTick: epochTick, SubstepTicks: substepTicks, V0: v0, Y0: y0) : null));
+            Clock: ReadClock(field.RowOrdinal, key));
     }
     private bool TryPool(int poolOrdinal, out StatePoolDescriptor pool, out string reason) {
         if (((uint)poolOrdinal) < ((uint)m_catalog.Pools.Count)) {

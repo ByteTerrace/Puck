@@ -308,8 +308,7 @@ public static class WorldStateDisclosure {
                     Dynamics: behavior.Dynamics,
                     Clock: (behavior.IsNone
                         ? null
-                        : TraitClock(
-                            arena: arena,
+                        : arena.ReadClock(
                             key: key,
                             rowOrdinal: rowOrdinal
                         ))
@@ -751,26 +750,6 @@ public static class WorldStateDisclosure {
         }
     }
 
-    // The clock a cell's trait reads, as the arena stores it; none while it has never settled, which every trait reads
-    // as settled at tick zero and a follower as at rest on its target.
-    private static StateCellClock? TraitClock(StateArena arena, int rowOrdinal, CellKey key) => ((arena.TryReadClock(
-        epochEngineTick: out var epochEngineTick,
-        epochTick: out var epochTick,
-        key: key,
-        rowOrdinal: rowOrdinal,
-        set: out var set,
-        substepTicks: out var substepTicks,
-        v0: out var v0,
-        y0: out var y0
-    ) && set)
-        ? new StateCellClock(
-            EpochEngineTick: epochEngineTick,
-            EpochTick: epochTick,
-            SubstepTicks: substepTicks,
-            V0: v0,
-            Y0: y0
-        )
-        : null);
     private static StateVector? Vector(StateArena arena, int rowOrdinal, CellKey key, in CellValue value) {
         if (
             (value.Kind != CellKind.Vector) ||

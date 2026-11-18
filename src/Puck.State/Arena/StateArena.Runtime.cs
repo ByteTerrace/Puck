@@ -133,6 +133,21 @@ public sealed partial class StateArena {
 
         return false;
     }
+    /// <summary>Returns the settled clock at this address, or null for a missing cell or unset clock.</summary>
+    public StateCellClock? ReadClock(int rowOrdinal, CellKey key) =>
+        TryCellSlot(rowOrdinal, key, out var slot) ? ClockAt(slot) : null;
+
+    private StateCellClock? ClockAt(int slot, StateCellClock? previous = null) {
+        if (!HasClock(slot)) { return null; }
+        var tick = ReadNumberRaw(ArenaColumn.ClockEpochTick, slot);
+        var engine = ReadNumberRaw(ArenaColumn.ClockEpochEngineTick, slot);
+        var y0 = ReadNumberRaw(ArenaColumn.ClockY0, slot);
+        var v0 = ReadNumberRaw(ArenaColumn.ClockV0, slot);
+        var substep = ReadNumberRaw(ArenaColumn.ClockSubstepTicks, slot);
+        return previous is not null && previous.EpochTick == tick && previous.EpochEngineTick == engine &&
+            previous.Y0 == y0 && previous.V0 == v0 && previous.SubstepTicks == substep
+            ? previous : new StateCellClock(tick, engine, y0, v0, substep);
+    }
     /// <summary>Attempts to write one cell's clock.</summary>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>
     /// <param name="key">The cell key.</param>
