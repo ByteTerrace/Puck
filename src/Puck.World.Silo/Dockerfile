@@ -5,6 +5,18 @@ FROM scratch AS shader-cache
 
 FROM rust:1.96.0 AS rust-toolchain
 
+# Remote files the image needs, fetched with retries and checked against pinned digests. ADD makes one attempt, and
+# packages.microsoft.com answers shared CI runners with HTTP 429 often enough to fail a release on one request.
+# The same DXC archive and checksum .github/actions/setup-dxc installs on Linux: the shader cache keys every entry by
+# the DXC binaries' content, so a different DXC here would miss every entry CI restores.
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-resolute AS downloads
+RUN fetch() { curl --fail --silent --show-error --location --retry 6 --retry-all-errors --retry-delay 10 --output "$2" "$1" \
+        && echo "$3  $2" | sha256sum -c -; } \
+    && fetch https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz \
+        /tmp/dxc.tar.gz 96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1 \
+    && fetch https://packages.microsoft.com/config/ubuntu/26.04/packages-microsoft-prod.deb \
+        /tmp/packages-microsoft-prod.deb b2e7c6b9328e0c6a68bfe5d0045be90ceb192b32e0ca906c6c529b9012726f39
+
 FROM mcr.microsoft.com/dotnet/sdk:11.0.100-resolute AS build
 WORKDIR /source
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
@@ -19,11 +31,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && clang --version && ld.lld --version \
     && rustup target add --toolchain 1.96.0 wasm32-unknown-unknown
-# The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
-# binaries' content, so a different DXC here would miss every entry CI restores.
-ADD https://github.com/microsoft/DirectXShaderCompiler/releases/download/v1.9.2609/linux_dxc_2026_09_28.x86_x64.tar.gz /tmp/dxc.tar.gz
-RUN echo '96faadc7f5c282d2ffda49804beb4c3ee38127bc252b723234e3c5cdf7aa39a1  /tmp/dxc.tar.gz' | sha256sum -c - \
-    && tar -xzf /tmp/dxc.tar.gz -C /usr/local --strip-components=1 \
+COPY --from=downloads /tmp/dxc.tar.gz /tmp/dxc.tar.gz
+RUN tar -xzf /tmp/dxc.tar.gz -C /usr/local --strip-components=1 \
+    && rm /tmp/dxc.tar.gz \
     && dxc --version
 COPY . .
 ENV CI=true
@@ -51,9 +61,8 @@ RUN setcap -r /usr/bin/caddy
 
 FROM mcr.microsoft.com/dotnet/aspnet:11.0-resolute AS runtime
 COPY --from=tls /usr/bin/caddy /usr/bin/caddy
-ADD https://packages.microsoft.com/config/ubuntu/26.04/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
-RUN echo 'b2e7c6b9328e0c6a68bfe5d0045be90ceb192b32e0ca906c6c529b9012726f39  /tmp/packages-microsoft-prod.deb' | sha256sum -c - \
-    && dpkg -i /tmp/packages-microsoft-prod.deb \
+COPY --from=downloads /tmp/packages-microsoft-prod.deb /tmp/packages-microsoft-prod.deb
+RUN dpkg -i /tmp/packages-microsoft-prod.deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends libmsquic \
     && rm -rf /var/lib/apt/lists/* /tmp/packages-microsoft-prod.deb
