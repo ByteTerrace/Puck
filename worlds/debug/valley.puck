@@ -15,6 +15,7 @@
 import "../standard/terrain"
 import "valley-form"
 import "water-site"
+import "glacier-site"
 
 let valleyRock = 0
 let valleyDeck = 1
@@ -106,13 +107,10 @@ prototypes {
       document {
         name: $"valley-{sector.name}"
         schema: "puck.creation.v1"
-        palette [
-          {
-            color: "#7D7366"
-            roughness: 0.95
-            specular: 0.02
-          }
-        ]
+        palette: concat(
+          [{ color: "#7D7366", roughness: 0.95, specular: 0.02 }],
+          sector.name == "north-west" ? wallPalette : []
+        )
         terrainRelief(seed: sector.seed)
         terrainMass(
           label: "main",
@@ -143,10 +141,40 @@ prototypes {
           sink: valleySink,
           material: valleyRock
         )
+        for ridge in filter(valleyRidges, r => r.sector == sector.name) {
+          terrainMass(
+            label: ridge.label,
+            foot: ridge.foot,
+            peak: ridge.peak,
+            radial: ridge.radial,
+            across: ridge.across,
+            offset: ridge.offset,
+            sink: valleySink,
+            material: valleyRock
+          )
+        }
         for basin in filter(valleyBasins, b => b.sector == sector.name) {
           terrainBasin(label: basin.label, lateral: basin.lateral, radial: basin.radial, y: basin.y, radii: basin.radii)
         }
-        terrainFloorCut(top: (sector.peak + 10))
+        for cut in filter(valleyCuts, c => c.sector == sector.name) {
+          shape Box $"{cut.label}" {
+            blend: Subtraction
+            material: cut.material
+            rounding: cut.rounding
+            position: cut.position
+            scale: cut.half
+            rotation: cut.rotation
+          }
+        }
+        for mound in filter(valleyMounds, m => m.sector == sector.name) {
+          shape Ellipsoid $"{mound.label}" {
+            material: mound.material
+            position: mound.position
+            scale: mound.radii
+            rotation: mound.rotation
+          }
+        }
+        terrainFloorCut(top: (maximum(sector.peak, sector.name == "north-west" ? glacierRidge.peak : 0) + 30))
       }
     }
   }

@@ -191,7 +191,6 @@ the code or capture shows, and the lane that closes it.
 
 | Id | Gap | What the code shows | Lane |
 |---|---|---|---|
-| G2 | The lake is a film in the air | `lakeSurface` is a cylinder 0.24 m thick (`scale [radius, 0.12, radius]`) at y 324.5 over a bowl the valley cuts to y 319 (`valleyBasins[lake-basin]`: radii 17 at y 336), and its slide lifts it 4 m per unit of `lakeLevel` over 0.4, so during the melt it floats up to 3.6 m higher with air beneath. The art's panel 2 has clear stones at the near bank, turquoise middle depth and teal deep water. | A2 |
 | G3 | The falls stand 8 m off the wall | `fallsRibbon` places fourteen flat 8 m sheets at `standoff: 8` in front of the face profile, so the ribbon hangs in the air before the rock; the art has one sheet hugging and interrupted by rock, and a residual dark wet streak when dry. | A3 |
 | G4 | The pool and plunge floors are flat boxes | `waterBasin` is a flat bed with square walls and up to four steps; the art's panel 4 wants shallow stones at the margin, a dark deep end, submerged stones under caustic light and the drain throat at the bank (the pool's west opening at (−66, −1.3, −6) leads nowhere); panel 3 wants a dark rounded plunge pocket. | A4 |
 | G5 | The reservoir is invisible and has no inlet | The pavilion's observation window (`glass { depth: 8, ior: 1.5 }`) lies over the reservoir's glass field surface, and the glass pass now shades two interfaces a pixel, so the pane can show the water line. The art's panel 5 has a descending inlet, air over the water, and the float on the surface beside pale ticks; the chamber has no inlet geometry and the gauge's post tops out at y −0.1 under the window. | A5 |
@@ -356,6 +355,8 @@ is the third.
 **Reuse.** `lakeSurface`, `glacierMass`, `valleyBasins`, `waterViews`, `lakeFlowLayer`, `icePalette`.
 
 **Check.** The rim view at stages 1, 2 and 4; `creation stats` for the glacier's bake groups; counts.
+
+**As built.** The glacier lies upslope of the lake. The north-west wall carries a ridge behind the bowl (`glacierRidge`, a `terrainMass`) and a U-shaped trough cut down it to the lake's back shore (`valleyCuts`: a rounded box on the ramp frame of `glacier-site.puck`, its cut face a polished floor, with three grooves that run to the lake, and moraine banked along both lips, `valleyMounds`). The ice is a creation of chamfered plates in steps down the trough, wedge cuts that widen at the surface, melt channels and a scalloped toe at the shore. It melts by plates sinking into the trough's floor with the `glacier` gauge, the toe's first, each plate with the pieces that carve it as one group (a cutter that moves against its group's baked ice does not re-carve it today), so the ice never scales; what is left bare at T is the polished trough, its grooves and the moraine. The lake is a cylinder of the bowl's depth whose top slides with `lakeLevel`, its rim and floor buried in the rock, cut away at the outlet's sill so no water side stands bare (`lakeSurface` `cuts`), with its bowl-floor cobbles and waterline boulders a creation of their own (`lakeStones`, `lakeBedStones`) and its flow drifting toward the outlet. Open: a flow layer carries one velocity, so the flow does not speed up over the sill; the ice has no relief noise; the falls ribbon is lane A3's.
 
 ### A3. The falls on the face
 

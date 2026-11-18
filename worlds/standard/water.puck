@@ -153,19 +153,36 @@ let lakeFlowLayer = {
   scale: 0.8
   stretch: 1.5
   cycle: 3
-  tilt: 0.12
+  tilt: 0.25
   coverage: 0
   softness: 0.1
   frame: World
   surface: waterFoam
   seed: 5
 }
-// A lake disc is a slab over its bowl, so it scatters more per metre, and its contact reaches less than its thickness.
-let lakeGlass = waterGlass with { scattering: 3, contact { reach: 0.2, coverage: 0.7 } }
-// Glacier ice: a pale blue body and a whiter weathered face.
+// A lake's depth runs to metres, so it scatters less per metre than a stream: a shallow margin stays clear over the stones,
+// the middle depth turns turquoise and the deep water teal. Its contact reaches less than a stream's.
+let lakeGlass = waterGlass with { scatter: "#2CB0B4", scattering: 0.12, contact { reach: 0.5, coverage: 0.9 } }
+// Glacier ice creeps: a slow world-space drift whose pattern is the weathered, matt surface of old ice against the blue
+// beneath, broad and not stretched so it follows no face's slope.
+let iceFlowLayer = {
+  frame: World
+  velocity [0.01, -0.02, 0.01]
+  scale: 0.13
+  stretch: 1.2
+  cycle: 4
+  tilt: 0.25
+  coverage: 0.28
+  softness: 0.5
+  surface { color: "#C9DDEA", roughness: 0.6, metal: 0 }
+  seed: 31
+}
+// Glacier ice: a blue body and a paler weathered face, each broken by the creep's pattern, and the cobalt of a crevasse's or
+// a channel's walls.
 let icePalette = [
-  { color: "#CFE8F2", roughness: 0.3, specular: 0.4, wrap: 0.3 }
-  { color: "#EEF6FA", roughness: 0.5, specular: 0.2, wrap: 0.4 }
+  flowed({ color: "#4F8DBB", roughness: 0.3, specular: 0.2, wrap: 0.05 }, iceFlowLayer)
+  flowed({ color: "#8DB6D1", roughness: 0.45, specular: 0.15, wrap: 0.05 }, iceFlowLayer)
+  { color: "#16477F", roughness: 0.25, specular: 0.3, wrap: 0.05 }
 ]
 // Stone for a bridge and its banks.
 let stonePalette = [
@@ -278,31 +295,149 @@ template fallsRibbon(id, profile, width = 8, standoff = 5, thickness = 0.2, gaug
     }
   }
 }
-// Ice shrinks uniformly about the authored origin; sizeBy reads the authority state that sets melt volume.
-// Zero parks the creation and removes its contact, leaving no crowns above the cradle.
-template glacierMass(id, lumps, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
+// The orientation, as a quaternion [x, y, z, w], of a piece lying on a slope whose climb makes an angle with +Z of cosine
+// `c`, then turned `yaw` degrees about the slope's own normal: the falls' sheets' tilt, so a piece's +Z runs up the slope and
+// its +Y stands off it.
+function onSlope(c, yaw) = [
+  0 - halfTurnSine(c) * cosine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * sine(yaw * 0.008726646259971648),
+  0 - halfTurnSine(c) * sine(yaw * 0.008726646259971648),
+  halfTurnCosine(c) * cosine(yaw * 0.008726646259971648)
+]
+
+// A glacier is a body of ice lying in a trough, in steps of chamfered `plates`, each its own group with the `blocks` that
+// stand on it, the wedge cuts that split it into masses (`wedges`), the melt channels (`cuts`) and the scalloped toe
+// (`scallops`) that carve it; every one names its plate (`plate`, an index) and rides it as its parent, so a plate and what
+// carves it move as one body and no seam stretches. The ice melts by plates sinking into the trough's floor: a plate sinks
+// `sink` metres along `axis` as the gauge `state.<gauge>` falls from one to zero, so with the toe's plates sinking furthest
+// the toe goes first and what remains thins, and the ice never scales (it never reads as an object shrinking). A slide
+// reaches at most four creation units, so a plate rides four. A plate is { position, half, cosine, yaw, chamfer, material,
+// axis, sink }, a block { plate, position, half, cosine, yaw, chamfer, material }, a cut { plate, position, half, cosine,
+// yaw, material }, a wedge { plate, position, half, taper, rotation, material } (a trapezoidal prism extruded across the ice;
+// `rotation` a quaternion that stands its wide side at the surface) and a scallop { plate, position, radius, height, cosine,
+// material } (a cylinder along the slope's normal). Positions are in the wall frame, `cosine` and `yaw` as `onSlope` reads
+// them, and a cut's `material` is its cut face's.
+template glacierMass(id, plates, blocks, cuts, wedges, scallops, gauge = "glacierLength", origin = [0, 0, 0], palette = icePalette) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
       palette: palette
-      sizeBy: $"state.{gauge}"
-      for (lump, i) in lumps {
-        shape Superellipsoid $"ice-{i}" {
-          material: i % 2
-          exponent: 2.4
-          position [lump.position[0] - origin[0], lump.position[1] - origin[1], lump.position[2] - origin[2]]
-          scale: lump.radii
-          group: 1
+      drivers [
+        { name: "melt", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0, blendOutSeconds: 0 }
+      ]
+      for (plate, i) in plates {
+        shape Box $"ice-{i}" {
+          material: plate.material
+          chamfer: plate.chamfer
+          position [
+            plate.position[0] - origin[0],
+            plate.position[1] - origin[1],
+            plate.position[2] - origin[2]
+          ]
+          scale: plate.half
+          rotation: onSlope(plate.cosine, plate.yaw)
+          group: i + 1
+          slides: map(range(0, 4), j => {
+            driver: "melt"
+            axis: plate.axis
+            amplitude: plate.sink / 4
+            phase: -1
+            wave: "linear"
+          })
+        }
+      }
+      for (block, i) in blocks {
+        shape Box $"block-{i}" {
+          material: block.material
+          chamfer: block.chamfer
+          position [
+            block.position[0] - origin[0],
+            block.position[1] - origin[1],
+            block.position[2] - origin[2]
+          ]
+          scale: block.half
+          rotation: onSlope(block.cosine, block.yaw)
+          group: block.plate + 1
+          parent: $"ice-{block.plate}"
+        }
+      }
+      for (cut, i) in cuts {
+        shape Box $"cut-{i}" {
+          blend: Subtraction
+          material: cut.material
+          position [
+            cut.position[0] - origin[0],
+            cut.position[1] - origin[1],
+            cut.position[2] - origin[2]
+          ]
+          scale: cut.half
+          rotation: onSlope(cut.cosine, cut.yaw)
+          group: cut.plate + 1
+          parent: $"ice-{cut.plate}"
+        }
+      }
+      for (wedge, i) in wedges {
+        shape Prism $"wedge-{i}" {
+          blend: Subtraction
+          material: wedge.material
+          taper: wedge.taper
+          position [
+            wedge.position[0] - origin[0],
+            wedge.position[1] - origin[1],
+            wedge.position[2] - origin[2]
+          ]
+          scale: wedge.half
+          rotation: wedge.rotation
+          group: wedge.plate + 1
+          parent: $"ice-{wedge.plate}"
+        }
+      }
+      for (scallop, i) in scallops {
+        shape Cylinder $"scallop-{i}" {
+          blend: Subtraction
+          material: scallop.material
+          position [
+            scallop.position[0] - origin[0],
+            scallop.position[1] - origin[1],
+            scallop.position[2] - origin[2]
+          ]
+          scale [scallop.radius, scallop.height, scallop.radius]
+          rotation: onSlope(scallop.cosine, 0)
+          group: scallop.plate + 1
+          parent: $"ice-{scallop.plate}"
         }
       }
     }
   }
 }
 
-// A lake's surface: a flat turquoise disc of `radius` that rises and falls with the gauge `state.<gauge>` by `rise` metres
-// a unit above `rest`, the gauge's value at the lake's outlet, its shading rippled by `flow`.
-template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
+// Stones lying in a lake's bowl and on its bank, in the lake's own frame: each { position, radii, yaw, material } is an
+// ellipsoid half sunk in the rock, so the floor and shore read through the water and the stones cross the waterline.
+template lakeStones(id, stones, palette) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: id
+      palette: palette
+      for (stone, i) in stones {
+        shape Ellipsoid $"stone-{i}" {
+          material: stone.material
+          position: stone.position
+          scale: stone.radii
+          rotation [0, sine(stone.yaw * 0.008726646259971648), 0, cosine(stone.yaw * 0.008726646259971648)]
+        }
+      }
+    }
+  }
+}
+
+// A lake's water: a body of the bowl's `depth` and `radius` whose top is the surface, so the floor shows through it by its
+// depth and the shore is where the rock meets the level. Its rim and floor are buried in the rock, and each of `cuts` (a
+// { position, half } box in the lake's frame) is a subtraction that takes the water away where the rock beyond it is lower
+// than the surface (an outlet's sill), so no water side stands bare. The surface rises and falls with the gauge
+// `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the cuts ride it, so no seam stretches.
+template lakeSurface(id, radius, depth, cuts = [], gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -311,13 +446,24 @@ template lakeSurface(id, radius, gauge = "lakeLevel", rest = 0.4, rise = 4, pale
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]
-      shape Cylinder "surface" {
+      shape Cylinder "water" {
         material: 0
-        position [0, 0, 0]
-        scale [radius, 0.12, radius]
+        group: 1
+        position [0, 0 - depth / 2, 0]
+        scale [radius, depth / 2, radius]
         slides [
           { driver: "level", axis [0, 1, 0], amplitude: rise, phase: 0 - rest, wave: "linear" }
         ]
+      }
+      for (cut, i) in cuts {
+        shape Box $"cut-{i}" {
+          blend: Subtraction
+          material: 0
+          group: 1
+          parent: "water"
+          position: cut.position
+          scale: cut.half
+        }
       }
     }
   }
