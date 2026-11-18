@@ -19,6 +19,10 @@ public sealed partial class WorldScopedReplayRuntime {
     private readonly HashSet<long> m_drawSites = [];
     private readonly SortedDictionary<int, List<PrivateDrawWord>> m_words = [];
     private IDisposable? m_drawInput;
+    private IDisposable? m_drawCapture;
+    private List<PrivateDrawWord>? m_expectedWords;
+    private int m_wordCursor;
+    private bool m_wordsDiffer;
     private readonly List<ulong> m_hashes = [];
     private readonly List<(int Tick, WorldCommand Command)> m_commands = [];
     private readonly List<(int Tick, IntentSubmission Intent)> m_intents = [];
@@ -249,15 +253,20 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         if (!m_active) { return; }
         if (m_drawSites.Count != 0) {
-            m_drawInput = m_recording ? m_server.DrawKeys.Capture(word => {
-                if (m_drawSites.Contains(word.Installation)) { RecordWord(m_cursor, word); }
-            }) : m_server.DrawKeys.Replay(m_words.GetValueOrDefault(m_cursor) ?? [],
-                address => {
-                    if (!m_diverged) { m_server.Output.Narrate("replay.scope", $"[replay.scope: {Name} MISMATCH tick {m_cursor + 1} lacks {address}]"); }
-                    m_diverged = true;
-                    CloseDrawInput();
-                    return null;
-                }, sites: m_drawSites);
+            m_expectedWords = m_words.GetValueOrDefault(m_cursor);
+            m_wordCursor = 0;
+            m_wordsDiffer = false;
+            if (!m_recording) {
+                m_drawInput = m_server.DrawKeys.Replay(m_expectedWords ?? [], static _ => null, sites: m_drawSites);
+            }
+            // Observe the same consumed words even when a whole-session tape supplies them ahead of this scope.
+            m_drawCapture = m_server.DrawKeys.Capture(word => {
+                if (!m_drawSites.Contains(word.Installation)) { return; }
+                if (m_recording) { RecordWord(m_cursor, word); }
+                else if (m_expectedWords is not { } words || m_wordCursor >= words.Count || words[m_wordCursor++] != word) {
+                    m_wordsDiffer = true;
+                }
+            });
         }
         if (m_recording) {
             foreach (var input in m_source.Inputs) {
@@ -295,6 +304,8 @@ public sealed partial class WorldScopedReplayRuntime {
     internal void CloseDrawInput() {
         m_drawInput?.Dispose();
         m_drawInput = null;
+        m_drawCapture?.Dispose();
+        m_drawCapture = null;
     }
     private void ResetDrive() {
         CloseDrawInput();
@@ -350,9 +361,11 @@ public sealed partial class WorldScopedReplayRuntime {
         if (!m_active) { return; }
         var actual = Hash();
 
-        if (m_recording) { m_hashes.Add(item: actual); m_recordHash.Add(value: actual); } else if ((actual != m_hashes[m_cursor]) && !m_diverged) {
+        var drawMismatch = m_drawSites.Count != 0 && (m_wordsDiffer || m_wordCursor != (m_expectedWords?.Count ?? 0));
+        if (m_recording) { m_hashes.Add(item: actual); m_recordHash.Add(value: actual); } else if (!m_diverged && (drawMismatch || actual != m_hashes[m_cursor])) {
             m_diverged = true;
-            m_server.Output.Narrate("replay.scope", $"[replay.scope: {m_source.Name} MISMATCH tick {(m_cursor + 1)} expected {m_hashes[m_cursor]:x16} actual {actual:x16}]");
+            var detail = drawMismatch ? "private draw inputs differ" : $"expected {m_hashes[m_cursor]:x16} actual {actual:x16}";
+            m_server.Output.Narrate("replay.scope", $"[replay.scope: {m_source.Name} MISMATCH tick {m_cursor + 1} {detail}]");
         }
         Write(key: "cursor", value: ++m_cursor);
         if (m_cursor < m_source.DurationTicks) { return; }

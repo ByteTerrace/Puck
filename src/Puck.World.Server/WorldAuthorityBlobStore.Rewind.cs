@@ -69,14 +69,12 @@ public sealed partial class WorldAuthorityBlobStore {
             cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false);
 
+        if (!WorldAuthorityCheckpointCodec.TryDecode(checkpoint.Span, out var decoded, out var reason, m_documentDirectory)) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: $"rewind checkpoint refused — {reason}. Select a point captured with the current authority.");
+        }
         if (
             (history.Source.Root.RewindBoundary != point.RewindBoundary) ||
             (history.Source.Root.DefinitionHash != WorldDefinitionFileSource.ComputeContentHash(content: definition.Span)) ||
-            !WorldAuthorityCheckpointCodec.TryDecode(
-            bytes: checkpoint.Span,
-            checkpoint: out var decoded,
-            reason: out _
-        ) ||
             (decoded!.Server.LastCompletedTick != row.Tick)
         ) {
             return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "restore payload does not match the selected capture provenance");

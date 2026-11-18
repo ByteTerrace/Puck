@@ -104,7 +104,7 @@ public sealed class WorldReleaseFixtureBuilder(IObjectBlobStore blobs, WorldRele
                     checkpoint: out var captured,
                     reason: out var reason
                 )) {
-                    throw new InvalidDataException(message: ("qualification snapshot checkpoint is invalid: " + reason));
+                    throw new InvalidDataException(message: $"qualification snapshot checkpoint refused — {reason}. Capture a new release fixture with the current authority.");
                 }
                 if (captured!.Server.LastCompletedTick != snapshot.Worlds[world.Key].Tick) { throw new InvalidDataException(message: "qualification checkpoint tick differs from its inventory"); }
                 var receipts = await fixtures.ReadReceiptsAsync(

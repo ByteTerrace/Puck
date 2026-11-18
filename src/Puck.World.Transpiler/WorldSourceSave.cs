@@ -15,8 +15,8 @@ namespace Puck.World.Transpiler;
 /// the document that authors every other row of its list, or the saved source. Inside each document
 /// <see cref="WorldSourceEdits"/> rewrites only the changed nodes, so every <c>let</c>, <c>template</c>, <c>for</c>
 /// and comment outside them stays as written, and a node a generator writes refuses by name. A source holds the world
-/// as it starts. A private draw world saves its live rows together so a deck and the hands dealt from it share one save.
-/// Other existing sources retain their authored simulation state. Nothing is written unless every edited source compiles to the document the save asked of it and the whole
+/// as it starts. A private draw world also saves its live rows together beside the source so a deck and the hands
+/// dealt from it share one save. Nothing is written unless every edited source compiles to the document the save asked of it and the whole
 /// tree composes to the snapshot.</remarks>
 public static class WorldSourceSave {
     // One source of the tree: its text and its own lowered document, which the save edits.
@@ -57,25 +57,22 @@ public static class WorldSourceSave {
 
         var snapshot = WorldDefinitionSerialization.SerializeBeside(definition, path);
 
-        var save = WorldDefinitionFileSource.SourceSavePath(path);
-        if (definition.AuthoredState.Any(row => row.Draw?.PrivateStream == true)) {
-            var newSource = !File.Exists(path);
-            Puck.Confinement.AtomicFile.WriteAllBytesDurably(save, snapshot);
-            bytesWritten = snapshot.Length;
-            written = [PuckPaths.Normalize(save)];
-            if (newSource) {
-                // Publish the entry only after its complete snapshot. This never asks the decompiler to invent names.
-                var basis = JsonValue.Create(Path.GetFileName(save)[..^".world.json".Length])!.ToJsonString();
-                var entry = Encoding.UTF8.GetBytes($"schema: \"{WorldDefinition.SchemaVersion}\"\nbasis: {basis}\n");
-                Puck.Confinement.AtomicFile.WriteAllBytesDurably(path, entry);
-                bytesWritten += entry.Length;
-                written = [PuckPaths.Normalize(path), PuckPaths.Normalize(save)];
-            }
-            reason = string.Empty;
-            return true;
-        }
+        var privateDraws = definition.AuthoredState.Any(row => row.Draw?.PrivateStream == true);
         var target = JsonNode.Parse(snapshot)!.AsObject();
+        var save = WorldDefinitionFileSource.SourceSavePath(path);
+        var basisName = Path.GetFileName(save)[..^".world.json".Length];
         if (!File.Exists(path: path)) {
+            if (privateDraws) {
+                // A new entry refers to the complete snapshot without asking the decompiler to invent generated names.
+                var basis = JsonValue.Create(basisName)!.ToJsonString();
+                var entry = Encoding.UTF8.GetBytes($"schema: \"{WorldDefinition.SchemaVersion}\"\nbasis: {basis}\n");
+                Puck.Confinement.AtomicFile.WriteAllBytesDurably(save, snapshot);
+                Puck.Confinement.AtomicFile.WriteAllBytesDurably(path, entry);
+                bytesWritten = snapshot.Length + entry.Length;
+                written = [PuckPaths.Normalize(path), PuckPaths.Normalize(save)];
+                reason = string.Empty;
+                return true;
+            }
             return TryCreate(bytesWritten: out bytesWritten, catalog: catalog, catalogFingerprint: catalogFingerprint, path: path, reason: out reason, target: target, written: out written);
         }
 
@@ -83,6 +80,15 @@ public static class WorldSourceSave {
 
         if (!TryLoad(path: path, reason: out reason, source: out var root)) {
             return false;
+        }
+        // A saved entry may itself be backed by its live snapshot. The entry has no authored rows to rewrite.
+        if (privateDraws && root!.Document.Count == 2 &&
+            root.Document[WorldDocumentBasis.BasisMemberName] is JsonValue basisValue &&
+            basisValue.TryGetValue<string>(out var savedBasis) && StringComparer.Ordinal.Equals(savedBasis, basisName)) {
+            Puck.Confinement.AtomicFile.WriteAllBytesDurably(save, snapshot);
+            bytesWritten = snapshot.Length;
+            written = [PuckPaths.Normalize(save)];
+            return true;
         }
         sources[root!.Path] = root;
 
@@ -119,10 +125,16 @@ public static class WorldSourceSave {
             return false;
         }
 
+        if (privateDraws) {
+            Puck.Confinement.AtomicFile.WriteAllBytesDurably(save, snapshot);
+            bytesWritten = snapshot.Length;
+        }
         foreach (var source in edited) {
             bytesWritten += Write(bom: source.ByteOrderMark, path: source.Path, text: source.Rewritten);
         }
-        written = [.. edited.Select(selector: static source => source.Path)];
+        written = privateDraws
+            ? [.. edited.Select(static source => source.Path).Append(PuckPaths.Normalize(save)).Order(PuckPaths.Comparer)]
+            : [.. edited.Select(static source => source.Path)];
         reason = string.Empty;
         return true;
     }

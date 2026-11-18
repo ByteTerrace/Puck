@@ -43,7 +43,7 @@ public sealed partial class WorldAuthorityBlobStore {
             checkpoint: out var captured,
             reason: out var reason
         )) {
-            return WorldAuthorityStoreOutcome.Failed(detail: ("fixture checkpoint is invalid: " + reason));
+            return WorldAuthorityStoreOutcome.Failed(detail: $"fixture checkpoint refused — {reason}. Capture a new release fixture with the current authority.");
         }
         var tick = captured!.Server.LastCompletedTick;
 

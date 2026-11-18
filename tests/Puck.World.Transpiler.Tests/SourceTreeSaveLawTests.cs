@@ -80,11 +80,13 @@ public sealed class SourceTreeSaveLawTests {
         var module = files.WriteText("cards.puck", Cards);
         var root = files.WriteText("table.puck", WorldSources.Header + """
             import "cards"
+            let rate = 30
+            simulation { rateHz: rate }
             state { world {
               row { name:"entropy" kind:Int draw { privateStream:true timing:Event generator { source:StreamDraw } } }
             } }
             """);
-        var authored = Live(root, _ => { });
+        var authored = Live(root, document => document["simulation"]!["rateHz"] = 60);
         WorldDefinition Deal(bool second) => authored.WithWorldState(authored.AuthoredState.Select(row => row.Name.Value switch {
             "deck" => row with { Cells = second ? [] : [new(CellName.Parse("b"), CellValue.Bool(true))] },
             "hand" => row with { Cells = second ? [new(CellName.Parse("a"), CellValue.Bool(true)), new(CellName.Parse("b"), CellValue.Bool(true))] :
@@ -102,6 +104,7 @@ public sealed class SourceTreeSaveLawTests {
         }
         Assert.Equal(committed, File.ReadAllBytes(save));
         Assert.Equal(Cards, File.ReadAllText(module));
+        Assert.Contains("let rate = 60", File.ReadAllText(root));
         Assert.True(WorldDefinitionLoader.TryLoadFileForAdmission(save, out var loaded, out _, out reason, keys: WorldDrawSampler.Preview), reason);
         var sourceRows = Live(root, _ => { }).AuthoredState;
         Assert.Equal(2, sourceRows.Single(r => r.Name.Value == "deck").Cells!.Count);
@@ -109,6 +112,15 @@ public sealed class SourceTreeSaveLawTests {
         var rows = loaded!.Definition.AuthoredState;
         Assert.Equal("b", Assert.Single(rows.Single(r => r.Name.Value == "deck").Cells!).Key.Value);
         Assert.Equal("a", Assert.Single(rows.Single(r => r.Name.Value == "hand").Cells!).Key.Value);
+
+        var fresh = files.PathOf("fresh.puck");
+        Assert.True(WorldSourceSave.TrySave(Deal(false), fresh, out _, out reason), reason);
+        Assert.True(WorldSourceSave.TrySave(Deal(true), fresh, out _, out reason), reason);
+        var compiled = WorldCompiler.Compile(source: File.ReadAllText(fresh), sourcePath: fresh, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(WorldSourceLoader.TryLoadForAdmission(fresh, Encoding.UTF8.GetBytes(compiled.RequireJson().ToJsonString()),
+            out var resumed, out reason, keys: WorldDrawSampler.Preview), reason);
+        Assert.Equal(60, resumed!.Definition.SimulationRateHz);
+        Assert.Equal(2, resumed.Definition.AuthoredState.Single(r => r.Name.Value == "hand").Cells!.Count);
     }
 
     [Fact]

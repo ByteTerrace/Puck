@@ -389,13 +389,8 @@ a sorted hand, a five-dice large straight is a `choice` of two sequences over a
 sorted tray. `world.patterns` echoes each compiled table; `world.budget`
 carries the states and the word cap.
 
-Private random transfers can use `draw.secret`, a nonzero 256-bit key provisioned
-by the authority before simulation. This selects cursor-addressed HMAC-SHA256
-samples for integer `streamDraw` sites; ordinary generators keep their PCG
-contract. Use a fresh unpredictable secret per game and keep authority saves,
-replays, and replica access private. The simulation draws no system entropy.
-No hidden keys, generator definitions, cursors, or drawn masks enter observation
-payloads. Publicly authored seeds alone are unsuitable for hidden deals.
+See [Keep draws private](../../docs/reference/state/generators.md#keep-draws-private)
+for declaring a private stream and saving or replaying its draws.
 
 **The tabletop primitive.** A placement's `board` facet (`WorldPlacementBoard`)
 anchors a discrete `Grid` topology's own world-space frame (its declared
