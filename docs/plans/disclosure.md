@@ -1312,7 +1312,7 @@ numbers here are W1–W8 to distinguish them from rd2's F1–F4 above.
 | W3, high: declaration omissions | `AdmitsDeclaration` checks domain, row readers, inverse and phase only; `ValidateDisclosureRow` reads knowledge source/mask/positions and cell readers; `ValidateWitnessRow` resolves the witness | Incoming declaration compilation, including its deferred source bindings, reads through access. Scope allowlist rejects these features from payload alone | Replace an admitted row with each knowledge, witness or per-cell-reader form. Include a public-source success control and inspect later delivery for copied values |
 | W4, high: reverse dependencies | `StateCatalog` builds `DependentRows` only from `KeysOf`; `ValidateDerivedBoard` compares token/code membership and order. Its shown error names the board and codes, **not the hidden keys themselves**. The packet overstates that text claim | Reverse invalidation comes from check reads, including the owner and negative lookups. All checks that could veto the change run restricted. Lower-tier general writes refuse by shape; scope checks cannot have outside dependents | Change tokens while a fixed hidden inverse's code membership varies; remove/reshape public sources of knowledge, phase, readers and witness checks. Add absent-dependent pairs below replica, and assert public state unchanged on refusal |
 | W5, high as a lower-tier oracle: empty selection | `WorldDefinitionFingerprint.Compute` filters `StateRaw.World` only; other sections remain. `DisclosedPlacements` deliberately emits one back per hidden cell under `Placeholder`. **One versus two backs is permitted disclosure to the seat in the packet, not a valid hidden-equivalent seat pair** | Every expected-definition form uses the actual read universe, never the write view. Null, empty and nonempty selection have identical ceiling admission | Recast the example as a Frames/Presentation writer not delivered those bytes; all forms refuse identically. Replica controls use their actual delivered fingerprints: equal for `Omit` hidden-only changes, different for a permitted back-count change |
-| W6, medium: console pre-reads | `WorldStateCommandModule.HandleCellSet` branches on `FindRow(server.ReadView(context))`; `WorldRowCommandModule.TryReadMutationRow` distinguishes `Withheld` from missing before admission; `WorldServer.ReadView` throws for unavailable sessions | Console submits raw edit intent; schema-dependent parsing/read-modify-write occurs inside preparation. Handler needs no write-side `ReadView` call | Multiword text, invalid vector and row set/remove/step/add through the real console for seats and session tiers, with Observe revoked too; compare synchronous reply, queued echo, outcome and stream survival |
+| W6, medium: console pre-reads | The former `world.state.cell.set` handler branched on the row kind before submitting a write. The command now submits its raw operand for ordered compose; `WorldRowCommandModule.TryReadMutationRow` distinguishes `Withheld` from missing before admission; `WorldServer.ReadView` throws for unavailable sessions | Console submits raw edit intent; schema-dependent parsing/read-modify-write occurs inside preparation. Handler needs no write-side `ReadView` call | Multiword text, invalid vector and row set/remove/step/add through the real console for seats and session tiers, with Observe revoked too; compare synchronous reply, queued echo, outcome and stream survival |
 | W7, medium: route before admission | The former dispatch path inspected the installed row before admission and emitted denials separately on its two routes | `WorldPreparedMutation.TryPrepare` now admits before classification. `WorldDocument.DenyMutation` emits the admission refusal on both routes. Classification still reads installed rows directly | Generate/upsert inside a batch also naming a placeholder, both state-only and mixed edits; same input, hidden row present/absent; compare the complete ordered transcript |
 | W8, medium: adjacent read doors | `WorldPopulationCommandModule.DescribeParked` reads population/body poses and its Anyone handler ignores context; `WorldHudCommandModule.ResolveDynamicTemplate` looks up the row before checking withholding | Parked read becomes a caller-stamped query over the existing body-observation policy, counts and deadlines included. HUD validation and substitution share a restricted read operation; unavailable/absent answer alike. Decision 6 prevents a handler obtaining population/authority state directly | Parked bodies with denied Observe and differing poses/membership; HUD placeholders naming withheld/absent rows and cells. Drive actual registered handlers for all ingresses; no GPU needed |
 
@@ -2125,12 +2125,30 @@ Transform prices read the declared sampling algorithm and bound cell metadata
 without examining stored cells. A private stream keeps the same price when
 its observation omits the key. Execution requires a matching provisioned key.
 
-The whole-preparation invariant remains open. Document staging still exports
-the arena, and classification, validators and transform kernels still have raw
-access. The world-wide declarations carrier, compiler and evaluator migration
+A mixed rule firing submits its ordered document edits once. Settlement reads clocks
+for newly introduced rows and materializes a row only when inverse board settlement
+needs its cells. Filtered and ranged rule reductions share the admitted reducer.
+A filter row must be admitted even when the primary row is empty.
+
+The whole-preparation invariant remains open. General document staging and
+detached decision prognosis still export the live arena. Candidate validation
+takes the current and proposed seeded definitions. For example, compiling a
+literal key can inspect the current keys of its domain row, and journal admission
+builds a layout from the seeded section. Removing those seeds today changes the
+answer. These consumers need admitted membership and layout operations.
+Classification, validators and transform kernels still have raw access.
+The world-wide declarations carrier, compiler and evaluator migration
 (including `IStateReader.Arena` and the seeded rows in `RuleCompileContext`),
 removal of lazy authority binders, raw server surface closure, DISC001 and the
-negative fixtures remain D0b1 work. D0b2–D0b4 depend on that wall.
+remaining negative fixtures are D0b1 work. D0b2–D0b4 depend on that wall.
+
+`DisclosureSurfaceLawTests` compiles an external consumer against the production
+assemblies. Its positive control uses the admitted row and operator APIs. Eight
+negative cases cover seeded cells, a draw key, a seeded-row cast, arena access
+through a callback, a handle ordinal, clearing a fault, constructing an operator
+context and naming the prepared result. Raw compiler and evaluation contexts,
+full-world preparation and command-module constructors and generic constraints
+still need their own closure and checks.
 
 `StateReadAccessLawTests` covers access-bound handles, sticky failure, detached
 vectors and declaration acquisition. The console acquisition laws observe
