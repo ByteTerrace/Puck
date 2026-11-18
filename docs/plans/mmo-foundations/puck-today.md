@@ -919,7 +919,7 @@ A private draw samples an HMAC keyed by the world authority and the site’s ins
 
 ### Who can change them
 
-An authorized writer can change the declaration. A matching declaration retains its live cursor and masks. Removing and reinstalling a site allocates a fresh ordinal. Only the authority persists the seed. See [the installer](../../../src/Puck.World.Schema/WorldPrivateDrawKeys.cs).
+An authorized writer can change the declaration. A matching declaration retains its live cursor and masks. Removing and reinstalling a site allocates a fresh ordinal. The seed lives only in the running authority's memory, so a new activation and every rewind draw from a fresh stream. See [the installer](../../../src/Puck.World.Server/WorldPrivateDrawKeys.cs).
 
 ## Premise verdicts
 
