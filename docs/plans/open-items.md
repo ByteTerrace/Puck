@@ -908,6 +908,16 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
+- [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
+  axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
+  adding the final endpoint wraps. Check dimensions and their product before
+  forming array indices, and let the bake coarsen or partition a box that
+  exceeds the sample budget.
+- [medium] `SdfMeshGeometryBuilder.RelativePose` gives another slot at
+  +3,000,000 m and +4,000,000 m the same key and bakes both at −2,097,152 m.
+  Its rounded component shares an out-of-range sentinel with the stored
+  coordinate. Carry the supported large offsets through the rounded pose,
+  the key and the uploaded rows, with absence represented independently.
 - [high] `puck mesh audit --cpu` still differs from the device wherever a
   lattice's gradient taps lie closer than the fixed-point evaluator resolves
   (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a

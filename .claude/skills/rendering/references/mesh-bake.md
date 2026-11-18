@@ -1030,8 +1030,9 @@ laws exercise that boundary.
   `GetCompletedValue` reserves for device loss, never signal that value or
   wrap to zero.
 - **Groups are keyed by geometry** (`SdfMeshGeometryBuilder`: instructions with
-  side-table values for offsets, materials by place, a dynamic bound's radius
-  alone, other slots by their rounded pose in the group's frame, lane-erosion
+  side-table values for offsets, materials by place, instance bounds in their
+  declared frame and the bake turn for nonzero world-axis offsets, other slots
+  by their rounded pose in the group's frame, lane-erosion
   lanes, the reach of a box it clamps, glass, and for a group holding a glyph the
   content identity of the atlas pixels its glyphs sample, `SdfProgram.GlyphAtlas`,
   which `SdfProgramBuilder.Glyph` takes from the atlas image's
