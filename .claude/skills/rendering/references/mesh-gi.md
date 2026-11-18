@@ -753,6 +753,30 @@ Aim the same eye at `4.60 4.2 29.76` to inspect that junction: a triangular
 bright patch there, in both indirect and final shading, is the probe above the
 roof admitted through the rays that graze past the roof's edge, which depth visibility must close. Do not infer a clean roof from the lower reference view.
 
+## Lighting-switch convergence checks
+
+How fast the main volume catches up with a lighting change is read from probe
+ages, not from stills. Boot `worlds/debug` windowed, and once
+`world.wait bakes` settles hold the day at noon
+(`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`,
+`world.state.cell.set day $value 0.5`) and pose body 0 at `0 0.02 -10`. Wait
+for the main volume's `[sdf.mesh-gi] done` line (its `triangles=` runs to
+hundreds of millions) and note its `seconds`. Then:
+
+- **A switch over a settled window.** Set `day` to 0.9, then 0.5, reading
+  `world.probe 0 0.05 -12 0 1 0`'s `lighting-version`, `relit` and each
+  level's `age-p50` and `age-max` every 60 ticks. The version moves on the
+  first read; the ages say when each level caught up.
+- **A switch during a refill.** Pose the body at `spawn:auction`, wait 600
+  ticks, then in one script pose it at `16 0.05 -24`, set `day` to 0.9 and read
+  `world.probe 16 0.1 -26 0 1 0` the same way. This is the case where stale
+  relights compete with the new window's traces (`SdfMeshIrradiance.Work`).
+
+Read the main residency's `trace-jobs=[…]` in `world.residency` beside the
+ages: origins a trace job (units over jobs) show whether placement trials share
+rounds. Ages count wall seconds, so a loaded machine slows them; compare two
+builds in back-to-back runs with the same script.
+
 ## Gallery isolation checks
 
 Turn `gallery.lights.all on` and leave the blinds down. Additional fixed

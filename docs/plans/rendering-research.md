@@ -1752,8 +1752,10 @@ switch, with no traces owed, relit the finest level in about 90 ticks,
 which is 3 seconds. And the lighting's version, the counter that marks a
 lighting change, moved about 1,380 ticks after the day was set. That is 46
 seconds before the age even starts to count. The run was on the tree the
-unmerged lighting branch started from, and the way to reproduce it is in
-[the lighting work packet](open-items.md#lighting-and-gi).
+unmerged lighting branch started from. The checks that reproduce it are the
+[lighting-switch convergence checks](../../.claude/skills/rendering/references/mesh-gi.md#lighting-switch-convergence-checks);
+with step 3's first two parts built, a switch moved the version on the first
+read in every run of them, so the delay above did not recur.
 
 A group's bake has the same shape. It samples up to five lattices that
 narrow in on the surface, then its final slabs, then up to eleven rounds

@@ -1153,41 +1153,23 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
-- [high] The debug world's main volume relights far slower than its lighting
-  changes, so a playing World shows stale indirect light for minutes after the
-  sun moves, the day turns to night or the window refills: a night lawn still
-  carries the noon bounce, and the view meters it as day. On the base build
-  the repro below kept `level-0-age-p50` above zero for about 55 seconds after
-  the version-23 capture (the probes went stale at about 4 s, 14, 36, 44,
-  then 0 with a max of 54), while relights ran only as fast as traces landed:
-  `trace-jobs` held about 26 origins a trace job at about 25 ms each, and most
-  of those jobs were placement trial rounds of a few probes, one round trip
-  per candidate offset. A second switch with no trace owed relit level 0 in
-  about 90 ticks. The fix is built but not yet measured in a running World:
-  every cut probe call keeps up to `SdfGpuWork.SlotCount` jobs in flight
-  (`SdfMeshProbeGpuWork.Run`), a batch commits once from its last relight job
-  (`SdfMeshProbeGpuWork.RecordCommit`), placement traces up to
-  `SdfMeshIrradiance.MostPlacementTrials` trials a probe per round
-  (`SdfMeshIrradiance.PlaceBatch`), probes relit under replaced lighting are
-  due at once (`sdf-probe-select.comp.hlsl`, the CPU `List`), the worker lists
-  again on a lighting change and shares its time between traces and stale
-  relights (`SdfMeshIrradiance.Work`). Next: run the repro on D3D12 and Vulkan
-  with the fix and with the base build (the base D3D12 figures above are from
-  one run; Vulkan has none), reading the convergence tick, `trace-jobs`,
-  `gpu-work`'s occupancy and `most-in-flight`, `[sdf.gpu-work] slow` lines and
-  device faults; take presented bursts of the valley across the switch; check
-  the gallery's level-0 exhibits and the meadow. Separately, on the base run
-  the lighting version itself moved only about 1,380 ticks after `day` was set
-  (traced stayed flat meanwhile, so the residency looks unstaged for that
-  span; a presentation program build on the first night switch is the
-  unverified lead); a second switch captured at once. Repro: boot
-  `worlds/debug`, hold the day at noon
-  (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`,
-  `world.state.cell.set day $value 0.5`), pose body 0 at (0, 0.02, -10), set
-  `day` to 0.9 at tick 4330, and read `world.probe 0 0.05 -12 0 1 0`'s
-  `lighting-version` and `level-0-age-p50` every 60 ticks with
-  `world.exposure`'s view 0 meter; the World ran at about 30 ticks a second,
-  so read ages, not ticks, as seconds.
+- [medium] Faster probe convergence costs host time while the volume works.
+  With several probe jobs in flight, one commit a batch and placement trials
+  sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
+  the worker now reaches the authored probe budget instead of waiting on round
+  trips, and its threads (`SdfMeshIrradiance`'s `BackgroundWorkers`) and the
+  frame thread's job recording compete with the simulation and the frame while
+  it does. On one loaded machine, the valley chapter of the `debug` benchmark
+  route ran with a cold window at a simulate median of 8.5 ms and a produce
+  median of 17.8 ms with indirect light on, against 5.4 ms and 13.9 ms with it
+  off, and the same chapter warm showed no difference. Next: in a quiet window,
+  run `puck benchmark --route debug --backend directx vulkan` on the build
+  before the probe-jobs change and on the head, then the head again with
+  `world.indirect off`, and read the simulate and produce medians per chapter
+  beside the `[sdf.mesh-gi] done` seconds; if the cost holds, find where the
+  host time goes (a .NET trace of the worker and the frame thread's `Record`
+  and `TryTake`, which walks the scene's draws each take through
+  `SdfMeshIrradianceScene.HasGpuPlacements`) before bounding the worker.
 - [high] A view-driven retier relights the whole window: a landed retier is a
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
