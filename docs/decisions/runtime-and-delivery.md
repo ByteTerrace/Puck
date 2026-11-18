@@ -227,6 +227,35 @@ requires one is not a defect. Inside it, pruning must hold four things:
 Three pre-landing reviews of earlier designs each found the same class of high,
 all of it adversarial same-user interleavings; this rule settles the class.
 
+## Vendor binaries
+
+A closed component from another company enters a Puck build only where its
+licence obliges nobody beyond whoever chose it (the owner's ruling, from the
+rendering plan's GPU capabilities round; the licence files were read, not
+summarized):
+
+- **Microsoft's Agility SDK** may ship in Windows builds whenever a feature
+  needs a newer Direct3D 12 runtime than Windows provides. Its licence makes
+  the runtime DLL distributable code inside an application, on condition
+  that the application adds significant functionality, its end users accept
+  terms that protect Microsoft at least as much as the SDK's own licence (an
+  end-user licence agreement), and the distributor indemnifies Microsoft. It
+  is restored from NuGet at build time and never committed.
+- **AMD's FSR 3.1** may be the engine's optional upscaler: the FidelityFX SDK
+  is open source under the MIT licence and runs on every backend. FSR 4 is
+  proprietary.
+- **NVIDIA's DLSS and Intel's XeSS** are opt-in vendor packages that an author
+  or distributor chooses, never engine parts. DLSS's licence requires
+  notifying NVIDIA before a commercial release and showing NVIDIA's marks on
+  splash screens, in the about box and in a game's credits; XeSS's requires
+  reproducing Intel's notice and terms. Built into the engine, those duties
+  would fall on every author who ships a world, which the engine never
+  imposes (AGENTS.md, "Authors rule").
+
+Every such component is an authored or distributor's choice with a working
+fallback, like any per-target capability. Before a commercial release, each
+licence is read in full again.
+
 ## The runtime
 
 **Bare-metal Puck runs on Puck's own host (the owner's ruling).** The

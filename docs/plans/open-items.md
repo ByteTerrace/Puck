@@ -64,14 +64,26 @@ The next lead rewrites this section when it hands off in turn.
   - irradiance scene rebuilds allocate `Node[]` through `SharedArrayPool`
     misses;
   - the lift allocates in spikes (frame thread 2.2 MB mean against 60 KB
-    median).
+    median);
+  - about twenty direct `NativeMemory.Alloc` and `AllocZeroed` calls use the
+    C runtime's heap beside mimalloc (`IAllocator`, `MimallocAllocator`): two
+    native allocators for one job, folded onto `IAllocator` by the same lane.
+  Mimalloc for native storage, the engine's own `GpuMemoryPool` and
+  `MemoryAccount` for GPU memory, and workstation GC with `ConserveMemory`
+  stay the choices. The World now runs with the runtime's default dynamic
+  PGO (it was off since the first commit for no recorded reason); the next
+  quiet 1440p benchmark reads the effect, and its readings are the new
+  baseline.
 - **In flight:** nothing. The GPU capabilities research round is in the
   rendering plan: its ranked list, its three first-wave lanes and its five
   second-wave lanes.
 - **Settled this round and recorded in their homes:** the frame bar's sizes,
   topologies and device order (AGENTS.md); deployed data is scratch
   (AGENTS.md); named engine gaps are filled first, and a material improvement
-  may land below the bar (AGENTS.md); the four engine questions of the
+  may land below the bar (AGENTS.md); a target lacking a capability never
+  vetoes a technique, and each device meets its bar by the path its quality
+  table enables (AGENTS.md); vendor binaries
+  ([the register](../decisions/runtime-and-delivery.md#vendor-binaries)); the four engine questions of the
   rendering plan ([what the owner settled](rendering-research.md#what-the-owner-settled-1));
   shared products in the [decision register](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
 - **Release rehearsal.** Release Azure dispatched without deploying on

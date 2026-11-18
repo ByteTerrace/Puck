@@ -2594,9 +2594,9 @@ Agility SDK. So whether the Windows runtime exposes the tier and the shader
 model is unverified, and it is part of the capability reading that takes no
 build (the table above). The `direct3d` lane's root-constant drop depends
 on that reading. If the runtime lacks them, both ways of dropping the
-constant need the SDK, and shipping it
-([the owner's call](#what-the-owner-settled-1)) then blocks a lane of the
-first wave. Whether ray queries need it is also unverified; the researcher
+constant need the SDK, which the owner allows in Windows builds
+([vendor binaries](../decisions/runtime-and-delivery.md#vendor-binaries)), so
+the lane brings it in rather than waiting. Whether ray queries need it is also unverified; the researcher
 infers the operating system's runtime is enough.
 
 **Text elsewhere that still lets one device decide.** These passages were
@@ -2947,9 +2947,9 @@ one barrier model.**
   read from the record as Vulkan reads it, and takes the reading again.
   That step depends on the capability reading showing that the Windows
   runtime exposes the second tier of indirect execution, or Shader Model
-  6.8, without the Agility SDK; if it shows neither, the step waits on the
-  owner's question about the SDK and the lane does only the barrier
-  change. Second, every texture transition goes through enhanced barriers, and the
+  6.8, without the Agility SDK; if it shows neither, the lane brings in
+  the Agility SDK, restored from NuGet at build time and shipped in
+  Windows builds, and takes the step. Second, every texture transition goes through enhanced barriers, and the
   older transition path is deleted.
 - *Owns.* In `src/Puck.DirectX`: `DirectXPipelineLayout*.cs`,
   `DirectXGpuRecorder*.cs`, `DirectXBarriers.cs`, and the capability reads
@@ -3096,7 +3096,7 @@ carries the change, Sonnet where the result is specified.
 | The paint on a blended seam (gap 10) | A painted marking stays fixed to a surface that bends | `water` and `shadows` | [Moving blends](moving-blends.md), step 4 | Opus |
 | The particle pool (gap 15) | Spray at the falls and a splash in the plunge pocket | `water` | [Water](water.md#w3-the-presentation-particle-pool) | Sonnet |
 | The stretched primitive (gap 11) | A true distance for a stretched capsule, cone and torus | Its design | [Rendering](rendering.md#bake-quality) | Opus |
-| Shared allocation | The allocation both backends share is cut at the sources a trace names | `vkalloc`, whose trace says what is left | [Job system](open-items.md#engine-job-system) | Sonnet |
+| Shared allocation | The allocation both backends share is cut at the sources a trace names: the warm loop's re-bakes as the detail level falls, the irradiance volume's whole upload on every window change, scene-rebuild `Node[]` misses in `SharedArrayPool`, and the lift's spikes; and every direct `NativeMemory.Alloc` or `AllocZeroed` call moves onto `IAllocator`, so mimalloc is Puck's one native allocator (two native heaps for one job is a duplicate) | `vkalloc`, whose trace says what is left | [Job system](open-items.md#engine-job-system) | Sonnet |
 | Keys by stage | An edit to the simplifier rebakes with no field sampling (decision 10) | `cutter` and `contour`, which change the same bake code | [Bake proportional to change](open-items.md#bake-proportional-to-change) | Opus |
 | Where the tick runs | A design that weighs the arrangements of decision 3, each with its time from input to display | `frame`'s cost of one more world | [The job system plan](engine-job-system.md#open-questions) | Fable |
 | The shadow filter in metres | A prototype behind a switch, compared with a brute-force filter (decision 6) | `shadows` | [Transmission](transmission.md#implementation-steps) | Opus |
@@ -3261,8 +3261,9 @@ Each item names the landing it needs. None waits for a wave to close.
   which changes the glass pass.
 - **A vendor's upscaler as an authored alternative to the resolve**
   (rank 9). It needs `history`, a reading of its cost at native size on
-  the RTX 4070, a register entry, and the owner's word on shipping a
-  vendor's binary.
+  the RTX 4070 and a register entry. FSR 3.1 is the engine's optional
+  upscaler; DLSS and XeSS arrive only as opt-in vendor packages
+  ([vendor binaries](../decisions/runtime-and-delivery.md#vendor-binaries)).
 - **Mesh landing decoded on the GPU** (rank 14). It needs the reading of a
   warm start, which may name Puck's own landing rate first, and the
   background queue.
@@ -3337,25 +3338,27 @@ explicit size is honoured as it is today.
    published pictures first, the visible part with secrets withheld as the
    target ([the eighth bet](#the-bets)), and layered pictures when the
    geometry itself is secret.
+5. **Vendor binaries.** Windows builds may ship the Agility SDK; FSR 3.1
+   (MIT) may be the engine's optional upscaler; DLSS and XeSS are opt-in
+   vendor packages, never engine parts
+   ([the register](../decisions/runtime-and-delivery.md#vendor-binaries)).
 
 Three things are not questions. The size the bar is read at, the two
 topologies and the order of devices are ruled. Sharpening stays ahead of
 bloom, as the register rules. And the hardware is not needed until the
 RTX 4070 meets its bars.
 
-Two questions from the round on GPU capabilities are the owner's, and
-neither is asked until its technique is taken up, after the second wave.
-Both ask whether a build may carry another company's binary. One is a GPU
-vendor's upscaler beside Puck's own resolve. The other is Microsoft's
-Agility SDK, a newer Direct3D 12 runtime shipped beside the program, which
-four watched features need
-([GPU capabilities](#gpu-capabilities-puck-does-not-use-yet)). The SDK
-question may come sooner: if the capability reading finds that the Windows
-runtime lacks the second tier of indirect execution and Shader Model 6.8,
-the `direct3d` lane's root-constant drop needs the SDK too, and the
-question then blocks that step of a first-wave lane.
+The round on GPU capabilities raised whether a build may carry another
+company's binary, and the owner settled it
+([vendor binaries](../decisions/runtime-and-delivery.md#vendor-binaries)):
+Windows builds may ship Microsoft's Agility SDK whenever a feature needs it;
+AMD's FSR 3.1, under the MIT licence, may be the engine's optional upscaler;
+and NVIDIA's DLSS and Intel's XeSS are opt-in vendor packages an author or
+distributor chooses, because their licences require notifying the vendor,
+showing its marks or carrying its terms, which the engine never imposes on
+authors.
 
-Otherwise no owner question blocks a lane of either wave. One design
+No owner question blocks a lane of either wave. One design
 question is open and is not the owner's yet: where the tick runs. The job-system plan
 owns it, the first wave measures what it needs, and it reaches the owner
 only if the design it settles on adds latency for the world the player

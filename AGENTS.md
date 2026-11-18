@@ -100,7 +100,10 @@ agent works in that mode by default, without asking:
   ruling: "We can't be in the business of 'policing' how authors perform
   attribution and whatnot"): the engine carries what an author writes in a
   creation's identified bytes and enforces no licence vocabulary,
-  compatibility or attribution policy.
+  compatibility or attribution policy. For the same reason, a vendor
+  component whose licence carries duties (notifying the vendor, showing its
+  marks) is an opt-in package an author or distributor chooses, never an
+  engine part ([vendor binaries](docs/decisions/runtime-and-delivery.md#vendor-binaries)).
 - Puck code over engine code (the owner's ruling). Behaviour is written as
   Puck programs that authors build and own: camera programs, physics and
   motion programs, the state system's rules, board games, cartridges and
