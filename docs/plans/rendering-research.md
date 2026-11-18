@@ -484,7 +484,8 @@ from a change to seeing it first
 ### 2. Capture and prepare only what a frame shows
 
 **The problem.** The frame thread does work for worlds, views and bodies
-that no pixel of the frame will show. The cause is the order of operations.
+that no pixel of the frame will show. The cause is that every residency is
+prepared before anything has decided what the frame needs.
 
 The host loop steps the simulation and then calls produce on the same thread
 (`src/Puck.Launcher/HostLoop.cs:169-184`). Produce starts every render
@@ -3442,7 +3443,7 @@ draft said "the tour", it meant the same thing.
 
 | Stage | In one line | Needs first |
 |---|---|---|
-| [0](#stage-0-measure) | Build the route and the instruments, and take the missing measurements. Change nothing a player sees | A quiet measurement session, an RTX 2060, and a Steam Deck whose windowed path has been brought up |
+| [0](#stage-0-measure) | Build the route and the instruments, and take the missing measurements. Change nothing a player sees | A quiet measurement session, an RTX 2060 and a Steam Deck |
 | [1](#stage-1-fix-what-the-player-sees-everywhere) | Fix what the player sees everywhere: colour, shadow roles, lighting lag, contour defects, nested-view quality | The lead machine's part of stage 0. An HDR display for the colour check |
 | [2](#stage-2-the-frame-thread-and-the-round-trips) | Shorten the frame thread's work, compact the draw list and remove the round trips | Stage 0's breakdowns. Stage 1's headroom rule and its closing bake run |
 | [3](#stage-3-one-instance-table-and-one-chain-of-meshes) | One instance table and one chain of meshes | Stage 2's compaction and instance updates. The shader matrix measured on the bar devices |
