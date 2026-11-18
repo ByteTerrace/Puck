@@ -74,6 +74,17 @@ The next lead rewrites this section when it hands off in turn.
   PGO (it was off since the first commit for no recorded reason); the next
   quiet 1440p benchmark reads the effect, and its readings are the new
   baseline.
+- **Beside the first wave, not before it:**
+  - targeted skill evals for what this round taught: `delegate` (a lane hands
+    back after build and boot instead of running windowed checks),
+    `orchestration` (batched landings, the three-slot GPU cap) and a
+    regression run of `dotnet-performance` after its .NET 11 rewrite; a
+    skill that misteaches is fixed mid-wave;
+  - a consolidation pass over AGENTS.md (about 44,600 characters, above the
+    large-memory-file warning on a 200k context): every ruling kept,
+    overlapping passages merged, repetition cut;
+  - the rendering plan's step designs folded into the plans that own them,
+    as the plan says happens after the owner's discussion.
 - **In flight:** nothing. The GPU capabilities research round is in the
   rendering plan: its ranked list, its three first-wave lanes and its five
   second-wave lanes.
