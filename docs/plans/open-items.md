@@ -2196,6 +2196,12 @@ lane's.
   cannot capture pumped addon guests or a stepped machine without durable
   checkpoint support", but `AnyUncapturableStateEverLatched` latches only on a
   stepped machine: the message names a condition that no longer refuses.
+- [low] `RuleGroupState.Flatten` emits dictionary insertion order, while
+  `RuleGroupState.AppendStateHash` reads compiled group order. The checkpoint
+  copies that flattened order in `WorldPersistence.TryCaptureCheckpoint`, so group
+  insertion history can change checkpoint bytes without changing the state hash.
+  Canonicalize group progress as the latch does, including the representation
+  of an absent versus explicitly stored default progress.
 - [low] The checkpoint image of an all-default array or input image is written
   whole; a sparse encoding would cut a slot's bytes about tenfold. It changes
   the checkpoint format, so it rides a door step that already does.

@@ -1040,7 +1040,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             if (!hadFences) {
                 foreach (var slot in m_slots) { slot.Fence?.Dispose(); slot.Fence = null; slot.Commands?.Dispose(); slot.Commands = null; }
             }
-            if (!key.Candidate) {
+            if (!key.Candidate || error is DeviceLostException) {
                 throw;
             }
             Refuse(

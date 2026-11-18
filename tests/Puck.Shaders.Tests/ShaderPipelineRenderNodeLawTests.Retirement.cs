@@ -23,6 +23,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         // The old implementation queried after installing the candidate and lost the old graph there. Ownership
         // now transfers without a query; the following frame meets the loss with both graphs still owned.
         Assert.Throws<DeviceLostException>(() => { _ = Produce(node); _ = Produce(node); });
+        Assert.Null(node.LastSwapError);
         gpu.LoseFenceQueryAfterCreation = 0;
         gpu.QueueHeld = false;
         node.OnDeviceLost();
