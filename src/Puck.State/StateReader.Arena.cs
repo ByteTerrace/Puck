@@ -43,11 +43,10 @@ public static partial class StateReader {
     }
 
     /// <summary>Reduces live cells in member order, without materializing rows.</summary>
-    public static long ReduceRaw(StateReadAccess arena, int rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) {
+    public static long ReduceRaw(StateReadAccess arena, StateReadRow rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) {
         if (op == StateReduceOp.Count) { return arena.CellCount(rowOrdinal: rowOrdinal); }
         if (op == StateReduceOp.ArrangementRank) {
-            var row = arena.Declaration(rowOrdinal);
-            if ((row.EffectiveDomain is not StateDomain.KeysOf { Ordered: true } zone) ||
+            if ((arena.Domain(rowOrdinal) is not StateDomain.KeysOf { Ordered: true } zone) ||
                 !arena.TryResolveRow(name: zone.Row, rowOrdinal: out var domain)) { return -1L; }
             Span<int> ordinals = stackalloc int[MaxArrangementTokens];
             var count = DomainOrdinals(arena: arena, rowOrdinal: rowOrdinal, domainOrdinal: domain, ordinals: ordinals);
@@ -62,6 +61,10 @@ public static partial class StateReader {
         }
         return result;
     }
+
+    /// <summary>Reduces an authority catalog row through the shared read kernel.</summary>
+    public static long ReduceRaw(StateArena arena, int rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) =>
+        ReduceRaw(arena.ReadAccess, arena.ReadAccess.AuthorityRow(rowOrdinal), op, tick, engineTick);
 
     /// <summary>Returns the winning live cell key, resolving equal values to the lowest participant index.</summary>
     public static string? ArgExtremum<TState>(StateArena arena, StateHandle handle, StateReduceOp op, ulong tick, ulong engineTick,

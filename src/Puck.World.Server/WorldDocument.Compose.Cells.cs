@@ -304,6 +304,16 @@ public sealed partial class WorldDocument {
 
         var rowOrdinal = handle.Ordinal;
 
+        // A kind-neutral console tail can include the numeric add suffix. Interpret it only after admission
+        // and row resolution; text keeps that same suffix as text. Share the console's token boundaries.
+        if (row.Kind is not (CellKind.Text or CellKind.Vector) && mutation.RawToken is { } tail) {
+            Span<Range> tokens = stackalloc Range[2];
+            if (Puck.Commands.CommandRegistry.Tokenize(tail, tokens) == 2 &&
+                tail.AsSpan()[tokens[1]].Equals("add", StringComparison.OrdinalIgnoreCase)) {
+                mutation = mutation with { Kind = WorldDocumentWriteKind.Add, RawToken = tail[tokens[0]] };
+            }
+        }
+
         if (
             (mutation.Vector is not null) &&
             (row.Kind != CellKind.Vector)
@@ -384,12 +394,9 @@ public sealed partial class WorldDocument {
             );
         }
 
-        // Whether this write is a text write is a fact of the write, not the row — a text write always
-        // carries a non-null Text (even ""), a numeric one never does. Asking it this way
-        // (rather than switching on row.Kind) is what lets a kind-mismatched write refuse by name instead of
-        // silently composing against the wrong field: a numeric write against a text row would
-        // otherwise fall into this arm with Text null and overwrite the cell with an empty string.
-        var isTextWrite = (mutation.Text is not null);
+        // Typed payloads keep their kind. A raw ingress tail acquires its kind only here, against the candidate,
+        // so a row declared earlier in this drain accepts multiword text as well as numeric and vector values.
+        var isTextWrite = (mutation.Text is not null) || (row.Kind == CellKind.Text && mutation.RawToken is not null);
         // A cycle on a text row: the next token after the one the live cell reads, wrapping; the write
         // is then an ordinary text set of that token.
         var isTextCycle = ((row.Kind == CellKind.Text) && (mutation.CycleTokens is { Count: >= 2 }));
@@ -413,7 +420,7 @@ public sealed partial class WorldDocument {
                 return false;
             }
 
-            var textToWrite = mutation.Text!;
+            var textToWrite = mutation.Text ?? mutation.RawToken!;
 
             if (isTextCycle) {
                 var currentText = ((arena.Keys.TryResolve(

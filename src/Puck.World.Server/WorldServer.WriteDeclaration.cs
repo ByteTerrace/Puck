@@ -3,8 +3,9 @@ using Puck.Commands;
 namespace Puck.World.Server;
 
 public sealed partial class WorldServer {
-    /// <summary>Acquires only the shape needed to spell a write. Admission precedes the lookup, and an absent
-    /// or withheld row has the same answer. The returned descriptor carries neither cells nor a live binder.</summary>
+    /// <summary>Acquires only the shape needed to spell a write. Name resolution precedes policy admission;
+    /// no declaration is returned before admission, and absent and withheld names have the same answer.
+    /// The returned descriptor carries neither cells nor a live binder.</summary>
     /// <param name="context">The ingress-stamped command invocation.</param>
     /// <param name="name">The row the submission names.</param>
     /// <param name="declaration">The detached declaration, when the write footprint reads whole.</param>

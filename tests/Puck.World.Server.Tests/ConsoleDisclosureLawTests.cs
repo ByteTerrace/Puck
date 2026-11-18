@@ -267,12 +267,14 @@ public sealed partial class ConsoleDisclosureLawTests {
         private ulong m_tick;
 
         private CommandResult m_last;
+        public WorldEditEcho? LastEcho { get; private set; }
 
         public DisclosureHost(WorldDefinition definition, bool leaky = false) {
             m_row = HostRow.Build(
                 definition: definition,
                 name: "boot"
             );
+            m_row.Server.EchoTap = echo => LastEcho = echo;
 
             IWorldConsoleAuthority authority = (leaky
                 ? new LeakyAuthority(instance: m_row.Instance)
@@ -316,7 +318,7 @@ public sealed partial class ConsoleDisclosureLawTests {
 
         public CommandResult Console(string line) => m_registry.Submit(line: line);
         public void Dispose() => m_row.Dispose();
-        public CommandResult Seat(int slot, string line) {
+        public CommandResult Seat(int slot, string line, bool settle = false) {
             m_last = CommandResult.None;
             m_seats[slot].Enqueue(line: line);
             m_source.Collect();
@@ -324,6 +326,7 @@ public sealed partial class ConsoleDisclosureLawTests {
             if (m_registry.RoutesToSimulation(line: line, slot: slot)) {
                 m_registry.ApplySnapshot(m_router.SnapshotForTick(tick: ++m_tick, windowEndTick: ulong.MaxValue));
             }
+            if (settle) { m_row.Server.Advance(stepTicks: 1); }
 
             return m_last;
         }

@@ -2078,8 +2078,12 @@ rules. A declaration carries neither cells nor storage cursors, a phase
 sequence, a draw secret, an arena or a live value binder. `StateReadAccess`
 checks whole-row admission before each operation, gives restricted callers
 local row and key identities, copies vector payloads, and retains an unavailable
-fault for its lifetime. Missing and withheld row acquisitions throw the same
-failure. `StateReader.ReduceRaw` and `DomainOrdinals` use these operations for
+fault for its lifetime. Missing and withheld acquisitions of the **named row** throw the same
+failure. This does not close the dependent-row existence channel R5: the
+[structural write footprint](#the-structural-write-footprint) still owns that closure.
+`StateReadRow` binds a row to the access that acquired it, with no public ordinal;
+authority catalog ordinals enter the shared kernels through explicit overloads.
+`StateReader.ReduceRaw` and `DomainOrdinals` use these operations for
 authority and restricted access alike.
 Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
 and disclosure images.
@@ -2087,15 +2091,30 @@ and disclosure images.
 The first consumer is `world.state.cell.set`: `TryAcquireWriteDeclaration`
 checks the existing conservative write footprint before the parser asks for
 the row kind. Numeric, text and vector parsing therefore cannot select a
-different branch for a withheld row and an absent row. This closes that parser
-path only; it does not close the other console preflights in W6.
+different branch for a withheld row and an absent row. Acquisition failure
+submits a kind-neutral raw cell write to compose, preserving the typed refusal
+and writes to rows declared earlier in the same drain. Restricted declaration
+acquisition admits every row binding it returns and omits the generator source
+and body. Bindings to other sections require wider declaration entitlement;
+row-only acquisition fails without it, and the console still submits raw intent.
+This closes that parser path only; it does not close the other console preflights in W6.
 
 `CommandDefinition.OperatorWithWireArgs` receives a registry-minted
 `OperatorContext`. `WorldServer.AcquireOperatorAuthority` and the resulting
 `WorldOperatorAuthority` check the addressed world's live Operate grant.
+That live grant, not the registry's mint alone, is the authorization boundary.
+The capability exposes only hash operations, checked under `AuthorityGate`;
+it exposes no retained arena or definition.
 `world.state.hash` now uses this route, including its component digests. An
 ordinary command context cannot acquire that capability. Other operator
 commands and composition roots have not yet migrated.
+
+Replica observation rows never carry `Draw.Secret`, including unrestricted
+operator replicas. `WorldStateDisclosure.DiscloseRow` removes it for initial
+documents and refreshed image skeletons; authority persistence keeps it.
+`DisclosureReviewLawTests.ReplicaDrawsNeverCarryTheAuthoritySecret` failed for
+both public and restricted rows before this correction and covers both plus
+operator observations and the persistence control.
 
 The whole-preparation invariant is **not enforced**. The remaining D0b1 work
 is the transaction-only mint of `WorldPreparedMutation`, the world-wide

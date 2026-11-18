@@ -22,13 +22,6 @@ public sealed class WorldOperatorAuthority {
         }
     }
 
-    /// <summary>The authority's live declarations and seeds.</summary>
-    public WorldDefinition Definition => Current.Definition;
-    /// <summary>The live authoritative arena, for trusted persistence and simulation integration.</summary>
-    public StateArena Arena => Current.Arena;
-    /// <summary>Materializes an authority snapshot at an explicit export boundary.</summary>
-    public WorldDefinition ExportDefinition() => Current.ExportDefinition();
-
     /// <summary>Reads a state hash and its tick at one settled authority boundary.</summary>
     public (ulong Tick, ulong Hash) CaptureStateHash(WorldStateHashScope scope) {
         lock (m_server.AuthorityGate) {

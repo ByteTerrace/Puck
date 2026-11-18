@@ -386,7 +386,8 @@ public abstract record WorldMutation(Principal Principal) {
     /// this write a text write at compose — an empty string is still a text write, never <see langword="null"/>.</param>
     /// <param name="RawToken">The human-authored wire token for a numeric/bool write (decimal text for
     /// <c>Fixed</c>, <c>true</c>/<c>false</c> for <c>Bool</c>, an integer literal otherwise) — <see langword="null"/>
-    /// for a caller that already resolved <see cref="Value"/>, and for every <c>Text</c>-kind write. An ingress that
+    /// for a caller that already resolved <see cref="Value"/>. A kind-neutral ingress carries its raw tail here;
+    /// a text candidate consumes the complete tail and a vector candidate parses base64url. An ingress that
     /// types a row name the same batch may still be declaring (<c>world.state.cell.set</c>) cannot know the row's
     /// <c>Kind</c> before this mutation composes — parsing "-5" as a fixed-point raw bit pattern versus a plain
     /// integer is exactly the decision that needs the row, and the row may not exist yet at submit time. Carrying the

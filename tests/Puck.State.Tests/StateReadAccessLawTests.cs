@@ -3,6 +3,32 @@ using Xunit;
 namespace Puck.State.Tests;
 
 public sealed class StateReadAccessLawTests {
+    [Fact]
+    public void DeclarationAcquisitionAlsoAdmitsTheAudienceRowItNames() {
+        var section = new StateSection(Rows: [
+            new(CellName.Parse("public"), CellKind.Int, Visibility: new StateVisibility(ReadersFrom: "readers")),
+            new(CellName.Parse("readers"), CellKind.Text, Domain: StateDomain.Keys.Instance)
+        ]);
+        var arena = new StateArena(StateCatalog.Compile(section), section, ArenaTime.Origin);
+        var access = arena.RestrictReads(ordinal => ordinal == 0);
+        var row = access.ResolveRow("public");
+        Assert.Throws<StateUnavailableException>(() => access.Declaration(row));
+        Assert.True(access.Failed);
+        var admitted = arena.RestrictReads(_ => true);
+        Assert.Equal("readers", admitted.Declaration(admitted.ResolveRow("public")).Visibility!.ReadersFrom);
+    }
+
+    [Fact]
+    public void RowAdmissionDoesNotAcquireAnInlineGeneratorProgram() {
+        var section = new StateSection(Rows: [new(CellName.Parse("draw"), CellKind.Int,
+            Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw,
+                Extended: new GeneratorExtended(128, Script: [7, 11]))))]);
+        var arena = new StateArena(StateCatalog.Compile(section), section, ArenaTime.Origin);
+        var access = arena.RestrictReads(_ => true);
+        Assert.Null(access.Declaration(access.ResolveRow("draw")).Draw!.Generator);
+        Assert.NotNull(StateRowDeclaration.From(section.Rows![0]).Draw!.Generator);
+    }
+
     private static StateArena Store(bool hidden) {
         var rows = new List<StateRow> {
             new(CellName.Parse("public"), CellKind.Int, Domain: StateDomain.Keys.Instance,
@@ -24,16 +50,16 @@ public sealed class StateReadAccessLawTests {
             var failure = Assert.Throws<StateUnavailableException>(() => access.ResolveRow("secret"));
             failures.Add(failure.Message);
             Assert.True(access.Failed);
-            Assert.Throws<StateUnavailableException>(() => access.Declaration(0));
-            Assert.Throws<StateUnavailableException>(() => access.CellCount(0));
+            Assert.Throws<StateUnavailableException>(() => access.Declaration(default));
+            Assert.Throws<StateUnavailableException>(() => access.CellCount(default));
             Assert.Throws<StateUnavailableException>(() => access.TryResolveRow("public", out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryRead(0, default, out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryReadLive(0, default, ArenaTime.Origin, out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryReadLiveNumber(0, default, ArenaTime.Origin, out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryKeyAt(0, 0, out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryResolveKey(0, CellName.Parse("a"), out _));
-            Assert.Throws<StateUnavailableException>(() => access.TryKeyName(0, default, out _));
-            Assert.Throws<StateUnavailableException>(() => { var cursor = 0; access.TryNextCell(0, ref cursor, out _); });
+            Assert.Throws<StateUnavailableException>(() => access.TryRead(default, default, out _));
+            Assert.Throws<StateUnavailableException>(() => access.TryReadLive(default, default, ArenaTime.Origin, out _));
+            Assert.Throws<StateUnavailableException>(() => access.TryReadLiveNumber(default, default, ArenaTime.Origin, out _));
+            Assert.Throws<StateUnavailableException>(() => access.TryKeyAt(default, 0, out _));
+            Assert.Throws<StateUnavailableException>(() => access.TryResolveKey(default, CellName.Parse("a"), out _));
+            Assert.Throws<StateUnavailableException>(() => access.TryKeyName(default, default, out _));
+            Assert.Throws<StateUnavailableException>(() => { var cursor = 0; access.TryNextCell(default, ref cursor, out _); });
         }
         Assert.Equal(failures[0], failures[1]);
     }
@@ -45,7 +71,7 @@ public sealed class StateReadAccessLawTests {
             var access = arena.RestrictReads(row => row == 0);
             var row = access.ResolveRow("public");
             Assert.Equal(17, StateReader.ReduceRaw(access, row, StateReduceOp.Sum, 0, 0));
-            Assert.Equal(StateReader.ReduceRaw(arena, row, StateReduceOp.Sum, 0, 0),
+            Assert.Equal(StateReader.ReduceRaw(arena, 0, StateReduceOp.Sum, 0, 0),
                 StateReader.ReduceRaw(access, row, StateReduceOp.Sum, 0, 0));
             Assert.False(access.Failed);
         }
@@ -87,7 +113,9 @@ public sealed class StateReadAccessLawTests {
         var without = Store(false).RestrictReads(_ => true);
         var row = access.ResolveRow("public");
         var other = without.ResolveRow("public");
-        Assert.Equal(other, row);
+        Assert.Throws<StateUnavailableException>(() => access.CellCount(other));
+        access = arena.RestrictReads(ordinal => ordinal == 1);
+        row = access.ResolveRow("public");
         Assert.True(access.TryResolveKey(row, CellName.Parse("a"), out var key));
         Assert.True(without.TryResolveKey(other, CellName.Parse("a"), out var otherKey));
         Assert.Equal(otherKey.Ordinal, key.Ordinal);
