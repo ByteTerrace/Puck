@@ -313,7 +313,12 @@ agent works in that mode by default, without asking:
     the hardware were on hand (a quality table authored per device, a
     memory bar per device), but testing on the RTX 2060, the Steam Deck and
     an HDR display waits until the engine meets the bars there, and missing
-    hardware holds up no fundamental work.
+    hardware holds up no fundamental work. A target that lacks a capability
+    never vetoes a technique (the owner's ruling: "We can optionally
+    enable/disable features as needed by target hardware. Be smart here!"):
+    features are enabled per target through its quality table, a weaker
+    device gets its own path, and a technique is judged first by what it
+    gives the RTX 4070.
   - The visual bar (the owner's ruling: "I need you to ensure that some bar
     is defined and adhered to"), with the frame bar's standing, and both hold
     at once. Every place in the debug world reads as what it is and meets its
