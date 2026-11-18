@@ -41,6 +41,9 @@ public sealed class DependencyVersion : IComparable<DependencyVersion>, IEquatab
     /// <summary>Whether this version has no prerelease suffix.</summary>
     public bool IsStable => (m_prerelease.Length == 0);
 
+    /// <summary>Creates an empty set of version spellings, ordered by version, for the versions of one package.</summary>
+    /// <returns>The set; it must only hold spellings <see cref="Parse"/> reads.</returns>
+    public static SortedSet<string> NewSet() => new(comparer: Comparer<string>.Create(comparison: static (left, right) => Parse(text: left).CompareTo(other: Parse(text: right))));
     /// <summary>Reads a version, with an optional leading <c>v</c>.</summary>
     /// <param name="text">The spelling.</param>
     /// <param name="version">The version when <paramref name="text"/> is one.</param>

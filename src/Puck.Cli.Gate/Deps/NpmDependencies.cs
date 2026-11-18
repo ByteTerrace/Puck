@@ -67,7 +67,7 @@ public static partial class NpmDependencies {
             if ((marker < 0) || (node is not JsonObject entry) || ((bool?)entry["link"] == true) || ((string?)entry["version"] is not { } version)) { continue; }
             var name = key[(marker + "node_modules/".Length)..];
 
-            if (!installed.TryGetValue(key: name, value: out var versions)) { installed[name] = (versions = new SortedSet<string>(comparer: Comparer<string>.Create(comparison: static (left, right) => DependencyVersion.Parse(text: left).CompareTo(other: DependencyVersion.Parse(text: right))))); }
+            if (!installed.TryGetValue(key: name, value: out var versions)) { installed[name] = (versions = DependencyVersion.NewSet()); }
             versions.Add(item: version);
         }
 
@@ -156,12 +156,7 @@ public static partial class NpmDependencies {
         var after = Installed(lockPath: lockPath);
         var project = Path.GetRelativePath(relativeTo: context.RepositoryRoot, path: directory).Replace(oldChar: '\\', newChar: '/');
 
-        foreach (var name in before.Keys.Union(second: after.Keys, comparer: StringComparer.Ordinal)) {
-            before.TryGetValue(key: name, value: out var from);
-            after.TryGetValue(key: name, value: out var to);
-            if ((from is not null) && (to is not null) && from.SetEquals(other: to)) { continue; }
-            context.Report.Add(move: new DependencyMove(Ecosystem: Ecosystem, From: ((from is null) ? "-" : string.Join(separator: ", ", values: from)), Name: $"{name} ({project})", To: ((to is null) ? "-" : string.Join(separator: ", ", values: to))));
-        }
+        context.Report.AddDifferences(after: after, before: before, ecosystem: Ecosystem, scope: project);
     }
 
     /// <summary>Moves every npm project's dependencies as far as the policy allows and reports what moved and what it held.</summary>

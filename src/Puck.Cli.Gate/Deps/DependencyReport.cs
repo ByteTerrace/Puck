@@ -34,6 +34,19 @@ public sealed class DependencyReport {
     /// <summary>Records a moved dependency.</summary>
     /// <param name="move">The move.</param>
     public void Add(DependencyMove move) => m_moves.Add(item: move);
+    /// <summary>Records a move for every package whose resolved versions differ between two lock readings, in package order.</summary>
+    /// <param name="ecosystem">The ecosystem's name.</param>
+    /// <param name="before">Each package with the versions it resolved to before.</param>
+    /// <param name="after">Each package with the versions it resolves to now.</param>
+    /// <param name="scope">What to append to each name, such as the project that holds the lock file; <see langword="null"/> for none.</param>
+    public void AddDifferences(string ecosystem, IReadOnlyDictionary<string, SortedSet<string>> before, IReadOnlyDictionary<string, SortedSet<string>> after, string? scope = null) {
+        foreach (var name in before.Keys.Union(second: after.Keys, comparer: StringComparer.OrdinalIgnoreCase).Order(comparer: StringComparer.OrdinalIgnoreCase)) {
+            before.TryGetValue(key: name, value: out var from);
+            after.TryGetValue(key: name, value: out var to);
+            if ((from is not null) && (to is not null) && from.SetEquals(other: to)) { continue; }
+            m_moves.Add(item: new DependencyMove(Ecosystem: ecosystem, From: ((from is null) ? "-" : string.Join(separator: ", ", values: from)), Name: ((scope is null) ? name : $"{name} ({scope})"), To: ((to is null) ? "-" : string.Join(separator: ", ", values: to))));
+        }
+    }
     /// <summary>Writes the report as Markdown: one table per ecosystem of what moved, then what was held.</summary>
     /// <param name="dryRun">Whether the run only checked, so every verb reads "would move".</param>
     /// <returns>The Markdown text, ending in a newline.</returns>

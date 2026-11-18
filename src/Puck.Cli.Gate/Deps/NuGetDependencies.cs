@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Puck.Cli.Locks;
@@ -30,21 +29,13 @@ public static partial class NuGetDependencies {
     private static SortedDictionary<string, SortedSet<string>> Resolved(IEnumerable<string> lockTexts) {
         var resolved = new SortedDictionary<string, SortedSet<string>>(comparer: StringComparer.OrdinalIgnoreCase);
 
-        foreach (var text in lockTexts) {
-            if ((JsonNode.Parse(json: text) is not JsonObject root) || (root["dependencies"] is not JsonObject frameworks)) { continue; }
-            foreach (var (_, frameworkNode) in frameworks) {
-                if (frameworkNode is not JsonObject packages) { continue; }
-                foreach (var (id, node) in packages) {
-                    if ((node is not JsonObject entry) || ((string?)entry["type"] is null or "Project") || ((string?)entry["resolved"] is not { } version)) { continue; }
-                    if (!resolved.TryGetValue(key: id, value: out var versions)) { resolved[id] = (versions = new SortedSet<string>(comparer: Comparer<string>.Create(comparison: static (left, right) => DependencyVersion.Parse(text: left).CompareTo(other: DependencyVersion.Parse(text: right))))); }
-                    versions.Add(item: version);
-                }
-            }
+        foreach (var (id, _, version) in lockTexts.SelectMany(selector: LockPins.Resolved)) {
+            if (!resolved.TryGetValue(key: id, value: out var versions)) { resolved[id] = (versions = DependencyVersion.NewSet()); }
+            versions.Add(item: version);
         }
 
         return resolved;
     }
-    private static string Spell(SortedSet<string>? versions) => ((versions is null) ? "-" : string.Join(separator: ", ", values: versions));
     private static string[] LockPaths(string repositoryRoot) => [.. LockFiles.Projects(repositoryRoot: repositoryRoot).Select(selector: static project => Path.Combine(path1: Path.GetDirectoryName(path: project)!, path2: LockFiles.FileName))];
     // The version a floor or file-app pin moves to: the newest stable one of its major, or of any major under --major, and
     // only when it is newer. A newer stable version of another major is a hold, reported beside the move.
@@ -166,11 +157,6 @@ public static partial class NuGetDependencies {
         if (result.ExitCode != 0) { throw new InvalidOperationException(message: $"the NuGet restore failed (exit {result.ExitCode}); every lock file is as it was.{Environment.NewLine}{result.Output.TrimEnd()}"); }
         var after = Resolved(lockTexts: locks.Where(predicate: File.Exists).Select(selector: static path => File.ReadAllText(path: path)));
 
-        foreach (var id in before.Keys.Union(second: after.Keys, comparer: StringComparer.OrdinalIgnoreCase)) {
-            before.TryGetValue(key: id, value: out var from);
-            after.TryGetValue(key: id, value: out var to);
-            if ((from is not null) && (to is not null) && from.SetEquals(other: to)) { continue; }
-            context.Report.Add(move: new DependencyMove(Ecosystem: Ecosystem, From: Spell(versions: from), Name: id, To: Spell(versions: to)));
-        }
+        context.Report.AddDifferences(after: after, before: before, ecosystem: Ecosystem);
     }
 }
