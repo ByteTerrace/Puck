@@ -1156,28 +1156,38 @@ The volume's cost and convergence:
 - [high] The debug world's main volume relights far slower than its lighting
   changes, so a playing World shows stale indirect light for minutes after the
   sun moves, the day turns to night or the window refills: a night lawn still
-  carries the noon bounce, and the view meters it as day. The probe work runs as
-  a strict round trip, one job in flight (`SdfMeshProbeGpuWork.TryTake`) and the
-  worker blocked on each answer (`SdfMeshProbeGpuWork.Submit`), each relight
-  job followed by its own commit job (`SdfMeshIrradiance.RelightGpu`), and each
-  job waits behind the frame's GPU work, so `world.residency`'s
-  `trace-jobs=[kind:jobs/units/latency]` shows about 20 ms a job against a
-  millisecond or two of GPU time, and the service's occupancy stays near
-  0.03 of its 0.25 share. Trace jobs hold about seventeen origins each. Two
-  changes would remove the round trips rather than shrink them: commit a whole
-  batch's relights in one job, and keep several of a batch's independent
-  relight jobs in flight across the service's slots. Separately, the worker
-  resumes a list made before a lighting change (`SdfMeshIrradiance.Work`'s
-  `m_listCursor`) and lists trace demand before every relight
-  (`OrderCandidates`), so after a change the finest level's stale probes wait
-  behind every trace a coarser level's first fill or a refill still owes;
-  re-listing on a lighting change and alternating trace and overdue relight
-  batches did not visibly change that on one D3D12 run, and the select kernel's
-  `forced` path is the next place to read. Repro: boot `worlds/debug`, hold the
-  day at noon (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`,
+  carries the noon bounce, and the view meters it as day. On the base build
+  the repro below kept `level-0-age-p50` above zero for about 55 seconds after
+  the version-23 capture (the probes went stale at about 4 s, 14, 36, 44,
+  then 0 with a max of 54), while relights ran only as fast as traces landed:
+  `trace-jobs` held about 26 origins a trace job at about 25 ms each, and most
+  of those jobs were placement trial rounds of a few probes, one round trip
+  per candidate offset. A second switch with no trace owed relit level 0 in
+  about 90 ticks. The fix is built but not yet measured in a running World:
+  every cut probe call keeps up to `SdfGpuWork.SlotCount` jobs in flight
+  (`SdfMeshProbeGpuWork.Run`), a batch commits once from its last relight job
+  (`SdfMeshProbeGpuWork.RecordCommit`), placement traces up to
+  `SdfMeshIrradiance.MostPlacementTrials` trials a probe per round
+  (`SdfMeshIrradiance.PlaceBatch`), probes relit under replaced lighting are
+  due at once (`sdf-probe-select.comp.hlsl`, the CPU `List`), the worker lists
+  again on a lighting change and shares its time between traces and stale
+  relights (`SdfMeshIrradiance.Work`). Next: run the repro on D3D12 and Vulkan
+  with the fix and with the base build (the base D3D12 figures above are from
+  one run; Vulkan has none), reading the convergence tick, `trace-jobs`,
+  `gpu-work`'s occupancy and `most-in-flight`, `[sdf.gpu-work] slow` lines and
+  device faults; take presented bursts of the valley across the switch; check
+  the gallery's level-0 exhibits and the meadow. Separately, on the base run
+  the lighting version itself moved only about 1,380 ticks after `day` was set
+  (traced stayed flat meanwhile, so the residency looks unstaged for that
+  span; a presentation program build on the first night switch is the
+  unverified lead); a second switch captured at once. Repro: boot
+  `worlds/debug`, hold the day at noon
+  (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`,
   `world.state.cell.set day $value 0.5`), pose body 0 at (0, 0.02, -10), set
   `day` to 0.9 at tick 4330, and read `world.probe 0 0.05 -12 0 1 0`'s
-  `level-0-age-p50` every 300 ticks with `world.exposure`'s view 0 meter.
+  `lighting-version` and `level-0-age-p50` every 60 ticks with
+  `world.exposure`'s view 0 meter; the World ran at about 30 ticks a second,
+  so read ages, not ticks, as seconds.
 - [high] A view-driven retier relights the whole window: a landed retier is a
   geometry change, every probe's local cube starts again
   (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
