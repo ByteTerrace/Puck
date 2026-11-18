@@ -63,11 +63,16 @@ For changing lighting, selection visits a stable cell phase every 1/4/8
 completed sweeps by level. Phase uses the sweep ordinal, since lighting
 versions can jump by a multiple of the period between sweeps and revisit the
 same phase indefinitely. The sweep holds its initial phase
-and interleave decision across empty or interrupted listings; a newer batch
-lighting never fills the deferred phases within that sweep.
+across empty or interrupted listings; a newer batch lighting never fills the
+deferred phases within that sweep. A probe relit in the current sweep under
+lighting since replaced is due at once, subject to its phase, so a lighting
+change never waits for the sweep to end; a change within a sweep turns
+interleaving on for the rest of it, and the next sweep interleaves too.
 `sdf-probe-select.comp.hlsl` alone sets the GPU
 due bit; missing geometry, rebase and unwritten publication bypass the phase,
 and lighting age at the level's bound forces it even in the current sweep.
+The worker lists again whenever the lighting version moves (`Work`'s
+`m_listLighting`), rather than resuming a list made under the old lighting.
 The bound is the authored age target times that level's interleave and is
 reported in `world.budget`. A sweep beginning under the same lighting version
 as its predecessor visits every phase so bounce propagation cannot stop on an
@@ -78,9 +83,13 @@ full-window `MaxSweeps` limit.
 The combined ages remain diagnostic totals; `behind` compares each level to
 its own bound and reports the worst relative overrun. Its needed relight rate
 is the sum of each level's probe count divided by that level's bound.
-Relight priority uses age relative to the level's bound before level, capture
-age and spatial band. Overload can exceed the targets; no probe retires on its
-own small change.
+Relight priority puts overdue probes first, then lighting-stale ones, then age
+relative to the level's bound before level, capture age and spatial band.
+Overload can exceed the targets; no probe retires on its own small change.
+The worker shares its time evenly between the list's traces and its overdue or
+lighting-stale relights (`Work`, by the wall time each part's batches took), so
+a lighting change is relit while a coarse level's first fill or a refill still
+traces; the remaining relights follow the traces.
 Below the bound, age priority is weighted by 1 inside any residency view's
 frustum and 0.25 outside all of them, and by 1.25 when the probe's last relight
 moved past the existing convergence threshold. Overdue probes ignore these
@@ -113,34 +122,48 @@ did not move owes no scene upload. The retained placement snapshot contains
 only meshes that scene names.
 `world.residency` reports completed scene changes, total payload bytes and the
 last change's payload bytes, separately from staging allocation sizes.
-One admitted query owns the shared scene and feedback regions until its fence completes;
-they therefore have one staging slot. Service slots independently retain their
-outputs through readback release. GPU hit-cache allocations carry nonrepeating
+Queries run several at a time across the service's slots (`SdfMeshProbeGpuWork`'s
+`m_inFlight`), taken in submission order. A query that replaces, clears or fills
+shared state (the hit cache, the camera-sample cache, the feedback volume's size, the
+batch output) is exclusive: `TryTake` admits it only with nothing in flight and
+admits nothing beside it, and a scene upload likewise starts only with no query
+in flight. The scene and feedback regions stage through the taking job's own
+service slot. Every job releases its readback when it is answered. GPU hit-cache allocations carry nonrepeating
 tokens, checked by selection before reuse. The cache is sized to the published
 tier (`HitCapacityOf`: the window's cells plus two fresh slots per probe a drain
 batch places). A placed probe's trace job copies its hits into a fresh cache
-slot on the device (the first trace and the trial traces into separate slots,
+slot on the device (the first trace and each trial into a slot of its own,
 `PlaceBatch`); its relight adopts the slot it keeps (`AdoptGpuHits`) and the
 cache pass stamps the token, so hits read back for the CPU's surface map are
-never uploaded again. A relight commits records only after `Stands` accepts
-their scene/window, then frame upload copies the ready slots into the published
-GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
-hit arrays once the batch is relit. Once the device has answered a meter, the camera sample reads
+never uploaded again. Placement traces every unresolved probe's next trials in
+one round, doubling them each round from `FirstPlacementTrials` to
+`MostPlacementTrials` within the cache's free slots, and keeps each probe's first
+trial in order that lands outside; the CPU reference traces one a round and keeps
+the same one. A batch's relight jobs each copy their results into the client's
+batch output, and only the batch's last job commits every record into the
+feedback volume, after the publication (`KeepsGpuPublication`) still stands as it
+is taken and every earlier job of the batch ran; so every probe of a batch reads
+the bounce the volume held before it, as the CPU reference does. The batch
+lands only once that commit completed, then frame upload copies the ready slots
+into the published GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
+hit arrays once the batch is relit. Once the device has answered a camera sample, the camera sample reads
 the GPU kernel's small answer rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
-never holds the coordinator or the meter behind it without bound.
+never holds the coordinator or the camera sample behind it without bound.
 
 A relight's GPU time is rays, not probes: each hit texel traces toward every
 shadowing light that reaches the probe, and a probe that cannot reuse its
 local cube traces toward every point light in range. `RelightGpu` predicts each
-probe's rays and submits a batch as consecutive jobs, each committed before the
-next, cut to background work's frame share at the relight's measured rate
+probe's rays and hands the batch to the probe service in one call, which cuts it
+into jobs to background work's frame share at the relight's measured rate
 (`RelightRaysWithinShare`): at most `RelightRaysPerJob` until a relight's
 timestamps measure the rate (always, on a queue without timestamps), and at most
-`RelightRaysCeiling` after. Each job and its commit are a round trip through the
-frame queue, so a cut below the share multiplies the volume's relight time; the
-service log's `trace-jobs=[kind:jobs/units/latency]` (in `world.residency`)
-shows a volume's jobs, their mean size and their round trip. A batch cut by probe count
+`RelightRaysCeiling` after. Every cut call (trace, select, relight) keeps up to
+`SdfGpuWork.SlotCount` of its jobs in flight (`SdfMeshProbeGpuWork.Run`), sizing
+each as it is submitted, so a call waits about one round trip through the frame
+queue per slot-count of jobs. The service log's
+`trace-jobs=[kind:jobs/units/latency]` (in `world.residency`) shows a volume's
+jobs, their mean size and their latency from submission to answer. A batch cut by probe count
 alone (384 fresh probes beside the stage, 78 point lights in range of each) ran
 one dispatch past the device timeout. The walk's step bound bounds one ray, never
 a dispatch. A slow job prints `[sdf.gpu-work] slow`, a device loss lists the
@@ -729,6 +752,30 @@ checking only the lower stepped strip misses the diagonal-probe case.
 Aim the same eye at `4.60 4.2 29.76` to inspect that junction: a triangular
 bright patch there, in both indirect and final shading, is the probe above the
 roof admitted through the rays that graze past the roof's edge, which depth visibility must close. Do not infer a clean roof from the lower reference view.
+
+## Lighting-switch convergence checks
+
+How fast the main volume catches up with a lighting change is read from probe
+ages, not from stills. Boot `worlds/debug` windowed, and once
+`world.wait bakes` settles hold the day at noon
+(`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}`,
+`world.state.cell.set day $value 0.5`) and pose body 0 at `0 0.02 -10`. Wait
+for the main volume's `[sdf.mesh-gi] done` line (its `triangles=` runs to
+hundreds of millions) and note its `seconds`. Then:
+
+- **A switch over a settled window.** Set `day` to 0.9, then 0.5, reading
+  `world.probe 0 0.05 -12 0 1 0`'s `lighting-version`, `relit` and each
+  level's `age-p50` and `age-max` every 60 ticks. The version moves on the
+  first read; the ages say when each level caught up.
+- **A switch during a refill.** Pose the body at `spawn:auction`, wait 600
+  ticks, then in one script pose it at `16 0.05 -24`, set `day` to 0.9 and read
+  `world.probe 16 0.1 -26 0 1 0` the same way. This is the case where stale
+  relights compete with the new window's traces (`SdfMeshIrradiance.Work`).
+
+Read the main residency's `trace-jobs=[…]` in `world.residency` beside the
+ages: origins a trace job (units over jobs) show whether placement trials share
+rounds. Ages count wall seconds, so a loaded machine slows them; compare two
+builds in back-to-back runs with the same script.
 
 ## Gallery isolation checks
 

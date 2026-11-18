@@ -67,7 +67,8 @@ public sealed partial class SdfMeshIrradiance {
     // Allocation tokens never repeat. Selection validates both words on the device, so a cached CPU description
     // cannot reuse hits after its slot was reclaimed. Only the coordinator allocates or frees, between jobs.
     // The device hit cache holds GpuHitCapacity slots: every window cell's owner, plus two fresh slots for each probe a
-    // batch places (its first trace and its trial traces, PlaceBatch), so it follows the published tier.
+    // batch places (its first trace and the trial it keeps, PlaceBatch), so it follows the published tier. A placement
+    // round's other trials borrow free slots only until the round lands, and never more than are free.
     private GpuRangeAllocator m_hitSlots = new(size: 1u, maxRanges: 1);
     private readonly Dictionary<(int Level, (int X, int Y, int Z) Cell), (uint Slot, ulong Token)> m_hitOwners = [];
     private ulong m_hitToken;
@@ -167,7 +168,7 @@ public sealed partial class SdfMeshIrradiance {
                         var priority = ProbePriority((x, y, z), low, center, snapshot.Camera, spacing);
                         var bound = SdfMeshProbeRelight.AgeBoundOf(level, snapshot.AgeTarget);
                         candidates.Add(new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: present ? probe.LitAt : 0, Trace: false,
-                            Overdue: bound > 0 && age >= bound, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
+                            Overdue: bound > 0 && age >= bound, Stale: present && probe.Lighting != snapshot.Lighting.Version, Urgency: AgePriority(age, bound, InAnyView(center, in snapshot), probe.Moved)));
                         if (present) { RecordAge(ages, level, age); }
                     }
                 }
@@ -263,12 +264,11 @@ public sealed partial class SdfMeshIrradiance {
     private long[] m_gpuRelightRays = [];
 
     // Relights a batch's probes on the GPU and commits each probe's published record into the feedback volume: the rows
-    // for the whole batch are composed once, then submitted in consecutive jobs whose predicted rays fit background
-    // work's share of a frame at the relight's measured rate (SdfMeshProbeGpuWork.RelightRaysWithinShare, at most
-    // RelightRaysCeiling, and RelightRaysPerJob until the rate is measured; a probe whose own prediction exceeds it goes
-    // alone), each committed before the next is
-    // submitted, so no relight job holds the frame behind it longer than that share however many lights reach the batch.
-    // False when the snapshot no longer stands at a commit; the probes committed before it stay committed.
+    // for the whole batch are composed once and handed to the probe service in one call, which cuts them into jobs whose
+    // predicted rays fit background work's share of a frame at the relight's measured rate
+    // (SdfMeshProbeGpuWork.Relight), keeps several in flight, and commits the whole batch after its last relight, so
+    // every probe of the batch reads the bounce the volume held before the batch, as the CPU reference's batch does.
+    // False when the snapshot no longer stands before the batch is handed over.
     private bool RelightGpu(List<Candidate> candidates, int first, int count, ProbeData[] probes, LightBlock lights,
         Lighting lighting, in Snapshot snapshot, bool feedback) {
         var rows = (m_gpuLightingRows = LightingRows(lighting, in snapshot, feedback, rows: m_gpuLightingRows));
@@ -276,6 +276,7 @@ public sealed partial class SdfMeshIrradiance {
         GrowScratch(array: ref m_gpuOrigins, length: count);
         GrowScratch(array: ref m_gpuInput, length: inputWords);
         GrowScratch(array: ref m_gpuRelightRays, length: count);
+        GrowScratch(array: ref m_gpuDestinations, length: count);
         // A probe without hits leaves its row and origin untouched, and Compose and the row writes below skip words, so
         // the batch starts from zeros as a new array would.
         Array.Clear(array: m_gpuOrigins, index: 0, length: count);
@@ -313,39 +314,15 @@ public sealed partial class SdfMeshIrradiance {
             }
             if (!probe.Invalid) { m_gpuRelightRays[i] = RelightRays(lighting: lighting, origin: new Vector3(origins[i].X, origins[i].Y, origins[i].Z), reuses: reuses); }
         }
-        for (var start = 0; (start < count);) {
-            var end = start + 1;
-            var bound = GpuTrace!.RelightRaysWithinShare;
-            for (var taken = m_gpuRelightRays[start]; (end < count) && ((taken + m_gpuRelightRays[end]) <= bound); end++) { taken += m_gpuRelightRays[end]; }
-            var rays = 0L;
-            for (var i = start; (i < end); i++) { rays += m_gpuRelightRays[i]; }
-            using var output = RelightGpuJob(candidates: candidates, first: first, start: start, count: (end - start), probes: probes, lights: lights, rows: rows, rays: rays, snapshot: in snapshot);
-            if (!CommitGpu(candidates: candidates, first: first, start: start, count: (end - start), probes: probes, output: output, snapshot: in snapshot)) { return false; }
-            start = end;
-        }
-        return true;
-    }
-
-    // The rays sdfProbeShade traces from one valid probe, for each of its hit texels at most, and the light loop after
-    // them: one toward each shadowing directional light, and unless the probe reuses its local cube, one toward each point
-    // light whose range reaches the probe's origin (a hit's own distance is not known before the trace answers).
-    private static long RelightRays(Lighting lighting, Vector3 origin, bool reuses) {
-        var lights = 0L;
-        foreach (var light in lighting.Lights) { if (light.CastsShadow) { lights++; } }
-        if (!reuses) {
-            foreach (var point in lighting.Points) { if (Vector3.DistanceSquared(point.Position, origin) < (point.Range * point.Range)) { lights++; } }
-        }
-        return (lights * (SdfMeshProbeDepth.HitCount + 1));
-    }
-
-    // Submits the probes [start, start + count) of a composed batch as one relight job and copies their answers into the
-    // batch's light block.
-    private SdfMeshProbeGpuWork.Result RelightGpuJob(List<Candidate> candidates, int first, int start, int count, ProbeData[] probes, LightBlock lights,
-        Vector4[] rows, long rays, in Snapshot snapshot) {
         SdfMeshProbeGpuWork.Deltas updates;
         int volumeWords;
         uint[]? snapshotOf = null;
         lock (m_gate) {
+            if (!Stands(in snapshot)) { m_gpuVolume = null; return false; }
+            for (var i = 0; i < count; i++) {
+                var candidate = candidates[first + i];
+                m_gpuDestinations[i] = probes[i].Hits is null ? -1 : VolumeSlot(candidate.Level, candidate.Cell);
+            }
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
                 updates = new(Words: new int[] { 0 }, Data: (uint[])m_volume.Clone(), Count: 1, Length: m_volume.Length);
@@ -366,14 +343,15 @@ public sealed partial class SdfMeshIrradiance {
             }
             m_gpuDirty.Clear();
         }
-        SdfMeshProbeGpuWork.Result output;
+        uint[] words;
         try {
-            output = GpuTrace!.Relight(snapshot.Scene, m_gpuOrigins.AsMemory(start: start, length: count),
-                m_gpuInput.AsMemory(start: (start * SdfMeshProbeRelight.InputWords), length: (count * SdfMeshProbeRelight.InputWords)), rows, volumeWords, in updates, GpuHitCapacity, rays: rays, reuse: m_gpuAnswer);
-            m_gpuAnswer = output.Words;
+            words = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, updates,
+                GpuHitCapacity, rays: m_gpuRelightRays.AsMemory(start: 0, length: count), destinations: m_gpuDestinations.AsMemory(start: 0, length: count),
+                geometry: snapshot.Geometry, window: snapshot.WindowVersion, reuse: m_gpuAnswer);
+            m_gpuAnswer = words;
         }
         catch (OperationCanceledException) {
-            // Admission cancellation consumed no delta. Re-send a full snapshot on the next accepted job.
+            // A cancelled job may or may not have consumed the delta. Re-send a full snapshot on the next accepted job.
             lock (m_gate) { m_gpuVolume = null; }
             throw;
         }
@@ -382,37 +360,29 @@ public sealed partial class SdfMeshIrradiance {
                 if (m_republishOwed && ReferenceEquals(m_volume, snapshotOf)) { RepublishAll(); }
             }
         }
-        try {
-            for (var j = 0; j < count; j++) {
-                var i = start + j;
-                var probe = probes[i];
-                if (probe.Hits is null || probe.Invalid) { continue; }
-                var row = output.Words.AsSpan(j * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
-                MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
-                MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
-                row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));
-                MemoryMarshal.Cast<uint, Vector3>(row.Slice(SdfMeshProbeRelight.SkyOutputWord, 18)).CopyTo(lights.SkyLight(i));
-                var candidate = candidates[first + i];
-                probes[i] = probe with { Moved = Moves(candidate.Trace, m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ? previous : null, lights.Radiance(i), lights.SkyLight(i)) };
-            }
-        } catch { output.Dispose(); throw; }
-        return output;
+        for (var i = 0; i < count; i++) {
+            var probe = probes[i];
+            if (probe.Hits is null || probe.Invalid) { continue; }
+            var row = words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
+            MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
+            MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
+            row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));
+            MemoryMarshal.Cast<uint, Vector3>(row.Slice(SdfMeshProbeRelight.SkyOutputWord, 18)).CopyTo(lights.SkyLight(i));
+            var candidate = candidates[first + i];
+            probes[i] = probe with { Moved = Moves(candidate.Trace, m_levels[candidate.Level].Cache.TryGetValue(candidate.Cell, out var previous) ? previous : null, lights.Radiance(i), lights.SkyLight(i)) };
+        }
+        return true;
     }
 
-    // Copies one relight job's published records into the feedback volume at their probes' slots. False, with the batch's
-    // volume snapshot dropped, when the snapshot no longer stands.
-    private bool CommitGpu(List<Candidate> candidates, int first, int start, int count, ProbeData[] probes, SdfMeshProbeGpuWork.Result output, in Snapshot snapshot) {
-        GrowScratch(array: ref m_gpuDestinations, length: count);
-        var destinations = m_gpuDestinations;
-        lock (m_gate) {
-            if (!Stands(in snapshot)) { m_gpuVolume = null; return false; }
-            for (var j = 0; j < count; j++) {
-                var candidate = candidates[first + start + j];
-                destinations[j] = probes[start + j].Hits is null ? -1 : VolumeSlot(candidate.Level, candidate.Cell);
-            }
+    // The rays sdfProbeShade traces from one valid probe, for each of its hit texels at most, and the light loop after
+    // them: one toward each shadowing directional light, and unless the probe reuses its local cube, one toward each point
+    // light whose range reaches the probe's origin (a hit's own distance is not known before the trace answers).
+    private static long RelightRays(Lighting lighting, Vector3 origin, bool reuses) {
+        var lights = 0L;
+        foreach (var light in lighting.Lights) { if (light.CastsShadow) { lights++; } }
+        if (!reuses) {
+            foreach (var point in lighting.Points) { if (Vector3.DistanceSquared(point.Position, origin) < (point.Range * point.Range)) { lights++; } }
         }
-        try { GpuTrace!.Commit(snapshot.Scene, snapshot.Geometry, snapshot.WindowVersion, output, destinations.AsMemory(start: 0, length: count)); }
-        catch (OperationCanceledException) { lock (m_gate) { m_gpuVolume = null; } throw; }
-        return true;
+        return (lights * (SdfMeshProbeDepth.HitCount + 1));
     }
 }
