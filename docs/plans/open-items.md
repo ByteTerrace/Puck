@@ -35,6 +35,12 @@ The rendering plan is the active programme, and another session orchestrates
 it. Read this, then [the plan's first wave](rendering-research.md#the-first-wave).
 The next lead rewrites this section when it hands off in turn.
 
+- **Branch first.** All of this round's work is on `main`. Create the wave's
+  integration branch from the latest `origin/main` (`git fetch`, then
+  `git switch -c lead/rendering origin/main`), push it, and land every lane
+  of the waves there; `main` moves only when the owner asks.
+- **The owner's priorities** are velocity, code quality and feature
+  expansion, in that order: code first, verification after (AGENTS.md).
 - **Start here:** dispatch the plan's first wave of fifteen lanes at once, in
   the merge order the plan gives where lanes meet. Three of them come from
   the round on [GPU capabilities Puck does not use yet](rendering-research.md#gpu-capabilities-puck-does-not-use-yet),
@@ -78,11 +84,12 @@ The next lead rewrites this section when it hands off in turn.
   - targeted skill evals for what this round taught: `delegate` (a lane hands
     back after build and boot instead of running windowed checks),
     `orchestration` (batched landings, the three-slot GPU cap) and a
-    regression run of `dotnet-performance` after its .NET 11 rewrite; a
-    skill that misteaches is fixed mid-wave;
-  - a consolidation pass over AGENTS.md (about 44,600 characters, above the
-    large-memory-file warning on a 200k context): every ruling kept,
-    overlapping passages merged, repetition cut;
+    regression run of `dotnet-performance` after its .NET 11 rewrite, plus
+    the graders the consolidation changed (`delegate` d11 and d17,
+    `orchestration` o01); a skill that misteaches is fixed mid-wave;
+  - a reduction pass over the orchestration skill (about 100,000
+    characters; it repeats several rules three or four times): every rule
+    kept, repetition cut, as AGENTS.md's consolidation did;
   - the rendering plan's step designs folded into the plans that own them,
     as the plan says happens after the owner's discussion.
 - **In flight:** nothing. The GPU capabilities research round is in the
