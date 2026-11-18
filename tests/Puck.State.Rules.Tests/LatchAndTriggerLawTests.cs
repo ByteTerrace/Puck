@@ -9,6 +9,29 @@ namespace Puck.State.Rules.Tests;
 /// <c>Flatten</c>/<c>Restore</c>, and closes a binding the sweep did not touch.</summary>
 public sealed class LatchAndTriggerLawTests {
     [Fact]
+    public void FlattenIgnoresRuleBindingAndSchedulerInsertionHistory() {
+        var first = new RuleLatch();
+        var second = new RuleLatch();
+        var journal = new ArenaJournal();
+        (string Rule, LatchKey Binding, bool Held)[] entries = [
+            ("z", new(Left: 2, LeftGeneration: 3, Right: 4, RightGeneration: 5), true),
+            ("a", new(Left: 2, LeftGeneration: 3, Right: 4, RightGeneration: 6), false),
+            ("a", new(Left: 2, LeftGeneration: 3, Right: 4, RightGeneration: 5), true),
+            ("a", new(Left: 1, LeftGeneration: 0, Right: 2, RightGeneration: 0), false),
+        ];
+        foreach (var entry in entries) { first.Restore(entry.Rule, entry.Binding, entry.Held, journal); }
+        second.Touch(second.Rule("scheduler-only"), new(Left: 99, LeftGeneration: 0, Right: -1, RightGeneration: 0));
+        foreach (var entry in entries.Reverse()) { second.Restore(entry.Rule, entry.Binding, entry.Held, journal); }
+        var firstBytes = new List<(string Rule, LatchKey Binding, bool Held)>();
+        var secondBytes = new List<(string Rule, LatchKey Binding, bool Held)>();
+
+        first.Flatten(firstBytes);
+        second.Flatten(secondBytes);
+        Assert.Equal(firstBytes, secondBytes);
+        Assert.Equal(new[] { entries[3], entries[2], entries[1], entries[0] }, firstBytes);
+    }
+
+    [Fact]
     public void LatchHashDistinguishesEitherInstanceGenerationAndIgnoresInsertionOrder() {
         var (host, _, rules, _, _) = EvaluatorFixture.Arrange([Counting(mode: ActionTriggerMode.Edge, name: "edge")]);
         var original = new RuleLatch();

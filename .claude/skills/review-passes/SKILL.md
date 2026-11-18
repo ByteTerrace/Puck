@@ -47,8 +47,8 @@ overrides this skill and is written into it in that session.
     read-only review. Its highs go to the lane that wrote the code or to their
     packet's owner.
   - **Review-and-fix**, the mode of every area fix pass, also fixes what is
-    local and clear, in a worktree of its own: the `specialist` agent, or Codex Sol (`gpt-6.1-sol`) with write access
-    (or Astra, `gpt-6-astra`, where the factors in AGENTS.md favour it). The installed Codex
+    local and clear, in a worktree of its own: the `specialist` agent, or Codex Sol (`gpt-6.2-sol`) with write access
+    (or Astra, `gpt-6.2-astra`, where the factors in AGENTS.md favour it). The installed Codex
     plugin's result-handling guidance not to auto-apply a review's fixes does
     not apply to this mode in this repository.
 - An explicit owner request starts a review with the owner's named model and

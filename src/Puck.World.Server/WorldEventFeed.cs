@@ -114,6 +114,11 @@ public sealed class WorldEventFeed {
 
     private WorldCollisionEvents? m_collisionPolicy;
     private WorldDefinition? m_regionDefinition;
+    // m_regionDefinition's sensing placements in placement order (their region ordinals), each with its radius and, for
+    // one attached to nothing, its static center: functions of the immutable definition, so a tick visits its regions
+    // and never every placement.
+    private RegionRow[] m_regionRows = [];
+    private readonly record struct RegionRow(WorldPlacement Placement, FixedQ4816 Radius, FixedVector3 StaticCenter);
 
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
@@ -556,23 +561,13 @@ public sealed class WorldEventFeed {
         if (!ReferenceEquals(objA: m_regionDefinition, objB: definition)) {
             m_regionFrames.Clear();
             m_regionDefinition = definition;
+            m_regionRows = RegionRowsOf(definition: definition);
         }
-        var ordinal = 0;
 
-        var placements = definition.Placements;
+        var rows = m_regionRows;
 
-        for (var index = 0; (index < placements.Count); index++) {
-            var placement = placements[index];
-            // A dealt template senses nothing itself; its region facet is what its dealt children carry.
-            if (
-                (placement is null) ||
-                (placement.Region is not { } region) ||
-                (placement.Deal is not null)
-            ) {
-                continue;
-            }
-
-            var thisOrdinal = ordinal++;
+        for (var thisOrdinal = 0; (thisOrdinal < rows.Length); thisOrdinal++) {
+            var (placement, radius, staticCenter) = rows[thisOrdinal];
 
             if (!m_regionOccupancy.TryGetValue(
                 key: placement.Id,
@@ -587,7 +582,7 @@ public sealed class WorldEventFeed {
             // no center, so the region contributes nothing this tick (every occupant exits, mirroring the row's
             // established "contributes nothing" verdict) rather than sensing at a stale last-known point.
             var hasCenter = true;
-            var center = default(FixedVector3);
+            var center = staticCenter;
 
             if (placement.Attach is { } attach) {
                 hasCenter = WorldPlacementAttachment.TryResolve(
@@ -597,14 +592,8 @@ public sealed class WorldEventFeed {
                     reason: out _,
                     yawRadians: out _
                 );
-            } else {
-                center = FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(
-                    definition: definition,
-                    placement: placement
-                ));
             }
 
-            var radius = FixedQ4816.FromDouble(value: region.Radius);
             var frame = (center, radius, hasCenter);
             var frameChanged = (!m_regionFrames.TryGetValue(key: placement.Id, value: out var previous) || (previous != frame));
 
@@ -642,6 +631,28 @@ public sealed class WorldEventFeed {
                 );
             }
         }
+    }
+    private static RegionRow[] RegionRowsOf(WorldDefinition definition) {
+        var rows = new List<RegionRow>();
+        var placements = definition.Placements;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var placement = placements[index];
+            // A dealt template senses nothing itself; its region facet is what its dealt children carry.
+            if ((placement is null) || (placement.Region is not { } region) || (placement.Deal is not null)) {
+                continue;
+            }
+
+            rows.Add(item: new RegionRow(
+                Placement: placement,
+                Radius: FixedQ4816.FromDouble(value: region.Radius),
+                StaticCenter: ((placement.Attach is null)
+                    ? FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement))
+                    : default)
+            ));
+        }
+
+        return [.. rows];
     }
     private void CollectSeats(WorldPopulation population) {
         for (var seat = 0; (seat < WorldBodiesLimits.LocalSeatCount); seat++) {

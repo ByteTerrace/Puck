@@ -105,17 +105,16 @@ internal sealed partial class PlayerCommandModule {
             verb: ModeCommand
         );
     }
-    // The one mode flip: it publishes the seat's new state and, on a camera-target edge, composes or dissolves the
-    // camera control application under the actor's own Drive over the target body. player.mode reaches it by name;
-    // player.camera reaches it by resolving the family/state pair itself, so both compose the identical application.
-    private CommandResult ApplyMode(CommandContext context, WorldSeatModeFamily modeFamily, WorldSeatModeState targetState, int slot, string verb) {
+    // Authority-owned modes submit an ordered selection (or toggle); the authority reports its actual outcome.
+    // Presentation families publish locally through the same handler.
+    private CommandResult ApplyMode(CommandContext context, WorldSeatModeFamily modeFamily, WorldSeatModeState targetState, int slot, string verb, bool toggle = false) {
         var family = modeFamily.Name;
 
         var authoritative = m_seatBindings.IsAuthoritativeMode(slot, family);
         if (authoritative && seatRouter.TryRoute(slot: slot) is { } inputRoute) {
             inputRoute.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SelectInputState(context.Principal,
-                inputRoute.EntityIndex, m_roster.PrincipalOf(slot: slot), family, targetState.Name, context.Activation));
-            return SeatCommandArgs.Echo(detail: $"'{family}' requested '{targetState.Name}'", slot: slot, verb: verb);
+                inputRoute.EntityIndex, m_roster.PrincipalOf(slot: slot), family, targetState.Name, context.Activation, Toggle: toggle));
+            return CommandResult.None;
         }
         if (authoritative) {
             return CommandResult.Error(output: $"[{verb}: seat {PlayerRoster.DisplayNumber(slot: slot)} has no authority route]");
@@ -135,7 +134,7 @@ internal sealed partial class PlayerCommandModule {
     }
     // The no-token Free Cam toggle a wheel sector or a pad chord fires. It resolves the seat's own camera-targeting
     // family/state from the routed document (never a hard-coded family name) and flips between that state and the
-    // family's authored default, then runs the SAME ApplyMode path player.mode does.
+    // family's authored default. The authority derives the toggle from its current selection, never the mirror.
     private CommandResult CameraHandler(CommandContext context, WireArgs args) {
         if (args.Count > 1) {
             return PlayerCameraForms.Refuse();
@@ -156,41 +155,13 @@ internal sealed partial class PlayerCommandModule {
             return CommandResult.Error(output: $"[{CameraCommand}: seat {PlayerRoster.DisplayNumber(slot: slot)}'s document declares no seatModes state targeting '{WorldSeatModeState.CameraTarget}']");
         }
 
-        var published = m_seatBindings.ModeState(
-            family: camera.Family.Name,
-            slot: slot
-        );
-        var leaving = string.Equals(
-            a: published,
-            b: camera.State.Name,
-            comparisonType: StringComparison.Ordinal
-        );
-        WorldSeatModeState? targetState = null;
-
-        foreach (var candidate in camera.Family.States) {
-            if (string.Equals(
-                a: candidate.Name,
-                b: (leaving
-                ? camera.Family.DefaultState
-                : camera.State.Name),
-                comparisonType: StringComparison.Ordinal
-            )) {
-                targetState = candidate;
-
-                break;
-            }
-        }
-
-        if (targetState is null) {
-            return CommandResult.Error(output: $"[{CameraCommand}: family '{camera.Family.Name}' has no state '{camera.Family.DefaultState}' to fall back to]");
-        }
-
         return ApplyMode(
             context: context,
             modeFamily: camera.Family,
             slot: slot,
-            targetState: targetState,
-            verb: CameraCommand
+            targetState: camera.State,
+            verb: CameraCommand,
+            toggle: true
         );
     }
     // The frame toggle a key or button fires: the seat's view of the screen it engages switches between the framed
@@ -282,7 +253,7 @@ internal sealed partial class PlayerCommandModule {
             bindability: CommandBindability.Bindable,
             name: CameraCommand,
             forms: PlayerCameraForms,
-            description: $"Toggles a seat's Free Cam: {PlayerCameraForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the ordinary ComposeControl door, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
+            description: $"Toggles a seat's Free Cam: {PlayerCameraForms.Spelling} (seat 1..{PlayerRoster.MaxSlots}, default 1). It resolves the seat's own seatModes state whose target is \"camera\" and flips between that state and the family's default, so a wheel sector or a pad chord composes exactly what player.mode <family> <state> composes — the seat possesses its declared camera body through the authority input-state transition, its own body intent diverting to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig). Refused by name when the world declares no camera-targeting state.",
             handler: CameraHandler,
             routing: CommandRouting.Simulation
         );
@@ -291,7 +262,7 @@ internal sealed partial class PlayerCommandModule {
             bindability: CommandBindability.Unbindable,
             name: ModeCommand,
             forms: PlayerModeForms,
-            description: $"Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): {PlayerModeForms.Spelling} (seat 1..4, default 1). The family-only form reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the ordinary ComposeControl door (the same possession primitive body.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
+            description: $"Flips a seat's published state within an AUTHORED per-seat mode family (see the document's seatModes section): {PlayerModeForms.Spelling} (seat 1..4, default 1). The family-only form reads back the seat's current state (a two-token line whose second token is an integer 1..4 reads that SEAT; a state named like a seat index needs the explicit three-token form). A state whose family declares target: \"camera\" composes the camera control application: the seat possesses its declared camera body through the authority input-state transition (the same possession primitive body.engage uses) — its own body intent diverts to Idle while the camera body's pose becomes what the seat perceives, sees, and hears through (see views.cameraRig); leaving such a state disengages, restoring the seat's own body. An unknown family or state is refused by name, naming every admissible sibling.",
             handler: ModeHandler,
             routing: CommandRouting.Simulation
         );

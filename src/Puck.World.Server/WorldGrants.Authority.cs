@@ -38,10 +38,14 @@ public sealed partial class WorldGrants {
 
     /// <summary>Admits and installs a direct grant using the actor's authority before the change.</summary>
     public bool TryGrant(WorldGrant grant, Principal actor, out string reason) {
-        if (!TryPrepareAuthority(actor: actor, adds: [grant], candidate: m_authorityDefinition, current: m_authorityDefinition, grantsWrite: false, prepared: out var prepared, reason: out reason, removes: [])) { return false; }
+        if (!TryPrepareGrant(grant, actor, out var prepared, out reason)) { return false; }
         prepared!.Install();
         return true;
     }
+    // Camera admission prepares its grant before composing, then consumes the token only after route admission.
+    internal bool TryPrepareGrant(WorldGrant grant, Principal actor, out PreparedAuthorityTransition? prepared, out string reason) =>
+        TryPrepareAuthority(actor: actor, adds: [grant], candidate: m_authorityDefinition, current: m_authorityDefinition,
+            grantsWrite: false, prepared: out prepared, reason: out reason, removes: []);
     /// <summary>Admits and removes a direct grant using the actor's authority before the change.</summary>
     public bool Revoke(Grantee grantee, WorldCapability capability, GrantSubject subject, Principal actor) {
         var row = new WorldGrant(grantee, capability, subject, false);

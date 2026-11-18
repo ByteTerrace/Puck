@@ -79,6 +79,9 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     /// <summary>The recipient's placement projection.</summary>
     public IReadOnlyList<WorldPlacement> Placements => Observes
         ? WorldStateDisclosure.PlacementProjection(Source, Arena, recipient, Unrestricted) : [];
+    /// <summary>Gets the authored spawn points the recipient's document carries at every observing ceiling: disclosure
+    /// withholds state, never a spawn point, so the read composes no disclosed document.</summary>
+    public IReadOnlyList<WorldSpawnPoint> SpawnPoints => Observes ? Source.SpawnPoints : [];
     /// <summary>The recipient's physical field regions.</summary>
     public IReadOnlyList<WorldFieldsSection> FieldRegions => Observes
         ? WorldStateDisclosure.FieldProjection(Source, Arena, recipient, Unrestricted) : [];

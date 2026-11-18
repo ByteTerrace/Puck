@@ -396,32 +396,44 @@ public sealed partial class WorldInputRuntime {
         m_publications = [];
     }
     /// <summary>Commits one finite seat state only when its resulting input tuple is admitted.</summary>
-    public bool TrySetSeatState(Principal principal, string family, string state, ulong activation, out string reason, Principal? actor = null) {
+    public bool TrySetSeatState(Principal principal, string family, string state, ulong activation, out string reason, Principal? actor = null, bool toggle = false) {
         if (!m_owners.TryGetValue(key: principal, value: out var owner) || !owner.SeatStates.TryGetValue(key: family, value: out var previous)) {
             reason = "input.mode: unknown owner or seat family";
             return false;
         }
         var declaration = m_host.Document.Definition.SeatModes.First(predicate: row => (row.Name == family));
+        if (toggle && (state == previous)) { state = declaration.DefaultState; }
         var selected = declaration.States.FirstOrDefault(predicate: row => (row.Name == state));
 
         if (selected is null) { reason = "input.mode: unknown finite seat state"; return false; }
-        if (state == previous) { reason = string.Empty; return true; }
+        if (state == previous) {
+            reason = string.Empty;
+            m_host.Output.Narrate("input.mode", $"{principal.Describe()} '{family}' = '{state}'");
+            return true;
+        }
         var previousState = declaration.States.First(predicate: row => (row.Name == previous));
 
         owner.SeatStates[family] = state;
-        if ((previousState.Target == WorldSeatModeState.CameraTarget) != (selected.Target == WorldSeatModeState.CameraTarget)) {
+        var cameraEdge = ((previousState.Target == WorldSeatModeState.CameraTarget) != (selected.Target == WorldSeatModeState.CameraTarget));
+        if (cameraEdge) {
             if (!TrySetCameraRoute(owner, (actor ?? principal), (selected.Target == WorldSeatModeState.CameraTarget), activation, out reason)) {
                 owner.SeatStates[family] = previous;
                 return false;
             }
         }
-        if (!TrySynchronize(activation: activation, owner: owner, reason: out reason)) { owner.SeatStates[family] = previous; return false; }
-        foreach (var controller in m_ordered) {
-            if ((controller.Controller is not null) && (controller.Body == owner.Body) && !TrySynchronize(activation: 0, owner: controller, reason: out reason)) {
-                throw new InvalidOperationException(message: reason);
+        // Camera edges already preflight every routed owner and install their barrier in ResetRoute. There is no
+        // fallible synchronization after the composition or its prepared grant has committed.
+        if (!cameraEdge) {
+            if (!TrySynchronize(activation: activation, owner: owner, reason: out reason)) { owner.SeatStates[family] = previous; return false; }
+            foreach (var controller in m_ordered) {
+                if ((controller.Controller is not null) && (controller.Body == owner.Body) && !TrySynchronize(activation: 0, owner: controller, reason: out reason)) {
+                    throw new InvalidOperationException(message: reason);
+                }
             }
         }
         owner.Publication = default;
+        reason = string.Empty;
+        m_host.Output.Narrate("input.mode", $"{principal.Describe()} '{family}' = '{state}'");
         return true;
     }
     /// <summary>Admits bounded calibration through the same reset and publication path as every unconditional input boundary.</summary>
@@ -463,6 +475,9 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Installs one barrier for an atomic application-set replacement, including its new selection.</summary>
     internal void ResetRoute(Principal principal) {
         if (!m_owners.TryGetValue(key: principal, value: out var owner)) { return; }
+        var cameraPlacement = $"{WorldSeatModeState.CameraPlacementIdPrefix}{principal.Index}";
+        if (!m_host.GrantTable.Applications(principal).Any(application => application.Target.Kind == GrantSubjectKind.Body &&
+            m_host.Population.InhabitantPlacementId(application.Target.Value) == cameraPlacement) && EndCameraModes(owner)) { return; }
         var next = (TrySelect(owner, out var selected, out _) ? selected! : owner.Input.Mapping);
 
         Reset(activation: 0, next: next, owner: owner);
@@ -565,11 +580,12 @@ public sealed partial class WorldInputRuntime {
         var catalog = m_host.Population.InputCatalog;
         var body = ((owner.Body >= 0) ? m_host.Body(index: owner.Body) : null);
         var routingPrincipal = RoutingPrincipal(owner: owner);
+        var seatStates = owner.SeatStates;
 
         if ((owner.Controller is not null) && TryGetBodyOwner(body: owner.Body, principal: out var primaryIdentity) &&
             (primaryIdentity != owner.Principal) && m_owners.TryGetValue(key: primaryIdentity, value: out var primary) && (primary.Controller is null)) {
             routingPrincipal = primaryIdentity;
-            foreach (var cell in primary.SeatStates) { owner.SeatStates[cell.Key] = cell.Value; }
+            seatStates = primary.SeatStates;
         }
         for (var family = 0; (family < catalog.Selectors.Length); family++) {
             var selector = catalog.Selectors[family];
@@ -589,7 +605,7 @@ public sealed partial class WorldInputRuntime {
                     known = ((slot >= 0) && selector.TrySelect(state: out state, value: m_host.Population.ActionStateLane.Counter(ordinal: owner.Body, slot: slot)));
                     break;
                 case WorldInputModeSelectorKind.SeatState:
-                    known = (owner.SeatStates.TryGetValue(key: selector.Name!, value: out var label) && selector.TrySelect(state: out state, value: label));
+                    known = (seatStates.TryGetValue(key: selector.Name!, value: out var label) && selector.TrySelect(state: out state, value: label));
                     break;
             }
             if (!known) { mapping = null; reason = $"input.mode: family '{catalog.Families[family].Name}' refuses an unknown selector value"; return false; }
