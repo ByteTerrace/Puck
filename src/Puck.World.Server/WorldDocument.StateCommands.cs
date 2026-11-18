@@ -11,13 +11,7 @@ public sealed partial class WorldDocument {
         WorldMutation.Batch batch => batch.Mutations.All(predicate: member => IsStateCommand(mutation: member)),
         _ => false,
     };
-    private bool TryApplyStateCommand(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived) {
-        m_lastMutationFailureDetail = null;
-        if (!TryAdmitCompleteMutation(admission: out var admission, mutation: mutation, preMetered: preMetered)) {
-            m_lastMutationFailureDetail = admission.Describe();
-            Host.EchoTap?.Invoke(new WorldEditEcho(Message: m_lastMutationFailureDetail, Rejected: true, Denied: true, Kind: WorldEditEchoKind.Mutation, Mutation: mutation, ConnectionId: connectionId, CorrelationId: correlationId));
-            return false;
-        }
+    private bool TryApplyStateCommand(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool derived) {
         var mark = Host.BeginStateTransaction();
         var time = ComposeTime(definition: m_definition, engineTick: engineTick, tick: tick);
 

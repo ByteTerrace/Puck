@@ -85,10 +85,8 @@ public sealed partial class WorldRuleHost {
         }
         if (!Host.Document.TryPrepareMutation(
             current: Proposed().Definition,
-            denied: out _,
             engineTick: firing.EngineTick,
             mutation: DocumentUnit(rows: m_documentArms),
-            preMetered: false,
             prepared: out var prepared,
             reason: out var reason,
             tick: firing.Tick
