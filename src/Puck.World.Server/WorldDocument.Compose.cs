@@ -355,7 +355,7 @@ public sealed partial class WorldDocument {
     // never silently compose against tick zero. `evictedKey` is non-null only when an UpsertStateCell write against an
     // Evicts row dropped its oldest cell to make room — the same pure function every re-composition (live apply,
     // world.undo's journal replay) runs, so the reported victim and the actually-dropped cell can never disagree.
-    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, bool prepareAuthority = true) {
+    internal static bool TryCompose(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, bool prepareAuthority = true, WorldPrivateDrawKeys? sampler = null) {
         refusalCode = null;
         if (!authority.IsOperator(principal: mutation.Principal)) {
             var view = WorldRecipientView.ForComposition(current, mutation.Principal, time: ComposeTime(definition: current, engineTick: engineTick, tick: tick));
@@ -366,6 +366,7 @@ public sealed partial class WorldDocument {
         }
 
         if (!TryComposeCore(
+            sampler: sampler ?? authority.DrawKeys,
             authority: authority,
             candidate: out candidate,
             current: current,
@@ -469,7 +470,7 @@ public sealed partial class WorldDocument {
     // Scratch for the rows the look graph binds; the step is single-threaded, so one set serves every door.
     private readonly HashSet<string> m_lookReferencedRows = new(comparer: StringComparer.Ordinal);
 
-    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority) {
+    private static bool TryComposeCore(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, WorldPrivateDrawKeys sampler) {
         refusalCode = null;
         reason = string.Empty;
         evictedKey = null;
@@ -599,6 +600,7 @@ public sealed partial class WorldDocument {
                 return true;
             case WorldMutation.Batch batch:
                 return TryComposeBatch(
+                    sampler: sampler,
                     authority: authority,
                     batch: batch,
                     candidate: out candidate,
@@ -1215,7 +1217,9 @@ public sealed partial class WorldDocument {
                     }
 
                     var last = current.StateRaw?.DrawInstallCount ?? 0;
-                    var installed = authority.DrawKeys.InstallRow(m.Row, previousRow, ref last);
+                    WorldStateRow installed;
+                    try { installed = sampler.InstallRow(m.Row, previousRow, ref last); }
+                    catch (InvalidDataException error) { candidate = current; reason = error.Message; return false; }
                     var declared = current.WithWorldState(rows: Upsert(
                         list: current.AuthoredState,
                         item: installed,

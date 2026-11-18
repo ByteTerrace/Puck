@@ -307,8 +307,7 @@ public sealed class VectorStateLawTests {
             Assert.True(condition: tapeB.TryBeginDrive(documentPath: null, forkName: "never-recorded", name: tapeName, refusal: out refusal, toTick: null), userMessage: refusal);
 
             for (var i = 0; (i < keys.Length); i++) {
-                tapeB.InjectDriveTick();
-                serverB.Step();
+                tapeB.DriveStep(() => serverB.Step());
                 tapeB.NoteTick();
 
                 var replayHash = WorldStateHashComposition.HashAuthoritative(server: serverB.Server, tick: serverB.Server.NextInputTick);

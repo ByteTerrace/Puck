@@ -90,7 +90,8 @@ public sealed partial class WorldHistory {
 
             var (server, _) = WorldServer.FromCheckpoint(
                 authorityIdentity: m_server.AuthorityIdentity,
-                checkpoint: checkpoint,
+                checkpoint: checkpoint with { Server = checkpoint.Server with { DrawAuthority = null } },
+                drawKeys: WorldPrivateDrawKeys.Recorded,
                 documentDirectory: documentDirectory,
                 instanceIdentity: m_server.InstanceIdentity,
                 machines: machines,
@@ -214,6 +215,16 @@ public sealed partial class WorldHistory {
     /// <param name="refusal">Why the replay-edit could not run, when it could not.</param>
     /// <returns><see langword="true"/> when the replay-edit ran.</returns>
     public bool TryReplayEdit(int ticksBack, string? documentPath, out WorldHistoryReplayEditReport? report, out string refusal) {
+        try {
+            return ReplayEdit(ticksBack, documentPath, out report, out refusal);
+        } catch (InvalidDataException error) when (ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
+            report = null;
+            refusal = error.Message;
+            return false;
+        }
+    }
+
+    private bool ReplayEdit(int ticksBack, string? documentPath, out WorldHistoryReplayEditReport? report, out string refusal) {
         report = null;
 
         if (WindowRefusal() is { } window) {
@@ -310,7 +321,7 @@ public sealed partial class WorldHistory {
                 }
 
                 editedExpected.Clear();
-                WorldReplaySnapshot.ApplyRecordedTick(
+                using var drawReplay = WorldReplaySnapshot.ApplyRecordedTick(
                     expectedMutationOutcomes: editedExpected,
                     input: editedInput,
                     population: edited.Server.Population,

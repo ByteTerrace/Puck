@@ -99,7 +99,7 @@ public sealed partial class WorldHistoryCommandModule {
 
         return new CommandResult(Output: output.Append(value: ']').ToString());
     }
-    private CommandResult Save(WireArgs args) {
+    private CommandResult Save(WireArgs args, Principal principal) {
         if (args.Count != 3) {
             return WorldHistoryForms.Refuse(args: in args);
         }
@@ -108,6 +108,7 @@ public sealed partial class WorldHistoryCommandModule {
         var tape = args[2].ToString();
 
         if (!m_history.TrySaveBranch(
+            recipient: principal,
             name: name,
             path: out var path,
             refusal: out var refusal,

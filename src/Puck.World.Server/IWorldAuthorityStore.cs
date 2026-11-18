@@ -89,7 +89,7 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
     public static WorldAuthorityStoreOutcome Success(string detail = "", WorldAuthorityRootSnapshot? root = null) => new(
         Detail: detail,
         Kind: WorldAuthorityStoreOutcomeKind.Ok
-    ) { PublishedRoot = root };
+    ) { PublishedRoot = root?.WithoutSeed() };
 }
 /// <summary>The blob-backed persistence seam a hosted world's checkpoint, journal, and published definition read and
 /// write through. Programmed against opaque encoded bytes throughout — this seam never decodes a checkpoint or a

@@ -1030,6 +1030,7 @@ public sealed partial class WorldInstanceHost {
 
         if (
             !WorldDefinitionLoader.TryLoadFileForAdmission(
+                keys: WorldPrivateDrawKeys.Preview,
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out var admission,

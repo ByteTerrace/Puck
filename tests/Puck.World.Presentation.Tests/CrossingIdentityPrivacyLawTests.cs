@@ -1105,8 +1105,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
             _ = tape.CancelDrive();
             return;
         }
-        tape.InjectDriveTick();
-        fixture.Step();
+        tape.DriveStep(() => fixture.Step());
         tape.NoteTick();
         Assert.Null(@object: tape.DriveProgress);
     }
@@ -1278,8 +1277,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
 
         while (tape.Mode == WorldReplayMode.Replaying) {
-            tape.InjectDriveTick();
-            fixture.Step();
+            tape.DriveStep(() => fixture.Step());
             tape.NoteTick();
         }
 
@@ -1364,8 +1362,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
 
         while (tape.Mode == WorldReplayMode.Replaying) {
-            tape.InjectDriveTick();
-            fixture.Step();
+            tape.DriveStep(() => fixture.Step());
             tape.NoteTick();
         }
 
@@ -1401,8 +1398,7 @@ public sealed class CrossingIdentityPrivacyLawTests {
         Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: "branch", name: "arrivals", refusal: out reason, toTick: null), userMessage: reason);
 
         while (tape.Mode == WorldReplayMode.Replaying) {
-            tape.InjectDriveTick();
-            fixture.Step();
+            tape.DriveStep(() => fixture.Step());
             tape.NoteTick();
         }
 

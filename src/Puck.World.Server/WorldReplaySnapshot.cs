@@ -430,9 +430,31 @@ public sealed partial class WorldReplaySnapshot {
     /// name from inside the step), or <see langword="null"/> for the live drive, which must never let a refusal throw
     /// out of the running session's step and narrates the disagreement itself instead.</param>
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
-    internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
+    internal static IDisposable ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
+        var scope = server.DrawKeys.Replay(input.Authority.OfType<WorldReplayEntry.PrivateWord>().Select(entry => entry.Word),
+            static address => ReplayRefusal.MissingPrivateDraw.Raise($"the recording lacks the private draw at {address}"));
+        try {
+            ApplyRecordedEntries(server, population, input, expectedMutationOutcomes, replayedMutationOutcomes, rebuildSource);
+            return scope;
+        } catch {
+            scope.Dispose();
+            throw;
+        }
+    }
+
+    internal static PrivateDrawWord ReadPrivateWord(ref WireReader reader) =>
+        new(reader.ReadInt64(), reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadInt64(), reader.ReadUInt32());
+
+    internal static void WritePrivateWord(WireWriter writer, PrivateDrawWord word) {
+        writer.WriteInt64(word.Installation);
+        writer.WriteUInt64(word.Seed);
+        writer.WriteUInt64(word.Stream);
+        writer.WriteInt64(word.Cursor);
+        writer.WriteUInt32(word.Value);
+    }
+
+    private static void ApplyRecordedEntries(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
         server.ReplaysInput = true;
-        server.DrawKeys.Replay(input.Authority.OfType<WorldReplayEntry.PrivateWord>().Select(entry => entry.Word).ToArray());
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -934,7 +956,7 @@ public sealed partial class WorldReplaySnapshot {
             case 21:
                 return ReadDepartureEntry(reader: ref reader);
             case 26:
-                return new WorldReplayEntry.PrivateWord(new(reader.ReadInt64(), reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadInt64(), reader.ReadUInt32()));
+                return new WorldReplayEntry.PrivateWord(ReadPrivateWord(ref reader));
             case 25: {
                     var encoded = reader.ReadBlock(
                         field: "custody record",
@@ -1541,11 +1563,7 @@ public sealed partial class WorldReplaySnapshot {
                 break;
             case WorldReplayEntry.PrivateWord(var word):
                 writer.WriteByte(26);
-                writer.WriteInt64(word.Installation);
-                writer.WriteUInt64(word.Seed);
-                writer.WriteUInt64(word.Stream);
-                writer.WriteInt64(word.Cursor);
-                writer.WriteUInt32(word.Value);
+                WritePrivateWord(writer, word);
                 break;
             case WorldReplayEntry.RateLever rateLever:
                 writer.WriteByte(value: 9);
@@ -1936,7 +1954,7 @@ public sealed partial class WorldReplaySnapshot {
         for (var tick = 0; (tick < Ticks.Count); tick++) {
             var expectedMutationOutcomes = new List<bool>();
 
-            ApplyRecordedTick(
+            using var drawReplay = ApplyRecordedTick(
                 expectedMutationOutcomes: expectedMutationOutcomes,
                 input: Ticks[tick],
                 population: population,

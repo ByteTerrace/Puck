@@ -652,7 +652,6 @@ public sealed partial class WorldTick {
             tick: (context.Tick + 1UL),
             stepTicks: context.StepTicks
         );
-        Host.DrawKeys.Replay(null);
         m_lastCompletedTick = (context.Tick + 1UL);
         m_lastStepTicks = context.StepTicks;
         m_lastCompletedEngineTicks = context.ElapsedTicks;

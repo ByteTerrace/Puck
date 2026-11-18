@@ -23,7 +23,7 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
     /// <summary>The sampler for this boot when it installs a live authority.</summary>
     public WorldPrivateDrawKeys? DrawKeys { get; init; }
     /// <summary>The original composition and selected entry corresponding to its boot-private staged path.</summary>
-    public (string StagedPath, string Source, string Entry)? CompositionOrigin { get; init; }
+    public (string StagedPath, string Source, string? Entry, string SavedDocument)? CompositionOrigin { get; init; }
     /// <summary>The file the current document origin resolves to; see the class remarks for why this is settable and
     /// who the one writer is.</summary>
     public string SourcePath { get; set; } = SourcePath;
@@ -97,7 +97,7 @@ public static partial class WorldDefinitionLoader {
     /// <param name="drawn">The drawn, resolved definition, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the document drew and every reference resolved.</returns>
-    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
     public static bool TryDraw(WorldDefinition definition, string sourceName, string instanceIdentity,
         [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? drawn, out string reason, WorldPrivateDrawKeys? keys = null) {
         drawn = null;
@@ -194,7 +194,7 @@ public static partial class WorldDefinitionLoader {
     /// (<see cref="WorldDefinition.DocumentDirectory"/>), which bytes carry no trace of; <see langword="null"/> for a
     /// document that has none.</param>
     /// <returns>The admitted document with its retained programs, or its named refusal.</returns>
-    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
     public static async ValueTask<(WorldDefinitionAdmission? Admission, string Reason)> LoadAsync(
         ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
         Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken,
@@ -288,8 +288,9 @@ public static partial class WorldDefinitionLoader {
     /// <param name="catalogFingerprint">The stable metadata fingerprint for the selected host catalog.</param>
     /// <param name="catalog">The selected host machine catalog, or null when provider semantics are deferred.</param>
     /// <returns><see langword="true"/> when the file loaded and validated.</returns>
-    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null) {
-        var accepted = TryLoadFileForAdmission(admission: out var admission, catalog: catalog, catalogFingerprint: catalogFingerprint,
+    /// <param name="keys">The sampler for private draws, when the caller owns one.</param>
+    public static bool TryLoadFile(string path, out WorldDefinition? definition, out string reason, string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldPrivateDrawKeys? keys = null) {
+        var accepted = TryLoadFileForAdmission(keys: keys, admission: out var admission, catalog: catalog, catalogFingerprint: catalogFingerprint,
             contentHash: out _, instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reason: out reason);
 
         definition = admission?.Definition;
@@ -307,7 +308,7 @@ public static partial class WorldDefinitionLoader {
     /// <param name="compiledWorlds">The cache the boot reads its compiled world from and writes one into on a miss, or
     /// <see langword="null"/> to draw the document without one.</param>
     /// <returns><see langword="true"/> when the boot may proceed.</returns>
-    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
     public static bool TryResolve(string path, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
         Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldCache? compiledWorlds = null, WorldPrivateDrawKeys? keys = null) {
         try {

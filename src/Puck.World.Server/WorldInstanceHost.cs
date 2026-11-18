@@ -1233,9 +1233,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             resolvedPath: resolvedPath
         ));
 
-        // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
-        // independently while each stays reproducible from (document, instance name, draw history).
-        var keys = Boot?.Server.DrawKeys.NewInstance() ?? WorldPrivateDrawKeys.Preview;
+        var keys = WorldDrawSave.Open(m_stateRoot, resolvedPath, null);
         var admission = prepared?.Admission;
         if (admission?.Definition.AuthoredState.Any(r => r.Draw?.PrivateStream == true) == true) { admission = null; }
 

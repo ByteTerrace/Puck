@@ -353,7 +353,19 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// the composition-owned callee is expected to hand the entry off to its own store write without blocking here
     /// (the checkpoint upload's own fire-and-forget shape). <see langword="null"/> (the default) journals nothing —
     /// a desktop row has no durable store to append to.</summary>
-    public Action<ulong, ulong, WorldMutation>? MutationJournalTap { get; set; }
+    internal Action<WorldJournalEntry>? MutationJournalTap { get; private set; }
+
+    private void RequireAuthorityCredential(WorldPrivateDrawKeys authority) {
+        if (!ReferenceEquals(authority, DrawKeys)) {
+            throw new InvalidOperationException("PrivateDrawAuthorityMismatch: this operation needs the live authority credential.");
+        }
+    }
+
+    /// <summary>Installs the authority's durable mutation writer. Entries can contain hidden values.</summary>
+    public void SetMutationJournalTap(WorldPrivateDrawKeys authority, Action<WorldJournalEntry>? writer) {
+        RequireAuthorityCredential(authority);
+        MutationJournalTap = writer;
+    }
     /// <summary>Observes every SUBMITTED document mutation as <see cref="WorldDocument.ApplyEnvelope"/> dispatches it, carrying the
     /// mutation and the envelope's own acting principal. The one ingress every submission kind shares — a local
     /// console/client write over the loopback, an admitted socket peer's, and a traveller's submission forwarded by
@@ -502,7 +514,7 @@ public sealed partial class WorldServer : IWorldServerHost {
     }
 
     /// <summary>The installed authority sampler.</summary>
-    public WorldPrivateDrawKeys DrawKeys { get; internal set; }
+    internal WorldPrivateDrawKeys DrawKeys { get; }
 
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
     /// <param name="definition">The loaded world definition (the initial live definition and journal base).</param>
@@ -540,7 +552,7 @@ public sealed partial class WorldServer : IWorldServerHost {
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
-        DrawKeys = drawKeys ?? WorldPrivateDrawKeys.Preview;
+        DrawKeys = drawKeys ?? WorldPrivateDrawKeys.Missing;
 
         if ((admission is not null) && !admission.AppliesTo(definition: definition, machines: machines.ValidationCatalog)) {
             throw new ArgumentException(message: "The admission result belongs to a different definition or machine catalog.", paramName: nameof(admission));

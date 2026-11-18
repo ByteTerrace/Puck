@@ -1091,7 +1091,7 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Hosting.Jobs.JobPool>();
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
-        services.AddSingleton(implementationInstance: worldSource.DrawKeys ?? WorldPrivateDrawKeys.Preview);
+        services.AddSingleton(implementationInstance: worldSource.DrawKeys ?? WorldPrivateDrawKeys.Missing);
         services.AddSingleton(implementationInstance: worldSource);
         services.AddSingleton(implementationInstance: worldSource.Definition);
         if (worldSource.Admission is { } bootAdmission) {

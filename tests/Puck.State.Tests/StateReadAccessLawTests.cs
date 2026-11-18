@@ -149,10 +149,10 @@ public sealed class StateReadAccessLawTests {
     [Fact]
     public void StreamSecretsAndProtocolSequencesNeverEnterTheDeclaration() {
         var row = new StateRow(CellName.Parse("draw"), CellKind.Int, Domain: StateDomain.Keys.Instance,
-            Draw: new PrivateDrawAuthority(new byte[32]).InstallStream(new Draw(Source: CellName.Parse("source"), PrivateStream: true), 7),
+            Draw: new PrivateDrawFixture().Bind(new Draw(Source: CellName.Parse("source"), PrivateStream: true), 7),
             Phase: new StatePhase(19), DrawCursor: 8, HistoryCursor: 23);
         var changed = row with {
-            Draw = new PrivateDrawAuthority(new byte[32]).InstallStream(row.Draw!, 97),
+            Draw = new PrivateDrawFixture().Bind(row.Draw!, 97),
             Phase = new StatePhase(113), DrawCursor = 223, HistoryCursor = 227
         };
         Assert.Equal(StateRowDeclaration.From(row), StateRowDeclaration.From(changed));

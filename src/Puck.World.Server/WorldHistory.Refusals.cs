@@ -68,6 +68,7 @@ public sealed partial class WorldHistory {
             return "the recorded rebuild has no content source";
         }
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: WorldPrivateDrawKeys.Preview,
             admission: out var admission,
             catalog: m_server.Machines.ValidationCatalog,
             contentHash: out var contentHash,

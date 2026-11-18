@@ -243,7 +243,7 @@ public sealed class BatchComposeLawTests {
         using var sequential = Fixtures.FreshServer(definition: Document());
         var journal = 0;
 
-        batched.Server.MutationJournalTap = (_, _, _) => journal++;
+        batched.MutationJournalTap = _ => journal++;
 
         batched.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
             Principal: Principal.Console,
@@ -347,7 +347,7 @@ public sealed class BatchComposeLawTests {
         using var sequential = Fixtures.FreshServer(definition: definition);
         var journal = 0;
 
-        batched.Server.MutationJournalTap = (_, _, _) => journal++;
+        batched.MutationJournalTap = _ => journal++;
 
         batched.Server.EnqueueMutation(mutation: new WorldMutation.Batch(
             Principal: Principal.Console,

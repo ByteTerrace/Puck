@@ -969,7 +969,7 @@ public sealed partial class RuleEvaluator {
     private Step FireSavepoint(TransactionEffect effect, in EffectFiring firing, out bool moved) {
         var arena = m_host.Arena;
         var queued = m_deferred.Count;
-        var mark = arena.BeginScope();
+        var mark = m_host.BeginStateTransaction();
 
         moved = false;
 

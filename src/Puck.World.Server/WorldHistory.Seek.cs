@@ -144,7 +144,9 @@ public sealed partial class WorldHistory {
                 utf8Json: checkpoint!.Server.DefinitionJson
             );
 
-            m_server.EnqueueRebuild(
+            var installed = m_server.Document.ApplyRebuild(
+                connectionId: SubmissionEnvelope.LocalConnectionId,
+                correlationId: 0,
                 principal: Principal.Console,
                 request: new WorldRebuildRequest(
                     ContentHash: WorldDefinitionFileSource.ComputeContentHash(content: checkpoint.Server.DefinitionJson),
@@ -156,12 +158,8 @@ public sealed partial class WorldHistory {
                         : null)
                 )
             );
-            _ = m_server.DrainAdministrative();
 
-            if (!ReferenceEquals(
-                objA: m_server.Document.Base,
-                objB: definition
-            )) {
+            if (!installed) {
                 return $"the keyframe's document at tick {segment.KeyframeTick} was refused by the load door (the [world.definition rejected: …] line names why)";
             }
 
@@ -225,7 +223,7 @@ public sealed partial class WorldHistory {
     // the outcome and hash proof. Returns whether the tick reproduced the recording.
     private bool StepRecorded(WorldServer server, ulong tick, in WorldReplayTickInput input, ulong stepTicks, ulong recordedHash, List<bool> expected, Queue<bool> replayed) {
         expected.Clear();
-        WorldReplaySnapshot.ApplyRecordedTick(
+        using var drawReplay = WorldReplaySnapshot.ApplyRecordedTick(
             expectedMutationOutcomes: expected,
             input: input,
             population: server.Population,
@@ -386,7 +384,10 @@ public sealed partial class WorldHistory {
                 diverged ??= resimulated;
 
                 return null;
+            } catch (InvalidDataException error) when (ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
+                return error.Message;
             } finally {
+                if (target < Head) { m_server.DrawKeys.AdvanceGeneration(); }
                 m_server.SaveEffectTap = save;
                 m_server.Output.WithholdsTimeline = false;
                 m_server.Extensions.CompleteReplay();

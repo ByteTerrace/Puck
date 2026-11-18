@@ -25,7 +25,7 @@ public sealed class DrawStreamLawTests {
             Script: [7L, 11L]
         )
     );
-    private static PrivateDrawStream Secret() => PrivateDrawStream.FromKey(new(
+    private static PrivateDrawStream Secret() => PrivateDrawFixture.Raw(new(
         Word0: 0x1234_5678UL,
         Word1: 0UL,
         Word2: 0UL,

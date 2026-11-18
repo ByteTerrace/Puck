@@ -10,6 +10,7 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="../Shared/PrivateDrawFixture.cs" Link="PrivateDrawFixture.cs" />
         <Compile Include="../Shared/ShippedWorldDocuments.cs" Link="ShippedWorldDocuments.cs" />
     </ItemGroup>
     <ItemGroup>

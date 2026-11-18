@@ -417,7 +417,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         }));
         var journal = new List<WorldMutation>();
 
-        fixture.Server.MutationJournalTap = (_, _, mutation) => journal.Add(item: mutation);
+        fixture.MutationJournalTap = entry => journal.Add(item: entry.Mutation);
 
         for (var index = 0; (index < 2); index++) {
             fixture.Step();

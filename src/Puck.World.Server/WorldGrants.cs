@@ -140,7 +140,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // The server whose document, entity table and narration the grant-application, ownership-escrow and admission
     // halves of this facade run against. Null only for a table built standalone, which reaches the capability doors
     // below and nothing else.
-    internal WorldPrivateDrawKeys DrawKeys => m_host?.DrawKeys ?? WorldPrivateDrawKeys.Preview;
+    internal WorldPrivateDrawKeys DrawKeys => m_host?.DrawKeys ?? WorldPrivateDrawKeys.Missing;
     private readonly WorldServer? m_host;
 
     /// <summary>Gets the server this table serves.</summary>

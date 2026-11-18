@@ -601,8 +601,7 @@ public sealed partial class PlacementDealLawTests {
         var replayed = new List<string>();
 
         while (tape.Mode == WorldReplayMode.Replaying) {
-            tape.InjectDriveTick();
-            fixture.Step();
+            tape.DriveStep(() => fixture.Step());
             tape.NoteTick();
             replayed.Add(item: Describe(server: fixture.Server));
         }

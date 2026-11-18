@@ -127,7 +127,7 @@ public sealed class AddonCheckpointLawTests {
         Assert.True(condition: stop.Verdict!.Passing, userMessage: stop.Verdict.Describe());
         Assert.True(condition: tape.TryBeginDrive(documentPath: null, forkName: null, name: "late-addon", refusal: out refusal, toTick: 1), userMessage: refusal);
         Assert.Equal(before.TotalFuelConsumed, Assert.Single(collection: runtime.DescribeCost()).TotalFuelConsumed);
-        tape.InjectDriveTick(); fixture.Step(); tape.NoteTick();
+        tape.DriveStep(() => fixture.Step()); tape.NoteTick();
         Assert.Equal(WorldReplayMode.Idle, tape.Mode);
     }
     [Fact]
@@ -141,7 +141,7 @@ public sealed class AddonCheckpointLawTests {
         var atCheckpoint = Assert.Single(collection: runtime.DescribeCost());
         var tail = new List<(ulong Tick, ulong EngineTick, WorldMutation Mutation)>();
 
-        fixture.Server.MutationJournalTap = (tick, engineTick, mutation) => tail.Add(item: (tick, engineTick, mutation));
+        fixture.MutationJournalTap = entry => tail.Add(item: (entry.Tick, entry.EngineTick, entry.Mutation));
         // These are the exact enqueue and drain seams used by a guest, with an expired completion token.
         fixture.Server.EnqueueMutation(new WorldMutation.UpsertStateRow(
             Row: new WorldStateRow(Name: CellName.Parse(candidate: "guest-effect"), Kind: CellKind.Int,
@@ -153,7 +153,7 @@ public sealed class AddonCheckpointLawTests {
         fixture.Step();
         Assert.Contains(collection: fixture.Server.Definition.State, filter: row => (row.Name.Value == "guest-effect"));
         Assert.Single(collection: tail);
-        fixture.Server.MutationJournalTap = null;
+        fixture.MutationJournalTap = null;
         fixture.Server.RestoreCheckpoint(checkpoint: checkpoint!);
         Assert.Equal(atCheckpoint, Assert.Single(collection: runtime.DescribeCost()));
         foreach (var entry in tail) { Assert.True(condition: fixture.Server.TryApplyJournalTailMutation(engineTick: entry.EngineTick, mutation: entry.Mutation, tick: entry.Tick)); }

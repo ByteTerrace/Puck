@@ -36,7 +36,7 @@ public sealed partial class WorldConfiguredExtensions {
         }
         var runtime = Create(
             captureCause: (recording
-                ? tape!.CaptureExternalOperationCause
+                ? () => tape!.CaptureExternalOperationCause(Puck.Commands.Principal.World)
                 : () => row.Server.CaptureExternalOperationCause(hostRow: instances.CaptureRow(row: row))),
             configuration: configuration,
             extensions: extensions,

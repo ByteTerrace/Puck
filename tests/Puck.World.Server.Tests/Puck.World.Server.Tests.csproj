@@ -12,6 +12,7 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="../Shared/PrivateDrawFixture.cs" Link="PrivateDrawFixture.cs" />
         <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite drives the
              real routed store rather than a second, hand-rolled dispatch. -->
         <Compile Include="../Shared/FixtureCompiler.cs" Link="FixtureCompiler.cs" />

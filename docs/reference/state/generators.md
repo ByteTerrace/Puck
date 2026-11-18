@@ -379,9 +379,11 @@ declaration and can price its work.
 
 A world receives a random 256-bit seed at authority installation. Each new private site takes the next installation ordinal. Removing a site and declaring it again allocates a fresh ordinal. A matching row edit or rebuild retains the live cursor and masks.
 
-The local authority save lives under `world-authorities/` in the state directory. Move that directory with the world and keep its launch-relative document path. A hosted activation recovers its seed from the fenced authority root. Checkpoints carry the seed and the live and journal-base installation ordinals. A compiled world keeps the undrawn source for a private first fill.
+The local authority save lives under `world-authorities/` in the state directory. Its name identifies the absolute source path and composition entry. A fresh local boot or instance gets a fresh seed. Saving writes the seed, generation, allocation counter and site ordinals before the document. The document supplies cells, masks and cursors on resume, including edits an author made after saving. Reopening the save reserves a generation before drawing, since a previous session may have continued playing after it saved.
 
-Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site key. Tapes record the consumed words at their addresses so an independent replay needs no authority secret. State exports and document fingerprints use the authored form. Source proofs and test servers use an isolated deterministic sampler. Private sites support neither skip nor an extended table.
+A hosted activation takes the seed from its fenced authority root and reserves a fresh generation. An acknowledged mutation in the recovery journal reuses its recorded private inputs. Its checkpoint identifies that authority and carries stream positions. Rewinding the world, restoring an earlier release or branching from history advances the private stream generation. Document undo restores earlier row state and also advances the generation because another participant may already have seen a later value. A compiled world carries the undrawn source for private first fills.
+
+Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site's generation-specific key. Search treats private samples as unknown. Only explicit authoring previews use the deterministic preview sampler. Replay reads the words captured by the authority. Private sites support neither skip nor an extended table.
 
 ## Extend a source's equidistribution
 

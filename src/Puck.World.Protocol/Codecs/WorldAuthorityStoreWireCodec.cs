@@ -10,6 +10,9 @@ public enum WorldAuthorityJournalEntryKind : byte {
     /// <summary>A crossing record the authority wrote ahead of a crossing step, encoded by the crossing-log
     /// codec.</summary>
     Crossing = 1,
+
+    /// <summary>A committed mutation with its authority-only private inputs and starting positions.</summary>
+    PrivateMutation = 2,
 }
 /// <summary>One authority journal entry — opaque encoded bytes (a committed mutation or a crossing record, opaque to
 /// the store) plus the simulation tick and engine tick it was recorded at. The two clocks are independent:
@@ -94,7 +97,7 @@ public static class WorldAuthorityStoreWireCodec {
 
             if (
                 !reader.Failed &&
-                (kind > ((byte)WorldAuthorityJournalEntryKind.Crossing))
+                (kind > ((byte)WorldAuthorityJournalEntryKind.PrivateMutation))
             ) {
                 reader.Fail(
                     detail: $"journal entry kind {kind} is not declared",

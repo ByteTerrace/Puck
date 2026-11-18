@@ -10,6 +10,7 @@
         <NoWarn>$(NoWarn);CS1591</NoWarn>
     </PropertyGroup>
     <ItemGroup>
+        <Compile Include="../Shared/PrivateDrawFixture.cs" Link="PrivateDrawFixture.cs" />
         <ProjectReference Include="../../src/Puck.State.Rules/Puck.State.Rules.csproj" />
         <!-- A trait law's fixture is checked against the world validator, so it cannot rest on a shape no world admits. -->
         <ProjectReference Include="../../src/Puck.World.Schema/Puck.World.Schema.csproj" />

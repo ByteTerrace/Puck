@@ -13,7 +13,11 @@ public sealed partial class WorldServer {
     private readonly List<int> m_transactionBodies = [];
 
     /// <summary>Opens one atomic gameplay batch. Every producer uses this journal boundary.</summary>
-    public int BeginStateTransaction() => m_arena.BeginScope();
+    public int BeginStateTransaction() {
+        var mark = m_arena.BeginScope();
+        if (Configuration.StateRaw?.DrawInstallCount > 0) { DrawKeys.TrackRewind(m_arena.Journal); }
+        return mark;
+    }
     /// <summary>Commits a prepared batch. Deliveries happen after this boundary.</summary>
     /// <remarks>A batch that wrote a drive-gate row resyncs the gates and every input owner. Otherwise only the owners
     /// routing a body whose selection registers the batch touched resynchronize; every other owner's selection reads

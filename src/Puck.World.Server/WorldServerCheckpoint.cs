@@ -36,7 +36,7 @@ public sealed record WorldServerCheckpoint(
     byte[] BaseDefinitionJson,
     WorldBaseOrigin BaseOrigin,
     ArenaSnapshot Arena,
-    IReadOnlyList<(ulong Tick, ulong EngineTick, WorldMutation Mutation)> Journal,
+    IReadOnlyList<WorldJournalEntry> Journal,
     ulong LastCompletedTick,
     ulong LastCompletedEngineTicks,
     ulong LastStepTicks,
@@ -63,13 +63,19 @@ public sealed record WorldServerCheckpoint(
     ArenaUndoSnapshot? Undo = null,
     WorldInputRuntimeCheckpoint? Input = null,
     IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null,
-    byte[]? DrawSeed = null,
+    string? DrawAuthority = null,
+    long DrawGeneration = 0,
     WorldDrawPositions? DrawPositions = null,
     WorldDrawPositions? BaseDrawPositions = null,
     string? AuthorityIdentity = null
 ) {
-    internal WorldPrivateDrawKeys OpenDrawKeys(WorldPrivateDrawKeys? fallback = null) => DrawSeed is { } seed
-        ? WorldPrivateDrawKeys.FromAuthorityState(seed) : fallback ?? WorldPrivateDrawKeys.Preview;
+    internal WorldPrivateDrawKeys OpenDrawKeys(WorldPrivateDrawKeys? supplied, bool recorded = false) {
+        var keys = supplied ?? WorldPrivateDrawKeys.Missing;
+        if (!recorded && (DrawPositions is not null || BaseDrawPositions is not null) && DrawAuthority != keys.Identity) {
+            throw new InvalidDataException("PrivateDrawAuthorityMismatch: the checkpoint requires its own authority root.");
+        }
+        return keys;
+    }
 
     /// <summary>Serializes a document into the form <see cref="DefinitionJson"/> and <see cref="BaseDefinitionJson"/>
     /// hold: the compact canonical bytes, the form a compiled world stores and a definition travels in. Every writer

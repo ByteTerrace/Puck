@@ -96,8 +96,8 @@ public sealed class MachineRestoreContinuityLawTests {
         var journaledA = 0;
         var journaledB = 0;
 
-        a.Server.MutationJournalTap = (_, _, _) => journaledA++;
-        b.Server.MutationJournalTap = (_, _, _) => journaledB++;
+        a.MutationJournalTap = _ => journaledA++;
+        b.MutationJournalTap = _ => journaledB++;
         Assert.Equal(expected: Guests(engine: engineA), actual: Guests(engine: engineB));
 
         for (var step = 0; (step < 3); step++) {

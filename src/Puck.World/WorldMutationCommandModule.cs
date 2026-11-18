@@ -245,6 +245,7 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                 // below) — both reuse server.Neighbours, the ONE live-session resolver this repository wires (a
                 // document SWAP, not a per-mutation check; see WorldServer.Neighbours' own remarks).
                 if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: WorldPrivateDrawKeys.Preview,
                     admission: out var admission,
                     catalog: machineCatalog,
                     contentHash: out var contentHash,
@@ -385,8 +386,8 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                     return WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, server, machineCatalog,
                         WorldBootComposition.MachineCatalogFingerprint(machineCatalog), stateRoot, out var result)
                         ? new CommandResult(Output: $"[world.save: {result}]")
-                        : CommandResult.Error(output: $"[world.save: {result}; nothing written]");
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) {
+                        : CommandResult.Error(output: $"[world.save: {result}]");
+                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException or InvalidDataException or System.Text.Json.JsonException)) {
                     return CommandResult.Error(output: $"[world.save: could not write {target} ({exception.Message})]");
                 }
             }

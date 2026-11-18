@@ -230,6 +230,8 @@ public sealed class StateCatalog {
     private bool MatchesBehaviors(int rowOrdinal, StateRow row) {
         static bool Same(EffectiveBehavior a, EffectiveBehavior b) =>
             (a.Advance == b.Advance) && (a.Cycle == b.Cycle) && (a.Dynamics == b.Dynamics);
+        // The arena keeps the catalog’s installed declarations when a value-only reload reuses it.
+        if (m_rows[rowOrdinal].Draw != row.Draw) { return false; }
         if (!Same(m_defaultBehaviors[rowOrdinal], EffectiveBehavior.Resolve(row: row, cell: null))) { return false; }
         var count = 0;
         foreach (var cell in row.Cells ?? []) {

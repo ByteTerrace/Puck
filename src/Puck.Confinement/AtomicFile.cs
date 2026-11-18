@@ -319,8 +319,9 @@ public static class AtomicFile {
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     /// <exception cref="IOException">The temporary could not be written or flushed, or the durable rename failed.</exception>
     /// <exception cref="UnauthorizedAccessException">The caller may not create the temporary or replace the destination.</exception>
-    public static void WriteAllBytesDurably(string path, ReadOnlySpan<byte> bytes) {
-        using var pending = Stage(path: path, unixCreateMode: null, state: bytes, fill: static (stream, content) => stream.Write(buffer: content));
+    /// <param name="unixCreateMode">Optional permissions for the replacement file on Unix.</param>
+    public static void WriteAllBytesDurably(string path, ReadOnlySpan<byte> bytes, UnixFileMode? unixCreateMode = null) {
+        using var pending = StageAllBytes(path, bytes, unixCreateMode);
 
         pending.CommitDurably();
     }

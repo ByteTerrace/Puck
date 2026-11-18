@@ -267,7 +267,7 @@ public sealed class WorldHostedOriginLawTests {
         );
     }
     [Fact]
-    public async Task ASecondActivationResumesTheFirstPrivateStream() {
+    public async Task UncheckpointedReactivationKeepsItsSeedAndRetiresItsOpeningStream() {
         using var directory = new TemporaryDirectory();
         var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
@@ -278,7 +278,8 @@ public sealed class WorldHostedOriginLawTests {
             Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)));
         var document = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] };
         Assert.True((await first.PublishDefinitionAsync(identity, document, token)).Ok);
-        Assert.Null((await first.LoadRecoveryAsync(identity, token))!.Value.DrawKeys!.SerializeAuthorityState());
+        var missing = await Assert.ThrowsAsync<InvalidDataException>(async () => await first.LoadRecoveryAsync(identity, token));
+        Assert.Contains("PrivateDrawSeedMissing", missing.Message);
         Assert.NotNull(await first.AcquireActivationAsync(identity, token));
         var live = (await first.LoadRecoveryAsync(identity, token))!.Value;
         var second = Open();
@@ -288,8 +289,75 @@ public sealed class WorldHostedOriginLawTests {
         var resumed = recovered.Definition!.AuthoredState[0].Draw!.Secret!;
         Assert.NotNull(live.DrawKeys!.SerializeAuthorityState());
         Assert.Equal(live.DrawKeys.SerializeAuthorityState(), recovered.DrawKeys!.SerializeAuthorityState());
-        Assert.NotEqual(live.DrawKeys.SerializeAuthorityState(), live.DrawKeys.NewInstance().SerializeAuthorityState());
-        for (var cursor = 0; cursor < 8; cursor++) { Assert.Equal(stream.Sample(3, 5, cursor), resumed.Sample(3, 5, cursor)); }
+        Assert.NotEqual(live.DrawKeys.SerializeAuthorityState(), WorldPrivateDrawKeys.Create().SerializeAuthorityState());
+        Assert.True(recovered.DrawKeys.RootGeneration > live.DrawKeys.RootGeneration);
+        Assert.NotEqual(Enumerable.Range(0, 8).Select(i => stream.Sample(3, 5, i)), Enumerable.Range(0, 8).Select(i => resumed.Sample(3, 5, i)));
+    }
+
+    [Fact]
+    public async Task RecoveryRekeysAndQualificationCannotStepProductionDraws() {
+        using var directory = new TemporaryDirectory();
+        var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
+        var token = TestContext.Current.CancellationToken;
+        var blobs = PuckStorageTestComposition.BuildStore();
+        WorldAuthorityBlobStore Store(string path) => new(blobs, WorldAuthorityBlobStore.DirectoryTarget(directory.PathOf(path)));
+        var source = Store("source");
+        var qualification = Store("qualification");
+        var fence = (await source.AcquireActivationAsync(identity, token))!.Value;
+        var document = Fixtures.BuildDocument().WithWorldState([new WorldStateRow(CellName.Parse("dice"), CellKind.Int,
+            Draw: new Draw(PrivateStream: true, Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)))]) with { Rules = [] };
+        Assert.True((await source.PublishDefinitionAsync(identity, document, token, fence)).Ok);
+        var live = (await source.LoadRecoveryAsync(identity, token))!.Value;
+        using var running = Fixtures.FreshServer(live.Definition!, drawKeys: live.DrawKeys);
+        Assert.True(running.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out var reason), reason);
+        var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
+        Assert.True((await source.WriteCheckpointAsync(identity, bytes, checkpoint!.Server.LastCompletedTick, token, fence)).Ok);
+        var operation = Guid.NewGuid();
+        var point = (await source.CaptureRecoveryRootAsync(identity, operation, token))!.Value;
+        var receipts = await source.CaptureReceiptSnapshotAsync(identity, (await source.LoadRootAsync(identity, token))!.Value, token);
+        Assert.True((await qualification.CreateReleaseFixtureAsync(identity, WorldDefinitionSerialization.Serialize(document), bytes, receipts, token)).Ok);
+        var qualified = (await qualification.LoadRecoveryAsync(identity, token))!.Value;
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(qualified.Checkpoint!.Value.Encoded.Span, out var detached, out reason), reason);
+        Assert.Equal(qualified.DrawKeys!.Identity, detached!.Server.DrawAuthority);
+        Assert.NotEqual(live.DrawKeys!.Identity, qualified.DrawKeys.Identity);
+        var mismatch = Assert.Throws<InvalidDataException>(() => running.Server.RestoreCheckpoint(detached));
+        Assert.Contains("PrivateDrawAuthorityMismatch", mismatch.Message);
+        Assert.True((await source.RestoreRecoveryRootAsync(identity, point.Pin, operation, fence, token)).Ok);
+        var restored = (await source.LoadRecoveryAsync(identity, token))!.Value;
+        Assert.Equal(live.DrawKeys.Identity, restored.DrawKeys!.Identity);
+        Assert.True(restored.DrawKeys.RootGeneration > live.DrawKeys.RootGeneration);
+        static uint[] Future(WorldDefinition d) => Enumerable.Range(0, 4).Select(i => d.AuthoredState[0].Draw!.Secret!.Sample(3, 5, i)).ToArray();
+        Assert.NotEqual(Future(live.Definition!), Future(restored.Definition!));
+        Assert.NotEqual(Future(live.Definition!), Future(qualified.Definition!));
+
+        // The durable mutation tail covers one draw. The next draw was visible before the host crashed.
+        var activeFence = (await source.AcquireActivationAsync(identity, token))!.Value;
+        var active = (await source.LoadRecoveryAsync(identity, token))!.Value;
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(active.Checkpoint!.Value.Encoded.Span, out var start, out reason), reason);
+        using var prior = Fixtures.FreshServer(active.Definition!, drawKeys: active.DrawKeys);
+        prior.Server.RestoreCheckpoint(start!);
+        static long Deal(WorldFixture f) {
+            f.Server.EnqueueMutation(new WorldMutation.Generate(Puck.Commands.Principal.Console, "dice"));
+            f.Step();
+            return f.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.Raw;
+        }
+        WorldJournalEntry journaled = default;
+        prior.MutationJournalTap = entry => journaled = entry;
+        Assert.Throws<InvalidOperationException>(() => prior.Server.SetMutationJournalTap(WorldPrivateDrawKeys.Create(), null));
+        var committed = Deal(prior);
+        Assert.True(WorldAuthorityCheckpointCodec.TryEncodeJournalMutation(journaled, out var tail, out reason), reason);
+        Assert.Equal(WorldAuthorityJournalEntryKind.PrivateMutation, tail.Kind);
+        Assert.True((await source.AppendJournalAsync(identity, tail, token, activeFence)).Ok);
+        var discarded = Deal(prior);
+        Assert.NotNull(await source.AcquireActivationAsync(identity, token));
+        var restarted = (await source.LoadRecoveryAsync(identity, token))!.Value;
+        Assert.True(restarted.DrawKeys!.RootGeneration > active.DrawKeys!.RootGeneration);
+        using var successor = Fixtures.FreshServer(restarted.Definition!, drawKeys: restarted.DrawKeys);
+        successor.Server.RestoreCheckpoint(start!);
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecodeJournalMutation(Assert.Single(restarted.Journal.Entries), out var recorded, out reason), reason);
+        Assert.True(successor.Server.TryRecoverJournalMutation(recorded, restarted.DrawKeys));
+        Assert.Equal(committed, successor.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.Raw);
+        Assert.NotEqual(discarded, Deal(successor));
     }
 
     [Fact]

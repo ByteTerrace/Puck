@@ -388,6 +388,17 @@ public sealed partial class WorldDocument {
     // change, as a reload replaces the document whatever stands; only a delta whose basis is unknown (a pending op a
     // checkpoint restored) is checked against the live document here.
     internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldDefinition? basis = null) {
+        var reads = Host.DrawKeys.Reads;
+        var accepted = false;
+        try {
+            accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, basis);
+            return accepted;
+        } finally {
+            if (!accepted && reads != Host.DrawKeys.Reads) { Host.DrawKeys.AdvanceGeneration(); }
+        }
+    }
+
+    private bool ApplyRebuildCore(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash, string? preparationFailure, WorldDefinitionAdmission? admission, WorldDefinition? basis) {
         var verb = RebuildVerb(kind: request.Kind);
 
         if (!Host.Grants.IsOperator(principal: principal)) {
@@ -534,7 +545,12 @@ public sealed partial class WorldDocument {
         // document-local checks and never reaches transport from the tick path, and a prepared admission of this exact
         // candidate already holds them.
         if (candidate.AuthoredState.Any(r => r.Draw?.PrivateStream == true) || priorDefinition.StateRaw?.DrawInstallCount > 0) {
-            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var drawReason, Host.DrawKeys, Host.MaterializeArena()) ||
+            var previous = Host.MaterializeArena();
+            if (request.Kind == WorldRebuildKind.Reset) {
+                Host.DrawKeys.AdvanceGeneration();
+                previous = WorldPrivateDrawKeys.WithLast(new WorldDefinition(), previous.StateRaw?.DrawInstallCount ?? 0);
+            }
+            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var drawReason, Host.DrawKeys, previous) ||
                 !WorldStateDocumentValues.TryResolve(candidate, out candidate, out drawReason)) {
                 RejectRebuild(verb, drawReason, connectionId, correlationId);
                 return false;

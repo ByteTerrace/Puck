@@ -56,13 +56,18 @@ public readonly record struct WorldAuthorityRoot(
     );
     /// <summary>The seed provisioned by the first fenced activation.</summary>
     internal string? DrawSeed { get; init; }
+    /// <summary>Durable timeline allocated by the rewind root CAS.</summary>
+    [JsonPropertyName("drawGeneration")]
+    public long DrawGeneration { get; init; }
     /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
     [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? RewindBoundary { get; init; }
 }
 /// <summary>A root together with the blob version token that must guard its next CAS.</summary>
-public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root, string VersionToken);
+public readonly record struct WorldAuthorityRootSnapshot(WorldAuthorityRoot Root, string VersionToken) {
+    internal WorldAuthorityRootSnapshot WithoutSeed() => this with { Root = Root with { DrawSeed = null } };
+}
 /// <summary>A coherent recovery view. The root was read once and all referenced immutable blobs were verified against
 /// that root, so checkpoint and journal cannot come from different publications.</summary>
 public readonly record struct WorldAuthorityRecovery(
@@ -134,7 +139,7 @@ internal static class WorldAuthorityRootCodec {
             var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) {
                 "version", "epoch", "fence", "sequence", "definition", "checkpoint", "checkpointOrdinal",
                 "checkpointTick", "journal", "journalCount", "journalSequence", "checkpointCoverageSequence",
-                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary", "drawSeed",
+                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary", "drawSeed", "drawGeneration",
             };
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -182,7 +187,7 @@ internal static class WorldAuthorityRootCodec {
             ) {
                 reason = "rewind boundary is not a full SHA-256 policy pin"; root = default; return false;
             }
-            var scalarFieldsValid = ((root.Version == 1) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
+            var scalarFieldsValid = ((root.DrawGeneration >= 0) && (root.Version == 1) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
             var journalCoverageValid = (scalarFieldsValid && (root.CheckpointCoverageSequence <= root.JournalSequence) &&
                 ((root.JournalHash is null)
                 ? ((root.JournalEntryCount == 0) && (root.JournalSequence == root.CheckpointCoverageSequence))

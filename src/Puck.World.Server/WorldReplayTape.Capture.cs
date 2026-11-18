@@ -180,6 +180,8 @@ public sealed partial class WorldReplayTape {
     // The one place the taps attach or detach: the capture runs while a recording is armed or a history is on, never
     // during a live drive (the drive feeds recorded input through the server's own doors) and never while a history
     // re-simulation holds it suspended. A detach drops whatever the open tick had gathered — nothing consumes it.
+    private IDisposable? m_privateDrawCapture;
+
     private void RefreshCapture() {
         var wanted = (
             (m_captureSuspensions == 0) &&
@@ -192,7 +194,8 @@ public sealed partial class WorldReplayTape {
         }
 
         m_capturing = wanted;
-        m_liveServer.DrawKeys.WordRead = wanted ? word => m_currentAuthority.Add(new WorldReplayEntry.PrivateWord(word)) : null;
+        m_privateDrawCapture?.Dispose();
+        m_privateDrawCapture = wanted ? m_liveServer.DrawKeys.Capture(word => m_currentAuthority.Add(new WorldReplayEntry.PrivateWord(word))) : null;
 
         if (wanted) {
             AttachTaps();
