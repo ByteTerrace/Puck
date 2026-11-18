@@ -31,6 +31,15 @@ apply to any machine an agent session runs on. CI runs on Windows and Ubuntu
 runners, so a Linux machine differs only where this list says; no runner is
 macOS, and nothing here is verified there.
 
+Harness settings that a tool reads from the project are versioned
+([rule 9](../../AGENTS.md#core-rules)): `.claude/settings.json`,
+`.claude/launch.json`, `.claude/agents/`, `.claude/hooks/`, `.mcp.json`,
+`.codex/config.toml`, `.codex/hooks.json`, `.codex/rules/`, `.agents/*.json`
+and `.agents/plugins/`. Necessary non-secret policy that a harness reads only
+from home is recorded under that tool's item below, and a machine keeps no
+policy beyond it. Login and hook-trust state remain local and are never copied
+into the repository.
+
 - **The .NET SDK `global.json` pins.** Roll-forward is disabled, so install
   exactly that version; `dotnet --version` run inside the checkout prints it.
   The full build also needs the `wasm-tools` workload

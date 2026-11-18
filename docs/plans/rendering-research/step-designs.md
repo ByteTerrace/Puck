@@ -1256,7 +1256,8 @@ The rule is stated at the edges of the render graph, not at one pass.
 - **The mechanism lands together with the retuned world.** Every place in
   the debug world is tuned against the missing encode. A corrected engine
   with the old values would look wrong everywhere, and AGENTS.md lets a
-  look change land only when its captures meet the reference. So the same
+  look change that misses its reference land only as a material improvement,
+  which a regression in every place is not. So the same
   merge carries the mechanism, the standard package's values and the debug
   world's values: the hall's `compensation: 2` goes, and each place's
   exposure and lights are set again against its reference.

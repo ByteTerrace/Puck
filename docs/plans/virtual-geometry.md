@@ -849,8 +849,7 @@ the same data, give the same result within the still tolerance, are measured to
 pay on their hardware and fall back automatically. **Decided.** Nothing in D1
 to D9 depends on a capability the 2060, the 4070 and the Deck do not all have;
 every enhancement is a second implementation that earns its place by the
-upper-hardware ruling (AGENTS.md, "Upper hardware enhances; the baseline is
-cross-platform"), and each begins with backend capability discovery and
+upper-hardware ruling (AGENTS.md, "Upper hardware enhances"), and each begins with backend capability discovery and
 enablement, not a shader. Qualification is three legs: Direct3D 12, native
 Vulkan, and Vulkan under Proton on the Deck; a 4070 at the Deck's resolution
 qualifies nothing on the Deck.

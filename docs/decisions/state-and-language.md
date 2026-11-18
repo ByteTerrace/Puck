@@ -444,6 +444,29 @@ language.
 Author-facing work belongs to the existing language packages. Their remaining
 cross-host and scenario gaps live in the [state plan's open items](../plans/state-and-language.md#open-items).
 
+### Ergonomic is optimal
+
+The owner's ruling: cost depends on what a document means, never on how it is
+spelled. A `for`/`map`, a template, a fold or a `let` costs no more than the
+hand-unrolled, pasted or literal form it replaces, so no author ever writes a
+clumsier form for speed. The surface language may keep several spellings where
+each helps authors, but all lower to one canonical form: the compiled document
+and its derived identities (bake, rule program, instance buckets). Uniformity
+lives there, so it never constrains expression, and a capability is removed
+only when nothing an author could want is lost. A spelling that costs more is a
+compiler or engine defect, never a style note.
+
+Confidence comes from three instruments:
+
+- a spelling-equivalence corpus, in which pairs that mean the same compile to
+  identical documents, identities and counted work;
+- cost attributed in `world.budget` to what the author wrote;
+- a log of where authors (the games, the debug world, agents authoring from
+  prompts) hit walls or reach for clumsy forms.
+
+[The programme's package for this ruling](../plans/state-and-language.md#s11--ergonomic-is-optimal)
+holds the designs chosen under it.
+
 ### The authoring consensus
 
 The owner asked for the language to genuinely improve, with big changes
