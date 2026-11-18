@@ -79,14 +79,24 @@ close, plus a presented burst through the extreme poses of anything that
 moves. The builder judges those captures against the references under the
 headings above and the [concept art review](#concept-art-review)'s
 attachment, physical coherence, perspective and compositing checks, and keeps
-iterating while it can see a defect. Any seam, tear, facet, fragment or
-unexplained shape fails; there is no pass with caveats, and work the builder
-knows fails is never presented as progress. The failure the bar exists for is
-not misjudging: it is knowing and showing anyway. Outside review (the
-`look-critic` agent, `.claude/agents/look-critic.md`, which judges captures
-against references without the builder's account) is a tool for a milestone
-or a real doubt, not a toll on every pass. A failure is a defect fixed at its
-cause, including the rendering feature or engine path the work needs.
+iterating while it can see a defect its authoring can fix. Any seam, tear,
+facet, fragment or unexplained shape fails; there is no pass with caveats, and
+work the builder knows fails is never presented as progress. The failure the
+bar exists for is not misjudging: it is knowing and showing anyway. Outside
+review (the `look-critic` agent, `.claude/agents/look-critic.md`, which judges
+captures against references without the builder's account) is a tool for a
+milestone or a real doubt, not a toll on every pass, and a creation gets at
+most two such rounds per wave. A failure is a defect fixed at its cause,
+including the rendering feature or engine path the work needs: when the cause
+is an engine limit, the builder stops sculpting around it and the gap goes to
+the front of its owning plan ([Puck's purpose](../../../AGENTS.md#pucks-purpose)).
+Only such work, a creation whose remaining failures rest on a named engine
+limit, may land while it still misses the bar, and only when it is a material
+improvement on what the tree holds, with its failures and the gaps behind them
+stated in the commit; it is not thereby called a pass. Any other look change
+that misses the bar (a global lighting retune, a palette or treatment pass)
+lands only when its captures meet the reference, never on relative
+improvement alone.
 The lead puts current captures beside their references before the owner on a
 regular cadence ([orchestration](../../../.claude/skills/orchestration/SKILL.md#land-in-batches)).
 

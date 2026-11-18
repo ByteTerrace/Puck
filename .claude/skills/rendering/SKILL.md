@@ -1231,7 +1231,38 @@ Attribute shading cost by toggling the live levers (`world.shadows`, `world.ao`,
 `world.debug-view depth`. Compare the whole frame, not one pass. `puck counters`
 boots a workload on both backends and `puck counters compare <before> <after>`
 holds two reports to each other; a deterministic count must agree on both
-backends. `world.debug-view` lists the diagnostic images. For a frame-time bar,
+backends. `world.debug-view` lists the diagnostic images.
+
+On the lead machine the frame bar is read at 2560 by 1440 on the RTX 4070, the
+device the work meets first (AGENTS.md, "Upper hardware enhances"), on the
+benchmark route in motion, and it must hold in both topologies; the RTX 2060
+and the Steam Deck have their own sizes and budgets. `puck benchmark` and `bench frames` open that
+size by default (`BenchmarkCommand`'s `--width` and `--height`); a reading at a
+smaller window says where time goes and is not a bar reading, and it can hide a
+defect that shows only at the bar's size. The route at that
+size runs once per integration batch, in the lead's quiet window, with the
+authority in process: the benchmark has no remote endpoint, so it says nothing
+about the remote topology, and a verdict names the device, size, backend and
+topology it read. A lane that claims frame time names the passes, counters and
+`host.frames` split it expects to move, with frozen builds from before and
+after its change, as a measurement request for that window; it takes the
+windowed before/after readings itself only when its brief grants a GPU leg
+for them.
+
+A technique is judged first by what it gives the RTX 4070, and a target that
+lacks a capability never vetoes it. What the device can do is read at device
+creation (`GpuDeviceCapabilities`, printed on `world.counters gpu`'s
+`capabilities` line), and each device meets its bar by the path its authored
+quality table enables. A path that needs a capability is a second
+implementation: it reads the same data as the path it replaces, gives the same
+result within the still tolerance, is measured to pay on that hardware, and
+falls back automatically where the capability is missing, so every device keeps
+a working path. No code reads a per-device quality table yet, so the benchmark
+boots with the debug world's own render settings;
+[the rendering plan](../../../docs/plans/rendering-research.md#the-bars-and-the-budget)
+owns building it.
+
+For a frame-time bar,
 `host.frames` on the windowed host gives produce, simulate and their sum per
 iteration (avg, p50, p99, max) and the worst iterations split into their
 phases (simulate, begin, produce, present, wait) with their collections and the
@@ -1349,7 +1380,10 @@ by its fence share is GPU back-pressure, not CPU work.
   only for a granted GPU leg), edit, `world.shaders.reload`, capture, and end it
   with `puck_world_stop`. A claim about
   how something renders rests on an inspected capture; say which backends you
-  looked at. A boot bakes the groups the mesh store does not hold; a reboot of
+  looked at. A lane without a GPU leg builds, boots headless once and asks for
+  the windowed check as a verification request; the lead's batch pass boots the
+  debug world windowed on Vulkan as well whenever the batch changed rendering
+  or GPU code (AGENTS.md). A boot bakes the groups the mesh store does not hold; a reboot of
   an unchanged world loads its completed meshes, and an empty `--cache-dir`
   bakes all of them. A cold debug-world bake can span thousands of rendered
   frames, while simulation advances many ticks per frame. Before capturing the

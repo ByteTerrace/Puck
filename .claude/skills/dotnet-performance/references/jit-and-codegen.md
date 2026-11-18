@@ -11,7 +11,8 @@ are where to read a magnitude, and a change in Puck is judged by its own
 disassembly and counts. Each one also says which kind of win it is. A *static*
 win rests on a proof the JIT makes from the code alone (a value range, an exact
 type, an object that provably does not escape), so it holds in the World. A win
-that *rides PGO* needs the profile the World runs without
+that *rides PGO* needs a tiered, profiled host: the World and `puck bench` are
+one, and a test host with tiering off is not
 ([repository constraints](../SKILL.md#apply-repository-constraints)).
 
 ## Contents

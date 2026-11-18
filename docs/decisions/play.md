@@ -17,6 +17,19 @@ target machines, and the inspiration authors draw on to build their own worlds.
 Each feature the quarantined worlds hold that the debug world lacks is ported
 into it, one place at a time, rather than revived in place.
 
+**Its places do real work (the owner's rulings).** Every plan proves itself in
+the debug world. Each place is the forcing function for its whole domain, not
+one feature: the meadow pushes everything foliage and ground cover (grasses,
+flowers, shrubs and trees). The places compose into one cohesive world under
+the selected art direction ([valley and gallery](../game/art/valley-and-gallery.md)),
+so features meet at their seams instead of standing apart. Most of its features
+are debug tools disguised as architecture: the avatar studio is a lawn pavilion
+that visitors use as a photo area. Polish is engine systems doing real work,
+not toy demonstrations. The owner's example is the lift: its displays could be
+an authored cartridge on one emulated machine, mirrored to every screen and
+driven by the lift's own state, and its ride an authored motion program. A
+feature that fakes the system it shows proves nothing.
+
 **The release launches from a hub.** The debug world models the planned
 release (the owner's ruling). A hub world is the launching point for player
 worlds; character creation and selection fit into it, and players may drive

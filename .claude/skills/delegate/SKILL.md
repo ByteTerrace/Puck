@@ -6,8 +6,9 @@ description: "Holds the working contract of every delegated Puck lane: grants, b
 # Working as a delegated lane
 
 You work autonomously: the lead may be offline, and only your commits and your hand-back reach it.
-Proceed on reversible work that follows from your brief; stop only for a look or product call, an
-owner-only action or the brief's stopping condition. [AGENTS.md](../../../AGENTS.md#when-you-are-the-delegate)
+Proceed on reversible work that follows from your brief; stop only for a product call (what the engine
+should do), an owner-only action or the brief's stopping condition. A look value is yours and the
+lead's to decide, never a reason to stop (AGENTS.md, Authors rule). [AGENTS.md](../../../AGENTS.md#when-you-are-the-delegate)
 holds the rules every family shares, and this skill does not repeat them: Git, pushing and stop
 orders, verifying a change by building and running it, and fixing a defect at its named cause
 (rule 7 and "the proper fix").
@@ -32,8 +33,9 @@ orders, verifying a change by building and running it, and fixing a defect at it
 ## Build and run
 
 - Build only the projects you touch (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and
-  run only focused checks, scenario files by name with `puck test <file> --jobs 1`: no `Puck.slnx`
-  build, full suite, `worlds/debug` sweep or GPU leg unless your brief grants it.
+  boot the debug world once. Beyond that, run only the focused checks your brief asks for, scenario
+  files by name with `puck test <file> --jobs 1`: no `Puck.slnx` build, full suite, `worlds/debug`
+  sweep, benchmark route or GPU leg unless your brief grants it.
 - Run `puck` verbs from a lane-named private copy of your worktree's built CLI, rebuilt after every
   merge of the integration tip ([verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)).
 - Heavy and GPU work go through `puck lease` as [verification](../verification/SKILL.md#what-uses-the-gpu)
@@ -63,7 +65,10 @@ orders, verifying a change by building and running it, and fixing a defect at it
   one plain command. The Bash tool refuses `pwsh -File <script>` and some full-path shells that the
   PowerShell tool runs; run a PowerShell script from the PowerShell tool (`& pwsh -File <script>`).
 - Name scratch `<worktree>/.claude/scratch/<lane>-*`. Claude removes a worktree holding only ignored
-  files when the lane ends, so output that must survive goes to the path your brief names.
+  files when the lane ends, and your Write tool refuses a path outside your worktree, so scratch does
+  not survive you. A document your brief asks for (findings, a critique, a draft) goes in full in
+  your hand-back, and a document meant for the tree (a plan, a memo) is committed on your branch.
+  A Codex or Antigravity lane writes to the path its brief names.
 - Before anything takes uncommitted work out of the tree (showing a check fail on the old code,
   trying another approach), commit it as WIP or copy it to a path your brief allows, then bring the
   old code back from a commit. Never let `git checkout --`, `git restore` or a script that runs on
@@ -124,8 +129,9 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - Evidence is load-independent ([the phases](../orchestration/SKILL.md#spend-verification-not-writing)):
   counters, hashes, bytes, executes, laws, captures. Report no timing as a result. A timing
   question goes in your hand-back as a measurement request (frozen before and after builds, the
-  command, what decides it) for the lead's quiet window. Check each step with filtered laws and a
-  reproduce of only the scenarios it reaches; the lead runs the full suites once per batch.
+  command, what decides it) for the lead's quiet window. Where your brief asks for a check beyond
+  the build and the boot, use filtered laws and a reproduce of only the scenarios the step reaches;
+  the lead runs the full suites once per batch.
 - A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
   for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
   for nothing.
@@ -134,9 +140,21 @@ orders, verifying a change by building and running it, and fixing a defect at it
   broad testing are the lead's batched passes after landing, not your gate: ask for them under
   **Needs you** as a verification request instead of running them, unless your brief makes one your
   finish line. Never re-run the same check to gain confidence.
+- Code first defers verification, never code quality. Writing the change properly includes the
+  search before you build a mechanism (Start, and AGENTS.md rule 7) and fixing the duplicates you
+  read or write in the same change (AGENTS.md, vigilance against duplication); one too large for
+  your change goes into the refactoring packet with its file and line, and under **Found**. The two
+  checks below that only read your tree, `puck scan --only duplicates` and `puck docs links`, need
+  no GPU and no windowed run, so no brief or deadline makes them optional.
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.
+- Take each piece of evidence you report once, on the final content: merge the integration tip
+  last, then build, boot and run the two scans below and any check your brief names, all before your
+  final commit, so no later merge of yours can bring in a duplicate or a broken link unseen. If you
+  merge again after the `Brief:` commit (the lead resumes you after the tip moved), repeat them on
+  the new merged head and report that; a failure the merge brought in goes under **Needs you** with
+  its cause rather than into a second `Brief:` commit.
 - Before your final commit, run `puck scan --only duplicates --against <base>` from your CLI copy
   (`<base>` is the integration tip your brief names; the scan reads the working tree, uncommitted
   files included) and read every `neighbour` and `helper` record
@@ -153,8 +171,8 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - A writing lane commits on its own branch: a lowercase `area: sentence` subject, what you ran to
   show it working in the body, and on the assignment's last commit only a final line
   `Brief: <id> done` or `Brief: <id> blocked: <question>`. Exactly one commit carries it: merges of
-  the integration tip may follow that commit, so a re-check after such a merge adds no second
-  `Brief:` commit (`puck landing handback` refuses two).
+  the integration tip may follow that commit, so the re-check after such a merge (above) adds no
+  second `Brief:` commit (`puck landing handback` refuses two).
 - Commit only with `git commit` over an index you inspected. Entries staged by something other than
   you stay staged and uncommitted: name your own paths to `git commit` rather than unstaging,
   resetting or committing theirs. Never build a commit from plumbing (`git commit-tree`,
@@ -163,7 +181,7 @@ orders, verifying a change by building and running it, and fixing a defect at it
   empty-tree retrigger commits that deleted the whole repository. An `--allow-empty` hand-back commit
   on your own tree stays allowed.
 - Hand back under **Needs you** (decisions you could not make, and verification requests and GPU
-  legs you need, with options and their cost), **Changed** (what landed and what you ran; a read-only lane names its findings file)
+  legs you need, with options and their cost), **Changed** (what landed and what you ran; a read-only lane gives its findings in full, or names the findings file its brief gave it)
   and **Found** (defects, risks and follow-ups with `file:line`, and what you could not confirm).
   Say what you mean in literal terms, and note in a line where you changed direction from the brief.
 

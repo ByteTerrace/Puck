@@ -248,7 +248,8 @@ summarized):
   licences ask only that redistributions reproduce the copyright notice and
   terms and that nobody reverse engineers the binary (the FSR SDK's
   [licence](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/main/docs/license.md); the Intel Simplified Software License in intel/xess),
-  which is the notice duty MIT already carries. FSR 4.1 runs only on AMD
+  so they carry MIT's notice duty plus that ban on reverse engineering the
+  binary. FSR 4.1 runs only on AMD
   GPUs (RDNA 2 and later, and listed Ryzen integrated GPUs), its signed
   binaries are Windows DLLs for Direct3D 12 and Vulkan, and the Steam Deck's
   chip is not on its list; XeSS's binaries are Windows-only.
@@ -279,8 +280,8 @@ Windows and Linux, Puck builds on the host's primitives (threads and their
 priorities, waits and timers, virtual memory, I/O, drivers) to meet its
 correctness and performance goals. It does not replace those primitives or
 compete with them: it never spins in place of a wait, and never takes cores or
-global timer resolution from other programs. The engine's scheduler and
-memory account are layers over those primitives. Only the bare-metal host
+global timer resolution from other programs. The engine's scheduler,
+memory account and job system are layers over those primitives. Only the bare-metal host
 supplies its own.
 
 **The bare-metal host has no garbage collector, by design (the owner's
