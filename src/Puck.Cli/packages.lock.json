@@ -1058,6 +1058,7 @@
           "BenchmarkDotNet": "[0.15.*, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
+          "Microsoft.Diagnostics.Tracing.TraceEvent": "[4.*, )",
           "Puck.Cli.Core": "[1.0.0, )",
           "Puck.Cli.Runs": "[1.0.0, )",
           "Puck.Cli.Worlds": "[1.0.0, )",
