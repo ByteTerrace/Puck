@@ -241,14 +241,21 @@ summarized):
   terms that protect Microsoft at least as much as the SDK's own licence (an
   end-user licence agreement), and the distributor indemnifies Microsoft. It
   is restored from NuGet at build time and never committed.
-- **AMD's FSR 3.1** may be the engine's optional upscaler: the FidelityFX SDK
-  is open source under the MIT licence and runs on every backend. FSR 4 is
-  proprietary.
-- **NVIDIA's DLSS and Intel's XeSS** are opt-in vendor packages that an author
-  or distributor chooses, never engine parts. DLSS's licence requires
-  notifying NVIDIA before a commercial release and showing NVIDIA's marks on
-  splash screens, in the about box and in a game's credits; XeSS's requires
-  reproducing Intel's notice and terms. Built into the engine, those duties
+- **AMD's FSR 3.1** is the engine's default optional upscaler: its source is
+  open under the MIT licence and it runs on every backend and vendor.
+- **AMD's FSR 4 and Intel's XeSS** may ship as engine-optional upscalers,
+  each enabled on the hardware that runs it. Both are binary-only, and their
+  licences ask only that redistributions reproduce the copyright notice and
+  terms and that nobody reverse engineers the binary (the FSR SDK's
+  [licence](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/main/docs/license.md); the Intel Simplified Software License in intel/xess),
+  which is the notice duty MIT already carries. FSR 4.1 runs only on AMD
+  GPUs (RDNA 2 and later, and listed Ryzen integrated GPUs), its signed
+  binaries are Windows DLLs for Direct3D 12 and Vulkan, and the Steam Deck's
+  chip is not on its list; XeSS's binaries are Windows-only.
+- **NVIDIA's DLSS** is an opt-in vendor package that an author or distributor
+  chooses, never an engine part. Its licence requires notifying NVIDIA before
+  a commercial release and showing NVIDIA's marks on splash screens, in the
+  about box and in a game's credits. Built into the engine, those duties
   would fall on every author who ships a world, which the engine never
   imposes (AGENTS.md, "Authors rule").
 

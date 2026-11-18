@@ -3261,8 +3261,10 @@ Each item names the landing it needs. None waits for a wave to close.
   which changes the glass pass.
 - **A vendor's upscaler as an authored alternative to the resolve**
   (rank 9). It needs `history`, a reading of its cost at native size on
-  the RTX 4070 and a register entry. FSR 3.1 is the engine's optional
-  upscaler; DLSS and XeSS arrive only as opt-in vendor packages
+  the RTX 4070 and a register entry. FSR 3.1 is the engine's default
+  optional upscaler, FSR 4 (AMD, Windows) and XeSS (Windows) are enabled on
+  the hardware that runs them, and DLSS arrives only as an opt-in vendor
+  package
   ([vendor binaries](../decisions/runtime-and-delivery.md#vendor-binaries)).
 - **Mesh landing decoded on the GPU** (rank 14). It needs the reading of a
   warm start, which may name Puck's own landing rate first, and the
@@ -3339,8 +3341,9 @@ explicit size is honoured as it is today.
    target ([the eighth bet](#the-bets)), and layered pictures when the
    geometry itself is secret.
 5. **Vendor binaries.** Windows builds may ship the Agility SDK; FSR 3.1
-   (MIT) may be the engine's optional upscaler; DLSS and XeSS are opt-in
-   vendor packages, never engine parts
+   (MIT) is the default optional upscaler; FSR 4 and XeSS are
+   engine-optional on the hardware that runs each; DLSS is an opt-in vendor
+   package, never an engine part
    ([the register](../decisions/runtime-and-delivery.md#vendor-binaries)).
 
 Three things are not questions. The size the bar is read at, the two
@@ -3352,11 +3355,12 @@ The round on GPU capabilities raised whether a build may carry another
 company's binary, and the owner settled it
 ([vendor binaries](../decisions/runtime-and-delivery.md#vendor-binaries)):
 Windows builds may ship Microsoft's Agility SDK whenever a feature needs it;
-AMD's FSR 3.1, under the MIT licence, may be the engine's optional upscaler;
-and NVIDIA's DLSS and Intel's XeSS are opt-in vendor packages an author or
-distributor chooses, because their licences require notifying the vendor,
-showing its marks or carrying its terms, which the engine never imposes on
-authors.
+AMD's FSR 3.1 (MIT) is the engine's default optional upscaler; AMD's FSR 4
+and Intel's XeSS may ship as engine-optional upscalers on the hardware that
+runs each, since their licences ask only for the notice MIT also asks for;
+and NVIDIA's DLSS is an opt-in vendor package an author or distributor
+chooses, because its licence requires notifying NVIDIA and showing its
+marks, which the engine never imposes on authors.
 
 No owner question blocks a lane of either wave. One design
 question is open and is not the owner's yet: where the tick runs. The job-system plan
