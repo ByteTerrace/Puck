@@ -162,10 +162,10 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
                 ) {
                     throw new InvalidDataException(message: $"machine checkpoint '{row.Name}' does not match the declared runtime");
                 }
-                if (instance.Lease.Kind != row.Kind) {
+                if ((instance.Lease.Kind != row.Kind) && !AdoptsPowerOn(lease: instance.Lease, row: row)) {
                     throw new InvalidDataException(message: $"machine checkpoint '{row.Name}' records a {row.Kind} machine where this host's is {instance.Lease.Kind}{((instance.Lease.Fault is { } fault) ? $" ({fault})" : string.Empty)}");
                 }
-                if (instance.Lease is MachineLease.Running running) {
+                if ((instance.Lease is MachineLease.Running running) && (row.Kind == WorldMachineCheckpointKind.Running)) {
                     if (running.Runtime is not IMachineCheckpointRuntime runtime) {
                         throw new InvalidDataException(message: $"machine checkpoint '{row.Name}' names a runtime with no durable checkpoint capability");
                     }
@@ -216,9 +216,20 @@ public sealed partial class WorldMachineHost : IWorldMachineCheckpointHost {
             );
         }
 
+        // A row recorded while its machine was refused carries no runtime image. When this host now prepares that
+        // machine, the restore keeps the runtime at its power-on image, as a world booting it would, so content that
+        // was missing when the checkpoint was taken never refuses the whole recovery. Only a runtime that has neither
+        // stepped nor queued a step is at that image; one that ran on is refused as any other mismatch. A running row
+        // on a host that now refuses the machine refuses the restore, so its image is never discarded silently.
+        private static bool AdoptsPowerOn(MachineLease lease, WorldMachineCheckpoint row) =>
+            ((row.Kind == WorldMachineCheckpointKind.Refused) &&
+            (lease is MachineLease.Running running) &&
+            (((running.Runtime as IQueuedMachineRuntime)?.CompletedSteps ?? running.CompletedSteps) == 0) &&
+            (((running.Runtime as IQueuedMachineRuntime)?.PendingSteps ?? 0) == 0));
+
         public void Apply() {
             foreach (var (lease, row) in m_rows) {
-                if (lease is MachineLease.Running running) {
+                if ((lease is MachineLease.Running running) && (row.Kind == WorldMachineCheckpointKind.Running)) {
                     ((IMachineCheckpointRuntime)running.Runtime).RestoreCheckpoint(checkpoint: row.RuntimeState);
                 }
             }
