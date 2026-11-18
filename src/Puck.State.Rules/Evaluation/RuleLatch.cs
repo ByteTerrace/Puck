@@ -183,34 +183,7 @@ public sealed class RuleLatch : IJournalParticipant {
                 continue;
             }
 
-            m_hashScratch.Clear();
-            foreach (var (binding, entry) in state.Bindings) {
-                if (entry.Held is not { } held) { continue; }
-                m_hashScratch.Add(item: new HashEntry(
-                    Binding: binding,
-                    Held: held,
-                    Left: LeftIdentity(
-                        binding: binding,
-                        keyNames: keyNames
-                    )
-                ));
-            }
-
-            var ordered = CollectionsMarshal.AsSpan(list: m_hashScratch);
-
-            ordered.Sort(comparison: static (left, right) => {
-                var result = left.Left.CompareTo(value: right.Left);
-
-                if (result != 0) {
-                    return result;
-                }
-                result = left.Binding.Right.CompareTo(value: right.Binding.Right);
-                if (result != 0) {
-                    return result;
-                }
-                result = left.Binding.LeftGeneration.CompareTo(value: right.Binding.LeftGeneration);
-                return ((result != 0) ? result : left.Binding.RightGeneration.CompareTo(value: right.Binding.RightGeneration));
-            });
+            var ordered = OrderedBindings(state, keyNames);
             hash.Add(value: ((uint)ordered.Length));
 
             foreach (var entry in ordered) {
@@ -223,6 +196,25 @@ public sealed class RuleLatch : IJournalParticipant {
                     : 0)));
             }
         }
+    }
+
+    // Hashing and checkpoints share one canonical binding order; scheduler-only entries never enter either.
+    private Span<HashEntry> OrderedBindings(RuleState state, IReadOnlyList<CellName>? keyNames) {
+        m_hashScratch.Clear();
+        foreach (var (binding, entry) in state.Bindings) {
+            if (entry.Held is not { } held) { continue; }
+            m_hashScratch.Add(new HashEntry(binding, held, LeftIdentity(binding, keyNames)));
+        }
+        var ordered = CollectionsMarshal.AsSpan(m_hashScratch);
+        ordered.Sort(comparison: static (left, right) => {
+            var result = left.Left.CompareTo(right.Left);
+            if (result != 0) { return result; }
+            result = left.Binding.Right.CompareTo(right.Binding.Right);
+            if (result != 0) { return result; }
+            result = left.Binding.LeftGeneration.CompareTo(right.Binding.LeftGeneration);
+            return ((result != 0) ? result : left.Binding.RightGeneration.CompareTo(right.Binding.RightGeneration));
+        });
+        return ordered;
     }
 
     // The layout-free identity of a binding's left side: the key name's own digest for a key-bound entry, the index
@@ -469,16 +461,16 @@ public sealed class RuleLatch : IJournalParticipant {
 
     /// <summary>Appends every entry as its rule name, its binding, and whether the gate held — what
     /// <see cref="Restore"/> reads back.</summary>
-    /// <param name="into">The list to append to.</param>
+    /// <param name="into">The list to append to, in ordinal rule-name order and the hash's binding order.</param>
+    /// <param name="keyNames">Key names by ordinal for key-bound entries, as in <see cref="AppendStateHash"/>.</param>
     /// <remarks>A binding's <see cref="LatchKey.Left"/> is an interned ordinal for a key-bound entry, so a caller
     /// persisting this must carry the key's NAME and re-intern it before restoring under another catalog.</remarks>
-    public void Flatten(List<(string Rule, LatchKey Binding, bool Held)> into) {
+    public void Flatten(List<(string Rule, LatchKey Binding, bool Held)> into, IReadOnlyList<CellName>? keyNames = null) {
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        foreach (var (name, state) in m_byRule) {
-            foreach (var (binding, entry) in state.Bindings) {
-                if (entry.Held is not { } held) { continue; }
-                into.Add(item: (name, binding, held));
+        foreach (var (name, state) in m_byRule.OrderBy(static row => row.Key, StringComparer.Ordinal)) {
+            foreach (var entry in OrderedBindings(state, keyNames)) {
+                into.Add(item: (name, entry.Binding, entry.Held));
             }
         }
     }

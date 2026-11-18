@@ -1875,7 +1875,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         exported?.BeginWrite();
         SubmitCounted(
             commands: m_commands,
-            fence: slot.Fence!
+            slot: slotIndex
         );
         if (job.Previewed) { m_preview!.Submitted(slot: slotIndex); }
         CommitCadenceFrame();

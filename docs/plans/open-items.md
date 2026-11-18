@@ -3352,13 +3352,12 @@ reversal brake, then a sitting.
 
 ### Input channels
 
-- [medium · unconfirmed] Reconcile camera mode lifecycle reseeding with its
-  authority state: `WorldSeatBindings.SyncSeatModes` resets client defaults and
-  raises `CameraApplicationDropped`, whose composition-root handler sends a
-  dissolve, while `WorldInputRuntime.PrepareOwner` retains a valid seat state.
-  Check a changed document or route while Free Cam is active for a retained
-  `free` state beside a dissolved application. Ordinary F9 entry and exit take
-  the authority path; reload and route teardown still need this focused check.
+- [medium] Free Cam admits only local seat owners: `WorldInputRuntime.TrySetCameraRoute`
+  requires a Seat principal whose index equals its body below LocalSeatCount.
+  Federated, routed peer and session input owners cannot enter the camera state.
+  Resolve the owner's camera placement and application through its admitted body
+  and route, rather than assuming a local seat index; keep the actor's Drive and
+  Control checks at the authority.
 
 Owner: input lane · ordinary · Next: the typing and chat exhibits and live
 hardware. The [input channel decision](../decisions/input-channels.md) owns

@@ -130,6 +130,8 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
     public bool RefuseNextSubmission { get; set; }
     /// <summary>Gets or sets whether the next submission reports device loss before any commands reach the queue.</summary>
     public bool LoseNextSubmission { get; set; }
+    /// <summary>Gets or sets a creation count after which fence queries report device loss; zero disables it.</summary>
+    public int LoseFenceQueryAfterCreation { get; set; }
     /// <summary>Gets or sets whether the next fenced submission is abandoned, as a batch whose hand-off failed before the
     /// queue leaves it: nothing reaches the queue, and its fence reports <see cref="GpuSubmissionAbandonedException"/>
     /// until a wait drains it.</summary>
@@ -902,7 +904,9 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
         public bool Abandoned;
 
         // The fake queue finishes every submission as it is made, unless the law holds it or stops it at a submission.
-        public bool IsSignaled => (Abandoned ? throw new GpuSubmissionAbandonedException() : (!gpu.QueueHeld && (Number <= gpu.CompletedThrough)));
+        public bool IsSignaled => ((gpu.LoseFenceQueryAfterCreation > 0 && gpu.CreationCount > gpu.LoseFenceQueryAfterCreation)
+            ? throw new DeviceLostException("Injected loss during fence query after allocation.")
+            : (Abandoned ? throw new GpuSubmissionAbandonedException() : (!gpu.QueueHeld && (Number <= gpu.CompletedThrough))));
 
         public void Dispose() => created.Dispose();
         // The fake queue has no completion to hand a signal to: it sets the signal, so whoever waits on it polls.

@@ -429,7 +429,7 @@ public sealed partial class WorldPersistence {
     internal WorldRuleLatchEntry[] FlattenLatch(RuleLatch latch, bool named, IReadOnlySet<string>? rules = null) {
         var flattened = new List<(string Rule, LatchKey Binding, bool Held)>(capacity: latch.Count);
 
-        latch.Flatten(into: flattened);
+        latch.Flatten(into: flattened, keyNames: (named ? Host.Arena.Keys.Names : null));
         if (rules is not null) { flattened.RemoveAll(match: entry => !rules.Contains(item: entry.Rule)); }
 
         var keys = Host.Arena.Keys;

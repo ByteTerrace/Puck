@@ -10,6 +10,40 @@ namespace Puck.Shaders.Tests;
 /// never finish fails the law instead of hanging the suite.
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
+    [Fact]
+    public void DeviceLossAfterReplacementAllocationLeavesBothGraphsOwned() {
+        var gpu = new FakePipelineGpu();
+        using var node = InstalledNode(gpu, previewOutput: true);
+        node.Paused = true;
+        gpu.QueueHeld = true;
+        node.Swap(Feedback(backdrop: true, historyFormat: "R32G32B32A32Float", revision: 1));
+        _ = node.ProduceBuildStart(gpu);
+        gpu.LoseFenceQueryAfterCreation = gpu.CreationCount;
+
+        // The old implementation queried after installing the candidate and lost the old graph there. Ownership
+        // now transfers without a query; the following frame meets the loss with both graphs still owned.
+        Assert.Throws<DeviceLostException>(() => { _ = Produce(node); _ = Produce(node); });
+        gpu.LoseFenceQueryAfterCreation = 0;
+        gpu.QueueHeld = false;
+        node.OnDeviceLost();
+        Assert.All(gpu.CreatedObjects, created => Assert.Equal(1, created.DisposeCount));
+        Assert.Equal(0UL, gpu.LiveBytes);
+    }
+
+    [Fact]
+    public void PollingAnAbandonedSlotDoesNotWaitTheDrainedFenceAgain() {
+        var gpu = new FakePipelineGpu { Recording = true };
+        using var node = InstalledNode(gpu);
+        node.Paused = true;
+        node.Step();
+        gpu.AbandonNextSubmission = true;
+        _ = Produce(node);
+        gpu.Events.Clear();
+
+        _ = Produce(node);
+        Assert.Equal((int)InFlight - 1, gpu.Events.Count(static entry => entry.StartsWith("wait fence ", StringComparison.Ordinal)));
+    }
+
     private static void DisposeWithin(ShaderPipelineRenderNode node) {
         var disposal = Task.Run(action: node.Dispose);
 

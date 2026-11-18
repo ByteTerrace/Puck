@@ -342,9 +342,9 @@ public sealed partial class ShaderPipelineRenderNode {
             return;
         }
 
-        // Any device-loss query happens before ownership moves, so the caller still owns an intact preview or
-        // graph if polling throws. Releasing proved retirements below performs no further GPU query.
-        RetireCompleted();
+        // Transfer ownership without querying the device: install callers may already have replaced their fields.
+        // The frame boundary polls fences through RetireCompleted after every object has an owning field or queue.
+        // Releasing retirements already proved complete below performs no GPU query.
         Hold(
             imageHandle: m_lastSurface.ImageHandle,
             preview: preview,
@@ -458,7 +458,8 @@ public sealed partial class ShaderPipelineRenderNode {
     // settles abandonment before advancing the count; a lost device throws without advancing it.
     private void RetireCompleted() {
         for (var slot = 0; slot < m_slots.Length; slot++) {
-            if ((m_slots[slot] is { Fence: { } fence } frame) && frame.Submission > m_completedSubmissions && Signaled(fence)) {
+            if ((m_slots[slot] is { Fence: { } fence } frame) && frame.Submission > m_completedSubmissions &&
+                Signaled(fence) && frame.Submission > m_completedSubmissions) {
                 WaitSlot(slot);
             }
         }
