@@ -730,7 +730,9 @@ public sealed partial class WorldDocumentWalker {
                     return value;
             }
         }
-        // A key/value pair an enumerated dictionary yields, which has no setter: a changed one is built anew.
+        // A key/value pair an enumerated dictionary yields, which has no setter: a changed one is built anew. The pair's
+        // type is named from KeyValuePair<,> itself (PairOf admits only that definition), never from GetType(), so a
+        // trimmed publish's analysis sees which constructor the rebuild needs and keeps it, as Rebuild's are kept.
         private object RewritePair(object pair, object? key, object? value, WorldModelType shape) {
             var nextKey = key;
             var nextValue = value;
@@ -760,7 +762,7 @@ public sealed partial class WorldDocumentWalker {
 
             return ((ReferenceEquals(objA: nextKey, objB: key) && ReferenceEquals(objA: nextValue, objB: value))
                 ? pair
-                : Activator.CreateInstance(type: pair.GetType(), args: [nextKey, nextValue])!);
+                : Activator.CreateInstance(type: typeof(KeyValuePair<,>).MakeGenericType(typeArguments: pair.GetType().GenericTypeArguments), args: [nextKey, nextValue])!);
         }
         // A list's or a dictionary's items rewritten: the same collection when no item changed, else a new one of the
         // kind the original was (an array as an array, a dictionary over its own comparer, any other list as a list).

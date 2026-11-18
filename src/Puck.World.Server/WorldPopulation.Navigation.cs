@@ -1,4 +1,5 @@
 using Puck.Maths;
+using Puck.Physics;
 using Puck.Physics.Fields;
 using Puck.Physics.Navigation;
 
@@ -121,7 +122,7 @@ public sealed partial class WorldPopulation {
     /// <summary>Gets the point a body standing on a route node stands at (<see cref="NavigationRuntime.Domain.Foot"/>).</summary>
     /// <param name="node">The route node.</param>
     public FixedVector3 NavigationFoot(NavigationRouteNode node) => m_navigation[node.Domain].Foot(node: node.Cell);
-    /// <summary>Finds a walkable cell for a route endpoint: the cell <see cref="NavigationRuntime.TryLocate"/> names at a
+    /// <summary>Finds a walkable cell for a route endpoint: the cell <see cref="NavigationRuntime.TryLocateNear"/> connects to a
     /// point, or for a place the walkable cell nearest its center whose ground lies inside its volume.</summary>
     /// <param name="point">The point, or a place's center.</param>
     /// <param name="within">The place's volume, or <see langword="null"/> for a bare point.</param>
@@ -130,12 +131,12 @@ public sealed partial class WorldPopulation {
     /// <returns><see langword="true"/> when a cell was found.</returns>
     public bool TryRouteEndpoint(FixedVector3 point, FixedSpatialShape? within, out int domain, out int cell) {
         if (within is not { } shape) {
-            return m_navigation.TryLocate(cell: out cell, domain: out domain, position: in point);
+            return m_navigation.TryLocateNear(cell: out cell, domain: out domain, position: in point, reach: 2);
         }
 
         domain = -1;
         cell = -1;
-        var best = Int128.MaxValue;
+        var best = FixedQ4816.MaxValue;
 
         for (var index = 0; (index < m_navigation.Count); index++) {
             var candidate = m_navigation[index];
@@ -147,8 +148,7 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                var offset = (candidate.Position(node: node) - shape.Center);
-                var distance = ((((Int128)offset.X.Value) * offset.X.Value) + (((Int128)offset.Y.Value) * offset.Y.Value) + (((Int128)offset.Z.Value) * offset.Z.Value));
+                var distance = (candidate.Foot(node: node) - shape.Center).LengthSquared;
 
                 if (distance < best) {
                     best = distance;
@@ -160,8 +160,37 @@ public sealed partial class WorldPopulation {
 
         return (domain >= 0);
     }
+
+    /// <summary>Finds a cell connected to a steering endpoint by the walking body's live contact field and collider.</summary>
+    /// <param name="body">The body the route steers.</param>
+    /// <param name="point">The body or destination foot point.</param>
+    /// <param name="fromPoint">Whether the connector starts at the point and ends at the cell.</param>
+    /// <param name="domain">The connected domain, or -1.</param>
+    /// <param name="cell">The connected cell, or -1.</param>
+    public bool TrySteeringEndpoint(WorldBody body, FixedVector3 point, bool fromPoint, out int domain, out int cell) {
+        return m_navigation.TryLocateNear(cell: out cell, domain: out domain, position: in point, reach: 2, connects: (candidate, node) => {
+            if ((m_contactField is not { } field) || (candidate.Tuning.Kind != NavigationKind.Surface)) {
+                return true;
+            }
+
+            var foot = candidate.Foot(node: node);
+            var stepHeight = FixedQ4816.Min(x: body.StepHeight, y: candidate.Tuning.MaxStepHeight);
+            if (FixedQ4816.Abs(value: (point.Y - foot.Y)) > stepHeight) {
+                return false;
+            }
+
+            var height = (FixedQ4816.Max(x: foot.Y, y: point.Y) + stepHeight);
+            var start = (fromPoint ? point : foot) with { Y = height };
+            var end = (fromPoint ? foot : point) with { Y = height };
+            var authored = body.ScaledColliderVolumes();
+            Span<FixedBodyColliderVolume> volumes = stackalloc FixedBodyColliderVolume[authored.Length];
+
+            LiftRouteVolumes(source: authored, destination: volumes, lift: stepHeight);
+            return FixedContactProbe.IsClear(field: field, start: start, end: end, orientation: body.FixedOrientation, up: FixedVector3.UnitY, volumes: volumes);
+        });
+    }
     /// <summary>Finds a route between two endpoint cells across the navigation domains and checks it against the
-    /// contact field the bodies collide with: a body of the default seat kit stood at every sample along the route,
+    /// contact field the bodies collide with: a body of the default seat kit sweeps between samples along the route,
     /// 0.1 m apart, proving its volume from a step height and a contact skin over the higher end's ground up to its full
     /// height (each capsule's top lowered by its lift), must meet nothing, the domains' own step rule. A contact there
     /// is a wall, a ceiling or an obstacle taller than a step.</summary>
@@ -199,7 +228,6 @@ public sealed partial class WorldPopulation {
 
         var spacing = FixedQ4816.FromDouble(value: 0.1);
         var skin = FixedQ4816.FromDouble(value: m_censusDefinition?.Collision.ContactSkin ?? 0.02);
-        var up = FixedVector3.UnitY;
         var volumes = collider.Volumes.ToArray();
 
         for (var index = 0; (index < route.Count); index++) {
@@ -215,45 +243,49 @@ public sealed partial class WorldPopulation {
             var planar = new FixedVector3(X: (end.X - start.X), Y: FixedQ4816.Zero, Z: (end.Z - start.Z));
             var steps = ((index == 0) ? 0 : Math.Max(val1: 1, val2: (int)((planar.Length.Value + spacing.Value - 1L) / spacing.Value)));
 
-            for (var volume = 0; (volume < volumes.Length); volume++) {
-                var authored = collider.Volumes[volume];
+            LiftRouteVolumes(source: collider.Volumes, destination: volumes, lift: lift);
+            var previous = start with { Y = height };
 
-                volumes[volume] = ((authored.Kind == Puck.Physics.FixedBodyColliderKind.Capsule)
-                    ? (authored with { Endpoint = authored.Endpoint with { Y = FixedQ4816.Max(x: authored.Center.Y, y: (authored.Endpoint.Y - lift)) } })
-                    : authored);
-            }
             for (var step = ((index == 0) ? 0 : 1); (step <= steps); step++) {
                 var fraction = ((steps == 0) ? FixedQ4816.Zero : (FixedQ4816.FromInteger(value: step) / FixedQ4816.FromInteger(value: steps)));
                 var probe = new FixedVector3(X: (start.X + (planar.X * fraction)), Y: height, Z: (start.Z + (planar.Z * fraction)));
-                var resolved = probe;
-                var velocity = FixedVector3.Zero;
-
                 samples++;
-                _ = field.Resolve(orientation: FixedQuaternion.Identity, position: ref resolved, up: in up, velocity: ref velocity, volumes: volumes);
-                if (resolved != probe) {
+                if (!FixedContactProbe.IsClear(field: field, start: previous, end: probe, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: volumes)) {
                     walls.Add(item: probe);
                 }
+                previous = probe;
             }
         }
 
         return status;
     }
+
+    private static void LiftRouteVolumes(ReadOnlySpan<FixedBodyColliderVolume> source, Span<FixedBodyColliderVolume> destination, FixedQ4816 lift) {
+        for (var index = 0; (index < source.Length); index++) {
+            var volume = source[index];
+
+            destination[index] = ((volume.Kind == FixedBodyColliderKind.Capsule)
+                ? (volume with { Endpoint = volume.Endpoint with { Y = FixedQ4816.Max(x: volume.Center.Y, y: (volume.Endpoint.Y - lift)) } })
+                : volume);
+        }
+    }
+
     /// <summary>Plans the path a seat program steers a body along: the route across the navigation domains from the
     /// walkable cell the body stands on, or the nearest one to it (<see cref="NavigationRuntime.TryLocateNear"/>), to a
     /// goal, straightened to the corners a walker turns at (<see cref="NavigationRuntime.Straighten"/>). Bakes the
     /// domains it reaches.</summary>
-    /// <param name="from">The body's foot.</param>
+    /// <param name="body">The body whose foot starts the route.</param>
     /// <param name="goal">The cells the route may end at.</param>
     /// <param name="margin">The clearance, in metres, a straight segment keeps from the edge of the walkable cells.</param>
     /// <param name="route">Receives the full route, cleared first.</param>
     /// <param name="corners">Receives the straightened route, cleared first; its foot points are the steering points.</param>
     /// <param name="work">The search's work.</param>
     /// <returns>The search's status; <see cref="NavigationStatus.OutsideDomain"/> when no walkable cell lies near the body.</returns>
-    public NavigationStatus PlanSteering(FixedVector3 from, INavigationRouteGoal goal, FixedQ4816 margin, List<NavigationRouteNode> route, List<NavigationRouteNode> corners, out NavigationRouteWork work) {
+    public NavigationStatus PlanSteering(WorldBody body, INavigationRouteGoal goal, FixedQ4816 margin, List<NavigationRouteNode> route, List<NavigationRouteNode> corners, out NavigationRouteWork work) {
         ArgumentNullException.ThrowIfNull(argument: corners);
         corners.Clear();
         work = default;
-        if (!m_navigation.TryLocateNear(cell: out var cell, domain: out var domain, position: in from, reach: 2)) {
+        if (!TrySteeringEndpoint(body: body, cell: out var cell, domain: out var domain, fromPoint: true, point: body.FixedPosition)) {
             route.Clear();
             return NavigationStatus.OutsideDomain;
         }

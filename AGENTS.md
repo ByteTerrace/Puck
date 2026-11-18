@@ -31,7 +31,12 @@ heavily as looks. Three things follow for every agent:
   while the engine limits behind them went unfixed. A brief for such a lane
   states this stop rule in its own words and allows at most two look-critic
   rounds per creation per wave; a third failure changes the approach or goes to
-  the owner.
+  the owner. An engine gap a lane, critic or review names is filled as soon as
+  possible (the owner's ruling): it goes to the front of the owning plan's
+  order, ahead of further work that would sculpt or tune around it, and is
+  never only filed. A creation that still misses the bar may land when it is a
+  material improvement on what the tree holds, with its failures and the gaps
+  behind them stated in the commit.
 - **The gallery is the engine's self-test.** "Every single item in the gallery
   is meant to ensure that the engine is operating correctly". A change to a
   shared system is judged by whether the exhibits it reaches still read as
@@ -298,7 +303,17 @@ agent works in that mode by default, without asking:
     baseline depends on. Such a path is a second implementation, so it earns
     its place: it reads the same data, gives the same result within the
     still tolerance, is measured to pay on that hardware, and falls back to
-    the baseline path automatically.
+    the baseline path automatically. The bar is read at 2560 by 1440 on the
+    RTX 4070, 1920 by 1080 on the RTX 2060, and the Steam Deck's own panel
+    in its native configuration (the owner's ruling), and
+    in both topologies: the authority in the same process, and a remote
+    authority on the Azure deployment, which the lead may change as that
+    testing needs. The work meets both bars on the lead machine's RTX 4070
+    first (the owner's ruling): other devices' code paths are written as if
+    the hardware were on hand (a quality table authored per device, a
+    memory bar per device), but testing on the RTX 2060, the Steam Deck and
+    an HDR display waits until the engine meets the bars there, and missing
+    hardware holds up no fundamental work.
   - The visual bar (the owner's ruling: "I need you to ensure that some bar
     is defined and adhered to"), with the frame bar's standing, and both hold
     at once. Every place in the debug world reads as what it is and meets its

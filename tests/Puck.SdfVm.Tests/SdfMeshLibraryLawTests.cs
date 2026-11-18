@@ -133,13 +133,13 @@ public sealed class SdfMeshLibraryLawTests {
     }
     [Fact]
     public void OneBodyHashesAlikeInEveryProgramThatCarriesIt() {
-        var crowded = Body(crowd: true, slot: 3, offset: new Vector3(x: 1f, y: 0f, z: 0f));
-        var alone = Body(crowd: false, slot: 7, offset: new Vector3(x: 0f, y: 1f, z: 0f));
+        var crowded = Body(crowd: true, slot: 3, offset: Vector3.Zero);
+        var alone = Body(crowd: false, slot: 7, offset: Vector3.Zero);
 
         var (crowdedGeometry, crowdedMaterials) = Geometry(instance: 1, program: crowded);
         var (aloneGeometry, aloneMaterials) = Geometry(instance: 0, program: alone);
 
-        // Another palette numbering, slot, world-axis bound and side-table offset leave the body's geometry alone; its
+        // Another palette numbering, slot and side-table offset leave the body's geometry alone; its
         // materials are the program's own.
         Assert.Equal(actual: aloneGeometry, expected: crowdedGeometry);
         Assert.True(condition: crowdedGeometry.Dynamic);
@@ -154,6 +154,21 @@ public sealed class SdfMeshLibraryLawTests {
         world.AppendInstruction(index: 0, program: crowded, transforms: [], sampled: SdfSampledSet.Empty);
         Assert.NotEqual(expected: crowdedGeometry, actual: other.Geometry);
         Assert.NotEqual(expected: crowdedGeometry.Hash, actual: world.Geometry.Hash);
+    }
+    [Fact]
+    public void AnOffsetWorldBoundKeysTheTurnThatPlacesItsBakeBox() {
+        var program = Body(crowd: false, slot: 0, offset: new Vector3(x: 0.25f, y: 0f, z: 0f));
+
+        SdfMeshBakeGroup Plan(Quaternion turn) => SdfMeshBakeGroup.Plan(
+            program, [new DynamicTransform(Vector3.Zero, turn)], 40,
+            static (selector, dynamic) => new SdfMeshBakeGroup(selector, dynamic)).Single();
+
+        var forward = Plan(Quaternion.Identity);
+        var turned = Plan(Quaternion.CreateFromAxisAngle(Vector3.UnitY, MathF.PI / 2));
+
+        Assert.NotEqual(forward.PlannedLow, turned.PlannedLow);
+        Assert.NotEqual(forward.Sealed, turned.Sealed);
+        Assert.NotEqual(forward.Form, turned.Form);
     }
     [Fact]
     public void ABakeTakesAGroupAnotherBakeOfItsLibraryMeshedRatherThanBakingIt() {

@@ -10,6 +10,9 @@
     </PropertyGroup>
     <ItemGroup>
         <PackageReference Include="BenchmarkDotNet" Version="[0.15.*, )" />
+        <!-- BenchmarkDotNet asks for TraceEvent 3.1.x while Puck.Cli.Gate takes 4.x; both reach Puck.Cli's
+             publish, whose native and relogger files then collide (NETSDK1152). One version for the closure. -->
+        <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="[4.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />

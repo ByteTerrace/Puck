@@ -44,18 +44,20 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    ([the disclosure plan](disclosure.md)) is in design.
 2. [high] [Residency and streaming](#residency-and-streaming): the
    [streaming and memory campaign](streaming-and-memory.md#the-build-order),
-   agreed with the owner: step 0's baseline legs on both backends in a quiet
+   agreed with the owner: step 5's floor first (an engine gap), then step 0's
+   baseline legs on both backends in a quiet
    window, steps 1, 2 and 3's windowed readings, and step 7's readings (the
    prototype is built: the capability read on this machine and the indexed
    read's paired cost window on both backends,
    [the measurement](streaming-and-memory.md#the-prototype-as-built)), and
    step 3's servicing readings (the slow present and the quiet cold bake,
    [step 3's check](streaming-and-memory.md#step-3-one-reservation)).
-3. [high] [Bake detail](#bake-detail): the contour's triangles that face out
-   by every lattice fact and are still turned from the field (vertices the
-   planes put off the surface, slivers beside a crease, a face narrower than
-   a cell), which keep six blend exhibits and the Moth's shin groups red,
-   then moving blends step 4.
+3. [high] [Bake detail](#bake-detail): its engine gaps first (a feature
+   thinner than a bake cell, a scaled primitive's bound, moving blends step 4),
+   then the contour's triangles that face out by every lattice fact and are
+   still turned from the field (vertices the planes put off the surface,
+   slivers beside a crease, a face narrower than a cell), which keep six blend
+   exhibits and the Moth's shin groups red.
 4. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh): sub-cell
    seams where boxes touch, then the valley sectors' buried colliders.
 5. [high] [Engine job system](#engine-job-system): the memo's next step:
@@ -67,8 +69,10 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
-8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
-   proof, built by [Water](#water)'s lanes A2 to A5.
+8. [high] [The visual bar](#the-visual-bar): the engine gaps behind its
+   misses first (the valley's walls, the water, the moving cutter), then the
+   caldera water as its first proof, built by [Water](#water)'s lanes A3 to
+   A5.
 9. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
 10. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
@@ -103,9 +107,12 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     next batch.
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
-    and visibility packets above. Its stage 0 builds the benchmark's route
-    and its reading of the bar before it measures; the lead ranks it at the
-    next batch.
+    and visibility packets above. Its
+    [engine gaps](rendering-research.md#engine-gaps-filled-first) are filled
+    first, ahead of further sculpting around them, and its
+    [work that starts now](rendering-research.md#work-that-starts-now) runs
+    beside its stage 0, which reads the bar on the RTX 4070 at 2560 by 1440;
+    the lead ranks it at the next batch.
 23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -251,10 +258,10 @@ Owner-only actions:
   deleted guards over non-code files return, if any ([tests](#tests-suspended)).
 - **Calling for qualification**, which returns the
   [quarantined gates](#quarantined-gates).
-- **Hardware for the rendering measurements**: an RTX 2060 and a Steam Deck
-  for the device readings, with the Deck needed early because its windowed
-  path has never run on hardware, and an HDR display for the colour check
-  ([rendering research](rendering-research.md#the-owners-calls)).
+- **Hardware for the rendering measurements**: an RTX 2060, a Steam Deck and
+  an HDR display, once the engine meets both bars on the RTX 4070. No
+  fundamental work waits for them
+  ([rendering research](rendering-research.md#the-bars-and-the-budget)).
 
 Sittings, each the owner's eye on a running World:
 
@@ -292,11 +299,12 @@ Open calls, each with its sides:
 - **The chase camera with its back to the stair wall**: swing the boom, rise
   over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
-- **The rendering research's three engine calls**, each with a default the
-  work proceeds on: what a bar device does when the planned gains cannot
-  reach its bar, the window size the frame bar is read at on the desktops,
-  and whether sharpening may act on bloom's scattered light
-  ([the page's calls](rendering-research.md#the-owners-calls)).
+- **The rendering research's four engine questions**, each with a default
+  the work proceeds on: how a derived product shared between machines is
+  named and trusted, the memory bar's figures for each device, whether a
+  device's quality table may lower the render scale, and whether a world
+  that shows a viewer only pictures publishes them once for an audience
+  ([the page's questions](rendering-research.md#questions-for-the-owner)).
 - **GameInput**: ship or require its redistributable, which the Share button,
   the Elite paddles and more than four pads need, or stay on the inbox runtime
   ([input](#input-channels)).
@@ -904,10 +912,27 @@ says how one is reproduced and profiled.
 ### Bake detail
 
 Owner: specialist (rendering, sdf-authoring) · high, it blocks authoring ·
-Next: the three kinds of triangle the lattice's facing does not judge, which
-the tour's remaining reds and the Moth's shin groups share, then
-[moving blends](moving-blends.md)' step 4.
+Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): a
+feature thinner than a bake cell is lost or faceted (gap 7), which starts with
+decision 10's count of the failing cells that were ever flagged for finer
+sampling, then its contour rule, built behind an audit of every stored mesh;
+a primitive under a non-uniform scale gives a bound, not a distance (gap 11,
+[rendering](rendering.md#bake-quality)); and, beside them,
+[moving blends](moving-blends.md#engine-gaps-first)' step 4 (gap 10). Then the
+three kinds of triangle the lattice's facing does not judge, which the tour's
+remaining reds and the Moth's shin groups share.
 
+- [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
+  axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
+  adding the final endpoint wraps. Check dimensions and their product before
+  forming array indices, and let the bake coarsen or partition a box that
+  exceeds the sample budget.
+- [medium] `SdfMeshGeometryBuilder.RelativePose` gives another slot at
+  +3,000,000 m and +4,000,000 m the same key and bakes both at −2,097,152 m.
+  Its rounded component shares an out-of-range sentinel with the stored
+  coordinate. Carry the supported large offsets through the rounded pose,
+  the key and the uploaded rows, with absence represented independently.
 - [high] `puck mesh audit --cpu` still differs from the device wherever a
   lattice's gradient taps lie closer than the fixed-point evaluator resolves
   (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a
@@ -989,9 +1014,10 @@ the tour's remaining reds and the Moth's shin groups share, then
   than a cell. A measured cell whose fine samples are two affine faces takes
   its split as its contour stride
   ([the memo's step 4](bake-demand-tiers.md#steps-and-checks)).
-- [medium] A rim thinner than a group's final cell is lost (`range-window`'s
+- [high] A rim thinner than a group's final cell is lost (`range-window`'s
   2 cm rim): a declared feature narrower than the cell must refine or be
-  reported.
+  reported. This is the engine gap above (gap 7), with the tapered tip of the
+  tapered-tip item below it.
 - [medium] Glyphs have no CPU reference: `SdfFieldEvaluator` has no
   interpreter for the `Glyph` shape, so `puck mesh audit --cpu` and
   `puck mesh preview` bake a plaque's text empty and no audit covers text. Add
@@ -1018,7 +1044,7 @@ the tour's remaining reds and the Moth's shin groups share, then
 - [low] A tier between a group's narrowed final cell and its planned one is a
   second key for one mesh (`SdfMeshBakeGroup.CoarsestTier` reads the planned
   box). Measure how many such entries a tour writes before tightening.
-- [low] A tapered tip thinner than about 1.5 bake cells does not bake, so a
+- [high] A tapered tip thinner than about 1.5 bake cells does not bake, so a
   small creation cannot have a needle point (`WorldShapeDetail.FinestDetail`);
   a finer floor for small creations needs its cost measured.
 - [low] No console command names a bake's pending groups or maps a slot to its
@@ -1028,7 +1054,9 @@ the tour's remaining reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 0's baseline legs (`puck benchmark --route seams`, both backends, a
+step 5, the floor, which is an engine gap
+([rendering research](rendering-research.md#engine-gaps-filled-first)) and goes
+first; then step 0's baseline legs (`puck benchmark --route seams`, both backends, a
 quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
 contiguous fallback, shared retirement timeline, destination page proofs,
@@ -1671,11 +1699,15 @@ collider, then the lifecycle lows as one pass.
 ### The valley's terrain
 
 Owner: geometry and bake lane (sdf-authoring, rendering, physics) · ordinary ·
-Next: the [terrain pass](terrain-pass.md#order-of-work)'s step 1 checks, with
-step 2 and step 4's bound fix in parallel; step 3's kernel edit is batched
-behind the bake fundamental, and step 6's terrain programs wait on the shader
-plan's bins. Relief contact is
-[certified field contact](#certified-field-contact).
+Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): a
+sector's bound, the relief's caps and a mask for relief inside a basin (the
+[terrain pass](terrain-pass.md#order-of-work)'s steps 4 and 3), then its
+terrain programs and far shadows (steps 6 and 7). They start together with
+step 1's checks; step 3's kernel edit lands in the bake fundamental's batch,
+and step 6 waits on the colour conversion and the RTX 4070's shading columns,
+not on the other devices'. Step 2 and the sets (step 8) follow. Relief
+contact is [certified field contact](#certified-field-contact).
 
 - [medium] Noise bake detail forces whole-surface refinement: `OwnFinal`
   clamps its factor to at least 2, so a small creation declaring a coarse
@@ -1697,15 +1729,23 @@ plan's bins. Relief contact is
 ### The visual bar
 
 Owner: look lanes (sdf-authoring, rendering) with a separate critic, the lead
-scheduling · high · Next: the caldera water's first proof, then the
-per-milestone review across every place. The bar and its judging are in
+scheduling · high · Next: the engine gaps behind this packet's misses, filled
+first and ahead of any look lane that would sculpt around them
+([rendering research](rendering-research.md#engine-gaps-filled-first)): the
+valley's walls wait on [the terrain pass](terrain-pass.md#order-of-work)'s
+steps 4, 3, 6 and 7 (gaps 1 to 4), the caldera water on
+[water](water.md#order)'s gaps 5, 6 and 9 and on
+[moving blends](moving-blends.md#engine-gaps-first)' gap 8, and the Moth and
+the swallow on its gap 10 and on [bake detail](#bake-detail)'s gap 7. Then
+the caldera water's first proof, then the per-milestone review across every
+place. The bar and its judging are in
 [the art README](../game/art/README.md#the-visual-bar); each place's look
 intent is in its guide.
 
 - [high] The caldera water fails its reference
   ([caldera pack](../game/art/caldera-water-pack/README.md), intent in
-  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is a row of
-  smooth ellipsoid lumps in two flat colours; the falls are a flat translucent
+  `worlds/debug/debug.md#water`). The glacier (`glacierMass`) is one swept
+  tongue and calved blocks that read as a plain white sausage from the rim; the falls are a flat translucent
   slab with visible tile seams and an opaque white impact disc; the pool is
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
@@ -1791,28 +1831,21 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: lane A2 changes approach (below), then A3 to A5, R3 and P1
-last. The plan owns the feature end to end; these are the defects it does not.
+ordinary · Next: the engine gaps this packet holds, filled first
+([rendering research](rendering-research.md#engine-gaps-filled-first)): depth
+over the bed driving colour, a flow read for each place, a camera inside
+water, and a moving cutter that re-carves. Then [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+P1 last. The plan owns the feature end to end; these are the defects it does not.
 
-- [high] Lane A2 (the lake and the glacier) failed two look-critic rounds on
-  every heading, so a third round on the same footing is not allowed
-  (AGENTS.md "Puck's purpose"). Its work is parked on `lane/wa2`, unmerged.
-  What failed: the lake is a flat-bottomed slab whose vertical side shows at
-  the near rim, with no depth grading from shallows to teal, stones that read
-  as discs and eggs, a busy ripple and no outlet sill; the glacier reads as
-  stacked bevelled tiles with an arcade toe and loose cubes, and it retreats
-  by dropping plates into fragments; the bare trough is a pale U-channel with
-  raised ladder-like blades and no moraine. The critic's direction: a lake
-  bounded by the bowl's own field (depth from zero at the bank), a calm flow
-  that speeds only at a rock sill carrying the falls' top, clustered sunk
-  stones; one smooth-blended tongue with a convex section, curved transverse
-  crevasses and a continuous gauge-bound retreat cut; a warm scoured floor
-  with cut grooves and moraine ridges. The changed approach, decided with the
-  owner: a written reference sheet for the lake, the glacier and the cradle
-  first (proportions, per-view silhouette targets, cited sources), then a
-  principal or Codex art lane against it. Open engine questions: a continuous
-  retreat cut inside a baked creation (a moving cutter does not re-carve the
-  group's mesh today), and caustics on submerged stones; both unverified.
+- [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
+  calm drift cannot speed up over the sill that the falls start from (panel 2 wants the water to move only there). It
+  needs a flow whose velocity is read from a field or a course (the river's winding course is the same gap, in
+  [the plan](water.md#the-rivers-channel-as-built)), or a second authored sheet over the sill. Caustics on the
+  submerged stones are not built, and are unverified against the glass pass.
+- [high] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
+  from the valley floor (`worlds/debug/glacier-site.puck`): the sector's cell at that distance is coarser than the
+  trough's grooves. A near cell for the trough, or a creation of its own for the cradle, would carry the detail
+  without baking the whole wall finely.
 
 - [high] A swimmer cannot leave a walled channel: the swim hold (`swimHold`,
   `worlds/standard/kits.puck`) floats the body 1.25 m under the surface and
@@ -1835,7 +1868,7 @@ last. The plan owns the feature end to end; these are the defects it does not.
   stage 4, so stages 4 and 5 look alike and the stage ticks need revisiting;
   the river groups' vertex count is unshown; a dark strip at the river-pool
   junction is unconfirmed.
-- [medium] A flow that follows a course: a palette flow layer carries one
+- [high] A flow that follows a course: a palette flow layer carries one
   velocity over a surface, so a river that winds needs a flow read per place
   (the course's tangent or a lattice row), a palette-flow and shader change.
 - [medium] The debug-world arc scenario (`worlds/debug/water-arc-tests.puck`)
@@ -1847,6 +1880,30 @@ last. The plan owns the feature end to end; these are the defects it does not.
 - [medium] Cold water meshes still miss the one-minute target, and the
   prototype audits flag normal and topology defects in the glacier, lake and
   falls; inspect those witnesses through the audit's image output.
+- [high] A cutter that moves against its group's baked mesh does not
+  re-carve it: the glacier's retreat as one cutter walking up the ice (the
+  moving half-space the stage table describes) showed no change at any pose, so
+  the ice melts by plates sinking into the trough's floor. The settle rebake
+  (`SdfMeshPathBake.Settle`) is the mechanism the moving-blends plan owns; a
+  moving subtraction would give a true retreating front and thinning. A slide is
+  also capped at four creation units, so a long travel rides four slides a plate
+  or a chain of carriers.
+- [high] The ice carries no relief noise: a `noise` facet is refused on an
+  animated creation, and the glacier is animated. It is authored from chamfered
+  plates and wedge cuts instead; relief would break their planes into
+  hummocks.
+- [high] Small stones in a wall sector bake at the sector's coarse cell, so the
+  trough's moraine and grooves read as flat-shaded polygons; the lake's
+  stones are creations of their own for that reason, at a preview cost of
+  about 650 000 triangles for the cobbles and boulders.
+- [medium] The falls ribbon beside the trough (`fallsRibbon`, lane A3) is a flat
+  rectangle with a segment seam that rises into the sky at its top and tilts
+  clear of the ground when the falls ebb. It needs to be a channel cut into the
+  ground with conforming water.
+- [low] `world.reload` of the debug world refuses once a lane's edit passes 16 MiB
+  as a whole rebuild ("Rebuild payload is 19239407 bytes; cap is 16777216");
+  the delta path reloads an edit of a few rows but a wall-sector edit that
+  moves many prototypes falls back to the rebuild.
 - [low] `water.speed 60` also runs the day clock, so stage captures come out
   at night; the tour's rows must pin the day.
 - [low] A stage checkpoint: a verb that saves and restores a live arena with
@@ -2085,6 +2142,24 @@ Owner: disclosure build lanes · high · Next: D0b1's acquisition wall, then
 the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
+
+- [high, unconfirmed] A route change does not withdraw a picture already
+  published. When a viewer's disclosure narrows (a full replica becomes a
+  private view, or observation is revoked while a second viewer keeps the
+  shared residency alive), route settlement leaves the shared scene and
+  package freshness goes false, but nothing withdraws the published image. A
+  cadence hold, a budget deferral, an unscheduled screen read, or a paused
+  node returning its last surface can show the old pixels
+  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
+  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
+  Enforce the current viewer's disclosure at publication and reuse,
+  previous-frame reads, aliases and retained composites included. Invalidate
+  that viewer's old output at once, and show an authorized replacement or an
+  authored fallback while the private graph builds. The other viewer's
+  publication stays usable. Verify on the first delivered frame of both cases
+  with a detail visible only in the full replica. Found by the rendering
+  research's decision-2 review; the code paths are cited there and not yet
+  reproduced.
 
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
@@ -2454,20 +2529,10 @@ checkpoints.
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · high · Next: the Azure release's three causes and the
-production deploy's catalog listing, which a push to `main` needs; then the
-silo's cold activation, CI's steady state, the shader cache and the GC-hole
-retirement.
+Owner: delivery lane · high · Next: the production deploy's catalog listing,
+which a push to `main` needs; then the silo's cold activation, CI's steady
+state, the shader cache and the GC-hole retirement.
 
-- [high] The Azure release of `main` fails at three causes, so nothing
-  deploys: the world-silo build image lacks `xz`, so `tar -xJf` cannot unpack
-  the LLVM tarball; PUCKARCH009 refuses
-  `src/Puck.Azure.Resources/bootstrap.cs`, a file-based app holding Azure SDK
-  references outside a `<PuckProvider>` project; and the WebAssembly publish's
-  trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
-  (`Activator.CreateInstance` on an unannotated type).
-  After the trim fix, re-run the browser AOT publish and Node harness; the
-  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -3004,13 +3069,14 @@ The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
 
-- [medium] The lift chapters' hitch lists hold iterations of 250 to 315 ms of
-  simulate time in `place-lift` while the car runs, headless. The likely cause,
-  inferred from the code path and not yet traced, is each door's response swap:
-  its colliders differ, so `WorldPopulation.InstallResponseSolids` compiles the
-  contact field and the navigation runtime again on the tick
-  (`CompileSolidConsumers`). Trace one swap and make it cost what the door
-  changed.
+- [medium] The headless lift chapter still has isolated simulate spikes around
+  door swaps. A thread trace showed rigid surface probes and full replica frame
+  serialization (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`).
+  The partial navigation bake now runs on a worker, and response swaps keep the
+  attached door's sampled pose so its new collider does not wake remote rigid
+  bodies. Profile the remaining spikes with `puck benchmark --headless --route
+  debug --chapter "the lift"` and make the remaining contact install and recipient
+  delivery cost follow the changed rows.
 - [low] A route chapter's control-line refusals are counted when the chapter
   ends (`WorldSeatDriver.Refused`), so a line still settling then is not
   counted; count each line's verdict as it arrives.
@@ -3203,7 +3269,7 @@ Looks and rules of play held in engine code:
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
 - [medium] Four looks the rendering research found in engine code, each with
-  the authored home [its looks table](rendering-research.md#looks-are-authored)
+  the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
   names: the filmic curve's constants in `place.comp.hlsl`; the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
   the shares of the display at which a nested view's update rate steps down

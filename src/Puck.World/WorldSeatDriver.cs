@@ -175,7 +175,7 @@ internal sealed class WorldSeatDriver {
             Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"a driven wall contact at ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}), normal ({Metres(normal.X)}, {Metres(normal.Y)}, {Metres(normal.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
-        if (m_checkCorridor && (m_corridor.Count > 0) && !read.Places.Any(predicate: m_corridor.Contains)) {
+        if (m_checkCorridor && (m_corridor.Count > 0) && ((read.Places.Count == 0) ? !m_corridor.Contains(item: read.Place) : !read.Places.Any(predicate: m_corridor.Contains))) {
             Fail(kind: "corridor", place: read.Place, reason: $"left the corridor ({string.Join(separator: ", ", values: m_corridor.Order(comparer: StringComparer.Ordinal))}) into {read.Place} on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})", tick: tick);
             return;
         }
@@ -348,12 +348,14 @@ internal sealed class WorldSeatDriver {
         switch (step) {
             case WorldRouteStep.PoseBody pose:
                 if (elapsed >= LandTicks) {
-                    var spawn = ((pose.Spawn is { } id) ? read.Server.Definition.SpawnPoints.FirstOrDefault(predicate: candidate => (candidate.Id == id)) : default);
-                    var at = ((pose.Point is { } point) ? Point(point) : Point(spawn.Position));
+                    var point = pose.Point;
+                    if (pose.Spawn is { } id) {
+                        point = WorldDefinitionRows.FindSpawnPoint(spawnPoints: read.Server.Definition.SpawnPoints, id: id)?.Position;
+                    }
 
                     // A pose that did not land (refused, or overtaken by a crossing in flight) leaves the chapter
                     // starting somewhere its author did not mean.
-                    if (Planar(from: read.Position, to: at) > FixedQ4816.One) {
+                    if ((point is not { } at) || ((Point(at) - read.Position).LengthSquared > FixedQ4816.One)) {
                         Fail(kind: "pose", place: read.Place, reason: $"the body is not where step {m_step} ({Describe(step: pose)}) set it down", tick: tick);
                         return still;
                     }
@@ -450,7 +452,7 @@ internal sealed class WorldSeatDriver {
                 NextStep(tick: tick, rateHz: rateHz);
                 return still;
             }
-        } else if (Planar(from: read.Position, to: Point(go.Point!.Value)) <= FixedQ4816.FromDouble(value: go.Within)) {
+        } else if ((Point(go.Point!.Value) - read.Position).IsWithin(radius: FixedQ4816.FromDouble(value: go.Within))) {
             NextStep(tick: tick, rateHz: rateHz);
             return still;
         }
@@ -577,14 +579,14 @@ internal sealed class WorldSeatDriver {
                 return false;
             }
             destination = new WorldNavigationPlaceGoal(Shape: shape);
-        } else if (population.TryRouteEndpoint(cell: out var cell, domain: out var domain, point: target, within: null)) {
+        } else if (population.TrySteeringEndpoint(body: read.Body, cell: out var cell, domain: out var domain, fromPoint: false, point: target)) {
             destination = new NavigationCellGoal(Cell: cell, Domain: domain, Position: population.NavigationFoot(node: new NavigationRouteNode(Cell: cell, Domain: domain, Position: default)));
         } else {
             Fail(kind: "route", place: read.Place, reason: $"no navigation domain holds a walkable cell at {Vector(go.Point)}", tick: tick);
             return false;
         }
 
-        var status = population.PlanSteering(corners: m_cornerNodes, from: read.Position, goal: destination, margin: m_margin, route: m_nodes, work: out _);
+        var status = population.PlanSteering(body: read.Body, corners: m_cornerNodes, goal: destination, margin: m_margin, route: m_nodes, work: out _);
 
         if ((status is not (NavigationStatus.Active or NavigationStatus.Arrived)) || (m_cornerNodes.Count == 0)) {
             Fail(kind: "route", place: read.Place, reason: $"no route from ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}) to {(go.Place ?? Vector(go.Point))}: {status.ToString().ToLowerInvariant()}", tick: tick);

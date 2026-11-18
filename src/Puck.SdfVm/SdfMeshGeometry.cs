@@ -20,8 +20,8 @@ public readonly record struct SdfMeshGeometry(bool Dynamic, UInt128 Hash);
 /// its field's handle;</item>
 /// <item>an instance's shapes' materials by their place among the group's materials (<see cref="Materials"/>), since a
 /// program numbers its palette in the order its emitters register materials;</item>
-/// <item>a static instance's bound, and a dynamic instance's bound radius, which clips what the bake samples. A dynamic
-/// instance's bound center is offset along world axes by the slot's pose when the program was emitted;</item>
+/// <item>each instance's bound, which clips what the bake samples. For a world-axis offset on a dynamic bound, the
+/// geometry also keys the exact turn that carries the offset back into the bake frame;</item>
 /// <item>a dynamic instance's transform into its own slot by that role rather than the slot's number, which each program
 /// assigns;</item>
 /// <item>a transform into any other slot by that slot's pose in the group's frame (its own slot's, in that slot's own
@@ -251,7 +251,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         m_restPoseSkin = range.RestPoseSkin;
         RestPoseSkin |= range.RestPoseSkin;
         if (range.RestPoseSkin) { Hash(fact: Fact.RestPoseSkin, source: [1]); }
-        var bound = (range.IsDynamic ? new Vector4(x: 0f, y: 0f, z: 0f, w: range.Radius) : new Vector4(value: range.Center, w: range.Radius));
+        var bound = new Vector4(value: range.Center, w: range.Radius);
         var count = (range.End - range.First);
         var ownSlot = (range.IsDynamic ? range.Slot : -1);
 
@@ -288,7 +288,16 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         // The bake carries each sample into the group's frame through its own slot, which is that frame.
         if (ownSlot >= 0) {
             Keep(orientationSteps: OrientationSteps, pose: Pose.Identity, positionSteps: PositionSteps, slot: ownSlot, transforms: transforms);
-            if (ownSlot < transforms.Count) { BoundTurn = Quaternion.Inverse(value: PoseOf(transform: transforms[ownSlot]).Orientation); }
+            BoundTurn = BoundTurnOf(slot: ownSlot, transforms: transforms);
+            if (range.Center != Vector3.Zero) {
+                if (range.BoundInSlotFrame) {
+                    Hash(fact: Fact.SlotLocalBound, source: []);
+                } else {
+                    var boundTurn = BoundTurn;
+
+                    Hash(fact: Fact.BoundTurn, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in boundTurn)));
+                }
+            }
         }
 
         for (var index = range.First; (index < range.End); index++) {
@@ -466,6 +475,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     public static (Vector3 Position, Quaternion Orientation) PoseOf(DynamicTransform transform) =>
         (transform.Position, ((transform.Orientation == default) ? Quaternion.Identity : transform.Orientation));
 
+    // Both the planner's lattice and the shader's world-axis bound offsets use this turn.
+    internal static Quaternion BoundTurnOf(int slot, IReadOnlyList<DynamicTransform> transforms) =>
+        ((slot < transforms.Count) ? Quaternion.Inverse(value: PoseOf(transform: transforms[slot]).Orientation) : Quaternion.Identity);
+
     /// <summary>Returns the world units one unit of a slot's own geometry spans (<see cref="DynamicTransform.Scale"/>),
     /// one for a scale that is not finite and positive: what the bake divides another slot's offset from a group's slot
     /// by, and what the group's draws scale its mesh by.</summary>
@@ -496,6 +509,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         Fitted,
         GlyphAtlas,
         Glyphs,
+        BoundTurn,
+        SlotLocalBound,
     }
     // A declared part's fields as the bytes the geometry hashes: its slot as an offset from the instance's own.
     [StructLayout(LayoutKind.Sequential)]

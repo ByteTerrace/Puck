@@ -101,26 +101,6 @@ public sealed partial class NavigationRuntime {
             );
         }
 
-        // Whether a body of these volumes standing at a foot point would be moved by the geometry: a push, an unproved
-        // contact or a refusal, the answers a body's own step would act on.
-        private static bool Touches(IContactField geometry, FixedVector3 foot, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-            var position = foot;
-            var velocity = FixedVector3.Zero;
-            var resolution = geometry.Resolve(orientation: FixedQuaternion.Identity, position: ref position, up: FixedVector3.UnitY, velocity: ref velocity, volumes: volumes);
-
-            return ((position != foot) || resolution.Unproved || (resolution.Refusal != ContactRefusal.None));
-        }
-        // Whether a body of these volumes swept from one foot point to another would be moved on the way, by the sweep a
-        // body's own step runs.
-        private static bool SweepMeets(IContactField geometry, FixedVector3 from, FixedVector3 to, ReadOnlySpan<FixedBodyColliderVolume> volumes) {
-            var position = to;
-            var velocity = FixedVector3.Zero;
-            var resolution = geometry.ResolveSweep(orientation: FixedQuaternion.Identity, position: ref position, previousPosition: in from, up: FixedVector3.UnitY,
-                velocity: ref velocity, volumes: volumes);
-
-            return ((position != to) || resolution.Unproved || (resolution.Refusal != ContactRefusal.None));
-        }
-
         // The occupancy sweep and the static edges, against one geometry part. Reads only the domain's immutable tuning
         // and the part, so it runs on any thread; the owner adopts the result.
         private NavigationDomainBake Bake(IContactField geometry, CancellationToken cancellation) {
@@ -145,19 +125,9 @@ public sealed partial class NavigationRuntime {
                 }
                 if ((current & 1023) == 0) { cancellation.ThrowIfCancellationRequested(); }
                 foreach (var step in Neighbors(node: current)) {
-                    var next = step.Node;
-
-                    // Each static edge is symmetric. Prove it once, then record each endpoint's local bit.
-                    if (
-                        (next <= current) ||
-                        !CanTraverseStatic(current: current, dx: step.Dx, dy: step.Dy, dz: step.Dz, geometry: geometry, ground: ground, next: next,
-                            walkable: walkable, work: ref work, x: step.X, y: step.Y, z: step.Z)
-                    ) {
-                        continue;
+                    if (step.Node > current) {
+                        ProveEdge(current: current, edges: edges, geometry: geometry, ground: ground, step: in step, walkable: walkable, work: ref work);
                     }
-                    edges[current] |= NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
-                    edges[next] |= NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
-                    work.Edges++;
                 }
             }
             return new NavigationDomainBake(
@@ -176,26 +146,33 @@ public sealed partial class NavigationRuntime {
             );
         }
 
-        /// <summary>Takes a bake from the domain this one replaces when only part of the geometry changed: where the
-        /// replaced domain was baked under equal tuning and its geometry part bounds its difference from this one's
-        /// (<see cref="IRegionalContactField.TryDifference"/>), its cells and edges are copied and only those the changed
-        /// colliders could reach are proved again, on the calling thread. The result is the bake a whole bake of this
-        /// domain's geometry gives, for a cost that follows the change: a door that swaps re-proves the cells round the
-        /// door, never the whole floor.</summary>
+        /// <summary>Starts a partial bake on the thread pool when a predecessor's immutable bake and a bounded
+        /// geometry difference are available. Only the cells and edges the change can reach are proved again.</summary>
         /// <param name="previous">The domain this one replaces.</param>
-        /// <returns><see langword="true"/> when this domain adopted a bake; otherwise it bakes whole as a new domain does.</returns>
-        internal bool TryRebakeFrom(Domain previous) {
+        /// <returns><see langword="true"/> when a partial bake was started.</returns>
+        internal bool TryBeginRebakeFrom(Domain previous) {
+            var geometry = m_geometry;
+
             if (
-                (previous.m_bake is not { } baked) ||
                 (previous.Tuning != Tuning) ||
-                (previous.CellCount != CellCount) ||
                 (Tuning.Kind == NavigationKind.Medium) ||
-                (m_geometry is not IRegionalContactField part) ||
-                !part.TryDifference(changed: out var changed, other: previous.m_geometry)
+                (geometry is not IRegionalContactField part)
             ) {
                 return false;
             }
+            _ = previous.IsBaked;
+            var basis = ((previous.m_bake is { } baked) ? (Bake: baked, Geometry: previous.m_geometry) : previous.m_rebakeBasis);
 
+            if ((basis is not { } source) || !part.TryDifference(changed: out var changed, other: source.Geometry) || changed.IsEverywhere) {
+                return false;
+            }
+
+            m_rebakeBasis = source;
+            StartBake(bake: cancellation => Rebake(baked: source.Bake, cancellation: cancellation, changed: changed, geometry: geometry));
+            return true;
+        }
+
+        private NavigationDomainBake Rebake(NavigationDomainBake baked, IContactField geometry, FixedAabb changed, CancellationToken cancellation) {
             var allocated = GC.GetAllocatedBytesForCurrentThread();
             var walkable = (bool[])baked.Walkable.Clone();
             var ground = (FixedQ4816[])baked.Ground.Clone();
@@ -204,10 +181,11 @@ public sealed partial class NavigationRuntime {
 
             if (!changed.IsEmpty) {
                 // A cell is re-proved where its own sample or an edge sweep from it could meet a changed collider: its
-                // center within the agent's radius and two cells of the change across, inside the band its probe and
+                // center within the agent's radius and two diagonal grid steps (up to three cells along a world axis)
+                // of the change across, inside the band its probe and
                 // agent span vertically. Its neighbours' edges are re-proved with it, since a diagonal edge is admitted
                 // through the walkability of the cells beside it.
-                var across = (Tuning.AgentRadius + (Tuning.CellSize * FixedQ4816.FromInteger(value: 2)));
+                var across = (Tuning.AgentRadius + (Tuning.CellSize * FixedQ4816.FromInteger(value: 3)));
                 var reach = new FixedAabb(
                     Maximum: new FixedVector3(X: (changed.Maximum.X + across), Y: (changed.Maximum.Y + Tuning.ProbeDown + across), Z: (changed.Maximum.Z + across)),
                     Minimum: new FixedVector3(X: (changed.Minimum.X - across), Y: (changed.Minimum.Y - (Tuning.ProbeUp + Tuning.AgentHeight + across)), Z: (changed.Minimum.Z - across))
@@ -216,6 +194,7 @@ public sealed partial class NavigationRuntime {
                 var touched = new bool[CellCount];
 
                 for (var node = 0; (node < CellCount); node++) {
+                    if ((node & 1023) == 0) { cancellation.ThrowIfCancellationRequested(); }
                     Coordinates(node: node, x: out var x, y: out var y, z: out var z);
 
                     var center = GridPosition(x: x, y: y, z: z);
@@ -228,7 +207,7 @@ public sealed partial class NavigationRuntime {
                     sampled[node] = true;
                     walkable[node] = false;
                     ground[node] = FixedQ4816.Zero;
-                    if (TrySampleCell(geometry: m_geometry, node: node, routeY: out var routeY, work: ref work)) {
+                    if (TrySampleCell(geometry: geometry, node: node, routeY: out var routeY, work: ref work)) {
                         ground[node] = routeY;
                         walkable[node] = true;
                     }
@@ -243,41 +222,28 @@ public sealed partial class NavigationRuntime {
                         touched[step.Node] = true;
                     }
                 }
-                // Every edge with a touched end is dropped from both ends and proved again, each pair once.
-                for (var node = 0; (node < CellCount); node++) {
-                    if (!touched[node]) {
-                        continue;
-                    }
-
-                    foreach (var step in Neighbors(node: node)) {
-                        edges[node] &= ~NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
-                        edges[step.Node] &= ~NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
-                    }
-                }
+                // Use the same direction as a whole bake, including when only the higher ordinal was touched.
                 for (var current = 0; (current < CellCount); current++) {
-                    if (!touched[current] || !walkable[current]) {
-                        continue;
-                    }
+                    if ((current & 1023) == 0) { cancellation.ThrowIfCancellationRequested(); }
+                    if (!touched[current]) { continue; }
 
                     foreach (var step in Neighbors(node: current)) {
                         var next = step.Node;
 
-                        if (
-                            (touched[next] && (next <= current)) ||
-                            !CanTraverseStatic(current: current, dx: step.Dx, dy: step.Dy, dz: step.Dz, geometry: m_geometry, ground: ground, next: next,
-                                walkable: walkable, work: ref work, x: step.X, y: step.Y, z: step.Z)
-                        ) {
-                            continue;
+                        if (next > current) {
+                            ProveEdge(current: current, edges: edges, geometry: geometry, ground: ground, step: in step, walkable: walkable, work: ref work);
+                        } else if (!touched[next]) {
+                            var reversed = new Step(Node: current, X: (step.X + step.Dx), Y: (step.Y + step.Dy), Z: (step.Z + step.Dz),
+                                Dx: -step.Dx, Dy: -step.Dy, Dz: -step.Dz, Axes: step.Axes);
+
+                            ProveEdge(current: next, edges: edges, geometry: geometry, ground: ground, step: in reversed, walkable: walkable, work: ref work);
                         }
-                        edges[current] |= NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
-                        edges[next] |= NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
-                        work.Edges++;
                     }
                 }
             }
 
             work.Walkable = walkable.LongCount(predicate: static cell => cell);
-            Adopt(bake: new NavigationDomainBake(
+            return new NavigationDomainBake(
                 edges: edges,
                 ground: ground,
                 walkable: walkable,
@@ -290,8 +256,7 @@ public sealed partial class NavigationRuntime {
                     Occupancies: work.Occupancies,
                     Walkable: work.Walkable
                 )
-            ));
-            return true;
+            );
         }
 
         private struct BakeCounts {
@@ -300,6 +265,21 @@ public sealed partial class NavigationRuntime {
             public long Occupancies;
             public long EdgeProofs;
             public long Edges;
+        }
+
+        // Both full and partial bakes record the result at both endpoints of the same canonical sweep.
+        private void ProveEdge(int current, in Step step, IContactField geometry, bool[] walkable, FixedQ4816[] ground, uint[] edges, ref BakeCounts work) {
+            var forward = NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
+            var backward = NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
+
+            edges[current] &= ~forward;
+            edges[step.Node] &= ~backward;
+            if (walkable[current] && CanTraverseStatic(current: current, dx: step.Dx, dy: step.Dy, dz: step.Dz, geometry: geometry, ground: ground,
+                next: step.Node, walkable: walkable, work: ref work, x: step.X, y: step.Y, z: step.Z)) {
+                edges[current] |= forward;
+                edges[step.Node] |= backward;
+                work.Edges++;
+            }
         }
 
         // A surface cell's ground is where the ground probe, lowered from probeUp over the domain's origin height, first
@@ -312,7 +292,7 @@ public sealed partial class NavigationRuntime {
             routeY = center.Y;
             if (Tuning.Kind != NavigationKind.Surface) {
                 work.Occupancies++;
-                return !Touches(foot: center, geometry: geometry, volumes: m_agent);
+                return FixedContactProbe.IsClear(field: geometry, start: center, end: center, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent);
             }
             var top = center with { Y = (center.Y + Tuning.ProbeUp) };
 
@@ -330,7 +310,9 @@ public sealed partial class NavigationRuntime {
             // Route positions are the agent's lower clearance-sphere center, never the floor itself.
             routeY = (ground + Tuning.AgentRadius);
             work.Occupancies++;
-            return !Touches(foot: center with { Y = (ground + m_lift) }, geometry: geometry, volumes: m_agent);
+            var lifted = center with { Y = (ground + m_lift) };
+
+            return FixedContactProbe.IsClear(field: geometry, start: lifted, end: lifted, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent);
         }
         private bool CanTraverseStatic(IContactField geometry, bool[] walkable, FixedQ4816[] ground, int current, int next, int x, int y, int z, int dx, int dy, int dz, ref BakeCounts work) {
             if (!walkable[next]) {
@@ -356,8 +338,8 @@ public sealed partial class NavigationRuntime {
                 if ((dz != 0) && !walkable[Index(x: x, y: y, z: (z + dz))]) { return false; }
             }
             work.EdgeProofs++;
-            return !SweepMeets(from: EdgeFoot(ground: ground, node: current, other: next), geometry: geometry,
-                to: EdgeFoot(ground: ground, node: next, other: current), volumes: m_agent);
+            return FixedContactProbe.IsClear(field: geometry, start: EdgeFoot(ground: ground, node: current, other: next),
+                end: EdgeFoot(ground: ground, node: next, other: current), orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent);
         }
         // Where an edge's sweep stands the agent at one end. A surface agent crosses at the higher end's ground, raised
         // by the step height, so the whole edge proves the volume a body standing on either end needs over the step it

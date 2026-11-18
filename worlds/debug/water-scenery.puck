@@ -8,6 +8,7 @@ import "../standard/water"
 import "../standard/foliage"
 import "valley-form"
 import "water-site"
+import "glacier-site"
 
 let compassRadians = 3.141592653589793 / 180
 
@@ -21,19 +22,21 @@ render {
 // The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
 let wallYaw = wallSector.compass + 180
 
-// The glacier contracts about its cradle's centre, following the authored linear melt fraction.
-let glacierOrigin = [0, 300, sectorFace(wallSector, 300)]
-let glacierLateral = [-30, -16, -2, 12, 26, 40]
-let glacierHeights = [300, 309, 316, 308, 298, 292]
-let glacierLumps = map(range(0, 6), i => {
-  position [glacierLateral[i], glacierHeights[i], sectorFace(wallSector, glacierHeights[i]) - 6]
-  radii [12 + (i % 3) * 2, 8 + (i % 2) * 2, 9]
-})
+// The world's X/Z of a point `radial` out from the ring's centre and `lateral` along the wall (the author frame's +X is
+// the placement yaw's own turn of world (cos compass, -sin compass)).
+function wallWorld(radial, lateral) = [
+  radial * sine(wallSector.compass * compassRadians) + lateral * cosine(wallSector.compass * compassRadians),
+  radial * cosine(wallSector.compass * compassRadians) - lateral * sine(wallSector.compass * compassRadians)
+]
 
 // The river runs from the plunge basin's east wall to the pool's north bank (water-site.puck's course) in a channel cut in
 // the ground (`riverChannel`). Its water is one lattice body over the cut ground that the chain's `riverDepth` raises and
 // lowers, flowing along the course's mean heading at the stream's pace.
-let riverSurface = flowed(streamMaterial, streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] }, glass: 1)
+let riverSurface = flowed(
+  streamMaterial,
+  streamFlowLayer with { velocity [riverHeading[0] * 1.2, 0, riverHeading[1] * 1.2] },
+  glass: 1
+)
 
 // A point `along` leg k of the course and `across` it (positive to its right), at height y: a stone's place.
 function riverPlace(leg, along, across, y) = [
@@ -45,38 +48,36 @@ function riverPlace(leg, along, across, y) = [
     cosine(riverLegs[leg].bearing * riverRadians) * along -
     sine(riverLegs[leg].bearing * riverRadians) * across
 ]
-// A golden-ratio fraction of k, in [0, 1): the stones' scatter.
-function riverScatter(k, ratio) = k * ratio - floor(k * ratio)
 // The riffle stones lie on the bed, four to a leg at scattered places, and the bank stones sit on each crest, one to a
 // side a leg, half sunk in the turf.
 let riverStones = concat(
   map(range(0, 4 * length(riverLegs)), k => {
     position: riverPlace(
       floor(k / 4),
-      riverLegs[floor(k / 4)].length * ((k % 4) + 0.5 + 0.3 * (riverScatter(k, 0.618034) - 0.5)) / 4,
-      3.2 * (riverScatter(k, 0.381966) - 0.5) + 0.0,
+      riverLegs[floor(k / 4)].length * ((k % 4) + 0.5 + 0.3 * (siteScatter(k, 0.618034) - 0.5)) / 4,
+      3.2 * (siteScatter(k, 0.381966) - 0.5) + 0.0,
       riverBed + 0.03
     )
     radii [
-      0.22 + 0.2 * riverScatter(k, 0.754878)
-      0.1 + 0.06 * riverScatter(k, 0.569840)
-      0.18 + 0.16 * riverScatter(k, 0.618034)
+      0.22 + 0.2 * siteScatter(k, 0.754878)
+      0.1 + 0.06 * siteScatter(k, 0.569840)
+      0.18 + 0.16 * siteScatter(k, 0.618034)
     ]
-    yaw: 360 * riverScatter(k, 0.754878)
+    yaw: 360 * siteScatter(k, 0.754878)
   }),
   map(range(0, 2 * length(riverLegs)), k => {
     position: riverPlace(
       floor(k / 2),
-      riverLegs[floor(k / 2)].length * (0.3 + 0.4 * riverScatter(k, 0.618034)),
-      (k % 2 * 2 - 1) * (3.35 + 0.35 * riverScatter(k, 0.381966)),
+      riverLegs[floor(k / 2)].length * (0.3 + 0.4 * siteScatter(k, 0.618034)),
+      (k % 2 * 2 - 1) * (3.35 + 0.35 * siteScatter(k, 0.381966)),
       0.02
     )
     radii [
-      0.3 + 0.25 * riverScatter(k, 0.754878)
-      0.22 + 0.1 * riverScatter(k, 0.569840)
-      0.26 + 0.2 * riverScatter(k, 0.618034)
+      0.3 + 0.25 * siteScatter(k, 0.754878)
+      0.22 + 0.1 * siteScatter(k, 0.569840)
+      0.26 + 0.2 * siteScatter(k, 0.618034)
     ]
-    yaw: 360 * riverScatter(k, 0.569840)
+    yaw: 360 * siteScatter(k, 0.569840)
   })
 )
 
@@ -89,10 +90,28 @@ prototypes {
     profile: fallsProfile,
     width: 8,
     standoff: 8,
-    flow: fallsFlowLayer with { coverageLane: fallsLane }, coverageLane: fallsLane
+    flow: fallsFlowLayer with { coverageLane: fallsLane },
+    coverageLane: fallsLane
   )
-  glacierMass(id: "glacier", lumps: glacierLumps, origin: glacierOrigin)
-  lakeSurface(id: "lake", radius: lakeSite.radius)
+  glacierMass(
+    id: "glacier",
+    lumps: glacierLumps,
+    furrows: glacierFurrows,
+    origin: glacierOrigin
+  )
+  lakeStones(
+    id: "lake-stones",
+    stones: lakeBedStones,
+    palette: lakeStonePalette,
+    beds: [{ y: lakeBowl.y - lakeSite.surface, radii: lakeBowl.radii, thickness: lakeBedThickness, cut: lakeBedCut, material: 0 }]
+  )
+  lakeSurface(
+    id: "lake",
+    radius: lakeSite.radius,
+    depth: lakeSite.depth,
+    bowl: { y: lakeBowl.y - lakeSite.surface, radii: lakeBowl.radii },
+    flow: lakeFlowLayer with { velocity [0.5, 0, -0.5] }
+  )
   riverChannel(
     id: "river-channel",
     region: riverHole,
@@ -143,22 +162,26 @@ placements {
     position [0, 0, 0]
     yawDegrees: wallYaw
   }
+  // The glacier lies on the lake's ramp, its toe at the lake's back shore and its head, which the ice shrinks toward, up the
+  // trough; the lake and its stones turn with the wall so their +z is out from the ring's centre.
   placement "glacier" {
     prototype: "glacier"
     position [
-      glacierOrigin[2] * sine(wallSector.compass * compassRadians),
-      glacierOrigin[1],
-      glacierOrigin[2] * cosine(wallSector.compass * compassRadians)
+      wallWorld(rampRadial + glacierHeadS * rampCos, 0)[0],
+      lakeSite.surface + glacierHeadS * rampSin,
+      wallWorld(rampRadial + glacierHeadS * rampCos, 0)[1]
     ]
     yawDegrees: wallYaw
   }
   placement "lake" {
     prototype: "lake"
-    position [
-      lakeSite.radial * sine(wallSector.compass * compassRadians),
-      lakeSite.surface,
-      lakeSite.radial * cosine(wallSector.compass * compassRadians)
-    ]
+    position [wallWorld(lakeSite.radial, 0)[0], lakeSite.surface, wallWorld(lakeSite.radial, 0)[1]]
+    yawDegrees: wallYaw
+  }
+  placement "lake-stones" {
+    prototype: "lake-stones"
+    position [wallWorld(lakeSite.radial, 0)[0], lakeSite.surface, wallWorld(lakeSite.radial, 0)[1]]
+    yawDegrees: wallYaw
   }
   // The channel's ground is placed at the origin: its shapes carry their own world positions.
   placement "river-channel" {

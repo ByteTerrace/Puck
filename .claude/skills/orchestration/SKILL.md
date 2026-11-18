@@ -789,9 +789,17 @@ brief that says to commit it gets a force-add that the next merge carries into
 the tree. The lead copies the file into the main checkout's `.claude/scratch/`
 before removing the lane's worktree: `git worktree remove` deletes ignored
 files without asking, and one research file was lost that way and recovered
-only from the lane's log. A Claude lane's Write tool refuses a path outside its
-worktree too, so its brief names an output path inside the worktree or asks for
-the findings in the hand-back. The lead never removes a worktree that a running
+only from the lane's log. A Claude lane with its own worktree (`principal`,
+`specialist`, `implementer`, or `isolation: worktree`) differs: the harness
+removes a worktree holding only ignored files the moment the lane ends, before
+the lead can copy anything, and the lane's Write tool refuses a path outside its
+worktree. So a Claude lane's document deliverable (findings, a critique, a
+draft) travels in full in its hand-back, the one channel that survives, and the
+lead writes the hand-back to the main checkout's `.claude/scratch/` as soon as
+it arrives; the brief never asks such a lane for a file beside its hand-back. A
+document meant for the tree (a plan, a memo) is committed on the lane's branch,
+which keeps the worktree. An Opus thesis draft and a Fable critique were each
+left in a removed worktree before this rule. The lead never removes a worktree that a running
 review or lane still reads: point the reader at the merged branch first. Shared
 inputs that live only in ignored scratch (findings, briefs, readings) are lost
 to another machine, so while lanes consume them the lead pushes them to a

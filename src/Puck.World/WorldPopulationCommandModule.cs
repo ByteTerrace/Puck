@@ -107,7 +107,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         var status = population.FindCheckedRoute(fromCell: fromCell, fromDomain: fromDomain, goal: goal, route: route, samples: out var samples, walls: walls, work: out var work);
 
         return new CommandResult(Output: DescribeRoute(from: from, to: to, status: status, route: route, work: work, samples: samples, walls: walls, path: path)) {
-            IsError = (route.Count == 0),
+            IsError = ((route.Count == 0) || (walls.Count != 0)),
         };
     }
     // A route endpoint: a place's region (its center and volume), a spawn point, a body's position or a literal point.
@@ -118,11 +118,9 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
         if (token.StartsWith(value: "spawn:", comparisonType: StringComparison.Ordinal)) {
             var id = token["spawn:".Length..];
 
-            foreach (var spawn in definition.SpawnPoints) {
-                if (spawn.Id == id) {
-                    point = FixedVector3.FromVector3(value: spawn.Position.Value);
-                    return true;
-                }
+            if (WorldDefinitionRows.FindSpawnPoint(spawnPoints: definition.SpawnPoints, id: id) is { } spawn) {
+                point = FixedVector3.FromVector3(value: spawn.Position.Value);
+                return true;
             }
 
             reason = $"no spawn point named '{id}'";
@@ -191,7 +189,9 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldPopul
             }
         }
 
-        _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.navigation route: {from} -> {to} status={status.ToString().ToLowerInvariant()} nodes={route.Count} length={length:0.00}m domains={string.Join(separator: ">", values: domains)} passes={string.Join(separator: ">", values: passes)} expanded={work.Expanded} joins={work.Joins} walls={walls.Count}/{samples}");
+        var verdict = ((walls.Count == 0) ? status.ToString().ToLowerInvariant() : "obstructed");
+
+        _ = text.Append(provider: CultureInfo.InvariantCulture, handler: $"[world.navigation route: {from} -> {to} status={verdict} nodes={route.Count} length={length:0.00}m domains={string.Join(separator: ">", values: domains)} passes={string.Join(separator: ">", values: passes)} expanded={work.Expanded} joins={work.Joins} walls={walls.Count}/{samples}");
         if (walls.Count > 0) {
             var first = walls[0];
             var places = server.Events.PlacesAt(point: first);

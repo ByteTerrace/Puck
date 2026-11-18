@@ -44,8 +44,10 @@ macOS, and nothing here is verified there.
   exclusive executable directory instead of discovery; an absent tool there
   is refused without falling back. The AGB BIOS compiles from its C/ARM sources on
   a counted cache miss. CI pins LLVM 19.1.6 in
-  `.github/actions/setup-toolchains/action.yml`; the silo Docker build uses the
-  same release. An unavailable tool refuses that machine by name, with a link
+  `.github/actions/setup-toolchains/action.yml`. The silo Docker build installs
+  its Ubuntu 26.04 base's own LLVM 19 packages (`clang-19`, `lld-19`) instead:
+  the release's Linux `ld.lld` needs `libxml2.so.2`, which that distribution no
+  longer ships. An unavailable tool refuses that machine by name, with a link
   back here; the World boots with the other machines. Its screen, `screen.state`,
   `machine.state` and `world.status` report the refusal, logged once at preparation commit.
 - **Rust 1.96.0 or later with Cargo and `wasm32-unknown-unknown`**. Install through
@@ -349,7 +351,11 @@ Repository automation is Puck CLI: `puck --help` lists the verbs and
 refresh are `puck` verbs, not scripts and not file apps.
 
 `src/Puck.Azure.Resources/bootstrap.cs` is the repository's one C# file app, an
-identity-team operation run outside CI. It uses the same `.editorconfig`,
+identity-team operation run outside CI. It holds Azure SDK references, so it
+declares its provider with `#:property PuckProvider=Azure`, the file-app form of
+the `<PuckProvider>` a provider project carries; PUCKARCH009 then admits it as
+it admits any Azure project, and still refuses any other file app holding a
+provider's SDK. It uses the same `.editorconfig`,
 compiler warnings, and Puck formatting conventions as the project-based code;
 its file directives declare its dependencies, so keep its SDK, package and
 project directives intact and its package versions pinned. The formatter's

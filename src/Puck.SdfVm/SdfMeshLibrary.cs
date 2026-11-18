@@ -201,36 +201,35 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
 
         while (true) {
             var pending = m_reads.GetOrAdd(key, static (key, state) => new Lazy<StoredMesh>(valueFactory: () => state.Library.Decode(disk: state.Disk, form: state.Form, geometry: key.Geometry, identity: key.Identity, taking: state.Taking)), (Library: this, Disk, Form: form, Taking: materials));
-            var result = pending.Value;
-
-            refusal = result.Refusal;
-            if (!result.Found) {
-                _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
-                return false;
-            }
-            if (result.Mesh is null) {
-                StoreEmpty(geometry: geometry, identity: identity);
-                _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
-                return true;
-            }
-
-            // The decode already holds the mesh (Decode), so the groups that shared it take it from the library. One of them
-            // owns the decode's own claim and may use the mesh itself if the library let go of the geometry in between.
-            var owns = result.TakeOwnership();
 
             try {
-                if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) {
-                    if (form is { } heldForm) { lock (m_gate) { SetForm(form: heldForm, geometry: geometry, identity: identity); } }
+                var result = pending.Value;
+
+                refusal = result.Refusal;
+                if (!result.Found) { return false; }
+                if (result.Mesh is null) {
+                    StoreEmpty(geometry: geometry, identity: identity);
                     return true;
                 }
-                if (owns) {
-                    // The library let go of the geometry between the hold and the take (a trim): the decode is the mesh.
-                    if (form is { } lostForm) { lock (m_gate) { SetForm(form: lostForm, geometry: geometry, identity: identity); } }
-                    mesh = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh.Acquire() : Renumber(from: result.Materials, mesh: result.Mesh, to: materials));
-                    return true;
-                }
+
+                // The decode already holds the mesh (Decode), so the groups that shared it take it from the library. One of
+                // them owns the decode's claim and may use the mesh itself if the library let go of the geometry in between.
+                var owns = result.TakeOwnership();
+
+                try {
+                    if (TryTake(geometry: geometry, identity: identity, materials: materials, mesh: out mesh)) {
+                        if (form is { } heldForm) { lock (m_gate) { SetForm(form: heldForm, geometry: geometry, identity: identity); } }
+                        return true;
+                    }
+                    if (owns) {
+                        // The library let go of the geometry between the hold and the take (a trim): use the decoded mesh.
+                        if (form is { } lostForm) { lock (m_gate) { SetForm(form: lostForm, geometry: geometry, identity: identity); } }
+                        mesh = (result.Materials.AsSpan().SequenceEqual(other: materials) ? result.Mesh.Acquire() : Renumber(from: result.Materials, mesh: result.Mesh, to: materials));
+                        return true;
+                    }
+                } finally { if (owns) { result.Mesh.Release(); } }
             } finally {
-                if (owns) { result.Mesh.Release(); }
+                // Lazy remembers a decode exception. End this attempt even when it throws, leaving any newer attempt alone.
                 _ = m_reads.TryRemove(item: new KeyValuePair<(UInt128, SdfMeshGeometry), Lazy<StoredMesh>>(key: key, value: pending));
             }
         }

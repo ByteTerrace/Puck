@@ -243,6 +243,31 @@ takes the same rule through the shared helpers.
   cause (the per-triangle helper, or resolving positions once into the
   visibility record), never by dropping the normal correction.
 
+## Engine gaps first
+
+Two of the engine gaps in the
+[rendering plan's list](rendering-research.md#engine-gaps-filled-first) are
+this plan's, and each is filled before the work that sculpts or tunes around
+it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)):
+
+- **Gap 10: a paint does not follow a blended seam between parts that move.**
+  Material coordinates across a blended seam are not blended, so a painted
+  marking on the Moth's or the swallow's head swims. This is step 4 below, the
+  next step of this plan, and it goes first. The two creations wait for the
+  owner's pair session, so the step's own check is the striped palette across a
+  moving neck, not either creation.
+- **Gap 8: a moving cutter does not re-carve a baked group, and an animated
+  creation takes no relief.** The bake watches only skinned groups for a
+  second bake at their settled pose (`SdfMeshPathBake.Settle`), and a carve
+  that moves against the surface it cuts keeps its rest cut
+  (`CreationMotionPlan.Borrows`). The glacier therefore cannot retreat by a
+  cut and melts by sinking, and its ice carries no relief. This plan's design
+  does not yet cover it (see [the scope](#scope-it-does-not-cover)), so its
+  first action is a design that says how a moving cutter re-carves a group and
+  whether an animated creation can take relief, with a check on the glacier's
+  retreat. Step 5 deletes the settle rebake, which is the mechanism this gap's
+  answer may reuse, so step 5 waits for that design.
+
 ## Steps, each with the check that shows it worked
 
 ### What is built, and its invariants
@@ -368,7 +393,8 @@ Contact reads the authored field (`CreationStampEmitter.EmitContact`, the
 field colliders), not the posed mesh. A pooled creation's seam is presentation.
 A solid creation that needs posed contact needs its own design. Skinned meshes
 keep no coarser levels (`SdfMeshCollapse.Levels`); a pose-aware level error is a
-later step.
+later step. A cutter that moves against its group's baked mesh, which gap 8
+above names, has no design here yet.
 
 ## Systems considered
 

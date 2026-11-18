@@ -86,11 +86,13 @@ The remaining rendering-specific details follow.
 The [collision-versus-mesh packet](open-items.md#collision-versus-drawn-mesh)
 owns sub-cell features and contact against the drawn surface; every shape's bake detail is one rule
 (`WorldShapeDetail.Of`, [mesh bake](../../.claude/skills/rendering/references/mesh-bake.md#groups-poses-and-materials)).
-The remaining bake investigations are:
+The remaining bake investigations are below, with an engine gap first. The
+[rendering plan's list](rendering-research.md#engine-gaps-filled-first) numbers
+it 11: a primitive under a non-uniform scale answers a bound on distance, not a
+distance, so any stretched cutter (the lake's bowl among them) frays the
+surface it cuts. Its design is decided, and it goes ahead of every item after
+it (the owner's ruling, [AGENTS.md](../../AGENTS.md#pucks-purpose)).
 
-- Finish an in-flight group that a later plan drops and retain it in the library
-  and store. Read back a boot's second, different `start` plan so churn cannot
-  silently rebake discarded work on every boot.
 - Give every primitive under a non-uniform scale a true distance, keeping the
   authored surface
   ([the decision](../decisions/engine-design.md#a-scaled-primitive-keeps-its-authored-surface-at-a-true-distance)).
@@ -110,6 +112,9 @@ The remaining bake investigations are:
   report distance error, certification, field work and mesh defects, with the
   CPU and GPU fields agreeing; then settled captures in the gallery and the
   bake's added work in a quiet window before choosing which solves to admit.
+- Finish an in-flight group that a later plan drops and retain it in the library
+  and store. Read back a boot's second, different `start` plan so churn cannot
+  silently rebake discarded work on every boot.
 - Inspect the Moth's hood opening, shin knife edges, left pauldron underside,
   lower eyelid, scalp, pod bands and greave rim. Touching mesh groups expose
   seams at back-pod plates and nozzle discs; contour a touching pair together
