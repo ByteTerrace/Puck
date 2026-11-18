@@ -236,10 +236,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
                 builder: new StringBuilder(),
                 source: source
             )),
-            // Three slots of the history, gray and drawn images, three slots of the frame group's and each pass's constant
+            // Two history images, three slots of the gray and drawn images, three slots of the frame group's and each pass's constant
             // buffer, the graph's one descriptor pool, and per pass and slot a frame group set and a pass group set. The
             // passes' pipelines and modules are the pass-pipeline cache's, so the node's line counts none of them.
-            expected: ["work lifetime: created.pipelines=0 created.shader-modules=0 created.images=9 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18 created.timestamp-pools=0"]
+            expected: ["work lifetime: created.pipelines=0 created.shader-modules=0 created.images=8 created.buffers=12 created.descriptor-pools=1 created.descriptor-sets=18 created.timestamp-pools=0"]
         );
         Assert.Equal(
             actual: source.WorkKinds.ToArray(),

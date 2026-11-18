@@ -12,6 +12,8 @@ namespace Puck.Shaders.Tests;
 /// </summary>
 public sealed partial class ShaderPipelineRenderNodeLawTests {
     private const ulong Mebibyte = (1024UL * 1024UL);
+    // The feedback graph's gray scratch, one RGBA8 image a frame slot, which a replacement of the same shape carries.
+    private const ulong FeedbackScratchBytes = (((Extent * Extent) * 4UL) * InFlight);
 
     private static CompiledShaderPipeline Compile(RenderGraphDefinition definition) {
         var plan = new ShaderPipelineCompiler().Compile(definition: definition);
@@ -157,29 +159,24 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         );
     }
     [Fact]
-    public void CarriedHistoryIsMovedNotAllocatedSoTheReplacementPeakDropsByExactlyItsBytes() {
+    public void CarriedStorageIsMovedNotAllocatedSoTheReplacementPeakDropsByExactlyItsBytes() {
         const string HistoryKind = "R16G16B16A16Float image";
         var gpu = new FakePipelineGpu();
         using var node = InstalledNode(gpu: gpu);
         var history = gpu.CreatedObjects.Where(predicate: static created => ((created.Kind == HistoryKind) && (created.DisposeCount == 0))).ToArray();
-        // The fake's own count of the history instances the replacement can carry: every slot's, at its texel size.
-        var carriedBytes = history.Aggregate(
-            func: static (total, created) => (total + created.Bytes),
-            seed: 0UL
-        );
+        var installed = gpu.CreatedObjects.Where(predicate: static created => (created.DisposeCount == 0)).ToArray();
         var candidate = Feedback();
         var account = node.Account(pipeline: candidate);
+        var owned = node.OwnedBytes;
 
+        // History only a compute pass touches, which the graph does not publish, holds the instance a frame reads and the
+        // one it writes, at its texel size.
         Assert.Equal(
-            actual: (Instances: history.Length, Bytes: carriedBytes),
-            expected: (Instances: ((int)InFlight), Bytes: (((Extent * Extent) * 8UL) * InFlight))
-        );
-        Assert.Equal(
-            actual: account.PeakBytes,
-            expected: ((node.OwnedBytes + account.SteadyBytes) - carriedBytes)
+            actual: (Instances: history.Length, Bytes: history.Sum(selector: static created => ((long)created.Bytes))),
+            expected: (Instances: 2, Bytes: ((long)((Extent * Extent) * 8UL) * 2L))
         );
 
-        // While the queue finishes nothing, the replaced graph and the whole candidate coexist, except the history,
+        // While the queue finishes nothing, the replaced graph and the whole candidate coexist, except what it carries,
         // which exists once: the device's peak is exactly the planned one.
         gpu.QueueHeld = true;
         gpu.ResetPeakBytes();
@@ -210,10 +207,17 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             frames: WarmFrames,
             node: node
         );
+
+        // Once the replaced graph retires, what survives of it is what the candidate carried: its history and its own
+        // scratch, never the published image. The peak is lower by exactly those bytes.
+        var carried = installed.Where(predicate: static created => (created.DisposeCount == 0)).ToArray();
+        var carriedBytes = carried.Aggregate(func: static (total, created) => (total + created.Bytes), seed: 0UL);
+
         Assert.Equal(
-            actual: (Owned: node.OwnedBytes, Live: gpu.LiveBytes, Disposed: history.Sum(selector: static created => created.DisposeCount)),
-            expected: (Owned: account.SteadyBytes, Live: account.SteadyBytes, Disposed: 0)
+            actual: (Owned: node.OwnedBytes, Live: gpu.LiveBytes, Disposed: history.Sum(selector: static created => created.DisposeCount), Peak: account.PeakBytes),
+            expected: (Owned: account.SteadyBytes, Live: account.SteadyBytes, Disposed: 0, Peak: ((owned + account.SteadyBytes) - carriedBytes))
         );
+        Assert.True(condition: (carriedBytes > history.Aggregate(func: static (total, created) => (total + created.Bytes), seed: 0UL)));
     }
     [Fact]
     public void TheCaptureReadbacksStagingBufferIsCountedInWhatTheNodeOwnsAndInEveryLaterPeak() {
@@ -236,13 +240,14 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: (Staging: StagingBytes, Owned: (installed + StagingBytes), Live: (installed + StagingBytes))
         );
 
-        // A replacement peaks with the staging buffer beside the installed graph and the whole candidate.
+        // A replacement peaks with the staging buffer beside the installed graph and the candidate less the scratch it
+        // carries.
         var candidate = Feedback(historyFormat: "R32G32B32A32Float");
         var account = node.Account(pipeline: candidate);
 
         Assert.Equal(
             actual: account.PeakBytes,
-            expected: ((installed + StagingBytes) + account.SteadyBytes)
+            expected: (((installed + StagingBytes) + account.SteadyBytes) - FeedbackScratchBytes)
         );
         gpu.QueueHeld = true;
         gpu.ResetPeakBytes();
@@ -267,10 +272,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
         var creations = gpu.CreationCount;
         var submissions = gpu.Submissions;
 
-        // The peak is the installed graph beside the whole candidate.
+        // The peak is the installed graph beside the candidate less the scratch it carries; its float history is new.
         Assert.Equal(
             actual: account.PeakBytes,
-            expected: (node.OwnedBytes + account.SteadyBytes)
+            expected: ((node.OwnedBytes + account.SteadyBytes) - FeedbackScratchBytes)
         );
 
         node.BudgetCapBytes = (account.PeakBytes - 1UL);
@@ -567,10 +572,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             name: "feedback"
         ));
         Assert.True(condition: (node.OwnedBytes > account.SteadyBytes));
-        // A reload of the installed graph carries its own float history, so the peak holds those instances once.
+        // A reload of the installed graph carries its own float history, both instances, and its scratch, so the peak holds
+        // those instances once.
         Assert.Equal(
             actual: (Steady: account.SteadyBytes, Peak: account.PeakBytes),
-            expected: (Steady: node.AllocationBytes, Peak: ((node.OwnedBytes + node.AllocationBytes) - (((Extent * Extent) * 16UL) * InFlight)))
+            expected: (Steady: node.AllocationBytes, Peak: (((node.OwnedBytes + node.AllocationBytes) - (((Extent * Extent) * 16UL) * 2UL)) - FeedbackScratchBytes))
         );
         Assert.StartsWith(
             actualString: inspection.ToString(),

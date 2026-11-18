@@ -5,7 +5,7 @@ namespace Puck.Shaders;
 
 // Barrier recording. The plan gives every access its prior state and barrier (ShaderPipelinePlannedPass.Accesses), and
 // the node records exactly those. The only states the plan cannot place are the ones the host's events leave an instance
-// in: new or reset storage, a zero clear, a presentation, and history carried over from a replaced graph. Each such
+// in: new or reset storage, a zero clear, a presentation, and storage carried over from a replaced graph. Each such
 // instance holds an override until its next access, which starts from the override and always records a barrier, so
 // every later planned barrier, which waits only on planned stages, still orders the unplanned accesses through it. A
 // package pass that skips a frame or stands on retained contents records none of its barriers and leaves each
@@ -431,9 +431,18 @@ public sealed partial class ShaderPipelineRenderNode {
         }
         m_initializationPending = true;
     }
-    // The state each instance of carried history is in under the graph it came from: its override, or, with none, the
-    // old plan's frame end for the instance the last frame wrote and the old plan's steady start for the rest.
+    // The state each instance of a carried storage is in under the graph it came from: its override, or, with none, the
+    // old plan's frame end, which for history holds only for the instance the last frame wrote and the old plan's
+    // steady start for the rest. An instance no frame touched still holds its fresh override.
     private void CarryStates(RuntimeResource old, RuntimeResource current, ShaderPipelinePlan oldPlan) {
+        if (!old.History) {
+            for (var instance = 0; (instance < current.Count); instance++) {
+                current.SetOverride(instance: instance, state: FrameEnd(resource: old, instance: instance));
+            }
+
+            return;
+        }
+
         var written = old.HistoryLatest;
         var start = old.Storage.FrameEnd;
 

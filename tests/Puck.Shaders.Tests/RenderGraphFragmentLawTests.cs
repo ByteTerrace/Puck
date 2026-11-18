@@ -374,6 +374,45 @@ public sealed class RenderGraphFragmentLawTests {
         Assert.NotSame(expected: refusal, actual: node.LastSwapError);
     }
     [Fact]
+    public void ACountChangeTheDeviceBudgetCannotHoldInstallsAsTheInstancesLeast() {
+        var plan = Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: true)));
+        var gpu = new FakePipelineGpu();
+        var counter = new Counter(instances: 2);
+        var account = new Puck.Hosting.Jobs.MemoryAccount(availablePhysicalBytes: static () => null, installedPhysicalBytes: (64L << 30));
+        using var node = Node(account: account, counter: counter, gpu: gpu, plan: plan);
+
+        node.ProduceUntilInstalled();
+
+        // The device pool has no room left. A resize the installed graph can keep rendering through gives way: it is
+        // refused by the budget, and the installed graph keeps rendering.
+        account.SetBudget(bytes: 1L, pool: Puck.Abstractions.Memory.PhysicalMemory.Device);
+        node.Resize(height: (Extent / 2), width: (Extent / 2));
+        _ = node.ProduceFrame(context: default);
+        Assert.StartsWith(actualString: node.LastSwapError?.Message, expectedStartString: $"[{ShaderPipelineMemoryAccount.RefusalCode}] ");
+
+        var submitted = node.FrameCounter;
+
+        _ = node.ProduceFrame(context: default);
+        Assert.True(condition: (node.FrameCounter > submitted));
+
+        // Once the counts move, the installed graph's recorders cannot render the current data and the node holds its
+        // last image. Its replacement is the instance's least: the full pool does not refuse it, and it installs at the
+        // new counts and the requested extent, so the picture moves again.
+        counter.Instances = 7;
+        submitted = node.FrameCounter;
+        TestLiveness.Until(
+            step: () => {
+                _ = node.ProduceFrame(context: default);
+
+                return (node.FrameCounter > submitted);
+            }
+        );
+        Assert.Equal(
+            actual: (Error: node.LastSwapError, node.Extent, Scratch: node.ResourceStatus.Single(predicate: static status => (status.Name == "scratch")).AllocationBytes),
+            expected: (Error: ((Exception?)null), ((Extent / 2), (Extent / 2)), Scratch: ((Elements * 7) * 4))
+        );
+    }
+    [Fact]
     public void ACountedBufferANodeCannotCountIsRefusedByName() {
         var plan = Plan(definition: Chain(buffer: Buffer(name: "scratch", transient: false)));
         var gpu = new FakePipelineGpu();
@@ -483,7 +522,7 @@ public sealed class RenderGraphFragmentLawTests {
         Assert.DoesNotContain(collection: recordings, filter: static recording => (recording.Pass == "counted$plain"));
     }
 
-    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null, string? skipped = null) {
+    private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, RenderGraphPlan plan, IShaderPipelineStorageCounter? counter, List<(string Pass, GpuKernelCounterRow? Counters)>? recordings = null, string? skipped = null, Puck.Hosting.Jobs.MemoryAccount? account = null) {
         var packages = new RenderGraphPackageRecorders();
 
         packages.Register(factory: new Silent(counter: counter), package: Writer);
@@ -499,7 +538,7 @@ public sealed class RenderGraphFragmentLawTests {
             packages: packages,
             pipelines: new GpuPassPipelineCache(),
             width: Extent
-        );
+        ) { MemoryAccount = (account ?? Puck.Hosting.Jobs.MemoryAccount.Shared) };
 
         node.Swap(pipeline: new CompiledShaderPipeline(
             plan: plan.Pipeline,

@@ -10,7 +10,7 @@ namespace Puck.Shaders;
 /// <param name="PeakBytes">The bytes the instance owns at the replacement's peak: everything it owns now (the installed
 /// graph with its preview, replaced objects still waiting for the GPU, published images held from them, and the capture
 /// readback's staging buffer) plus the
-/// candidate's <paramref name="SteadyBytes"/>, all of which exist together while the candidate allocates, less the history
+/// candidate's <paramref name="SteadyBytes"/>, all of which exist together while the candidate allocates, less the storage
 /// the candidate carries from the installed graph, whose instances it takes over rather than allocates.</param>
 /// <param name="BudgetBytes">The budget the peak is held to: the peak the instance has reserved in the process's memory
 /// account and the room the account has left for it to raise, lowered to the instance's own cap.</param>

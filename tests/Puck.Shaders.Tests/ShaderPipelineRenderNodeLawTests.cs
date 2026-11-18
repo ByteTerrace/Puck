@@ -298,15 +298,16 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
     public void ACandidateWhoseAllocationFailsPartwayIsRefusedAndDisposesExactlyWhatItCreated() {
         var candidateCreations = ReplacementCreationCount();
 
-        // Three images per slot (history, gray, and the image the fullscreen pass draws into); per compute pass a module,
-        // a pipeline, and per slot a sampler; for the fullscreen pass two modules, a render pass and a graphics pipeline,
-        // and per slot a framebuffer and a sampler; every pass records into the frame slot's one command list;
-        // per slot a constant buffer for the frame group's block and one for each of the three passes' pass blocks; and the
-        // graph's one descriptor pool. The candidate's shaders differ from the installed graph's, so the pass-pipeline
-        // cache creates its modules, render pass and pipelines as new entries, each a creation the fault can land on.
+        // The float history's two images and the image the fullscreen pass draws into per slot, the gray scratch carrying
+        // over; per compute pass a module, a pipeline, and per slot a sampler; for the fullscreen pass two modules, a
+        // render pass and a graphics pipeline, and per slot a framebuffer and a sampler; every pass records into the frame
+        // slot's one command list; per slot a constant buffer for the frame group's block and one for each of the three
+        // passes' pass blocks; and the graph's one descriptor pool. The candidate's shaders differ from the installed
+        // graph's, so the pass-pipeline cache creates its modules, render pass and pipelines as new entries, each a
+        // creation the fault can land on.
         Assert.Equal(
             actual: candidateCreations,
-            expected: (((((3 * ((int)InFlight)) + (2 * (2 + ((int)InFlight)))) + (4 + (2 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1)
+            expected: GraphCreations
         );
 
         for (var failAt = 1; (failAt <= candidateCreations); failAt++) {
@@ -537,9 +538,10 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
 
         // Once the queue finishes, the next frame retires every object of the replaced graph exactly once. What stays was
         // never the replaced graph's alone: one fence and one output-finalizing command pool per slot, which belong to the
-        // node's frame slots and are still in use by the replacement; and the feedback graph's pass pipelines, which the
-        // replacement, whose shaders are the same, leased from the same pass-pipeline cache entries, so the replaced
-        // graph's retirement released its leases and disposed none of them.
+        // node's frame slots and are still in use by the replacement; the gray scratch's image per slot, which the
+        // replacement carried; and the feedback graph's pass pipelines, which the replacement, whose shaders are the same,
+        // leased from the same pass-pipeline cache entries, so the replaced graph's retirement released its leases and
+        // disposed none of them.
         gpu.QueueHeld = false;
         node.Paused = false;
 
@@ -560,7 +562,7 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
             collection: installed
         );
         Assert.Equal(
-            expected: ((string[])[.. Enumerable.Repeat(count: ((int)InFlight), element: "fence"), .. Enumerable.Repeat(count: ((int)InFlight), element: "command pool"), .. FeedbackPassPipelineKinds]).Order(comparer: StringComparer.Ordinal),
+            expected: ((string[])[.. Enumerable.Repeat(count: ((int)InFlight), element: "fence"), .. Enumerable.Repeat(count: ((int)InFlight), element: "command pool"), .. Enumerable.Repeat(count: ((int)InFlight), element: "R8G8B8A8Unorm image"), .. FeedbackPassPipelineKinds]).Order(comparer: StringComparer.Ordinal),
             actual: installed.Where(predicate: static created => (created.DisposeCount == 0)).Select(selector: static created => created.Kind).Order(comparer: StringComparer.Ordinal)
         );
         Assert.DoesNotContain(
@@ -613,6 +615,15 @@ public sealed partial class ShaderPipelineRenderNodeLawTests : IDisposable {
             Remaining();
         }
 
+        // The gray scratch's images live on in the replacement, which carried them; every other image of the replaced
+        // graph is gone by the last frame.
+        var carried = remaining[^1];
+
+        Assert.Equal(
+            actual: installed.Where(predicate: created => carried.Contains(value: created.Handle)).Select(selector: static created => created.Kind),
+            expected: Enumerable.Repeat(count: ((int)InFlight), element: "R8G8B8A8Unorm image")
+        );
+        remaining = [.. remaining.Select(selector: handles => handles.Except(second: carried).ToArray())];
         Assert.Equal(
             actual: remaining.Select(selector: static handles => handles.Length),
             expected: [2, 2, 2, 1, 0]

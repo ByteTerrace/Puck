@@ -17,8 +17,9 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
     // keyed by the deployed display encode's bytecode, which every graph's preview on the node shares.
     private const int PreviewPipelineCreations = 4;
     // The feedback graph's own objects, as the replacement law counts them, with or without the backdrop, whose image is
-    // the host's and whose copy pass samples it through the pass's one sampler.
-    private const int GraphCreations = (((((3 * ((int)InFlight)) + (2 * (2 + ((int)InFlight)))) + (4 + (2 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
+    // the host's and whose copy pass samples it through the pass's one sampler. A replacement whose history cannot be
+    // carried creates its two history images and an output image per slot; its gray scratch carries over.
+    private const int GraphCreations = (((((2 + ((int)InFlight)) + (2 * (2 + ((int)InFlight)))) + (4 + (2 * ((int)InFlight)))) + (4 * ((int)InFlight))) + 1);
 
     private static ShaderPipelineDimensions FrameRelative => ShaderPipelineDimensions.Relative();
 
@@ -203,13 +204,13 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             high: (firstRetirement - 1),
             low: 0
         );
-        // The 16x16 half-float history ring, the two 32x32 RGBA8 rings, the backdrop's 32x32 RGBA8 preview ring and its
-        // 256-byte encode block, and the ring of the four 256-byte constant buffers (the frame group's block and each
-        // pass's); the backdrop is the host's.
+        // The 16x16 half-float history's two images, the two 32x32 RGBA8 rings, the backdrop's 32x32 RGBA8 preview ring
+        // and its 256-byte encode block, and the ring of the four 256-byte constant buffers (the frame group's block and
+        // each pass's); the backdrop is the host's.
         const ulong Half = (Extent / 2);
 
         Assert.Equal(
-            expected: (((((((Half * Half) * 8UL) * InFlight) + ((((2UL * Extent) * Extent) * 4UL) * InFlight)) + (((Extent * Extent) * 4UL) * InFlight)) + 256UL) + ((4UL * 256UL) * InFlight)),
+            expected: (((((((Half * Half) * 8UL) * 2UL) + ((((2UL * Extent) * Extent) * 4UL) * InFlight)) + (((Extent * Extent) * 4UL) * InFlight)) + 256UL) + ((4UL * 256UL) * InFlight)),
             actual: node.AllocationBytes
         );
     }
@@ -345,10 +346,11 @@ public sealed partial class ShaderPipelineRenderNodeLawTests {
             expected: (submissions + 1),
             actual: gpu.Submissions
         );
-        // No history survives the changed extent. The first read binds the one cleared instance of the new ring,
-        // independently of the submission phase. Every other instance is written before it is read.
+        // No history survives the changed extent. The new ring holds the instance a frame reads and the one it writes;
+        // the first read binds the one cleared instance, independently of the submission phase, and the other is written
+        // before it is read.
         Assert.Equal(
-            expected: ((int)InFlight),
+            expected: 2,
             actual: newHistory.Length
         );
         var cleared = Assert.Single(collection: gpu.ClearedImages);
