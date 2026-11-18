@@ -801,7 +801,15 @@ from child tick 30. Omitted, a drive runs to the tape's end.
   host-owned queued/in-doubt transfers or forwarding history also refuse:
   a single-authority tape cannot rewind another authority's obligations. A
   tape that lands arrivals refuses too: driving it would embody travelers no
-  source released, so `replay.verify` lands them again offline instead.
+  source released, so `replay.verify` lands them again offline instead; so does
+  a tape whose travelers depart to another authority, which no destination would
+  land. An in-place crossing (`Crossing`, a portal pair standing in the world)
+  re-applies from the tape, and the host's portal and adjacency scans mint no
+  transfer for a row driving its tape (`WorldInstanceHost.ScanInstanceBoundariesCore`):
+  a scan's crossing on top of the taped one would move the body twice. The scans
+  keep observing, so the occupancy latch is current when live input returns, and
+  a rewind keeps the row's transfer counter (ids only climb), so a session whose
+  bodies have crossed in place may still drive a tape or seek its history.
   The ownership check and reset hold the same authority gate, preventing a
   network reservation between them. `WorldPersistence.RestoreReplayStart`, shared
   with probes, prepares the complete guest image before changing geometry,

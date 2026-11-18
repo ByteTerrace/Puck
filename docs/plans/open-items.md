@@ -2170,6 +2170,13 @@ lane's.
   and `BodyActionState` (`WorldPersistence.AppendStateHashComponent`). The
   door's steps D5 to D9 take the first and D9 to D11 the rest. A replica's
   fixed floor per scenario is unmeasured.
+- [medium] `replay.drive` drives one authority, so it refuses a tape whose
+  travelers depart to another authority as it refuses one that lands arrivals
+  (`WorldReplayTape.TryBeginDrive`): a player who walked into the garden cannot
+  watch that walk again live, only `replay.verify` it offline. Driving the set
+  live needs the boot tape and the companion tapes its crossings pair with
+  driven together on their own rows, each departure landing where its arrival
+  was taped (`WorldReplaySetVerdict` already pairs them offline).
 - [low] A debug-world scenario fixture that keeps `documentId: "debug"` (hall,
   chess, cardtable, freecell, meadow, suit) still boots the garden, night and
   hearth companions the debug world's `references` name, beside the boot
