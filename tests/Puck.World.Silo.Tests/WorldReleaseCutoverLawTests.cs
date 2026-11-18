@@ -1163,7 +1163,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 "world.key",
                 key.ExportPkcs8PrivateKey()
             );
-            m_target = new(m_directory.RootPath);
+            m_target = WorldAuthorityBlobStore.DirectoryTarget(rootPath: m_directory.RootPath);
             Identities = [new(
                     Owner: m_owner,
                     World: SafeName.Parse(candidate: "alpha")
