@@ -532,9 +532,5 @@ public sealed class WorldDisclosureImages {
         return m_definitions[audience] = new AudienceDefinition(source, composed, frame, fields, frameRows, rows, images, versions, dependencies,
             arena.DisclosureRevision, digests) { Arena = arena, MovesRead = moves };
     }
-    private byte[] DigestOf(WorldStateRow skeleton) {
-        var bytes = CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow);
-        m_work.Add(DefinitionBytes, bytes.Length);
-        return SHA256.HashData(bytes);
-    }
+    private byte[] DigestOf(WorldStateRow skeleton) => Digest(CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow));
 }
