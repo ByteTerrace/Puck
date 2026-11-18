@@ -3094,45 +3094,89 @@ the same area.
   (`src/Puck.Overlays/Assets/Shaders/overlay-unified.frag.hlsl:1`). It costs
   about 0.9 ms with the benchmark panel showing.
 - **An emulated machine's video is shown at the simulation's rate, not the
-  machine's.** The video is uploaded once per completed tick
-  (`src/Puck.Hosting/Graph/MachineVideoSourceUpload.cs:137-139`), and the
-  debug world ticks at 30 Hz. The machine's output does return the sequence
-  number of the frame it wrote (`IMachineVideoOutput.WriteFrame`). The
-  upload reads only whether that number is positive and advances a stamp of
-  its own on every write (`MachineVideoSourceUpload.Write`). An unchanged
-  frame is therefore uploaded again under a new stamp.
+  machine's.** The video source declares that it updates once a tick
+  (`src/Puck.Hosting/Graph/MachineVideoSourceUpload.cs:137-139`), so an
+  upload is scheduled at most once for each completed tick, and the debug
+  world ticks at 30 Hz. A write can also be refused or made to wait, and
+  nothing counts which of the machine's frames were uploaded and which were
+  lost. The machine's output does return the sequence number of the frame
+  it wrote (`IMachineVideoOutput.WriteFrame`). The upload reads only
+  whether that number is positive and advances a stamp of its own on every
+  successful write (`MachineVideoSourceUpload.Write`). An unchanged frame
+  is therefore uploaded again under a new stamp.
 - **Screens light everything.** According to the area's map, every pixel
   walks every bound screen as a light with no range limit and no visibility
   test.
-- **Only Windows has display timing.** The display-timing and
-  precision-wait interfaces are implemented on Windows alone.
+- **Only Windows has precise timing.** The interfaces for the display's
+  timing and for a precise wait are implemented in the Windows platform
+  project alone. On Linux the loop still paces itself, through the host's
+  ordinary waits (`HostWaits.Until`), which wake less exactly.
 
 **What we propose.**
 
-1. **One record for every present, joined by present id** (option 15a).
-   This is first. It holds the attempt, the submit, the display outcome
-   where the host reports one (shown, dropped or unknown), the signal the
-   outcome came from, and the queue depth. It is the benchmark's
-   displayed-time stage with the outcome added. It reports three separate
-   counts: frames whose production was avoided, submits accepted, and
-   display drops observed.
+1. **One record for every attempt to present** (option 15a). This is
+   first. It holds the attempt, whether it was submitted, the display
+   outcome where the host reports one (shown, dropped or unknown), the
+   signal the outcome came from, and the queue depth. It extends what every
+   presenter already reports (`PresentTimingSample`), and it is the
+   benchmark's displayed-time stage with the outcome added. It reports
+   three separate counts: frames whose production was avoided, submits
+   accepted, and display drops observed.
+
+   The record is keyed by a number the host gives each attempt, not by the
+   driver's present id. An attempt that is skipped before it reaches the
+   driver has no present id. The Vulkan presenter's id also starts again at
+   1 whenever the swap chain is replaced, so two presents can share an id,
+   and a late answer about the old chain could be credited to the new one.
+   So the driver's id is stored beside the attempt, together with which
+   swap chain it belonged to, and answers still outstanding for a replaced
+   chain are closed as unknown.
+
+   What counts as "displayed" is defined by what the surface offers. The
+   Vulkan present-timing extension lets each surface say which stages of a
+   present it can time, and requires only one of them. A displayed
+   interval is counted only from a stage that marks the first pixel
+   reaching the display. A surface that offers less has no display column.
+
+   The record also carries decision 1's latency column: the time from the
+   earliest input a frame used to its display or submit.
 2. **One admission rule on both backends** (option 15b), once decision 2
    lets frames fit their period. On a valid surface, the host is admitted to
    a slot in the present queue before it renders. It then renders no frame
-   that has no slot.
+   that has no slot. The wait that does this exists on both backends
+   (`ISwapChainPacing.TryWaitForFrame`). It gives up in several cases, and
+   the host then paces itself by a timer and renders anyway. The rule is
+   built by closing those cases on a valid surface, and by moving the
+   Vulkan presenter's acquire of the next image ahead of produce. The
+   latency column says whether waiting for a slot costs latency or saves
+   it, and the rule is kept only if it does not cost.
 3. **The overlay as bounded, clipped geometry blended in place, with text
    from an atlas texture** (option 15c). This is the UI plan's step 2, after
-   that plan's measurement.
-4. **Show machine frames at the machine's rate** (option 15d), through a
-   queue keyed by presentation time. The machine's own frame sequence
-   decides every downstream refresh, together with a replacement or reset
-   of the source. This comes after a capture confirms that frames are shown
-   at half rate today.
-5. **Screens join the one light selection** (option 15e). A screen's range
-   comes from its luminance and area, and its visibility from the probes.
-   This goes with decision 7's sizing of light reach.
+   that plan's measurement. The overlay keeps its own copy of its glyphs
+   today, flattened into a buffer (`OverlayGlyphSdfPack`). It becomes a
+   texture built by the same code that builds the world's text atlas. The
+   two atlases stay separate, because they come from different sources.
+4. **Show machine frames at the machine's rate** (option 15d). It starts
+   with a trace on a scrolling cartridge, of the frames the machine made,
+   the uploads that were asked for, the uploads that were accepted, and the
+   frames that were shown. That says whether frames are lost and where.
+   The change is then two things. The source stops declaring a tick
+   cadence and declares the machine's own. And a short queue of complete
+   frames, each stamped with the machine's own sequence number, stands
+   between the machine and the display. That sequence decides every
+   downstream refresh, together with a replacement or reset of the source.
+5. **Screens join the one light selection** (option 15e). Screens already
+   answer through the same interface as every other light. What they lack
+   is selection and visibility. A screen's range comes from its luminance
+   and area, and its visibility from the probes. A screen that goes from
+   black to bright while out of view has to wake its source before the new
+   light is budgeted, which is one of decision 14's minimums. This goes
+   with decision 7's sizing of light reach.
 6. **Display timing, a precision waiter and a display request on Linux**
-   (option 15f), when a Steam Deck is available.
+   (option 15f), when a Steam Deck is available. It starts by measuring
+   what the Deck does today: its cadence, how late its waits wake, and how
+   quickly input and shutdown are served under load. The work is kept only
+   for an improvement those readings show.
 
 What a fixed-refresh display shows when the loop cannot hold its rate is a
 setting, and the mechanism serves either choice: a steady whole divisor of
@@ -3143,8 +3187,9 @@ the refresh rate, or frames as they arrive
 
 - *The record.* An even loop interval can hide judder on the display, and
   the frame rate that players see is unexplained today. The Vulkan
-  present-timing proposal says the older present-wait extension "lacks
-  important details such as the latency of the present operation itself".
+  present-timing extension's own proposal says the older present-wait
+  extension "lacks important details such as the latency of the present
+  operation itself".
 - *Admission.* It stops work being thrown away under backpressure, and
   stops two pacing mechanisms taking turns. Microsoft's guidance is that
   "Your rendering loop should wait for the swap chain to signal ... before
@@ -3152,8 +3197,8 @@ the refresh rate, or frames as they arrive
   buffers than frames queued.
 - *The overlay.* Its cost stops scaling with pixels times records, and a
   second full-resolution image goes away.
-- *Machine cadence.* A scrolling cartridge is shown at half its rate today,
-  and unchanged frames are uploaded.
+- *Machine cadence.* A scrolling cartridge is likely shown at half its rate
+  today, and unchanged frames are uploaded.
 - *Screens as lights.* It ends glow passing through walls and a per-pixel
   walk that grows with every screen bound.
 
@@ -3162,7 +3207,10 @@ the refresh rate, or frames as they arrive
 - A true display time on Vulkan needs an extension the bar devices may not
   have. Its absence is then reported as a capability, with a named
   follow-up. Where a compositor trace exists, the record is checked against
-  it.
+  it. A device with no display time can only be judged on what the host
+  produced: the work of each frame inside the period, with skipped and
+  dropped presents reported. A loop can hold 60 Hz while the display skips
+  frames, so that reading does not show the bar was met on screen.
 - Admission cannot promise display. A compositor may replace a submitted
   frame, and a surface may be lost. Three limits also have to be kept
   apart, each derived from its actual readers: the number of images, how far
@@ -3171,7 +3219,9 @@ the refresh rate, or frames as they arrive
   for a window that never displays must stay bounded, and the host must keep
   serving ticks, uploads, input and shutdown during it.
 - The overlay's diagnostic focus treatment reads the scene behind it, which
-  blending in place has to allow for.
+  blending in place has to allow for. A build that quietly dropped that
+  treatment would be faster and would pass a frame-time check, so the
+  overlay's check looks at the treatment itself.
 - No display shows every machine frame exactly once at every rate. A 60 Hz
   machine repeats frames on a 120 Hz display and skips some on a 45 Hz one.
   So the contract is the latest eligible frame at a bounded age, with
@@ -3180,21 +3230,30 @@ the refresh rate, or frames as they arrive
 - Linux needs a research pass and the hardware.
 
 **What we still have to find out.** Which present-timing and present-id
-extensions each bar device's driver exposes. Whether machine frames really
-are dropped on a running World. Everything about Linux timing.
+extensions each bar device's driver exposes, and which stages each surface
+can time. Whether machine frames really are dropped on a running World.
+Everything about Linux timing.
 
 **Evidence.** Code read for this page: the zero acquire timeout, the
-overlay's header, the once-per-tick upload, the unused frame sequence, and
-that only Windows implements the timing interfaces. From the presentation
-area's map: screens walked as unbounded lights. Measured: the overlay's
-0.9 ms. Outside sources, confirmed: the `VK_EXT_present_timing` proposal's
-remark about present wait, Microsoft's swap chain guidance (archived), and
-NVIDIA's buffer guidance. Partial: the present-timing proposal relies on a second
-present-id extension, and nobody has checked whether the bar devices'
-drivers expose either. Unverified: Chlumsky's distance-field text (one
-bilinear sample and a median). The machine cadence claim was read from the
-code and has not been confirmed on a running World. No verified source
-supports screens as selected lights, and no source was read for Linux.
+presenter's early returns and its id starting again on a new swap chain,
+the presenters' shared timing sample, the shared wait and the cases in
+which it gives up, the overlay's header, the video source's declared
+cadence and its stamp, the unused frame sequence, the host's wait without
+a precision waiter, and that only Windows implements the timing
+interfaces. From the presentation area's map: screens walked as unbounded
+lights. From the reviews, not reopened here: the overlay's flattened glyph
+copy, that screens answer through the lights' interface, and that the
+present-timing extension advertises its stages per surface. Measured: the
+overlay's 0.9 ms. Outside sources, confirmed: the `VK_EXT_present_timing`
+proposal's remark about present wait, Microsoft's swap chain guidance
+(archived), and NVIDIA's buffer guidance. Partial: the present-timing
+proposal relies on a second present-id extension, and nobody has checked
+whether the bar devices' drivers expose either. An attack reader found the
+extension's reference page describing it as ratified. This page read only
+its proposal. Unverified: Chlumsky's distance-field text (one bilinear
+sample and a median). The machine cadence claim was read from the code and
+has not been confirmed on a running World. No verified source supports
+screens as selected lights, and no source was read for Linux.
 
 **What it rests on.** "Puck plays nice with its host": waits go through the
 host's primitives, and polling is never the steady state.
@@ -3206,7 +3265,8 @@ a simulation one.
 ## Work the areas do more than once
 
 Each row is one job that the code does in several places today. The decision
-in the last column leaves one implementation.
+in the last column leaves one implementation, except where the row says the
+places differ for a reason.
 
 | The job | Where it is done today | Decision |
 |---|---|---|
@@ -3214,9 +3274,11 @@ in the last column leaves one implementation.
 | Rendering the sky map | A GPU kernel, a CPU render that decides whether to refresh, and a CPU render for each lighting capture | 7 (option 7f) |
 | Deciding what a pass can show | The GPU kernel. A CPU copy of the test (`SdfMeshCull`, `SdfMeshBox`) that glass and update rates still read. A projection onto the light's plane that is written out five times in shader code | 11 (option 11f) |
 | Whether the sun reaches a point | Cascades in some views and a probe bit in others, chosen per view | 6 (option 6c) |
-| Choosing detail by size on screen | Three constants and two projection formulas | 8 (option 8b) |
+| Choosing detail by size on screen | Three constants, and four places that compute size on screen: a group's tier, a mesh's level, a body's update rate and a viewport's pixels per metre | 8 (option 8b) |
 | Budgeting background work | A budget in pass pixels, a share of GPU wall time, relight credits per frame, a fixed cost per bake sample, and a CPU share per service | 4 (option 4g) |
-| Counting frames in flight | Five different numbers: the render graph's 3, the tables' ring of 2, the Vulkan presenter's 2, the Direct3D 12 swap chain's 3 and the background service's 4 slots | 15 (option 15b), 4 (option 4e) |
+| Reading how loaded the GPU frame is | Dynamic resolution's load source, and the headroom rule an earlier draft of this page proposed beside it | 4 (the first half of option 4g): one reading |
+| Compacting a list on the GPU | The probe client's compaction, which runs in series, and the shading bins' scatter, which keeps no order | 11 (option 11a): one ordered scan and scatter, written as a shared header |
+| Counting frames in flight | Five different numbers: the render graph's 3, the tables' ring of 2, the Vulkan presenter's 2, the Direct3D 12 swap chain's 3 and the background service's 4 slots. These are not one number held five times. Each counts a different thing with its own readers: images, how far the CPU runs ahead, and how long a GPU reader keeps a resource. What they can share is the way a slot is admitted and released. Each capacity stays derived from its own readers | 15 (option 15b), 4 (option 4e) |
 | Knowing a GPU submission finished | Completion signals shared with a batch's owner, beside the device's own timeline | 4 (option 4e) |
 | Running CPU work on other threads | The bake's own pool, the lighting's loops, thread-pool tasks and the job pool | The job system's pool (J1) |
 | Placing keyed ranges in a buffer | One allocator for the probe scene and another for the mesh region | The lighting work packet |
@@ -3226,7 +3288,7 @@ in the last column leaves one implementation.
 | Shading a surface | Authored programs and fixed layers | 13 (option 13a) |
 | A motion's value and its bound | An interpreter that looks drivers up by name, the audit's fixed-point pose, a measured reach and a measured speed | 12 (option 12a) |
 | Storing baked meshes | One store per backend | 10 (option 10f) |
-| Reducing an image to a statistic | The composite's histogram and the grid that computes a screen's glow | 13 (option 13e) |
+| Reducing an image to a statistic | The composite's histogram for the exposure meter, and the grid that computes a screen's glow. These are two different statistics of two different images, and stay two. They can share a way of sampling | 13 (option 13e) |
 
 ### Out-of-date text found while reading
 
@@ -3276,11 +3338,13 @@ follow from that. Each has a way to fail.
   and the GPU disagree below their resolution, and every kernel edit forces
   a rebake.
 - **Probe hits that are exact and independent of the view.** Surface
-  entries keyed from exact hits leave no unlit surface after a teleport or
-  through a portal. Which lights reach a surface is geometry, made stale
-  only by what changed. A drain is a function of its inputs. *It fails* in
-  that the sharing ratio is unmeasured, and a per-source sky is exact only
-  for a uniform change.
+  entries keyed from exact hits are valid from any camera, so a teleport or
+  a portal finds a place lit wherever the pool already holds its entries.
+  Which lights reach a surface is geometry, made stale only by what
+  changed. A drain is a function of its inputs. *It fails* in that the
+  sharing ratio is unmeasured, a place with no entries yet still has to be
+  traced and lit from nothing, and a per-source sky is exact only for a
+  uniform change.
 - **Consumers' minimums first, then presented pixels.** Portals and nested
   views are worlds. So before the frame is built, the selector knows who
   consumes each residency and what share of the picture each has. Minimums
@@ -3294,128 +3358,256 @@ follow from that. Each has a way to fail.
   creations mixing program kinds stay on the CPU, and a loose bound costs
   culling.
 - **Every published result has an identity.** A machine frame's sequence
-  number, a view's change stamp, and a sky's packed inputs with its acquired
-  pictures decide every downstream refresh. A published result also carries
-  the projection and the recipient-view generation it was made for. *It
-  fails* where "unchanged" is wrong, which shows as a frozen picture, and
-  where reuse ignores the recipient, which shows what was withdrawn.
+  number, a view's packed signature, and a sky's packed inputs with its
+  acquired pictures decide every downstream refresh. A published result is
+  also identified by the content of the delivered rows it read, so viewers
+  who are delivered the same rows share it and a viewer who is delivered
+  less does not. *It fails* where "unchanged" is wrong, which shows as a
+  frozen picture, and where reuse ignores the recipient, which shows what
+  was withdrawn.
 - **A receiver mask taken from the visibility record.** One structure
   serves three uses: culling shadow casters, the minimum update rate that
   takes occlusion into account, and the measurement that decides whether
   shadow storage can be sparse. *It fails* on a surface that came into view
-  after the mask was built.
+  after the mask was built, which is why such a surface takes the probes'
+  answer until the shadow map is drawn again.
 
 ## The build order
 
-This is the round's order by dependency, as the review corrected it. Each
-stage's steps are filed in the plan its decision names, and
+This is the round's order by dependency, as three reviews corrected it.
+Each stage's steps are filed in the plan its decision names, and
 [open items](open-items.md#next) ranks them among everything else.
 
-Three rules apply to every check below.
+### How every check is read
 
-- **Where it is measured.** On Direct3D 12 and on a windowed Vulkan boot,
-  at `world.quality high`, in real time on the benchmark's route, under the
-  recipe. A check that claims the frame bar reads the slowest frame and
-  names the bar devices it was read on.
+Six rules apply to every check below.
+
+- **How the frame-rate bar is read.** The bar is stated once, here, and
+  every check that claims it uses this reading.
+  - *What is read.* The slowest frame's work: the loop iteration less the
+    time the pacer waited (`HostFrameRecording` keeps both). Where the
+    device reports display outcomes, no present is skipped or dropped.
+  - *At what quality.* The `world.quality high` preset, with the render
+    scale at native and dynamic resolution off. The benchmark applies the
+    preset before the first chapter, outside the timed span.
+  - *At what window size.* The benchmark's default window of 1280 by 720
+    on the two desktop devices, and the panel's own size on the Steam
+    Deck. A second reading at 1920 by 1080 is taken on the desktops. The
+    size the bar is finally read at is
+    [the owner's call](#the-owners-calls).
+  - *With nothing quietly reduced.* The detail bias is zero: under memory
+    pressure the bake can coarsen every mesh without saying so in the
+    picture (`SdfMeshTier.Biased`). No refusal is printed beside the
+    reading, such as a render graph that could not be replaced for want of
+    memory.
+  - *Under recorded conditions.* On Direct3D 12 and on a windowed Vulkan
+    boot, in real time on the benchmark's route, under the recipe. The
+    run records its quality settings, GPU, driver, display state, whether
+    the mesh store started empty, and the machine's clock and power state.
+    Two runs are compared only when those match.
+- **How a change is judged.** Each landing is compared with the build it
+  started from. Both are frozen and run in the same quiet session
+  (`puck measure`), and the difference is judged against the base's own
+  spread between runs. A single slowest frame is not enough either way: one
+  interruption can fail a faster build, and one unchanged cold spike can
+  hide a slowdown on every other frame. So a check reads the slowest frame
+  with its cause, how many frames missed the period and by how much, and
+  the counted work, over repeated runs. A chapter that was disturbed, went
+  off course or did not finish fails the check. It is not left out.
+- **Needs are stated per item.** A stage is a group of items, not a gate.
+  An item waits only for what its own needs name. An item whose criterion
+  is a fixed figure, and misses it, does not hold the items after it: the
+  entry under [what would change the answer](#what-would-change-the-answer)
+  says what happens instead.
 - **No dependence on stronger hardware.** No stage relies on a code path
   that only stronger hardware runs.
 - **A claim that can be shown false.** From stage 1 on, each check states
   the gain its change claims and what result would show the claim false, on
   the same moving route. The work is counted beside the time: instances
   visible and processed, draws and dispatches, bytes held, and the slowest
-  frame. Filing a cause for a slow frame is a measurement. It closes no
-  stage.
+  frame. Naming the cause of a slow frame is a measurement. It is required,
+  and it closes nothing on its own.
+- **Where sharing is claimed, the arrangement of worlds is stated.** Every
+  world of the debug world admits every viewer at full disclosure, so a
+  check run there shares as much as can be shared. A check that claims
+  work is shared between viewers is also read with one window onto a world
+  that gives the viewer less than a full replica, in the same process. A
+  world served by another process is left to the federation work, because
+  a remote world's screens show nothing yet.
+
+"The route" below always means the benchmark's route. Where an earlier
+draft said "the tour", it meant the same thing.
 
 | Stage | In one line | Needs first |
 |---|---|---|
-| [0](#stage-0-measure) | Take the missing measurements. Change no behaviour | A quiet measurement window, and one GPU session on the RTX 2060 and the Steam Deck |
-| [1](#stage-1-fix-what-the-player-sees-everywhere) | Fix what the player sees everywhere: colour, shadow roles, lighting lag, contour defects, nested-view quality | Stage 0's split of GPU time |
-| [2](#stage-2-the-frame-thread-and-the-round-trips) | Shorten the frame thread's work and remove the round trips | Stage 0's breakdown and critical path. Stage 1's headroom rule |
-| [3](#stage-3-one-instance-table-and-one-chain-of-meshes) | One instance table and one chain of meshes | Stage 2. The shader matrix measured on the bar devices |
-| [4](#stage-4-scale) | Scale: populations, far shadows, nested views, presentation | Stage 3. The terrain research round. A Steam Deck |
+| [0](#stage-0-measure) | Build the route and the instruments, and take the missing measurements. Change nothing a player sees | A quiet measurement session, an RTX 2060, and a Steam Deck whose windowed path has been brought up |
+| [1](#stage-1-fix-what-the-player-sees-everywhere) | Fix what the player sees everywhere: colour, shadow roles, lighting lag, contour defects, nested-view quality | The lead machine's part of stage 0. An HDR display for the colour check |
+| [2](#stage-2-the-frame-thread-and-the-round-trips) | Shorten the frame thread's work, compact the draw list and remove the round trips | Stage 0's breakdowns. Stage 1's headroom rule and its closing bake run |
+| [3](#stage-3-one-instance-table-and-one-chain-of-meshes) | One instance table and one chain of meshes | Stage 2's compaction and instance updates. The shader matrix measured on the bar devices |
+| [4](#stage-4-scale) | Scale: populations, far shadows, nested views, presentation | Stage 3's table and chain. The terrain research round. A Steam Deck. An adjacency authored between two debug-world worlds |
 
 ### Stage 0: measure
 
-**What lands.** The measurements in decision 1's table, and each
-candidate's own first measurement. No behaviour changes.
+**What lands.**
+
+- The benchmark reads the bar as stated above: it applies the high preset,
+  and records the conditions two runs must share.
+- The route. It has three chapters today, all named "baseline". It gains
+  the chapters later checks name: Valley, Meadow, Entrance and Night. The
+  benchmark plan already proposes them. Night is reached in a way a route
+  can run. A capture can be taken at a named tick of a chapter. Each
+  chapter's program is frozen before its first compared reading, because
+  the benchmark treats a chapter whose program changed as a new workload.
+- The measurements in decision 1's table, and each candidate's own first
+  measurement.
+- Beside the stage, the Steam Deck's bring-up: a first windowed boot on the
+  device, the benchmark and the quiet session running there, a way for a
+  Deck session to get its meshes, and the least display timing a valid
+  reading needs.
+
+No behaviour changes.
+
+**It needs.** A quiet measurement session. An RTX 2060 and a Steam Deck for
+the device rows. The research owed on display timing, read from each
+device, before the present record is designed
+([research still owed](#research-still-owed)).
+
+The stage closes device by device. The lead machine's rows are enough for
+stages 1 and 2 to start.
 
 **It is done when:**
 
-- A `puck benchmark` run on each backend reports, for each chapter of the
-  route:
-  - produce split by part, with the parts summing to within 5% of the
-    `produce-work` figure that `host.frames` reports;
-  - captures and prepares, by what asked for them;
-  - triangles per level, per pass;
-  - each cascade's occupied cells;
-  - the GPU frame split into the root view, nested views and background
-    work.
-- The time each frame stood on the display is reported per present,
-  wherever the host provides it, joined by present id and with its signal
-  named. On Windows it agrees with a compositor trace of the same presents,
+- A `puck benchmark` run applies the high preset before its first chapter
+  and reports the conditions it ran under. Two runs that differ in a
+  condition are refused as a comparison.
+- The route plays every chapter a later check names, on both backends, and
+  the windowed benchmark run that open items still owes has been taken.
+- Every row of decision 1's table has a reading in the report, on the
+  devices its row names. A row without one names what blocks it. Produce's
+  parts sum to within 5% of the `produce-work` figure that `host.frames`
+  reports.
+- Every attempt to present has a record with its outcome and the signal it
+  came from, and the report states the share whose outcome is unknown. On
+  Windows the record agrees with a compositor trace of the same presents,
   as the benchmark's displayed-time stage requires. A device and backend
   pair that provides no display time says so in the report, with the
   follow-up that would supply it. The report then either explains why the
   frame rate reads as it does, or says that it cannot yet.
-- The same measurements exist for every bar device and backend pair, at the
-  meadow and at the lobby.
-- One cold bake under the recipe gives the critical path that ranks
-  decision 10's two speed fixes.
+- Each bar device has its table: the slowest frame of each chapter against
+  the bar, by part, at both window sizes on the desktops.
+- The time from an edit to seeing it is reported for a `.puck` edit, a
+  shader edit and a C# edit, by phase.
 - The night-switch reproduction and the meadow report shadow queries issued
-  and pairs of hit and light tested.
+  and pairs of hit and light tested, and the delay before the lighting's
+  version moves.
+- The Steam Deck has booted the debug world windowed and played the route.
 
 ### Stage 1: fix what the player sees everywhere
 
 **What lands.**
 
-- Decision 5's conversion in each view's own graph, with the filmic
-  constants moved into authored data.
-- Decision 6's admission of lights, cascade roles and per-pixel probe
-  fallback, as one piece of work.
-- Decision 4's headroom rule on the one budget. Then several probe jobs in
-  flight, and the grant per second.
-- Decision 10's contour rule and its removal of redundant triangles.
-- Nested views' quality as an authored table (decision 14, option 14c's
-  first step).
+One sequence, because three of its pieces edit the same code: the selector
+that chooses a view's bloom, shadow and glass passes.
 
-**It needs.** Stage 0's split of GPU time, for the headroom rule. After
-decision 5 lands, the lead walks the tour and retunes it against the
-references.
+1. Decision 5's conversion in each view's own graph, with the sharpen
+   moved into it, the filmic constants moved into authored data, the two
+   colour types, and the debug world and standard package retuned in the
+   same merge.
+2. Decision 6's admission of lights, cascade roles and per-pixel probe
+   fallback, as one piece of work, built against the cascade set's data
+   model.
+3. Nested views' quality as an authored table (decision 14, option 14c's
+   first step).
 
-These pieces are independent and run in parallel.
+Beside that sequence, and independent of it:
+
+- Decision 4's headroom rule on the one reading of the frame's load. Then
+  bake jobs cut to the allowance, and the per-device upload rate. Then
+  several probe jobs in flight, stale relights sharing the worker, and the
+  grant per second.
+- Decision 10's keys by stage, its contour rule and its removal of
+  redundant triangles.
+- The prototype of the metre-sized shadow filter, behind its switch.
+
+**It needs.** The lead machine's readings from stage 0: the split of GPU
+time and the per-frame GPU span for the headroom rule, the whole-world mesh
+audit for the contour rule, the edit-wait readings for the keys by stage,
+and the route's chapters. An HDR display for the colour check. The unmerged
+lighting branch merged and run in a World for the first time.
 
 **It is done when:**
 
 - **Colour conversion.** A grey card reads 118/255, within 3 codes, under
   its manual exposure value, through every path a view takes: a single
   world, a split view, a filmed view shown on a screen, a view beside a
-  pane, and the scRGB path for HDR. On that last path a floating-point
-  capture shows a patch authored at N nits at N nits. A graph that joins
-  scene light to a working-image input without the conversion fails to
-  compose. The gain claimed is one meaning for a pixel value. Any path where
-  the card reads differently shows the claim false.
-- **Shadow roles.** At noon, `world.counters gpu pass sdf.world$shadow-second`
-  shows no draws. Through a continuous exchange of sun and moon, run forward
-  and reversed, no frame is without cascades. A capture shows a shadow
-  beyond 40 m while the sun's slot empties. Each end of the exchange matches
-  a cold jump to it. A capture across the 120 m edge of coverage shows no
-  hard line and no sunlit interior.
-- **Lighting lag, inside the headroom.** On the night-switch reproduction,
-  `level-0-age-p50` stays under the authored age at 60 and at 30 frames a
-  second, with every job slot full and with a lighting change in the middle
-  of a batch, on both backends. In the same measurement run, the root frame's
-  slowest frame is no slower than before the change. An age that falls only
-  by taking frame time shows the claim false. The lawn stops being metered
-  as day.
-- **Contour.** `puck mesh audit` reports no wrongly facing triangle on the
-  fourteen blend exhibits. Every audited group is non-empty, and its `open`
-  and `uncovered` measures are no higher than before. A blade part has
-  about a dozen triangles. The blend seams, and the rim of the Moth in
-  motion, are captured from the sides that failed.
-- **Nested quality.** One lit exhibit reads the same as in the root view,
-  both through a full-size portal and through a camera. An author's override
-  of the table changes the nested views alone. `puck search` finds neither
-  constant.
+  pane, a fully framed screen, a sharpened view with bloom, a camera read
+  both as scene light and directly, and a window from a dim room onto a
+  bright world, where the two exposures differ. Each display output the
+  device exposes is read back in its own format: SDR in both of its cases,
+  scRGB and HDR10. On each, neutral and coloured patches authored at N
+  nits show N times the exposure times the display's white level, with the
+  tone transform at none, inside a stated tolerance. One swatch for each
+  kind of scene colour reads correctly: a surface, the sky, fog, a light
+  and a colour keyed over time. A letterbox colour and a HUD colour do not
+  move. A bright edge in motion shows no new shimmer on SDR or HDR. A graph
+  that joins two kinds of image without the conversion fails to compose.
+  The gain claimed is one meaning for a pixel value. Any path where the
+  card reads differently shows the claim false.
+- **The retuned world.** Every chapter of the route meets its reference in
+  motion, and the gallery's exhibits still read as their plaques say. The
+  judge is not the lane that tuned them. The lamps' ranges are no longer
+  than before.
+- **Shadow roles.** All of this is read at the high preset, where two
+  lights cast shadows, and the first check is shown failing on the base
+  build. At noon, `world.counters gpu pass sdf.world$shadow-second` shows
+  no draws. Through a continuous exchange of sun and moon, run forward and
+  reversed, no frame is without cascades. Through a crossing where both
+  lights stay lit and swap which is brighter, a far receiver's shadow
+  changes without a jump in either direction, and the brighter light ends
+  with the near and far cascades. A capture shows a shadow beyond 40 m
+  while the sun's slot empties. Each end of the exchange matches a cold
+  jump to it. A capture across the 120 m edge of coverage shows no hard
+  line and no sunlit interior. A capture in the frames just after a camera
+  cut shows the unfilled area dark and not sunlit. A second view far from
+  the first still gets an answer.
+- **Lighting lag, inside the headroom.** The lighting is judged by each
+  probe level's oldest age against that level's bound, and by the count of
+  levels behind, which is the engine's own test. It holds on the
+  night-switch reproduction, with traces owed and with none, and on the
+  route's moving chapters. It holds at the display's rate and at half of
+  it, with every job slot full and with a lighting change in the middle of
+  a batch, on both backends. It is read where the GPU limits the frame. If
+  no stop does on the lead machine, a forced load makes one. In the same
+  run the root frame is no slower than the base beyond the base's spread.
+  An age that falls only by taking frame time shows the claim false. Three
+  more legs: with dynamic resolution on (`world.render-scale auto`), the
+  two controllers do not fight. Under a load that fills the period, with
+  every slot already full, frames that miss behind a background job and
+  lighting that is overdue are counted apart. And in play no background
+  job measures longer than one frame's allowance. The lawn stops being
+  metered as day.
+- **Keys by stage.** An edit to the Land stage's code rebakes with no GPU
+  sampling dispatched. The edit-wait reading for that edit falls.
+- **Contour.** The stored-mesh audit over the whole world reports no class
+  of defect worse than before, on both backends, and no wrongly facing
+  triangle on the fourteen blend exhibits. Every audited group is
+  non-empty, and its `open` and `uncovered` measures are no higher than
+  before. For each group that failed, the report says whether its cell was
+  ever flagged for refinement. A blade part has about a dozen triangles.
+  The blend seams, and the rim of the Moth in motion, are captured from
+  the sides that failed. The bake's time is reported beside each fix.
+- **Nested quality.** One lit exhibit seen through a full-size portal
+  matches the root view from the same pose. A camera's feed matches a root
+  view placed at the camera's pose. An author's override of the table
+  changes the nested views alone. `puck search` finds neither constant. A
+  walk across each of the table's thresholds, on both backends, is read
+  for its slowest frame, its peak GPU memory and any refused replacement.
+- **The shadow filter's prototype** stays inside its stated bound against
+  the brute-force filter, in a burst of presented frames, on all four
+  blockers.
+- **The ranking bake.** One cold bake under the recipe, taken at the close
+  of the stage, gives the critical path that ranks decision 10's two speed
+  fixes, and the cold bake's figure.
 - The Valley, Entrance and Night chapters each show these in a burst of
   presented frames.
 
@@ -3423,90 +3615,134 @@ These pieces are independent and run in parallel.
 
 **What lands.**
 
-- Decision 2's snapshot, schedule-first order, bounded correction and state
-  keyed by view. The allocation cuts.
+- Decision 2's capture order, its upkeep step, the minimums for unseen
+  worlds and state keyed by view. The cuts to field queries and to
+  allocation. The cheap freshness check only if the breakdown calls for it.
 - The job system's bounded waits (C0), then its pool with an owned fork
-  (J1), then decision 3's tick partitions (T3, T2).
+  (J1), then decision 3's tick partitions (T3, T2) and the tick's serial
+  fixes in the order its breakdown gives.
+- Decision 11's first three steps: reduced rates for far placements,
+  uploads only for instances that changed, and ordered compaction.
 - Decision 4's work list on the GPU and its early hand-off.
 - The bake's first speed fix, whichever the critical path ranks first:
   sampling in one round trip per stage, built from one root-search rule, or
   the Land stage on the pool.
-- Decision 7's single sky, and per-source storage for edits that keep a
-  light's reach.
+- Decision 7's single sky, per-source storage for edits that keep a
+  light's reach, and the rescale of probes a relight has not reached.
 - `transmit-identity`, then decision 6's metre-sized filter together with
   `transmit-plane`.
 - Decision 11's receiver masks as a conservative union, and boxes for
-  skinned draws.
+  rigidly skinned draws.
 
-**It needs.** Stage 0's breakdown and critical path. Stage 1's headroom
-rule, before the GPU work list raises the background work's use of its
-share.
+**It needs.** Stage 0's breakdowns of produce and of the tick. Stage 1's
+headroom rule, before the GPU work list raises the background work's use of
+its share, and stage 1's closing bake run. A device session for the
+readings on which the transmission plan closes `transmit-identity`.
 
 Some of this is serial. The bounded waits, the pool and the partitions
 follow one another. `transmit-identity` comes before the metre-sized filter,
-which is one piece of work with `transmit-plane`. The capture changes and
-the GPU work list are independent of each other.
+which is one piece of work with `transmit-plane`. The GPU work list lands
+before the lighting's CPU loops move onto the pool, because both rewrite
+the same code. The early hand-off lands after the rework of waits. The
+bake's chunk scheduling lands after the pool. The instance updates land
+before compaction. The capture changes and the GPU work list are
+independent of each other.
 
 **It is done when:**
 
-- **Capture.** Captures counted by cause show none that no scheduled
-  render, owed upload or minimum read. A scratch World holding extra unseen
-  residencies with no minimums shows the same begin-frame time and the same
-  capture count. A camera turn that reveals two levels of windows, in a
-  frame that releases nothing, shows the first level in that frame. The
-  second shows its fallback for one counted frame. A capture count that the
-  reordering leaves unchanged shows the claim false.
+- **Capture.** Captures counted by cause show none that no footprint, owed
+  upload or minimum read. A scratch World holding extra unseen residencies
+  shows the same capture count, and a begin-frame time that grows only by
+  the upkeep step. A camera turn that reveals two levels of windows shows
+  both in that frame. A window showing its fallback image is a counted
+  miss, and is allowed only for a camera whose pose is not yet known. With
+  the hidden arrival render gone, the destination of an approaching portal
+  still has its first image and its lighting before its first pixel shows,
+  and a changing screen that is out of view still moves the light of a
+  visible room. An unseen residency still gives memory back when asked,
+  still retires what it released, and has a shader reload applied before
+  it is next seen. A viewer whose right to see a world is withdrawn while
+  their window's picture stands does not see that picture in the next
+  frame delivered. No garbage collection pauses the steady loop. A capture
+  count that the reordering leaves unchanged shows the claim false.
+- **The cheap freshness check, if it was built.** The audit switch reads
+  zero disagreements over the route, and over a test world that puts a
+  moving body, a keyed light, a flowing surface, fog, a change of quality
+  setting and a shader reload behind a window whose picture is standing.
 - **The pool before the partitions.** A console verb issued while a tick's
   join is overdue is answered within one iteration. Through a cold bake, the
   process's threads are counted as pool workers, the frame and control
   threads, and dedicated threads, each against the job system plan's
-  figure. The slowest frame of the Meadow and Entrance chapters is stated
-  with its cause, before and after, and the tick's share of it falls.
+  figure. The tick is reported in milliseconds by phase for each chapter,
+  before and after. The report also states whether the tick and produce
+  each fit the period while their sum does not, which is the reading that
+  would reopen a tick on its own thread.
+- **The draw list.** In every raster pass, commands executed equal the
+  draws that survive. Records staged in a frame fall to the slots that
+  moved.
+- **Background GPU work.** With a small grant, a probe facing a wall that
+  many lamps light stays inside the cap and resumes in the next dispatch,
+  and the most work in one dispatch is reported. Drains run with different
+  batch sizes reach the same result. With the early hand-off, a job's
+  answer is available one step sooner, and the extra submit's cost is
+  reported beside it. A validation run of both backends completes clean.
 - **Lighting by what changed.** A change of only a directional light's
   colour or brightness, or of the sky's gain, relights no probe and matches
-  a from-scratch drain within `ConvergedShare`. The same holds for one of
-  two lamps changed, a light taken from zero to on, and a receiver at the
-  old range boundary of a brightened lamp. A panoramic sky picture that
-  moves under unchanged sky parameters refreshes the sky. An unchanged
-  procedural sky under a moving camera does not.
+  a from-scratch drain within `ConvergedShare`. The same holds for the
+  other cases decision 7 lists: one of two lamps changed, a light taken
+  from zero to on, a receiver at the old range boundary of a brightened
+  lamp, a sky gain that is not a power of two with a rounding grid set,
+  and two coloured lamps with an emitting object and a wall lit only by
+  bounce. A panoramic sky picture that moves under unchanged sky
+  parameters refreshes the sky. An unchanged procedural sky under a moving
+  camera does not.
 - **The bake.** `puck bench startup --bake` under `puck lease quiet` reads
-  under a minute on each backend, from that backend's own empty store, with
-  the first-ranked speed fix landed. If the sampling fix is the one that
-  lands, a group takes about four round trips. Its roots pass bracket,
-  residual and thin-feature checks against the authored field on both
-  backends.
+  about a minute or less on each backend, from that backend's own empty
+  store, with the first-ranked speed fix landed. If the sampling fix is the
+  one that lands, a group takes about four round trips. Its roots pass
+  bracket, residual and thin-feature checks against the authored field on
+  both backends. While the player turns into a new place during a bake,
+  the first visible surface arrives no later than before.
 - **The shadow filter.** A walk through the boundary between cascades shows
   one soft-edge width on either side and no seam. A deep blocker directly
   above and a blocker displaced to the side both shadow as the brute-force
   filter does. A thin occluder beside a back face lit by wrapped lighting
   keeps a correct shadow in motion on both backends.
-- **Caster culling.** With culling on and off, moving captures agree for
-  backlit glass against the sky, across the blend band, and on the first
-  frame after a cut. In every raster pass, commands executed equal the
-  survivors.
+- **Caster culling.** With culling on and off, moving captures agree in six
+  cases: backlit glass against the sky, across the blend band, on the first
+  frame after a cut, when a foreground object is removed while a far
+  shadow map is held, when the camera moves sideways during a hold, and
+  when a new blocker widens a soft edge where the map was empty. The step
+  is judged by the casters it admits and the shadow that results. A
+  rigidly skinned draw is culled when it cannot show and still shadows a
+  visible receiver.
+- The slowest frame of every chapter is compared with the stage's starting
+  build on the lead machine, under the rule above. The stage's closing
+  build is frozen, and stage 3 is compared with it.
 
 ### Stage 3: one instance table and one chain of meshes
 
 **What lands.**
 
-- Grouped commands with indexed draws and draw records that read their
-  transform slot.
+- Commands grouped by geometry and level, the split draw record, and the
+  render origin's contract, in one change of format.
+- The indexed-draw experiment.
 - One read of the instance rows per residency, and the glass list from the
-  kernel.
-- Decision 8's projection function, counters and chain measured against the
-  field.
-- The streaming plan's backing, floor and eviction, and the lighting's own
-  class of demand.
-- Decision 7's shared surface lighting and visibility bits.
+  kernel. The clear of glass shadow storage by tile.
+- Decision 8's single function for size on screen, and its chain measured
+  against the field.
+- The streaming plan's backing, floor, eviction and keeping of what was
+  observed in use, and the lighting's own class of demand.
+- Decision 7's shared surface lighting and visibility bits, and the count
+  that decides coarse-to-fine convergence.
 - The bake's second speed fix, if a measurement shows it pays.
-- One mesh store, judged separately from the bar.
+- One mesh store, judged separately from the cold bake's figure.
 - The one shading path.
-- The design of the eye-centred cascade set.
+- The rest of the eye-centred cascade memo.
 
-**It needs.** Stage 2, and the shader matrix measured on the bar devices.
-
-The grouping, the indexed draw and the slot-reading record land together,
-so the command format and the record change once.
+**It needs.** Stage 2's instance updates and compaction, for the grouping.
+The shader matrix measured on the bar devices, for the shading path. Stage
+2's frozen closing build, for the comparison.
 
 **It is done when:**
 
@@ -3514,48 +3750,75 @@ so the command format and the record change once.
   pairs of geometry and level, with picking, motion and portal straddles
   intact. The route's counts of visible and processed instances and of
   dispatches, read before and after, show commands falling with what
-  survives. Two home windows facing opposite ways, and a window routed to
-  another world, each read their rows once per residency.
+  survives. Two views of one other world that face different ways, and a
+  view of a second other world, read two residencies' rows once each and
+  classify three views. The same holds with one window onto a world that
+  gives its viewer less than a full replica.
+- **Indexed draws.** The experiment is reported pass by pass on each bar
+  device and backend. It becomes the baseline's format only if every one
+  supports it and none is slower.
 - **The chain.** Walking up to one tree changes no distant tree's
-  triangles. Thin contours and offset contours hold through each change of
-  tier, in camera views and in shadow views. A rung whose recorded deviation
-  fails the consumer's budget is not taken.
+  triangles. A large copy far away and a small copy close by each draw
+  their own rung. Thin contours and offset contours hold through each
+  change of tier, in camera views and in shadow views. A rung whose
+  recorded deviation fails the consumer's budget is not taken. A group
+  with two separate parts, one of which a coarse rung loses, is recorded
+  as not qualified.
 - **Residency.** A burst of cold arrivals shows no frame with a missing
-  surface. Through a real reduction of the budget, the settled native bytes
-  held fall to the budget once the last reader retires, with a shared block
-  and the forced contiguous fallback both exercised. Where they cannot
-  fall, the report names the pinned floor or the fragmentation. Counts of
-  evictions and tier changes are read as diagnostics only.
-- **The lighting's tier.** With the eye moving and probe demand held, a lit
-  exhibit and a thin partition keep their light. A wave of tier changes
+  surface. A cut to a place whose meshes are not stored shows the last
+  complete scene or the fallback image until the place's floors and
+  lighting stand, and floors not ready, failed and evicted are counted
+  apart. The same holds when a mesh cannot be derived at all. Through a
+  real reduction of the budget, with a block known to be releasable, a
+  release is observed and the bytes held fall by it once the last reader
+  retires. With something deliberately in the way, the report accounts
+  for the bytes that stay. Both run with a shared block and with the
+  forced contiguous fallback. Counts of evictions and tier changes are
+  read as diagnostics only.
+- **The lighting's tier.** At a lit exhibit, on both sides of a thin
+  partition and in a lit recess, the light traced against the lighting's
+  mesh matches the light traced against full detail, inside a stated
+  tolerance. A partition built to fail the lighting check does fail it.
+  With the eye moving and probe demand held, a wave of tier changes
   rebuilds no trace scene. Trace rebuilds are counted separately from
   lighting error.
-- **One shading path.** The `world.shade` switch is gone, and the migrated
-  tour matches its references in motion. List building, dispatch and shading
-  are measured separately, with one material and with a mix, on each bar
-  device.
+- **One shading path.** The temporary switch between programs and layers
+  is gone, `world.shade default` remains, and the migrated route matches
+  its references in motion. List building, dispatch and shading are
+  measured separately, with one material and with a mix, on each bar
+  device. So is the arrival of a program with no compiled kernel.
 - **One store.** Each backend's cold bake is timed from its own empty
-  store. Reuse across backends is shown in both directions by audit,
-  materials, seams and captures in motion.
+  store, with floors on, and still reads about a minute or less. Reuse
+  across backends is shown in both directions by audit, materials, seams
+  and captures in motion, on each bar device.
 - The slowest frame of every chapter is measured on all three bar devices
-  and is no slower than at the end of stage 2, on any chapter. Each frame
-  over a device's bar has a named cause filed in open items.
+  and compared with stage 2's frozen build, under the rule above. Each
+  device's table from stage 0 is updated. On the RTX 2060 and the Steam
+  Deck the lighting's age, the share it was granted and the rates it
+  achieved are read beside the frame.
 
 ### Stage 4: scale
 
 **What lands.**
 
-- Decision 12's motion kernel, placement streams with their identity and
-  authoritative changes, and terrain tiles.
+- Decision 12's motion kernel, placement evaluated cell by cell with its
+  identity and authoritative changes, and terrain tiles. Ground cover
+  thinned with distance.
 - Decision 6's far cascade entries, and the rest of the transmission plan.
-- Decision 14's minimums for unseen worlds, fitted windows, quality by
-  presented size, standing feeds and glass by coverage.
-- One lighting pool and one priced GPU budget, keyed by recipient.
-- Decision 13's history split.
+- Decision 14's division of optional work by presented pixels, fitted
+  windows, quality by presented size, standing feeds, glass by coverage,
+  glass facing and the eye inside a medium.
+- One lighting pool and one priced GPU budget, shared by the content of
+  what each viewer is delivered. Emitting surfaces lit as areas, and
+  screens as selected lights.
+- Decision 13's history split and its three smaller changes.
+- Decision 11's smaller per-pass savings.
 - Decision 15's admission rule, overlay, machine cadence and Linux timing.
 
-**It needs.** Stage 3, the terrain research round, and a Steam Deck for the
-Linux timing work.
+**It needs.** Stage 3's table and chain. The terrain research round, for
+the tiles. A Steam Deck, for the Linux timing work. An adjacency authored
+between two worlds of the debug world, for the seam check: none exists
+today.
 
 These pieces are independent, except where one names a need above.
 
@@ -3565,36 +3828,72 @@ These pieces are independent, except where one names a need above.
   added tiles populated and on the route, shows a pose-packing time that
   follows the animated instances in view and not the tiles placed. Both
   counts are in the report.
-- **Populations.** A belt of sixteen times the area boots inside the bake
-  and memory bars. A harvested occurrence stays harvested through eviction,
-  re-entry and a replay. Two ways of writing one scatter give the same
-  identities.
+- **Populations.** The checks close on a named place of the debug world. A
+  body far from any view still collides with a scattered tree. A cell's
+  bytes are the same from a headless World and a presenting one. The
+  collider ceiling holds per cell. A harvested occurrence stays harvested
+  through eviction, re-entry and a replay, and after the scatter's density
+  is raised and the world reloaded. A moved occurrence is picked and
+  collided with while only the cell it moved to is loaded. Two ways of
+  writing one scatter give the same identities. Thinned ground cover does
+  not pop in a presented walk, in the camera's view or in a shadow. A belt
+  of sixteen times the area is booted as a diagnostic of bake time and
+  memory.
+- **Seams between worlds.** A ridge in one world casts its shadow across
+  an adjacency into the next, and a body is handed across it in motion.
 - At `valley-rim`, ridges cast shadows and the frame bar holds under a
   moving sun.
-- **Minimums.** A nested world that is deliberately overloaded leaves the
-  main world's lighting age unchanged. In the same run, the destination of
-  an approaching portal has its first image published before its first
-  pixel shows. A changing screen that is out of view still moves the light
-  of a visible room.
+- **Optional work.** A nested world that is deliberately overloaded leaves
+  the main world's lighting age unchanged.
 - **Recipients.** Two sessions at one camera pose with different
   projections show different pictures. One of them is restricted while its
-  camera is held still, and its next published image, lighting included,
-  reflects the restriction.
+  camera is held still, the replacement picture is deliberately late, and
+  the job submitted before the restriction finishes afterwards. Every
+  frame delivered after the restriction reflects it, lighting included.
+  Two sessions with different bodies and the same static rows share one
+  probe volume. A change of grant that moves no visible row relights
+  nothing.
 - **Standing feeds.** A named still feed that renders today stands once its
   cause is fixed, shown by a count of renders. An external frame, an
   exposure change and newly converging lighting each wake it.
+- **Windows and glass.** Two viewers who see different slivers of one
+  window each see the right pixels. A window crossing the near plane keeps
+  its mapping, and a pick on a known mark at each edge lands on it. A pane
+  moved across separate tiles, removed, and its buffer used by another
+  view, leaves nothing behind, and the bytes cleared are reported against
+  a full clear. Mirrored, skinned and clipped glass face the right way,
+  and a rotating glass box reads the same thickness from both sides. With
+  the eye under water, two overlapping media and a continuous crossing of
+  the waterline show colour that deepens with the length of water a ray
+  passes.
+- **The history and the probe lookup.** The split history holds through
+  camera motion, a newly revealed surface, a view cut and a history just
+  allocated. A lit pane over the sky, a lit pane over a dark wall, and two
+  panes at an angle are each lit correctly with the lookup shared.
 - **Admission.** Under sustained backpressure, under minimize and restore,
   and under swap chain recreation on Vulkan, three counts are kept apart:
-  production avoided, submits accepted and display drops observed. No frame
-  is rendered without a slot. The host keeps serving ticks, input and
-  shutdown.
+  production avoided, submits accepted and display drops observed. A
+  skipped attempt, then a replaced swap chain, then a first present on the
+  new one, with an answer about the old one still outstanding, are each
+  recorded against the right attempt. No frame is rendered without a slot.
+  The host keeps serving ticks, input and shutdown. The time from input to
+  display is no longer than before.
+- **The overlay.** The UI plan's own rendering check passes: proportional
+  text, clips, split screen, and the focus treatment that reads the scene
+  behind it.
 - **Machine cadence.** A scrolling test cartridge is shown at display rates
   below, equal to and above the machine's. Each shows the latest eligible
   frame at a bounded age against the audio clock, with repeats and skips
   counted, and with no upload of an unchanged frame.
-- On the Steam Deck, the display line of the report names a timing signal.
+- **The Steam Deck.** Its cadence, the lateness of its waits and its
+  response to input and shutdown are measured first, and the timing work
+  shows an improvement on them. The display line of its report names a
+  timing signal, or says there is none.
+- The cold bake still reads about a minute or less on each backend.
 - The slowest frame of the route holds 16.7 ms on the RTX 2060 and the RTX
-  4070, and 22.2 ms on the Steam Deck.
+  4070, and 22.2 ms on the Steam Deck, read as stated at the top of this
+  section. On a device that reports no display time, that is a statement
+  about the frames the host produced.
 
 ## Invariants the order rests on
 
