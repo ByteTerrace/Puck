@@ -68,7 +68,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
    backlog, as parallel lanes beside everything above.
 8. [high] [The visual bar](#the-visual-bar): the caldera water as its first
-   proof, built by [Water](#water)'s lanes A2 to A5.
+   proof, built by [Water](#water)'s lanes A3 to A5.
 9. [high] [Dense landscapes](#dense-landscapes): the plan's next action, the
    repeated CPU dependency work, then memory attribution.
 10. [high] [Lighting and GI](#lighting-and-gi): what the GPU trace still owes
@@ -1799,28 +1799,18 @@ intent is in its guide.
 ### Water
 
 Owner: the water feature lane (rendering, puck-world, sdf-authoring) ·
-ordinary · Next: lane A2 changes approach (below), then A3 to A5, R3 and P1
-last. The plan owns the feature end to end; these are the defects it does not.
+ordinary · Next: [the plan](water.md#the-lanes)'s lanes A3 to A5 (A2 is built, awaiting its look critic), then R3 and
+P1 last. The plan owns the feature end to end; these are the defects it does not.
 
-- [high] Lane A2 (the lake and the glacier) failed two look-critic rounds on
-  every heading, so a third round on the same footing is not allowed
-  (AGENTS.md "Puck's purpose"). Its work is parked on `lane/wa2`, unmerged.
-  What failed: the lake is a flat-bottomed slab whose vertical side shows at
-  the near rim, with no depth grading from shallows to teal, stones that read
-  as discs and eggs, a busy ripple and no outlet sill; the glacier reads as
-  stacked bevelled tiles with an arcade toe and loose cubes, and it retreats
-  by dropping plates into fragments; the bare trough is a pale U-channel with
-  raised ladder-like blades and no moraine. The critic's direction: a lake
-  bounded by the bowl's own field (depth from zero at the bank), a calm flow
-  that speeds only at a rock sill carrying the falls' top, clustered sunk
-  stones; one smooth-blended tongue with a convex section, curved transverse
-  crevasses and a continuous gauge-bound retreat cut; a warm scoured floor
-  with cut grooves and moraine ridges. The changed approach, decided with the
-  owner: a written reference sheet for the lake, the glacier and the cradle
-  first (proportions, per-view silhouette targets, cited sources), then a
-  principal or Codex art lane against it. Open engine questions: a continuous
-  retreat cut inside a baked creation (a moving cutter does not re-carve the
-  group's mesh today), and caustics on submerged stones; both unverified.
+- [high] The lake's outlet sill does not carry a faster flow: a flow layer carries one velocity per surface, so the lake's
+  calm drift cannot speed up over the sill that the falls start from (panel 2 wants the water to move only there). It
+  needs a flow whose velocity is read from a field or a course (the river's winding course is the same gap, in
+  [the plan](water.md#the-rivers-channel-as-built)), or a second authored sheet over the sill. Caustics on the
+  submerged stones are not built, and are unverified against the glass pass.
+- [medium] The bake of the north-west wall's relief shows as hard facets on the trough's floor and the moraine ridges
+  from the valley floor (`worlds/debug/glacier-site.puck`): the sector's cell at that distance is coarser than the
+  trough's grooves. A near cell for the trough, or a creation of its own for the cradle, would carry the detail
+  without baking the whole wall finely.
 
 - [high] A swimmer cannot leave a walled channel: the swim hold (`swimHold`,
   `worlds/standard/kits.puck`) floats the body 1.25 m under the surface and
