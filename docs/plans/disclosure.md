@@ -2088,16 +2088,13 @@ authority and restricted access alike.
 Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
 and disclosure images.
 
-The first consumer is `world.state.cell.set`: `TryAcquireWriteDeclaration`
-checks the existing conservative write footprint before the parser asks for
-the row kind. Numeric, text and vector parsing therefore cannot select a
-different branch for a withheld row and an absent row. Acquisition failure
-submits a kind-neutral raw cell write to compose, preserving the typed refusal
-and writes to rows declared earlier in the same drain. Restricted declaration
-acquisition admits every row binding it returns and omits the generator source
-and body. Bindings to other sections require wider declaration entitlement;
-row-only acquisition fails without it, and the console still submits raw intent.
-This closes that parser path only; it does not close the other console preflights in W6.
+`world.state.cell.set` now acquires only the addressed submission link. It
+sends the raw operand for every row kind, and compose interprets it after
+admission against the candidate produced by earlier writes. A console handler
+cannot branch on a private row's kind through this command. This also removes
+the declaration preflight for rows whose kind changes during the same drain.
+Restricted declaration acquisition admits its row bindings and omits a draw's
+source and program. Bindings into other sections still require wider entitlement.
 
 `CommandDefinition.OperatorWithWireArgs` receives a registry-minted
 `OperatorContext`. `WorldServer.AcquireOperatorAuthority` and the resulting

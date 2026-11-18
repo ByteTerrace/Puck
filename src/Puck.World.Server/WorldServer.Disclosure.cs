@@ -52,6 +52,11 @@ public sealed partial class WorldServer {
     // submission door's (a stale epoch is refused before admission), and what it may write is its grants'.
     internal WorldRecipientView WriteView(Principal? recipient) => PolicyView(recipient);
 
+    internal StateReadAccess ReadForWrite(WorldRecipientView view) {
+        var arena = Arena;
+        return view.IsAuthority ? arena.ReadAccess : arena.RestrictReads(ordinal => view.Admits(arena.Catalog.Descriptors[ordinal].Name));
+    }
+
     // The capability at the policy's own tier: Replica, always observing. Seats, the console, the world and mounted
     // addons keep theirs; any other principal is minted one per use.
     private WorldRecipientView PolicyView(Principal? recipient) {

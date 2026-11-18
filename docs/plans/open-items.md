@@ -2083,7 +2083,8 @@ findings are answered in decision 3a. Then the researcher brief's priorities
 
 - [high, D0b1 incomplete] sec1 has introduced declaration-only row descriptors,
   restricted read primitives and an operator-dispatch capability, and moved
-  the cell-set parser and state-hash command onto those narrow doors. The
+  the state-hash command onto the operator door. Cell-set submits its raw tail
+  through the addressed link and parses it at compose. The
   [implementation checkpoint](disclosure.md#d0b1-implementation-checkpoint)
   states their guarantees and limits. The sec1 review's acquisition corrections
   are implemented: restricted row handles are typed, declaration bindings are

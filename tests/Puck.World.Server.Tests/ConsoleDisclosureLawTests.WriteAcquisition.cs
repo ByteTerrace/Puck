@@ -19,6 +19,19 @@ public sealed partial class ConsoleDisclosureLawTests {
     }
 
     [Theory]
+    [InlineData(CellKind.Text, "int", "7 add", "7")]
+    [InlineData(CellKind.Int, "text", "words with add", "words with add")]
+    public void CellWriteUsesTheReplacementKindWhenTheRowWasAlreadyLive(CellKind before, string after, string payload, string expected) {
+        var definition = Document();
+        using var host = new DisclosureHost(definition.WithWorldState([.. definition.AuthoredState, new WorldStateRow(CellName.Parse("changing"), before)]));
+        Assert.False(host.Console($"world.row.set state {{\"name\":\"changing\",\"kind\":\"{after}\"}}").IsError);
+        var result = host.Seat(1, $"world.state.cell.set changing $value {payload}", settle: true);
+        Assert.False(result.IsError, result.Output);
+        Assert.False(host.LastEcho!.Value.Rejected);
+        Assert.Contains(expected, host.Seat(1, "world.state changing").Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(CellKind.Int, "not-a-number")]
     [InlineData(CellKind.Text, "text with spaces")]
     [InlineData(CellKind.Vector, "not/base64!")]
