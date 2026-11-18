@@ -1,6 +1,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Cli.Deps;
 
 namespace Puck.Cli.Locks;
 
@@ -17,6 +18,25 @@ public static class LockPins {
         WriteIndented = true,
     };
 
+    /// <summary>Lists every package a lock file resolves from a feed, as NuGet records it: not a project reference, with
+    /// the version it resolved to.</summary>
+    /// <param name="text">The lock file's text.</param>
+    /// <returns>Each package's id, its entry (version, contentHash and dependency list) and its resolved version, once per
+    /// target framework that lists it.</returns>
+    public static IEnumerable<(string Id, JsonObject Entry, string Version)> Resolved(string text) {
+        ArgumentNullException.ThrowIfNull(argument: text);
+
+        if ((JsonNode.Parse(json: text) is not JsonObject root) || (root["dependencies"] is not JsonObject frameworks)) { yield break; }
+
+        foreach (var (_, frameworkNode) in frameworks) {
+            if (frameworkNode is not JsonObject packages) { continue; }
+
+            foreach (var (id, node) in packages) {
+                if ((node is not JsonObject entry) || (Text(node: entry["type"]) is null or "Project") || (Text(node: entry["resolved"]) is not { } resolved)) { continue; }
+                yield return (id, entry, resolved);
+            }
+        }
+    }
     /// <summary>Finds the version of each package the lock files pin, the lowest where they differ: a project that gains the package compiles against no newer assembly than a dependent deploys.</summary>
     /// <param name="texts">The text of each lock file.</param>
     /// <returns>Each package id's entry (its version, contentHash and dependency list) at the lowest pinned version.</returns>
@@ -25,17 +45,8 @@ public static class LockPins {
 
         var pinned = new Dictionary<string, JsonObject>(comparer: StringComparer.Ordinal);
 
-        foreach (var text in texts) {
-            if ((JsonNode.Parse(json: text) is not JsonObject root) || (root["dependencies"] is not JsonObject frameworks)) { continue; }
-
-            foreach (var (_, frameworkNode) in frameworks) {
-                if (frameworkNode is not JsonObject packages) { continue; }
-
-                foreach (var (id, node) in packages) {
-                    if ((node is not JsonObject entry) || (Text(node: entry["type"]) is null or "Project") || (Text(node: entry["resolved"]) is not { } resolved)) { continue; }
-                    if (!pinned.TryGetValue(key: id, value: out var known) || (Compare(left: resolved, right: Text(node: known["resolved"])!) < 0)) { pinned[id] = entry; }
-                }
-            }
+        foreach (var (id, entry, resolved) in texts.SelectMany(selector: Resolved)) {
+            if (!pinned.TryGetValue(key: id, value: out var known) || (Compare(left: resolved, right: Text(node: known["resolved"])!) < 0)) { pinned[id] = entry; }
         }
 
         return pinned;
@@ -122,23 +133,11 @@ public static class LockPins {
 
         return ((order < 0) || ((order == 0) && (range[^1] == ']')));
     }
-    // Orders two versions as NuGet does for the spellings a lock file holds: the numeric parts, then a release above its
-    // prerelease.
+    // Orders two versions by DependencyVersion's order; a spelling that is not a version counts as 0.
     private static int Compare(string left, string right) {
-        static (Version Core, bool Release) Parse(string version) {
-            var dash = version.IndexOf(value: '-');
-            var core = ((dash < 0) ? version : version[..dash]);
+        var zero = DependencyVersion.Parse(text: "0");
 
-            while (core.Count(predicate: static character => (character == '.')) < 1) { core += ".0"; }
-
-            return (Version.TryParse(input: core, result: out var parsed) ? parsed : new Version(), (dash < 0));
-        }
-
-        var (leftCore, leftRelease) = Parse(version: left);
-        var (rightCore, rightRelease) = Parse(version: right);
-        var order = leftCore.CompareTo(value: rightCore);
-
-        return ((order != 0) ? order : leftRelease.CompareTo(rightRelease));
+        return (DependencyVersion.TryParse(text: left, version: out var first) ? first : zero).CompareTo(other: (DependencyVersion.TryParse(text: right, version: out var second) ? second : zero));
     }
     private static string? Text(JsonNode? node) =>
         ((node is JsonValue value) && value.TryGetValue<string>(value: out var text) ? text : null);

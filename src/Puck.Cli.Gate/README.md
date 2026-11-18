@@ -1,6 +1,6 @@
 # Puck.Cli.Gate
 
-Puck.Cli.Gate holds the verbs that choose and run verification: `affected`, `gate`, `host`, `baselines` and `locks`. They reference none of the verbs composed beside them and no World runtime.
+Puck.Cli.Gate holds the verbs that choose and run verification: `affected`, `gate`, `host`, `baselines`, `locks` and `deps`. They reference none of the verbs composed beside them and no World runtime.
 
 ## Documentation
 
@@ -9,5 +9,6 @@ Puck.Cli.Gate holds the verbs that choose and run verification: `affected`, `gat
 - [`puck host load`](../../docs/reference/cli.md#puck-host-loadadmission-lines-for-the-machine)
 - [`puck baselines`](../../docs/reference/cli.md#puck-baselinestest-baselines)
 - [`puck locks`](../../docs/reference/cli.md#puck-locksrestore-lock-files)
+- [`puck deps`](../../docs/reference/cli.md#puck-depsupdate-external-dependencies)
 - [Puck.Cli.Gate.Tests](../../tests/Puck.Cli.Gate.Tests/README.md) — the laws that hold this assembly's verbs.
 - [Puck.Cli](../Puck.Cli/README.md) — the `puck` root that composes every verb assembly.

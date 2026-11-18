@@ -38,7 +38,7 @@ jobs:
         name: Read the Claude federation identifiers
         uses: ./.github/actions/claude-federation
       - name: Run Claude Code
-        uses: anthropics/claude-code-action@db77d4d3c98f3f6380e7cd45ffba2342a3dbde3c # v1.0.254
+        uses: anthropics/claude-code-action@469588f42e6b1e94cd14ad09dccfeaec772ce0fd # v1.0.280
         with:
           anthropic_federation_rule_id: ${{ steps.federation.outputs.rule }}
           anthropic_organization_id: ${{ steps.federation.outputs.organization }}

@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <!-- The verbs that choose and run verification: affected, gate, host, baselines and locks. -->
+    <!-- The verbs that choose and run verification: affected, gate, host, baselines, locks and deps. -->
     <PropertyGroup>
         <AssemblyName>Puck.Cli.Gate</AssemblyName>
         <IsAotCompatible>false</IsAotCompatible>
