@@ -38,8 +38,8 @@ It replaces no existing plan. [Illumination](illumination.md),
 four things those plans cannot say alone: where two of them meet, where the
 round's evidence changes a step's priority, which mechanism can serve several
 areas, and in what order the cross-area work depends on itself.
-[Open items](open-items.md#next) ranks the work against everything else; this
-page is not a queue.
+[Open items](open-items.md#next) ranks the work against everything else.
+This page is not a queue.
 
 ## Summary
 
@@ -145,6 +145,8 @@ where a decision first leans on it.
 | Produce | Everything the frame thread does to build one frame and hand it to the GPU. |
 | View | One rendering of a world from one camera. The root view fills the window. A nested view is shown inside another: through a portal or window, or on a screen in the world. |
 | Residency | The GPU-side copy of one world: its instance tables, its baked meshes and its lighting data (`SdfWorldResidency`). |
+| Pass | One step of drawing a frame on the GPU, such as drawing the meshes or one shadow map. |
+| Kernel | A compute shader: a program the GPU runs over many pixels or records at once. |
 | Bake | Puck's shapes are authored as signed distance fields. The bake samples a field and builds a triangle mesh from it. A cold bake starts from an empty mesh store. |
 | Group | The unit the bake works on: a set of shapes baked into one mesh. |
 | Tier | The cell size a group is baked at. A coarser tier is a new mesh built from the field on a coarser grid. |
@@ -622,8 +624,8 @@ is not short of time. The work waits on round trips.
 Background GPU work is everything the GPU does that is not drawing the
 frame: relighting probes, tracing their rays, sampling the distance field
 for the bake, and uploading finished meshes. One service runs it
-(`SdfGpuWork`), under one budget for all of a window's residencies
-(`SdfGpuWorkBudget`). The budget is a share of GPU time, counted against the
+(`SdfGpuWork`), under one budget shared by every residency the application
+presents (`SdfGpuWorkBudget`). The budget is a share of GPU time, counted against the
 wall clock (`SdfGpuWork.GpuShare`). The service has a fixed number of job
 slots (`SdfGpuWork.SlotCount`).
 
@@ -641,8 +643,8 @@ worth (`SdfMeshIrradiance.Grant`). A game presenting 30 frames a second is
 therefore granted half the lighting work per second of one presenting 60.
 
 One windowed run measured the result. Each probe job took about 25 ms to go
-out and come back. The service used 5% of the GPU time it is allowed. After
-a switch to night, the finest probe level's lighting was up to 44 seconds
+out and come back. The service was busy for 0.05 of GPU time, against an
+allowed share of 0.25. After a switch to night, the finest probe level's lighting was up to 44 seconds
 old. That run was on the tree the unmerged lighting branch started from, and
 the way to reproduce it is in [the lighting work packet](open-items.md#lighting-and-gi).
 
@@ -673,7 +675,7 @@ Uploads of finished meshes run at one byte rate
 2. **Let several probe jobs run at once, with one commit per batch. Then
    grant lighting work per second, not per frame** (option 4b). Each
    increase in throughput is measured beside the root frame's time and the
-   lighting's age, in the same window, on both backends.
+   lighting's age, in the same measurement run, on both backends.
 3. **Move the work list onto the GPU** (option 4c). Probe state lives on the
    device. A kernel selects what to do next by a deterministic key, compacts
    the selection into indirect arguments capped at a ray budget, and one
@@ -689,7 +691,7 @@ Doing the bake's sampling in one round trip per stage (option 4d) stays a
 candidate. Its rank waits for the measurement of what limits the cold bake
 ([decision 10](#10-bring-the-cold-bake-inside-its-minute-and-close-the-contour-defects)).
 
-**Why.** Raising the share or the slot count would do nothing while 95% of
+**Why.** Raising the share or the slot count would do nothing while most of
 the share goes unused. The round trips are the limit. Shipped systems hold
 update cost fixed and let lighting latency vary: Lumen describes "fixed
 update cost, variable lighting latency", and Frostbite's probe system holds
@@ -698,7 +700,7 @@ a fixed budget of 100,000 rays and about 6,000 probes a frame.
 The headroom rule comes first for a reason that is easy to miss. On the
 round's measurements the root frame uses about 12.6 ms of GPU time before
 any nested view, and the background share is 4.2 ms. That is 16.8 ms against
-a 16.7 ms frame. The 5% use today hides this. The first fix that makes the
+a 16.7 ms frame. The low use today hides this. The first fix that makes the
 lighting worker effective would otherwise be paid for in frame time.
 
 **What it costs or risks.**
@@ -714,7 +716,7 @@ lighting worker effective would otherwise be paid for in frame time.
 - A measured share feeds back on itself and can oscillate. The price
   therefore enters the scheduler as an input, so lockstep stays
   reproducible.
-- The strongest case against the order is the one above: today's 5% use
+- The strongest case against the order is the one above: today's low use
   limits nothing that a working worker does tomorrow, and the share already
   overruns the frame on paper.
 
@@ -752,8 +754,8 @@ lighting worker effective would otherwise be paid for in frame time.
 
 **Evidence.** Code read for this page: the one-at-a-time admission, the
 blocking coordinator, the per-frame grant, the slot count and the shared
-budget, and the commit messages that recorded the 25 ms round trip, the 5%
-use, the 44 s age and the bake medians. From the area's map: the shape of a
+budget, and the commit messages that recorded the 25 ms round trip, the
+0.05 occupancy, the 44 s age and the bake medians. From the area's map: the shape of a
 group's bake, the 4.4 million-ray timeout, and that the pump after an upload
 runs inside the frame's open batch, whose completion signals are shared
 with the batch's owner. Measured: about 4 s of GPU work in 68 s, the 12.6 ms
@@ -914,8 +916,8 @@ terrain pass's grey card, and the three paths a view takes. Reasoned: the
 0.104 target showing as 1% of white where an encode would give code 0.36.
 Outside sources: Lottes, that brightness belongs before the tonemap and not
 as a gamma applied afterwards (slide 54), confirmed. Gran Turismo 7 blends
-in a linear space with 1.0 tied to a reference luminance; this is partial,
-because the source says it of its tone mapping and not of its whole
+in a linear space with 1.0 tied to a reference luminance. That claim is
+partial, because the source says it of its tone mapping and not of its whole
 pipeline.
 
 **What it rests on.** The photometric decision in the register, and
@@ -1205,9 +1207,10 @@ The steps, in order:
    comes after step 3, so that entries are built once per source group.
 5. **Store which lights reach each surface as geometry** (option 7c): one
    bit per light per entry, made stale only by the ray segments that a
-   changed bounding box crosses. Light reach is sized by the live exposure
-   minimum. This is sized from decision 1's counted queries and tested
-   pairs, not from the predicted charge.
+   changed bounding box crosses. How far a light reaches is sized from the
+   lowest exposure in use at the time. The store itself is sized from
+   decision 1's counted queries and tested pairs, not from the predicted
+   charge.
 6. **Trace against a mesh that the camera never changes** (option 7d). The
    lighting gets its own class of demand. Its tier is chosen by the probe
    spacing of the finest probe level that reaches the group. That tier is
@@ -1218,7 +1221,8 @@ The steps, in order:
    whether this is adopted.
 8. **One lighting budget and one pool of probes across residencies**
    (option 7g): minimums first, the rest divided by pixels presented.
-   Open-air probes update at a coarse level's rate. A window that moves is
+   Probes in open air update at a coarse level's rate. The probe grid covers
+   a region of space around the camera. When that region moves, it is
    published slot by slot. The level table becomes authored data in the
    standard package. This goes with the job system's `Lighting` class and
    decision 4's single price.
@@ -1235,14 +1239,15 @@ The steps, in order:
   number of hits that share an entry. The illumination plan already holds
   this step, with its bar for adoption.
 - *Visibility as geometry* stops a level-of-detail swap from relighting the
-  whole window, and stops a recoloured lamp from tracing anything.
+  whole probe grid, and stops a recoloured lamp from tracing anything.
 - *A stable trace mesh* ends the waves of relighting that follow the camera.
   The owner ruled that the trace reads a mesh "which never changes with the
   camera". Either tier meets that.
 - *One sky* removes two CPU renderers, one of them on the frame thread. It
   is a duplicate found by reading the code and needs no outside evidence.
 - *One pool* ends the cost of a full volume and budget for every world
-  shown, and the dark period while a cold area's whole window is measured.
+  shown, and the dark period while the whole probe grid of a newly visited
+  area is measured.
   It also moves a look, the level table, out of engine data.
 
 **What it costs or risks.**
@@ -1561,10 +1566,12 @@ level against the field, never by equality with the old output
    two candidates:
    - the bake's GPU sampling in one round trip per stage (option 10c, which
      is decision 4's option 4d);
-   - the Land stage (option 10d): refuse a collapse by checking the removed
-     vertex first, use one witness structure, limit the second sheet pass,
-     schedule chunks largest first on the one thread pool, and give each
-     worker its own storage.
+   - the Land stage (option 10d). Five changes: reject a simplification step
+     by checking the removed vertex first. Share one set of error samples
+     between the two routines that measure a step. Limit the second pass
+     that closes thin sheets to samples near what the first pass closed.
+     Schedule chunks largest first on the one thread pool. Give each worker
+     its own storage.
 
    Decision 1's single cold-bake run ranks them. It records worker activity,
    the wait on each GPU request, GPU timestamps and the total time together,
@@ -2039,7 +2046,7 @@ reproduced.
 - A quality change that swaps the shading fragment rebuilds the view's
   render graph.
 - A frozen scene is not enough to let a view stand. Lighting may still be
-  converging, the temporal window may still be filling, or an external
+  converging, the antialiasing history may still be filling, or an external
   picture or its mapping may have changed.
 - Glass by coverage adds one more atomic operation per fragment. A Vulkan
   device loss near these passes has not been explained yet. Repacking the
@@ -2398,7 +2405,7 @@ These pieces are independent and run in parallel.
 - **Lighting lag, inside the headroom.** On the night-switch reproduction,
   `level-0-age-p50` stays under the authored age at 60 and at 30 frames a
   second, with every job slot full and with a lighting change in the middle
-  of a batch, on both backends. In the same window, the root frame's
+  of a batch, on both backends. In the same measurement run, the root frame's
   slowest frame is no slower than before the change. An age that falls only
   by taking frame time shows the claim false. The lawn stops being metered
   as day.
@@ -2474,7 +2481,7 @@ the GPU work list are independent of each other.
   one soft-edge width on either side and no seam. A deep blocker directly
   above and a blocker displaced to the side both shadow as the brute-force
   filter does. A thin occluder beside a back face lit by wrapped lighting
-  holds in motion on both backends.
+  keeps a correct shadow in motion on both backends.
 - **Caster culling.** With culling on and off, moving captures agree for
   backlit glass against the sky, across the blend band, and on the first
   frame after a cut. In every raster pass, commands executed equal the
@@ -2605,7 +2612,7 @@ with it.
 | A lit, admitted light holds the primary cascade role (decision 6, option 6b) | To build: one resolver assigns roles, and `SdfMeshShadowCascades.Fit` reads roles and not slot 0 | The fade between roles. It is authored, and the walk through the exchange checks it |
 | A reused published result was derived from the projection its consumer may see (decision 7's shared pool, decision 14's standing feeds) | Not enforced in the current tree. To build: the type of the reuse key carries the recipient view's generation, so no reuse can be written without it. Until a check covers it, this stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | What the authority chooses to deliver. That belongs to [disclosure](disclosure.md) |
 | A group within reach always has a surface to draw (decision 9) | The streaming plan's floor, built by its decision 5 | A floor that fails its acceptance test. Such a group keeps a finer tier |
-| A frame whose lighting has converged shows light that is a function of its scene, lighting and window (decisions 4 and 7) | A frame the graph withholds drives its own background work to completion and does not pump it under budgets (`SdfWorldResidency.FrameWithheld`). The headroom rule and the per-second grant must stay out of that path | Ordinary presented play, where budgets apply and the lighting's age varies |
+| A frame whose lighting has converged shows light that is a function of its scene, its lighting and where its probe grid sits (decisions 4 and 7) | A frame the graph withholds drives its own background work to completion and does not pump it under budgets (`SdfWorldResidency.FrameWithheld`). The headroom rule and the per-second grant must stay out of that path | Ordinary presented play, where budgets apply and the lighting's age varies |
 | A query that replaces shared probe state runs alone, and a batch's commit copies only the rows that batch wrote (decision 4, option 4b) | The unmerged branch's single admission door (`SdfMeshProbeGpuWork.TryTake`), by that branch's own account | A running World. The branch has not been measured in one |
 | The rule that finds a surface crossing has one definition (decision 4, option 4d) | Today the rule exists on the CPU only. To build, with the GPU sampling: both evaluators derived from one source | Floating-point differences between the evaluators. The bracket and residual checks measure those |
 | What play did to an occurrence survives the eviction of its cell (decision 12, option 12b) | To build: changes are simulation state keyed by the canonical identity, and a cell's buffer is a cache | An identity that changes with how the scatter is written. The equivalence check covers that |
