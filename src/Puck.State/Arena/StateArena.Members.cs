@@ -43,7 +43,7 @@ public sealed partial class StateArena {
     /// <param name="key">The interned key on success; otherwise the invalid default.</param>
     /// <param name="reason">Why the insert was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the cell was inserted.</returns>
-    /// <remarks>The minted value is admitted through <see cref="StateRow.TryAdmitWrite"/> against the row's
+    /// <remarks>The minted value is admitted through <see cref="StateRowShape.TryAdmitWrite"/> against the row's
     /// envelope, overflow policy, and symbolic domain, exactly as a write to the same cell would be, and a refused
     /// insert leaves the row untouched. A carrier holding no case is refused by row and cell name, so a member
     /// never exists without a value.</remarks>
@@ -305,7 +305,7 @@ public sealed partial class StateArena {
     /// <param name="value">The value to push.</param>
     /// <param name="reason">Why the push was refused, or empty on success.</param>
     /// <returns><see langword="true"/> when the value was pushed.</returns>
-    /// <remarks>The pushed value is admitted through <see cref="StateRow.TryAdmitWrite"/> against the ring's
+    /// <remarks>The pushed value is admitted through <see cref="StateRowShape.TryAdmitWrite"/> against the ring's
     /// envelope, overflow policy, and symbolic domain.
     /// <para>The slot the cursor lands on is cleared before the value is stored, so a ring's contents are decided
     /// by what has been pushed into it and never by what the overwritten slot carried.</para></remarks>

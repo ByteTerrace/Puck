@@ -111,7 +111,7 @@ position once and read occupancy from the derived row.
 ### Slots and keyed rows
 
 A slot holds one cell under the reserved key `$value`, which C# exposes as
-`StateRow.SlotKey`. When a rule writes a slot, it omits the key; the omitted key
+`StateRowShape.SlotKey`. When a rule writes a slot, it omits the key; the omitted key
 selects the slot's cell. On a keyed row an omitted key addresses nothing, and the
 rule compiler refuses it. An omitted key never falls back to a keyed row's first
 cell.
@@ -203,7 +203,7 @@ signed bytes; the typed view belongs to [the vector library](vectors.md).
 
 ### Kind admission
 
-A cell's value must hold its row's declared kind. `StateRow.TryAdmitKind` decides
+A cell's value must hold its row's declared kind. `StateRowShape.TryAdmitKind` decides
 that, and every path that admits a cell calls it: the arena's import, a live
 mint, an insert, and a write. A carrier holding no case is refused the same way
 as a carrier holding the wrong case. A numeric write then goes through the row's

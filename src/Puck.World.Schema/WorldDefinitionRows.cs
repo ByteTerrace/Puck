@@ -1,4 +1,5 @@
 using Puck.Physics.Motion;
+using static Puck.Abstractions.NamedRows;
 
 namespace Puck.World;
 
@@ -7,33 +8,6 @@ public static class WorldDefinitionRows {
     /// <summary>Resolves one mounted addon declaration by its stable name without a per-read closure.</summary>
     public static WorldAddonRow? FindAddon(IReadOnlyList<WorldAddonRow>? rows, string name) =>
         Find(rows, name, static row => row.Name);
-    // The one linear scan every Find* below composes: allocation-free (selector is a static, capture-free lambda, so
-    // the compiler caches ONE delegate instance rather than allocating one per call) and null-tolerant, so a
-    // section's own nullability is never a second thing a caller must guard before resolving a name against it.
-    // Reference rows only: for a struct row, T? is T and a miss would return a default row instead of null.
-    private static T? Find<T>(IReadOnlyList<T>? rows, string name, Func<T, string> selector) where T : class {
-        if (rows is null) {
-            return default;
-        }
-
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
-
-            if (
-                (((object?)row) is not null) &&
-                string.Equals(
-                a: selector(row),
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return row;
-            }
-        }
-
-        return default;
-    }
-
     /// <summary>Enumerates every declared reference to a <c>curves</c> row across the document: a camera's own rig and
     /// the world's <c>views.seatRig</c>/<c>views.cameraRig</c> <c>path</c> op (<c>Section</c> <c>"cameras"</c>), plus
     /// whatever a body-motion program's <c>curve</c> target source contributes (<c>"follows"</c>) — the one walk both
