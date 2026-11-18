@@ -857,7 +857,7 @@ and the re-drive binds them to one shared detached identity, so a write through 
 others exactly as it did live. It reports on `replay.profile` where the owned identity as it
 stands now differs from the taped projection, as a pinned seat's drifted rate is reported, so an
 owner's edit since the recording is named without making the replay diverge. A live
-`replay.drive` refuses a tape that lands travelers. It seats each profiled seat on such a detached
+`replay.drive` refuses a tape that lands travelers or sends them to another authority. It seats each profiled seat on such a detached
 copy too, and when the drive ends or is cancelled every seat this authority's catalog owns rebinds to
 the live catalog identity and the copy is discarded: a write the drive made never reaches the catalog,
 the same differences are reported on `replay.profile`, and a write after the drive is saved again. A

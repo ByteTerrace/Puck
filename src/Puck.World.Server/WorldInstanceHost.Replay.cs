@@ -34,10 +34,8 @@ public sealed partial class WorldInstanceHost {
                     return "a departed traveler's forwarding route depends on this timeline — replay in an isolated session";
                 }
             }
-            // The tape owns one authority's inputs, not the host's transfer-id, resolver, or occupancy history.
-            if (instance.NextTransferId != 0) {
-                return "this host row has transfer history outside the tape — replay in an isolated session";
-            }
+            // A rewind keeps this row's transfer counter, drained ids and occupancy latch: ids only climb, so none is
+            // minted twice, and a replaying row's scan keeps its latch current while minting nothing.
             break;
         }
         return null;

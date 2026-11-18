@@ -2619,9 +2619,13 @@ grants, held input, and population together. `WorldServer.Advance` continues
 from the restored clock; console waits retain a separate monotonic host-work
 count, and local route epochs refresh so input can resume immediately.
 Live replay refuses unresolved transfer reservations or
-credentials, remote occupants, host-owned transfer history, and a tape that
-lands arrivals. A tape owns one authority's inputs; it cannot rewind
-obligations held by another world.
+credentials, remote occupants, queued, in-doubt or forwarded transfers, and a
+tape that lands arrivals or departs travelers to another authority. A tape owns
+one authority's inputs; it cannot rewind obligations held by another world.
+A crossing through a portal pair standing in the replaying world re-applies from
+its tape entry, and while the row drives its tape the host's portal and
+adjacency scans observe its faces (keeping the occupancy latch current) but
+mint no transfer, which would move the body a second time.
 The ownership check and reset share the authority gate, so concurrent
 federation ingress cannot reserve between them.
 `WorldServerStepShell` feeds one recorded
