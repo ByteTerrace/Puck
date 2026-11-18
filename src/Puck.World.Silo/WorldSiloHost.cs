@@ -1243,7 +1243,9 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         var admitted = false;
 
         try {
+            var drawKeys = WorldPrivateDrawKeys.Create();
             var recovery = (await m_store.LoadRecoveryAsync(
+                drawKeys: drawKeys,
                 cancellationToken: ct,
                 identity: identity
             ).ConfigureAwait(continueOnCapturedContext: false)
@@ -1310,7 +1312,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             );
             WorldServer server;
             WorldPopulation population;
-            var drawKeys = recovery.DrawKeys ?? WorldPrivateDrawKeys.Missing;
             var adjacencies = new WorldAdjacencyFields(
                 instances: Instances,
                 sourceInstanceName: identity.World.Value

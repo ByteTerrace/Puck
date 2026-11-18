@@ -18,7 +18,8 @@ public static class WorldArenaTransforms {
     /// <param name="live">The live transaction arena, or null for an edit preview.</param>
     /// <param name="engineTick">The engine clock coordinate.</param>
     /// <returns>Whether the operation composed.</returns>
-    public static bool TryApply(WorldDefinition definition, StateTransform transform, Principal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null, StateArena? live = null, ulong? engineTick = null) {
+    /// <param name="sampler">The authority for private draw sites.</param>
+    public static bool TryApply(WorldDefinition definition, StateTransform transform, Principal actor, ulong tick, string instance, out WorldDefinition candidate, out string reason, PhaseGuard? guard = null, StateArena? live = null, ulong? engineTick = null, PrivateDrawAuthority? sampler = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: transform);
 
@@ -85,6 +86,7 @@ public static class WorldArenaTransforms {
         }
 
         var host = new WorldArenaHost(
+            drawAuthority: sampler,
             arena: arena,
             documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
             dynamics: definition.Dynamics,

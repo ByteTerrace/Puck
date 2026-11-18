@@ -768,6 +768,10 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// only a world reads, <c>gatesDrive</c> beside the flags and <c>field</c>/<c>verdict</c>/<c>witness</c> beside the traits.</summary>
 internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldStateRow> {
     /// <inheritdoc/>
+    public override void Write(Utf8JsonWriter writer, WorldStateRow value, JsonSerializerOptions options) =>
+        base.Write(writer, value.InstallationInput, options);
+
+    /// <inheritdoc/>
     protected override IReadOnlyList<string> SchemaCycleExclusiveMembers => ["field"];
     /// <inheritdoc/>
     protected override IReadOnlyList<string> SchemaDrawSiteMembers => ["field"];

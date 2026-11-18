@@ -19,6 +19,7 @@ public interface IArenaTransformHost {
 /// <remarks>The host is the reader every operand answers from, so a caller advances it to the tick it wants
 /// (<see cref="Advance"/>) before evaluating.</remarks>
 public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost {
+    private readonly PrivateDrawAuthority? m_drawAuthority;
     private readonly HashSet<string> m_rewoundUndoGroups = new(comparer: StringComparer.Ordinal);
     private readonly StateInstanceHandle[] m_instanceBindings = new StateInstanceHandle[StateCapacity.MaxInstanceBindings];
     private readonly long[] m_locals = new long[RuleCapacity.MaxLocalsPerRule];
@@ -50,7 +51,9 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog
     /// ordinal of <paramref name="arena"/>.</exception>
-    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null) {
+    /// <param name="drawAuthority">The credential for private sites this host executes.</param>
+    public ArenaEffectHost(StateArena arena, IReadOnlyList<GeneratorRow>? generators = null, int ticksPerSecond = 0, IReadOnlyList<DynamicsRow>? dynamics = null, ulong documentSeed = 0UL, string instanceIdentity = "", IReadOnlyList<string>? sites = null, PrivateDrawAuthority? drawAuthority = null) {
+        m_drawAuthority = drawAuthority;
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         if ((sites is not null) && (sites.Count != arena.Catalog.Count)) {
@@ -154,6 +157,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             Generators: m_generators,
             Seeds: m_seeds,
             Hypothetical: Hypothetical,
+            DrawAuthority: m_drawAuthority,
             Time: Time
         );
 
@@ -251,6 +255,8 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
         }
         if (!GeneratorEngine.TryResolveExecutableSource(
             draw: Hypothetical ? draw.WithoutStream() : draw,
+            authority: m_drawAuthority,
+            sample: out var sample,
             generator: out var generator,
             generators: m_generators,
             reason: out var resolveReason
@@ -268,7 +274,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             reason: out var fireReason,
             result: out var fired,
             rowOrdinal: ordinal,
-            secret: draw.Secret,
+            secret: sample,
             seed: m_seeds[ordinal],
             skip: draw.Skip
         )) {

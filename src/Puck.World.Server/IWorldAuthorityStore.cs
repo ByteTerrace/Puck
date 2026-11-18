@@ -89,7 +89,7 @@ public readonly record struct WorldAuthorityStoreOutcome(WorldAuthorityStoreOutc
     public static WorldAuthorityStoreOutcome Success(string detail = "", WorldAuthorityRootSnapshot? root = null) => new(
         Detail: detail,
         Kind: WorldAuthorityStoreOutcomeKind.Ok
-    ) { PublishedRoot = root?.WithoutSeed() };
+    ) { PublishedRoot = root };
 }
 /// <summary>The blob-backed persistence seam a hosted world's checkpoint, journal, and published definition read and
 /// write through. Programmed against opaque encoded bytes throughout — this seam never decodes a checkpoint or a
@@ -98,7 +98,7 @@ public interface IWorldAuthorityStore {
     /// <summary>Reads the authoritative root; <see langword="null"/> when the world has no published authority.</summary>
     Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
     /// <summary>Reads a coherent checkpoint and journal view named by one root publication.</summary>
-    Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
+    Task<WorldAuthorityRecovery?> LoadRecoveryAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken, WorldPrivateDrawKeys? drawKeys = null);
     /// <summary>Advances the activation epoch using one root CAS and returns the lease bound to that epoch.</summary>
     Task<WorldAuthorityFence?> AcquireActivationAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken);
     /// <summary>Publishes an unowned root with a new epoch, preventing the released lease from being reused.</summary>

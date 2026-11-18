@@ -684,6 +684,9 @@ public static partial class WorldDefinitionFileSource {
         reason: out reason
     );
 
+    /// <summary>The live save beside a source world. Imports always resolve to the authored source.</summary>
+    public static string SourceSavePath(string path) => path + ".save.world.json";
+
     // The composition and content pin every file read shares: the admission door draws, settles and admits what it
     // returns, and the pin read keeps only the hash. It returns the parsed, undrawn document, which nothing may
     // admit or carry before the draw.

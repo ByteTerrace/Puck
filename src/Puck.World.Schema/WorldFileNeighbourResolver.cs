@@ -175,7 +175,7 @@ public sealed class WorldFileNeighbourResolver : IWorldNeighbourResolver {
         }
 
         if (!WorldDrawBootResolver.TryResolve(
-            keys: WorldPrivateDrawKeys.Preview,
+            keys: WorldDrawSampler.Preview,
             definition: parsed,
             instanceIdentity: WorldDefinitionLoader.BootInstanceName,
             reason: out var drawReason,

@@ -3,23 +3,27 @@ using System.Security.Cryptography;
 
 namespace Puck.State;
 
+/// <summary>Reads a raw word for a generator authorized to consume a site.</summary>
+public delegate uint PrivateDrawSample(ulong seed, ulong stream, long cursor);
+
 /// <summary>Deterministic private stream samples. The authority provisions the key before simulation; simulation
 /// consumes no system entropy. Cursor addressing preserves constant-time resume.</summary>
 public sealed class PrivateDrawStream {
-    private readonly Func<ulong, ulong, long, uint> m_sample;
-    internal PrivateDrawAuthority? Owner { get; }
+    private readonly PrivateDrawSample m_sample;
+    internal PrivateDrawAuthority Owner { get; }
 
-    internal PrivateDrawStream(Func<ulong, ulong, long, uint> sample, long installation, PrivateDrawAuthority? owner) {
-        m_sample = sample;
+    internal PrivateDrawStream(PrivateDrawSample sample, long installation, PrivateDrawAuthority owner) {
         Installation = installation;
+        m_sample = sample;
         Owner = owner;
     }
 
-    /// <summary>The installation ordinal in the authority continuation.</summary>
+    /// <summary>The nonsecret address used by recorded draws.</summary>
     public long Installation { get; }
 
-    /// <summary>Returns the word at this address.</summary>
-    public uint Sample(ulong seed, ulong stream, long cursor) => m_sample(seed, stream, cursor);
+    /// <summary>Opens this site's word source for its issuing authority. Public previews need no credential.</summary>
+    public PrivateDrawSample? Open(PrivateDrawAuthority? authority) =>
+        ReferenceEquals(Owner, authority) || Owner.PreviewWords ? m_sample : null;
 
     /// <summary>Computes one word from an installed key.</summary>
     internal static uint Word(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {

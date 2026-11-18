@@ -12,6 +12,8 @@ public static partial class ArenaTransforms {
             (context.Arena.Rows[rowOrdinal].Draw is not { Timing: not DrawTiming.Boot } declared) ||
             (context.Arena.Layout[rowOrdinal].Kind != CellKind.Int) ||
             !GeneratorEngine.TryResolveExecutableSource(
+            authority: context.DrawAuthority,
+            sample: out var sample,
             draw: context.Hypothetical ? declared.WithoutStream() : declared,
             generator: out var generator,
             generators: context.Generators,
@@ -46,7 +48,7 @@ public static partial class ArenaTransforms {
             generator: generator,
             reason: out var reason,
             rowOrdinal: rowOrdinal,
-            secret: declared.Secret,
+            secret: sample,
             seed: seeds[rowOrdinal],
             skip: declared.Skip,
             stream: out draws

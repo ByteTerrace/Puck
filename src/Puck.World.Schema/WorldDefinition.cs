@@ -173,6 +173,7 @@ public sealed partial record WorldDefinition(
     /// carries it; a door that rebuilds a definition from its JSON restores it from the definition it rebuilt.</remarks>
     [JsonIgnore]
     public string? DocumentDirectory { get; init; }
+    internal bool ReadFromFile { get; init; }
     /// <summary>Gets the per-world binding overlays — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldBindingOverlay> BindingOverlays => (BindingOverlaysRaw ?? []);

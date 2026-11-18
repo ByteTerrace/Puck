@@ -19,13 +19,14 @@ public static class WorldStaging {
     /// <param name="worlds">The worlds the source's compile declared.</param>
     /// <param name="entry">The world a boot was asked to start in, or <see langword="null"/> for the declared entry.</param>
     /// <param name="directory">The directory the source's worlds are staged into; deleted and recreated.</param>
+    /// <param name="portable">Receives the composed document relative to the source before device-local paths are materialized.</param>
     /// <param name="catalog">The host's machine catalog, whose providers name the content and asset paths of each
     /// world's machine configurations, which staging relocates.</param>
     /// <param name="entryPath">The full path of the entry world's staged document on success.</param>
     /// <param name="entryName">The entry world's declared name on success.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when an entry was chosen and every world composed and was written.</returns>
-    public static bool TryStageComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? entry, string directory, IMachineValidationCatalog catalog, out string entryPath, out string entryName, out string reason) {
+    public static bool TryStageComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? entry, string directory, IMachineValidationCatalog catalog, out string entryPath, out string entryName, out string reason, Action<string, byte[]>? portable = null) {
         entryPath = string.Empty;
         entryName = string.Empty;
 
@@ -71,6 +72,7 @@ public static class WorldStaging {
 
             foreach (var world in worlds) {
                 if (!TryWrite(
+                    portable: portable,
                     catalog: catalog,
                     directory: directory,
                     name: world.Name,
@@ -107,12 +109,13 @@ public static class WorldStaging {
     /// <param name="name">The world's document name, which names the file it is written to.</param>
     /// <param name="sourceDirectory">The full path of the directory of the source the world was compiled from.</param>
     /// <param name="directory">The directory the world is staged into; created when absent.</param>
+    /// <param name="portable">Receives the composed document relative to the source before device-local paths are materialized.</param>
     /// <param name="catalog">The host's machine catalog, whose providers name the content and asset paths of the
     /// world's machine configurations.</param>
     /// <param name="path">The full path of the written document on success.</param>
     /// <param name="reason">The composition, machine-path or font-staging refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the world composed and was written.</returns>
-    public static bool TryWrite(JsonObject world, string name, string sourceDirectory, string directory, IMachineValidationCatalog catalog, out string path, out string reason) {
+    public static bool TryWrite(JsonObject world, string name, string sourceDirectory, string directory, IMachineValidationCatalog catalog, out string path, out string reason, Action<string, byte[]>? portable = null) {
         ArgumentNullException.ThrowIfNull(argument: catalog);
 
         _ = Directory.CreateDirectory(path: directory);
@@ -145,6 +148,11 @@ public static class WorldStaging {
 
         var document = (composed ?? world);
 
+        if (portable is not null) {
+            var local = (JsonObject)document.DeepClone();
+            WorldDocumentPaths.RelocateDocumentFields(local, authored, authored, origins);
+            portable(name, CanonicalJsonDocument.Serialize(local));
+        }
         WorldDocumentPaths.RelocateDocumentFields(module: document, origins: origins, sourceDocumentPath: authored, targetDocumentPath: path);
 
         if (!WorldModuleNamespace.TryRelocateConfigurationAssets(
