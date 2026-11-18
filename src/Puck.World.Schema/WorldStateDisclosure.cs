@@ -421,6 +421,9 @@ public static class WorldStateDisclosure {
     internal static WorldStateRow DiscloseRow(StateArena arena, int index, ref Observer observer, DisclosedFields? fields, out WorldWithheldRow? withheld) {
         var exported = arena.ToRow(rowOrdinal: index);
         var row = ((exported as WorldStateRow) ?? new WorldStateRow(exported, false, null));
+        // A draw key belongs only to authority persistence, even when every current cell reads whole.
+        // Both initial replica documents and refreshed image skeletons pass this boundary.
+        if (row.Draw is { Secret: not null } draw) { row = row with { Draw = draw with { Secret = null } }; }
 
         withheld = null;
         if (observer.TryRow(ordinal: out var ordinal, row: row) && !observer.ReadsWhole(rowOrdinal: ordinal)) {
