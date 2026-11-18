@@ -35,6 +35,31 @@ Different pages serve different purposes:
 | Reference | Precise fields, commands, contracts, limits, and lookup navigation. |
 | Plan | The proposed outcome, dependencies, unresolved decisions, and completion criteria. |
 
+### Write for a person, not for an agent
+
+A plan, a report or a hand-back a person reads is written for a capable
+engineer who is new to the code (the owner's ruling, on a research plan:
+"completely written in 'Claudese' rather than a prose that humans prefer").
+The test is one plain reading: that engineer follows it without a glossary,
+without opening another page to decode a sentence, and without reading a
+sentence twice. Agent-dense prose fails that test in recognizable ways:
+
+| Instead of | Write |
+|---|---|
+| An internal label as the subject (`1b`, `RR-05`, `decision 6e`, `stage 2's lane`) | What it is, in words; keep the label in parentheses for cross-reference only |
+| An evidence tag inside a sentence (`[opened]`, `[record]`, `[partial]`) | The claim in plain words, with its evidence in a note, a citation or a separate section |
+| A stacked noun phrase (`receiver-conditioned two-phase caster path`) | A clause with a verb: "shadow casters are chosen by which surfaces will read them, in two passes" |
+| A coined term used as if known (`the floor`, `the extract`, `the drain`) | The plain description at first use, and the term only after it |
+| A chain of clauses joined by semicolons and parentheses | Separate sentences, one idea each |
+| A number with no scale (`25 ms`, `0.03`) | The number with what it is measured against: "about 25 ms per round trip, for 1 to 2 ms of GPU work" |
+| The conclusion buried after the qualifications | The point first, then why, then the caveats |
+
+A long plan opens with a summary the owner can act on, and each decision
+reads as: the problem, what we propose, why, what it costs or risks, and what
+we still have to find out. Precision is kept, not traded away: the exact
+symbols, citations and evidence labels move to the places a reader goes to
+check them.
+
 Use the shape that fits the content. Short pages can stay short; long pages need
 clear navigation rather than a mandatory set of empty sections. A plan is not
 forced into one section template merely because another plan uses one. Tables

@@ -539,6 +539,7 @@ Pushing `main`, force-pushing, and deleting a remote branch that holds unmerged 
 Decide, don't ask, except for product/taste decisions and owner-only actions: those above, Azure deployment, package publication, or changes outside this repository.
 The owner's Azure subscription ID is not a secret and may appear in committed configuration (the owner's ruling); credentials, keys and tokens never do.
 End runs with **Needs you**, **Changed**, **Found**; state verification and unconfirmed findings.
+Anything a person reads (a plan, a report, a hand-back) passes [write for a person](docs/development/documentation.md#write-for-a-person-not-for-an-agent): a capable engineer new to the code follows it on one plain reading (the owner's ruling against "Claudese").
 
 Documents rot when they copy the code ([keep documents from rotting](docs/development/documentation.md#keep-documents-from-rotting)):
 - derive facts from the code or cite them by symbol, never by retyping them;
