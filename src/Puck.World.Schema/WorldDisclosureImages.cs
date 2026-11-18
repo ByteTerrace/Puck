@@ -65,10 +65,16 @@ public sealed class WorldDisclosureImages {
     // changed row's skeleton (its declaration and storage, cells removed) is derived again. Everything else in the
     // document (the frame) moves only with the source, the audience or a withheld row the placements read, and each of
     // those composes the whole definition again. Identity digests the frame and every row's image and skeleton digest.
-    private sealed class AudienceDefinition(WorldDefinition source, WorldDefinition composed, WorldStateDisclosure.DisclosedFields? fields,
-        bool[] frameRows, WorldStateRow[] rows, WorldRecipientImage[] images, ulong[] versions, ulong[] dependencies, long revision, byte[] digests) {
+    // The frame's digest is the one part of the identity that serializes the whole document less its rows, so it is taken
+    // only when an identity is first asked for (FrameOf), never by a read of the definition alone: a console read of one
+    // section through a seat's view composes rows and skeletons, not the document's bytes.
+    private sealed class AudienceDefinition(WorldDefinition source, WorldDefinition composed, WorldDefinition frame,
+        WorldStateDisclosure.DisclosedFields? fields, bool[] frameRows, WorldStateRow[] rows, WorldRecipientImage[] images, ulong[] versions,
+        ulong[] dependencies, long revision, byte[] digests) {
         public WorldDefinition Source { get; } = source;
         public WorldDefinition Composed { get; } = composed;
+        // The composed document less its rows, whose digest fills the frame slot once (FrameOf); released once digested.
+        public WorldDefinition? FrameDocument { get; private set; } = frame;
         public WorldStateDisclosure.DisclosedFields? Fields { get; } = fields;
         public bool[] FrameRows { get; } = frameRows;
         // The ordinals FrameRows marks, in row order: the only rows whose images can move the frame.
@@ -83,9 +89,18 @@ public sealed class WorldDisclosureImages {
         public StateArena? Arena { get; set; }
         public long MovesRead { get; set; } = -1L;
         public byte[] Digests { get; } = digests;
-        public ContentPin Identity { get; private set; } = ContentPin.Compute(digests);
-        // The frame slot is written once, at composition: rows refresh only their own slots.
-        public ContentPin Frame { get; } = ContentPin.FromDigest(digests.AsSpan(0, SHA256.HashSizeInBytes));
+        private ContentPin m_identity;
+        private bool m_identityStale = true;
+        // Identity and Frame read the frame slot, so only FrameOf, which fills it first, hands either out.
+        public ContentPin Identity {
+            get {
+                if (FrameDocument is not null) { throw new InvalidOperationException("The frame digest is taken before the identity is read."); }
+                if (m_identityStale) { m_identity = ContentPin.Compute(Digests); m_identityStale = false; }
+                return m_identity;
+            }
+        }
+        // The frame slot is written once, by FillFrame: rows refresh only their own slots.
+        public ContentPin Frame { get; private set; }
         public WorldDefinition? Disclosed { get; set; }
         public bool Dirty { get; set; }
 
@@ -97,9 +112,15 @@ public sealed class WorldDisclosureImages {
             digest.CopyTo(target);
             Dirty = true;
         }
+        public void FillFrame(ReadOnlySpan<byte> digest) {
+            digest.CopyTo(Digests.AsSpan(0, SHA256.HashSizeInBytes));
+            Frame = ContentPin.FromDigest(Digests.AsSpan(0, SHA256.HashSizeInBytes));
+            FrameDocument = null;
+            m_identityStale = true;
+        }
         public void Settle() {
             if (!Dirty) { return; }
-            Identity = ContentPin.Compute(Digests); Disclosed = null; Dirty = false;
+            m_identityStale = true; Disclosed = null; Dirty = false;
         }
     }
     private readonly WorkCounterSet m_work = new(name: SourceName, kinds: WorkKindOrder);
@@ -353,7 +374,42 @@ public sealed class WorldDisclosureImages {
     }
     // The content identity of the recipient's disclosed definition. Two documents that disclose the same frame, rows and
     // row observations share it; work follows the rows that changed since the audience's last read.
-    internal ContentPin DefinitionIdentity(WorldRecipientView view) => Current(view).Identity;
+    internal ContentPin DefinitionIdentity(WorldRecipientView view) {
+        var entry = Current(view);
+        _ = FrameOf(entry);
+        return entry.Identity;
+    }
+    // The entry's frame identity, digesting the composed document less its rows the first time any identity is asked for.
+    // A frame is digested in three parts: its placements section, its state section (rows already removed) and everything
+    // else. A composition differs from its source only in those two sections (DiscloseDocument re-deals placements and
+    // projects field lattices, nothing more), so everything else is the source's own: digested once per installed
+    // source and shared by every audience and every recomposition, while each composition serializes only its two
+    // sections. Each part is digested apart, so equal frames, and only equal frames, get equal digests.
+    private ContentPin FrameOf(AudienceDefinition entry) {
+        if (entry.FrameDocument is { } frame) {
+            if (!ReferenceEquals(m_frameBaseOf, entry.Source)) {
+                m_frameBase = Digest(WorldDefinitionSerialization.SerializeCompact(frame with { PlacementsRaw = null, StateRaw = null }));
+                m_frameBaseOf = entry.Source;
+            }
+            Span<byte> parts = stackalloc byte[3 * SHA256.HashSizeInBytes];
+            m_frameBase.CopyTo(parts);
+            DigestSection(frame.PlacementsRaw).CopyTo(parts[SHA256.HashSizeInBytes..]);
+            DigestSection(frame.StateRaw).CopyTo(parts[(2 * SHA256.HashSizeInBytes)..]);
+            entry.FillFrame(SHA256.HashData(parts));
+        }
+        return entry.Frame;
+    }
+    // An absent section digests no bytes, which no serialized section is.
+    private byte[] DigestSection<T>(T? section) where T : class => (section is null)
+        ? SHA256.HashData(ReadOnlySpan<byte>.Empty)
+        : Digest(CanonicalJsonDocument.SerializeCompact(section, WorldJsonContext.Default.For<T>()));
+    private byte[] Digest(byte[] bytes) {
+        m_work.Add(DefinitionBytes, bytes.Length);
+        return SHA256.HashData(bytes);
+    }
+    // The source whose frame, less its placements and state sections, m_frameBase digests.
+    private WorldDefinition? m_frameBaseOf;
+    private byte[] m_frameBase = [];
     // The content identity of the recipient's disclosed document less its state rows: placements and every other
     // section a row snapshot does not carry. A value-only delivery owes the document again exactly when it moved.
     // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those
@@ -361,16 +417,16 @@ public sealed class WorldDisclosureImages {
     // sink's per-tick check never asks for.
     internal ContentPin FrameIdentity(WorldRecipientView view) {
         var audience = Audience(view);
-        if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, view.Source)) { return Compose(view, audience).Frame; }
+        if (!m_definitions.TryGetValue(audience, out var entry) || !ReferenceEquals(entry.Source, view.Source)) { return FrameOf(Compose(view, audience)); }
         var arena = view.Arena;
         m_work.Add(RowVisits, entry.FrameRowOrdinals.Length);
         foreach (var row in entry.FrameRowOrdinals) {
             // The entry's row record changes only in Current, which refreshes skeletons with it; here a row whose image
             // stands is left to Current, and the image table answers its repeated reads from its own cache.
             if ((arena.RowVersion(row) == entry.Versions[row]) && (DependencyVersions(arena, row) == entry.Dependencies[row])) { continue; }
-            if (!Image(view, row, audience).Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return Compose(view, audience).Frame; }
+            if (!Image(view, row, audience).Digest.AsSpan().SequenceEqual(entry.Images[row].Digest)) { return FrameOf(Compose(view, audience)); }
         }
-        return entry.Frame;
+        return FrameOf(entry);
     }
     // The recipient's disclosed definition, assembled from its current rows only after its identity moved.
     internal WorldDefinition Definition(WorldRecipientView view) {
@@ -461,9 +517,11 @@ public sealed class WorldDisclosureImages {
         var rows = composed.AuthoredState.Select(row => row with { Cells = null }).ToArray();
         var digests = new byte[AudienceDefinition.ImageSlot(count)];
         var frame = (composed.StateRaw is { } state) ? composed with { StateRaw = state with { World = [] } } : composed;
-        var frameBytes = WorldDefinitionSerialization.SerializeCompact(frame);
-        m_work.Add(DefinitionBytes, frameBytes.Length);
-        SHA256.HashData(frameBytes, digests.AsSpan(0, SHA256.HashSizeInBytes));
+        // FrameOf shares the source's frame less these two sections with every composition, so a disclosure that changed
+        // any other section would be digested as its source: refused here instead.
+        if (!(composed with { PlacementsRaw = source.PlacementsRaw, StateRaw = source.StateRaw }).Equals(source)) {
+            throw new InvalidOperationException("A disclosed document differs from its source beyond its placements and state sections.");
+        }
         for (var row = 0; row < count; row++) {
             images[row].Digest.CopyTo(digests.AsSpan(AudienceDefinition.ImageSlot(row), SHA256.HashSizeInBytes));
             DigestOf(rows[row]).CopyTo(digests.AsSpan(AudienceDefinition.SkeletonSlot(row), SHA256.HashSizeInBytes));
@@ -471,12 +529,8 @@ public sealed class WorldDisclosureImages {
         var frameRows = rows.Select(row => disclosed.PlacementReads.Contains(row.Name.Value)).ToArray();
         DefinitionsComposed++;
         m_work.Count(DefinitionCompositions);
-        return m_definitions[audience] = new AudienceDefinition(source, composed, fields, frameRows, rows, images, versions, dependencies,
+        return m_definitions[audience] = new AudienceDefinition(source, composed, frame, fields, frameRows, rows, images, versions, dependencies,
             arena.DisclosureRevision, digests) { Arena = arena, MovesRead = moves };
     }
-    private byte[] DigestOf(WorldStateRow skeleton) {
-        var bytes = CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow);
-        m_work.Add(DefinitionBytes, bytes.Length);
-        return SHA256.HashData(bytes);
-    }
+    private byte[] DigestOf(WorldStateRow skeleton) => Digest(CanonicalJsonDocument.SerializeCompact(skeleton, WorldJsonContext.Default.WorldStateRow));
 }

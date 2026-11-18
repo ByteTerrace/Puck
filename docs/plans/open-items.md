@@ -592,12 +592,40 @@ The frame thread's CPU work, largest first:
   `FixedStepPump.Step`), so a frame that steps carries a whole tick. The scan
   that does not follow change is the rule host's fact derivation
   (`WorldRuleHost.DeriveFacts` compares every population slot's pose and facts
-  on each pass, `world.counters world.tick`'s `fact-derives` and `fact-slots`),
-  and a replay scope encodes each body's continuation every tick
-  (`WorldScopedReplayRuntime.AfterTick`); both wait on
+  on each pass, `world.counters world.tick`'s `fact-derives` and `fact-slots`:
+  about 11 passes over every slot a tick in the debug world, each slot's
+  `WorldBody.Facts` evaluating every publishable fact's `FactHolds`, a quarter
+  of rule evaluation in a trace), and a replay scope encodes each body's
+  continuation every tick (`WorldScopedReplayRuntime.AfterTick`); both wait on
   [the body's write door](#test-runner-and-replay). The move off the frame
   thread is the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
+  What a tick spends, from a `dotnet-sampled-thread-time` trace of a warm
+  headless debug World playing the seam chapter 'seam walk: the valley into
+  the gallery, walking' (shares of `WorldTick.StepCore`): body advance about
+  a third (field support queries through `FixedStepUp.TrySnap` and
+  `BodySupportMemo.Query` into `FixedFieldColliderContact.Solve`, whose
+  `SdfBoundsCache` keys exact boxes and so misses on every box of a moving
+  body over relieved ground; and the step's capture copies,
+  `WorldBody.CaptureIntegrationResidue`, `TransferState` and
+  `ExecuteProducer`'s motion scratch, which sample as zero-fill and
+  write-barrier skid and want an untraced reading before any cut), rule
+  evaluation under a third, snapshot emission about a tenth (session sinks
+  bringing their audience's whole identity current after every snapshot,
+  `WorldDeliveryCursor.DeliveredRows` into `WorldDisclosureImages.Current`,
+  although only `DeliverDefinition` and `Holds` read it; and the session
+  mirrors' `WorldSessionMirror.FillImage`), the event feed and addon reads
+  about a twentieth each. No one cause holds more than a tenth.
+- [medium] A composition of an audience's disclosed definition still
+  serializes about 12 MB in the debug world (`world.counters
+  world.disclosure`: 11 compositions and 140 MB of definition bytes over a
+  boot and one seam chapter): every row's skeleton digest
+  (`WorldDisclosureImages.DigestOf`) and the state section, on each
+  composition (the split between the two is inferred, not measured). A
+  session sink's audience recomposes twice a tick through the boot's first
+  ticks, as the rows its placements read move its frame. Digest a skeleton
+  once per declaration and disclosure revision rather than once per
+  composition.
 - [high] CPU field queries: the creation effectors' surface probes
   (`WorldCreationInstances.ApplyEffectors`) and the chase camera's clearance
   march (`WorldCameraClearance.March`), together about a third of the meadow's
@@ -2939,14 +2967,16 @@ the stages; this packet holds what a stage does not.
   `stop` and the wall-time limit write a partial one, a World's shutdown does
   not. Shutdown ends the run as `stop` does. The report's `gpu` window naming
   the overlay pass is therefore still unread on a window.
-- [medium] A chapter's first iteration is its slowest by far: the opening
-  `body.pose` to a spawn point steps the simulation for well over a 60 Hz
-  period and allocates on the order of a hundred megabytes on the frame
-  thread, with a generation 1 collection inside it, on a headless World
-  (`world.benchmark`'s `worst` for the seam walk's valley chapters). Find
-  what a pose across the world allocates
-  ([the job system packet](#engine-job-system) owns allocation on the frame
-  thread).
+- [medium] A fresh run's first chapter opens on the boot's settling, not on
+  its pose: on a headless World armed `at 10` after a `--paused` boot, the
+  chapter's first two iterations (ticks 10 and 11) still simulate for
+  hundreds of milliseconds, and a thread-time trace of the ticks before them
+  holds seconds of rigid contact settling
+  (`WorldPopulation.SolveRigidContacts`) and session sinks composing their
+  disclosed definitions, while a warm attached replay of the same chapter
+  opens on an ordinary tick. Arm a fresh run's first chapter after the boot
+  settles, or report the settling as its own span, so a chapter's statistics
+  read the route.
 - [medium] `puck benchmark --uncapped` boots with the immediate present mode and
   does not lift the presentation target: `PresentPacingPolicy.Resolve` caps an
   explicit `world.target` at the display's ceiling (a variable-refresh range's
