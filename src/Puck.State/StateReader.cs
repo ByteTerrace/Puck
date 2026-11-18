@@ -28,12 +28,14 @@ public static partial class StateReader {
         );
         return unchecked((long)Combinatorics.PermutationRank(permutation: relative));
     }
-    public static int DomainOrdinals(StateReadAccess arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) {
-        ArgumentNullException.ThrowIfNull(argument: arena);
+    /// <summary>Reads domain positions using explicit authority catalog ordinals.</summary>
+    public static int DomainOrdinals(StateArena arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) =>
+        domainOrdinal < 0 ? -1 : DomainOrdinals(arena.ReadAccess, arena.ReadAccess.AuthorityRow(rowOrdinal),
+            arena.ReadAccess.AuthorityRow(domainOrdinal), ordinals);
 
-        if (domainOrdinal < 0) {
-            return -1;
-        }
+    /// <summary>Reads domain positions using rows acquired through the same access.</summary>
+    public static int DomainOrdinals(StateReadAccess arena, StateReadRow rowOrdinal, StateReadRow domainOrdinal, Span<int> ordinals) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
 
         var count = arena.CellCount(rowOrdinal: rowOrdinal);
 

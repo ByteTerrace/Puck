@@ -45,7 +45,7 @@ public class RuleCompileContext : IRuleCostContext {
         // section's row universe. Keep the compiler's metadata view over that same universe: resolving a generated
         // field by ordinal and then pricing it against only the authored rows would silently fall back to the
         // section-wide ceiling.
-        Rows = StateCatalog.ExpandRows(section: section);
+        Rows = StateRowDeclaration.FromRows(StateCatalog.ExpandRows(section));
         SimulationRateHz = simulationRateHz;
         Spaces = (section?.Spaces ?? []);
         Tables = (tables ?? []);
@@ -86,7 +86,7 @@ public class RuleCompileContext : IRuleCostContext {
     public IReadOnlyList<CellSetRow> Sets { get; init; } = [];
 
     /// <summary>Gets the section's rows.</summary>
-    public IReadOnlyList<StateRow> Rows { get; }
+    public IReadOnlyList<StateRowDeclaration> Rows { get; }
     /// <summary>Gets or sets the rule-scoped bound values the rule being compiled has declared so far — a binding's
     /// own expression sees only the bindings declared before it; the gate and effects see all of them.</summary>
     public List<CompiledRuleLocal>? RuleLocals { get; set; }
@@ -174,11 +174,11 @@ public class RuleCompileContext : IRuleCostContext {
         Needs.Clear();
         m_scope.Clear();
     }
-    /// <summary>Finds the draw a row redraws through on <c>generate</c>: its own <see cref="StateRow.Draw"/>. A
+    /// <summary>Finds the draw a row redraws through on <c>generate</c>: its own <see cref="StateRowDeclaration.Draw"/>. A
     /// document project overrides this to answer a row painted by a fill it declares.</summary>
     /// <param name="row">The row.</param>
     /// <returns>The draw, or <see langword="null"/>.</returns>
-    public virtual Draw? FindDraw(StateRow row) {
+    public virtual StateDrawDeclaration? FindDraw(StateRowDeclaration row) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
         return row.Draw;
@@ -187,11 +187,11 @@ public class RuleCompileContext : IRuleCostContext {
     /// <remarks>Pool field compilation and costing use <see cref="FindRowAt"/> after resolving a pool handle.</remarks>
     /// <param name="name">The row name.</param>
     /// <returns>The row, or <see langword="null"/>.</returns>
-    public StateRow? FindRow(string name) => StateRows.FindStateRow(name: name, rows: Rows);
+    public StateRowDeclaration? FindRow(string name) => StateRows.FindStateRow(name: name, rows: Rows);
     /// <summary>Finds a declared or generated storage row by its catalog ordinal.</summary>
     /// <param name="rowOrdinal">The catalog ordinal.</param>
     /// <returns>The row, or <see langword="null"/>.</returns>
-    public StateRow? FindRowAt(int rowOrdinal) {
+    public StateRowDeclaration? FindRowAt(int rowOrdinal) {
         if (((uint)rowOrdinal) >= ((uint)Catalog.Count)) {
             return null;
         }
@@ -241,13 +241,14 @@ public class RuleCompileContext : IRuleCostContext {
     /// <param name="row">The declared row.</param>
     /// <param name="key">The literal cell key.</param>
     /// <returns>Whether the row declares that cell.</returns>
-    public virtual bool DeclaresCell(StateRow row, string key) {
+    public virtual bool DeclaresCell(StateRowDeclaration row, string key) {
         ArgumentNullException.ThrowIfNull(row);
 
         // A token domain is itself a row and may be keyed over another; the step count bounds a cycle the validator
         // refuses anyway.
         for (var step = 0; (step < StateCapacity.MaxRows); step++) {
-            if (row.HasCell(key: key) || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
+            var seeds = StateRows.FindStateRow(StateCatalog.ExpandRows(Section), row.Name);
+            if (seeds?.HasCell(key: key) == true || ((row.EffectiveDomain is StateDomain.CellsOf domain) &&
                 (FindTopology(name: domain.Topology) is { } topology) &&
                 long.TryParse(key, NumberStyles.None, CultureInfo.InvariantCulture, out var ordinal) && (ordinal < topology.CellCount))) {
                 return true;
@@ -266,7 +267,7 @@ public class RuleCompileContext : IRuleCostContext {
     /// <param name="key">The literal key, or invalid when the key is indirect.</param>
     /// <param name="keyFrom">The key indirection, or null for a literal key.</param>
     /// <returns>The typed read operand.</returns>
-    public virtual IRuleOperand CreateCellRead(StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
+    public virtual IRuleOperand CreateCellRead(StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
         new StateCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind);
     /// <summary>Returns the most cells a row can hold, read from declarations only: see <see cref="RowCapacity(int)"/>.
     /// An undeclared name answers the section-wide ceiling.</summary>

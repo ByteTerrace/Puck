@@ -5,9 +5,37 @@ using Xunit;
 namespace Puck.World.Server.Tests;
 
 public sealed class DisclosureReviewLawTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReplicaDrawsNeverCarryTheAuthoritySecret(bool restricted) {
+        var secret = new ClosedBitset256(1, 2, 3, 4);
+        var definition = Fixtures.BuildDocument() with {
+            Rules = [],
+            StateRaw = new WorldStateSection(World: [new WorldStateRow(
+                CellName.Parse("dice"), CellKind.Int,
+                Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw),
+                    Timing: DrawTiming.Event, PrivateStream: true, Secret: secret),
+                Visibility: restricted ? new StateVisibility(Readers: ["seat1"]) : null)])
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        var replica = View(fixture.Server, Principal.Seat(1));
+        var observed = Assert.Single(replica.Definition.AuthoredState).Draw!;
+        Assert.True(observed.PrivateStream);
+        Assert.Null(observed.Secret);
+        var operated = new WorldRecipientView(() => fixture.Server.Definition, () => fixture.Server.Arena,
+            Principal.Seat(1), WorldDisclosureTier.Replica, () => true, new WorldDisclosureImages(),
+            fixture.Server.AuthorityIdentity, () => fixture.Server.DeliveryTime, () => true);
+        Assert.Null(Assert.Single(operated.Definition.AuthoredState).Draw!.Secret);
+        Assert.Null(Assert.Single(WorldStateDisclosure.Disclose(
+            fixture.Server.Definition, fixture.Server.Arena, Principal.Seat(1), unrestricted: true)
+            .Definition.AuthoredState).Draw!.Secret);
+        Assert.Equal(secret, Assert.Single(fixture.Server.ExportDefinition().AuthoredState).Draw!.Secret);
+    }
+
     private static WorldRecipientView View(WorldServer server, Principal recipient, WorldDisclosureTier tier = WorldDisclosureTier.Replica) =>
         new(() => server.Definition, () => server.Arena, recipient, tier, () => true, new WorldDisclosureImages(),
-            server.AuthorityIdentity, () => server.DeliveryTime);
+            server.AuthorityIdentity, () => server.DeliveryTime, () => server.Grants.IsOperator(recipient));
 
     [Theory]
     [InlineData(false)]

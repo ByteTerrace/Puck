@@ -6,7 +6,7 @@ namespace Puck.World.Server;
 public sealed partial class WorldDocument {
     /// <summary>Composes, validates and applies one mutation through the ordinary pipeline.</summary>
     /// <remarks>The pipeline is two steps. <see cref="TryPrepareMutation"/> runs every gate that can refuse and
-    /// moves nothing; <see cref="InstallPrepared"/> installs what it produced and refuses nothing. A caller that
+    /// leaves any writes in a reversible scope. <see cref="WorldPreparedMutation.Install"/> commits the result. A caller that
     /// must know a mutation will land before it commits something else prepares first and installs after.</remarks>
     /// <param name="mutation">The mutation.</param>
     /// <param name="tick">The simulation tick it applies at.</param>
@@ -17,109 +17,49 @@ public sealed partial class WorldDocument {
     /// <returns>Whether the mutation applied.</returns>
     /// <param name="derived">Whether a guest produced this mutation, so only a checkpoint retains its effects.</param>
     internal bool TryApplyMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool preMetered, bool derived = false) {
-        if (IsStateCommand(mutation: mutation)) {
-            return TryApplyStateCommand(connectionId: connectionId, correlationId: correlationId, derived: derived,
-            engineTick: engineTick, mutation: mutation, preMetered: preMetered, tick: tick);
-        }
-        // An edit of a creation's shading neither reads nor writes state and its install keeps the arena, so it
-        // composes over the installed document and exports nothing; every other mutation composes over the arena's
-        // values, since its install may seed a replacement arena from what it composed.
-        var shading = EditsShadingAlone(mutation: mutation, previous: m_definition);
-        var current = (shading ? m_definition : Host.MaterializeArena());
-
         m_lastMutationFailureDetail = null;
-
-        var admitted = TryPrepareMutation(
-            current: current,
-            denied: out var denied,
-            engineTick: engineTick,
-            mutation: mutation,
-            preMetered: preMetered,
-            prepared: out var prepared,
-            reason: out var reason,
-            tick: tick
-        );
-
-        // The composed candidate decides the install: one composed over the installed seeds that installs otherwise
-        // is composed again over the arena's values, its dispatch already charged.
-        if (admitted && shading && (prepared.Kind != WorldInstallKind.Presentation)) {
-            prepared.Dispose();
-            admitted = TryPrepareMutation(
-                current: Host.MaterializeArena(),
-                denied: out denied,
-                engineTick: engineTick,
-                mutation: mutation,
-                preMetered: true,
-                prepared: out prepared,
-                reason: out reason,
-                tick: tick
-            );
-        }
-        if (!admitted) {
-            if (denied) {
-                m_lastMutationFailureDetail = reason;
-
-                if (Host.Output.HasNarrationSink) {
-                    Host.Output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {reason} — {WorldServer.Describe(mutation: mutation)} dropped]");
-                }
-                Host.EchoTap?.Invoke(obj: new WorldEditEcho(
-                    Message: ((m_lastMutationFailureCode == WorldRecipientMutations.NotDisclosedCode) ? reason : $"{WorldServer.Describe(mutation: mutation)} denied: {reason}"),
-                    Rejected: true,
-                    Kind: WorldEditEchoKind.Mutation,
-                    Mutation: mutation,
-                    Denied: true,
-                    ConnectionId: connectionId,
-                    CorrelationId: correlationId
-                ));
-            } else {
-                Reject(
-                    connectionId: connectionId,
-                    correlationId: correlationId,
-                    mutation: mutation,
-                    reason: reason
-                );
-            }
-
+        if (!TryPrepareMutation(mutation, tick, engineTick, preMetered, out var prepared, out var reason, out var denied)) {
+            if (denied) { DenyMutation(mutation, reason, connectionId, correlationId); }
+            else { Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason); }
             return false;
         }
 
-        InstallPrepared(
-            connectionId: connectionId,
-            correlationId: correlationId,
-            prepared: prepared,
-            derived: derived
-        );
-
+        prepared.Install(connectionId, correlationId, derived);
         return true;
     }
-    /// <summary>Runs every gate a mutation can be refused at, against a document the caller names, and moves
-    /// nothing: authority through the one admission predicate, composition, whole-document validation, the pipeline
-    /// override binding, the render envelope and field capacities, the solid field build, and the addon and machine staging.</summary>
-    /// <param name="mutation">The mutation.</param>
-    /// <param name="current">The document the mutation composes against: the installed one, or the one that will
-    /// be installed when the prepared mutation is.</param>
-    /// <param name="tick">The simulation tick it applies at.</param>
-    /// <param name="engineTick">The engine tick it applies at.</param>
-    /// <param name="preMetered">Whether the ingress already charged the dispatch budget.</param>
-    /// <param name="prepared">Everything the install needs. The caller installs it or disposes it.</param>
-    /// <param name="reason">Why the mutation was refused.</param>
-    /// <param name="denied">Whether the refusal is the admission predicate's.</param>
-    /// <returns>Whether the mutation can be installed.</returns>
-    internal bool TryPrepareMutation(WorldMutation mutation, WorldDefinition current, ulong tick, ulong engineTick, bool preMetered, out WorldPreparedMutation prepared, out string reason, out bool denied) {
-        denied = false;
-        prepared = default;
 
-        // The one admission predicate decides the whole authority question: section hold, the Mutate/section kind
-        // mask, the row-scoped Edit hold and its mask, and the untrusted per-tick dispatch budget. Every
-        // ordered-domain ingress converges here, so the peer door gets the masks and metering the addon seam has.
-        // preMetered says only whether this ingress already charged the dispatch; it never changes which rules run.
-        if (!TryAdmitCompleteMutation(admission: out var admission, mutation: mutation, preMetered: preMetered)) {
-            denied = true;
-            reason = admission.Describe();
-
-            return false;
+    private void DenyMutation(WorldMutation mutation, string reason, int connectionId, long correlationId) {
+        m_lastMutationFailureDetail = reason;
+        if (Host.Output.HasNarrationSink) {
+            Host.Output.Narrate(channel: "world.grant denied", text: $"[world.grant denied: {mutation.Principal.Describe()} {reason} — {WorldServer.Describe(mutation: mutation)} dropped]");
         }
+        Host.EchoTap?.Invoke(new WorldEditEcho(
+            Message: reason,
+            Rejected: true,
+            Kind: WorldEditEchoKind.Mutation,
+            Mutation: mutation,
+            Denied: true,
+            ConnectionId: connectionId,
+            CorrelationId: correlationId
+        ));
+    }
 
+    internal bool TryPrepareMutation(WorldMutation mutation, ulong tick, ulong engineTick, bool preMetered,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPreparedMutation? prepared, out string reason, out bool denied) =>
+        WorldPreparedMutation.TryPrepare(this, mutation, tick, engineTick, preMetered, out prepared, out reason, out denied);
+
+    private bool TryStageDocument(WorldMutation mutation, ulong tick, ulong engineTick, out DocumentStage stage, out string reason) {
+        if (EditsShadingAlone(mutation, m_definition)) {
+            if (!TryStageDocument(m_definition, mutation, tick, engineTick, out stage, out reason)) { return false; }
+            if (stage.Kind == WorldInstallKind.Presentation) { return true; }
+            stage.Dispose();
+        }
+        return TryStageDocument(Host.MaterializeArena(), mutation, tick, engineTick, out stage, out reason);
+    }
+
+    private bool TryStageDocument(WorldDefinition current, WorldMutation mutation, ulong tick, ulong engineTick,
+        out DocumentStage prepared, out string reason) {
+        prepared = default;
         if (!TryCompose(
             prepareAuthority: false,
             authority: Host.GrantTable,
@@ -360,7 +300,7 @@ public sealed partial class WorldDocument {
 
             if (!Host.GrantTable.TryPrepareDocument(mutation.Principal, current, candidate,
                 (WorldMutationKindCatalog.SectionOf(mutation: mutation) == WorldSection.Grants), out var authority, out reason)) { return false; }
-            prepared = new WorldPreparedMutation(
+            prepared = new DocumentStage(
                 addonPlan: addonPlan,
                 arena: arena,
                 authority: authority!,
@@ -398,7 +338,7 @@ public sealed partial class WorldDocument {
     /// <param name="correlationId">The submitting envelope's correlation id.</param>
     /// <param name="record">Whether to journal and echo here; a coalesced cell run records each original act.</param>
     /// <param name="derived">Whether the mutation is guest output excluded from the external-edit recovery tail.</param>
-    internal void InstallPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, bool record = true, bool derived = false) {
+    private void InstallPrepared(DocumentStage prepared, int connectionId, long correlationId, bool record = true, bool derived = false) {
         var mutation = prepared.Mutation;
         var candidate = prepared.Candidate;
         var engineTick = prepared.EngineTick;
@@ -478,7 +418,7 @@ public sealed partial class WorldDocument {
         if (record) { RecordPrepared(connectionId: connectionId, correlationId: correlationId, derived: derived, mutation: mutation, prepared: prepared); }
     }
 
-    private void RecordPrepared(WorldPreparedMutation prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived) =>
+    private void RecordPrepared(DocumentStage prepared, int connectionId, long correlationId, WorldMutation mutation, bool derived) =>
         RecordCommittedMutation(mutation: mutation, tick: prepared.Tick, engineTick: prepared.EngineTick, connectionId: connectionId,
             correlationId: correlationId, evictedKey: prepared.EvictedKey, addonPlan: prepared.AddonPlan, machinePlan: prepared.MachinePlan, derived: derived);
     private void RecordCommittedMutation(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId,

@@ -420,16 +420,7 @@ public static partial class WorldFactsVocabulary {
                     );
                 }
 
-                var cells = (row.Cells ?? []);
-                var ordinals = new int[cells.Count];
-
-                for (var index = 0; (index < cells.Count); index++) {
-                    ordinals[index] = world.PlacementOrdinal(
-                        channel: name,
-                        placementId: cells[index].Key.Value,
-                        ruleName: ruleName
-                    );
-                }
+                var ordinals = world.PlacementOrdinals(row, name, ruleName);
 
                 var operand = PhysicsQuiescentOperand.ForPlacements(placementOrdinals: ordinals);
 

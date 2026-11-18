@@ -248,8 +248,8 @@ The arena is the live gameplay store. `StateReader` reads its columns;
 holds declarations and seeds. `WorldServer.ExportDefinition()` materializes
 cells only at an explicit export or edit boundary.
 
-`WorldServer.ProposePublication` reads the journal's changed-row flags without
-exporting rows. `PublishArena` publishes committed changes to snapshot mirrors,
+`WorldServer.PublishArena` reads the journal's changed-row flags, publishes
+committed changes to snapshot mirrors,
 marks delivery pending, and calls `WorldDocument.ReconcileStateConsumers`.
 Bound document values read the arena, so a state write does not serialize and
 rehydrate the definition each tick. Responses, deals and contribution tenure

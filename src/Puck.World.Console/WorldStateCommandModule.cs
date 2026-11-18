@@ -16,8 +16,7 @@ namespace Puck.World;
 /// messages every document write flows through. The whole-row pair (a row's name, kind, envelope, capacity, and cells) lives in
 /// <c>world.row.set</c>/<c>world.row.remove state ...</c> — a cell write is a finer grain than a row upsert, not
 /// sugar for one, which is why it stays here: <c>world.state.cell.set</c> writes one cell of an already-declared row
-/// without re-authoring its shape, dispatching on the row's own declared kind (a numeric/bool token, or a raw-tail
-/// string for an already-live text-kind row); <c>world.state.cell.remove</c> removes one, <c>world.generate</c>
+/// without re-authoring its shape. The authority parses the submitted tail against the row at compose; <c>world.state.cell.remove</c> removes one, <c>world.generate</c>
 /// redraws a draw site, and <c>world.state</c> reads all three grains back (every row, one row with its cells, one
 /// cell alone). A slot is a row with one cell keyed <see cref="StateRowShape.SlotKey"/>, so there is no separate verb
 /// family for it. A cell set settles with its typed authoritative accept/reject receipt, including numeric, text and vector forms; no empty submission is a success receipt. Every write verb routes
@@ -542,97 +541,6 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             _ => "0",
         })
     );
-    // Row existence, row KIND (for the same-batch-declare edge case below), and the bool+add refusal are ALL asked
-    // at compose too (WorldServer's UpsertStateCell arm) — a verb-level check can settle the COMMON case (the row
-    // is already live) but not the same-batch "world.row.set state declaring <row> a line ago, still draining"
-    // race, so compose keeps re-checking regardless of what this dispatch decided.
-    //
-    // DISPATCH: a row already live as text-kind takes the raw tail as TEXT (the text grammar,
-    // folded in here); everything else — int/fixed/bool, OR a row this door cannot yet see live — falls through to
-    // the numeric/bool token grammar, exactly as this verb always has. A text row declared and written to in the
-    // SAME buffered batch (before this door can see it live) is the one case that still needs two steps.
-    private CommandResult HandleCellSet(WorldServer server, IServerLink link, CommandContext context, WireArgs args) {
-        if (args.Count < 2) {
-            return WorldStateCellSetForms.Refuse(args: in args);
-        }
-
-        var rowName = args[0].ToString();
-        if (!server.TryAcquireWriteDeclaration(context, rowName, out var row, out var refusal)) {
-            return CommandResult.Error(output: $"[world.state.cell.set: {refusal}]");
-        }
-
-        if (
-            (row is { Kind: CellKind.Vector }) &&
-            (args.Count == 3)
-        ) {
-            var vectorString = args[2].ToString();
-
-            if (!StateVector.TryParseBase64Url(error: out var vectorError, text: vectorString, vector: out var parsedVector)) {
-                return CommandResult.Error(output: $"[world.state.cell.set: invalid vector '{vectorString}': {vectorError}]");
-            }
-
-            return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-                Principal: context.Principal,
-                Row: rowName,
-                Key: args[1].ToString(),
-                Value: 0L,
-                Kind: WorldDocumentWriteKind.Set,
-                RawToken: vectorString,
-                Vector: parsedVector
-            ), echoes: echoes, verb: "world.state.cell.set");
-        }
-
-        if (
-            (row is { Kind: CellKind.Text }) &&
-            (args.Count >= 3)
-        ) {
-            var text = WorldCommandArguments.RawAfter(
-                args: in args,
-                context: context,
-                tokens: 3
-            );
-
-            return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-                Principal: context.Principal,
-                Row: rowName,
-                Key: args[1].ToString(),
-                Value: 0L,
-                Kind: WorldDocumentWriteKind.Set,
-                Text: text
-            ), echoes: echoes, verb: "world.state.cell.set");
-        }
-
-        if (
-            (args.Count != 3) &&
-            (args.Count != 4)
-        ) {
-            return WorldStateCellSetForms.Refuse(args: in args);
-        }
-
-        var kind = WorldDocumentWriteKind.Set;
-
-        if (args.Count == 4) {
-            if (!string.Equals(
-                a: args[3].ToString(),
-                b: "add",
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return WorldStateCellSetForms.Refuse(args: in args, got: args[3].ToString());
-            }
-
-            kind = WorldDocumentWriteKind.Add;
-        }
-
-        return link.Submit(mutation: new WorldMutation.UpsertStateCell(
-            Principal: context.Principal,
-            Row: rowName,
-            Key: args[1].ToString(),
-            Value: 0L,
-            Kind: kind,
-            RawToken: args[2].ToString()
-        ), echoes: echoes, verb: "world.state.cell.set");
-    }
-
     private const int DefaultRuleTraceEvaluations = 8;
 
     /// <inheritdoc/>
@@ -883,24 +791,16 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "world.state.cell.set",
-            description: $"Upserts one cell inside an already-declared row, leaving the row's own shape untouched (declare or redeclare the row with world.row.set state <row-json>): {WorldStateCellSetForms.Spelling}. The row's declared kind decides the form. When <row> is already live as a text-kind row, everything after <key> is the text, spaces included and unquoted, replacing the cell; 'add' is refused there. When <row> is already live as a vector-kind row, the one token after <key> is the unpadded base64url encoding of the vector's signed 8-bit components. Otherwise (int, fixed or bool, or a row the same batch has not yet declared, which this command cannot see live) <value> is a single token resolved at compose against the row's declared kind, so a same-batch world.row.set state that declares <row> ahead of this line composes first and this line lands against it: decimal text for a fixed-kind row (e.g. \"12.5\"), a whole number for int (or, on a row naming an enum, one of its member names), or true|false for bool, never raw FixedQ4816 bits. The optional trailing 'add' adds <value> to the key's current value (0 if the key is absent) instead of replacing it; it is refused on bool. Any row is reachable; pass the reserved key '{WorldStateRow.SlotKey}' to write a one-value row's own cell. Writing '{WorldStateRow.SlotKey}' on a row declaring 'advance' rebases it: the written value becomes the new base and its epoch becomes this tick, as redeclaring the row does. Writing a keyed cell that carries its own advance rebases that cell the same way, preserving its rate. A row or cell declaring 'dynamics' rebases the same way, preserving which dynamics row it names: its Y0/V0 become the live eased value and velocity at this tick (never the raw write) plus a velocity kick signed by that row's own response, and its epoch becomes this tick. The write moves the truth, never the follower's own position, which keeps chasing from wherever it was. A trailing 'add' adds to the row's live truth (the accumulated value for 'advance', the stored value itself for 'dynamics', never the eased follower position) rather than to the stored base. Buffers and applies at the tick boundary. Refused, against the candidate this batch has built so far rather than a stale read, if <row> names no state row (declare it first), if a numeric/bool write targets a text-kind row or the reverse, if 'add' targets a bool-kind row, if <value> does not parse under <row>'s kind, if the written text exceeds StateCapacity.MaxTextValueLength, if <key> carries the reserved '$' prefix and is not '{WorldStateRow.SlotKey}' (draw and generator bookkeeping such as a cursor or the drawn masks lives in the row's own fields, never in a cell this command can reach), or, at whole-document revalidation, if the resulting value falls outside the row's declared envelope, a non-negative row's value would go negative, the write would grow the row past its capacity, or the acting principal lacks a Mutate/section:state or Edit/state:<row> hold admitting UpsertStateCell.",
+            description: $"Writes one cell of an already-declared row: {WorldStateCellSetForms.Spelling}. At the tick boundary the row's kind selects the grammar. A numeric or bool row takes one value token; numeric rows also accept a trailing 'add'. A text row stores the entire tail, including spaces. A vector row takes its unpadded base64url encoding. A declaration submitted earlier in the same drain is visible to the write. The command returns the settled mutation receipt.",
             forms: WorldStateCellSetForms,
             handler: (context, args) => {
-                if (!authority.TryResolveInstance(
-                    context: context,
-                    error: out var error,
-                    instance: out var instance,
-                    verb: "world.state.cell.set"
-                )) {
-                    return error;
-                }
-
-                return HandleCellSet(
-                    args: args,
-                    context: context,
-                    link: instance.SubmissionLink,
-                    server: instance.Server
-                );
+                if (args.Count < 3) { return WorldStateCellSetForms.Refuse(args: in args); }
+                if (!authority.TryResolveLink(context, "world.state.cell.set", out var link, out var error)) { return error; }
+                return link.Submit(mutation: new WorldMutation.UpsertStateCell(
+                    Principal: context.Principal, Row: args[0].ToString(), Key: args[1].ToString(),
+                    Value: 0L, Kind: WorldDocumentWriteKind.Set,
+                    RawToken: WorldCommandArguments.RawAfter(context, in args, tokens: 3)
+                ), echoes: echoes, verb: "world.state.cell.set");
             },
             routing: CommandRouting.Simulation
         );

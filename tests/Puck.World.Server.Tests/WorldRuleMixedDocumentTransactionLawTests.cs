@@ -169,16 +169,17 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
 
         fixture.Server.MutationJournalTap = (_, _, _) => installs++;
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             ),
             expected: 0L
         );
         Assert.Contains(
-            collection: fixture.Server.Definition.Placements,
+            collection: observed.Placements,
             filter: static placement => (placement.Id == PlacementId)
         );
         Assert.Equal(
@@ -204,16 +205,17 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
 
         fixture.Server.MutationJournalTap = (_, _, _) => installs++;
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             ),
             expected: 0L
         );
         Assert.DoesNotContain(
-            collection: fixture.Server.Definition.Placements,
+            collection: observed.Placements,
             filter: placement => (placement.Id == created.Id)
         );
         Assert.Equal(
@@ -238,16 +240,17 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
 
         fixture.Server.MutationJournalTap = (_, _, _) => installs++;
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             ),
             expected: 1L
         );
         Assert.DoesNotContain(
-            collection: fixture.Server.Definition.Placements,
+            collection: observed.Placements,
             filter: placement => (placement.Id == created.Id)
         );
         // The firing's rows are one unit, so they are one install.
@@ -264,46 +267,47 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         fixture.Server.MutationJournalTap = (_, _, _) => installs++;
 
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefix"
             )
         );
         Assert.Equal(
             expected: "prefix",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefixLabel"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "after"
             )
         );
         Assert.Equal(
             expected: "after",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "label"
             )
         );
         Assert.Equal(
             expected: 1.25f,
             actual: Placement(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 id: PlacementId
             ).Scale
         );
@@ -314,45 +318,46 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
 
         // The gate is closed by the state write. A second fixed step must not replay the document write.
         fixture.Step();
+        observed = fixture.Server.ExportDefinition();
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefix"
             )
         );
         Assert.Equal(
             expected: "prefix",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefixLabel"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "after"
             )
         );
         Assert.Equal(
             expected: "after",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "label"
             )
         );
         Assert.Equal(
             expected: 1.25f,
             actual: Placement(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 id: PlacementId
             ).Scale
         );
@@ -362,52 +367,53 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         using var fixture = Fixtures.FreshServer(definition: Scenario(includeBadSecondPlacement: true));
 
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             expected: 0L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefix"
             )
         );
         Assert.Equal(
             expected: "before",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefixLabel"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             )
         );
         Assert.Equal(
             expected: 0L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "after"
             )
         );
         Assert.Equal(
             expected: "before",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "label"
             )
         );
         Assert.Equal(
             expected: 1f,
             actual: Placement(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 id: PlacementId
             ).Scale
         );
         Assert.DoesNotContain(
             expected: "missing",
-            collection: fixture.Server.Definition.Placements.Select(selector: static placement => placement.Id)
+            collection: observed.Placements.Select(selector: static placement => placement.Id)
         );
     }
     [Fact]
@@ -418,46 +424,47 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         ));
 
         fixture.Step();
+        var observed = fixture.Server.ExportDefinition();
 
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefix"
             )
         );
         Assert.Equal(
             expected: "prefix",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "prefixLabel"
             )
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "stage"
             )
         );
         Assert.Equal(
             expected: 1.25f,
             actual: Placement(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 id: PlacementId
             ).Scale
         );
         Assert.Equal(
             expected: 1L,
             actual: State(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "after"
             )
         );
         Assert.Equal(
             expected: "after",
             actual: Text(
-                definition: fixture.Server.Definition,
+                definition: observed,
                 row: "label"
             )
         );

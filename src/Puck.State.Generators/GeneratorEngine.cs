@@ -1516,10 +1516,32 @@ public static partial class GeneratorEngine {
     public static bool TryResolveSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, out StateGenerator generator, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: draw);
 
+        return TryResolveSource(generators, draw.Source, draw.Generator, out generator, out reason);
+    }
+
+    /// <summary>Resolves a site for execution and verifies its declared sampler has the required credential.</summary>
+    public static bool TryResolveExecutableSource(IReadOnlyList<GeneratorRow>? generators, Draw draw, out StateGenerator generator, out string reason) {
+        ArgumentNullException.ThrowIfNull(draw);
+        if (draw.PrivateStream != draw.Secret.HasValue || draw.Secret is { IsEmpty: true }) {
+            generator = null!;
+            reason = "the declared draw sampler and its provisioned key do not agree";
+            return false;
+        }
+        return TryResolveSource(generators, draw, out generator, out reason);
+    }
+
+    /// <summary>Resolves the source of a draw from its declaration alone.</summary>
+    public static bool TryResolveSource(IReadOnlyList<GeneratorRow>? generators, StateDrawDeclaration draw, out StateGenerator generator, out string reason) {
+        ArgumentNullException.ThrowIfNull(draw);
+        return TryResolveSource(generators, draw.Source, draw.Generator, out generator, out reason);
+    }
+
+    private static bool TryResolveSource(IReadOnlyList<GeneratorRow>? generators, CellName? source, StateGenerator? inlineSource,
+        out StateGenerator generator, out string reason) {
         generator = null!;
 
-        if ((draw.Source is null) == (draw.Generator is null)) {
-            reason = ((draw.Source is null)
+        if ((source is null) == (inlineSource is null)) {
+            reason = ((source is null)
                 ? "declares neither 'source' nor 'generator' — a draw names a declared source or inlines one"
                 : "declares both 'source' and 'generator' — a draw names a declared source or inlines one, never both"
             );
@@ -1527,7 +1549,7 @@ public static partial class GeneratorEngine {
             return false;
         }
 
-        if (draw.Generator is { } inline) {
+        if (inlineSource is { } inline) {
             generator = inline;
             reason = string.Empty;
 
@@ -1535,7 +1557,7 @@ public static partial class GeneratorEngine {
         }
 
         foreach (var row in (generators ?? [])) {
-            if (row.Name == draw.Source!.Value) {
+            if (row.Name == source!.Value) {
                 generator = row.Generator;
                 reason = string.Empty;
 
@@ -1543,7 +1565,7 @@ public static partial class GeneratorEngine {
             }
         }
 
-        reason = $"names no declared generator '{draw.Source}' — add it to the document's 'generators' section or inline the source at the site";
+        reason = $"names no declared generator '{source}' — add it to the document's 'generators' section or inline the source at the site";
 
         return false;
     }

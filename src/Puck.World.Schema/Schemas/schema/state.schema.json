@@ -218,6 +218,11 @@
                 "description": "An authored seek, non-negative, default 0: a rebuild advances the generator by skip \u002B cursor rather than cursor. Authored data, the same class as the seed ladder\u0027s own rungs \u2014 it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site\u0027s does.",
                 "type": "integer",
                 "default": 0
+              },
+              "privateStream": {
+                "description": "Whether samples use the keyed algorithm. Observers can price it without the authority key.",
+                "type": "boolean",
+                "default": false
               }
             },
             "additionalProperties": false

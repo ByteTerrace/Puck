@@ -39,7 +39,7 @@ public static class TransformWork {
     /// <param name="context">The compile context the row resolves against.</param>
     /// <param name="rowOrdinal">The written row's catalog ordinal.</param>
     /// <returns>The work units.</returns>
-    public static long LiveWrite(RuleCompileContext context, int rowOrdinal) => (((Door + BoardEntries) + (((context.FindRowAt(rowOrdinal: rowOrdinal) is not { } row) || ArenaLayout.HasTraits(row: row))
+    public static long LiveWrite(RuleCompileContext context, int rowOrdinal) => (((Door + BoardEntries) + ((context.FindRowAt(rowOrdinal: rowOrdinal) is not { Generated: true, Advance: null })
         ? ClockEntries
         : 0L
     )) + Dependents(
@@ -57,19 +57,17 @@ public static class TransformWork {
             rowOrdinal: rowOrdinal
         );
 
-        var lanes = 3L; // number, presence and member key
-
-        if (context.FindRowAt(rowOrdinal: rowOrdinal) is { } row) {
-            var columns = ArenaLayout.ColumnsOf(row: row);
-
-            foreach (var column in new[] { ArenaColumn.Text, ArenaColumn.ClockEpochTick, ArenaColumn.ClockEpochEngineTick,
-                ArenaColumn.ClockY0, ArenaColumn.ClockV0, ArenaColumn.ClockSubstepTicks, ArenaColumn.ClockSet,
-                ArenaColumn.Behavior, ArenaColumn.Visibility, ArenaColumn.Observation }) {
-                if ((columns & (1UL << ((int)column))) != 0UL) { lanes++; }
-            }
-        } else { lanes += 10L; }
+        var row = context.FindRowAt(rowOrdinal: rowOrdinal);
+        var lanes = 3L + MetadataWidth(row); // number, presence, member key and optional metadata
+        if (row is null or { Kind: CellKind.Text }) { lanes++; }
         return (2L * (lanes + ((dimensions > 0L) ? (1L + dimensions) : 0L)));
     }
+    // An authored cell may supply its own clock, behavior, visibility or observation. Generated pool
+    // cells can carry a seed clock, and only a field with declared advance adds the behavior column.
+    internal static long MetadataWidth(StateRowDeclaration? row) => row is { Generated: true }
+        ? ClockEntries + (row.Advance is null ? 0L : 1L)
+        : ClockEntries + 3L;
+
     /// <summary>Prices permutation checks, the positional view, two links per member and the row endpoints.</summary>
     /// <param name="context">The compile context.</param>
     /// <param name="rowOrdinal">The row ordinal.</param>
@@ -116,9 +114,7 @@ public static class TransformWork {
         );
         var edges = (((2L * Door) + (2L * masks)) + BoardWrite);
 
-        if (draw?.Secret is not null) {
-            return (edges + (samples * PrivateSample));
-        }
+        if (draw?.PrivateStream == true) { return edges + samples * PrivateSample; }
         if (generator?.Extended is { } extended) {
             var k = ((long)extended.K);
             var rebuild = ((2L * k) + (extended.Script?.Count ?? 0));
@@ -128,7 +124,7 @@ public static class TransformWork {
             return ((((edges + (2L * rebuild)) + (4L * extendedSeek)) + (samples * (Sample + 1L))) + ((1L + (samples / TableTickPeriod)) * (2L * k)));
         }
 
-        return ((edges + Seek) + (samples * Sample));
+        return (edges + Seek) + (samples * Sample);
     }
     /// <summary>Returns the work one step of a compiled pattern costs: a binary search of its letter cuts and one
     /// transition.</summary>

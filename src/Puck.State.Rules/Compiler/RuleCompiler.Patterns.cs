@@ -441,7 +441,7 @@ public static partial class RuleCompiler {
 
         var facet = MatchFacet.Accept;
         var occurrence = 0;
-        StateRow? row = null;
+        StateRowDeclaration? row = null;
 
         if (!TryResolveLiveRow(
             context: context,

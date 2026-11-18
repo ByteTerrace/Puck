@@ -1421,7 +1421,7 @@ public sealed partial class CommandRegistry {
     /// <param name="tokens">The destination span (capacity <see cref="MaxWireTokens"/>).</param>
     /// <returns>The token count, or <c>-1</c> when the line has more tokens than <paramref name="tokens"/> can hold
     /// (the caller then falls through to the full parse).</returns>
-    private static int Tokenize(ReadOnlySpan<char> line, Span<Range> tokens) {
+    public static int Tokenize(ReadOnlySpan<char> line, Span<Range> tokens) {
         var count = 0;
         var index = 0;
 

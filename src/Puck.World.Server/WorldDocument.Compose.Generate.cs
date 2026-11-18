@@ -116,7 +116,7 @@ public sealed partial class WorldDocument {
             return false;
         }
 
-        if (!GeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveExecutableSource(
             generators: current.Generators,
             draw: draw,
             generator: out var generator,

@@ -14,6 +14,8 @@
     <ItemGroup>
         <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite drives the
              real routed store rather than a second, hand-rolled dispatch. -->
+        <Compile Include="../Shared/FixtureCompiler.cs" Link="FixtureCompiler.cs" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[11.*, )" />
     </ItemGroup>
     <ItemGroup>

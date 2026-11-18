@@ -293,21 +293,11 @@ reaches everything outside it through one boundary, `WorldServer.PublishArena`,
 at the end of the tick's rule evaluation. A reader outside the rule loop sees
 the state as of the previous publication.
 
-A publication installs what `WorldServer.ProposePublication` composes. A
-proposal reads the rows whose version moved since the document and the arena
-last agreed on them, and the rows an open scope has written, and keeps every
-other installed row as it is, so its cost follows what was written, not what
-the document declares. A preflight judges the same proposal the commit then
-adopts (`AdoptPublication`), so what was judged is what is installed. The first
-publication after the arena is seeded from a document carries every row, which
-puts the installed document in the arena's own spelling. It then does what any
-installed state value owes: it re-resolves document values that read a moved
-row, marks state delivery pending, and calls
-`WorldDocument.ReconcileStateConsumers`, the routine a value mutation also ends
-in. That routine brings the consumers that keep their own copy of a value up to
-date: the grant table's drive gates, the field lattice's input, each body's
-scale, and the cell-driven inhabit counts. A consumer added later belongs
-there, so it cannot depend on which door a value came through.
+A publication reads the journal's changed-row flags, marks state delivery
+pending, and reconciles the consumers that keep their own copies of a value.
+These include drive gates, field inputs, body scales and cell-driven inhabit
+counts. A rule firing publishes its committed state writes before its prepared
+document edit reconciles those consumers.
 
 One rule firing is one arena journal scope. What a firing promises depends on
 the kind of effect:
@@ -315,7 +305,7 @@ the kind of effect:
 | Kind | Examples | Promise |
 |---|---|---|
 | Arena write | `setState`, a transform, a transfer | Inside the scope: lands with the commit or rewinds with it. |
-| Transactional arm (`EffectNeeds.Transactional`) | a placement or HUD panel upsert or removal | Inside the promise. The firing's rows compose in order into one `WorldMutation.Batch`; each is preflighted against the document the firing proposes with the rows before it applied, so a row that cannot follow them refuses by name. The whole batch is then prepared (`IEffectHost.PrepareTransactional`): every gate of the mutation door that can refuse it runs while the firing can still rewind. The commit installs the prepared batch, which cannot refuse. |
+| Transactional arm (`EffectNeeds.Transactional`) | a placement or HUD panel upsert or removal | Inside the promise. The firing's rows compose in order into one `WorldMutation.Batch`; the transaction composes each row against what the preceding rows leave. The batch is prepared once (`IEffectHost.PrepareTransactional`): every gate of the mutation door that can refuse it runs while the firing can still rewind. The commit installs the prepared batch, which cannot refuse. |
 | Delivered arm (`EffectNeeds.Irreversible` alone) | a cue, a pose, a body motion, a rigid impulse, a field paint, a save | Outside the promise. It is preflighted before the commit, against what the earlier arms of the firing would leave where the host models that (a rigid impulse lands on the velocity the earlier impulses leave), and fired after the commit in authored order. A delivery that refuses is one counted refusal (`IrreversibleArmFailed`); it undoes nothing and stops no later delivery. |
 
 A preflight installs nothing: the scope is still open, so the document it
@@ -323,13 +313,13 @@ judges against is a proposal and the installed document never carries a write
 that may rewind.
 
 The mutation door is two steps for the same reason.
-`WorldDocument.TryPrepareMutation` runs every gate that can refuse a mutation,
-against a document the caller names, and moves nothing: admission, composition,
-whole-document validation, the render envelope and field capacities, the solid
-field build, the replacement state arena when the install needs one, and the
-addon and machine staging. `WorldDocument.InstallPrepared` installs what it
-produced and refuses nothing. `TryApplyMutation` is the two in sequence; a rule
-firing prepares before its arena scope commits and installs after.
+`WorldDocument.TryPrepareMutation` checks admission before choosing the execution
+path. State commands stage their writes in an arena journal scope. Document
+edits stage their candidate, compiled rules, solids, replacement arena and host
+plans. Successful preparation mints a `WorldPreparedMutation`. Its install
+consumes the result once. Disposal rewinds pending state writes or releases
+pending host plans. A rule firing prepares before its own scope commits and
+installs after.
 Value-only installs reuse the arena and preflight their import against its
 live key and visibility budgets, including names retained after cell removal.
 

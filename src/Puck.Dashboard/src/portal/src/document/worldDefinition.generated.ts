@@ -13597,6 +13597,10 @@ export type WorldStateRow = {
      * An authored seek, non-negative, default 0: a rebuild advances the generator by skip + cursor rather than cursor. Authored data, the same class as the seed ladder's own rungs — it never writes the persisted DrawCursor, which keeps counting raw words from zero exactly as an unskipped site's does.
      */
     skip?: number;
+    /**
+     * Whether samples use the keyed algorithm. Observers can price it without the authority key.
+     */
+    privateStream?: boolean;
   };
   /**
    * How many raw words this site's Draw has consumed, including rejections. Resuming seeks directly to that position rather than replaying earlier results. Stored in the document, so world.undo, world.save, and replay rewind a site's draw position with the same whole-document restore that rewinds an ordinary counter. Zero when Draw is null; refused negative.

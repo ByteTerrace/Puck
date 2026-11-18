@@ -444,16 +444,8 @@ public sealed partial class WorldServer {
     // and carried across every publication's state-only replacement.
     private IReadOnlySet<string> DocumentValueRows() => WorldStateDocumentValues.ReferencedRows(definition: m_document.Definition);
 
-    /// <summary>Composes what a publication would install, and installs nothing: the installed document carrying
-    /// the arena's values as they stand, an open scope's writes included.</summary>
-    /// <remarks>A proposal reads the rows whose version has moved since the document and the arena last agreed on
-    /// them, and the rows an open scope has written, and keeps every other installed row as it is, so what it costs
-    /// follows what was written and not what the document declares. Every row it reads is the row the arena was
-    /// built over with its stored columns written back, so a row's own traits ride across. The document values that
-    /// read a moved row are re-resolved in the proposal. <see cref="PublishArena"/> adopts exactly this, so what a
-    /// preflight judges is what the commit installs.</remarks>
-    /// <returns>The proposal.</returns>
-    public WorldArenaPublication ProposePublication() {
+    // Peek at changed rows before the publication consumes the journal's flags.
+    private (bool Moved, bool DriveGate) PublicationChanges() {
         Array.Clear(array: m_publicationRows);
         m_arena.CopyChangedRows(rows: m_publicationRows);
         if (m_arena.Journal.Scopes != 0) { m_arena.FlagOpenRows(rows: m_publicationRows); }
@@ -465,11 +457,11 @@ public sealed partial class WorldServer {
             moved = true;
             drive |= (m_arena.Rows[row] is WorldStateRow { GatesDrive: true });
         }
-        return new WorldArenaPublication(Definition: m_document.Definition, Moved: moved, DriveGate: drive, RefreshRefusal: null);
+        return (moved, drive);
     }
     /// <summary>Publishes committed changed positions to every live consumer, without exporting document rows.</summary>
     public bool PublishArena(bool reconcile = true) {
-        var proposal = ProposePublication();
+        var proposal = PublicationChanges();
 
         if (proposal.Moved) {
             m_snapshotKeys.Include(m_arena.ChangedKeys);
@@ -488,8 +480,6 @@ public sealed partial class WorldServer {
         if (reconcile) { SettleStateConsumers(); }
         return proposal.Moved;
     }
-    /// <summary>Publishes a committed firing's positions; edit proposals materialize only at their edit boundary.</summary>
-    public bool AdoptPublication(WorldArenaPublication publication, bool reconcile = true) => PublishArena(reconcile: reconcile);
 
     private void SettleStateConsumers() {
         if (!m_consumersOwed) { return; }

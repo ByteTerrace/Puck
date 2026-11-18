@@ -7,12 +7,7 @@ public sealed partial class StateArena {
     /// <summary>Reads the stored columns needed by a presentation mirror.</summary>
     public ArenaCellImage ReadCellImage(int rowOrdinal, CellKey key) {
         TryRead(rowOrdinal: rowOrdinal, key: key, value: out var value);
-        StateCellClock? clock = null;
-        if (TryReadClock(rowOrdinal: rowOrdinal, key: key, epochTick: out var tick, epochEngineTick: out var engine,
-            y0: out var y0, v0: out var v0, substepTicks: out var substep, set: out var set) && set) {
-            clock = new StateCellClock(EpochTick: tick, EpochEngineTick: engine, Y0: y0, V0: v0, SubstepTicks: substep);
-        }
-        return new ArenaCellImage(Key: m_keys[key], Value: value, Behavior: Behavior(rowOrdinal: rowOrdinal, key: key), Clock: clock);
+        return new ArenaCellImage(Key: m_keys[key], Value: value, Behavior: Behavior(rowOrdinal: rowOrdinal, key: key), Clock: ReadClock(rowOrdinal, key));
     }
 
     /// <summary>Starts replacing a mirror row from a committed snapshot, outside gameplay transaction execution.</summary>

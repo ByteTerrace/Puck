@@ -106,63 +106,24 @@ public sealed partial class StateArena {
         var authored = traits?.GetValueOrDefault(key: name);
         var behavior = ((m_behaviors is null) ? StateCellBehavior.Inherit : (StateCellBehavior)m_behaviors[slot]);
         var value = ValueAt(layout: in layout, slot: slot);
-        var sameClock = (HasClock(slot: slot) ? ((previous?.Clock is { } clock) &&
-            (clock.EpochEngineTick == ReadNumberRaw(column: ArenaColumn.ClockEpochEngineTick, index: slot)) &&
-            (clock.EpochTick == ReadNumberRaw(column: ArenaColumn.ClockEpochTick, index: slot)) &&
-            (clock.SubstepTicks == ReadNumberRaw(column: ArenaColumn.ClockSubstepTicks, index: slot)) &&
-            (clock.V0 == ReadNumberRaw(column: ArenaColumn.ClockV0, index: slot)) && (clock.Y0 == ReadNumberRaw(column: ArenaColumn.ClockY0, index: slot)))
-            : (previous?.Clock is null));
+        var clock = ClockAt(slot, previous?.Clock);
 
         if ((previous is not null) && (previous.Key == name) && (previous.Value == value) &&
             (previous.Advance == authored?.Advance) && (previous.Cycle == authored?.Cycle) && (previous.Dynamics == authored?.Dynamics) &&
             (previous.Behavior == behavior) && (previous.Observation == m_observations?[slot]) &&
-            (previous.Visibility == m_visibilities?[slot]) && sameClock) {
+            (previous.Visibility == m_visibilities?[slot]) && ReferenceEquals(previous.Clock, clock)) {
             return previous;
         }
 
         return new StateCell(
             Advance: authored?.Advance,
-            Behavior: ((m_behaviors is null)
-                ? StateCellBehavior.Inherit
-                : ((StateCellBehavior)m_behaviors[slot])
-            ),
-            Clock: (HasClock(slot: slot)
-                ? new StateCellClock(
-                    EpochEngineTick: ReadNumberRaw(
-                        column: ArenaColumn.ClockEpochEngineTick,
-                        index: slot
-                    ),
-                    EpochTick: ReadNumberRaw(
-                        column: ArenaColumn.ClockEpochTick,
-                        index: slot
-                    ),
-                    SubstepTicks: ReadNumberRaw(
-                        column: ArenaColumn.ClockSubstepTicks,
-                        index: slot
-                    ),
-                    V0: ReadNumberRaw(
-                        column: ArenaColumn.ClockV0,
-                        index: slot
-                    ),
-                    Y0: ReadNumberRaw(
-                        column: ArenaColumn.ClockY0,
-                        index: slot
-                    )
-                )
-                : null
-            ),
+            Behavior: behavior,
+            Clock: clock,
             Cycle: authored?.Cycle,
             Dynamics: authored?.Dynamics,
             Key: name,
             Observation: m_observations?[slot],
-            // An export owns its data, so a vector is copied out of the arena where ValueAt aliases it.
-            Value: ((layout.Kind == CellKind.Vector)
-                ? CellValue.Vector(components: VectorSpan(slot: slot).ToArray())
-                : ValueAt(
-                    layout: in layout,
-                    slot: slot
-                )
-            ),
+            Value: value.DetachedCopy(),
             Visibility: m_visibilities?[slot]
         );
     }

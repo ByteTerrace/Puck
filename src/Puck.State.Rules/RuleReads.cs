@@ -94,85 +94,10 @@ public static class RuleReads {
     public static long Reduce(IStateReader reader, int rowOrdinal, StateReduceOp op, int filterOrdinal, (long Lower, long Upper)? range) {
         ArgumentNullException.ThrowIfNull(argument: reader);
 
-        var arena = reader.Arena;
-        var count = arena.CellCount(rowOrdinal: rowOrdinal);
-
-        if (
-            (op == StateReduceOp.Count) &&
-            (filterOrdinal < 0) &&
-            (range is null)
-        ) {
-            return count;
-        }
-        if (count == 0) {
-            return 0L;
-        }
-
-        var time = reader.Time;
-        var admitted = 0L;
-        var sum = 0L;
-        var extremum = 0L;
-        var seen = false;
-        var cursor = 0;
-
-        while (arena.TryNextCell(
-            cursor: ref cursor,
-            key: out var key,
-            rowOrdinal: rowOrdinal
-        )) {
-            if (
-                (filterOrdinal >= 0) &&
-                (!arena.TryReadLiveNumber(
-                key: key,
-                rowOrdinal: filterOrdinal,
-                time: in time,
-                value: out var gate
-            ) || (gate == 0L))
-            ) {
-                continue;
-            }
-            if (!arena.TryReadLiveNumber(
-                key: key,
-                rowOrdinal: rowOrdinal,
-                time: in time,
-                value: out var value
-            )) {
-                continue;
-            }
-            if (
-                (range is { } bounds) &&
-                ((value < bounds.Lower) || (value > bounds.Upper))
-            ) {
-                continue;
-            }
-
-            admitted++;
-            sum = BinaryIntegerFunctions.AddSaturating(
-                left: sum,
-                right: value
-            );
-            if (
-                !seen ||
-                ((op == StateReduceOp.Max)
-                ? (value > extremum)
-                : (value < extremum))
-            ) {
-                extremum = value;
-                seen = true;
-            }
-        }
-
-        return (op switch {
-            StateReduceOp.Count => admitted,
-            StateReduceOp.Sum => sum,
-            StateReduceOp.Max or StateReduceOp.Min => (seen
-            ? extremum
-            : 0L),
-            _ => 0L,
-        });
+        return StateReader.ReduceRaw(reader.Arena, rowOrdinal, op, reader.Time, filterOrdinal, range);
     }
     /// <summary>Returns the Lehmer rank of an ordered zone's token order relative to its token domain's cell order —
-    /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateReadAccess, int, int, Span{int})"/>
+    /// over k! for k tokens — read off the live arena: <see cref="StateReader.DomainOrdinals(StateArena, int, int, Span{int})"/>
     /// ranked by <see cref="StateReader.ArrangementRank(ReadOnlySpan{int})"/>.</summary>
     /// <param name="reader">The evaluation in flight.</param>
     /// <param name="rowOrdinal">The ordered zone's catalog ordinal.</param>

@@ -144,7 +144,6 @@ public static class WorldStateSettlement {
         if (bornRows is { Count: 0 }) {
             return definition;
         }
-        var exported = seeded.ToRows();
         List<WorldStateRow>? settled = null;
 
         for (var index = 0; (index < rows.Count); index++) {
@@ -153,10 +152,7 @@ public static class WorldStateSettlement {
             if ((bornRows is not null) && !bornRows.Contains(item: row.Name.Value)) {
                 continue;
             }
-            if (StateRows.FindStateRow(
-                rows: exported,
-                name: row.Name.Value
-            ) is not { } born) {
+            if (!seeded.Catalog.TryResolve(StateLane.Document, row.Name, out var handle)) {
                 continue;
             }
             // A derived board's cells are the arena's own recompute, never the document's — the board is never
@@ -164,6 +160,7 @@ public static class WorldStateSettlement {
             // handed over, so a settlement that changed no board keeps the definition it was given and the
             // compilation receipt that names it.
             if (row.Inverse is not null) {
+                var born = seeded.ToRow(handle.Ordinal);
                 if (SameBoardCells(
                     left: row.Cells,
                     right: born.Cells
@@ -176,7 +173,7 @@ public static class WorldStateSettlement {
 
                 continue;
             }
-            if (row.Cells is not { Count: > 0 } cells) {
+            if (!seeded.Layout[handle.Ordinal].HasColumn(ArenaColumn.ClockSet) || row.Cells is not { Count: > 0 } cells) {
                 continue;
             }
 
@@ -185,10 +182,8 @@ public static class WorldStateSettlement {
             for (var cell = 0; (cell < cells.Count); cell++) {
                 if (
                     (cells[cell].Clock is not null) ||
-                    (StateRows.FindCell(
-                    cells: born.Cells,
-                    key: cells[cell].Key
-                )?.Clock is not { } clock)
+                    !seeded.Keys.TryResolve(cells[cell].Key, out var key) ||
+                    seeded.ReadClock(handle.Ordinal, key) is not { } clock
                 ) {
                     continue;
                 }

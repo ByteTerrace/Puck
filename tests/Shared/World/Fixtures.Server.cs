@@ -13,6 +13,25 @@ using Puck.World.Machines;
 namespace Puck.World.Testing;
 
 internal static partial class Fixtures {
+    /// <summary>Starts a world with a live replica peer. The admission grants no mutation or row access.</summary>
+    public static WorldFixture FreshServerWithPeer(WorldDefinition definition, out Principal peer) {
+        var entry = new WorldAdmissionEntry(Domain: "https://issuer.test", Subject: "reader",
+            Mode: WorldAdmissionTrustMode.OAuth, Disclosure: WorldDisclosureTier.Replica, Grants: []);
+        var fixture = FreshServer(definition with { Admission = [entry],
+            PopulationRaw = definition.Population with { CapacityRaw = 8, NetworkPlayers = 4 } });
+        try {
+            var server = fixture.Server;
+            Assert.True(WorldAdmissionDoor.TryMatchOAuthEntry(server.Definition.Admission, entry.Domain, entry.Subject!, out var verdict));
+            Assert.True(server.TryAdmitPeerConnection(verdict, server.Definition.Admission, out var admitted, out var reason), reason);
+            peer = admitted.Identity;
+            Assert.True(server.IsLivePeer(peer));
+            return fixture;
+        } catch {
+            fixture.Dispose();
+            throw;
+        }
+    }
+
     private sealed class InputFixtureState {
         public required WorldInputOwner Owner;
         public required WorldInputProducer Producer;

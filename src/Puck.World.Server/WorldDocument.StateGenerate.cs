@@ -12,7 +12,7 @@ public sealed partial class WorldDocument {
             (arena.Rows[row.Ordinal].Draw is not { Timing: not DrawTiming.Boot } draw)) {
             reason = "generate requires a redrawable draw site"; return false;
         }
-        if (!GeneratorEngine.TryResolveSource(m_definition.Generators, draw, out var generator, out reason)) { return false; }
+        if (!GeneratorEngine.TryResolveExecutableSource(m_definition.Generators, draw, out var generator, out reason)) { return false; }
         var site = WorldDrawSites.StateRow(rowName: arena.Rows[row.Ordinal].Name);
         var seed = new DrawSeed(State: GeneratorEngine.ComputeSeedState(documentSeed: (m_definition.Generation?.WorldSeed ?? 0UL), instanceIdentity: Host.InstanceIdentity, site: site), Stream: GeneratorEngine.ComputeStreamId(site: site));
 

@@ -21,7 +21,7 @@ public static class BoardCombination {
     /// <see cref="StateOverflow.Saturate"/>), or zero when refused.</param>
     /// <param name="reason">The refusal, or empty.</param>
     /// <returns>Whether the operation is admissible; source existence and topology agreement remain the adapter's responsibility.</returns>
-    public static bool TryValidate(StateTransform.BoardCombine combine, StateRow row, long empty, CompiledTopology topology, out int direction, out int element, out long value, out string reason) {
+    public static bool TryValidate(StateTransform.BoardCombine combine, StateRowShape row, long empty, CompiledTopology topology, out int direction, out int element, out long value, out string reason) {
         ArgumentNullException.ThrowIfNull(combine);
         ArgumentNullException.ThrowIfNull(row);
         ArgumentNullException.ThrowIfNull(topology);

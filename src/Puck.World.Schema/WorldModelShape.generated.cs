@@ -706,6 +706,7 @@ public static partial class WorldModelShape {
                 M("timing", typeof(global::Puck.State.DrawTiming), typeof(global::Puck.State.Draw), "Timing", Read | Write, static value => ((global::Puck.State.Draw)value).Timing),
                 M("secret", typeof(global::System.Nullable<global::Puck.State.ClosedBitset256>), typeof(global::Puck.State.Draw), "Secret", Read | Write, static value => ((global::Puck.State.Draw)value).Secret),
                 M("skip", typeof(global::System.Int64), typeof(global::Puck.State.Draw), "Skip", Read | Write, static value => ((global::Puck.State.Draw)value).Skip),
+                M("privateStream", typeof(global::System.Boolean), typeof(global::Puck.State.Draw), "PrivateStream", Read | Write, static value => ((global::Puck.State.Draw)value).PrivateStream),
             ],
             []),
         T(typeof(global::Puck.State.DynamicsRow), true, JsonTypeInfoKind.Object, null,

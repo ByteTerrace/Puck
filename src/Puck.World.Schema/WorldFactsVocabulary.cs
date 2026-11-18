@@ -114,15 +114,21 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
     /// <param name="name">The channel name.</param>
     /// <returns>The ordinal, or <c>-1</c>.</returns>
     public int ChannelOrdinal(string name) => (WorldInputCatalog.For(definition: Definition).TryGetLogicalId(id: out var logicalId, name: name) ? logicalId : -1);
+    internal bool AdmitIdentityTraits(out string reason) =>
+        WorldIdentityFactLane.TryAdmitTraits(
+            row: WorldDefinitionRows.FindStateRow(Definition.AuthoredState, WorldIdentityFactLane.RowName)!,
+            reason: out reason);
+
     /// <inheritdoc/>
-    public override Draw? FindDraw(StateRow row) {
+    public override StateDrawDeclaration? FindDraw(StateRowDeclaration row) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
-        return (row.Draw ?? (((row is WorldStateRow world) && (WorldLatticeFill.FindDraw(trait: world.Field) is { } fill))
-            ? new Draw(
+        return (row.Draw ?? (((WorldDefinitionRows.FindStateRow(Definition.AuthoredState, row.Name) is { } world) && (WorldLatticeFill.FindDraw(trait: world.Field) is { } fill))
+            ? new StateDrawDeclaration(
                 Generator: fill.Generator,
                 Source: fill.Source,
-                Timing: DrawTiming.Event
+                Timing: DrawTiming.Event,
+                Skip: 0L
             )
             : null));
     }
@@ -132,7 +138,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         name: name
     );
     /// <inheritdoc/>
-    public override bool DeclaresCell(StateRow row, string key) {
+    public override bool DeclaresCell(StateRowDeclaration row, string key) {
         ArgumentNullException.ThrowIfNull(row);
         if (row.HostOwned && (row.EffectiveDomain is StateDomain.CellsOf domain) &&
             (WorldTopologyCompilation.FindPhysical(state: Definition.StateRaw, name: domain.Topology) is { } region)) {
@@ -142,7 +148,7 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
         return base.DeclaresCell(key: key, row: row);
     }
     /// <inheritdoc/>
-    public override Puck.State.Rules.IRuleOperand CreateCellRead(StateRow row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
+    public override Puck.State.Rules.IRuleOperand CreateCellRead(StateRowDeclaration row, int rowOrdinal, CellKey key, CompiledCellRef? keyFrom) =>
         ((row.HostOwned && (row.EffectiveDomain is StateDomain.CellsOf))
             ? new WorldHostOwnedCellOperand(rowOrdinal: rowOrdinal, key: key, keyFrom: keyFrom, valueKind: row.Kind)
             : base.CreateCellRead(key: key, keyFrom: keyFrom, row: row, rowOrdinal: rowOrdinal));
@@ -172,21 +178,21 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             refusal: WorldRuleRefusal.SpatialChannelMalformed,
             ruleName: ruleName
         ));
-        var cells = (row.Cells ?? []);
-        var ordinals = new int[cells.Count];
-
-        for (var index = 0; (index < cells.Count); index++) {
-            ordinals[index] = PlacementOrdinal(
-                channel: channel,
-                placementId: cells[index].Key.Value,
-                ruleName: ruleName
-            );
-        }
+        var ordinals = PlacementOrdinals(row, channel, ruleName);
 
         Scope[PlacementOrdinalsScope] = ordinals;
 
         return ordinals;
     }
+    internal int[] PlacementOrdinals(StateRowDeclaration row, string channel, string ruleName) {
+        var cells = StateRows.FindStateRow(StateCatalog.ExpandRows(Section), row.Name)?.Cells ?? [];
+        var ordinals = new int[cells.Count];
+        for (var index = 0; index < ordinals.Length; index++) {
+            ordinals[index] = PlacementOrdinal(channel, placementId: cells[index].Key.Value, ruleName: ruleName);
+        }
+        return ordinals;
+    }
+
     /// <summary>Gets a value indicating whether a placement carries a region facet.</summary>
     /// <param name="placementId">The placement's id.</param>
     /// <returns><see langword="true"/> when the placement declares a region.</returns>

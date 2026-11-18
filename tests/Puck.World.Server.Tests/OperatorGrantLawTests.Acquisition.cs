@@ -25,11 +25,10 @@ public sealed partial class OperatorGrantLawTests {
         Assert.False(result.IsError, result.Output);
         var invocation = Assert.IsType<OperatorContext>(module.Invocation);
         var authority = server.AcquireOperatorAuthority(invocation);
-        Assert.Same(server.Definition, authority.Definition);
+        _ = authority.CaptureStateHash(WorldStateHashScope.Authoritative);
         Assert.True(server.GrantTable.Revoke(Seat, WorldCapability.Operate, GrantSubject.All, Principal.Console));
-        Assert.Throws<InvalidOperationException>(() => authority.Definition);
-        Assert.Throws<InvalidOperationException>(() => authority.Arena);
-        Assert.Throws<InvalidOperationException>(() => authority.ExportDefinition());
+        Assert.Throws<InvalidOperationException>(() => authority.CaptureStateHash(WorldStateHashScope.Authoritative));
+        Assert.Throws<InvalidOperationException>(() => authority.CaptureStateComponents());
         Assert.Throws<InvalidOperationException>(() => server.AcquireOperatorAuthority(invocation));
         module.Invocation = null;
         Invoke();

@@ -37,7 +37,7 @@ public static class WorldDrawBootResolver {
     private static bool TryDrawSite(WorldDefinition definition, ulong worldSeed, string instanceIdentity, string site, Draw draw, CellKind targetKind, out GeneratorEngine.FireResult fired, out string reason, long cursor = 0L, IReadOnlyList<ClosedBitset256>? masks = null) {
         fired = default;
 
-        if (!GeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveExecutableSource(
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,
@@ -181,7 +181,7 @@ public static class WorldDrawBootResolver {
             return false;
         }
 
-        if (!GeneratorEngine.TryResolveSource(
+        if (!GeneratorEngine.TryResolveExecutableSource(
             generators: definition.Generators,
             draw: draw,
             generator: out var generator,

@@ -158,17 +158,14 @@ public static partial class WorldFactsCompiler {
     public static int ResolveIdentityLane(string ruleName, WorldFactsCompileContext context, string where) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        if (context.FindRow(name: WorldIdentityFactLane.RowName) is not { Kind: CellKind.Int, IsKeyed: true } lane) {
+        if (context.FindRow(name: WorldIdentityFactLane.RowName) is not { Kind: CellKind.Int, IsKeyed: true }) {
             throw new RuleException(
                 detail: $"{where} reads or writes an identity fact, but the document declares no keyed int row named '{WorldIdentityFactLane.RowName}' in state.world — a world carries facts only when it declares that lane",
                 refusal: WorldRuleRefusal.IdentityLaneUndeclared,
                 ruleName: ruleName
             );
         }
-        if (!WorldIdentityFactLane.TryAdmitTraits(
-            reason: out var reason,
-            row: lane
-        )) {
+        if (!context.AdmitIdentityTraits(out var reason)) {
             throw new RuleException(
                 detail: $"{where} reads or writes an identity fact, but {reason}",
                 refusal: WorldRuleRefusal.IdentityLaneTraited,
