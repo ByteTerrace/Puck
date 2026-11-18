@@ -371,16 +371,58 @@ public sealed record WorldPlacementFace(
 /// turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see
 /// <c>Server.WorldEventFeed</c> and the <c>observe region:&lt;name&gt;</c> grant subject). The region's name is the
 /// carrying placement's <see cref="WorldPlacement.Id"/> — one identity, never a second string kept in sync by hand.
-/// The volume is a sphere centered on the placement's <see cref="WorldPlacement.Position"/> (the placement's own
-/// <see cref="WorldPlacement.Scale"/>/<see cref="WorldPlacement.YawDegrees"/> do not affect it — a region's size is
-/// its own authored radius, never derived from the creation's visual bounds). Presentation-only in itself (drawing
-/// no geometry); sensing reads the same document-authored center every tick, converted to fixed-point at the same
-/// boundary <see cref="WorldSolid"/> facets already cross through — unless the row also carries
-/// <see cref="WorldPlacement.Attach"/>, in which case the center is the resolved live body pose instead
+/// The volume is a sphere of <paramref name="Radius"/> or an oriented box of <paramref name="HalfExtents"/> (exactly
+/// one is authored), so a room or a corridor is one region. Its center is <paramref name="Center"/> in the placement's
+/// resolved frame and a box turns with the placement's resolved yaw plus its own <paramref name="YawDegrees"/>; the
+/// placement's <see cref="WorldPlacement.Scale"/> never sizes it, since a region's size is its own authored extent,
+/// never derived from the creation's visual bounds. Presentation-only in itself (drawing no geometry); sensing reads
+/// the fixed-point shape <see cref="ShapeAt"/> compiles from the placement's resolved frame — unless the row also
+/// carries <see cref="WorldPlacement.Attach"/>, in which case the frame is the resolved live body pose instead
 /// (<c>Server.WorldEventFeed.CollectRegions</c>, the same resolve <c>world.attachments</c> answers): the sensing
-/// sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.</summary>
-/// <param name="Radius">The sensing radius, world units. Must be finite and positive (validated).</param>
-public sealed record WorldPlacementRegion(float Radius);
+/// volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is
+/// inside when its foot point lies within the closed volume, the test <see cref="FixedSpatialShape.Contains"/> owns.</summary>
+/// <param name="Radius">The sensing sphere's radius in world units, or zero for a box. A sphere's radius must be finite
+/// and positive (validated).</param>
+/// <param name="HalfExtents">The sensing box's half-extents in world units along its own axes, or absent for a
+/// sphere. Each must be finite and positive (validated).</param>
+/// <param name="Center">The volume's center in the placement's frame, world units (yawed with it, never scaled).</param>
+/// <param name="YawDegrees">A box's yaw about +Y in degrees, added to the placement's resolved yaw. Ignored by a sphere.</param>
+public sealed record WorldPlacementRegion(
+    float Radius = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Vector3? HalfExtents = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] Vector3 Center = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float YawDegrees = 0f
+) {
+    /// <summary>Gets whether the region is a box rather than a sphere.</summary>
+    [JsonIgnore]
+    public bool IsBox => HalfExtents.HasValue;
+
+    /// <summary>Compiles the region's fixed-point volume in a frame: the one conversion every sensing reader uses.</summary>
+    /// <param name="origin">The frame's world origin: the placement's resolved position, or its carrier's live pose.</param>
+    /// <param name="yawRadians">The frame's world yaw about +Y.</param>
+    /// <returns>The sphere or oriented box the region occupies.</returns>
+    public FixedSpatialShape ShapeAt(FixedVector3 origin, FixedQ4816 yawRadians) {
+        var rotation = FixedQuaternion.FromAxisAngle(angle: yawRadians, axis: FixedVector3.UnitY);
+        var center = (origin + rotation.Rotate(vector: FixedVector3.FromVector3(value: Center)));
+
+        return (HalfExtents is { } halfExtents)
+            ? FixedSpatialShape.OfBox(
+                center: center,
+                halfExtents: FixedVector3.FromVector3(value: halfExtents),
+                rotation: FixedQuaternion.FromAxisAngle(
+                    angle: (yawRadians + FixedQ4816.FromDegrees(degrees: YawDegrees)),
+                    axis: FixedVector3.UnitY
+                )
+            )
+            : FixedSpatialShape.OfSphere(center: center, radius: FixedQ4816.FromDouble(value: Radius));
+    }
+    /// <summary>Gets the region's volume in cubic world units, presentation-side: the order <c>body.place</c> lists
+    /// nested regions in, smallest (innermost) first.</summary>
+    [JsonIgnore]
+    public double Volume => (HalfExtents is { } halfExtents)
+        ? (8.0 * ((double)halfExtents.X) * ((double)halfExtents.Y) * ((double)halfExtents.Z))
+        : ((4.0 / 3.0) * Math.PI * ((double)Radius) * ((double)Radius) * ((double)Radius));
+}
 /// <summary>How a tabletop board binding treats an illegal move — the author's choice per table, engine-side and
 /// game-agnostic: the judge that computes <see cref="WorldPlacementBoard.Verdict"/> is authored per world, and this
 /// field only decides what the engine itself does once that verdict refuses.</summary>

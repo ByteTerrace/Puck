@@ -36,14 +36,6 @@ public sealed class SdfMeshDresser : IDisposable {
     private long m_layout = -1;
 
     private SdfMeshRows.Run m_host;
-    private SdfMeshRows.Run m_clipCopies;
-
-    private readonly List<SdfMeshDraw> m_clipScratch = [];
-    private readonly List<(SdfMeshRows.Run Run, int Offset)> m_clipSources = [];
-    private readonly List<int> m_clipCopiedIndices = [];
-    private readonly List<(int Row, ulong Occupancy)> m_clipOccupants = [];
-
-    private bool m_hadClips;
     private bool m_pending;
     private bool m_disposed;
     private bool m_faultThisDress;
@@ -57,7 +49,7 @@ public sealed class SdfMeshDresser : IDisposable {
     }
 
     /// <summary>Gets logical retained scratch and index bytes.</summary>
-    public long ScratchBytes => (((((m_bindingsByOwner.StorageBytes + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
+    public long ScratchBytes => ((((((m_rows.ClipIndexBytes + m_bindingsByOwner.StorageBytes) + m_candidates.StorageBytes) + m_slots.StorageBytes) + m_hostChanges.StorageBytes) + (((long)m_bindings.Length) * IntPtr.Size)) + (((long)m_copies.Length) * (IntPtr.Size + sizeof(int))));
 
     /// <summary>Reconciles products, copy membership and poses without moving unrelated owners.</summary>
     public SdfFrame Dress(SdfFrame frame) {
@@ -79,7 +71,6 @@ public sealed class SdfMeshDresser : IDisposable {
             SdfRowChecks.ProcessWork.Count(kind: (retry ? SdfRowChecks.Retry : (frame.TickLocked ? SdfRowChecks.Locked : SdfRowChecks.Packs)));
         }
         var programChanged = !ReferenceEquals(objA: m_program, objB: frame.Program);
-        var portal = (m_hadClips || (frame.SlotClips.Count > 0));
         var hostNew = (m_host.Count != frame.MeshDraws.Count);
         var hostWhole = m_hostCursor.Collect(frame.MeshDrawChanges, frame.MeshDrawChangesSerial, frame.MeshDraws,
             frame.MeshDraws.Count, frame.MeshDrawsRevision, m_hostChanges, force: (startOver || hostNew));
@@ -173,15 +164,15 @@ public sealed class SdfMeshDresser : IDisposable {
                 visited++;
             }
         }
-        if (portal) { ApplyClips(frame: frame); }
-        // Clip-copy membership is derived by the conservative portal walk in R1b. If that walk allocated or freed
+        m_writer.SetClips(clips: frame.SlotClips);
+        // If clip-copy reconciliation allocated or freed
         // rows on an otherwise canonical locked frame, reconcile once from empty before publishing it.
         if (frame.TickLocked && !startOver && (m_program is not null) && !m_rows.Canonical) {
             m_pending = false;
             return Dress(frame: frame);
         }
         if (SdfRowChecks.Enabled) { CheckDress(access: access, frame: frame); }
-        m_writer.Publish(cause: (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : (portal ? SdfMeshStagingCause.Portal : null)));
+        m_writer.Publish(cause: (startOver ? (retry ? SdfMeshStagingCause.Retry : SdfMeshStagingCause.Rebuild) : null));
         if ((m_map is null) || !ReferenceEquals(objA: m_map.Inner, objB: frame.HostPickMap)) { m_map = ((frame.HostPickMap is { } inner) ? new SdfDressedPickMap(inner: inner, rows: m_rows) : null); }
         // The frame answers with this dresser's rows and map by reference, so a frame that stands is the frame answered
         // and no copy is made. A frame another dresser dressed is copied first: its rows are theirs to keep.
@@ -196,7 +187,6 @@ public sealed class SdfMeshDresser : IDisposable {
         m_slotCursor.Commit();
         m_program = frame.Program;
         m_layout = access.CopyLayoutRevision;
-        m_hadClips = (frame.SlotClips.Count > 0);
         m_pending = false;
         access.Acknowledge();
 
@@ -230,7 +220,7 @@ public sealed class SdfMeshDresser : IDisposable {
     private void StartOver() {
         m_writer.StartOver();
         m_groups.Clear(); m_own.Clear(); m_bindingsByOwner.Clear(); Array.Clear(array: m_bindings);
-        m_host = default; m_clipCopies = default; m_program = null; m_layout = -1; m_clipOccupants.Clear();
+        m_host = default; m_program = null; m_layout = -1;
     }
     private void RemoveBindings(SdfMeshRows.Run run) {
         for (var row = run.Start; (row < (run.Start + run.Count)); row++) { if (row < m_bindings.Length) { m_bindings[row] = null; m_bindingsByOwner.Remove(row: row); } }
@@ -244,7 +234,7 @@ public sealed class SdfMeshDresser : IDisposable {
         IndexBinding(binding: binding, row: row);
         Write(run, offset, binding.Pose(frame: frame, matrices: ref matrices), OwnerOf(binding: binding));
     }
-    private static SdfMeshRows.Owner OwnerOf(DrawBinding binding) => new(Instance: binding.FirstInstance);
+    private static SdfMeshRows.Owner OwnerOf(DrawBinding binding) => new(Instance: binding.FirstInstance, RigidCopy: (binding.CopyIndex >= 0));
     private void IndexBinding(int row, DrawBinding binding) {
         m_bindingsByOwner.Remove(row: row);
         if (binding.CopyIndex >= 0) { m_bindingsByOwner.Set(row, (true, binding.CopyIndex)); } else if (binding.Slot is { } slot) { m_bindingsByOwner.Set(key: (false, slot), row: row); }
@@ -253,39 +243,6 @@ public sealed class SdfMeshDresser : IDisposable {
         for (var row = m_bindingsByOwner.First(key: key); (row >= 0); row = m_bindingsByOwner.Next(row: row)) { m_candidates.Add(length: 1, start: row); }
     }
     private (SdfMeshRows.Run Run, int Offset) BindingRun(int row) => (m_bindings[row]!.Run, (row - m_bindings[row]!.Run.Start));
-    private void ApplyClips(SdfFrame frame) {
-        m_clipScratch.Clear(); m_clipSources.Clear(); m_clipCopiedIndices.Clear();
-        AddBase(run: m_host);
-        foreach (var state in m_groups.Values) { AddBase(run: state.Run); }
-        foreach (var state in m_own.Values) { AddBase(run: state.Run); }
-        var count = m_clipScratch.Count;
-
-        SdfSlotClip.Apply(m_clipScratch, frame.SlotClips, m_clipCopiedIndices);
-        var copyCount = (m_clipScratch.Count - count);
-        var copiesChanged = (m_clipCopies.Count != copyCount);
-
-        for (var i = 0; (!copiesChanged && (i < copyCount)); i++) {
-            var (run, offset) = m_clipSources[m_clipCopiedIndices[i]];
-            copiesChanged = (m_clipOccupants[i] != ((run.Start + offset), m_rows.Occupancy(row: (run.Start + offset))));
-        }
-        if (copiesChanged) { var old = m_clipCopies; m_clipCopies = m_writer.Allocate(count: copyCount); m_writer.Free(run: old); }
-        for (var i = 0; (i < count); i++) {
-            var (run, offset) = m_clipSources[i];
-            m_writer.SetStaged(run, offset, m_clipScratch[i], m_rows.OwnerOf(row: (run.Start + offset)));
-        }
-        m_clipOccupants.Clear();
-        for (var copied = 0; (copied < copyCount); copied++) {
-            var (run, offset) = m_clipSources[m_clipCopiedIndices[copied]];
-            var source = (run.Start + offset);
-
-            m_writer.Set(m_clipCopies, copied, m_clipScratch[(count + copied)], new(CopiedRow: source));
-            m_clipOccupants.Add(item: (source, m_rows.Occupancy(row: source)));
-        }
-    }
-    private void AddBase(SdfMeshRows.Run run) {
-        for (var i = 0; (i < run.Count); i++) { m_clipScratch.Add(item: m_rows.BaseAt(row: (run.Start + i))); m_clipSources.Add(item: (run, i)); }
-        SdfMeshHistory.ProcessWork.Add(SdfMeshHistory.RowsWalkedWhole, run.Count);
-    }
     private void CheckDress(SdfFrame frame, SdfMeshPathBake.FrameAccess access) {
         var expected = new List<SdfMeshDraw>(collection: frame.MeshDraws);
         var matrices = 0;

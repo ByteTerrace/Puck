@@ -155,6 +155,8 @@ public sealed class PrototypeMeshLawTests {
         var first = scene.Frame();
         var draw = Assert.Single(collection: first);
 
+        Assert.NotNull(@object: draw.FrameSlot);
+        Assert.False(condition: draw.UsesRootMaterialFrame);
         Assert.Equal(expected: (Assert.Single(collection: new Scene(definition: Animated(mesh: (Quad() with { Material = 0 }))).Frame()).Material + 1), actual: draw.Material);
         AssertNear(expected: new Vector3(x: 2f, y: 0f, z: -1f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[1], matrix: draw.ObjectToWorld));
         AssertNear(expected: new Vector3(x: 2f, y: 2f, z: -3f), actual: Vector3.Transform(position: draw.Mesh.Positions.Span[3], matrix: draw.ObjectToWorld));

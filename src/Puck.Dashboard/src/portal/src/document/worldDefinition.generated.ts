@@ -10008,13 +10008,25 @@ export type WorldPlacementReflow = {
 };
 
 /**
- * A placement's region facet — a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:<name> grant subject). The region's name is the carrying placement's Id — one identity, never a second string kept in sync by hand. The volume is a sphere centered on the placement's Position (the placement's own Scale/YawDegrees do not affect it — a region's size is its own authored radius, never derived from the creation's visual bounds). Presentation-only in itself (drawing no geometry); sensing reads the same document-authored center every tick, converted to fixed-point at the same boundary WorldSolid facets already cross through — unless the row also carries Attach, in which case the center is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing sphere follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point.
+ * A placement's region facet — a named volume row, not a trigger system: any placement may carry one, turning its stamp into a sensing volume the world-events feed watches for body enter/exit edges (see Server.WorldEventFeed and the observe region:<name> grant subject). The region's name is the carrying placement's Id — one identity, never a second string kept in sync by hand. The volume is a sphere of Radius or an oriented box of HalfExtents (exactly one is authored), so a room or a corridor is one region. Its center is Center in the placement's resolved frame and a box turns with the placement's resolved yaw plus its own YawDegrees; the placement's Scale never sizes it, since a region's size is its own authored extent, never derived from the creation's visual bounds. Presentation-only in itself (drawing no geometry); sensing reads the fixed-point shape ShapeAt compiles from the placement's resolved frame — unless the row also carries Attach, in which case the frame is the resolved live body pose instead (Server.WorldEventFeed.CollectRegions, the same resolve world.attachments answers): the sensing volume follows the carrier, and an inactive carrier senses nobody rather than sensing at a stale point. A body is inside when its foot point lies within the closed volume, the test Contains owns.
  */
 export type WorldPlacementRegion = {
   /**
-   * The sensing radius, world units. Must be finite and positive (validated).
+   * The sensing sphere's radius in world units, or zero for a box. A sphere's radius must be finite and positive (validated).
    */
-  radius: number;
+  radius?: number;
+  /**
+   * The sensing box's half-extents in world units along its own axes, or absent for a sphere. Each must be finite and positive (validated).
+   */
+  halfExtents?: [number, number, number];
+  /**
+   * The volume's center in the placement's frame, world units (yawed with it, never scaled).
+   */
+  center?: [number, number, number];
+  /**
+   * A box's yaw about +Y in degrees, added to the placement's resolved yaw. Ignored by a sphere.
+   */
+  yawDegrees?: number;
 };
 
 /**

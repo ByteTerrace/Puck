@@ -210,8 +210,7 @@ public sealed partial class SdfWorldTables {
 
     internal SdfMeshRowStamp RowStamp => new(m_currentDrawRows.Rows, m_meshSourceRevision);
 
-    // The cause the records the current staging packs count under, or null while it takes the draw journal, which splits
-    // them between a hand-over and a pose (StagingTally).
+    // An explicit publication cause, or null to classify each staged row as a hand-over, landing or pose (StagingTally).
     private SdfMeshStagingCause? m_stagingCause;
     private ulong m_meshRegionBytes;
     private ulong m_meshRegionUsedBytes;

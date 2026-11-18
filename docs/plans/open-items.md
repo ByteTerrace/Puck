@@ -62,7 +62,7 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
    the scheduling stage's, C0.3's and C0.4's windowed readings, the control plane's
    step C0.5, then the pool's design.
 6. [high] [The frame bar's owed frames](#other-frame-time-findings): arrival
-   work proportional to change: R1h and R1a's windowed checks, then R1b, R1c and S2 of
+   work proportional to change: R1h through R1c's windowed checks, then S2 of
    [its memo](arrival-proportional.md) in that order (R0's rule has read
    them), then the frame thread's field queries.
 7. [high] [Refactoring campaign](#refactoring-campaign): the duplication
@@ -101,7 +101,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     `puck benchmark` on both backends ([the memo](benchmark.md#the-build-order)'s stage 3). It replaces
     [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
     next batch.
-22. Then, by ordinary priority:
+22. [high] [Rendering research](rendering-research.md#the-build-order): the
+    research round's order across the residency, lighting, bake, job-system
+    and visibility packets above, from its stage 0 readings; the lead ranks
+    it at the next batch.
+23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
@@ -546,9 +550,21 @@ What an arrival and a hand-over still cost the frame:
   [The exact R1b request](arrival-proportional.md#windowed-r1b-verification-request)
   names the commands, forcing counts and what decides each. R1a and R1h retain
   their outstanding windowed requests there too. Count-changing arrivals keep
-  unrelated owner runs; only a start over rebuilds them. Indexed clipping (R1c)
-  still replaces the conservative portal visit, and clustered trace scenes (S2)
+  unrelated owner runs; only a start over rebuilds them. Indexed clip derivation
+  now covers every owner kind; [the R1c request](arrival-proportional.md#windowed-r1c-verification-request)
+  holds and withdraws the host-mesh witness and the rigid stand-in at the linked
+  gallery paintings on both backends. Its straddle, picks and appearance remain
+  unconfirmed until those counters and captures hold. Clustered trace scenes (S2)
   remain next; R2 stays with the visibility plan's V1b.
+- [medium] Portal straddle bounds omit authored mesh triangles outside the
+  creation's field bounds. `WorldCreationInstances.ReachOf` and `PartSpheres`
+  read the field shapes, while `WorldRigidAssets.Metadata` derives its reach
+  from the creation document; neither includes `WorldPrototype.Mesh`. A mesh
+  extending past its field can therefore reach the glass before the detector
+  publishes a clip. Include mesh bounds in those shared reach/sphere paths and
+  verify host and rigid bodies whose triangles reach beyond their fields. The
+  row-writer straddle witness keeps its triangles inside the keel's bounding
+  sphere, so its owner-kind check does not settle this separate detector gap.
 - [medium] Arrival at a new place can pay a settling cost of several seconds,
   produce and simulate both inflated as if the frame thread were starved,
   which steady readings do not show. A stop's window can also still hold part
@@ -2948,8 +2964,9 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: stage 4's places, then
-navigation domains, goal chapters and the seat program that plays them
+Owner: one benchmark lane per stage · high · Next: stage 4's goal chapters,
+the seat program that plays them and wall-contact failure, on the places and
+navigation domains built
 ([the route is places](benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)),
 beside the lead's windowed reading of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
@@ -2957,6 +2974,41 @@ beside the lead's windowed reading of `puck benchmark` on both backends
 The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
+
+- [high] Baking the debug world's navigation domains costs minutes of one
+  thread: `world.navigation` bakes all eight (99,183 cells) in about 170 s of
+  wall time on the lead machine, a timing lead whose attribution is a sampled
+  trace of the bake: about 69% proving edges (`Domain.HasClearTransition`'s
+  sphere casts) and 31% sampling cells, and inside each distance most of the
+  time in `SdfFieldEvaluator.WalkPoints`, the whole-world field's per-point
+  cull walk, with the valley's relief noise (`Pcg3dLatticeNoise.Fbm3`) the
+  largest shape cost. The domains read the derived solid field
+  (`WorldSolidField.Query`), a second geometry beside the analytic contact
+  provider the Moth collides with, and their rows make every boot compile that
+  field (`WorldTargetSelection.RequiresLineOfSight` counts navigation rows). A
+  route's first search bakes what it reaches on the authority's thread. Fix at
+  the cause: plan against the contact provider the bodies use (an
+  `IWorldQuery` over `WorldColliderSet`, so planning and walking read one
+  geometry and no boot compiles a whole-world field for navigation), or give
+  the field query a spatial partition, then bake off the tick. The seat
+  program lane needs this before routes play live.
+- [medium] The route contact check (`WorldPopulation.FindCheckedRoute`) and the
+  bake disagree near (-4.7, 5.2) on the spawn's ground: `world.navigation route
+  place-stage place-camera-course` answers `walls=3/239` there, a route the
+  field bake admits meeting the analytic contact field (likely a lawn group's
+  contact facet the derived solid field does not hold; unconfirmed). Name the
+  placement (`world.debug-view report contacts`) and fix whichever side is
+  wrong; planning on the contact provider (above) closes the class.
+- [medium] The desktop in the lobby (`place-desktop`, `desktop.puck`) has no
+  walkable navigation cell around the desk and chair, though `debug.go
+  desktop` stands the Moth behind the chair: the field bake blocks about
+  4 x 3.5 m there (`world.navigation map grounds 98 100 12 14`). Find which
+  shape the field holds that the contact provider does not.
+- [medium] The baseline route's third chapter goes off course headless at
+  (24.1, 33.53) in `place-east-wing`, with or without navigation domains: its
+  places visited show it reaching `place-wonderland-threshold` and turning back
+  into the lobby without crossing the painting. Stage 4's goal chapters replace
+  its tick-pinned stick program.
 
 - [high] The same route runner is built four times: the tour's route stops
   (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and

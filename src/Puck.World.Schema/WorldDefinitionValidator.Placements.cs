@@ -1845,11 +1845,28 @@ public static partial class WorldDefinitionValidator {
             // placement's own id, so no separate uniqueness check is owed — the id duplication check above already
             // covers it.
             if (placement.Region is { } region) {
-                if (
+                if (region.HalfExtents is { } halfExtents) {
+                    if (region.Radius != 0f) {
+                        errors.Add(item: $"{path}.region authors both radius and halfExtents; a region is a sphere (radius) or a box (halfExtents).");
+                    }
+                    if (
+                        !float.IsFinite(f: halfExtents.X) || (halfExtents.X <= 0f) ||
+                        !float.IsFinite(f: halfExtents.Y) || (halfExtents.Y <= 0f) ||
+                        !float.IsFinite(f: halfExtents.Z) || (halfExtents.Z <= 0f)
+                    ) {
+                        errors.Add(item: $"{path}.region.halfExtents ({halfExtents.X}, {halfExtents.Y}, {halfExtents.Z}) must each be finite and positive.");
+                    }
+                } else if (
                     !float.IsFinite(f: region.Radius) ||
                     (region.Radius <= 0f)
                 ) {
-                    errors.Add(item: $"{path}.region.radius {region.Radius} must be finite and positive.");
+                    errors.Add(item: $"{path}.region.radius {region.Radius} must be finite and positive (or author halfExtents for a box).");
+                }
+                if (
+                    !float.IsFinite(f: region.Center.X) || !float.IsFinite(f: region.Center.Y) || !float.IsFinite(f: region.Center.Z) ||
+                    !float.IsFinite(f: region.YawDegrees)
+                ) {
+                    errors.Add(item: $"{path}.region.center and .yawDegrees must be finite.");
                 }
             }
 

@@ -119,6 +119,9 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["arrivalFailed"] = Strings(values: failed),
             ["arrivalUnjudged"] = Strings(values: unjudged),
             ["pose"] = chapter.Where?.Answer,
+            ["startPlaces"] = PlacesOf(line: chapter.StartPlace),
+            ["endPlaces"] = PlacesOf(line: chapter.EndPlace),
+            ["placesVisited"] = Visited(chapter: chapter),
             ["stateHash"] = chapter.Hash?.Answer,
             ["disturbed"] = Strings(values: Disturbances(chapter: chapter, statistics: statistics)),
             ["ticksShed"] = chapter.Shed,
@@ -170,6 +173,7 @@ public sealed partial class WorldBenchmarkCommandModule {
         }
 
         var poses = chapter.Poses.Where(predicate: static line => (line.Outcome == "ran")).ToArray();
+        var places = chapter.Places.Where(predicate: static line => (line.Outcome == "ran")).ToArray();
         var listed = new JsonArray();
 
         foreach (var (index, _) in over.OrderByDescending(keySelector: static hitch => hitch.Work).ThenBy(keySelector: static hitch => hitch.Index).Take(count: MaxHitchesListed)) {
@@ -201,6 +205,10 @@ public sealed partial class WorldBenchmarkCommandModule {
                     ["y"] = double.Parse(s: pose.Groups["y"].Value, provider: CultureInfo.InvariantCulture),
                     ["z"] = double.Parse(s: pose.Groups["z"].Value, provider: CultureInfo.InvariantCulture),
                 };
+            }
+            if (places.LastOrDefault(predicate: line => (line.Tick <= sample.Tick)) is { } named) {
+                hitch["places"] = PlacesOf(line: named);
+                hitch["placesSampledTick"] = named.Tick;
             }
             listed.Add(item: hitch);
         }
@@ -240,6 +248,30 @@ public sealed partial class WorldBenchmarkCommandModule {
         }
 
         return reads;
+    }
+
+    // The innermost place of the chapter's start, of each sample and of its end, in order, a repeat collapsed: the rooms
+    // the walk passed through, at the samples' grain.
+    private static JsonArray Visited(Chapter chapter) {
+        var visited = new List<string>();
+
+        foreach (var line in chapter.Places.Prepend(element: chapter.StartPlace).Append(element: chapter.EndPlace)) {
+            if ((PlacesOf(line: line) is { } places) && (((places.Count > 0) ? places[0]!.GetValue<string>() : "none") is var at) && ((visited.Count == 0) || (visited[^1] != at))) {
+                visited.Add(item: at);
+            }
+        }
+
+        return Strings(values: visited);
+    }
+    // The places a body.place line answered, innermost first; null when the line never ran or named no place list.
+    private static JsonArray? PlacesOf(WorldTickScript.Line? line) {
+        if ((line is not { Outcome: "ran" }) || (PlaceList().Match(input: line.Answer ?? string.Empty) is not { Success: true } match)) {
+            return null;
+        }
+
+        var value = match.Groups["places"].Value;
+
+        return Strings(values: ((value == "none") ? [] : value.Split(separator: ',')));
     }
 
     private string? AnswerOf(WorldTickScript.Line line) => ((line.Outcome is "ran" or "refused" or "faulted") && m_raw.TryGetValue(key: line, value: out var raw)) ? raw : null;

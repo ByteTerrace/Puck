@@ -477,6 +477,15 @@ public sealed partial class WorldRuleHost {
         return true;
     }
 
+    // The places a body stands in, innermost first, and the innermost alone as `at`; the payload carries the list.
+    private QueryAnswer DescribePlace(int index) {
+        var places = Host.Events.PlacesOf(body: index);
+
+        return new QueryAnswer(
+            Text: $"[body.place: body:{index} at={((places.Count == 0) ? "none" : places[0])} places={((places.Count == 0) ? "none" : string.Join(separator: ",", values: places))}]",
+            Payload: places
+        );
+    }
     /// <summary>Composes the authoritative answer to a read-back query.</summary>
     /// <param name="query">The read-back query.</param>
     /// <returns>The authoritative answer.</returns>
@@ -490,6 +499,11 @@ public sealed partial class WorldRuleHost {
         ),
             WorldQuery.PlayerWhere where => new QueryAnswer(
             Text: $"[body.where: body:{where.Index} is not an active population entry — see world.population]",
+            Refused: true
+        ),
+            WorldQuery.PlayerPlace place when (Host.Body(index: place.Index) is not null) => DescribePlace(index: place.Index),
+            WorldQuery.PlayerPlace place => new QueryAnswer(
+            Text: $"[body.place: body:{place.Index} is not an active population entry — see world.population]",
             Refused: true
         ),
             WorldQuery.PlayerChannels channels when (Host.Body(index: channels.Index) is { } body) => new QueryAnswer(Text: Host.DescribeChannels(

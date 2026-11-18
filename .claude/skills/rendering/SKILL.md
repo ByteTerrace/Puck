@@ -179,7 +179,10 @@ The static scene key and diagnostic comparison ignore row order.
 refusal, relocation and an expired consumer. `force skip host`, `force skip scene`, `force pack` and
 `force dress-fault [<dresses>]` exercise the remaining cursor and publication paths. `host.memory collect` and `gpu.faults lose` exercise
 trim and new tables. The device-free witness is `SdfMeshArrivalLawTests`; a headless World stages
-no draws. Active/ended portal clipping still visits all base rows through the writer until R1c.
+no draws. `SdfMeshRows.Writer.SetClips` compares clip values in order and revisits only their old/new slot chains,
+indexed across host, rigid-copy and in-place rows. The table derives staged draws from base draws, owns one carried
+run per clip, and reconciles changed membership before publication. `SdfSlotClip.Apply` is only the rebuild oracle's
+clip step. `rows.written`, `rows.clipped` and `rows.restored` in `sdf.instances` count by owner kind.
 `world.residency` reports logical journal/scratch array bytes separately from
 mesh residency and the overlapping process/account/backend memory readings.
 Pending bake demand reads the same occurrence index and transformed copy boxes;

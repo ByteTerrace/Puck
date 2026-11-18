@@ -93,6 +93,10 @@ public sealed class WorldEventFeed {
     // reorderable ordinal" rule m_regionOccupancy follows).
     private readonly Dictionary<string, LinkState> m_links = new(comparer: StringComparer.Ordinal);
     private readonly bool[] m_seatOccupied = new bool[WorldBodiesLimits.LocalSeatCount];
+    // Each local seat body's innermost place as of its latest region edge, published for presentation readers on other
+    // threads (a string reference written whole); derived from the occupancy latches, so a checkpoint carries none.
+    private readonly string?[] m_seatPlaces = new string?[WorldBodiesLimits.LocalSeatCount];
+    private readonly bool[] m_seatPlacesStale = new bool[WorldBodiesLimits.LocalSeatCount];
     // Pairwise overlap state, keyed by the ascending (a, b) body-index pair. Its degree is bounded by the authored
     // collision-events policy, so a dense few-thousand-body crowd never becomes a quadratic table.
     private readonly HashSet<(int A, int B)> m_overlapping = [];
@@ -110,15 +114,15 @@ public sealed class WorldEventFeed {
 
     // Only membership matters here: the complete candidate image is sorted by X/slot before any pair is visited.
     private readonly HashSet<int> m_collisionPending = [];
-    private readonly Dictionary<string, (FixedVector3 Center, FixedQ4816 Radius, bool HasCenter)> m_regionFrames = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, (FixedSpatialShape Shape, bool HasCenter)> m_regionFrames = new(comparer: StringComparer.Ordinal);
 
     private WorldCollisionEvents? m_collisionPolicy;
     private WorldDefinition? m_regionDefinition;
-    // m_regionDefinition's sensing placements in placement order (their region ordinals), each with its radius and, for
-    // one attached to nothing, its static center: functions of the immutable definition, so a tick visits its regions
-    // and never every placement.
+    // m_regionDefinition's sensing placements in placement order (their region ordinals), each with, for one attached to
+    // nothing, its static volume: functions of the immutable definition, so a tick visits its regions and never every
+    // placement.
     private RegionRow[] m_regionRows = [];
-    private readonly record struct RegionRow(WorldPlacement Placement, FixedQ4816 Radius, FixedVector3 StaticCenter);
+    private readonly record struct RegionRow(WorldPlacement Placement, WorldPlacementRegion Region, FixedSpatialShape StaticShape);
 
     private readonly ulong[] m_collisionPairKeys;
     private readonly CollisionTransition[] m_collisionTransitions;
@@ -562,12 +566,13 @@ public sealed class WorldEventFeed {
             m_regionFrames.Clear();
             m_regionDefinition = definition;
             m_regionRows = RegionRowsOf(definition: definition);
+            Array.Fill(array: m_seatPlacesStale, value: true);
         }
 
         var rows = m_regionRows;
 
         for (var thisOrdinal = 0; (thisOrdinal < rows.Length); thisOrdinal++) {
-            var (placement, radius, staticCenter) = rows[thisOrdinal];
+            var (placement, region, staticShape) = rows[thisOrdinal];
 
             if (!m_regionOccupancy.TryGetValue(
                 key: placement.Id,
@@ -577,24 +582,25 @@ public sealed class WorldEventFeed {
                 m_regionOccupancy[placement.Id] = occupancy;
             }
 
-            // An ATTACHED region's sensing sphere centers on the resolved live pose (the SAME fixed-point resolve
+            // An ATTACHED region's sensing volume stands in the resolved live pose (the SAME fixed-point resolve
             // world.attachments answers), never the row's inert static Position — an inactive target body resolves
             // no center, so the region contributes nothing this tick (every occupant exits, mirroring the row's
             // established "contributes nothing" verdict) rather than sensing at a stale last-known point.
             var hasCenter = true;
-            var center = staticCenter;
+            var shape = staticShape;
 
             if (placement.Attach is { } attach) {
                 hasCenter = WorldPlacementAttachment.TryResolve(
                     attach: attach,
                     population: population,
-                    position: out center,
+                    position: out var center,
                     reason: out _,
-                    yawRadians: out _
+                    yawRadians: out var yawRadians
                 );
+                shape = region.ShapeAt(origin: center, yawRadians: yawRadians);
             }
 
-            var frame = (center, radius, hasCenter);
+            var frame = (shape, hasCenter);
             var frameChanged = (!m_regionFrames.TryGetValue(key: placement.Id, value: out var previous) || (previous != frame));
 
             m_regionFrames[placement.Id] = frame;
@@ -608,10 +614,10 @@ public sealed class WorldEventFeed {
                     hasCenter &&
                     population.IsActive(index: body) &&
                     (population.EntryBody(index: body) is { } entry) &&
-                    (entry.FixedPosition - center).IsWithin(radius: radius)
+                    shape.Contains(point: entry.FixedPosition)
                 );
 
-                _ = EmitTransition(
+                if (EmitTransition(
                     latch: ref occupancy[body],
                     now: inside,
                     onClear: new WorldEventEdge(
@@ -628,7 +634,16 @@ public sealed class WorldEventFeed {
                         A: body,
                         B: thisOrdinal
                     )
-                );
+                ) && (body < m_seatPlaces.Length)) {
+                    m_seatPlacesStale[body] = true;
+                }
+            }
+        }
+        // A seat's innermost place is named again only on the tick one of its region edges fires.
+        for (var seat = 0; (seat < m_seatPlaces.Length); seat++) {
+            if (m_seatPlacesStale[seat]) {
+                m_seatPlacesStale[seat] = false;
+                Volatile.Write(location: ref m_seatPlaces[seat], value: ((PlacesOf(body: seat) is { Count: > 0 } places) ? places[0] : null));
             }
         }
     }
@@ -643,12 +658,14 @@ public sealed class WorldEventFeed {
                 continue;
             }
 
+            var frame = ((placement.Attach is null)
+                ? WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement)
+                : default);
+
             rows.Add(item: new RegionRow(
                 Placement: placement,
-                Radius: FixedQ4816.FromDouble(value: region.Radius),
-                StaticCenter: ((placement.Attach is null)
-                    ? FixedVector3.FromVector3(value: WorldDefinitionRows.ResolvedPosition(definition: definition, placement: placement))
-                    : default)
+                Region: region,
+                StaticShape: region.ShapeAt(origin: frame.FixedPosition, yawRadians: frame.FixedYawRadians)
             ));
         }
 
@@ -773,6 +790,41 @@ public sealed class WorldEventFeed {
         m_edges.AddRange(collection: m_pendingRoutes);
         m_pendingRoutes.Clear();
         population.CompleteBodyEvents();
+    }
+    /// <summary>Lists the regions (places) one body stands in as of the latest collection: the same occupancy latches
+    /// region edges and <c>$region:</c> rule reads come from, innermost first (the smallest volume, so a room inside a
+    /// wing lists before the wing), ties in placement order.</summary>
+    /// <param name="body">The body's 0-based entity index.</param>
+    /// <returns>The carrying placements' ids, empty when the body stands in none or the feed has not collected yet.</returns>
+    public IReadOnlyList<string> PlacesOf(int body) => Places(holds: (row, _) => IsOccupant(placementId: row.Placement.Id, body: body));
+    /// <summary>Gets a local seat body's innermost place as of its latest region edge, safe to read from any thread:
+    /// the reading a HUD binds (<c>seat.&lt;n&gt;.place</c>).</summary>
+    /// <param name="seat">The 0-based local seat, which is its body index.</param>
+    /// <returns>The innermost place's placement id, or <see langword="null"/> while the body stands in none.</returns>
+    public string? SeatPlace(int seat) => ((((uint)seat) < ((uint)m_seatPlaces.Length)) ? Volatile.Read(location: ref m_seatPlaces[seat]) : null);
+    /// <summary>Lists the regions (places) whose volume holds a point, in the frames the latest collection sensed them
+    /// in, innermost first as <see cref="PlacesOf"/> orders them.</summary>
+    /// <param name="point">The world point.</param>
+    /// <returns>The carrying placements' ids, empty when no region holds the point or the feed has not collected yet.</returns>
+    public IReadOnlyList<string> PlacesAt(FixedVector3 point) => Places(holds: (row, _) => (
+        m_regionFrames.TryGetValue(key: row.Placement.Id, value: out var frame) &&
+        frame.HasCenter &&
+        frame.Shape.Contains(point: point)
+    ));
+    // The regions a predicate holds, smallest volume first, ties in placement order.
+    private string[] Places(Func<RegionRow, int, bool> holds) {
+        var rows = m_regionRows;
+        var places = new List<(double Volume, int Ordinal, string Id)>();
+
+        for (var ordinal = 0; (ordinal < rows.Length); ordinal++) {
+            if (holds(rows[ordinal], ordinal)) {
+                places.Add(item: (rows[ordinal].Region.Volume, ordinal, rows[ordinal].Placement.Id));
+            }
+        }
+
+        places.Sort(comparison: static (left, right) => ((left.Volume != right.Volume) ? left.Volume.CompareTo(value: right.Volume) : left.Ordinal.CompareTo(value: right.Ordinal)));
+
+        return [.. places.Select(selector: static place => place.Id)];
     }
     /// <summary>Reports whether one body is inside a placement's region as of this tick's collection.</summary>
     /// <param name="placementId">The placement carrying the region facet.</param>
@@ -935,6 +987,8 @@ public sealed class WorldEventFeed {
         foreach (var row in checkpoint.RegionOccupancy) {
             m_regionOccupancy[row.Region] = ((bool[])row.Occupancy.Clone());
         }
+        // The restored latches may name other places; each seat's is named again at the next collection.
+        Array.Fill(array: m_seatPlacesStale, value: true);
     }
 
     private readonly record struct CollisionTransition(ulong Key, bool Now) : IComparable<CollisionTransition> {

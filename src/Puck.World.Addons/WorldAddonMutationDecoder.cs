@@ -91,7 +91,7 @@ public static class WorldAddonMutationDecoder {
     private static readonly string[] MirrorMembers = ["normal", "offset"];
     private static readonly string[] EmissionMembers = ["patchId", "level", "radius"];
     private static readonly string[] SolidMembers = ["margin"];
-    private static readonly string[] RegionMembers = ["radius"];
+    private static readonly string[] RegionMembers = ["radius", "halfExtents", "center", "yawDegrees"];
     private static readonly string[] AttachMembers = ["bodyIndex", "localOffset", "localYawDegrees"];
     private static readonly string[] InhabitMembers = ["kit", "look", "source", "count", "distribution"];
     // A face is read through the document's own contract, so this door decodes exactly the face shape a document row
@@ -601,17 +601,20 @@ public static class WorldAddonMutationDecoder {
             members: members
         );
 
-        var radius = RequireFinite(
-            context: context,
-            members: members,
-            name: "radius"
+        // A sphere names its radius and a box its half-extents; the validator owns their positivity and exclusivity.
+        Vector3? halfExtents = (members.ContainsKey(key: "halfExtents")
+            ? RequireVector3(context: context, members: members, name: "halfExtents")
+            : null);
+        var radius = ((halfExtents is null || members.ContainsKey(key: "radius"))
+            ? RequireFinite(context: context, members: members, name: "radius")
+            : 0f);
+
+        return new WorldPlacementRegion(
+            Center: (members.ContainsKey(key: "center") ? RequireVector3(context: context, members: members, name: "center") : default),
+            HalfExtents: halfExtents,
+            Radius: radius,
+            YawDegrees: (members.ContainsKey(key: "yawDegrees") ? RequireFinite(context: context, members: members, name: "yawDegrees") : 0f)
         );
-
-        if (radius <= 0f) {
-            throw new AddonMutationDecodeException(message: $"{context}: 'radius' must be positive (got {radius.ToString(provider: CultureInfo.InvariantCulture)})");
-        }
-
-        return new WorldPlacementRegion(Radius: radius);
     }
     private static WorldMutation DecodeRemoveHudElement(JsonElement root, Principal principal) {
         var members = UniqueMembers(

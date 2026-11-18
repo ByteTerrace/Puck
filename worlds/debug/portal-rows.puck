@@ -1,0 +1,43 @@
+// A brass diamond on a teal keel: authored triangles beside a field, carried by one articulated body.
+// The neutral timeline keeps it in the stamp pool, so its diamond is a host draw and its keel an in-place bake.
+// Imported ahead of every other inhabitant, with one extra capacity slot, it takes body 560 without moving them.
+// This is a probe of the renderer, not a sculpting project: an engine limit here is fixed at its cause or handed back.
+import "../standard/kits"
+
+prototypes {
+  prototype "portal-row-witness" {
+    mesh {
+      material: 1
+      vertices [[0, 1.6, 0], [0.45, 0.95, 0], [0, 0.3, 0], [-0.45, 0.95, 0], [0, 0.95, 0.45], [0, 0.95, -0.45]]
+      indices [0, 4, 1, 0, 3, 4, 0, 5, 3, 0, 1, 5, 2, 1, 4, 2, 4, 3, 2, 3, 5, 2, 5, 1]
+    }
+    document {
+      name: "Portal row witness"
+      schema: "puck.creation.v1"
+      frames [{ name: "rest", transforms [] }]
+      palette [{ color: "#397C83", roughness: 0.5 }, { color: "#D9A344", roughness: 0.3, metal: 0.65 }]
+      shape Box "keel" {
+        material: 0
+        position [0, 0.95, 0]
+        scale [0.16, 0.85, 0.2]
+      }
+    }
+  }
+}
+looks [{
+  name: "portal-row-witness", scale: 1, source: creation(prototypeId: `portal-row-witness`)
+  motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+}]
+placements {
+  placement "portal-row-witness" {
+    prototype: "portal-row-witness"
+    position [54.5, 0.05, 32.5]
+    inhabit {
+      count: 1
+      distribution { fill { name: "additive", offset: 0, step: 0.001 }, region: disc(radius: 0.01) }
+      kit: "walker"
+      look: "portal-row-witness"
+      source: "Idle"
+    }
+  }
+}

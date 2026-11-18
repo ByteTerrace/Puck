@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.Net.Http.Headers;
 
 namespace Puck.Cli.PullRequest;
 
@@ -10,17 +9,8 @@ namespace Puck.Cli.PullRequest;
 /// </summary>
 internal static class PullRequestSubmitFormatCommand {
     private static async Task<int> RunAsync(long runId, CancellationToken cancellationToken) {
-        using var client = new HttpClient { BaseAddress = new Uri(uriString: (CliGitHub.ApiUrl.TrimEnd(trimChar: '/') + "/")), Timeout = TimeSpan.FromMinutes(value: 2) };
+        using var client = CliGitHub.CreateClient(userAgent: "Puck-Formatter/1.0");
 
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-            parameter: CliGitHub.Token,
-            scheme: "Bearer"
-        );
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(input: "Puck-Formatter/1.0");
-        client.DefaultRequestHeaders.Add(
-            name: "X-GitHub-Api-Version",
-            value: "2022-11-28"
-        );
         await new FormatSubmission(
             client: client,
             report: CliGitHub.Summarize

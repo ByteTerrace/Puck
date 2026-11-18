@@ -392,10 +392,10 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
         var rightClip = other.ClipPlane;
 
         return (
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in leftMatrix)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in rightMatrix))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in leftRotation)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Quaternion>(reference: in rightRotation))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in leftShift)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector3>(reference: in rightShift))) &&
-            MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in leftClip)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<Vector4>(reference: in rightClip)))
+            Bitwise.Equal(left: in leftMatrix, right: in rightMatrix) &&
+            Bitwise.Equal(left: in leftRotation, right: in rightRotation) &&
+            Bitwise.Equal(left: in leftShift, right: in rightShift) &&
+            Bitwise.Equal(left: in leftClip, right: in rightClip)
         );
     }
 
@@ -708,10 +708,10 @@ public static class SdfMeshRegion {
         var clip = draw.ClipPlane;
         var previousClip = previous.ClipPlane;
         var meshChanged = (!retained || !ReferenceEquals(objA: mesh, objB: previous.Mesh));
-        var matrixChanged = (!retained || !SameDrawBits(left: in matrix, right: in previousMatrix));
+        var matrixChanged = (!retained || !Bitwise.Equal(left: in matrix, right: in previousMatrix));
         var normalChanged = (!retained || !SameNormalBasis(left: in matrix, right: in previousMatrix));
-        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !SameDrawBits(left: in carry, right: in previousCarry) ||
-            !SameDrawBits(left: in shift, right: in previousShift) ||
+        var boxChanged = (meshChanged || normalChanged || (draw.Displacement != previous.Displacement) || !SameDrawTranslation(left: in matrix, right: in previousMatrix) || !Bitwise.Equal(left: in carry, right: in previousCarry) ||
+            !Bitwise.Equal(left: in shift, right: in previousShift) ||
             (BitConverter.SingleToUInt32Bits(value: draw.CarryScale) != BitConverter.SingleToUInt32Bits(value: previous.CarryScale)));
         var writer = new DrawRecordWriter(record[..SdfMeshRecord.DrawWords], retained);
 
@@ -755,7 +755,7 @@ public static class SdfMeshRegion {
             WriteSelectionVector(words: ref writer, offset: (SdfMeshRecord.SelectionWord + 12), value: box.HalfZ);
         }
 
-        var enclosed = ((!meshChanged && !normalChanged && SameDrawBits(left: in clip, right: in previousClip))
+        var enclosed = ((!meshChanged && !normalChanged && Bitwise.Equal(left: in clip, right: in previousClip))
             ? ((selection[3] & 4u) != 0u)
             : draw.EnclosesSolid);
 
@@ -790,8 +790,6 @@ public static class SdfMeshRegion {
         }
     }
 
-    private static bool SameDrawBits<T>(in T left, in T right) where T : unmanaged =>
-        MemoryMarshal.AsBytes(span: new ReadOnlySpan<T>(reference: in left)).SequenceEqual(other: MemoryMarshal.AsBytes(span: new ReadOnlySpan<T>(reference: in right)));
     private static bool SameNormalBasis(in Matrix4x4 left, in Matrix4x4 right) {
         var before = MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in left));
         var after = MemoryMarshal.AsBytes(span: new ReadOnlySpan<Matrix4x4>(reference: in right));

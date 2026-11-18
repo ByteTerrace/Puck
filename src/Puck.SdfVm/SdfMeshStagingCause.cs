@@ -2,17 +2,17 @@ namespace Puck.SdfVm;
 
 /// <summary>Why a staging of the mesh region packed a draw record. A staging that does not take the draw journal packs
 /// every record under one cause, the first of <see cref="Rebuild"/> through <see cref="Cursor"/> that holds; one that
-/// takes it splits its records between <see cref="HandOver"/> and <see cref="Pose"/>. The tables count each cause in
+/// takes it counts an explicit publication cause, or splits its records between <see cref="HandOver"/>,
+/// <see cref="Landing"/> and <see cref="Pose"/>. The tables count each cause in
 /// <see cref="SdfMeshHistory.ProcessWork"/> (<see cref="SdfMeshHistory.RowsPackedOf"/>).</summary>
 public enum SdfMeshStagingCause : byte {
     /// <summary>The frame owes every row because the dresser rebuilt its topology.</summary>
     Rebuild = 0,
-    /// <summary>The frame owes every row because a body straddles a portal, or stopped straddling one.</summary>
+    /// <summary>The publication includes changed clipped rows, their carried copies, or rows restored after a clip ended.</summary>
     Portal = 1,
     /// <summary>The frame owes every row because the publication before it failed.</summary>
     Retry = 2,
-    /// <summary>The journal names rows, and the tables refuse it because a mesh is owed, the last staged list was
-    /// filtered by landing, its row count differs, or a changed row names a mesh whose words do not stand.</summary>
+    /// <summary>A mesh's placement or availability changed, so its rows were packed live or absent.</summary>
     Landing = 3,
     /// <summary>The journal cannot be collected: there is none, it is another producer's or list's, its serial
     /// expired, or the tables have staged nothing yet.</summary>

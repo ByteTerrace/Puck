@@ -17,6 +17,7 @@ internal sealed partial class PlayerCommandModule {
     private static readonly CommandForms BodyReleaseForms = CommandForms.Of(verb: "body.release", OptionalBodyForm);
     private static readonly CommandForms BodyStopForms = CommandForms.Of(verb: "body.stop", StopForm);
     private static readonly CommandForms BodyWhereForms = CommandForms.Of(verb: "body.where", WhereForm);
+    private static readonly CommandForms BodyPlaceForms = CommandForms.Of(verb: "body.place", OptionalBodyForm);
     // The body.reconcile smoothing window: the default when [seconds] is omitted, and the clamp a supplied value is
     // held to.
     private const float DefaultReconcileSeconds = 0.25f;
@@ -1160,6 +1161,71 @@ internal sealed partial class PlayerCommandModule {
                 )) {
                     IsError = answer.Refused,
                 };
+            }
+        );
+
+        return result;
+    }
+    // body.place reads the authority that holds the body: a named instance's seat, a seat routed through a portal into
+    // another instance, or the boot world's own population.
+    private CommandResult PlaceHandler(CommandContext context, WireArgs args) {
+        if (!TryStripInstanceToken(
+            args: in args,
+            error: out var tokenError,
+            target: out var instanceTarget,
+            verb: "body.place"
+        )) {
+            return tokenError!.Value;
+        }
+
+        if (instanceTarget.Instance is { } instance) {
+            if (
+                (instanceTarget.EffectiveCount != 1) ||
+                !args.TryInt(index: 0, value: out var instanceSlot) ||
+                (instanceSlot < 1) ||
+                (instanceSlot > WorldBodiesLimits.LocalSeatCount)
+            ) {
+                return CommandResult.Error(output: $"[body.place: instance-targeted form expects <slot> 1..{WorldBodiesLimits.LocalSeatCount} before instance:<name>]");
+            }
+
+            var instanceAnswer = instance.Server.AnswerSubmittedQuery(
+                principal: context.Principal,
+                query: new WorldQuery.PlayerPlace(Index: WorldPopulation.EntityFromDisplay(number: instanceSlot))
+            );
+
+            return new CommandResult(Output: WithInstanceTag(text: instanceAnswer.Text, instanceName: instance.Name)) { IsError = instanceAnswer.Refused };
+        }
+
+        if (instanceTarget.EffectiveCount > 1) {
+            return BodyPlaceForms.Refuse();
+        }
+
+        if (TryRoutedSeatQuery(
+            args: in args,
+            caller: context.Principal,
+            query: static index => new WorldQuery.PlayerPlace(Index: index),
+            result: out var routed
+        )) {
+            return routed;
+        }
+
+        var (player, index, error) = ResolveTarget(
+            args: in args,
+            requiredCount: 0,
+            verb: "body.place"
+        );
+
+        if (player is null) {
+            return CommandResult.Error(output: error!);
+        }
+
+        var result = default(CommandResult);
+
+        m_link.Query(
+            principal: context.Principal,
+            query: new WorldQuery.PlayerPlace(Index: index),
+            completion: answer => {
+                result = new CommandResult(Output: answer.Text) { IsError = answer.Refused };
             }
         );
 

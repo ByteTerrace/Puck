@@ -1661,6 +1661,7 @@ public sealed partial class WorldInstanceHost {
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerChannels } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerChannels(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerInput } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerInput(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerAffordances } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerAffordances(Index: bodyIndex)),
+        WorldSubmissionPayload.Query { Value: WorldQuery.PlayerPlace } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerPlace(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerState } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerState(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.PlayerTargets } => new WorldSubmissionPayload.Query(Value: new WorldQuery.PlayerTargets(Index: bodyIndex)),
         WorldSubmissionPayload.Query { Value: WorldQuery.Contacts } => new WorldSubmissionPayload.Query(Value: new WorldQuery.Contacts(Index: (bodyIndex + 1))),

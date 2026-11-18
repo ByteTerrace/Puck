@@ -14,6 +14,7 @@ documentId: "garden"
 import "moth-controls"
 import "suit"
 import "size"
+import "place-kit"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
 import "garden-pond"
 
@@ -92,6 +93,30 @@ placements {
     maxPlacementScale: 1
     minPlacementScale: 1
     previewDeadlineFrames: 1
+  }
+
+  // The garden's places (place-kit.puck): the plot, the ground before the arrival frame a crossing walks out onto, and
+  // the pond plot west of the frames (pond.puck).
+  placement "place-garden" {
+    prototype: "place"
+    position [-5, 1.5, -18]
+    region {
+      halfExtents [30, 3, 28]
+    }
+  }
+  placement "place-garden-arrival" {
+    prototype: "place"
+    position [3, 1.5, -10]
+    region {
+      halfExtents [2, 2, 2]
+    }
+  }
+  placement "place-garden-pond" {
+    prototype: "place"
+    position [-20, 1.5, -18]
+    region {
+      halfExtents [11, 3, 16]
+    }
   }
 
   // The garden painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
