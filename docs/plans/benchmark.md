@@ -310,7 +310,7 @@ Each step's check, run headless unless named:
 | Navigation | `world.navigation` lists each domain with its compiled and clear cell counts; `world.navigation route place-stage <place>` returns a route to every place with `walls=0/<samples>`; the bake's cost is read from `world.navigation` and `host.memory` |
 | Goals and the seat program | Built: `puck benchmark --headless --route debug --loops 2` arrives in every chapter of both loops with no wall contact, the stage chapter under the boot's shed ticks and the Wonderland chapter with the body at a quarter scale; the same chapter takes the same ticks in both loops. Open: `puck test` playing a route, and the same accepted input per chapter tick headless and live |
 | Failure | Built: a driven contact fails a chapter naming it (`wall at tick <t> in <place>: a driven wall contact at (x, y, z), normal (…), on step <n> (…)`), and a body that steps out of its path's places fails naming the place it entered |
-| The owner watches | A windowed `puck benchmark --loops 2` of the debug route, both backends, every chapter arriving |
+| The owner watches | A windowed `puck benchmark --route debug --loops 2`, both backends, every chapter arriving. A lane's windowed Direct3D 12 run played the first five chapters to arrival in the ticks the headless runs take, with 39 to 104 ticks shed in each |
 
 What exists and is reused: the region facet and its occupancy
 (`WorldPlacementRegion`, `WorldEventFeed.IsOccupant`, `WorldEventFeed.TryPlaceShape`),
