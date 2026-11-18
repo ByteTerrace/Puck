@@ -1728,17 +1728,13 @@ presents (`SdfGpuWorkBudget`). The budget is a share of GPU time, counted agains
 wall clock (`SdfGpuWork.GpuShare`). The service has a fixed number of job
 slots (`SdfGpuWork.SlotCount`).
 
-Three things in the lighting client throttle it. It admits one query at a
-time (`src/Puck.SdfVm/SdfMeshProbeGpuWork.cs:249`):
-
-```csharp
-            if (m_inFlight || !tables.BindsBackgroundWork) { return false; }
-```
-
-Its coordinator blocks on each answer (`SdfMeshProbeGpuWork.Submit`), and
-every relight job is followed by a separate job that commits it. And the
-relight's allowance is credited per rendered frame, capped at two frames'
-worth (`SdfMeshIrradiance.Grant`). A game presenting 30 frames a second is
+Three things in the lighting client throttled it when this was written. It
+admitted one query at a time, its coordinator blocked on each answer, and
+every relight job was followed by a separate job that committed it; step 3's
+first two parts below removed those (`SdfMeshProbeGpuWork.Run`,
+`SdfMeshProbeGpuWork.RecordCommit`). The third stands: the relight's allowance
+is credited per rendered frame, capped at two frames' worth
+(`SdfMeshIrradiance.Grant`). A game presenting 30 frames a second is
 therefore granted half the lighting work per second of one presenting 60.
 
 One windowed run measured the result. Each probe job took about 25 ms to go
@@ -1842,9 +1838,10 @@ Two more things are sized by fixed constants on every device.
    a third. The rate that works is one per kind of lattice, or one that
    follows the mean. The cold bake is measured again with it.
 3. **Let several probe jobs run at once, in three parts** (option 4b).
-   - Several jobs in flight, with one commit per batch.
+   - Several jobs in flight, with one commit per batch (built:
+     `SdfMeshProbeGpuWork.Run`, `SdfMeshProbeGpuWork.RecordCommit`).
    - Relights that a lighting change made stale become due at once and
-     share the worker with owed traces.
+     share the worker with owed traces (built: `SdfMeshIrradiance.Work`).
    - Then the grant per second, last. The relight's separate credit per
      frame (`SdfMeshIrradiance.Grant`) is deleted, and the relight draws on
      the one budget's wall-clock credit. The authored allowance stays in
