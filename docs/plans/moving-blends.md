@@ -393,8 +393,8 @@ the surface the cutter actually reaches, and resolves the conflict with step 5.
 
 ### What the gap is in the code
 
-The rendering plan's table describes the glacier as melting by sinking and
-carrying no relief. Both descriptions are stale. The glacier is the standard
+The gap was first written up as a glacier that melts by sinking and carries
+no relief. Neither holds today. The glacier is the standard
 template `glacierMass` (`worlds/standard/water.puck`), placed by
 `worlds/debug/water-scenery.puck`. Its ice is overlapping superellipsoid lumps
 with swept furrows cut out of them, under a `noise` relief, and it shrinks by
@@ -519,8 +519,10 @@ point (`SdfMeshTier.PixelShare`), so a swap between two steps moves the surface
 by no more than the error the bake already accepts there. This is the seamless
 guarantee, and it holds while the bake keeps up: while the cutter moves less
 than one step in the time a re-carve takes to land. A cutter faster than that
-lands its newest pose each time, a larger jump, and the counters below say
-so.
+lands its newest pose each time, a larger jump. G1 counts both cases in the
+bake's work counters: each operand re-plan, and each plan that replaced a
+waiting successor (the bake already counts coalesced resamples,
+`m_coalesced`), so a reading shows when the bake falls behind.
 
 **Which changes re-bake.** The bake already re-plans a group when a frame input
 its geometry read has moved: a sampled field's snapshot
