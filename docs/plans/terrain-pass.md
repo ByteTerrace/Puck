@@ -37,6 +37,9 @@ goes). Its parameters are authored data on the creation:
 - **Erosion mask:** each octave's amplitude is divided by `1 + k·|∇|²` of the
   sum so far, smoothing slopes and keeping detail in gullies and on ridges; the
   quintic interpolant's derivative is closed-form.
+- **Region masks:** the relief's strength is scaled down, or switched off,
+  inside regions the author draws with shapes, so a basin, a pad or a path
+  stands where its shapes put it ([the relief mask](#the-relief-mask)).
 - **Octaves from kilometres to centimetres**, one series each consumer cuts at
   its own spacing. Octaves whose quarter-wavelength is at least the finest
   declared terrain spacing are geometry: the bake draws them and contact reads
@@ -58,6 +61,467 @@ blobs), smooth radius at most half the smaller blended shape's least
 half-extent. The octave limit rises to 12, about 2 km down to the bake's cell.
 Shading octaves hash on the periodic lattice (`sdfPeriodicNoise3`): a
 centimetre octave 1 km from the origin leaves a float about 2^-7 of a cell.
+
+### The relief mask
+
+This is gap 4 and the first part of step 3. Relief moves authored ground by up
+to its amplitude, so anything placed against an analytic surface sinks or
+floats. On the debug world's north-west wall the lake's bowl is a
+subtraction in the sector's own creation (`terrainBasin` in
+`worlds/standard/terrain.puck`, fed by `valleyBasins` in
+`worlds/debug/water-site.puck`), and the sector's relief is applied after it
+to the whole composed field (`CreationStampEmitter.EmitNoise`, inside the
+creation's field scope). The lake's water, its lining and its stones are
+separate placements positioned from the analytic bowl (`lakeBowlFloor`), so
+up to 4 m of relief buries them or leaves them hanging. The relief record has
+no region to prevent it (`CreationNoiseDocument`).
+
+The fix is a mask on the relief: a list of regions, each drawn with ordinary
+shapes, that scales the relief's displacement by a weight between 0 and 1. A
+region's shapes are evaluated only to measure distance to the region. They
+add no surface, take no material, and are never part of the composed solid.
+
+#### What an author writes
+
+The relief record (`noise` today, the TerrainRelief op's record after step 3)
+gains one member, `masks`. Each entry holds:
+
+| Member | Meaning | Default |
+|---|---|---|
+| `shapes` | The region: shapes in the creation's frame, joined by hard union. | required, at least one |
+| `fade` | The width of the band, in creation units, over which the weight moves from `inside` to `outside`. | required, above 0 |
+| `start` | Where the band starts, as a distance from the region's surface; negative starts it inside the region. | 0 |
+| `inside` | The weight on and inside the region. | 0 |
+| `outside` | The weight past the band. | 1 |
+
+At a point whose distance to the region is `m`, an entry's weight is
+`inside + (outside - inside) * smoothstep(start, start + fade, m)`, and the
+relief's displacement is multiplied by the product of all entries' weights.
+`inside` and `outside` are limited to [0, 1], so a mask can only reduce relief,
+never amplify it. One mechanism covers what authors ask for:
+
+- **Mask:** `inside: 0`. On and inside the region the relief is exactly zero,
+  and it returns over `fade` metres outside. A lake's bowl, a glacier's
+  cradle, a building pad.
+- **Fade:** `inside` between 0 and 1. A path keeps a little of the ground's
+  roughness (`inside: 0.3`).
+- **Flatten:** there is no flatten op. A flat pad or a level floor is
+  geometry: the author adds the pad as a union shape (or the bowl as a
+  subtraction) and masks the relief over the same region. The standard
+  package's templates pair the two from one table, so the region is written
+  once.
+- **Relief only in a region:** `inside: 1, outside: 0`. The gallery's noise
+  exhibit (`shape-noise-subject` in `worlds/debug/shapes.puck`) splits into two
+  prototypes today only so the plinth and label stay clean. With this mask it
+  could be a single prototype.
+
+The `.puck` form uses the same row syntax as the creation's shapes. A `mask`
+block is one entry of `noise.masks`, and the `shape` rows inside it are that
+entry's `shapes`. The world vocabulary gains one `mask` construct. It reuses
+the existing `shape` construct for its rows rather than defining a second
+shape grammar. Unchecked: whether the `shape` construct in
+`WorldConstructs.Sections.cs` already resolves inside a nested block, or needs
+its enclosing rule widened.
+
+```text
+noise {
+  frequency: 0.02
+  amplitude: 4
+  octaves: 6
+  seed: 108
+  mask {
+    fade: 8m
+    shape Superellipsoid "lake-basin" { exponent: 2  position [0, 336, 440]  scale [46, 17, 46] }
+    shape Superellipsoid "lake-outlet" { exponent: 2  position [0, 331.9, 393]  scale [14, 8, 34] }
+  }
+}
+```
+
+The generic value path (`masks [ { fade: 8, shapes [ { type: "Superellipsoid", … } ] } ]`)
+compiles to the same document. That pair goes into the spelling-equivalence
+corpus.
+
+The standard terrain library gives the debug world its spelling. Its
+`terrainRelief` template gains a `masks` parameter, and a new
+`terrainBasinMask` function returns one mask entry built from the same basin
+rows `terrainBasin` carves. In `worlds/debug/valley.puck` the sector's call
+becomes `terrainRelief(seed: sector.seed, masks: …)` over
+`filter(valleyBasins, b => b.sector == sector.name)`. The lake's basin and its
+outlet then share one entry, so the bowl and the sill form one region. All of
+this is ordinary `.puck`: templates expand at compile time, so it compiles to
+the document a hand-written `mask` block would.
+
+Other places in the debug world that the mask serves, each to be done by its
+own place's lane once the mask lands:
+
+- **The glacier's cradle.** `valleyCuts` in `worlds/debug/glacier-site.puck`
+  carves the trough with a rounded box, and the glacier sits in it. The mask's
+  region is the same box.
+- **The falls.** `fallsProfile` in `worlds/debug/water-site.puck` follows the
+  analytic face (`sectorFace`), so the relief moves the rock under the ribbon.
+  This is inferred from how the profile is defined; it has not been
+  reproduced. Nothing is carved here, so the region is used only as a mask: a
+  chain of capsules along the profile (a `map` over its points),
+  `inside: 0`, a fade of a few metres.
+- **The overlook deck.** `valley-overlook` (`worlds/debug/valley.puck`) is kept
+  in a separate unrelieved prototype so the deck collides where it is drawn.
+  The south-west sector's wall behind it is still relieved, though. A pad mask
+  over the deck's footprint keeps that wall where the deck meets it.
+  Unchecked: whether the join shows a defect today.
+
+**What a mask shape may carry.** A mask shape carries geometry only: its type,
+name, pose, scale, and the facets that keep a primitive's distance a bound
+with a known Lipschitz factor (exponent, rounding, chamfer, elongate, a
+prism's profile). A material, blend, group, detail flag, warp, fold, field
+op, panel, trim, cell or paint on a mask shape is refused by name, since none
+of them means anything for a region. The type must be one that contact admits
+(not Revolve and not Sweep: see
+[contact admission](../../.claude/skills/sdf-authoring/references/shapes.md#contact-admission)).
+The contact field reads the same mask, and contact must not quietly drop part
+of it. Shapes in one entry join by hard union only. A subtraction or a smooth
+blend inside a mask is left for a later change, because a smooth blend against
+the seed described below would change the weight near the band's outer edge.
+These refusals turn away nothing that could be written before, because the
+mask itself is new.
+
+**Canonical form.** `CreationCanonicalizer` normalizes each entry: it fills in
+the defaults, canonicalizes each shape through the same shape normalization
+creation shapes use (so the gauge, scale and exponent conventions are the
+same), and keeps the entries in authored order. Entries are not merged or
+sorted. Two entries are not one entry with both shapes, because a product of
+two bands differs from one band over a union.
+
+#### How it lowers
+
+The relieved creation already emits inside one field scope: its shapes, then
+the relief, then the pop. The mask adds one short scope per entry, between the
+shapes and the relief:
+
+```text
+PushField                      the creation's scope, as today
+  shapes and text …
+  PushField  seeded at start + fade        one entry
+    the entry's shapes, Union, material 0
+    ReliefWeight(start, fade, inside, outside, 1/L)
+  PopField   Union
+  … one such scope per entry …
+  relief (NoiseDisplace, or TerrainRelief after step 3)
+PopField
+```
+
+It needs one new op and one extension of an existing one.
+
+- **ReliefWeight** (a field op): it reads the scope's accumulator as the
+  region's distance `m`, scaled by the scope's own 1/L. The Lipschitz analysis
+  bakes that factor onto the op, as it already bakes a scope's candidate scale
+  onto each pop. It computes the entry's weight and multiplies it into a
+  per-sample relief-weight register, which starts each sample at 1. Then it
+  sets the accumulator to the far distance. The plain Union pop that follows
+  therefore composes nothing: `min(parent, far)` is the parent, and the
+  parent's material wins.
+- **The relief op** multiplies its displacement by the register, then resets
+  the register to 1. This is the same consume-and-clear pattern that LaneErode's
+  pending amount uses before the shape it erodes.
+- **PushField's seed:** a push whose Shape lane holds a nonzero float seeds its
+  accumulator with that value instead of the far distance. GaussianPush already
+  reads a float from the Shape lane the same way. A mask scope is seeded at
+  `start + fade`, where the weight already reaches `outside`. So clamping the
+  region's distance there changes no weight, and the existing per-shape bound
+  test in mapCore's ShapeBlend (a shape whose bound sphere is farther than the
+  running minimum is skipped) skips every mask shape farther than the band.
+  Far from every region, a mask costs one sphere test per mask shape. Near
+  one, it costs the primitive, a smoothstep and a multiply. Unseeded pushes
+  read 0 and behave as today.
+
+**One door.** All three relief emitters call `CreationStampEmitter.EmitNoise`:
+the static stamper (`WorldPlacementStamper`), the moving root surface
+(`WorldPlacementStamper.EmitRootSurface`) and contact
+(`CreationStampEmitter.EmitContact`). The mask scopes are emitted inside
+EmitNoise, through the same per-shape emission the creation's shapes use, with
+the same stamp transform. So a mirrored, scaled or slot-carried copy mirrors,
+scales and carries its mask with the shapes it masks. The relief pattern does
+not follow the mirror, as today. Nothing else reads the masks list except the
+canonicalizer and `puck creation stats`.
+
+**Scope depth.** A mask scope sits one level inside the creation's scope, so a
+relieved creation uses two of the VM's four levels
+(`SdfProgramBuilder.MaxFieldScopeDepth`). Entries follow one another and do
+not nest.
+
+#### What stays exact
+
+The design rests on five invariants.
+
+1. **The weight is in [0, 1], so a masked relief's reach is at most its
+   amplitude.** Every existing channel that reads the relief's reach as its
+   amplitude therefore stays sound without change: the cull's relief charge,
+   the interval rule, the instance bound and contact's growth term in
+   `WorldColliderSet`. *Enforced* in `SdfProgram` validation, the one door
+   every program passes, which refuses a ReliefWeight whose inside or outside
+   lies outside [0, 1]. The canonicalizer and the builder refuse it earlier, by
+   name.
+2. **The register reaches only the relief that follows its masks.** A
+   ReliefWeight's scope must be followed, in the same parent scope, only by
+   further mask scopes and then the relief op. The relief consumes the register
+   and resets it. *Enforced* in `SdfProgram` validation, which checks that
+   sequence the way it checks that GaussianPush's tail is adjacent. Both
+   interpreters' reset makes a stray register harmless even if a program got
+   past validation.
+3. **A mask scope adds nothing to the composed field.** After ReliefWeight,
+   the scope's candidate is the far distance, and its pop carries candidate
+   scale 1. Every analysis must treat it that way.
+   - The interval rule must give the scope the far point. Treating it as the
+     union of its shapes would be unsound: a union's upper bound would claim
+     "certainly inside" in empty air where a mask region lies.
+   - The cull, skip spheres and the influence reader must treat it as
+     contributing nothing.
+   - The CPU evaluator must give ReliefWeight its own arm. Its field-edit
+     helper, `SdfFieldEvaluator.EditField`, ends in a default arm that
+     dilates, so an op routed there without an arm would silently become a
+     dilation.
+
+   *Enforced* only in part. `SdfOpRoles.Of` refuses an unclassified op, so the
+   op cannot reach a program unclassified. The remaining arms are the
+   rendering skill's new-instruction checklist, which a reviewer checks. The
+   mechanical check in step A below compares a masked program with its
+   unmasked twin outside the band.
+4. **Contact and drawing read one masked field.** This follows from the one
+   door: contact's program comes from `CreationStampEmitter.EmitContact`, which
+   calls the same EmitNoise.
+5. **The step bound includes the band's slope.** The relief adds to its
+   scope's Lipschitz bound additively, as the relief does today in a
+   shape-free chain (`SdfProgram.Lipschitz.cs`). With masks, that contribution
+   becomes `|a| · B`, where `a` is the amplitude, `L` is the unmasked relief's
+   gradient bound, and
+
+   `B = L + sum over entries of |outside - inside| · 1.5 / fade`.
+
+   This holds because the masked displacement's gradient is
+   `a · (w ∇n + n ∇w)` with `|n| ≤ 1` and `w ≤ 1`, and smoothstep's slope is
+   at most 1.5 per band width. The 1/L baked onto ReliefWeight makes the
+   region's distance 1-Lipschitz. *Enforced* by computing B in one public
+   formula on `SdfProgram`, beside `SdfProgram.NoiseDisplaceStepFactor`.
+   `AnalyzeLipschitz` and the canonicalizer's budget check both call it, as
+   they share the unmasked formula today.
+
+**Where the guarantee stops.** Wherever an entry's `inside` is 0, the relief's
+term is exactly zero on the region's surface and inside it. A carve or pad
+that is also its own mask region therefore keeps its authored surface:
+bit-exact in the fixed-point contact field, and within float rounding in the
+bake's samples. The mesh is still a bake, so the drawn floor stands within the
+bake's error (half a cell's diagonal). The mask does not move placements in
+other creations: an author positions a region in the creation's own frame, as
+`water-site.puck` already computes the bowl in the sector's frame. The finer
+octaves that shading will read (step 6) are not masked by this design; see
+[mesh and contact](#mesh-and-contact) below.
+
+**A carve mask stays one sheet when its band is wide enough.** Consider a
+carve (the bowl) that is also its mask region, with `inside: 0`. Let δ be the
+depth into the rock below the carve's surface. The composed field there is
+about `-δ + a · w(δ) · n`. If the weight rose faster than the depth, a
+positive relief value could open a hidden pocket under a thin floor. The
+smoothstep's largest ratio of rise to depth, `s(t)/t`, is 9/8, at
+`t = 3/4`. So no pocket can open when `fade ≥ (9/8) · |a| · |outside - inside|`.
+For the lake, 4.5 m is enough. The standard `terrainBasinMask` defaults its
+fade to twice the relief's amplitude, and the mesh audit flags a sliver if an
+author goes narrower. This is guidance, not a refusal. A region used only as
+a mask (the falls' corridor) does not coincide with a surface, and pockets
+there are ordinary relief behaviour.
+
+#### Mesh and contact
+
+**The bake** samples the masked field through mapCore's one call site, like
+any other op. Three parts of the bake stay as they are:
+
+- **The instance bound** comes from the document's shapes and the relief's
+  amplitude (`CreationStampEmitter.RenderReach`), never from mask shapes. A
+  region that reaches past the creation's solid therefore does not enlarge
+  it. This is sound, because the mask scope adds no surface (invariant 3).
+- **The declared detail.** The creation keeps the relief's spacing
+  (`CreationNoiseDocument.DetailSpacing`), so the masked floor still bakes at
+  that spacing. This costs triangles only where the floor curves.
+- **The gap 1 fix** (the bound about the shapes, step 4) is independent of the
+  mask: the mask changes neither the bound nor the detail.
+
+**Contact** (`IContactField`) reads it through the relieved creation's field
+collider (`WorldColliderSet`). That collider's program is
+`CreationStampEmitter.EmitContact`, which calls EmitNoise, so a body stands on
+the masked surface the bake draws. The fixed-point evaluator computes the
+weight with `FixedQ4816.Smoothstep`, so contact stays deterministic.
+Grounding and the slope test read the masked field's normal. Three parts of
+the collider stay unchanged:
+
+- **The envelope** is built with `applyRelief: false`, so it emits no mask
+  scopes.
+- **The witnesses** come from `CreationStampEmitter.VisitFixedPrimitiveCopies`
+  over the document's shapes, so mask shapes are not witnesses.
+- **The growth term** (the amplitude times the stamp's scale) stays sound by
+  invariant 1.
+
+The certified sweep reads the larger step bound of invariant 5.
+
+**How it composes with the terrain's shading.** The mask is geometry only. It
+adds no slope, altitude or curvature rule, and no material. The fixed
+weathering's up-facing deposit and curvature edges
+(`shade/shade-weathering.hlsli`), and step 6's terrain program after it, read
+the baked normal and curvature. So a masked bowl floor already reads to them
+as smooth, level ground through their existing inputs, and the mask
+duplicates none of them. A region that should also look different is a
+material choice: the lake's lining is its own placement and palette. One
+consequence belongs to step 6. When the terrain program reads the relief's
+shading octaves, a masked region should mute them too. The pixel passes walk
+no field, so the weight would have to reach shading as a per-vertex value the
+bake writes. Step 6 owns that decision. Until it lands, shading octaves are
+not read at all, so nothing is lost meanwhile.
+
+#### Bake identity and work
+
+The cost lands in three places:
+
+- **The kernel edit** (the new op, the seeded push, the relief's read of the
+  register) changes the bake kernels' bytecode, and the CPU evaluator's change
+  enters `SdfMeshBakeClosure`'s code identity. Every stored mesh misses once,
+  which is why this lands in the
+  [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of
+  kernel edits with the rest of step 3.
+- **A creation that authors a mask** changes its program words, so its groups'
+  geometry key changes (`SdfMeshGeometryBuilder`), and only that creation
+  rebakes. A creation with no mask emits the same instructions as before.
+- **Work per sample** rises only near a region. Far from every region, a mask
+  costs one bound-sphere test per mask shape.
+
+The step bound is the cost that is not local. It is one constant per scope,
+so the band's slope term widens the narrowing band of the whole creation
+(`SdfMeshPathBake.Refine` keeps samples within half the finest spacing of the
+surface, in the scaled field). The north-west sector's numbers were computed
+from `SdfProgram.NoiseDisplaceStepFactor`'s formula, with frequency 0.02,
+amplitude 4, 6 octaves, gain 0.5 and lacunarity 2:
+
+- The unmasked relief's step factor is 2.58.
+- With one entry of fade 8 m (`inside: 0`), B gives 3.33, about 29% higher.
+- The tightest bound for one entry is 2.90, about 12% higher. It takes the
+  largest value over the band of `w · L + |∇w|`, both functions of the band
+  position alone.
+
+That sample-count effect is inferred from how the narrowing reads the field;
+it has not been measured. Step A measures it and decides. If the masked
+sector's CPU bake stays within step 3's existing budget (at most 1.5 times
+the NoiseDisplace bake in counted samples), the sum formula stays. If it does
+not, the formula takes the tight one-entry bound. For several entries that
+bound becomes the smallest, over the entries k, of k's tight bound plus the
+plain band terms of the others, which is still sound.
+
+#### The proof exhibit
+
+The exhibit is the lake on the north-west wall. One mask entry covers the
+lake's basin and its outlet, with a fade of 8 m (twice the amplitude). The
+bowl's floor and walls then stand where `lakeBowl` puts them, while beyond 8 m
+the wall keeps its full relief. Three checks decide it, from cheapest to
+dearest:
+
+1. **Offline.** Run
+   `puck mesh preview --world worlds/debug --prototype valley-north-west`
+   with a close window about the bowl, and
+   `puck mesh audit --cpu --world worlds/debug --prototype valley-north-west`.
+   The preview should show a smooth bowl with relieved rock beyond the band.
+   The audit should show no new open edges or slivers.
+2. **Headless, in the world.** Add a `test` block to a new
+   `worlds/debug/water-site-tests.puck`. It poses a body on the bowl's dry
+   wall, above the waterline between 324.5 and 336 m, at a height computed
+   from `lakeBowlFloor`, runs a few ticks, and expects `bodyPosition` to stay
+   at that height within the body's skin. Unmasked, the body is pushed up out
+   of rock or falls onto lower rock, so the test fails; masked, it passes. The
+   spot must be clear of the stones, the outlet and the trough. Water-site's
+   tables suggest bearing 45 or 315 degrees at 40 m from the lake's centre;
+   this has not been checked against the placed geometry. The exact `expect`
+   spelling is the implementer's to confirm against
+   [testing a world](../authoring/testing-a-world.md).
+3. **Windowed** (the lead's batched window). Capture the lake from
+   `worlds/debug/measure-water.json`'s `lake` view and from the shore, on both
+   backends, after `world.wait bakes`. The lining and the stones should show
+   where they are authored, the bowl's rim should blend into relieved rock with
+   no visible seam where the band ends, and the wall around should keep its
+   relief.
+
+#### Steps to build it
+
+- **Step A: the mask, CPU and kernel together.** This step covers the record
+  and the canonicalizer, the `mask` construct and its spelling pair, the
+  builder's mask API, `SdfProgram` validation, the op's role, the Lipschitz
+  term, both interpreters' arms, the bounds and cull arms, EmitNoise, and the
+  kernel's ReliefWeight, seeded push and register read. The rendering skill's
+  rule is that an instruction touches every partner in one change, so the
+  kernel arm is part of this step. Build and check it now with the CPU bake;
+  it lands in the bake batch. If TerrainRelief is ready by then, it lands
+  together with it and reads the register. If TerrainRelief is not ready, the
+  mask lands on NoiseDisplace, and TerrainRelief takes over the read later.
+  *Checks:*
+  - The spelling pair compiles to identical documents.
+  - Outside every band, a masked program and its unmasked twin read
+    bit-identical fixed-point values. The weight there is exactly 1, and
+    multiplying by exactly 1 changes no bits.
+  - On a mask region's surface with `inside: 0`, the masked field equals the
+    creation's unrelieved field exactly.
+  - `puck creation stats` prints the scoped clamp B predicts.
+  - The north-west sector's CPU bake sample count, with and without the mask,
+    decides the step-bound formula as described above.
+- **Step B: kernel agreement.** This is step 3's existing target applied to a
+  masked sector: a fixed-point CPU bake and a kernel bake agree within the
+  bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`
+  against the kernel bake, both backends (a GPU leg).
+- **Step C: the exhibit and the gallery.** Author the lake's mask in
+  `worlds/standard/terrain.puck` and `worlds/debug/valley.puck`. Add the
+  headless test. Add a gallery exhibit beside NOISE in
+  `worlds/debug/shapes.puck`, so the gallery tests the mechanism the way it
+  tests every other shared system: a relieved slab with a bowl pressed into it
+  under a mask, and its plaque saying the bowl stays smooth while the slab
+  stays rough. *Checks:* the proof exhibit's three checks, and the gallery
+  exhibit's capture in the same window.
+- The glacier's cradle, the falls' corridor and the overlook belong to step 8
+  and the water plan's place lanes. Each reuses the mask with no engine work.
+
+#### Systems considered
+
+- **Field scopes** (`SdfProgramBuilder.PushField`, `SdfProgramBuilder.PopField`):
+  reused. A mask is a scope, and the design adds only an optional seed.
+- **A new compose blend on the pop**, which would make the pop write the weight
+  instead of composing. Rejected because every blend switch would need a new
+  arm, and the CPU evaluator's blend switch falls through to union, so a
+  missing arm would silently union the region into contact
+  ([the rendering skill](../../.claude/skills/rendering/SKILL.md#changing-the-instruction-set)).
+  A field op inside an ordinary Union scope keeps the blend set unchanged.
+- **LaneErode** (`SdfProgramBuilder.LaneErode`): the precedent for a pending
+  value consumed and cleared by the next op. The register copies its pattern.
+  Its lane-driven front measures time, not space, so it cannot be the mask.
+- **Morph scopes** (`SdfProgramBuilder.PushFieldMorph`): a lerp between two
+  fields by a lane. The parameter is uniform across the creation, not spatial,
+  so it cannot be the mask.
+- **Ordering the carve after the relief**, so the bowl is cut from relieved
+  rock. This keeps the bowl exact with no new op, but the cut leaves a hard
+  crease where it meets the rock, it cannot fade, and it does nothing for a
+  pad or a path, where relieved ground would poke through. Rejected as a
+  partial answer.
+- **Analytic regions encoded inside the relief instruction** (a few
+  ellipsoids or boxes in its data words). Rejected because it would be a
+  second shape vocabulary beside `SdfShapeType`, with its own bounds and
+  contact twin.
+- **A role flag on creation shapes** (a shape that only masks). Rejected
+  because every consumer of a creation's shapes (bounds, pooled emission,
+  contact witnesses, detail, stats) would have to remember to skip it. Keeping
+  mask shapes inside the relief record means nothing else iterates them.
+- **Sampled fields** (`SdfProgramBuilder.SampledValues`, `SdfHeightField`): a
+  painted mask raster. Left for later: it is a second representation that
+  contact would need to sample in fixed point. If authors ask for painted
+  masks, that route is open.
+- **Regional state** ([weather](../decisions/engine-design.md#weather-is-a-regions-composition-of-generic-pieces)):
+  physical regions are lattices of changing state. A bake is a function of its
+  program, so a mask must be static document data, not live state.
+- **The fixed weathering and the terrain programs**: covered above. The mask
+  adds no shading rule.
+- **The erosion term** in the TerrainRelief design above: it divides
+  amplitude by the local gradient. It composes with the mask by
+  multiplication, and invariant 5's bound still holds, since the plan keeps the
+  undamped bound.
 
 ### Contact on the drawn relief
 
@@ -196,10 +660,10 @@ this plan's, and each is filled before work that sculpts or tunes around it
   shapes costs.
 - **Step 3's `TerrainRelief` op, carrying a mask (gap 4).** A relief has no
   region, so it buries anything set into the terrain (the lake's bowl, the
-  pool, the river's channel, the glacier's cradle). The op's design gains a
-  way to mask or flatten the relief over a region, and that is the step's
-  first part. Its CPU side starts now; its kernel edit lands in the bake
-  fundamental's batch of kernel edits (see Risks).
+  pool, the river's channel, the glacier's cradle). The step's first part is
+  [the relief mask](#the-relief-mask), designed above with its own steps A to
+  C. It is built and checked now with the CPU bake; its kernel edit lands in
+  the bake fundamental's batch of kernel edits (see Risks).
 - **Step 6's terrain programs (gap 2).** The default frame runs the fixed
   layers, which have no slope or altitude rule, because authored programs
   sit behind a switch that is left off. The step needs the colour conversion
@@ -228,7 +692,7 @@ the same window as its after, never from a recorded figure.
 | 0. Baseline | lead, GPU | GPU free | Six stills on both backends; the frame and per-pass GPU time at each pose; `world.exposure` at each stop after two tour orders on one World. |
 | 1. Image meter's checks | rendering A | 0 | The grey card reads 118/255 ±3 under its manual EV. Under 0.5% of rock pixels clip in any channel at `valley-rim` and `valley-slope`. A stop's EV agrees within 0.05 whichever stop preceded it (a cut snaps, so the band leaves no history). The composite's added cost with the meter is stated beside the composite alone. |
 | 4. Relative caps, shape bound (gap 1) | authoring/bake D | The bound fix none, and its first action is the triangle count of a bound about the shapes; 3 for relief | A sector bakes at its declared spacing. Warm boot's counted bake work is unchanged. |
-| 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them. |
+| 3. `TerrainRelief` op, with a mask over a region (gap 4) | field/maths C | The kernel edit lands in the [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of kernel edits; the CPU side and the mask's design start now | A fixed-point CPU bake and a kernel bake of one sector, both derived in the run, agree within the bake's tolerance. The exact noise result is pinned by one Maths law. A sector's CPU bake at the same cell costs at most 1.5× its `NoiseDisplace` bake in counted samples. With the mask over the lake's bowl, the bowl's floor and walls stand where their shapes put them ([its checks](#the-proof-exhibit)). |
 | 6. Terrain programs (gap 2) | rendering/shading F | The colour conversion (step 1's grey card reads it); the RTX 4070's shading columns ([the shader plan's matrix](author-shaders.md#the-decision-matrix)), which are read | The terrain template with its slope, altitude, curvature and breakup masks, and the weathering's up-facing deposit expressed through it. The frame bar holds at `valley-slope` with the program on every wall; the stills read as the two sets' references. |
 | 7. Far shadows (gap 3) | rendering A, after 1 | 0; shadow maps assigned by light role (the rendering plan's work that starts now) | `valley-rim` shows ridge shadows on the far walls, and the frame bar holds there with the sun moving. |
 | 2. Aerial perspective | rendering B | 0 | `SdfAir` and the kernel agree as today. At `valley-draw-distance`, rock 700 m out shifts measurably toward the sky's hue and the rim keeps its silhouette. Changing `farDistance` changes no pixel nearer than it. |

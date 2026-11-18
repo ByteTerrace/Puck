@@ -288,23 +288,24 @@ slide. Details, caps, every refusal, and the Moth's driver map are in
 
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
 The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength
-under root scaling. Parts that move within that frame refuse it: per-part relief would change the composed
-surface at their seams. `sizeBy` reads a numeric state binding in authority fixed point; solid contact and the drawn root share the tick's sampled size, and zero removes contact.
+under root scaling. Parts that move within that frame refuse it (`CreationMotionPlan`, PUCK030): per-part
+relief would change the composed surface at their seams. A moving cutter counts as such a part today. `sizeBy` reads a numeric state binding in authority fixed point; solid contact and the drawn root share the tick's sampled size, and zero removes contact.
 
 **Blends between shapes that move apart (owner's ruling).** A pooled `group`
-bakes one mesh at the pose its program arrives in, and each vertex then rides
-one shape's slot, so a smooth or non-union blend joining shapes with different
-motion owners (a swing, slide, effector chain or frame not shared through
-`parent`) stretches its seam as they move. It is a warning, not an error:
-PUCK122 in `puck compile --validate`, `puck lint` and `puck creation stats`
-names the creation, the two shapes, what moves each and the blend
-(`CreationMotion.MovingBlends`). Once the shapes' relative pose holds still the
-engine bakes the group again there (the
-[settle rebake](../rendering/references/mesh-bake.md#groups-poses-and-materials)),
-so a pose that settles reads right and continuous motion keeps the stretched
-seam. When the seam must hold while the shapes move, give them one owner: put
-the swing or slide on a shape both parent under, or take the moving shape out
-of the group and accept a union crease.
+whose blend joins shapes with different motion owners (a swing, slide, effector
+chain or frame not shared through `parent`) bakes once at the authored rest. A
+smooth blend whose motion stays inside its admitted envelope skins: each vertex
+near the seam blends its two owners' motions, so the seam holds while they
+move. Any other such blend splits the group by owner, and it draws as a crease.
+A carve (a subtraction or intersection) of one owner on another owner's
+surface keeps the cut it makes at rest, wherever the cutter moves
+([moving blends' gap 8](../../../docs/plans/moving-blends.md#gap-8-a-cutter-that-moves-against-the-surface-it-cuts)
+designs the fix). It is a warning, not an error: PUCK122 in
+`puck compile --validate`, `puck lint` and `puck creation stats` names the
+creation, the two shapes, what moves each, the blend and the outcome
+(`CreationMotion.MovingBlends`, `CreationMotion.Describe`). When a seam outside
+the envelope must hold, give the shapes one owner: put the swing or slide on a
+shape both parent under, or widen `smooth` as PUCK122 says.
 
 ## Render-only versus deterministic
 
