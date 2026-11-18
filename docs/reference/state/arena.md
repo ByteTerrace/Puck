@@ -247,7 +247,7 @@ var admitted = arena.TryWrite(
 );
 ```
 
-Every value entering a row passes through `StateRow.TryAdmitWrite`. That
+Every value entering a row passes through `StateRowShape.TryAdmitWrite`. That
 includes a rule's write, a mint, a ring push, the landing of a transfer, a board
 combine, an imported row, and the section a construction seeds from. It checks
 the row's envelope, its overflow policy, and its enum, so every path agrees on
@@ -308,7 +308,7 @@ _ = catalog.TryResolve(
 );
 _ = arena.Keys.TryResolve(
     key: out var slot,
-    name: StateRow.SlotKey
+    name: StateRowShape.SlotKey
 );
 
 var before = arena.ComputeHash();

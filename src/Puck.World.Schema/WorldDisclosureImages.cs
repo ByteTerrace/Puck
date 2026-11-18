@@ -309,7 +309,7 @@ public sealed class WorldDisclosureImages {
         if (includes && (Export(arena, row).Cells is { } exported)) {
             foreach (var cell in exported) {
                 if (!observer.Discloses(row, cell.Key.Value)) { continue; }
-                m_cellScratch.Add((cell.Value.Kind == CellKind.Vector) ? cell with { Value = CellValue.Vector(cell.Value.AsVector.ToArray()) } : cell);
+                m_cellScratch.Add((cell.Value.Kind == CellKind.Vector) ? cell with { Value = cell.Value.DetachedCopy() } : cell);
             }
         }
         var cells = m_cellScratch.ToArray();

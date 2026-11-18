@@ -28,7 +28,7 @@ public static partial class StateReader {
         );
         return unchecked((long)Combinatorics.PermutationRank(permutation: relative));
     }
-    public static int DomainOrdinals(StateArena arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) {
+    public static int DomainOrdinals(StateReadAccess arena, int rowOrdinal, int domainOrdinal, Span<int> ordinals) {
         ArgumentNullException.ThrowIfNull(argument: arena);
 
         if (domainOrdinal < 0) {

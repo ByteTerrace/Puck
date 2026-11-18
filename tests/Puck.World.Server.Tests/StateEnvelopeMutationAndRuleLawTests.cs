@@ -8,7 +8,7 @@ namespace Puck.World.Server.Tests;
 
 /// <summary>An out-of-range write refuses or saturates identically through the administrative mutation door
 /// (<see cref="WorldMutation.UpsertStateCell"/>) and through a world rule's <see cref="ActionEffect.AddState"/>
-/// effect, since both compose through the one <see cref="StateRow.TryAdmitWrite"/> decision (ENGINE CONTRACT A);
+/// effect, since both compose through the one <see cref="StateRowShape.TryAdmitWrite"/> decision (ENGINE CONTRACT A);
 /// <c>world.undo</c> and a checkpoint restore each reproduce a saturated value and every cell's own clock (an
 /// advance epoch, a dynamics follower's sampled position/velocity, a cycle's settled phase and substep) bit-exactly.</summary>
 public sealed class StateEnvelopeMutationAndRuleLawTests {

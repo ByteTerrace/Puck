@@ -26,28 +26,8 @@ public static class StateRows {
     /// <param name="dynamics">The section's dynamics rows, or <see langword="null"/> for none.</param>
     /// <param name="name">The dynamics row name to find.</param>
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
-    public static DynamicsRow? FindDynamics(IReadOnlyList<DynamicsRow>? dynamics, string name) {
-        if (dynamics is null) {
-            return null;
-        }
-
-        for (var index = 0; (index < dynamics.Count); index++) {
-            var row = dynamics[index];
-
-            if (
-                (row is not null) &&
-                string.Equals(
-                a: row.Name,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return row;
-            }
-        }
-
-        return null;
-    }
+    public static DynamicsRow? FindDynamics(IReadOnlyList<DynamicsRow>? dynamics, string name) =>
+        Puck.Abstractions.NamedRows.Find(dynamics, name, static row => row.Name);
     /// <summary>Finds an authored state row by stable name — the one row-find every reader of the section shares.
     /// A generated storage row is addressed by catalog ordinal and never resolves by name, so no authored name
     /// reaches engine-owned storage through any consumer.</summary>
@@ -58,27 +38,9 @@ public static class StateRows {
     /// <returns>The row, or <see langword="null"/> when the section declares none by that name.</returns>
     /// <remarks>Allocation-free and ordinal: a per-frame binding path runs this. A whole-document validator builds
     /// a name-keyed map once per walk instead, which a linear scan per lookup would turn quadratic.</remarks>
-    public static TRow? FindStateRow<TRow>(IReadOnlyList<TRow>? rows, string name) where TRow : StateRow {
-        if (rows is null) {
-            return null;
-        }
-
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
-
-            if (
-                (row is not null) &&
-                string.Equals(
-                a: row.Name.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return (row.Generated ? null : row);
-            }
-        }
-
-        return null;
+    public static TRow? FindStateRow<TRow>(IReadOnlyList<TRow>? rows, string name) where TRow : StateRowShape {
+        var row = Puck.Abstractions.NamedRows.Find(rows, name, static row => row.Name.Value);
+        return row is { Generated: false } ? row : null;
     }
     /// <summary>Gets a value indicating whether <paramref name="name"/> is a generated storage row's name.</summary>
     /// <typeparam name="TRow">The row type the list carries.</typeparam>
@@ -86,26 +48,6 @@ public static class StateRows {
     /// <param name="name">The row name to test.</param>
     /// <returns><see langword="true"/> when a generated row carries that name.</returns>
     /// <remarks>A refusal that names engine-owned storage asks this; nothing reads such a row through it.</remarks>
-    public static bool IsGeneratedRowName<TRow>(IReadOnlyList<TRow>? rows, string name) where TRow : StateRow {
-        if (rows is null) {
-            return false;
-        }
-
-        for (var index = 0; (index < rows.Count); index++) {
-            var row = rows[index];
-
-            if (
-                (row is not null) &&
-                string.Equals(
-                a: row.Name.Value,
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )
-            ) {
-                return row.Generated;
-            }
-        }
-
-        return false;
-    }
+    public static bool IsGeneratedRowName<TRow>(IReadOnlyList<TRow>? rows, string name) where TRow : StateRowShape =>
+        Puck.Abstractions.NamedRows.Find(rows, name, static row => row.Name.Value)?.Generated == true;
 }

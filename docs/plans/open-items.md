@@ -2065,6 +2065,16 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high, D0b1 incomplete] sec1 has introduced declaration-only row descriptors,
+  restricted read primitives and an operator-dispatch capability, and moved
+  the cell-set parser and state-hash command onto those narrow doors. The
+  [implementation checkpoint](disclosure.md#d0b1-implementation-checkpoint)
+  states their guarantees and limits. The preparation transaction, compiler
+  and evaluator migration, removal of raw/lazy acquisition, DISC001 and the
+  complete public-surface law remain unfinished. The existing admission
+  predicates remain in force. Do not treat this checkpoint as completion of
+  D0b1 or start D0b2–D0b4 from it.
+
 - [low, D2/F12; before state-fed membership is introduced] Operator-source
   protection currently rejects any dependency writable through a recipient's
   seeded Edit/all, and `Allows` denies Edit/all wholesale when an operator source

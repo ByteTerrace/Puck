@@ -6,7 +6,7 @@ namespace Puck.World;
 
 public sealed partial class WorldStateCommandModule {
     private static readonly CommandForms WorldStateHashForms = CommandForms.Of(verb: "world.state.hash", "[capture|pose|world|authoritative|components]");
-    private static CommandResult DescribeHash(WorldServer server, WireArgs args) {
+    private static CommandResult DescribeHash(WorldOperatorAuthority server, WireArgs args) {
         if (args.Count > 1) {
             return WorldStateHashForms.Refuse();
         }
@@ -24,27 +24,14 @@ public sealed partial class WorldStateCommandModule {
         if (scope is null) {
             return WorldStateHashForms.Refuse(got: token);
         }
-        ulong tick;
-        ulong hash;
-
-        // The tick and its hash are read at one settled boundary, the one every state hash folds under.
-        lock (server.AuthorityGate) {
-            tick = (server.NextInputTick - 1UL);
-            hash = WorldStateHashComposition.Hash(scope: scope.Value, server: server, tick: tick);
-        }
+        var (tick, hash) = server.CaptureStateHash(scope.Value);
         return new CommandResult(Output: args.Count == 0
             ? string.Create(CultureInfo.InvariantCulture, $"[world.state.hash: tick={tick} hash={hash:x16}]")
             : string.Create(CultureInfo.InvariantCulture, $"[world.state.hash: scope={token} tick={tick} hash={hash:x16}]"));
     }
     // Each authoritative component's own digest, in fold order: what names the component two runs disagree in.
-    private static CommandResult DescribeComponents(WorldServer server) {
-        ulong tick;
-        ulong[] digests;
-
-        lock (server.AuthorityGate) {
-            tick = (server.NextInputTick - 1UL);
-            digests = WorldStateHashComposition.AuthoritativeComponents(server: server, tick: tick);
-        }
+    private static CommandResult DescribeComponents(WorldOperatorAuthority server) {
+        var (tick, digests) = server.CaptureStateComponents();
 
         var parts = new string[digests.Length];
 

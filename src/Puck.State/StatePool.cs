@@ -25,21 +25,13 @@ public sealed record StatePoolField(
     StateAdvance? Advance = null
 ) {
     /// <summary>Gets an immutable snapshot of the declared default.</summary>
-    public CellValue Default { get => field; init => field = Freeze(value: value); } = Freeze(value: Default);
-
-    private static CellValue Freeze(CellValue value) => ((value.HasValue && (value.Kind == CellKind.Vector))
-        ? CellValue.Vector(components: value.AsVector.ToArray())
-        : value);
+    public CellValue Default { get => field; init => field = value.DetachedCopy(); } = Default.DetachedCopy();
 }
 /// <summary>One field override in a statically seeded pool instance.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StatePoolValue(CellName Field, CellValue Value, StateCellClock? Clock = null) {
     /// <summary>Gets an immutable snapshot of the field value.</summary>
-    public CellValue Value { get => field; init => field = Freeze(value: value); } = Freeze(value: Value);
-
-    private static CellValue Freeze(CellValue value) => ((value.HasValue && (value.Kind == CellKind.Vector))
-        ? CellValue.Vector(components: value.AsVector.ToArray())
-        : value);
+    public CellValue Value { get => field; init => field = value.DetachedCopy(); } = Value.DetachedCopy();
 }
 /// <summary>One statically live pool slot and its field overrides.</summary>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

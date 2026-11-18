@@ -741,7 +741,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// Reads and writes <see cref="WorldStateRow"/> — the cell substrate's one C# type — as one authored JSON shape (see
 /// <see cref="WorldStateRow"/>'s remarks): a <c>name</c>, a <c>kind</c> (<see cref="CellKind"/>'s own declared member
 /// name), the optional envelope fields (<c>min</c>/<c>max</c>/<c>capacity</c>/<c>overflow</c>), and
-/// either a bare <c>value</c> — sugar for the one cell keyed <see cref="StateRow.SlotKey"/> — or a <c>cells</c>
+/// either a bare <c>value</c> — sugar for the one cell keyed <see cref="StateRowShape.SlotKey"/> — or a <c>cells</c>
 /// array of <c>{"key","value"}</c> objects. Two optional fields, never two discriminators: a row carrying both is
 /// refused by name, as is a <c>value</c> beside a <c>capacity</c> (declaring a capacity is declaring a keyed row).
 /// Omitting both is a declared-but-empty row. There is no <c>$type</c> and no <c>rows</c> member — the two retired
@@ -751,7 +751,7 @@ internal sealed class DocumentWriteMaskJsonConverter : NameListMaskJsonConverter
 /// <see cref="FixedQ4816.TryParse(string?,IFormatProvider?,out FixedQ4816)"/>/<see cref="FixedQ4816.ToString()"/> —
 /// never the raw Q48.16 bit pattern; only the per-cell mutation wire and the addon ABI channel convention stay raw
 /// (see <c>Puck.World.Protocol.WorldMutation.UpsertStateCell</c>'s remarks). An int-kind value is a plain JSON
-/// number (a timer's zero floor is <see cref="StateRow.Min"/>, enforced at validation, never a
+/// number (a timer's zero floor is <see cref="StateRowShape.Min"/>, enforced at validation, never a
 /// parse-time concern here). Unmapped members and a wrong-shaped value are hard parse failures, by name, matching
 /// every other row in the document graph's strict posture — a custom converter opts out of the context-wide
 /// <c>UnmappedMemberHandling.Disallow</c> policy, so this converter re-implements it by hand.</para>
