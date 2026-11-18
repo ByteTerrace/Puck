@@ -11,6 +11,7 @@ using Puck.Cli.Canary;
 using Puck.Cli.CartridgeCost;
 using Puck.Cli.Cartridges;
 using Puck.Cli.Counters;
+using Puck.Cli.Deps;
 using Puck.Cli.Determinism;
 using Puck.Cli.Docs;
 using Puck.Cli.Evals;
@@ -86,6 +87,7 @@ public static class PuckRootCommand {
             CartridgesCommand.Create(),
             CountersCommand.Create(),
             DeclarationsCommand.Create(),
+            DepsCommand.Create(),
             DeterminismCommand.Create(),
             DocsCommand.Create(),
             EvalsCommand.Create(clock: clock),

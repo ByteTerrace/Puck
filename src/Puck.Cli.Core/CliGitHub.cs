@@ -1,3 +1,7 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json.Nodes;
+
 namespace Puck.Cli;
 
 // The GitHub Actions seams every automation verb shares: the run's required values, secret masking, step outputs,
@@ -17,6 +21,46 @@ public static class CliGitHub {
 
     private static string Required(string name, string? value) =>
         (value ?? throw new InvalidOperationException(message: $"{name} is required."));
+
+    // The REST client every automation verb that talks to GitHub shares: the run's API root and token.
+    public static HttpClient CreateClient(string userAgent) {
+        var client = new HttpClient { BaseAddress = new Uri(uriString: (ApiUrl.TrimEnd(trimChar: '/') + "/")), Timeout = TimeSpan.FromMinutes(value: 2) };
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            parameter: Token,
+            scheme: "Bearer"
+        );
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(input: userAgent);
+        client.DefaultRequestHeaders.Add(
+            name: "X-GitHub-Api-Version",
+            value: "2022-11-28"
+        );
+        return client;
+    }
+    public static async Task<JsonNode> GetJsonAsync(HttpClient client, string path) {
+        using var response = await client.GetAsync(requestUri: path).ConfigureAwait(continueOnCapturedContext: false);
+
+        response.EnsureSuccessStatusCode();
+        return JsonNode.Parse(json: await response.Content.ReadAsStringAsync().ConfigureAwait(continueOnCapturedContext: false))!;
+    }
+    // Sends a JSON body and returns the JSON answer, or null for an empty one (a dispatch answers 204).
+    public static async Task<JsonNode?> SendJsonAsync(HttpClient client, HttpMethod method, string path, JsonObject value) {
+        using var content = new StringContent(
+            content: value.ToJsonString(),
+            encoding: Encoding.UTF8,
+            mediaType: "application/json"
+        );
+        using var request = new HttpRequestMessage(method: method, requestUri: path) { Content = content };
+        using var response = await client.SendAsync(request: request).ConfigureAwait(continueOnCapturedContext: false);
+
+        response.EnsureSuccessStatusCode();
+        var text = await response.Content.ReadAsStringAsync().ConfigureAwait(continueOnCapturedContext: false);
+
+        return (string.IsNullOrWhiteSpace(value: text)
+            ? null
+            : JsonNode.Parse(json: text)
+        );
+    }
 
     public static void Mask(string value) {
         if (IsActions) { Console.WriteLine(value: $"::add-mask::{value}"); }
