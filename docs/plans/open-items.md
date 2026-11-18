@@ -103,8 +103,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     next batch.
 22. [high] [Rendering research](rendering-research.md#the-build-order): the
     research round's order across the residency, lighting, bake, job-system
-    and visibility packets above, from its stage 0 readings; the lead ranks
-    it at the next batch.
+    and visibility packets above. Its stage 0 builds the benchmark's route
+    and its reading of the bar before it measures; the lead ranks it at the
+    next batch.
 23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
@@ -227,9 +228,12 @@ is filed with `puck measure`.
 
 ## Owner decisions
 
-Every call that waits on the owner: what the engine should do, how it looks
-and feels, and the owner-only actions. An engineering call is the lead's and
-sits in its packet as a "Decide" line.
+Every call that waits on the owner: what the engine should do, and the
+owner-only actions. How a world looks is its authors' (AGENTS.md, "Authors
+rule"), so a look value is not a call: [the rendering research page](rendering-research.md#looks-are-authored)
+names where each is authored. The owner corrects the debug world's looks as
+its art lead, in the sittings below, and no step waits for a sitting. An
+engineering call is the lead's and sits in its packet as a "Decide" line.
 
 Owner-only actions:
 
@@ -247,6 +251,10 @@ Owner-only actions:
   deleted guards over non-code files return, if any ([tests](#tests-suspended)).
 - **Calling for qualification**, which returns the
   [quarantined gates](#quarantined-gates).
+- **Hardware for the rendering measurements**: an RTX 2060 and a Steam Deck
+  for the device readings, with the Deck needed early because its windowed
+  path has never run on hardware, and an HDR display for the colour check
+  ([rendering research](rendering-research.md#the-owners-calls)).
 
 Sittings, each the owner's eye on a running World:
 
@@ -263,7 +271,10 @@ Sittings, each the owner's eye on a running World:
 - Looks: the faerie; the board room and the card tables, the card faces
   included; the lift panel and reach boxes; the gallery inspection lever's
   values; the glass exhibit on both backends; whether `motion-pulse` reads
-  right now that its petals and core blend in their own groups.
+  right now that its petals and core blend in their own groups; the bloom's
+  scatter of 0.04 and radius of 0.08; the terrain pass's exposure
+  compensation and how strongly distance fades toward blue
+  ([terrain pass](terrain-pass.md#risks-and-owner-calls)).
 
 Open calls, each with its sides:
 
@@ -281,8 +292,11 @@ Open calls, each with its sides:
 - **The chase camera with its back to the stair wall**: swing the boom, rise
   over the wall, or switch to first person there
   ([motion](#dual-stick-play-and-the-moths-motion)).
-- **The back of a portal's glass**: no image, the fallback colour, or a mirror
-  of the front ([rendering plan](rendering.md)).
+- **The rendering research's three engine calls**, each with a default the
+  work proceeds on: what a bar device does when the planned gains cannot
+  reach its bar, the window size the frame bar is read at on the desktops,
+  and whether sharpening may act on bloom's scattered light
+  ([the page's calls](rendering-research.md#the-owners-calls)).
 - **GameInput**: ship or require its redistributable, which the Share button,
   the Elite paddles and more than four pads need, or stay on the inbox runtime
   ([input](#input-channels)).
@@ -305,9 +319,6 @@ Open calls, each with its sides:
   ([custody protocol](companion-redesign.md#10-owner-calls)).
 - **Transmission's looks and the Steam Deck's budgets**, each with the
   design's choice first ([the plan's calls](transmission.md#the-owners-calls)).
-- **The terrain pass's looks**: whether the +2.5 EV compensation stays now the
-  meter reads the image, and how strongly distance fades toward blue
-  ([terrain pass](terrain-pass.md#risks-and-owner-calls)).
 - **The streaming plan's two questions**, which have defaults and block no
   step: how pressure feels on a turn, and what a character shows at its floor
   ([the plan](streaming-and-memory.md#the-owners-questions)).
@@ -1916,6 +1927,14 @@ Federation and transfers:
   transfer door, the authored unobservability predicate, and the hop cooldown
   kept by the layer set's authority per identity. Both answers to the owner's
   deferred layer-feel call are authored data on it.
+- [medium] What a world nobody sees still costs its authority. Every
+  instance steps on the frame thread whether or not anything shows it
+  (`WorldInstanceHost.StepInstances`), and each session is still delivered
+  to. The rendering research measures both
+  ([its decision 1](rendering-research.md#1-measure-before-building)) and
+  reduces only presentation work. How often an unobserved world delivers is
+  this area's question, asked through the observation door's projection
+  request and not by the renderer.
 - [medium] A contested seam's residual rule: a neighbour correction a body's
   own motion does not ask for still carries a still body toward the plane up
   to its ownership threshold, with no decay rule
@@ -3162,6 +3181,14 @@ Looks and rules of play held in engine code:
   `SdfSky.DefaultLuminance` (`WorldEnvironmentResolve.cs`). Make the
   unauthored default neutral, author the atmosphere in each debug-world place
   that leans on it, and look at the places on both backends before and after.
+- [medium] Four looks the rendering research found in engine code, each with
+  the authored home [its looks table](rendering-research.md#looks-are-authored)
+  names: the filmic curve's constants in `place.comp.hlsl`; the share of its
+  own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
+  the shares of the display at which a nested view's update rate steps down
+  (`SdfUpdateRateTiers.ViewHertz`); and what a nested view gives up, held as
+  two constants (`WorldSessionSceneEmitter.ReducedQuality`,
+  `WorldScreenBinder.CameraViewQuality`).
 - [medium] The opening ripple's feel and look are engine constants: reach,
   margin and strengths in `WorldOpeningRipples`, the lifetime and clock period
   mirrored in C# and HLSL (`SdfScreenRipple`), and the amplitudes, speeds,
@@ -3710,17 +3737,12 @@ reviews it and says so (the owner's ruling).
   rendered at astronomical distance, and a crossing between worlds with
   different gravity. Whether the moon admits a visitor's portal is the moon's
   own grant.
-- **Authored exposure per place or world.** Each place or world authors its
-  exposure and the engine blends at seams (a doorway, a portal), so adaptation
-  into a dark room is designed.
-- **Tonemapping.** One curve exists (`render.tonemap` `Filmic`), and the debug
-  world authors none, so its sky, sun and emissives clip at white. Proposed:
-  Khronos PBR Neutral for the gallery as an inspection tool, a luminance-based
-  filmic option that keeps hue, the choice per world and camera, a
-  colour-grade look as a material, and a display-aware curve once an HDR
-  display can verify it.
-- **The bloom look.** The debug world authors scatter 0.04 and radius 0.08 for
-  the owner to judge.
+- Exposure per place and the tone curve left this list. Both are look values,
+  which authors set and the owner is not asked to choose. The mechanisms
+  they need, a blend of exposure across a doorway or a portal and the tone
+  curve as authored data, are engine work in
+  [rendering research](rendering-research.md#looks-are-authored). Which
+  curves the standard package and the debug world then author is theirs.
 - **A maths room** in the gallery: a 2D grid board and a 3D floating lattice
   whose cells `Puck.Maths` computes in the simulation. Audience, animation,
   interactivity and which maths leads are the owner's questions.

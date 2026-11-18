@@ -84,7 +84,8 @@ the staged list's owed bytes and meshes, how many restore from the store or are
 in landing, whether background work may bind, and the arena's relocations, or the
 required upload against those submitted and completed and its fence. Landing runs
 at `SdfGpuWork.UploadBytesPerSecond` of wall time, so a boot owes the debug
-world's 1.75 GB region for some seconds whatever the frame rate.
+world's whole mesh region for some seconds whatever the frame rate
+(`world.residency` prints the region's size).
 Waiting on every allocated residency
 deadlocks on hidden routed scenes whose GPU work correctly never starts.
 

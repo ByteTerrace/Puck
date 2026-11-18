@@ -419,6 +419,13 @@ streaming plan's
 [decision 9](streaming-and-memory.md#decision-9-lighting-reads-the-same-demand-and-pays-on-demand).
 Cel-specific checks wait with [cel shading](#cel-shading).
 
+[Rendering research decision 7](rendering-research.md#7-make-a-lighting-change-cost-what-changed)
+builds on two of these steps. It keeps step 2's rescale as the bridge for
+probes a relight has not reached, beside a store of light per source. And it
+extends step 6's emitters to static emitting faces, designed inside that
+same store, which is the fix for the hall's blotches under its ceiling
+strips.
+
 The day cycle is standard data (`dayCycle` in `worlds/standard/skies.puck`,
 expanded by `worlds/debug/day.puck`); writing `day` moves the time and its
 advance holds the sun (`worlds/debug/debug.md`, "Time of day"). The hold is
