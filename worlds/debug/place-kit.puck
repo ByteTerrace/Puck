@@ -1,0 +1,16 @@
+// The carrier a place's region rides on: a creation that draws nothing. The debug world's places (places.puck) and
+// its portals' destinations (garden.puck, night.puck) import it, so `body.place` names the places of whichever world a
+// body stands in.
+exports {
+  reads [place]
+}
+
+prototypes {
+  prototype "place" {
+    document {
+      name: "place"
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000" }]
+    }
+  }
+}

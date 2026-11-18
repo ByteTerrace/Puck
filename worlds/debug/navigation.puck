@@ -1,0 +1,60 @@
+// The debug world's walkable spaces as navigation domains: the valley floor, the ground around the spawn and the
+// gallery hall's level 0 (with Wonderland through its own doorway), each upper level of the hall, and the stairwell
+// between each pair of levels. `world.navigation` lists them and `world.navigation route <from> <to>` searches one route
+// across them between two places (places.puck), checked against the contact field the Moth collides with.
+//
+// A surface domain samples one ground per column: the first surface under its probe's start, origin height plus
+// probeUp. The start stands below every lintel a walker passes under (the hall's entrance opening is 3.3 m tall,
+// Wonderland's doorway 3.05 m, the wing's 3 m) and above the Moth's 2.06 m, so a doorway's cells find its floor rather
+// than starting inside the wall over it. The hall's switchback stairs (hall.puck) repeat every storey, so no one
+// ground per column can hold a level and the flights above and below it: each storey's stairwell is a domain of its
+// own whose probe starts over its flights and landing and under the next storey's flights, and it shares cells with the
+// level under it (on flight A's treads) and the level over it (on flight B's treads and the half landing).
+//
+// A route crosses between two domains only at a cell both prove walkable at the same place and height, so every grid
+// here is aligned: cell sizes exact in fixed point (2, 0.5 and 0.25 m) and origins on the finest grid, so a coarser
+// grid's cell centers are cells of a finer one where they overlap. Cells are sized for the corridors and doorways they
+// cross: the stairs' 0.25 m cells hold one tread each (0.4 m treads, 0.25 m risers, under the Moth's 0.3 m step), the
+// hall and the spawn ground's 0.5 m cells pass the 2 m doorways with the Moth's 0.35 m radius clear of both jambs, and
+// the valley's 2 m cells cross its open floor.
+
+import "shapes"
+
+// A surface domain for the Moth's walking envelope (avatars/moth.puck): her capsule's 2.06 m height and 0.35 m radius,
+// her 0.3 m step, and a 50 degree slope, under the standard's 60 so a route never leans on the limit. Every cell is
+// searchable in one route (the expansion budget is the cell count) and a route keeps up to its path budget.
+function walkable(name, origin, cellSize, width, depth, probeUp, probeDown, maxPathNodes) = {
+  name: name
+  kind: Surface
+  origin: origin
+  cellSize: cellSize
+  width: width
+  depth: depth
+  layers: 1
+  probeUp: probeUp
+  probeDown: probeDown
+  agentHeight: 2.06
+  agentRadius: 0.35
+  maxStepHeight: 0.3
+  maxSlopeDegrees: 50
+  arrivalDistance: cellSize
+  maxExpandedNodes: (width * depth)
+  maxPathNodes: maxPathNodes
+}
+
+navigation {
+  domains: concat(
+    [
+      // The spawn's ground, the hall's level 0 and Wonderland, x -40 .. 72, z -30 .. 44.
+      walkable("grounds", [-40, 0.05, -30], 0.5, 224, 148, 2.2, 2, 1024)
+      // The caldera's floor out to the walls' feet (valley.puck), x and z -210 .. 210, down to the pool's basin.
+      walkable("valley", [-210, 0.05, -210], 2, 211, 211, 2.2, 3, 1024)
+    ],
+    // Each storey of the hall above level 0, x 10 .. 70, z 12 .. 40: its probe starts 1.9 m over the floor (under every
+    // doorway, over the next storey's flights) and reaches down to the half landing under it.
+    map(range(1, 3), level => walkable($"hall-level-{level}", [10, galleryFloor[level], 12], 0.5, 120, 56, 1.9, 2.35, 1024)),
+    // The stairwell from each level to the next, x 10.25 .. 14.5, z 33.75 .. 39.75: its probe starts 4.45 m over the
+    // lower floor, over flight B's top tread (4.3 m) and under the next storey's flight A (4.55 m).
+    map(range(0, 3), level => walkable($"hall-stairs-{level}", [10.25, (galleryFloor[level] + 2.2), 33.75], 0.25, 18, 25, 2.25, 2.6, 450))
+  )
+}

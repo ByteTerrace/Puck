@@ -255,8 +255,8 @@ regardless of grants or verb masks — a decoder gap, not an authority one;
 wiring a new kind in is additive (a new `case` arm), never a change to the
 decoder's own contract. The decoder's own division of labor: it turns wire
 JSON into TYPED values and enforces a row's own intrinsic shape invariants
-(a rect's width must be positive, a region's radius must be finite and
-positive, a repeat's counts must be at least 1) — cross-referencing checks
+(a rect's width must be positive, a region's numbers must be finite (the
+validator owns their positivity), a repeat's counts must be at least 1) — cross-referencing checks
 that need the whole document (does `creationId` resolve, does a `state` row's
 `Min`/`Max` pair validate, does a placement's `scale` sit inside the
 authoring envelope) stay with `WorldDefinitionValidator`, exactly like the
@@ -413,7 +413,7 @@ The host delivers world events as host-written `Observation` cells (verbs
 the ABI pin never bumps). Five families are WORLD-scoped, collected once per
 tick by `src/Puck.World.Server/WorldEventFeed.cs` after the population settles: seat
 join/leave, region enter/exit (a placement's `WorldPlacementRegion` facet —
-a named sphere, addressed by the carrying placement's own `Id`; the cell's `B`
+a named sphere or oriented box, addressed by the carrying placement's own `Id`; the cell's `B`
 is the region's position among the guest's own `Observe/region:` requests, in
 manifest order, so a guest's table of regions follows its row), collision
 pairs (a flat proximity test, independent of physical contact resolution),

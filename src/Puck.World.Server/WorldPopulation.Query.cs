@@ -280,7 +280,7 @@ public sealed partial class WorldPopulation {
 
             rows[index] = $"{domain.Name}:{tuning.Kind.ToString().ToLowerInvariant()} {tuning.Width}x{tuning.Depth}x{tuning.Layers} clear={domain.WalkableCellCount}/{domain.CellCount} connectivity={tuning.Connectivity.ToString().ToLowerInvariant()} search<={tuning.MaxExpandedNodes} path<={tuning.MaxPathNodes} medium={(tuning.Medium ?? "none")}{shared}{frame}";
         }
-        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount}; {string.Join(
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount} cells={m_navigation.CellCount} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
             separator: "; ",
             values: rows
         )}]";

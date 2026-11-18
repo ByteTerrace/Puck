@@ -557,7 +557,11 @@ Restoring resident trees directly through `Domain.RestoreShared` also establishe
 the bake before those trees can be retained across a query replacement.
 
 A `Surface` domain samples ground through the host's `IWorldQuery.TryGroundHeight`,
-proving lower/head clearance, slope, and step limits; every admitted edge is
+the first surface under its probe's start (origin height plus `probeUp`, so an
+author keeps that start under the lintels a walker passes beneath), proving
+clearance from `maxStepHeight` over the ground up to the head (the step rule
+admits anything lower, so a stair's next riser does not refuse a tread's
+cell), slope, and step limits; every admitted edge is
 proven with swept spheres from `maxStepHeight` above the foot up to the head
 (the step rule already admits anything lower, and a sphere sweeping the floor
 it stands on advances one contact skin per march step) and stored in one
@@ -607,6 +611,26 @@ reservations, hierarchical long-distance routing, or group membership. The
 many-agents/one-destination approach is informed by
 [Emerson's crowd pathfinding chapter](https://www.gameaipro.com/GameAIPro/GameAIPro_Chapter23_Crowd_Pathfinding_and_Steering_Using_Flow_Field_Tiles.pdf),
 using finite domain trees rather than that chapter's tiled hierarchy.
+
+`NavigationRuntime.FindRoute` searches one route across every domain of a
+runtime: a bounded A* over the union of the domains' cells, each step's cost
+its length in millimetres and the heuristic the horizontal Chebyshev distance
+to the goal, which never exceeds the cost left. Two domains join at a
+junction, a pair of walkable cells whose route positions share X and Z
+exactly and, between two surfaces, differ in height by no more than the lower
+step height (two volume cells must coincide; a medium domain joins none), so a
+route crosses between domains only where both prove the same ground and the
+hop holds no unproven segment. Junctions exist only where grids align: cell
+sizes exact in fixed point and multiples of each other, origins on the finer
+grid. A search joins a pair the first time it settles a cell inside the second
+domain's footprint and, for a surface, its probe's height band
+(`Domain.CoversRouteHeight`), so it bakes only the domains it reaches.
+`TryLocate` names the walkable cell a position stands on. The workspace
+(`RouteWorkspaceBytes`) allocates on the first route search. This is the
+multi-storey answer the single-ground surface grid lacks: a building whose
+stairwell repeats every storey is a domain per level and per storey's
+stairwell, joined on the treads and landings they share
+(`worlds/debug/navigation.puck`).
 
 `CaptureShared`/`RestoreShared`/`ValidateShared`/`AppendSharedHash` checkpoint
 and hash the shared scheduler: resident goals, discovered costs/successors,

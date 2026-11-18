@@ -78,6 +78,7 @@ public abstract record WorldQuery {
     public GrantSubject ObservationSubject() => this switch {
         StateObservations { Row: { } row } => GrantSubject.State(name: row),
         PlayerWhere where => GrantSubject.Body(index: where.Index),
+        PlayerPlace place => GrantSubject.Body(index: place.Index),
         PlayerChannels channels => GrantSubject.Body(index: channels.Index),
         PlayerInput input => GrantSubject.Body(index: input.Index),
         PlayerAffordances affordances => GrantSubject.Body(index: affordances.Index),
@@ -95,6 +96,10 @@ public abstract record WorldQuery {
     /// <summary>The full 6DOF pose read-back for one entity (<c>body.where</c>).</summary>
     /// <param name="Index">The 0-based body index.</param>
     public sealed record PlayerWhere(int Index) : WorldQuery;
+    /// <summary>The places one entity stands in (<c>body.place</c>): every region placement whose volume holds its
+    /// foot point as of the authority's latest collection, innermost first.</summary>
+    /// <param name="Index">The 0-based body index.</param>
+    public sealed record PlayerPlace(int Index) : WorldQuery;
     /// <summary>The channel decision read-back for one entity (<c>body.channels</c>) — per declared channel, the
     /// folded value, the owning seat's base, the later held overlay and composed result, every contributor tagged by
     /// principal, and the pool ceiling/clamp state (see <c>Server.WorldServer.Answer</c>).</summary>

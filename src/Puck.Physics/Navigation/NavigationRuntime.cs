@@ -288,18 +288,20 @@ public sealed partial class NavigationRuntime {
             }
             // Routes use the lower clearance-sphere center, never the floor surface itself.
             routeY = ((ground + Tuning.AgentRadius) + ClearanceEpsilon);
+            // The occupancy proof starts maxStepHeight over the ground, as an edge's sweeps do: the step rule admits
+            // anything lower, so a tread's next riser beside the cell does not refuse it.
+            var headY = (((ground + Tuning.AgentHeight) - Tuning.AgentRadius) - ClearanceEpsilon);
             var foot = new FixedVector3(
                 X: probe.X,
-                Y: routeY,
+                Y: FixedQ4816.Min(x: (routeY + FixedQ4816.Max(x: FixedQ4816.Zero, y: Tuning.MaxStepHeight)), y: FixedQ4816.Max(x: routeY, y: headY)),
                 Z: probe.Z
             );
-            var headY = (((ground + Tuning.AgentHeight) - Tuning.AgentRadius) - ClearanceEpsilon);
 
             if (query.Overlap(
                 center: FixedPosition.FromLocal(local: foot),
                 radius: Tuning.AgentRadius
             )) { return false; }
-            if (headY <= routeY) { return true; }
+            if (headY <= foot.Y) { return true; }
             var head = new FixedVector3(
                 X: probe.X,
                 Y: headY,
@@ -466,7 +468,13 @@ public sealed partial class NavigationRuntime {
                 : m_rotation.Rotate(vector: local)));
         }
 
-        public bool TryCell(in FixedVector3 position, out int node) {
+        public bool TryCell(in FixedVector3 position, out int node) => (TryIndex(node: out node, position: in position) && IsWalkable(node: node));
+        /// <summary>Returns whether a world position rounds to a cell inside this domain's footprint, walkable or not.
+        /// Reading it never bakes.</summary>
+        /// <param name="position">The world position; a surface domain reads only its X and Z.</param>
+        public bool Covers(in FixedVector3 position) => TryIndex(node: out _, position: in position);
+        // The cell a world position rounds to, without the walkability a bake decides.
+        private bool TryIndex(in FixedVector3 position, out int node) {
             var local = ((Tuning.YawRadians == FixedQ4816.Zero)
                 ? position
                 : (Tuning.Origin + m_inverseRotation.Rotate(vector: (position - Tuning.Origin)))
@@ -503,7 +511,7 @@ public sealed partial class NavigationRuntime {
                 y: ((int)y),
                 z: ((int)z)
             );
-            return IsWalkable(node: node);
+            return true;
         }
         public NavigationStatus FindPath(int start, int goal, Span<int> path, out int pathLength, out int expanded) {
             pathLength = 0;

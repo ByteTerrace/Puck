@@ -7,6 +7,90 @@
 // `debug.go` is an authored command: a `commands` row composing existing verbs, which the console answers beside the
 // engine's own (help, help --names, a binding row or wheel sector naming it). It runs each line under the caller's
 // own authority, as though the caller had typed it.
+//
+// The world's rooms and areas are regions here too: each `place-*` placement below carries a region facet, a box over
+// a room, a corridor or an area of the valley floor, drawing nothing. `body.place` names the regions a body stands in,
+// innermost first, so a scripted walk or the benchmark reads which room it is in from the world's own documents; rules
+// read the same occupancy as `$region:place-<name>`. Boxes are world coordinates (center and half-extents); a level's
+// rooms reach from half a metre under its floor to the underside of the slab above (hall.puck: floors at 4.5k + 0.05,
+// slabs 0.3 m thick). Nested places list smallest first: an exhibit's guide region (guide.puck) inside the east wing,
+// inside the gallery's level 0, inside the hall, inside the valley.
+
+import "shapes"
+import "place-kit"
+
+// One storey's room box: x and z spans and a level index, from 0.5 m under the level's floor to the slab above.
+function storeyPlace(name, level, x0, x1, z0, z1) = {
+  id: name
+  at [((x0 + x1) / 2), (galleryFloor[level] + 1.6), ((z0 + z1) / 2)]
+  half [((x1 - x0) / 2), 2.1, ((z1 - z0) / 2)]
+}
+// An area of open ground: x and z spans, from 1 m under the floor to 4 m over it.
+function groundPlace(name, x0, x1, z0, z1) = {
+  id: name
+  at [((x0 + x1) / 2), 1.5, ((z0 + z1) / 2)]
+  half [((x1 - x0) / 2), 2.5, ((z1 - z0) / 2)]
+}
+
+let regionPlaces = concat(
+  [
+    // The caldera's floor out to the walls' feet (valley.puck), and the hall as one building.
+    { id: "valley", at [0, 10, 0], half [232, 60, 232] }
+    { id: "hall", at [40, 9.2, 26], half [30, 9.7, 14] }
+    // The spawn's open ground, and the hall's south entrance (x 14 .. 18 in the wall at z 12), outside and in.
+    groundPlace("stage", -6, 6, -6, 6)
+    { id: "hall-entrance", at [16, 1.5, 12], half [3, 2, 2.5] }
+    // Level 0: the lobby (the map board, the desktop, the wonderland painting), the exhibit rows east of it, and the
+    // painting wing behind its partition at x 51 (paintings.puck).
+    storeyPlace("lobby", 0, 10.3, 20, 12.3, 34.5)
+    storeyPlace("east-wing", 0, 20, 51, 12.3, 39.7)
+    storeyPlace("painting-room", 0, 51, 69.7, 12.3, 39.7)
+    // Before each painting of the wing: the looping pair facing each other at z 34.5 (west and east walls), the garden
+    // and the night field on the north wall, and the endless fall in the floor at (66, 22.6), its column up to the
+    // ceiling twin.
+    storeyPlace("loop-portal-west", 0, 51.3, 53.3, 33.3, 35.7)
+    storeyPlace("loop-portal-east", 0, 67.4, 69.4, 33.3, 35.7)
+    storeyPlace("garden-painting", 0, 55.8, 58.2, 37.4, 39.4)
+    storeyPlace("night-painting", 0, 62.8, 65.2, 37.4, 39.4)
+    { id: "endless-fall", at [fallX, 1.6, fallZ], half [1.5, 2.6, 1.5] }
+    // The lobby's west wall: the desktop computer before it, and the big painting into Wonderland (wonderland.puck).
+    storeyPlace("desktop", 0, 10.3, 13.3, 22.4, 25)
+    storeyPlace("wonderland-threshold", 0, 10.3, 12.3, 29, 32)
+    // Wonderland: the room beyond the lobby's west wall, the device row along its west side, and the mouse hole in
+    // its east wall back to the lobby.
+    { id: "wonderland", at [5.2, 2, 29], half [4.5, 2.5, 5.3] }
+    { id: "machines", at [4.8, 2, 30.5], half [4.1, 2.5, 3] }
+    { id: "mouse-hole", at [8.9, 1, 30.5], half [0.5, 1.5, 1] }
+    // The stairwell and the lift shaft, every storey (hall.puck).
+    { id: "stairs", at [12.35, 9.2, 37.1], half [2.05, 9.7, 2.6] }
+    { id: "lift", at [16, 9.2, 38], half [2, 9.7, 2] }
+    // The board game room on level 2 behind its partition at x 51 (hall.puck).
+    storeyPlace("board-room", 2, 51.3, 69.7, 12.3, 39.7)
+    // The valley floor's places (valley.puck lists what stands where).
+    groundPlace("studio", 24, 72, -76, -20)
+    groundPlace("camera-course", -26, -13, 16, 44)
+    groundPlace("pool", -66, -46, -22, -2)
+    groundPlace("meadow", 90, 140, -85, -35)
+    groundPlace("forest", -95, 110, -190, -88)
+    groundPlace("range", -106, -88, -52, 118)
+  ],
+  // Each gallery level whole, and the lift landing before the shaft's door on it.
+  map(range(0, 4), level => storeyPlace($"gallery-level-{level}", level, 10.3, 69.7, 12.3, 39.7)),
+  map(range(0, 4), level => storeyPlace($"lift-landing-{level}", level, 14.4, 17.6, 33.5, 36))
+)
+
+placements {
+  for place in regionPlaces {
+    placement $"place-{place.id}" {
+      prototype: "place"
+      position: place.at
+      region {
+        halfExtents: place.half
+      }
+    }
+  }
+}
+
 
 spawnPoints [
   // Tight-space camera comparisons. Call gallery.lift 0 before visiting the car.

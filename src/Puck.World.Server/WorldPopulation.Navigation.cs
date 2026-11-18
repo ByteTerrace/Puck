@@ -4,6 +4,15 @@ using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
+/// <summary>A route goal that is a place: every walkable cell whose foot point stands inside the place's region volume.</summary>
+/// <param name="Shape">The region's compiled volume.</param>
+public sealed record WorldNavigationPlaceGoal(FixedSpatialShape Shape) : INavigationRouteGoal {
+    /// <inheritdoc/>
+    public FixedAabb Bounds => Shape.Bounds;
+    /// <inheritdoc/>
+    public bool Accepts(int domain, int cell, in FixedVector3 foot) => Shape.Contains(point: foot);
+}
+
 public sealed partial class WorldPopulation {
     /// <summary>One body's cached route: the domain and goal cell a path was last found for, the path itself, and
     /// the search's last outcome and expansion count.</summary>
@@ -52,6 +61,183 @@ public sealed partial class WorldPopulation {
         public ulong ValueRevision(int field) => m_fields[field].Lattice.ValueRevision(field: m_fields[field].Field);
     }
 
+    /// <summary>Draws one navigation domain's baked cells as text, a row per cell along Z (ascending) and a character per
+    /// cell along X: <c>#</c> for a cell no route stands on, and for a walkable cell its ground height above the lowest
+    /// walkable ground in the window, in quarter metres, as a base-36 digit. Bakes the domain.</summary>
+    /// <param name="name">The domain's authored name.</param>
+    /// <param name="x0">The first column drawn.</param>
+    /// <param name="z0">The first row drawn.</param>
+    /// <param name="width">The columns drawn, clamped to the domain.</param>
+    /// <param name="depth">The rows drawn, clamped to the domain.</param>
+    /// <returns>The drawing, or a refusal naming the unknown domain.</returns>
+    public string DescribeNavigationMap(string name, int x0, int z0, int width, int depth) {
+        for (var index = 0; (index < m_navigation.Count); index++) {
+            var domain = m_navigation[index];
+
+            if (domain.Name != name) {
+                continue;
+            }
+
+            var tuning = domain.Tuning;
+            var x1 = Math.Min(val1: tuning.Width, val2: (Math.Max(val1: 0, val2: x0) + width));
+            var z1 = Math.Min(val1: tuning.Depth, val2: (Math.Max(val1: 0, val2: z0) + depth));
+            var low = FixedQ4816.MaxValue;
+            var quarter = FixedQ4816.FromDouble(value: 0.25);
+
+            x0 = Math.Max(val1: 0, val2: x0);
+            z0 = Math.Max(val1: 0, val2: z0);
+            for (var z = z0; (z < z1); z++) {
+                for (var x = x0; (x < x1); x++) {
+                    var node = ((z * tuning.Width) + x);
+
+                    if (domain.IsWalkable(node: node) && (domain.Foot(node: node).Y < low)) {
+                        low = domain.Foot(node: node).Y;
+                    }
+                }
+            }
+
+            var text = new System.Text.StringBuilder();
+
+            _ = text.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"[world.navigation map: {name} columns {x0}..{(x1 - 1)} rows {z0}..{(z1 - 1)} from ({((double)domain.CellCenter(node: ((z0 * tuning.Width) + x0)).X):0.###},{((double)domain.CellCenter(node: ((z0 * tuning.Width) + x0)).Z):0.###}) every {((double)tuning.CellSize):0.###} m; ground above {((low == FixedQ4816.MaxValue) ? 0.0 : (double)low):0.###} in 0.25 m digits");
+            for (var z = z0; (z < z1); z++) {
+                _ = text.Append(value: '\n');
+                for (var x = x0; (x < x1); x++) {
+                    var node = ((z * tuning.Width) + x);
+
+                    _ = text.Append(value: (domain.IsWalkable(node: node)
+                        ? "0123456789abcdefghijklmnopqrstuvwxyz"[(int)(((domain.Foot(node: node).Y - low) / quarter).Value >> 16) % 36]
+                        : '#'));
+                }
+            }
+
+            return text.Append(value: ']').ToString();
+        }
+
+        return $"[world.navigation map: no domain named '{name}']";
+    }
+    /// <summary>Gets a navigation domain's authored name.</summary>
+    /// <param name="index">The domain's index.</param>
+    public string NavigationDomainName(int index) => m_navigation[index].Name;
+    /// <summary>Gets the point a body standing on a route node stands at (<see cref="NavigationRuntime.Domain.Foot"/>).</summary>
+    /// <param name="node">The route node.</param>
+    public FixedVector3 NavigationFoot(NavigationRouteNode node) => m_navigation[node.Domain].Foot(node: node.Cell);
+    /// <summary>Finds a walkable cell for a route endpoint: the cell <see cref="NavigationRuntime.TryLocate"/> names at a
+    /// point, or for a place the walkable cell nearest its center whose ground lies inside its volume.</summary>
+    /// <param name="point">The point, or a place's center.</param>
+    /// <param name="within">The place's volume, or <see langword="null"/> for a bare point.</param>
+    /// <param name="domain">The cell's domain, or -1.</param>
+    /// <param name="cell">The cell, or -1.</param>
+    /// <returns><see langword="true"/> when a cell was found.</returns>
+    public bool TryRouteEndpoint(FixedVector3 point, FixedSpatialShape? within, out int domain, out int cell) {
+        if (within is not { } shape) {
+            return m_navigation.TryLocate(cell: out cell, domain: out domain, position: in point);
+        }
+
+        domain = -1;
+        cell = -1;
+        var best = Int128.MaxValue;
+
+        for (var index = 0; (index < m_navigation.Count); index++) {
+            var candidate = m_navigation[index];
+
+            for (var node = 0; (node < candidate.CellCount); node++) {
+                // The cell's center at the place's own height first, which needs no bake, so a domain with no cell
+                // under the place never bakes for it.
+                if (!shape.Contains(point: candidate.CellCenter(node: node) with { Y = shape.Center.Y }) || !candidate.IsWalkable(node: node) || !shape.Contains(point: candidate.Foot(node: node))) {
+                    continue;
+                }
+
+                var offset = (candidate.Position(node: node) - shape.Center);
+                var distance = ((((Int128)offset.X.Value) * offset.X.Value) + (((Int128)offset.Y.Value) * offset.Y.Value) + (((Int128)offset.Z.Value) * offset.Z.Value));
+
+                if (distance < best) {
+                    best = distance;
+                    domain = index;
+                    cell = node;
+                }
+            }
+        }
+
+        return (domain >= 0);
+    }
+    /// <summary>Finds a route between two endpoint cells across the navigation domains and checks it against the
+    /// contact field the bodies collide with: a body of the default seat kit stood at every sample along the route,
+    /// 0.1 m apart, proving its volume from a step height and a contact skin over the higher end's ground up to its full
+    /// height (each capsule's top lowered by its lift), must meet nothing, the domains' own step rule. A contact there
+    /// is a wall, a ceiling or an obstacle taller than a step.</summary>
+    /// <param name="fromDomain">The start cell's domain.</param>
+    /// <param name="fromCell">The start cell.</param>
+    /// <param name="goal">The cells the route may end at: one cell, or a place (<see cref="WorldNavigationPlaceGoal"/>).</param>
+    /// <param name="route">Receives the route, cleared first.</param>
+    /// <param name="work">The search's work.</param>
+    /// <param name="samples">The samples the contact check stood a body at.</param>
+    /// <param name="walls">The samples where that body met geometry, in route order.</param>
+    /// <returns>The search's status.</returns>
+    public NavigationStatus FindCheckedRoute(int fromDomain, int fromCell, INavigationRouteGoal goal, List<NavigationRouteNode> route, out NavigationRouteWork work, out int samples, List<FixedVector3> walls) {
+        ArgumentNullException.ThrowIfNull(argument: walls);
+        walls.Clear();
+        samples = 0;
+
+        var status = m_navigation.FindRoute(
+            fromCell: fromCell,
+            fromDomain: fromDomain,
+            goal: goal,
+            maxExpanded: checked((int)Math.Min(val1: m_navigation.CellCount, val2: int.MaxValue)),
+            maxNodes: WorldNavigationCapacity.MaxPathNodes * WorldNavigationCapacity.MaxDomains,
+            route: route,
+            work: out work
+        );
+
+        if (
+            (route.Count == 0) ||
+            (m_contactField is not { } field) ||
+            (m_kits.Length == 0) ||
+            (m_kits[m_seatKit].Collider is not { } collider)
+        ) {
+            return status;
+        }
+
+        var spacing = FixedQ4816.FromDouble(value: 0.1);
+        var skin = FixedQ4816.FromDouble(value: m_censusDefinition?.Collision.ContactSkin ?? 0.02);
+        var up = FixedVector3.UnitY;
+        var volumes = collider.Volumes.ToArray();
+
+        for (var index = 0; (index < route.Count); index++) {
+            var from = route[(index == 0) ? 0 : (index - 1)];
+            var to = route[index];
+            var start = m_navigation[from.Domain].Foot(node: from.Cell);
+            var end = m_navigation[to.Domain].Foot(node: to.Cell);
+            // The body proves its volume from a step over its ground to its full height, as a domain's occupancy proof
+            // does: it stands a step and a skin over the higher end's ground with each capsule's top lowered as far,
+            // so a tread or a skirting a step could climb passes under it and its head stays where it stands.
+            var lift = (FixedQ4816.Max(x: m_navigation[from.Domain].Tuning.MaxStepHeight, y: m_navigation[to.Domain].Tuning.MaxStepHeight) + skin);
+            var height = (FixedQ4816.Max(x: start.Y, y: end.Y) + lift);
+            var planar = new FixedVector3(X: (end.X - start.X), Y: FixedQ4816.Zero, Z: (end.Z - start.Z));
+            var steps = ((index == 0) ? 0 : Math.Max(val1: 1, val2: (int)((planar.Length.Value + spacing.Value - 1L) / spacing.Value)));
+
+            for (var volume = 0; (volume < volumes.Length); volume++) {
+                var authored = collider.Volumes[volume];
+
+                volumes[volume] = ((authored.Kind == Puck.Physics.FixedBodyColliderKind.Capsule)
+                    ? (authored with { Endpoint = authored.Endpoint with { Y = FixedQ4816.Max(x: authored.Center.Y, y: (authored.Endpoint.Y - lift)) } })
+                    : authored);
+            }
+            for (var step = ((index == 0) ? 0 : 1); (step <= steps); step++) {
+                var fraction = ((steps == 0) ? FixedQ4816.Zero : (FixedQ4816.FromInteger(value: step) / FixedQ4816.FromInteger(value: steps)));
+                var probe = new FixedVector3(X: (start.X + (planar.X * fraction)), Y: height, Z: (start.Z + (planar.Z * fraction)));
+                var resolved = probe;
+                var velocity = FixedVector3.Zero;
+
+                samples++;
+                _ = field.Resolve(orientation: FixedQuaternion.Identity, position: ref resolved, up: in up, velocity: ref velocity, volumes: volumes);
+                if (resolved != probe) {
+                    walls.Add(item: probe);
+                }
+            }
+        }
+
+        return status;
+    }
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.
