@@ -154,6 +154,28 @@ public static class WorldStateDisclosure {
 
         return new Observer(arena: arena, recipient: recipient).ReadsWhole(rowOrdinal: rowOrdinal);
     }
+    /// <summary>Returns what one recipient may read of the live store, as a search job planning over that
+    /// recipient's sight asks it: the same row, cell and zone policies, and the same live reader rows, every disclosure
+    /// to that recipient answers by.</summary>
+    /// <param name="arena">The live store; the sight reads it at every question, never a copy.</param>
+    /// <param name="recipient">The recipient, or <see langword="null"/> for the public observer.</param>
+    /// <returns>The recipient's sight.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
+    public static IArenaSearchSight SearchSight(StateArena arena, Principal? recipient) {
+        ArgumentNullException.ThrowIfNull(argument: arena);
+
+        return new RecipientSight(arena: arena, recipient: recipient);
+    }
+    private sealed class RecipientSight(StateArena arena, Principal? recipient) : IArenaSearchSight {
+        private readonly string? m_name = recipient?.Describe();
+
+        private Observer Observer => new(arena: arena, recipient: recipient, name: m_name);
+
+        public bool ReadsWhole(int rowOrdinal) => Observer.ReadsWhole(rowOrdinal: rowOrdinal);
+        public bool AdmitsRow(int rowOrdinal) => ((((uint)rowOrdinal) < ((uint)arena.Rows.Count)) && Observer.Allows(policy: arena.Rows[rowOrdinal].Visibility));
+        public bool CanRead(int rowOrdinal, CellKey key) => ((((uint)rowOrdinal) < ((uint)arena.Rows.Count)) &&
+            Observer.CanRead(key: key, row: arena.Rows[rowOrdinal], rowOrdinal: rowOrdinal));
+    }
     /// <summary>Returns what one row withholds from the recipient, read from the live store.</summary>
     /// <param name="arena">The live store and its declarations.</param>
     /// <param name="rowOrdinal">The row's catalog ordinal.</param>

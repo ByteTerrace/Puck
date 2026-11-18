@@ -13106,6 +13106,10 @@ export type WorldSearchRow = {
    * Optional integer slot copied to best.revision with the completed answer.
    */
   revision?: string | null;
+  /**
+   * Whose sight the job plans over. Omitted, the job sees what the public may read; a principal (seat2), what that principal may read; either way every other cell the job reads holds a value imagined from the plan's own seed, and every output's audience must lie inside the actor's. world plans over the authority's true state, and every output's audience must then be one every row the job reads encloses.
+   */
+  actor?: Principal | null;
 };
 
 export type WorldSearchSection = {

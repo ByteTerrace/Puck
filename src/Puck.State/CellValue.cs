@@ -89,6 +89,37 @@ public readonly struct CellValue : IEquatable<CellValue>, IUnion {
         _ => throw new InvalidOperationException(message: $"A {Kind} cell value carries no stored number."),
     });
 
+    /// <summary>Folds the value into a hash: whether it holds a case, then its kind and content (a text's
+    /// length-framed characters, a vector's component count and components, or a numeric case's stored number), so two
+    /// values fold alike exactly when they are equal.</summary>
+    /// <param name="hash">The fold in flight.</param>
+    public void AddTo(ref Fnv1aHash hash) {
+        hash.Add(value: ((byte)(HasValue ? 1 : 0)));
+        if (!HasValue) {
+            return;
+        }
+
+        hash.Add(value: ((byte)Kind));
+        switch (Kind) {
+            case CellKind.Text:
+                hash.Add(value: (m_text ?? string.Empty));
+
+                break;
+            case CellKind.Vector:
+                var components = m_vector.Span;
+
+                hash.Add(value: components.Length);
+                foreach (var component in components) {
+                    hash.Add(value: unchecked((byte)component));
+                }
+
+                break;
+            default:
+                hash.Add(value: m_number);
+
+                break;
+        }
+    }
     /// <summary>Creates the <see cref="CellKind.Bool"/> case.</summary>
     /// <param name="value">The boolean value.</param>
     /// <returns>The carrier.</returns>

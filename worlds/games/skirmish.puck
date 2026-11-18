@@ -27,9 +27,11 @@ import "../standard/sealed"
 // its own unit). The judge (`skirmish-judge-<u>`) compares each unit's cell with `skirmishLast`, the last legal board,
 // which only the world reads; the search runs the same judge.
 //
-// Two computer players search blue's moves (`skirmishSearch`). `skirmishSharp` scores a move by how close blue's
-// first unit comes to red's first unit where it really stands; `skirmishFair` by how close it comes to where blue last
-// saw it. Their answers are the search's own writes into `skirmishSharpBest` (authority only) and `skirmishFairBest` (blue's).
+// Two computer players search blue's moves (`skirmishSearch`). `skirmishSharp` plans as the world (`actor: "world"`),
+// over the true board, and scores a move by how close blue's first unit comes to red's first unit where it really
+// stands; `skirmishFair` plans as blue (`actor: "seat2"`), over what blue may read, and scores by how close it comes to
+// where blue last saw it. Their answers are the search's own writes into `skirmishSharpBest` (authority only) and
+// `skirmishFairBest` (blue's).
 //
 // The disclosure fixture (../debug/skirmish-disclosure.puck): the principals are `seat1` and `seat2`; the hidden cells
 // are the other side's `skirmishPos` cells, `skirmishLast`, the other side's `skirmishView`, `skirmishSeen<s>`,
@@ -356,6 +358,7 @@ template skirmishSearch() {
     jobs [
       {
         name: "skirmishSharp"
+        actor: "world"
         tokens: skirmishPos
         board: skirmishBoard
         turn: skirmishTurn
@@ -373,6 +376,7 @@ template skirmishSearch() {
       }
       {
         name: "skirmishFair"
+        actor: "seat2"
         tokens: skirmishFairPos
         board: skirmishBoard
         turn: skirmishFairTurn

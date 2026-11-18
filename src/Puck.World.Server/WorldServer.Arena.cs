@@ -516,6 +516,8 @@ public sealed partial class WorldServer {
 
         var plans = new ArenaSearchPlan[authored.Length];
         var judges = new IArenaSearchJudge[authored.Length];
+        var sights = new IArenaSearchSight?[authored.Length];
+        var jobs = m_ruleCompilation!.Definition.Search.Rows;
         var host = new ArenaSearchEffectHost(
             arena: m_arena,
             documentSeed: (definition.Generation?.WorldSeed ?? 0UL),
@@ -543,12 +545,15 @@ public sealed partial class WorldServer {
                 rules: judgeRules[index],
                 score: scores[index]
             );
+            // A job plans over its actor's sight (the public's when none is authored) unless it names the world.
+            sights[index] = (jobs[index].ReadsAuthority ? null : WorldStateDisclosure.SearchSight(arena: m_arena, recipient: jobs[index].Actor));
         }
 
         if (!m_search.Rebuild(
             judges: judges,
             plans: plans,
-            reason: out var rebuildReason
+            reason: out var rebuildReason,
+            sights: sights
         )) {
             throw new InvalidOperationException(message: $"search failed to install after validation: {rebuildReason}");
         }

@@ -82,7 +82,8 @@ public abstract class PrivateDrawAuthority : IJournalParticipant {
     protected virtual bool RecordedOnly => false;
 
     /// <summary>Opens an isolated sampler under a caller-owned key.</summary>
-    protected static PrivateDrawSample FromKey(ClosedBitset256 key) => (seed, stream, cursor) => PrivateDrawStream.Word(key, seed, stream, cursor);
+    protected static PrivateDrawSample FromKey(ClosedBitset256 key) => PrivateDrawStream.Imagined(key: key);
+
 
     /// <summary>Binds a private declaration at the allocated ordinal.</summary>
     protected Draw InstallStream(Draw draw, long installation) {

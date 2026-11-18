@@ -16,10 +16,38 @@ namespace Puck.State;
 /// </remarks>
 public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
-    protected override bool Hypothetical => true;
+    private PrivateDrawSample? m_imagined;
+    private ulong m_imaginedSeed;
 
     /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
     public int SearchPly { get; set; }
+
+    /// <summary>Gets the sampler every private draw site a candidate samples draws from, keyed by the current
+    /// imagination seed (<see cref="Imagine"/>): words no authority issued, so a candidate never reads the
+    /// authority's stream, its read count or its timeline.</summary>
+    protected override PrivateDrawSample? ImaginedSampler => (m_imagined ??= Key(seed: m_imaginedSeed));
+
+    /// <summary>Keys every private draw site a candidate samples to <paramref name="seed"/>, the seed the job imagines
+    /// with at its current inputs.</summary>
+    /// <param name="seed">The imagination seed.</param>
+    public void Imagine(ulong seed) {
+        if ((m_imagined is not null) && (seed == m_imaginedSeed)) {
+            return;
+        }
+
+        m_imaginedSeed = seed;
+        m_imagined = null;
+    }
+    private static PrivateDrawSample Key(ulong seed) {
+        var generator = Puck.Maths.Pcg32XshRr.Create(state: seed, stream: 0UL);
+
+        return PrivateDrawStream.Imagined(key: new ClosedBitset256(
+            Word0: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word1: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word2: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()),
+            Word3: ((((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32())
+        ));
+    }
 
     /// <summary>Initializes a host over the arena a search opens its candidate scopes on.</summary>
     /// <param name="arena">The store every read and write addresses.</param>
@@ -29,7 +57,7 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     /// <param name="documentSeed">The document's own reroll lever, folded into every draw site's seed.</param>
     /// <param name="instanceIdentity">The running instance's identity, folded into every draw site's seed.</param>
     /// <param name="sites">The site descriptor per catalog ordinal, the same table the live host draws with, so a
-    /// candidate reproduces public draws while private samples remain unknown; <see langword="null"/>
+    /// candidate reproduces public draws while it draws a private site from its own imagined sampler; <see langword="null"/>
     /// names each site by its catalog row name.</param>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog

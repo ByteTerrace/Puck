@@ -43,16 +43,18 @@ public sealed class DisclosureReviewLawTests {
     }
 
     [Fact]
-    public void SearchCannotSampleAnInstalledPrivateSite() {
+    public void SearchSamplesAPrivateSiteWithItsOwnSamplerNeverTheAuthoritys() {
         var keys = WorldPrivateDrawKeys.Create();
         using var fixture = Fixtures.FreshServer(PrivateDice(), drawKeys: keys);
         var arena = fixture.Server.Arena;
         Assert.True(arena.Catalog.TryResolve(StateLane.Document, "dice", out var row));
         var search = new ArenaSearchEffectHost(arena);
         var reads = keys.Reads;
+        // Another authority's credential opens nothing; the search host draws from its own imagined sampler instead.
         Assert.Null(arena.Rows[row.Ordinal].Draw!.Secret!.Open(WorldPrivateDrawKeys.Create()));
-        Assert.False(search.Apply(Mutation.Generate(row.Ordinal), out var refusal));
-        Assert.Contains("sampler", refusal.Reason);
+        var scope = arena.BeginScope();
+        Assert.True(search.Apply(Mutation.Generate(row.Ordinal), out var refusal), refusal.Reason);
+        arena.Rewind(mark: scope);
         Assert.Equal(reads, keys.Reads);
         Assert.True(Apply(fixture.Server, new WorldMutation.Generate(Principal.Console, "dice")));
         Assert.True(keys.Reads > reads);

@@ -156,7 +156,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             Arena: Arena,
             Generators: m_generators,
             Seeds: m_seeds,
-            Hypothetical: Hypothetical,
+            Imagined: ImaginedSampler,
             DrawAuthority: m_drawAuthority,
             Time: Time
         );
@@ -236,8 +236,10 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
 
         return changed;
     }
-    /// <summary>A hypothetical candidate cannot inspect a private stream.</summary>
-    protected virtual bool Hypothetical => false;
+    /// <summary>Gets the sampler this host draws every private site from in place of the site's own, or
+    /// <see langword="null"/> to draw a private site only through the authority that issued it. A hypothetical host
+    /// (a search candidate's) returns one keyed by its own seed, so it never reads the authority's stream.</summary>
+    protected virtual PrivateDrawSample? ImaginedSampler => null;
 
     private bool ApplyGenerate(in Mutation mutation, out EffectRefusal refusal) {
         var ordinal = mutation.RowOrdinal;
@@ -254,8 +256,9 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             return false;
         }
         if (!GeneratorEngine.TryResolveExecutableSource(
-            draw: Hypothetical ? draw.WithoutStream() : draw,
+            draw: draw,
             authority: m_drawAuthority,
+            imagined: ImaginedSampler,
             sample: out var sample,
             generator: out var generator,
             generators: m_generators,

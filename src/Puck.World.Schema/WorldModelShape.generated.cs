@@ -5944,6 +5944,8 @@ public static partial class WorldModelShape {
                 M("scores", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Scores", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Scores),
                 M("enabled", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Enabled", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Enabled),
                 M("revision", typeof(global::System.String), typeof(global::Puck.World.WorldSearchRow), "Revision", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Revision),
+                M("actor", typeof(global::System.Nullable<global::Puck.Commands.Principal>), typeof(global::Puck.World.WorldSearchRow), "Actor", Read | Write, static value => ((global::Puck.World.WorldSearchRow)value).Actor),
+                M("readsAuthority", typeof(global::System.Boolean), typeof(global::Puck.World.WorldSearchRow), "ReadsAuthority", None),
                 M("effectiveShapes", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldSearchShape>), typeof(global::Puck.World.WorldSearchRow), "EffectiveShapes", None),
             ],
             []),
@@ -6342,6 +6344,7 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldStateSection), true, JsonTypeInfoKind.Object, null,
             [],
             [
+                M("drawInstallCount", typeof(global::System.Int64), typeof(global::Puck.World.WorldStateSection), "DrawInstallCount", None),
                 M("world", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldStateRow>), typeof(global::Puck.World.WorldStateSection), "World", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).World),
                 M("body", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.ActionStateSlot>), typeof(global::Puck.World.WorldStateSection), "Body", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).Body),
                 M("identity", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.ActionStateSlot>), typeof(global::Puck.World.WorldStateSection), "Identity", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).Identity),
