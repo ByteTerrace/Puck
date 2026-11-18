@@ -15,8 +15,8 @@ namespace Puck.World.Transpiler;
 /// the document that authors every other row of its list, or the saved source. Inside each document
 /// <see cref="WorldSourceEdits"/> rewrites only the changed nodes, so every <c>let</c>, <c>template</c>, <c>for</c>
 /// and comment outside them stays as written, and a node a generator writes refuses by name. A source holds the world
-/// as it starts, so the <c>state</c> the simulation moves is not written into an existing source; a JSON save keeps
-/// it. Nothing is written unless every edited source compiles to the document the save asked of it and the whole
+/// as it starts. A private draw world saves its live rows together so a deck and the hands dealt from it share one save.
+/// Other existing sources retain their authored simulation state. Nothing is written unless every edited source compiles to the document the save asked of it and the whole
 /// tree composes to the snapshot.</remarks>
 public static class WorldSourceSave {
     // One source of the tree: its text and its own lowered document, which the save edits.
@@ -76,7 +76,7 @@ public static class WorldSourceSave {
             return false;
         }
 
-        KeepAuthoredSimulation(authored: canonical!, target: target);
+        KeepAuthoredSimulation(authored: canonical!, target: target, keepState: !definition.AuthoredState.Any(row => row.Draw?.PrivateStream == true));
 
         var delta = WorldDocumentBasis.Diff(basis: canonical!, target: target);
 
@@ -111,8 +111,8 @@ public static class WorldSourceSave {
 
     // A source writes the world as it starts, so what the simulation writes keeps its authored value: the `state`
     // section, and the response mask (`holding`) the sweep writes on a placement row from that state.
-    private static void KeepAuthoredSimulation(JsonObject authored, JsonObject target) {
-        Keep(authored: authored, name: "state", target: target);
+    private static void KeepAuthoredSimulation(JsonObject authored, JsonObject target, bool keepState) {
+        if (keepState) { Keep(authored: authored, name: "state", target: target); }
         if ((target["placements"]?["rows"] is not JsonArray rows) || (authored["placements"]?["rows"] is not JsonArray authoredRows)) {
             return;
         }

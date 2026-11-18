@@ -133,8 +133,9 @@ internal static partial class Fixtures {
     /// among them) resolve beside, or null for the definition's own directory.</param>
     /// <param name="landingRefusal">Optional transfer admission policy supplied by the law.</param>
     /// <param name="catalogNarration">The hub the fixture's owned-world catalog narrates through, or <see langword="null"/> for none.</param>
+    /// <param name="drawKeys">Authority sampler, or an isolated deterministic sampler for a law.</param>
     /// <param name="consoleNarration">Whether the server narrates to the console, or attaches no narration sink at all.</param>
-    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null, bool consoleNarration = true) {
+    public static WorldFixture FreshServer(WorldDefinition? definition = null, IEnumerable<Puck.Abstractions.Machines.IMachineEngine>? engines = null, WorldMachineCatalog? machineCatalog = null, string? documentPath = null, Func<int, string?>? landingRefusal = null, WorldOutputHub? catalogNarration = null, bool consoleNarration = true, WorldPrivateDrawKeys? drawKeys = null) {
         // The default document's BYTES are serialized once for the whole run. Each fixture still deserializes its
         // own graph — that is what keeps one test's mutation off the next test's document — but the serialize half
         // of the round trip is the same work every time and is not worth repeating seven hundred times.
@@ -172,7 +173,9 @@ internal static partial class Fixtures {
             machineId: Guid.NewGuid(),
             narrationHub: catalogNarration
         );
+        drawKeys ??= WorldPrivateDrawKeys.Preview;
         var server = new WorldServer(
+            drawKeys: drawKeys,
             definition: definition,
             population: population,
             profiles: profiles,
@@ -183,6 +186,7 @@ internal static partial class Fixtures {
         );
 
         return new WorldFixture(
+            drawKeys: drawKeys,
             machines: machines,
             scratch: scratch,
             server: server,
@@ -349,12 +353,16 @@ internal sealed class WorldFixture : IDisposable {
     // stepTicks is the engine-tick width one Step advances by; null means one simulation tick at the default
     // fixture rate. scratch is a directory the fixture owns and resolves at Dispose; null means the caller owns
     // whatever directory the server was booted over.
-    internal WorldFixture(WorldServer server, WorldMachineHost machines, ulong? stepTicks = null, TemporaryDirectory? scratch = null) {
+    internal WorldFixture(WorldServer server, WorldMachineHost machines, ulong? stepTicks = null, TemporaryDirectory? scratch = null, WorldPrivateDrawKeys? drawKeys = null) {
+        m_drawKeys = drawKeys;
         Server = server;
         m_machines = machines;
         m_scratch = scratch;
         m_stepTicks = (stepTicks ?? Fixtures.StepTicks);
     }
+
+    private readonly WorldPrivateDrawKeys? m_drawKeys;
+    public Action<WorldJournalEntry>? MutationJournalTap { set => Server.SetMutationJournalTap(m_drawKeys!, value); }
 
     /// <summary>The live server under test.</summary>
     public WorldServer Server { get; }

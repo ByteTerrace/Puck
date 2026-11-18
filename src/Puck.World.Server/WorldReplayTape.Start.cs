@@ -54,7 +54,7 @@ public sealed partial class WorldReplayTape {
     /// <exception cref="ArgumentException"><paramref name="name"/> is not a valid tape name.</exception>
     /// <exception cref="InvalidDataException">The re-drive refused the draft by name.</exception>
     /// <exception cref="WorldReplayCodecException">A host-side codec bug.</exception>
-    public WorldReplayVerdict SaveDraft(string name, WorldReplaySnapshot draft, out string path) {
+    internal WorldReplayVerdict SaveDraft(string name, WorldReplaySnapshot draft, out string path) {
         ArgumentNullException.ThrowIfNull(argument: draft);
 
         if (!IsValidName(name: name)) {

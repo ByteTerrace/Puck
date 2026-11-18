@@ -21,19 +21,19 @@ internal static class PuckWorldLoader {
     // entry from there. The directory is the source's alone and is restaged whole on every boot, so a world the
     // source no longer declares cannot be reached.
     private static bool TryBootComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? named, out WorldDefinitionSource source, out string failure, string catalogFingerprint,
-        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches, bool authority) {
+        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches, bool authority, bool preview) {
         source = null!;
 
         var directory = Path.Combine(
             path1: stateRoot.FullPath,
             path2: "compositions",
-            path3: Path.GetFileNameWithoutExtension(path: path)
+            path3: WorldDrawSave.WorldIdentity(path)
         );
         var sourceDirectory = (Path.GetDirectoryName(path: path) ?? ".");
 
         if (!WorldStaging.TryStageComposition(
             catalog: catalog,
-            directory: directory,
+            directory: Path.Combine(directory, "staged"),
             entry: named,
             entryName: out var entryName,
             entryPath: out var entryPath,
@@ -49,8 +49,20 @@ internal static class PuckWorldLoader {
         // The booted world's origin is its staged document, so its borders resolve their neighbours beside it; the
         // origin line names the --world path the boot was asked for, as every --world boot does. Its compiled world
         // belongs to the document `puck compile` writes beside the source.
+        var staged = Path.GetDirectoryName(entryPath)!;
+        var entryIdentity = worlds.Any(world => world.Entry && world.Name == entryName) ? null : entryName;
+        var savedDocument = Path.Combine(directory, Path.GetFileName(entryPath));
+        // Stage a fresh authored basis each boot. The durable document is an ordinary author-editable delta.
+        var basisName = entryName + "-basis";
+        while (File.Exists(Path.Combine(staged, WorldDocumentName.DocumentFile(basisName)))) { basisName += "-basis"; }
+        File.Move(entryPath, Path.Combine(staged, WorldDocumentName.DocumentFile(basisName)));
+        var overlay = File.Exists(savedDocument)
+            ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(savedDocument))!.AsObject()
+            : new System.Text.Json.Nodes.JsonObject();
+        overlay[WorldDocumentBasis.BasisMemberName] = basisName;
+        Puck.Confinement.AtomicFile.WriteAllBytes(entryPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(overlay));
         var neighbours = new WorldFileNeighbourResolver(
-            baseDirectory: () => directory,
+            baseDirectory: () => staged,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint
         );
@@ -62,7 +74,7 @@ internal static class PuckWorldLoader {
             )
         );
 
-        if (!WorldDrawSave.TryOpen(authority, stateRoot, path, entryName, out var keys, out failure)) { return false; }
+        var keys = authority ? WorldDrawSave.Open(stateRoot, path, entryIdentity) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
             keys: keys,
             admission: out var loaded,
@@ -88,7 +100,7 @@ internal static class PuckWorldLoader {
         source = new WorldDefinitionSource(
             Definition: loaded!.Definition,
             SourcePath: entryPath
-        ) { Admission = loaded, DrawKeys = keys, CompositionOrigin = (entryPath, path, entryName) };
+        ) { Admission = loaded, DrawKeys = keys, CompositionOrigin = (entryPath, path, entryIdentity, savedDocument) };
         failure = string.Empty;
 
         return true;
@@ -108,9 +120,10 @@ internal static class PuckWorldLoader {
     /// overrides nothing the document carries.</param>
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
+    /// <param name="preview">Whether this boot is an isolated deterministic test run.</param>
     /// <param name="authority">Whether this boot owns the local world authority save.</param>
     public static bool TryResolveWorld(string worldPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
-        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null, bool authority = false) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null, bool authority = false, bool preview = false) {
         string path;
 
         try {
@@ -148,7 +161,7 @@ internal static class PuckWorldLoader {
                 return false;
             }
 
-            if (!WorldDrawSave.TryOpen(authority, stateRoot, path, null, out var documentKeys, out failure)) { source = null!; return false; }
+            var documentKeys = authority ? WorldDrawSave.Open(stateRoot, path, null) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
             return WorldDefinitionLoader.TryResolve(
                 keys: documentKeys,
                 catalog: catalog,
@@ -195,6 +208,7 @@ internal static class PuckWorldLoader {
         if (compiled!.Worlds.Count > 0) {
             return TryBootComposition(
                 authority: authority,
+                preview: preview,
                 caches: caches,
                 stateRoot: stateRoot,
                 catalog: catalog,
@@ -220,7 +234,7 @@ internal static class PuckWorldLoader {
             documentPath: path
         );
 
-        if (!WorldDrawSave.TryOpen(authority, stateRoot, path, null, out var keys, out failure)) { source = null!; return false; }
+        var keys = authority ? WorldDrawSave.Open(stateRoot, path, null) : preview ? WorldPrivateDrawKeys.Preview : WorldPrivateDrawKeys.Missing;
         if (!WorldSourceLoader.TryLoadForAdmission(
             keys: keys,
             admission: out var loaded,

@@ -283,7 +283,7 @@ public static partial class GeneratorEngine {
             (secret is not null) &&
             !SupportsSecret(generator, targetKind)
         ) {
-            reason = "secret draws require a nonzero key and an integer streamDraw source with replacement";
+            reason = "private draws require an integer streamDraw source with replacement";
 
             return false;
         }

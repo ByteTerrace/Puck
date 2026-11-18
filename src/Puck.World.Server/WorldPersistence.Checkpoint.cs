@@ -101,19 +101,7 @@ public sealed partial class WorldPersistence {
 
         for (var index = 0; (index < keep); index++) {
             var entry = Host.Document.Journal[index];
-
-            if (!WorldDocument.TryCompose(
-            authority: Host.GrantTable,
-                current: candidate,
-                mutation: entry.Mutation,
-                tick: entry.Tick,
-                engineTick: entry.EngineTick,
-                instanceIdentity: Host.InstanceIdentity,
-                candidate: out var next,
-                reason: out var composeReason,
-                evictedKey: out _,
-                refusalCode: out _
-            )) {
+            if (!entry.TryCompose(Host, candidate, out var next, out var composeReason)) {
                 var composeRefusal = $"undo refused: replay failed at journal entry {index} ({WorldServer.Describe(mutation: entry.Mutation)}) — {composeReason}";
 
                 return RefuseUndo(
@@ -161,8 +149,11 @@ public sealed partial class WorldPersistence {
             kept.Add(item: entry);
         }
 
-        if (Host.Configuration.StateRaw?.DrawInstallCount > 0) {
-            candidate = Host.DrawKeys.Install(candidate, previous: Host.MaterializeArena());
+        Host.DrawKeys.AdvanceGeneration();
+        if (WorldPrivateDrawKeys.Positions(candidate) is { } positions) {
+            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var why, Host.DrawKeys, restore: positions)) {
+                return RefuseUndo($"undo refused: {why}", connectionId, correlationId);
+            }
         }
 
         // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
@@ -392,22 +383,10 @@ public sealed partial class WorldPersistence {
 
             for (var index = 0; (index < excess); index++) {
                 var entry = Host.Document.Journal[index];
-
                 // Every entry here already applied live once, against this exact base-and-prefix, so recomposing it
                 // is expected to succeed; if it somehow does not, leave the journal exactly as it stood rather than
                 // fold onto a candidate that failed to build.
-                if (!WorldDocument.TryCompose(
-            authority: Host.GrantTable,
-                    current: candidate,
-                    mutation: entry.Mutation,
-                    tick: entry.Tick,
-                    engineTick: entry.EngineTick,
-                    instanceIdentity: Host.InstanceIdentity,
-                    candidate: out var next,
-                    reason: out _,
-                    evictedKey: out _,
-                        refusalCode: out _
-                    )) {
+                if (!entry.TryCompose(Host, candidate, out var next, out _)) {
                     return;
                 }
 
@@ -529,14 +508,16 @@ public sealed partial class WorldPersistence {
     /// <param name="authorityIdentity">The namespace the restored authority mints entity addresses under, or
     /// <see langword="null"/> for <paramref name="instanceIdentity"/> (see the <see cref="WorldServer"/>
     /// constructor).</param>
+    /// <param name="drawKeys">Sampler opened from the authority root, or an explicit replay sampler.</param>
     /// <returns>The restored server and the population it owns.</returns>
-    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null) {
+    internal static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        var keys = checkpoint.Server.OpenDrawKeys();
+        var keys = checkpoint.Server.OpenDrawKeys(drawKeys);
+        keys.ResumeGeneration(checkpoint.Server.DrawGeneration);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
@@ -671,11 +652,7 @@ public sealed partial class WorldPersistence {
                 }
             }
 
-            var journal = new (ulong, ulong, WorldMutation)[Host.Document.Journal.Count];
-
-            for (var index = 0; (index < Host.Document.Journal.Count); index++) {
-                journal[index] = (Host.Document.Journal[index].Tick, Host.Document.Journal[index].EngineTick, Host.Document.Journal[index].Mutation);
-            }
+            var journal = Host.Document.Journal.ToArray();
 
             var ruleGateHeld = FlattenLatch(
                 latch: Host.RuleHost.RuleGateHeld,
@@ -706,7 +683,8 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldServerCheckpoint.DocumentBytes(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
-                DrawSeed: Host.DrawKeys.SerializeAuthorityState(),
+                DrawAuthority: Host.Configuration.StateRaw?.DrawInstallCount > 0 || Host.Document.Base.StateRaw?.DrawInstallCount > 0 ? Host.DrawKeys.Identity : null,
+                DrawGeneration: Host.DrawKeys.Generation,
                 DrawPositions: WorldPrivateDrawKeys.Positions(Host.Configuration),
                 BaseDrawPositions: WorldPrivateDrawKeys.Positions(Host.Document.Base),
                 AuthorityIdentity: Host.AuthorityIdentity,
@@ -773,12 +751,13 @@ public sealed partial class WorldPersistence {
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
-        var keys = checkpoint.Server.OpenDrawKeys();
+        var keys = checkpoint.Server.OpenDrawKeys(Host.DrawKeys);
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
         RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+        keys.AdvanceGeneration();
     }
 
     // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
@@ -930,16 +909,9 @@ public sealed partial class WorldPersistence {
             origin: restoredOrigin
         );
         Host.Document.Journal.Clear();
-        foreach (var (tick, engineTick, mutation) in server.Journal) {
-            Host.Document.Journal.Add(item: new WorldJournalEntry(
-                EngineTick: engineTick,
-                Mutation: mutation,
-                Tick: tick
-            ));
-        }
+        Host.Document.Journal.AddRange(server.Journal);
         Host.Document.Pending.Clear();
-        keys.WordRead = Host.DrawKeys.WordRead;
-        Host.DrawKeys = keys;
+        keys.ResumeGeneration(server.DrawGeneration);
         Host.Tick.RestoreClock(
             completedEngineTicks: server.LastCompletedEngineTicks,
             completedTick: server.LastCompletedTick,

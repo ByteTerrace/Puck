@@ -167,7 +167,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         ));
         var installs = 0;
 
-        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
+        fixture.MutationJournalTap = _ => installs++;
         fixture.Step();
         var observed = fixture.Server.ExportDefinition();
 
@@ -203,7 +203,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         ));
         var installs = 0;
 
-        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
+        fixture.MutationJournalTap = _ => installs++;
         fixture.Step();
         var observed = fixture.Server.ExportDefinition();
 
@@ -238,7 +238,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         ));
         var installs = 0;
 
-        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
+        fixture.MutationJournalTap = _ => installs++;
         fixture.Step();
         var observed = fixture.Server.ExportDefinition();
 
@@ -264,7 +264,7 @@ public sealed class WorldRuleMixedDocumentTransactionLawTests {
         using var fixture = Fixtures.FreshServer(definition: Scenario(includeBadSecondPlacement: false));
         var installs = 0;
 
-        fixture.Server.MutationJournalTap = (_, _, _) => installs++;
+        fixture.MutationJournalTap = _ => installs++;
 
         fixture.Step();
         var observed = fixture.Server.ExportDefinition();

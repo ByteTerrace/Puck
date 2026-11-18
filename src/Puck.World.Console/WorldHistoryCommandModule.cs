@@ -390,7 +390,7 @@ public sealed partial class WorldHistoryCommandModule(WorldHistory history, Worl
         }
 
         if (args.Is(index: 0, value: "save")) {
-            return Save(args: args);
+            return Save(args: args, principal: context.Principal);
         }
 
         if (args.Is(index: 0, value: "replay-edit")) {

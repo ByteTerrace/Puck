@@ -46,7 +46,8 @@ public sealed partial class WorldSiloHost {
 
             var (definition, reason) = await origin.LoadAsync(
                 identity.World.Value,
-                cancellationToken
+                cancellationToken,
+                keys: WorldPrivateDrawKeys.Preview
             );
             if (definition is null) { throw new InvalidDataException(message: reason); }
             var hash = WorldDefinitionFileSource.ComputeContentHash(content: WorldDefinitionSerialization.Serialize(definition: definition));

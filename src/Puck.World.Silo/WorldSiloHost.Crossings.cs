@@ -75,7 +75,7 @@ public sealed partial class WorldSiloHost {
     // Replay the publication order after admission and host-slice restore. A mutation can change the spawn,
     // capacity or admission policy an arrival used, so moving it ahead of that arrival changes the traveler. A record
     // that does not decode or redo refuses the activation and leaves its crossing watermark where it stopped.
-    private bool TryRecoverJournal(WorldInstance row, IReadOnlyList<WorldAuthorityJournalEntry> entries, out string reason) {
+    private bool TryRecoverJournal(WorldInstance row, IReadOnlyList<WorldAuthorityJournalEntry> entries, WorldPrivateDrawKeys drawKeys, out string reason) {
         foreach (var entry in entries) {
             switch (entry.Kind) {
                 case WorldAuthorityJournalEntryKind.Crossing:
@@ -98,22 +98,11 @@ public sealed partial class WorldSiloHost {
                     }
                     break;
                 case WorldAuthorityJournalEntryKind.Mutation:
-                    if (
-                        !WorldSubmissionCodec.TryDecodeCommittedMutation(
-                        bytes: entry.Encoded.Span,
-                        failure: out var failure,
-                        mutation: out var mutation
-                    ) ||
-                        (mutation is null)
-                    ) {
-                        reason = $"mutation decode: {failure}";
+                case WorldAuthorityJournalEntryKind.PrivateMutation:
+                    if (!WorldAuthorityCheckpointCodec.TryDecodeJournalMutation(entry, out var mutation, out reason)) {
                         return false;
                     }
-                    if (!row.Server.TryApplyJournalTailMutation(
-                        engineTick: entry.EngineTick,
-                        mutation: mutation,
-                        tick: entry.Tick
-                    )) {
+                    if (!row.Server.TryRecoverJournalMutation(mutation, drawKeys)) {
                         reason = "replay rejected a recorded mutation";
                         return false;
                     }

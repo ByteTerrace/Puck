@@ -438,7 +438,7 @@ public static partial class AzureCommand {
                     foreach (var identity in m_identities) {
                         var key = $"{identity.Owner:D}/{identity.World}";
 
-                        if (source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
+                        if (!operation.ReturnsToPreviousRelease && source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
                         var publication = await authority.PrepareReleaseMetadataAsync(
                             identity,
                             operation,

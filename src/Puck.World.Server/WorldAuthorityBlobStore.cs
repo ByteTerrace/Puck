@@ -127,45 +127,13 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
     /// <inheritdoc/>
     public async Task<WorldDefinition?> LoadDefinitionAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        var rooted = await WorldAuthorityRootReader.ReadDefinitionAsync(
-            identity.Owner,
-            identity.World,
-            m_store,
-            m_target,
-            cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (rooted is null) { return null; }
-        var origin = new WorldHostedOrigin(
-            owner: identity.Owner,
-            store: m_store,
-            target: m_target,
-            timeProvider: m_clock,
-            documentDirectory: m_documentDirectory,
-            world: identity.World
-        );
-
-        return await Task.Run(
-            cancellationToken: cancellationToken,
-            function: () => {
-                if (origin.TryLoad(
-                    definition: out var definition,
-                    instanceIdentity: identity.World.Value,
-                    reason: out var reason
-                )) {
-                    return definition;
-                }
-
-                if (reason.StartsWith(
-                    comparisonType: StringComparison.Ordinal,
-                    value: "no cloud copy at"
-                )) {
-                    return null;
-                }
-
-                throw new InvalidDataException(message: $"hosted definition for '{origin.Identity}' failed to load: {reason}");
-            }
-        );
+        var content = await LoadPublishedDefinitionBytesAsync(identity, cancellationToken).ConfigureAwait(false);
+        if (content is null) { return null; }
+        if (WorldDefinitionLoader.TryReadPublishable(System.Text.Encoding.UTF8.GetString(content.Value.Span),
+            identity.World.Value, out var definition, out var reason, m_machines, m_documentDirectory)) {
+            return definition;
+        }
+        throw new InvalidDataException($"hosted definition for '{identity.World}' failed to load: {reason}");
     }
     /// <inheritdoc/>
     public async Task<WorldAuthorityJournalTail> LoadJournalTailAsync(WorldAuthorityIdentity identity, long afterOrdinal, CancellationToken cancellationToken) {
@@ -410,10 +378,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     }
 
     /// <inheritdoc/>
-    public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) => await ReadRootSnapshotAsync(
-        cancellationToken: cancellationToken,
-        identity: identity
-    ).ConfigureAwait(continueOnCapturedContext: false);
+    public async Task<WorldAuthorityRootSnapshot?> LoadRootAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) =>
+        (await ReadRootSnapshotAsync(identity, cancellationToken).ConfigureAwait(false))?.WithoutSeed();
     /// <inheritdoc/>
     public async Task<WorldRecoveryRootReference?> CaptureRecoveryRootAsync(WorldAuthorityIdentity identity, Guid operationId, CancellationToken cancellationToken) {
         ValidateRecoveryRequest(
@@ -652,6 +618,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         )
         ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
         var restored = saved.Root with {
+            DrawSeed = present.Root.DrawSeed,
+            DrawGeneration = checked(Math.Max(saved.Root.DrawGeneration, present.Root.DrawGeneration) + 1),
             Epoch = checked((Math.Max(
             val1: present.Root.Epoch,
             val2: saved.Root.Epoch
@@ -706,7 +674,8 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             var root = current?.Root ?? WorldAuthorityRoot.Empty;
             var nextToken = Guid.NewGuid();
             var next = root with {
-                DrawSeed = root.DrawSeed ?? Convert.ToBase64String(WorldPrivateDrawKeys.Create().SerializeAuthorityState()!),
+                DrawGeneration = root.Epoch > 0 ? checked(root.DrawGeneration + 1) : root.DrawGeneration,
+                DrawSeed = root.Epoch == 0 && root.DrawSeed is null ? Convert.ToBase64String(WorldPrivateDrawKeys.Create().SerializeAuthorityState()!) : root.DrawSeed,
                 Epoch = checked(root.Epoch + 1),
                 FenceToken = nextToken,
                 Sequence = checked(root.Sequence + 1)
@@ -1057,7 +1026,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         }
         WorldDefinitionAdmission? admission = null;
 
-        var keys = rooted.Root.DrawSeed is { } seed ? WorldPrivateDrawKeys.FromAuthorityState(Convert.FromBase64String(seed)) : WorldPrivateDrawKeys.Preview;
+        var keys = rooted.Root.DrawSeed is { } seed ? WorldPrivateDrawKeys.FromAuthorityState(Convert.FromBase64String(seed), rootGeneration: rooted.Root.DrawGeneration) : WorldPrivateDrawKeys.Missing;
         if (definitionBytes is { } bytes) {
             var resolver = new WorldStorageNeighbourResolver(
                 m_store,
@@ -1081,7 +1050,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             admission = loaded.Admission;
         }
         return new WorldAuthorityRecovery(
-            rooted,
+            rooted.WithoutSeed(),
             checkpoint,
             new WorldAuthorityJournalTail(
                 CheckpointOrdinal: rooted.Root.CheckpointOrdinal,

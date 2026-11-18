@@ -30,6 +30,8 @@ public sealed record WorldReleaseGroupRecord {
     [JsonPropertyName("pendingPhase")] public WorldReleaseOperationPhase? PendingPhase { get; init; }
     [JsonPropertyName("pendingSourceRelease")] public string? PendingSourceRelease { get; init; }
     [JsonPropertyName("pendingTargetRelease")] public string? PendingTargetRelease { get; init; }
+    /// <summary>The pending transition activates the retained predecessor.</summary>
+    [JsonIgnore] public bool ReturnsToPreviousRelease => PreviousRelease is not null && PendingTargetRelease == PreviousRelease;
     [JsonPropertyName("previousRelease")] public string? PreviousRelease { get; init; }
     [JsonPropertyName("restorePoint"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public WorldReleaseRestoreSelection? RestorePoint { get; init; }

@@ -21,10 +21,6 @@ public sealed class PrivateDrawStream {
     /// <summary>Returns the word at this address.</summary>
     public uint Sample(ulong seed, ulong stream, long cursor) => m_sample(seed, stream, cursor);
 
-    /// <summary>Opens a raw stream for generator kernels.</summary>
-    public static PrivateDrawStream FromKey(ClosedBitset256 key) =>
-        new((seed, stream, cursor) => Word(key, seed, stream, cursor), 0, null);
-
     /// <summary>Computes one word from an installed key.</summary>
     internal static uint Word(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {
         Span<byte> key = stackalloc byte[32];

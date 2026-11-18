@@ -10,7 +10,7 @@ public sealed record WorldReleaseFixtureCheckpoint(byte[] Encoded, ulong Tick, W
 /// <summary>A checkpoint object's exact identity, its captured row tick, and the exact pin of the receipt snapshot
 /// captured with it.</summary>
 public sealed record WorldReleaseFixtureRow(string Hash, ulong Tick, string ReceiptsHash);
-/// <summary>Immutable inventory for a coherent qualification snapshot. It contains no production signing keys.</summary>
+/// <summary>Immutable inventory for a coherent qualification snapshot. Its checkpoints contain authority-only game state and draw positions. Qualification provisions its own signing and draw keys.</summary>
 public sealed record WorldReleaseFixtureManifest(string Schema, Guid RequestId, string Group, string Release,
     Guid Owner, Guid MachineId, IReadOnlyDictionary<string, WorldReleaseFixtureRow> Worlds) {
     /// <summary>Host capture time for the coherent group, distinct from each world's simulation tick.</summary>

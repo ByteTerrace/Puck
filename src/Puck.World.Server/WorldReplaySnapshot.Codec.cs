@@ -519,11 +519,7 @@ public sealed partial class WorldReplaySnapshot {
 
         stream.Write(buffer: Encode(recording: recording));
     }
-    /// <summary>Serializes a recording to <paramref name="path"/> in one write: the whole tape is encoded to memory
-    /// first (<see cref="Encode"/>, where every write-side throw can still fire), and only a complete buffer ever
-    /// reaches the destination file, via one <see cref="File.WriteAllBytes(string, byte[])"/> call. A throw during
-    /// encoding therefore never truncates or creates a partial file on disk — the destination is untouched until the
-    /// whole tape is ready (a guard against a codec throw, not against the disk failing mid-write).</summary>
+    /// <summary>Encodes a complete authority tape and durably replaces the private file.</summary>
     /// <param name="path">The destination file path.</param>
     /// <param name="recording">The recording to write.</param>
     /// <exception cref="ArgumentNullException"><paramref name="recording"/> is <see langword="null"/>.</exception>
@@ -532,10 +528,7 @@ public sealed partial class WorldReplaySnapshot {
     public static void WriteFile(string path, WorldReplaySnapshot recording) {
         ArgumentException.ThrowIfNullOrEmpty(argument: path);
 
-        File.WriteAllBytes(
-            bytes: Encode(recording: recording),
-            path: path
-        );
+        Puck.Confinement.AtomicFile.WriteAllBytesDurably(path, Encode(recording), UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 
     private static InvalidDataException Corrupt(WireFailure failure) => new(message: $"Corrupt .puckreplay recording: {failure}.");

@@ -497,6 +497,8 @@ an empty hidden inventory from a nonempty one.
 
 ## Hashes, checkpoints, and replay
 
+A whole-session tape is authority data. Its starting checkpoint includes hidden cells, and its inputs include the private words the authority needed to decide each recorded tick, including a firing that later refused. Only the authority or its operator may hold or export this file. Keep it with the authority's private state. A player or spectator replay must contain only the observations delivered to that recipient.
+
 An authored `replays` row records and replays a selected scope while the rest of
 the world continues. It names document rows, stable bodies and input principals,
 its control row, duration, and a timed numeric input program. The first completed

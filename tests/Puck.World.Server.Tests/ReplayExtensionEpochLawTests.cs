@@ -56,8 +56,7 @@ public sealed class ReplayExtensionEpochLawTests {
         Assert.Throws<InvalidOperationException>(testCode: () => Extension(server: server));
 
         while (harness.Tape.Mode == WorldReplayMode.Replaying) {
-            harness.Tape.InjectDriveTick();
-            harness.StepWithoutInput();
+            harness.Tape.DriveStep(() => harness.StepWithoutInput());
         }
 
         // The drive ended: the instance that watched the replaced timeline stays retired, a fresh one admits, and its

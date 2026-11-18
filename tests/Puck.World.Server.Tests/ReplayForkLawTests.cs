@@ -47,8 +47,7 @@ public sealed class ReplayForkLawTests {
     }
     // One live tick the way WorldServerStepShell drives it: recorded input into the doors, the step, the close.
     private static void ShellStep(WorldFixture fixture, WorldReplayTape tape) {
-        tape.InjectDriveTick();
-        fixture.Step();
+        tape.DriveStep(() => fixture.Step());
         tape.NoteTick();
     }
     private static WorldReplaySnapshot Snapshot(int ticks, WorldReplayForkProvenance? forkedFrom, IReadOnlyList<WorldReplayEntry>? firstTick = null, WorldDefinition? definition = null, IReadOnlyList<WorldReplaySeat>? seats = null) {

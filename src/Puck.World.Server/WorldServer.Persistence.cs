@@ -10,8 +10,9 @@ public sealed partial class WorldServer {
 
     /// <inheritdoc cref="WorldPersistence.FromCheckpoint"/>
     [Replaces(root: typeof(StateArena))]
-    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null) =>
+    public static (WorldServer Server, WorldPopulation Population) FromCheckpoint(WorldAuthorityCheckpoint checkpoint, WorldOwnedWorlds profiles, IWorldMachineHost machines, string instanceIdentity, IWorldAdjacencySource? adjacencies = null, string? documentDirectory = null, bool restoreOwnedIdentities = true, string? authorityIdentity = null, WorldPrivateDrawKeys? drawKeys = null) =>
         WorldPersistence.FromCheckpoint(
+            drawKeys: drawKeys,
             adjacencies: adjacencies,
             authorityIdentity: authorityIdentity,
             checkpoint: checkpoint,
@@ -42,6 +43,20 @@ public sealed partial class WorldServer {
             mutation: mutation,
             tick: tick
         );
+    /// <summary>Replays one durable mutation with the authority inputs consumed before the last activation ended.</summary>
+    [Replaces(root: typeof(StateArena))]
+    public bool TryRecoverJournalMutation(WorldJournalEntry entry, WorldPrivateDrawKeys authority) {
+        RequireAuthorityCredential(authority);
+        using var input = DrawKeys.Replay(entry.DrawHistory?.Words ?? [], static address => ReplayRefusal.MissingPrivateDraw.Raise(address));
+        if (entry.DrawHistory is { } history) {
+            for (var i = 0; i < Arena.Rows.Count; i++) {
+                if (Arena.Rows[i].Draw?.Secret is { } site && history.Positions.TryGetValue(site.Installation, out var position)
+                    && !ArenaDraws.TryWrite(Arena, i, position.Cursor, position.Masks, out _)) { return false; }
+            }
+        }
+        return TryApplyJournalTailMutation(entry.Mutation, entry.Tick, entry.EngineTick);
+    }
+
     /// <inheritdoc cref="WorldPersistence.TryCaptureCheckpoint"/>
     public bool TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint hostRow, out WorldAuthorityCheckpoint? checkpoint, out string reason) =>
         m_persistence.TryCaptureCheckpoint(

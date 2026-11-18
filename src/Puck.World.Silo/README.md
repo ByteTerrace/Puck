@@ -317,10 +317,10 @@ activation's fence and requires recovery.
 
 ## Live journaling
 
-Every non-guest mutation `WorldServer` applies fires `WorldServer.MutationJournalTap`
+Every non-guest mutation `WorldServer` applies reaches the writer installed with `WorldServer.SetMutationJournalTap`
 (wired once per row, right after activation's own tail replay so a replayed
 entry is never re-appended as a duplicate). `WorldSiloHost.ScheduleJournalAppend`
-re-encodes it (`WorldSubmissionCodec.TryEncodeCommittedMutation`) and schedules the
+encodes it with `WorldAuthorityCheckpointCodec.TryEncodeJournalMutation` and schedules the
 store write as a continuation of that row's own append chain
 (`RowBookkeeping.JournalTail`)—never two appends racing concurrently for one
 row, since `WorldAuthorityBlobStore.AppendJournalAsync` rewrites the whole
@@ -331,7 +331,7 @@ count of outstanding appends and the most recently acknowledged one back.
 Guest-derived mutations stay in the checkpoint's tick image and are excluded from
 the external-edit tail: recovery never applies later guest decisions to earlier
 guest memory. Console and peer edits still enter that tail.
-Recovery uses `TryDecodeCommittedMutation`. These trusted-storage leaves admit
+Recovery uses `WorldAuthorityCheckpointCodec.TryDecodeJournalMutation`. A mutation that drew privately carries its recorded words and starting positions. Every new activation advances the generation so an uncommitted draw seen after the last durable entry cannot predict the next draw. These trusted-storage leaves admit
 the world's own authored effects; live submissions still refuse a world actor.
 
 ## Document validation

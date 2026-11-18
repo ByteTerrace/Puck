@@ -24,7 +24,7 @@ public sealed partial class WorldDocument {
     // rehydration a hit triggers does. A member that can add or drop a reference — a whole-row write, or an edit to
     // any other section — drops the set, so the next state member collects it again from the document that member
     // produced.
-    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority) {
+    private static bool TryComposeBatch(WorldDefinition current, WorldMutation.Batch batch, ulong tick, ulong engineTick, string instanceIdentity, out WorldDefinition candidate, out string reason, out CellName? evictedKey, out string? refusalCode, WorldGrants authority, WorldPrivateDrawKeys sampler) {
         refusalCode = null;
         var working = current;
         var time = ComposeTime(
@@ -156,6 +156,7 @@ public sealed partial class WorldDocument {
                             );
 
                             if (!TryComposeCore(
+                                sampler: sampler,
                                 authority: authority,
                                 candidate: out var next,
                                 current: working,

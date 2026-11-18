@@ -24,7 +24,7 @@ public sealed partial class WorldReplaySnapshot {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
         return (checkpoint with {
-            Server = checkpoint.Server with { DrawSeed = null },
+            Server = checkpoint.Server with { DrawAuthority = null },
             HostRow = WorldAuthorityHostRowCheckpoint.Empty,
             OwnedWorlds = new WorldOwnedWorldsCheckpoint(
                 Documents: [],
@@ -81,7 +81,7 @@ public sealed partial class WorldReplaySnapshot {
     // The write side's guard: a start checkpoint describes the embedded definition and carries no owned document. A
     // recording that broke either would be the host's own defect, never tape data.
     private static byte[] EncodeStartCheckpoint(WorldAuthorityCheckpoint checkpoint, byte[] definitionJson) {
-        if (checkpoint.Server.DrawSeed is not null || checkpoint.OwnedWorlds.Documents.Count != 0) {
+        if (checkpoint.Server.DrawAuthority is not null || checkpoint.OwnedWorlds.Documents.Count != 0) {
             throw new WorldReplayCodecException(message: "A recording start checkpoint contains private authority state or owned identity documents.");
         }
 
@@ -106,7 +106,7 @@ public sealed partial class WorldReplaySnapshot {
             throw new InvalidDataException(message: $"Corrupt .puckreplay recording: its start checkpoint does not decode ({reason}).");
         }
 
-        if (checkpoint!.Server.DrawSeed is not null || checkpoint.OwnedWorlds.Documents.Count != 0) {
+        if (checkpoint!.Server.DrawAuthority is not null || checkpoint.OwnedWorlds.Documents.Count != 0) {
             throw new InvalidDataException(message: "Corrupt .puckreplay recording: its start checkpoint contains private authority state or owned identity documents.");
         }
 
@@ -128,6 +128,7 @@ public sealed partial class WorldReplaySnapshot {
             (server, population) = WorldServer.FromCheckpoint(
                 authorityIdentity: Authority,
                 checkpoint: start,
+                drawKeys: WorldPrivateDrawKeys.Recorded,
                 documentDirectory: DocumentDirectory,
                 instanceIdentity: Instance,
                 machines: machines,
@@ -141,6 +142,7 @@ public sealed partial class WorldReplaySnapshot {
             server = new WorldServer(
                 authorityIdentity: Authority,
                 definition: definition,
+                drawKeys: WorldPrivateDrawKeys.Recorded,
                 envelope: new WorldRenderEnvelope(),
                 instanceIdentity: Instance,
                 machines: machines,

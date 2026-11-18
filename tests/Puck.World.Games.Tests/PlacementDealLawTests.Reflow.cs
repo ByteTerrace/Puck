@@ -104,8 +104,7 @@ public sealed partial class PlacementDealLawTests {
             userMessage: refusal.ToString()
         );
         while (tape.Mode == WorldReplayMode.Replaying) {
-            tape.InjectDriveTick();
-            fixture.Step();
+            tape.DriveStep(() => fixture.Step());
             tape.NoteTick();
         }
         Assert.Equal(

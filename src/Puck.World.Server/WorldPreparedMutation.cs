@@ -16,6 +16,7 @@ public sealed partial class WorldDocument {
         private readonly CellName? m_evicted;
         private DocumentStage m_stage;
         private bool m_pending = true;
+        private MutationDrawHistory? m_privateWords;
 
         private WorldPreparedMutation(WorldDocument document, WorldMutation mutation, ulong tick, ulong engineTick,
             int? stateMark, CellName? evicted, DocumentStage stage) {
@@ -42,6 +43,10 @@ public sealed partial class WorldDocument {
             var reads = host.ReadForWrite(view);
             int? mark = null;
             CellName? evicted = null;
+            // Only real inputs to an accepted mutation enter its journal entry.
+            MutationDrawHistory? words = null;
+            using var capture = WorldJournalEntry.MayDraw(host.Configuration, mutation)
+                ? host.DrawKeys.Capture(word => (words ??= new()).Record(host.Arena, word)) : null;
             DocumentStage stage = default;
             try {
                 bool accepted;
@@ -55,7 +60,7 @@ public sealed partial class WorldDocument {
                 }
                 if (!reads.Failed) {
                     if (!accepted) { return false; }
-                    prepared = new WorldPreparedMutation(document, mutation, tick, engineTick, mark, evicted, stage);
+                    prepared = new WorldPreparedMutation(document, mutation, tick, engineTick, mark, evicted, stage) { m_privateWords = words };
                     return true;
                 }
             } catch (StateUnavailableException) when (reads.Failed) {
@@ -63,6 +68,7 @@ public sealed partial class WorldDocument {
             } finally {
                 if (prepared is null) {
                     if (mark is { } open) { host.RewindStateTransaction(open); }
+                    else if (words is not null) { host.DrawKeys.AdvanceGeneration(); }
                     stage.Dispose();
                 }
             }
@@ -78,9 +84,9 @@ public sealed partial class WorldDocument {
             if (m_stateMark is { } mark) {
                 m_document.Host.CommitStateTransaction(mark);
                 m_document.Host.PublishArena();
-                m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, derived: derived);
+                m_document.RecordCommittedMutation(m_mutation, m_tick, m_engineTick, connectionId, correlationId, m_evicted, derived: derived, privateWords: m_privateWords);
             } else {
-                m_document.InstallPrepared(m_stage, connectionId, correlationId, derived: derived);
+                m_document.InstallPrepared(m_stage, connectionId, correlationId, derived: derived, privateWords: m_privateWords);
             }
         }
 
@@ -88,7 +94,10 @@ public sealed partial class WorldDocument {
             if (!m_pending) { return; }
             m_pending = false;
             if (m_stateMark is { } mark) { m_document.Host.RewindStateTransaction(mark); }
-            else { m_stage.Dispose(); }
+            else {
+                if (m_privateWords is not null) { m_document.Host.DrawKeys.AdvanceGeneration(); }
+                m_stage.Dispose();
+            }
         }
     }
 

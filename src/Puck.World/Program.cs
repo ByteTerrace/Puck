@@ -415,6 +415,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // path that will not load ends the boot here — a typo must never quietly run a different world.
     if (!PuckWorldLoader.TryResolveWorld(
         authority: batchHost is null && connectTarget is null,
+        preview: batchHost is not null,
         caches: caches,
         entry: parseResult.GetValue(option: entryOption),
         worldPath: worldPath,

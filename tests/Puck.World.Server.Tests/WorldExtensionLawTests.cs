@@ -622,11 +622,12 @@ public sealed class WorldExtensionLawTests {
             ),
             userMessage: refusal
         );
-        Assert.Throws<InvalidOperationException>(testCode: () => tape.CaptureExternalOperationCause());
+        Assert.Throws<InvalidOperationException>(testCode: () => tape.CaptureExternalOperationCause(Principal.World));
         extension.Submit(mutation: Mutation());
         fixture.Step();
         tape.NoteTick();
-        var cause = tape.CaptureExternalOperationCause();
+        Assert.Throws<InvalidOperationException>(() => tape.CaptureExternalOperationCause(Principal.Seat(1)));
+        var cause = tape.CaptureExternalOperationCause(Principal.World);
         using var prefix = new MemoryStream(buffer: Convert.FromBase64String(s: cause["puck-replay:".Length..]));
 
         Assert.Single(collection: WorldReplaySnapshot.Read(stream: prefix).Ticks);

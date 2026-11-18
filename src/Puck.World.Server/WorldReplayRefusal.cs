@@ -68,6 +68,10 @@ internal enum ReplayRefusal {
     [Refusal(door: "replay.tape", condition: "a recorded mutation's accept/refuse outcome disagrees with what the replay's own apply pipeline produced for it", kind: RefusalKind.Verdict)]
     MutationOutcomeMismatch,
 
+    /// <summary>A replay requested a private sample the captured authority did not read.</summary>
+    [Refusal(door: "replay.tape", condition: "the recording lacks a requested private draw address", kind: RefusalKind.Verdict)]
+    MissingPrivateDraw,
+
     /// <summary>A recorded arrival the re-drive's own escrow does not reproduce: a traveler that does not land again
     /// in the body index or at the generation it landed at live, or a commit that does not roll back where the live
     /// one did.</summary>

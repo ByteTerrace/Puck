@@ -16,7 +16,7 @@ public abstract class WorldDocumentOrigin {
     public abstract IWorldNeighbourResolver Neighbours { get; }
 
     /// <summary>Loads the definition this origin names.</summary>
-    public abstract bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason);
+    public abstract bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason, WorldPrivateDrawKeys? keys = null);
     /// <summary>Resolves a <c>references[].document</c> locator authored relative to this origin into the
     /// neighbour's own origin.</summary>
     public abstract bool TryResolveReference(string document, out WorldDocumentOrigin? sibling, out string reason);
@@ -56,8 +56,9 @@ public sealed class WorldFileOrigin : WorldDocumentOrigin {
         comparisonType: PuckPaths.Comparison
     );
     /// <inheritdoc/>
-    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) =>
+    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason, WorldPrivateDrawKeys? keys = null) =>
         WorldDefinitionLoader.TryLoadFile(
+            keys: keys,
             definition: out definition,
             instanceIdentity: instanceIdentity,
             neighbours: Neighbours,
@@ -220,8 +221,9 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
     /// <summary>Reads a hosted definition and its neighbours without blocking on storage I/O.</summary>
     /// <param name="instanceIdentity">The running instance's identity for boot draws.</param>
     /// <param name="cancellationToken">Cancels root and neighbour reads.</param>
+    /// <param name="keys">The live authority, or the explicit sampler of a preview.</param>
     /// <returns>The fully validated document, or a named load refusal.</returns>
-    public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken) {
+    public async ValueTask<(WorldDefinition? Definition, string Reason)> LoadAsync(string instanceIdentity, CancellationToken cancellationToken, WorldPrivateDrawKeys? keys = null) {
         var address = WorldAuthorityBlobStore.RootAddress(identity: new WorldAuthorityIdentity(
             Owner: m_owner,
             World: m_world
@@ -258,16 +260,18 @@ public sealed class WorldHostedOrigin : WorldDocumentOrigin {
             instanceIdentity,
             neighbours.ResolveHostedAsync,
             cancellationToken,
+            keys: keys,
             documentDirectory: m_documentDirectory
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return (loaded.Admission?.Definition, loaded.Reason);
     }
     /// <inheritdoc/>
-    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason) {
+    public override bool TryLoad(string instanceIdentity, out WorldDefinition? definition, out string reason, WorldPrivateDrawKeys? keys = null) {
         (definition, reason) = LoadAsync(
             instanceIdentity,
-            CancellationToken.None
+            CancellationToken.None,
+            keys
         ).AsTask().GetAwaiter().GetResult();
         return (definition is not null);
     }

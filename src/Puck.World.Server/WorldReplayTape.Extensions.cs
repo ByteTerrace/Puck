@@ -3,12 +3,18 @@ using Puck.World.Server;
 namespace Puck.World;
 
 public sealed partial class WorldReplayTape {
+    internal bool CanExport(Puck.Commands.Principal recipient) => m_liveServer.Grants.IsOperator(recipient);
+
     /// <summary>Captures a versioned replay prefix as causal recovery evidence without stopping the recording.
     /// This supports hosts whose deterministic addon state cannot be checkpointed. Call on the simulation pump
     /// immediately after NoteTick, before admitting more input; retain the pinned modules with the recovery image.</summary>
+    /// <param name="recipient">The recipient of the recovery evidence.</param>
     /// <returns>A base64-encoded replay prefixed by its recovery format name.</returns>
     /// <exception cref="InvalidOperationException">Recording is not active or the current boundary is not fully recorded.</exception>
-    public string CaptureExternalOperationCause() => m_liveServer.ExecuteAuthorityOperation(operation: () => {
+    public string CaptureExternalOperationCause(Puck.Commands.Principal recipient) => m_liveServer.ExecuteAuthorityOperation(operation: () => {
+        if (!CanExport(recipient)) {
+            throw new InvalidOperationException("AuthorityTapeRequired: only the authority or its operator may receive a replay tape.");
+        }
         if (
             (m_mode != WorldReplayMode.Recording) ||
             (m_ticks is not { Count: > 0 }) ||

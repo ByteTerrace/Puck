@@ -4,17 +4,13 @@ using Puck.World.Server;
 namespace Puck.World.Silo;
 
 public sealed partial class WorldSiloHost {
-    private async Task AppendJournalEntryAsync(WorldAuthorityIdentity identity, string worldId, ulong tick, ulong engineTick, byte[] encoded, RowBookkeeping bookkeeping) {
+    private async Task AppendJournalEntryAsync(WorldAuthorityIdentity identity, string worldId, WorldAuthorityJournalEntry entry, RowBookkeeping bookkeeping) {
         try {
             var outcome = (bookkeeping.PersistenceBlocked
                 ? WorldAuthorityStoreOutcome.RecoveryRequired(detail: "This activation must recover before publishing again.")
                 : await m_store.AppendJournalAsync(
                     cancellationToken: CancellationToken.None,
-                    entry: new WorldAuthorityJournalEntry(
-                        Encoded: encoded,
-                        EngineTick: engineTick,
-                        Tick: tick
-                    ),
+                    entry: entry,
                     identity: identity,
                     fence: bookkeeping.Fence
                 )
@@ -42,7 +38,7 @@ public sealed partial class WorldSiloHost {
                     bookkeeping.PendingJournalAppends--;
                     bookkeeping.JournalTimestamp = m_clock.GetTimestamp();
                     bookkeeping.JournalFailed |= !outcome.Ok;
-                    if (!outcome.Ok) { bookkeeping.JournalFailureTick = tick; }
+                    if (!outcome.Ok) { bookkeeping.JournalFailureTick = entry.Tick; }
                     bookkeeping.LastJournalOutcome = (outcome.Ok
                         ? "ok"
                         : $"failed ({outcome.Detail})"
@@ -64,7 +60,7 @@ public sealed partial class WorldSiloHost {
                 ) {
                     bookkeeping.PendingJournalAppends--;
                     bookkeeping.JournalFailed = true;
-                    bookkeeping.JournalFailureTick = tick;
+                    bookkeeping.JournalFailureTick = entry.Tick;
                     bookkeeping.LastJournalOutcome = $"failed ({error.Message})";
                 }
             });
@@ -72,7 +68,7 @@ public sealed partial class WorldSiloHost {
         }
     }
     // Called from WorldServer.MutationJournalTap, always on the tick thread — the one writer of JournalTail.
-    private void ScheduleJournalAppend(string worldId, WorldAuthorityIdentity identity, ulong tick, ulong engineTick, WorldMutation mutation, WorldServer source) {
+    private void ScheduleJournalAppend(string worldId, WorldAuthorityIdentity identity, WorldJournalEntry entry, WorldServer source) {
         if (!m_rows.TryGetValue(
             key: worldId,
             value: out var bookkeeping
@@ -92,14 +88,10 @@ public sealed partial class WorldSiloHost {
         )
         ) { return; }
 
-        if (!WorldSubmissionCodec.TryEncodeCommittedMutation(
-            bytes: out var encoded,
-            failure: out var failure,
-            mutation: mutation
-        )) {
+        if (!WorldAuthorityCheckpointCodec.TryEncodeJournalMutation(entry, out var encoded, out var failure)) {
             bookkeeping.PersistenceBlocked = true;
             bookkeeping.JournalFailed = true;
-            bookkeeping.JournalFailureTick = tick;
+            bookkeeping.JournalFailureTick = entry.Tick;
             bookkeeping.LastJournalOutcome = $"failed (encoding: {failure})";
             Console.Error.WriteLine(value: $"[silo.journal: '{RowKey(identity: identity)}' a mutation would not re-encode for the durable journal ({failure}) — this tick's mutation is unrecoverable after a restart with no later checkpoint]");
 
@@ -112,10 +104,8 @@ public sealed partial class WorldSiloHost {
             bookkeeping.JournalTail = bookkeeping.JournalTail.ContinueWith(
                 continuationFunction: _ => AppendJournalEntryAsync(
                     bookkeeping: bookkeeping,
-                    encoded: encoded,
-                    engineTick: engineTick,
+                    entry: encoded,
                     identity: identity,
-                    tick: tick,
                     worldId: worldId
                 ),
                 scheduler: TaskScheduler.Default

@@ -153,6 +153,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             Arena: Arena,
             Generators: m_generators,
             Seeds: m_seeds,
+            Hypothetical: Hypothetical,
             Time: Time
         );
 
@@ -231,6 +232,9 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
 
         return changed;
     }
+    /// <summary>A hypothetical candidate cannot inspect a private stream.</summary>
+    protected virtual bool Hypothetical => false;
+
     private bool ApplyGenerate(in Mutation mutation, out EffectRefusal refusal) {
         var ordinal = mutation.RowOrdinal;
 
@@ -246,7 +250,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             return false;
         }
         if (!GeneratorEngine.TryResolveExecutableSource(
-            draw: draw,
+            draw: Hypothetical ? draw.WithoutStream() : draw,
             generator: out var generator,
             generators: m_generators,
             reason: out var resolveReason

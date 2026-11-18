@@ -46,8 +46,15 @@ public static class WorldServerStepShell {
             // Federation may commit from another thread. Its authority operation must precede this whole step or
             // follow its tape close: a post-step arrival cannot enter the bucket replay will apply before that step.
             lock (server.AuthorityGate) {
-                tape?.InjectDriveTick();
-                server.Advance(stepTicks: current.StepTicks);
+                try {
+                    using var recordedDraws = tape?.InjectDriveTick();
+                    server.Advance(stepTicks: current.StepTicks);
+                } catch (InvalidDataException error) when (tape?.Mode == WorldReplayMode.Replaying &&
+                    ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
+                    var name = tape.CancelDrive();
+                    server.Output.Narrate("replay.drive", $"[replay.drive {name}: {error.Message}]");
+                    return current.Tick;
+                }
                 server.EnforceJournalDepth();
                 // Close this tick's captured server-input group for an armed recording or an in-session history, or
                 // compare and advance a drive (a no-op otherwise): the whole tick's intent and command stream has

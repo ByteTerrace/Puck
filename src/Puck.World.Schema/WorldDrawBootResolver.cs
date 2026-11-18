@@ -274,14 +274,22 @@ public static class WorldDrawBootResolver {
     /// is retained when neither a draw site nor a boot-time row read changes the document.</param>
     /// <param name="reason">Why a site refused, on failure.</param>
     /// <param name="previous">The live state when installing a writer’s rebuild.</param>
+    /// <param name="restore">The installation ordinals of a restored journal document.</param>
     /// <param name="keys">The authority credential, or the isolated preview sampler for an authoring read.</param>
     /// <returns><see langword="true"/> when every first-fill site resolved.</returns>
-    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null, WorldDefinition? previous = null) {
+    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null, WorldDefinition? previous = null, WorldDrawPositions? restore = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        keys ??= WorldPrivateDrawKeys.Preview;
-        definition = previous is null ? keys.InstallAtBoot(definition) : keys.Install(definition, previous);
+        keys ??= WorldPrivateDrawKeys.Missing;
+        try {
+            definition = restore is not null ? keys.Install(definition, restore: restore) :
+                previous is null ? keys.InstallAtBoot(definition) : keys.Install(definition, previous);
+        } catch (InvalidDataException error) {
+            resolved = definition;
+            reason = error.Message;
+            return false;
+        }
         resolved = definition;
         reason = string.Empty;
 

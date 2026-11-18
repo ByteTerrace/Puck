@@ -16,6 +16,7 @@ namespace Puck.State;
 /// </remarks>
 public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
+    protected override bool Hypothetical => true;
 
     /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
     public int SearchPly { get; set; }
@@ -28,7 +29,7 @@ public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     /// <param name="documentSeed">The document's own reroll lever, folded into every draw site's seed.</param>
     /// <param name="instanceIdentity">The running instance's identity, folded into every draw site's seed.</param>
     /// <param name="sites">The site descriptor per catalog ordinal, the same table the live host draws with, so a
-    /// candidate's draw reproduces the draw the live host would make at the same cursor; <see langword="null"/>
+    /// candidate reproduces public draws while private samples remain unknown; <see langword="null"/>
     /// names each site by its catalog row name.</param>
     /// <exception cref="ArgumentNullException"><paramref name="arena"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="sites"/> does not hold exactly one descriptor per catalog

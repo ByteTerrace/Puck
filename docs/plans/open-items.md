@@ -2094,6 +2094,8 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [medium] Player and spectator replay needs a recording of the observations delivered to each recipient. The disclosure lane owns this work. Verify it with two seats that receive different hidden hands and replay only what each seat saw.
+
 - [high, D0b1 incomplete] sec1 has introduced declaration-only row descriptors,
   restricted read primitives and an operator-dispatch capability, and moved
   the state-hash command onto the operator door. Cell-set submits its raw tail

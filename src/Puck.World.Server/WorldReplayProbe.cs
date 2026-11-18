@@ -94,7 +94,7 @@ public sealed class WorldReplayProbe : IDisposable {
             for (var tick = 0; (tick < m_inputs.Count); tick++) {
                 var expected = new List<bool>();
 
-                WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_inputs[tick], expected, outcomes,
+                using var drawReplay = WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_inputs[tick], expected, outcomes,
                     static rebuild => (null, rebuild.ContentHash));
                 // The companion's tape carries its own delivered input. Re-emitting a screen session's
                 // delivery here would mutate that still-live companion a second time.
@@ -116,11 +116,11 @@ public sealed class WorldReplayProbe : IDisposable {
             }
             // The export can fall between this authority's ticks. Session/transfer events have already
             // applied, while queued input still awaits a step: replay that boundary without advancing it.
-            WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_tail, [], outcomes,
+            using var tailReplay = WorldReplaySnapshot.ApplyRecordedTick(m_server, m_server.Population, m_tail, [], outcomes,
                 static rebuild => (null, rebuild.ContentHash));
             return ((m_finalExport.AsSpan().SequenceEqual(other: WorldStateExport.ToCanonicalJson(server: m_server)) &&
                 m_finalMachines.SequenceEqual(second: WorldReplaySnapshot.MachineDigests(machines: m_server.Machines))) ? -1 : m_inputs.Count);
-        } finally { m_tape.ResumeCapture(); }
+        } finally { m_server.DrawKeys.AdvanceGeneration(); m_tape.ResumeCapture(); }
     }
     /// <summary>Detaches capture without changing the authority.</summary>
     public void Dispose() {

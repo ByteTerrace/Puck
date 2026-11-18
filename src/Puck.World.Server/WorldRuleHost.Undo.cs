@@ -22,6 +22,7 @@ public sealed partial class WorldRuleHost {
         if (!Host.ArenaHost.TryRewindGroup(group: group, reason: out reason)) {
             return false;
         }
+        Host.DrawKeys.AdvanceGeneration();
         InvalidateArenaScheduling();
         return true;
     }

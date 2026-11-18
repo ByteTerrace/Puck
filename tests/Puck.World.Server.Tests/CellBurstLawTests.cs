@@ -33,7 +33,7 @@ public sealed class CellBurstLawTests {
         var journal = new List<(ulong Tick, ulong EngineTick, WorldMutation Mutation)>();
         var echoes = new List<WorldEditEcho>();
 
-        fixture.Server.MutationJournalTap = (tick, engineTick, mutation) => journal.Add(item: (tick, engineTick, mutation));
+        fixture.MutationJournalTap = entry => journal.Add(item: (entry.Tick, entry.EngineTick, entry.Mutation));
         fixture.Server.EchoTap = echoes.Add;
         for (var index = 0; (index < 13); index++) {
             fixture.Server.EnqueueMutation(Write(kind: WorldDocumentWriteKind.Add, row: "counter", value: 1), sourceAddonInstanceId: (guest ? 7L : -1L), actOrdinal: ((ushort)index));

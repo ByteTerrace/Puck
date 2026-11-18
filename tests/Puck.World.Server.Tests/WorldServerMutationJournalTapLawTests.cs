@@ -6,7 +6,7 @@ using Puck.World.Protocol;
 
 namespace Puck.World.Server.Tests;
 
-/// <summary>Proves <see cref="WorldServer.MutationJournalTap"/> fires with the exact tick/mutation
+/// <summary>Proves <see cref="WorldServer.SetMutationJournalTap"/> fires with the exact tick/mutation
 /// <see cref="WorldServer.TryApplyJournalTailMutation"/> reapplies — a hosted row's live-journaling seam
 /// (<c>Puck.World.Silo</c>'s <c>WorldSiloHost.ScheduleJournalAppend</c>), proved at this layer without a store or a
 /// silo: a fresh, uncheckpointed server fed only the tapped-and-reencoded entry reaches the tapped mutation's own
@@ -19,7 +19,7 @@ public sealed class WorldServerMutationJournalTapLawTests {
         using var fixture = Fixtures.FreshServer(definition: Fixtures.BuildDocument());
         var fired = 0;
 
-        fixture.Server.MutationJournalTap = (_, _, _) => fired++;
+        fixture.MutationJournalTap = _ => fired++;
 
         // A cell write against an undeclared row is refused by the compose-time gate before the mutation ever
         // reaches the journal — the tap must not fire for it.
@@ -48,7 +48,8 @@ public sealed class WorldServerMutationJournalTapLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
         (ulong Tick, ulong EngineTick, byte[] Encoded)? captured = null;
 
-        fixture.Server.MutationJournalTap = (tick, engineTick, mutation) => {
+        fixture.MutationJournalTap = entry => {
+            var (tick, engineTick, mutation) = entry;
             Assert.Null(@object: captured);
             Assert.True(
                 condition: WorldSubmissionCodec.TryEncodeCommittedMutation(

@@ -288,7 +288,8 @@ public sealed partial class WorldReplayTape {
     public string Directory() {
         var directory = m_stateRoot.PathOf(name: "Replays");
 
-        _ = System.IO.Directory.CreateDirectory(path: directory);
+        if (OperatingSystem.IsWindows()) { System.IO.Directory.CreateDirectory(directory); }
+        else { System.IO.Directory.CreateDirectory(directory, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
 
         return directory;
     }

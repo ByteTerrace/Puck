@@ -138,7 +138,10 @@ public sealed partial class WorldHistory {
                 diverged ??= ReenterBranch(branch: branch);
 
                 return null;
+            } catch (InvalidDataException error) when (ReplayRefusalExtensions.ReasonOf(error) == ReplayRefusal.MissingPrivateDraw) {
+                return error.Message;
             } finally {
+                m_server.DrawKeys.AdvanceGeneration();
                 m_server.SaveEffectTap = save;
                 m_server.Output.WithholdsTimeline = false;
                 m_server.Extensions.CompleteReplay();
@@ -233,7 +236,7 @@ public sealed partial class WorldHistory {
     /// <param name="tape">The tape draft, on success.</param>
     /// <param name="refusal">Why the branch cannot become a tape, when it cannot.</param>
     /// <returns><see langword="true"/> when the draft was built.</returns>
-    public bool TryBranchTape(string name, out WorldReplaySnapshot? tape, out string refusal) {
+    internal bool TryBranchTape(string name, out WorldReplaySnapshot? tape, out string refusal) {
         tape = null;
 
         if (WindowRefusal() is { } window) {
@@ -327,10 +330,12 @@ public sealed partial class WorldHistory {
     /// <param name="verdict">The re-drive's verdict, on success.</param>
     /// <param name="refusal">Why nothing was written, when nothing was.</param>
     /// <returns><see langword="true"/> when the tape was written.</returns>
-    public bool TrySaveBranch(string name, string tapeName, out string path, out WorldReplayVerdict verdict, out string refusal) {
+    /// <param name="recipient">The principal requesting the authority tape.</param>
+    public bool TrySaveBranch(Puck.Commands.Principal recipient, string name, string tapeName, out string path, out WorldReplayVerdict verdict, out string refusal) {
         path = string.Empty;
         verdict = default;
 
+        if (!m_tape.CanExport(recipient)) { refusal = "AuthorityTapeRequired"; return false; }
         if (!WorldReplayTape.IsValidName(name: tapeName)) {
             refusal = "a tape name must be non-empty, with no '.', '/', '\\', or other filename-invalid characters";
 

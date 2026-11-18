@@ -82,6 +82,7 @@ public sealed partial class WorldReplayTape {
     // recording, and anything else — a plain drive's end, or a cancel — leaves the tape Idle. Either way the sessions the
     // drive restored that no observer holds end last, where a fork's recording captures their ends.
     private void EndDrive(bool completed) {
+        m_liveServer.DrawKeys.AdvanceGeneration();
         EndDriveCore(completed: completed);
         m_liveServer.EndUnobservedSessions();
     }
@@ -405,11 +406,16 @@ public sealed partial class WorldReplayTape {
 
         return name;
     }
+    /// <summary>Runs a step with exactly its recorded private inputs, including when the step throws.</summary>
+    public void DriveStep(Action step) {
+        using var inputs = InjectDriveTick();
+        step();
+    }
     /// <summary>Feeds the recorded tick at the drive cursor into the live server ahead of the step that consumes it
     /// — the same doors and order the offline drive uses — while <see cref="Mode"/> is
     /// <see cref="WorldReplayMode.Replaying"/>. Called by <see cref="WorldServerStepShell"/> immediately before
     /// <see cref="WorldServer.Advance"/>; a no-op otherwise, or when the cursor's tick is already in the doors.</summary>
-    public void InjectDriveTick() {
+    internal IDisposable? InjectDriveTick() {
         // Every step taken while a drive holds the session replays: its seats' own input is masked at the loopback.
         m_liveServer.ReplaysInput = (m_mode == WorldReplayMode.Replaying);
 
@@ -419,12 +425,12 @@ public sealed partial class WorldReplayTape {
             drive.Injected ||
             (drive.Cursor >= drive.Target)
         ) {
-            return;
+            return null;
         }
 
         drive.ExpectedMutationOutcomes.Clear();
         drive.Injected = true;
-        WorldReplaySnapshot.ApplyRecordedTick(
+        return WorldReplaySnapshot.ApplyRecordedTick(
             expectedMutationOutcomes: drive.ExpectedMutationOutcomes,
             input: drive.Source.Ticks[drive.Cursor],
             population: m_liveServer.Population,

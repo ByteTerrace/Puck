@@ -111,6 +111,7 @@ public sealed partial class WorldDocument {
     // read it through: drawn for this instance and admitted on its own facts, since the tick path reaches no transport.
     private WorldDefinition RereadForReplay(string verb, string path, out string contentHash) {
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: WorldPrivateDrawKeys.Preview,
             admission: out var reread,
             catalog: Host.Machines.ValidationCatalog,
             contentHash: out contentHash,

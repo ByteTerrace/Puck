@@ -1310,6 +1310,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             );
             WorldServer server;
             WorldPopulation population;
+            var drawKeys = recovery.DrawKeys ?? WorldPrivateDrawKeys.Missing;
             var adjacencies = new WorldAdjacencyFields(
                 instances: Instances,
                 sourceInstanceName: identity.World.Value
@@ -1320,6 +1321,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     (server, population) = WorldServer.FromCheckpoint(
                         adjacencies: adjacencies,
                         checkpoint: cp,
+                        drawKeys: drawKeys,
                         documentDirectory: m_documentDirectory,
                         instanceIdentity: identity.World.Value,
                         machines: machines,
@@ -1334,7 +1336,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         // This activation's own read admitted the document against this host's catalog, so
                         // construction installs those programs instead of validating and compiling again.
                         admission: recovery.Admission,
-                        drawKeys: recovery.DrawKeys,
+                        drawKeys: drawKeys,
                         definition: definition,
                         envelope: new WorldRenderEnvelope(),
                         instanceIdentity: identity.World.Value,
@@ -1455,6 +1457,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     // the row steps; every later crossing step writes ahead through this activation's fence.
                     if (!TryRecoverJournal(
                         entries: recovery.Journal.Entries,
+                        drawKeys: drawKeys,
                         reason: out var recoveryReason,
                         row: row
                     )) {
@@ -1464,14 +1467,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         return;
                     }
                     // Recovered entries already belong to the store; only live mutations are appended.
-                    server.MutationJournalTap = (tick, engineTick, mutation) => ScheduleJournalAppend(
+                    server.SetMutationJournalTap(drawKeys, entry => ScheduleJournalAppend(
                         identity: identity,
-                        mutation: mutation,
-                        tick: tick,
-                        engineTick: engineTick,
+                        entry: entry,
                         worldId: identity.World.Value,
                         source: server
-                    );
+                    ));
                     server.InstallCrossingLog(log: new RowCrossingLog(
                         bookkeeping: bookkeeping,
                         host: this,

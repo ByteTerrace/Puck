@@ -524,9 +524,14 @@ public sealed partial class WorldRuleHost : IWorldPersistedDecisions, IJournalPa
             if (m_proposedRows.Count != 0) {
                 var current = Host.MaterializeArena();
                 var unit = DocumentUnit(rows: m_proposedRows);
+                var hypothetical = WorldPrivateDrawKeys.Preview;
+                if (current.StateRaw?.DrawInstallCount > 0) {
+                    current = hypothetical.Install(current, restore: WorldPrivateDrawKeys.Positions(current));
+                }
 
                 if (!WorldDocument.TryCompose(
-            authority: Host.GrantTable,
+                    authority: Host.GrantTable,
+                    sampler: hypothetical,
                     candidate: out proposed,
                     current: current,
                     engineTick: firing.EngineTick,

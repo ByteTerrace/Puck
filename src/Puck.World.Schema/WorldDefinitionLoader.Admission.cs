@@ -19,7 +19,7 @@ public static partial class WorldDefinitionLoader {
     /// <param name="documentDirectory">The directory the document's relative paths resolve beside
     /// (<see cref="WorldDefinition.DocumentDirectory"/>), or null for bytes that came from no file.</param>
     /// <returns>Whether the document loaded and validated.</returns>
-    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
     public static bool TryLoadForAdmission(ReadOnlyMemory<byte> utf8, string sourceName,
         out WorldDefinitionAdmission? admission, out string reason, string instanceIdentity = BootInstanceName,
         IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
@@ -99,7 +99,7 @@ public static partial class WorldDefinitionLoader {
     public static bool TryProvePublishable(WorldDefinition definition, string sourceName, out string reason, IMachineValidationCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         try {
-            return TryPrepareAndAdmit(catalog: catalog, definition: definition, instanceIdentity: BootInstanceName, neighbours: null,
+            return TryPrepareAndAdmit(keys: WorldPrivateDrawKeys.Preview, catalog: catalog, definition: definition, instanceIdentity: BootInstanceName, neighbours: null,
                 proveNeighbours: false, reason: out reason, resolved: out _, sourceName: sourceName);
         } catch (Exception exception) {
             reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
@@ -142,7 +142,7 @@ public static partial class WorldDefinitionLoader {
     /// <param name="displayName">What every refusal calls the document, or <see langword="null"/> to call it by its path. A
     /// host that must not name the file's directory (the owned-world catalog) passes the file name.</param>
     /// <returns>Whether the document loaded and validated.</returns>
-    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
+    /// <param name="keys">The installed world sampler, required for private draws.</param>
     public static bool TryLoadFileForAdmission(string path, out WorldDefinitionAdmission? admission, out string contentHash, out string reason,
         string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, bool proveNeighbours = true,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,

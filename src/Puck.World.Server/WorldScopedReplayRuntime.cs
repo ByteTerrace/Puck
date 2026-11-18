@@ -181,6 +181,7 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         // RestoreScope checks the whole image before it changes a column.
         m_server.Arena.RestoreScope(image: m_start);
+        if (m_rows.Any(row => m_server.Arena.Rows[row].Draw?.PrivateStream == true)) { m_server.DrawKeys.AdvanceGeneration(); }
         RestoreRules();
         // Every body is posed before any contact is restored: a pose passes the discontinuity door, which forgets the
         // contacts other bodies own with the posed one, so a contact restored earlier in the same pass would be lost.
