@@ -97,9 +97,26 @@ public sealed class SdfMeshHistory {
     private static readonly WorkKind[] FramesOverChunkKinds = DeclareCauses(peak: false, prefix: "sdf.instances.frames.over-chunk");
     private static readonly WorkKind[] PeakRowsPackedKinds = DeclareCauses(peak: true, prefix: "sdf.instances.peak.rows.packed");
     private static readonly WorkKind[] TopologyBuildKinds = DeclareTopologyReasons();
+    private static readonly WorkKind[] RowsWrittenKinds = DeclareOwners(prefix: "sdf.instances.rows.written", carried: true);
+    private static readonly WorkKind[] RowsClippedKinds = DeclareOwners(prefix: "sdf.instances.rows.clipped", carried: false);
+    private static readonly WorkKind[] RowsRestoredKinds = DeclareOwners(prefix: "sdf.instances.rows.restored", carried: false);
 
     /// <summary>Gets process-lifetime observations from every staged table. These counts never enter simulation state.</summary>
     public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.instances", kinds: Registry.Kinds);
+
+    /// <summary>Gets actual staged writes by source owner kind, with carried rows counted separately.</summary>
+    public static WorkKind RowsWrittenOf(SdfMeshRows.Owner owner) => RowsWrittenKinds[OwnerKind(owner: owner)];
+    /// <summary>Gets rows derived under a clip by source owner kind.</summary>
+    public static WorkKind RowsClippedOf(SdfMeshRows.Owner owner) => RowsClippedKinds[OwnerKind(owner: owner)];
+    /// <summary>Gets rows whose ended clip restored their author's base draw, by source owner kind.</summary>
+    public static WorkKind RowsRestoredOf(SdfMeshRows.Owner owner) => RowsRestoredKinds[OwnerKind(owner: owner)];
+
+    private static int OwnerKind(SdfMeshRows.Owner owner) => ((owner.CopiedRow >= 0) ? 3 : ((owner.Host >= 0) ? 0 : (owner.RigidCopy ? 1 : 2)));
+    private static WorkKind[] DeclareOwners(string prefix, bool carried) {
+        string[] names = ["host", "copy", "in-place", "carried"];
+
+        return names.Take(count: (carried ? 4 : 3)).Select(selector: name => Registry.Declare(name: $"{prefix}.{name}", unit: "count", workClass: WorkClass.Pacing)).ToArray();
+    }
 
     /// <summary>The records one staging packs past which it counts as over one chunk: one background upload chunk of
     /// records (<see cref="SdfGpuWork.UploadChunkBytes"/> over <see cref="SdfMeshRegion.DrawBytes"/>), more record bytes

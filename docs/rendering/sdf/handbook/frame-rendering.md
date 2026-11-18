@@ -1633,8 +1633,12 @@ stage in one call. Producers
 without a draw journal still supply a different list or move its revision, and the
 tables compare that revised list. `SdfMeshDraw.SameStagedContent` supplies the one
 exact comparison for both dressing and staging, including float bits and motion
-interpretation. Active or removed portal clipping still visits every base row through the
-writer and retains one run of carried copies. Indexed clip derivation is the next arrival step.
+interpretation. The row writer derives portal clipping from base draws through its own slot index,
+which covers host, rigid-copy and in-place rows. Changed clips visit their old and new slot chains;
+unchanged clips cost only ordered value comparison. Each clip owns a run of carried copies, and
+changed membership is reconciled before publication. Ending a clip derives the base draw again,
+including its authored clip plane and carry. `SdfSlotClip.Apply` remains the independent rebuild
+oracle's clip step. `sdf.instances` reports written, clipped and restored rows by owner kind.
 An empty draw delta still allows the GPU's final motion-history settle.
 
 Only a start over rebuilds all owner runs: publication retry, free rows beyond

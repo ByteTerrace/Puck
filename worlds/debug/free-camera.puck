@@ -1,6 +1,6 @@
 // The debug world's free camera: the standard's (../standard/free-camera.puck) for the debug world's one local seat.
-// Imported ahead of the board game room's tables, so the camera body takes the population's highest slot and every other
-// body keeps its index (debug.puck adds `freeCameraBodies` to the capacity). F9 toggles it. It rests 40 m over the stage,
+// Imported ahead of the board game room's tables, after the portal-row witness, so the camera body keeps its slot and every
+// earlier body keeps its index (debug.puck adds `freeCameraBodies` to the capacity). F9 toggles it. It rests 40 m over the stage,
 // an overview of the caldera, until a seat first flies it.
 import "../standard/inputs"
 import "../standard/free-camera"

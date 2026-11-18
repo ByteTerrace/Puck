@@ -233,6 +233,7 @@ internal static class Coverage {
     /// by reference (type + name) so the ids resolve mechanically.</summary>
     /// <summary>The authored member waivers and their category reasons.</summary>
     public static readonly (CoverRef Reference, string Reason)[] WaiverDeclarations = [
+        (new CoverRef(Name: "Equal", Type: typeof(Bitwise)), "Raw CLR representation comparison, including padding, rather than an arithmetic operation. The renderer owns its padding-free layouts; SdfMeshRowsLawTests.IndexedClipsMatchTheRebuildWhenTheyOverlapReorderReslotAndReuseSourceAddresses checks a signed-zero-only clip change against the independent list rebuild, and the upload-model pack comparison exercises the same primitive on matrices, carries and clip planes. No algebra-law classification is claimed for arbitrary struct padding."),
         // Three FixedPoint presentation seams are deliberately NOT waived here — FixedComplex.ToComplex,
         // FixedQuaternion.ToQuaternion and FixedQ4816's explicit conversion to double. "Presentation-only; the algebra
         // laws pin the exact raw contract instead" is false about the thing each of them decides alone: the lane ORDER
