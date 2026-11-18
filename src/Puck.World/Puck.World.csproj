@@ -17,7 +17,6 @@
              first-use JIT work out of world startup; ordinary builds retain their portable IL output. -->
         <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
         <PublishReadyToRun Condition="'$(PublishReadyToRun)' == '' and '$(PublishAot)' != 'true'">true</PublishReadyToRun>
-        <TieredPGO>false</TieredPGO>
     </PropertyGroup>
     <!-- Presentation builds and replaces large managed workspaces (irradiance hierarchies, probe caches and decoded
          mesh arrays). ConserveMemory reduces retention of freed LOH regions after these bursts. Published mesh

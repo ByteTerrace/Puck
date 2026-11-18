@@ -35,11 +35,9 @@ When reviewing code, scan **Folklore to delete** below — flagging obsolete han
 
 - **Dynamic PGO underlies several of the wins below.** Interface-typed `foreach`,
   guarded devirtualization and the escape-analysis payoffs assume tiered code that
-  PGO has profiled. `Puck.World` sets `TieredPGO=false`
-  (the `TieredPGO` property in [`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj)) for
-  its whole process, so every library a World loads runs without it, while
-  `puck bench` runs in the CLI with it: confirm a PGO-dependent win in the
-  World's own disassembly.
+  PGO has profiled. The World and `puck bench` run with the default dynamic
+  PGO, so these wins reach the World; the World test hosts turn tiering off,
+  so a test host's timing does not show them.
 - **Most of what .NET 11 adds is static proof, which the World keeps.** Its JIT
   changes are largely range analysis (bounds and overflow checks), exact-type
   devirtualization (generic virtual methods included), escape analysis with no

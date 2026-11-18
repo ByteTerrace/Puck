@@ -59,14 +59,11 @@ techniques and the defects review found are what transfer. Each technique cites 
   advancing only the former left a placement census motionless. The corrected
   production capture moves thousands of independent authored grass slots. Label
   a placement-only census separately from the native World's body population.
-- **Measure where `TieredPGO` matches the target.** The World process runs
-  without dynamic PGO
-  (the `TieredPGO` property in [`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj)), and
-  the setting is process-wide, so every library it loads runs that way.
-  `puck bench kernels` and `puck bench world` run in the CLI with default PGO,
+- **Measure where tiering matches the target.** The World process and
+  `puck bench kernels` and `puck bench world` run with the default dynamic PGO,
   and the World test hosts turn tiering off. A win that rests on PGO (guarded
-  devirtualization, a stack-allocated enumerator) can show there and not in the
-  World: confirm it in the World's build.
+  devirtualization, a stack-allocated enumerator) shows in the World and the
+  bench but not in a test host's timing.
 
 ## A runtime move shifts the baseline
 
@@ -118,7 +115,7 @@ cited by section and pull request).
 | Remove re-copies and rescans of finished work | #70139 | `SdfMeshPathBake.Pending`'s done-through cursor ([source](../../../../src/Puck.SdfVm/SdfMeshPathBake.cs)) |
 | Allocate rarely used state on first use | #70189 | `SdfFieldEvaluator`'s point walk builds its reach scratch on a thread's first walk ([source](../../../../src/Puck.SignedDistance/Queries/SdfFieldEvaluator.PointWalk.cs)) |
 | A `static` lambda with a state argument, not a capturing closure | #70185 | `WorldSchema.ResolveDescriptionForMember` ([source](../../../../src/Puck.World.Schema/WorldSchema.cs)) |
-| Without PGO, loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake` indexes copy membership when topology changes; `SdfMeshDresser` reads retained bindings instead of enumerating all copies per group |
+| Loop over the concrete collection where an interface enumerator boxes | #70147 | `SdfMeshPathBake` indexes copy membership when topology changes; `SdfMeshDresser` reads retained bindings instead of enumerating all copies per group |
 | Format text only when it is emitted | #70178 | `GenlockPhaseAligner.LogPhase` checks `IsEnabled` first ([source](../../../../src/Puck.Launcher/GenlockPhaseAligner.cs)) |
 | Look up by span through an alternate lookup, and decode strictly | #70142 | `CellKeyTable.TryResolve` ([source](../../../../src/Puck.State/CellKey.cs)) |
 | Cache `SearchValues` statically; never rebuild one per call | #70224 | `IdentifierRules.ReservedCharacters` ([source](../../../../src/Puck.State/SafeName.cs)) |

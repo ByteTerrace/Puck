@@ -59,13 +59,11 @@ Code the post makes worth revisiting is filed in the
   formatting guidance collapses to the invariant case.
 - **`PlatformTarget` is x64 and `OptimizationPreference` is Speed.** Arm-specific
   and size-tuning material is background rather than a work item.
-- **`Puck.World` sets `TieredPGO=false`**
-  (the `TieredPGO` property in [`Puck.World.csproj`](../../../src/Puck.World/Puck.World.csproj)). The
-  setting is process-wide, so every library a World loads runs without dynamic
-  PGO, while `puck bench` runs in the CLI with it. Advice that rests on dynamic
-  PGO (guarded devirtualization, stack-allocated `foreach` enumerators over
-  `IEnumerable<T>`, hot and cold splitting) describes other hosts; for code the
-  World runs, read the disassembly of the actual build before relying on it.
+- **The World and `puck bench` both run with the runtime's default dynamic
+  PGO**; the World test hosts turn tiering off. Advice that rests on dynamic PGO
+  (guarded devirtualization, stack-allocated `foreach` enumerators over
+  `IEnumerable<T>`, hot and cold splitting) applies to the World, and a test
+  host's timing does not show it.
   Advice that rests on a static proof holds in the World: range analysis and
   the bounds and overflow checks it removes, devirtualization from a known
   receiver type, escape analysis with no profile guard, and generic
