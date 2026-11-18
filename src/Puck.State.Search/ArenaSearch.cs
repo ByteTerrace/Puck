@@ -427,12 +427,7 @@ public sealed partial class ArenaSearch {
                 seatCount: ((plan.ScoresOrdinal >= 0)
                     ? m_arena.CellCount(rowOrdinal: plan.ScoresOrdinal)
                     : 0),
-                // A capped tokens row reserves its whole capacity, so a pile whose count moves (or that an actor sees
-                // with an imagined count) never outgrows the cursors' range.
-                tokenCapacity: Math.Max(
-                    val1: m_arena.CellCount(rowOrdinal: plan.TokensOrdinal),
-                    val2: ((m_arena.Rows[plan.TokensOrdinal].Capacity is not null) ? m_arena.Rows[plan.TokensOrdinal].CellCeiling : 0)
-                )
+                tokenCapacity: m_arena.CellCount(rowOrdinal: plan.TokensOrdinal)
             ) {
                 Judge = judge,
                 OutputRows = plan.Outputs(),

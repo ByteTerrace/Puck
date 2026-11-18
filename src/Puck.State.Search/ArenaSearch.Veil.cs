@@ -182,10 +182,11 @@ public sealed partial class ArenaSearch {
         return true;
     }
     // A pile, whose membership is what it hides: every member the actor may not read leaves, and as many imagined
-    // members as the actor is told of (its hidden count under Count or Placeholder; an imagined count under Omit, or
-    // when the row's own policy excludes the actor) are dealt from the domain keys the actor may read and sees in no
-    // pile over that domain. Under Placeholder they stand where the hidden members stood, whose places are disclosed;
-    // otherwise they follow the visible members, whose relative order is all that is disclosed.
+    // members as the actor is told of are dealt from the domain keys the actor may read and sees in no pile over that
+    // domain. Count and Placeholder tell it the hidden count; Omit, or a row whose own policy excludes the actor, tells
+    // it nothing, not even whether any member is hidden, so it imagines none and plans over what it sees. Under
+    // Placeholder the imagined members stand where the hidden ones stood, whose places are disclosed; under Count they
+    // follow the visible members, whose relative order is all that is disclosed.
     private bool TryVeilPile(Job job, int ordinal, in ArenaRowLayout layout, StateRow row, bool admitted, ulong seed, out string reason) {
         reason = string.Empty;
 
@@ -218,7 +219,7 @@ public sealed partial class ArenaSearch {
 
         var domain = layout.DomainOrdinal;
 
-        if (domain >= 0) {
+        if (counted && (m_veilPositions.Count > 0) && (domain >= 0)) {
             var whole = sight.ReadsWhole(rowOrdinal: domain);
             var domainAdmitted = sight.AdmitsRow(rowOrdinal: domain);
             var cursor = 0;
@@ -234,12 +235,16 @@ public sealed partial class ArenaSearch {
             }
         }
 
-        var rng = Pcg32XshRr.Create(state: seed, stream: RowStream(row: row));
-        var limit = Math.Max(val1: 0, val2: Math.Min(val1: m_veilNames.Count, val2: (layout.CellCapacity - m_veilSeen.Count)));
         var take = (counted
-            ? Math.Min(val1: m_veilPositions.Count, val2: limit)
-            : ((limit > 0) ? ((int)rng.NextUInt32(maximum: ((uint)limit), minimum: 0U)) : 0)
+            ? Math.Max(val1: 0, val2: Math.Min(val1: m_veilPositions.Count, val2: Math.Min(val1: m_veilNames.Count, val2: (layout.CellCapacity - m_veilSeen.Count))))
+            : 0
         );
+
+        if (take == 0) {
+            return true;
+        }
+
+        var rng = Pcg32XshRr.Create(state: seed, stream: RowStream(row: row));
 
         rng.Shuffle(values: CollectionsMarshal.AsSpan(list: m_veilNames));
 
