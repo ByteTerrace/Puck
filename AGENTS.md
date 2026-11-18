@@ -180,7 +180,9 @@ agent works in that mode by default, without asking:
 - The owner's velocity rulings:
   - Waits are judged by what a reasonable player, author and developer expects
     (the owner's ruling): one long first start is acceptable (a first boot, a
-    loading screen, a cold bake), but a wait to see or validate a simple change
+    loading screen, a cold bake), and "reasonable" is taken in context: a long
+    start is a few minutes at most, never something like an hour, the way a
+    shipped game's first boot or shader compile is. A wait to see or validate a simple change
     destroys productivity ("if they have to wait 5 minutes to witness/validate
     a simple change then they lose all productivity"), so the time from a
     change to seeing it outranks every cold-start figure. The numeric targets
