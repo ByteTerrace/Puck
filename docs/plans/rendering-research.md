@@ -169,8 +169,640 @@ This page is not a queue.
   look of night and the quality tables are values the standard package and
   any author set over a neutral engine default
   ([authored looks](#looks-are-authored)).
+- **A discussion of what the renderer is.** The next section states the
+  plan's thesis in four principles. Four of its proposals change decisions
+  by more than a small edit, and they are for the owner to discuss. A
+  view, not a world, is the unit of rendering, and worlds that share one
+  space merge into one instance table (decisions 11 and 14). A portal
+  crossing is prepared ahead as a consumer's minimum and given a budget of
+  its own (decision 14). A derived product's identity names what it means,
+  and trust in fetched bytes comes from a pin, never from the bytes, which
+  amends the register (decision 10). And products are never shared among
+  machines that do not trust each other. None of the four blocks a step
+  ([the fifteen decisions under the thesis](#the-fifteen-decisions-under-the-thesis)).
 - Further calls come to the owner only if a measurement or another plan
   raises them ([the owner's calls](#the-owners-calls)).
+
+## What Puck's renderer is
+
+Puck's renderer turns authored fields into pixels, and treats everything
+in between as a cache. A baked mesh, a probe's hits, a shadow map and the
+picture behind a portal each know what they were made from, how far they
+are from the field they stand for, and what they cost. Each is made again
+only when what it was made from changes, and only as far as some viewer
+will see. Worlds meet in the frame the way they meet in the simulation: by
+declared relationships, each under its own rules about who may see what.
+An engine that starts from triangles cannot work this way. Its reference
+is itself an approximation, its game state changes without a record of
+what changed, and its other places are levels it loads, not peers it
+composes with.
+
+This section states that idea as four principles. Each says what it means
+in Puck's code, why an engine built on meshes cannot do it, what it does
+for an MMO and for the debug world, what we are betting, and what result
+would show the bet wrong. Three drafts were written for it, one each by
+Claude, Codex and Gemini, from the same five starting ideas. Each
+principle ends with a note of which draft it came from. Where the drafts
+disagreed, the choice and its reason are
+[recorded below](#how-the-drafts-disagreed-and-what-we-chose), and so are
+[the places where the idea is romantic](#where-the-thesis-is-romantic).
+
+The thesis does not replace the fifteen decisions. Most of them should be
+built as written, in their order. What it changes is their shape: it says
+which mechanism each decision should extend, and it names six bets that
+need a design and a bounded prototype before anything is built on them.
+The decisions weigh Puck against Nanite, Lumen and virtual shadow maps,
+and the ideas only Puck can try sit in a list near the end
+([combinations only Puck can make](#combinations-only-puck-can-make)). The
+thesis puts those ideas first.
+
+### The field is the one reference, and everything drawn is a measured cache
+
+**What it means.** The authored distance field is the only truth about a
+shape. Everything the GPU reads is derived from it by one sampler and
+carries three things: an identity, which says what it was derived from,
+code included; an error, which says how far it is from the field in a unit
+a consumer can turn into pixels or texels; and a price, the counted work
+to derive it, hold it and draw it.
+
+Parts of this exist. Identity is real for baked meshes. The store keys a
+mesh by the bake's CPU code, its kernels' bytecode and the store's entry
+format (`SdfMeshBakeIdentity`), and a miss names the part that changed.
+Error exists in two forms. A mesh's coarser levels carry an error measured
+against that mesh (`SdfMeshCollapse`), and it already chooses the level a
+draw takes. Error against the field exists too, but no decision reads it
+yet: `SdfMeshFieldLevels.Measure` bounds a simplified mesh against the
+field in both directions and finds lost parts, and
+[decision 8](#8-choose-detail-by-one-error-budget-along-one-chain-of-meshes)
+makes that the record every step of the chain of meshes carries. Price
+exists for shading: an admitted shading program's work per pixel is
+counted (`SdfShadeProgram.PixelWork`), including the loops inside the
+shapes it calls (`SdfShadeCost`).
+
+The field reaches the frame only through such products. The frame never
+walks the authored program per pixel: even with the interpreter compiled
+away, the primary and shadow passes stayed several times over the RTX
+2060's frame ([the register](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs)).
+Where a mesh is the wrong tool, the field is used in three other ways,
+listed from least to most risk.
+
+- *At bake time, as a judge.* It measures each mesh's error. It tells a
+  thin wall, which must block light at a coarse probe level, from a hill's
+  near side, by the solid's thickness behind the hit
+  ([the register's rule for sheets](../decisions/rendering.md#global-illumination)).
+  And it lets a part whose program names a closed-form solid be converted
+  exactly instead of sampled (decision 10, option 10b). A grass blade is a
+  prism of about a dozen triangles and bakes to about 474 today.
+- *On the CPU, as a certificate.* The fixed-point evaluator can enclose
+  every distance inside a box (`SdfFieldEvaluator.TryDistanceBounds`). It
+  can also prove a segment clear or blocked, or say it cannot decide within
+  a budget (`SdfFieldEvaluator.TryCertifiedLineOfSight`). A box proved
+  empty lets a probe ray skip that stretch of static space. The gallery's
+  roof is the test: its three skylights are each 10 m by 16 m, and with a
+  metre held back from every edge, 112 of each one's 160 square metres
+  would be proved clear while the blinds are up.
+- *On the GPU, as a product for tracing.* Sparse distance bricks, sampled
+  by the same bake kernel and identified like a mesh, could answer soft sun
+  visibility past the shadow maps and the visibility of probe rays, at a
+  cost that does not grow with the program's length. A distance volume of
+  this kind was built once, as the primary picture. On the RTX 2060 it took
+  about 10.6 ms of GPU time against the meshes' 9.2 ms, in development
+  readings, and it lost the scene's materials. A visibility trace reads no
+  material.
+
+**Why a mesh-first engine cannot do it.** Its reference is its own best
+mesh. Simplification measures error against the level before it, and a
+distance field, when one is needed, is rebuilt from the triangles.
+Unreal's documentation says its mesh distance fields are built offline
+from the triangles, and that a thin surface can only be held as a negative
+texel inside the mesh. Puck has the arrow the other way round. The field
+has no resolution of its own, so a finer mesh can always be derived than
+any mesh stored, and one reference serves drawing, contact, picking and
+lighting. The server decides contact from the fixed-point field. The
+client draws a mesh derived from the same program. The gap between the
+two is a number recorded per triangle (`SdfMesh.BakeCell`), not a
+collision hull an artist made by hand.
+
+**What it does for the MMO and the debug world.** One reference closes a
+class of bug that large games ship with: the invisible wall, and the
+visible wall a player walks through. Every zone, character and prop is
+approximated the same way, so a zone's far detail, its shadows and its
+lighting come from one chain. In the debug world the gallery becomes the
+self-test the owner asked for: an exhibit can show its own error against
+the field, live, as a diagnostic view.
+
+**The bet.** That one unit of error, the deviation from the field projected
+into the consumer's pixels or texels, can choose between products of
+different kinds, and that the error the engine records is close to the
+error a player sees.
+
+**What would prove it wrong.** A presented walk on the benchmark route
+shows pops, holes or swimming detail where the recorded errors say less
+than a pixel. Or bricks at a zone's density do not fit a bar device's
+memory beside the meshes. Then bricks are dropped, and the principle
+shrinks to meshes and their recorded error, which is decision 8 as
+written.
+
+**Where it came from.** Identity, error and price, and the bricks, are the
+Claude draft's. The field as a judge at bake time and a certificate on the
+CPU is the Gemini draft's. Skipping part of a probe ray through a box
+proved empty, with the gallery roof as its test, is the Codex draft's.
+
+### Work follows change, and programs say how far a change reaches
+
+**What it means.** A frame should cost what changed since the last frame,
+plus what a viewer newly sees. Puck can know what changed, because its
+state is written through one arena, deterministically. The record already
+exists at four doors, and nothing joins them:
+
+- the arena marks every committed write by row and key
+  (`StateArena.ChangedKeys`, read through `StateArena.CopyChangedRows`),
+  and the disclosure layer already consumes those marks every tick
+  (`WorldDisclosureImages.BeginTick`); the reader that consumes them
+  clears them, so a second reader needs a cursor of its own, as the GPU
+  row journal below gives each of its consumers;
+- a recipient is sent only the members of its projection that changed, and
+  a composition that changes nothing sends nothing (`WorldProjectionFeed`);
+- clocks travel as anchors, sent again only where prediction misses, so "a
+  sky held still or moving along a proved span sends nothing"
+  (`WorldClockAnchorLedger`, [worlds](../architecture/worlds.md#observation-and-display));
+- the GPU tables keep a bounded journal of changed rows, with a cursor for
+  each consumer (`GpuChangedRows`).
+
+Even so, a view learns that nothing changed by doing all the work.
+`SdfWorldResidency.IsUnchanged` prepares the residency, which captures and
+packs it, and only then compares a hash of the packed tables. The
+principle joins the four doors into one stream that ends at the products
+whose inputs it crosses, and keeps the hash as the audit that catches a
+miss.
+
+Two things make this hold in motion and not only for still frames. First,
+inputs that change continuously are kept out of caches that hold
+structure. A moving sun should relight probes, not trace them again. A
+lamp's brightness should multiply stored light, not relight it. A camera
+turn should change no mesh's tier. Decisions 7 and 8 already say so.
+Today a probe's light is reused only while two whole-scene numbers match,
+and one of them moves whenever a mesh swaps its level of detail.
+
+Second, an authored program's bounds are the reach of its change. A motion
+program's swept box says which shadow texels, probes and standing views a
+moving part can touch. A shading program's shadow demand says which
+shadow maps a material can read (`SdfShadeDemand`). The engine derives
+these bounds from the program and never asks the author for them.
+
+**Why a mesh-first engine cannot do it.** In a conventional engine, game
+code changes objects directly. The renderer learns what changed only
+through flags each system must remember to set, or by extracting
+everything again. A build system can reuse a result safely only when the
+work is a deterministic function of inputs it tracks, which is the
+assumption Salsa states for incremental compilers. Puck's simulation
+meets that assumption by rule ([rule 4](../../AGENTS.md#core-rules)), and
+few engines' simulations do. Likewise, a shader graph that may move
+vertices freely cannot say how far a vertex moves, so its artists guess
+the bounds by hand.
+
+**What it does for the MMO and the debug world.** Most of what an MMO
+player sees is still: buildings, terrain, parked mounts, idle characters,
+and the other worlds held ready for a quick crossing. A renderer that pays
+for change pays for the dozens of things moving, not the thousands
+present, and a world held behind a closed portal costs its upkeep and
+nothing more. The same stream already crosses the network, so a client
+renders the delta it was sent. In the debug world, standing still in the
+gallery should cost the frame thread little beyond upkeep, and one lever
+pulled should cost what that lever reaches.
+
+**The bet.** That every input a view reads can reach it through a door that
+records change, so that a new input cannot be added without one. That
+includes the inputs that are not state: bodies' poses between ticks, a
+wind phase, a flow clock and the camera.
+
+**What would prove it wrong.** Keeping the stream complete needs a mark
+that each writer must remember to make. Such a mark fails silently: one a
+writer forgets shows as a picture that should have redrawn and did not,
+and the count that judges the work goes down. Or the inputs that change
+continuously (the sun, the wind, players, a camera turning in a crowd)
+invalidate nearly everything every frame, so the stream saves only still
+frames. The frame bar is read
+on the slowest frame, and a saving on still frames does not move it.
+
+**Where it came from.** The joined stream, and bounds as the edges change
+travels along, are the Claude draft's. That draft named the arena's undo
+journal as the source. This page corrects it to the arena's marks of
+committed changes, because the undo journal is discarded when the
+outermost scope commits (`ArenaJournal`). Keeping continuous inputs out of
+structural caches, and the warning that a skip based on a stamp makes the
+counters look better when it is wrong, are the Gemini draft's.
+
+### A frame is demand from the display, flowing through worlds
+
+**What it means.** There is no root scene. The display is the first
+consumer: it asks for a view of a world, at a size, by a deadline. That
+view asks for others, such as a portal, a painting, an emulator's screen
+or a mirror, each at the size it is shown. A world's residency serves each
+consumer's minimum first, and divides the rest by the pixels each one
+presents ([decision 14](#14-treat-a-nested-view-as-the-same-view-at-another-size)).
+
+Worlds compose in two ways, and the decisions state only the first.
+
+- *Worlds in another space nest.* Behind a portal or on a screen, a world
+  is another view at another size.
+- *Worlds in the same space merge.* Two adjacent zones, or a body standing
+  in a zone, feed one view's table of instances as rows. A body is already
+  a row of the zone that simulates it, although the character it belongs
+  to is a world of its own ([the world model](../architecture/worlds.md#the-idea-in-plain-terms)).
+  Two adjacent zones are not merged today. The band of a neighbour's
+  geometry that crosses a border holds at most eight placements and eight
+  bodies (`WorldAdjacencyGeometry`), and the debug world authors no
+  adjacency.
+
+So a world is the unit of authority, identity and disclosure. The unit of
+rendering is the view.
+
+Demand is also predicted. The residency register already rules that every
+eye mapped through a portal face is a demand point, led along its velocity
+([residency](../decisions/residency.md#one-selector-passive-by-default-explicit-by-choice)),
+and the streaming plan builds it.
+As a player approaches the night-field painting, its world should hold a
+complete coarse surface around the exit and lit ground a step inside, so
+that the player can cross, turn back at once, and find both sides ready.
+Prediction never advances the destination's simulation and never commits a
+body's transfer. And the frame in which a player crosses is the worst
+frame for two worlds at once: the portal fills most of the screen while
+the near world still fills its edges.
+
+**Why a mesh-first engine cannot do it.** It can render portals, but the
+far side is the same scene, or a texture filled by a second camera,
+usually with its lighting, shadows and antialiasing stripped. It is never
+a peer with its own authority, clock and disclosure. In Puck, an
+emulator's screen, a card table, a hub's screen and a seamless neighbour
+are one relationship seen at different sizes and in different spaces. A
+triangle renderer can prefetch a level, but triangles cannot say which
+opening a player may cross, where the far eye will be, or whether the
+destination will admit them. In Puck the authored relationship answers all
+three, beside the world's own admission decision.
+
+**What it does for the MMO and the debug world.** This principle decides
+whether the MMO is possible. A city holds hundreds of characters with
+different looks. If each look cost a residency or a view, capture would
+grow with the crowd. Under this principle each look costs a bake, shared
+by identity with every identical look, and a row. One thing stands in the
+way today: a skinned body has no box (`SdfMeshBox.TryOf` refuses a mesh
+with members), so it is drawn unculled, at its full mesh, in every pass.
+Decision 11's boxes for skinned draws (the virtual geometry plan's G3a and
+G3b) add them. From a ridge, a player should see the next zone's mountains, drawn from
+that zone's coarse meshes without joining it, because seeing a world needs
+no body. In the debug world, the gallery's portals already teach worlds
+"without exposition". The valley needs merging to show what lies beyond.
+
+**The bet.** That merging and nesting are the only two cases. That one
+table of instances can take rows from several residencies without a pass
+for each world. And that a crossing can be prepared so that it feels like
+continuing to walk.
+
+**What would prove it wrong.** A two-world adjacency in the debug world
+shows a seam in lighting, shadow or detail at the border. A scene with N
+characters shows capture or residency counts that grow with N. Or
+prediction moves the hitch out of the crossing and into the hall before
+it, in which case the arrival minimum alone stays.
+
+**Where it came from.** Merging beside nesting, and the world as a unit of
+authority rather than of rendering, are the Claude draft's. Preparing the
+far side for the player's next step, its three test walks, and keeping
+prediction away from the authority are the Codex draft's. The crossing
+frame as the worst frame is the Gemini draft's. The crowd's real cost, a
+bake per look and a skinned draw without a box, is this page's reading.
+
+### Results cross between worlds under each world's rules
+
+**What it means.** A world already chooses where its simulation runs. It
+can also choose where its derived products come from: its authority's
+servers, or the player's own machine. Products then travel by identity,
+over the lane that already carries content, under three rules.
+
+- *An identity names what a product means; a pin names its bytes.* A mesh
+  derived on another GPU can differ in its bytes and still be the same
+  mesh within its recorded error. The CPU sampler and the device already
+  disagree near creases by design (`SdfMeshCpuField.TapSpacing`). Each
+  backend's kernel bytecode is part of today's identity, which is why each
+  backend keeps its own store.
+- *Trust comes from a source the receiver already accepts, never from the
+  bytes.* The pattern exists for the bodies of prototypes. A projection
+  carries each body's `sha256/` pin, a missing body is fetched over the
+  authenticated lane between worlds, and its bytes must match the pin
+  before they enter the cache. A pin grants no access by itself
+  ([worlds](../architecture/worlds.md#observation-and-display),
+  `ContentAddressedStore`). A product follows the same rule: it is pinned
+  by the world's authority, or derived locally. A field audit of a fetched
+  product checks its quality across GPU vendors. It is not a way to trust
+  it, because a sampled check cannot see a part that vanished, as decision
+  8 says of meshes.
+- *Disclosure decides who may derive what.* A result derived from rows a
+  viewer was never delivered is never given to that viewer. Decision 14
+  already keys a reused result by the content of the rows it read, and the
+  disclosure layer stores a delivered row once per audience, by its content
+  (`WorldDisclosureImages`). At a card table, another seat's face-down hand
+  is a product a spectator may not derive, because its inputs never reached
+  them. Drawing and hidden information become one rule.
+
+Light crosses too. The garden painting's sunset should reach the gallery
+floor even when the player faces away, and a cabinet standing in its way
+should cast a shadow the hall works out. The opening is where the two
+lighting calculations meet. The garden publishes the light leaving it
+across the opening, first as an average and then as a few samples by
+position and direction, together with the time it was taken, its frame of
+reference and the scope of observation its authority allowed. The hall
+integrates that light against its own surfaces and blockers. Decision 7
+already plans screens, portal openings and windows as area lights in the
+relight. This designs them as a boundary between two authorities. An
+emulated screen uses the same kind of light, its authored display turning
+the cartridge's pixels into emitted light.
+
+**Why a mesh-first engine cannot do it.** Studios share derived data only
+among machines that trust each other. Unreal's documentation calls its
+shared derived-data cache "an unauthenticated service" for local or
+trusted networks. Valve's Fossilize shares the recipe for a GPU pipeline
+rather than the product, because the product depends on the device. No
+engine we read has a renderer whose cache keys know who is watching. Puck's
+world model already has authorities, pins, admission and disclosure, and
+its renderer can use them. A light field sampled at an opening between two
+worlds that run independently is a cut only an engine that composes worlds
+has.
+
+**What it does for the MMO and the debug world.** A studio's zone derives
+its meshes, floors and probe hits on its own servers and serves them by
+identity, so a player's first frame in a new zone is a download, not a
+bake. A friend's world derives on the friend's machine. Light that depends
+on the time of day stays local: a moving sun makes lit products stale all
+day, so only products that depend on geometry alone (meshes, floors, probe
+hits) are shared. In the debug world, a second machine, or the second
+backend, starts warm from the first one's store and passes the field
+audit. The garden lights the hall. And the shedding table's disclosure
+fixture, two deals that look the same to a spectator and differ for a
+seated player, shows that no derived light or picture tells the two apart
+(`worlds/debug/shedding-disclosure.puck`).
+
+**The bet.** That a product's identity can name its meaning rather than its
+bytes, with acceptance by audit within the recorded error. That fetching
+costs less than deriving on a bar device. And that a few samples of light
+at an opening look as good as the far scene seen in full.
+
+**What would prove it wrong.** Fetching costs more than deriving at a bar
+device's bandwidth. The error between vendors is wider than a pixel at the
+distances where products are shared. A richer publication of light costs
+nearly a second full view, or a private edit changes the light a spectator
+sees. Then sharing stops at local reuse, and the opening keeps an average
+light.
+
+**Where it came from.** Choosing where products are derived as a world
+chooses its authority, and disclosure as the permission to derive, are the
+Claude draft's. Trust from a pin a publisher vouches for rather than from
+an input key, and light lent across an opening with its disclosure test,
+are the Codex draft's. The risk that floating-point results differ across
+vendors is the Gemini draft's.
+
+**Evidence for this section.** Code read for this page: the bake's
+identity, the measure of a level against the field, a shading program's
+counted work and its helpers' cost, the evaluator's certified bounds and
+line of sight, the arena's marks of committed changes and its undo
+journal, the projection feed, the clock anchors, the GPU row journal, the
+freshness test that prepares first, the adjacency band's two limits of
+eight, the box refused to a skinned mesh, the motion envelope of a moving
+blend, the prototype bodies' pins, the disclosure images, the CPU
+sampler's creases, the gallery roof's slabs and the painting wing. The
+registers: the frame not interpreting programs, the rule for sheets, and
+portal-mapped eyes as demand points.
+Measured, in the commit that chose meshes over the distance volume:
+about 9.2 ms against 10.6 ms on the RTX 2060 under Direct3D 12 at 1280 by
+900. Reasoned: the skylights' 112 of 160 square metres. Outside sources,
+all unverified: Unreal's pages on mesh distance fields and on its derived
+data cache, Fossilize's README and the Salsa book were read by the Claude
+draft through a summarizing tool; Haines and Wallace on shaft culling and
+Levoy and Hanrahan on light fields were cited by the Codex draft. None was
+reopened for this page.
+
+### How the drafts disagreed, and what we chose
+
+- **Using the field directly.** The starting ideas asked for the field to
+  be used where meshes are wrong. The Claude draft proposed distance
+  bricks. The Gemini draft would use the field only as a judge at bake time
+  and for a few point queries. The Codex draft would use certified empty
+  boxes inside the probe tracer. We kept all three, as uses in order of
+  risk, and never a walk of the authored program per pixel, which the
+  register rejected on measurement. Bricks come last, and are adopted only
+  if they replace the triangle trace for some use: two tracers side by side
+  would be two implementations of one thing. A distance volume was built
+  once already, so the brick prototype starts from what that branch
+  learned.
+- **Whether a world is a unit of rendering.** The Gemini draft treats every
+  portal, window and screen as a view in a federation of views. The Claude
+  draft adds that worlds in the same space merge. We chose the view as the
+  unit of rendering, with merging and nesting as its two ways of composing,
+  because a crowd and a zone border cannot each be a view.
+- **How a shared product is trusted.** The Claude draft accepts a product
+  that passes a field audit. The Codex draft requires a digest vouched for
+  by a publisher the receiver accepts. The Gemini draft doubts sharing
+  across vendors at all. We separated meaning from trust: identity names
+  meaning, the authority's pin or local derivation supplies trust, and the
+  audit checks quality across vendors. Sharing among strangers is dropped.
+- **Decision 2's cheap freshness check.** The Gemini draft would drop it,
+  and the Claude draft would rebuild it on the existing journals. We
+  changed it: if it is built, it reads change from the doors that already
+  record it, and anything without such a door is still judged by the hash
+  ([decision 2](#2-capture-and-prepare-only-what-a-frame-shows), step 3).
+- **Light stored per source.** The Gemini draft would hold decision 7's
+  per-source storage to a few fixed channels (the sun, the moon, the sky,
+  emission, and a handful of the local lights that dominate a cell), for
+  memory. The page already narrows the storage if memory runs short
+  ([what would change the answer](#what-would-change-the-answer)). The
+  fixed channels are a proposal for decision 7's memory pricing, not a
+  change made here.
+- **Where to start.** The Codex draft would fund the crossing trial first,
+  and the Claude draft the change stream. The change stream's memo comes
+  first, because decision 2 needs its answer in stage 2. The crossing trial
+  runs beside it, since it extends the minimums that stage builds anyway.
+
+### Where the thesis is romantic
+
+- **"Shared by identity" does not mean identical bytes.** The bake samples
+  on the GPU in floating point, each backend's kernel bytecode is part of
+  the identity, and the CPU sampler and the device disagree near creases.
+  Sharing holds only if identity names meaning and acceptance is by audit.
+  That is a new contract, designed in the transport memo below, not
+  assumed. The register's statement that deleting every cache gives the
+  same picture already holds only within a tolerance.
+- **Sharing products with strangers.** Dropped. An input key cannot
+  authenticate bytes a stranger supplies, and a sampled audit cannot see a
+  part that vanished.
+- **The field is a reference only where it is correct.** An authored field
+  can overstate its own distance: the rendering skill records the Moth's
+  spine joints reading 26 times their bound. Outside an instance's sphere
+  of influence the bake's sampler answers the sphere's bound, not the
+  distance (`SdfFieldSlice`). Bricks, certified boxes and audits inherit
+  both. A correct field becomes something rendering depends on, not only
+  contact.
+- **A derived price is not GPU time.** A shading program's price is
+  counted logical work. The views kernel uses 255 registers on the RTX 4070
+  under Vulkan, and a short program that keeps many values alive can cost
+  more than a long one. A static estimate of a program's live values can
+  rank programs, but it cannot predict the driver's register allocation.
+  Only measurement on the bar devices finds those cliffs.
+- **Work that follows change, in a living world.** A quick turn in a crowd
+  changes nearly every sample while the document stays the same. Wind sways
+  every blade, and the sun moves all day. The bar is read on the slowest
+  frame. So the stream saves still frames, slow ones, unseen worlds and held
+  views, which frees budget. It holds in motion only where continuous
+  inputs are kept out of structural caches, and it does not lower the cost
+  of the worst frame by itself.
+- **One unit of error is exact for geometry and a model for light.**
+  Lighting's reference is a converged drain, which is expensive. Ranking a
+  lighting product's error against a mesh's in pixels is a model, not a
+  measurement.
+- **Precomputed light shared between machines.** Dropped, beyond products
+  that depend on geometry alone. A moving sun makes lit products stale all
+  day, and a friend's machine cannot derive lighting for a hundred
+  visitors. Caching every pixel everywhere is dropped for the same reason.
+- **The double cost.** Puck pays for the bake and then for the triangles.
+  The thesis holds only where the field gives fewer and better triangles
+  than a mesh made by hand would. A grass blade at 474 triangles, where its
+  prism has a dozen, is the thesis losing to its own machinery.
+- **Bounds on composed programs grow loose.** Three smooth blends, a twist
+  and some noise relief compound conservatively. A bound four times too
+  wide is safe and quietly costly, so `world.budget` and
+  `puck creation stats` must show when a composition's bound has gone
+  loose.
+- **None of this closes today's gap.** The lead machine misses the bar on
+  the CPU before the GPU matters, and nothing has been measured on the RTX
+  2060 or the Steam Deck. The thesis tells the incremental fixes which
+  shape to take. It does not replace them.
+
+### The big bets and the incremental fixes
+
+Most of this page is incremental: fixes any well-run renderer needs, which
+the thesis shapes but does not change. They go first, as the build order
+says. They are the colour conversion (decision 5), shadow roles and the
+probes' fallback (decision 6), the background round trips and the headroom
+rule (decision 4), the contour defects, the removal of redundant triangles
+and the keys by bake stage (decision 10), the allocation work (decision
+2), the one shading path and the split history (decision 13), and the
+present record (decision 15).
+
+Six bets are different. Each rests on something no engine we read does,
+each can fail silently or expensively, and each needs a design memo and a
+bounded prototype before anything is built on it. In order:
+
+1. **One change stream.** *Why it is a bet.* It has the largest payoff and
+   the largest risk of a picture that silently goes stale (the second
+   principle). *The first step.* A memo that lists every input of one
+   view's signature, with the door that records its change or the fact
+   that none does. Then a prototype that lets a still view stand on that
+   record, with the hash run beside it as an audit. *What it shows in the
+   debug world.* Standing still in the gallery, produce falls to upkeep
+   while the audit counts no disagreement over the route, and one lever
+   pulled costs what it reaches.
+2. **A prepared crossing.** *Why it is a bet.* A crossing is where Puck's
+   portals either feel like walking or feel like a loading screen, and the
+   crossing frame carries two worlds at once (the third principle). *The
+   first step.* A prototype on the paintings. It adds the predicted exit as
+   a consumer's minimum, bounded by how far the player can move and by
+   memory; it carries lighting across the handoff only where what the
+   lighting read still matches; and it gives the crossing frame a budget.
+   It is read on three walks: cross and look back at once, approach and
+   turn away, and drop through the endless fall again and again. It counts
+   the bytes resident at the first turn, the transfers wasted on the turn
+   away, evictions, missed presents in the hall, and the crossing frame's
+   work against one world's. *What it shows in the debug world.* Stepping
+   through the garden painting feels like continuing to walk.
+3. **Worlds merged into one view.** *Why it is a bet.* The zone border and
+   the crowd decide whether the MMO scales (the third principle). *The
+   first step.* A memo for one table of instances that takes rows from
+   several residencies and draws a far neighbour from its floors without
+   joining it. Then an adjacency authored between two worlds of the debug
+   world, and a crowd of N characters with different looks. *What it shows
+   in the debug world.* From the valley's rim, the neighbouring world's
+   ridges are drawn and cast shadows across the border, and residencies and
+   captures stay flat as N grows.
+4. **Products that travel, and how they are trusted.** *Why it is a bet.*
+   It changes what a derived product's identity means, and a mistake shows
+   a wrong mesh or leaks what a viewer may not see (the fourth principle).
+   *The first step.* A memo that separates an identity of meaning from a
+   pin on bytes, with the authority's pin as trust, the field audit as
+   quality across vendors, disclosure as the permission to derive, and
+   fetching and deriving priced in one budget. Its prototype is decision
+   10's one store read by both backends. *What it shows in the debug
+   world.* The second backend's first frame loads the first backend's
+   meshes, which pass the audit, and the materials, seams and captures in
+   motion match.
+5. **Light carried across an opening.** *Why it is a bet.* No source we
+   read samples light at the cut between two worlds that run apart, and
+   the light can disclose what a viewer may not see (the fourth principle).
+   *The first step.* A prototype in one process with the garden painting:
+   an average light against a few samples by position and direction,
+   published before exposure, compared with a reference that samples the
+   far scene in full. Only paths that cross one boundary count, each once,
+   because two openings facing each other would otherwise feed back
+   forever. The shedding table's two deals test disclosure. *What it shows
+   in the debug world.* Facing away from the garden, its sunset lights the
+   floor, a moved cabinet shadows it, and raising the camera's exposure
+   never brightens it.
+6. **Tracing with the field.** *Why it is a bet.* It adds a product of a
+   new kind beside meshes, and whether tracing costs enough to need it is
+   not measured (the first principle). *The first step.* Once stage 3 has
+   measured the probe trace against the lighting's mesh, compare three
+   ways on a walk from the skylights toward moving foliage: the triangle
+   hierarchy alone, certified empty boxes that skip stretches of static
+   space, and distance bricks. Count traversal steps saved, evaluator
+   calls, bytes held and boxes made stale. One false "clear" fails it.
+   *What it shows in the debug world.* Lowering the skylight blinds moves
+   the shadow's edge correctly, and past the far shadow map a real soft
+   shadow replaces the probes' answer from 32 m apart. If neither field
+   method beats the triangles at equal quality, the field stays the
+   offline judge.
+
+### The fifteen decisions under the thesis
+
+The principles are named short here: one reference, work follows change,
+demand through worlds, and results crossing worlds. "Applied" means this
+page has made the change in the decision. "Proposed" means the change is
+for the owner's discussion and has not been made.
+
+| Decision | Principles | Effect | The change |
+|---|---|---|---|
+| 1. Measure before building | All four | Strengthened, changed | Applied: a new row reads three kinds of frame apart, one in which nothing changed, one under continuous change and a portal crossing, because a renderer whose work follows change has a different bottleneck in each. Later, each product's recorded error becomes a reading beside its cost |
+| 2. Capture and prepare only what a frame shows | Work follows change, demand through worlds | Changed | Applied: step 3, if built, takes change from the doors that already record it rather than from a stamp every writer must move. An input with no such door is still judged by the hash. The other steps are the third principle as written |
+| 3. Keep the tick ahead of the frame | Work follows change | Unchanged | None. The tick's committed changes become the frame's input. The tick's place in the loop does not move |
+| 4. Background GPU work | Work follows change, results crossing worlds | Strengthened | Proposed: fetching a product and deriving it become two prices in the one budget, once the transport memo settles fetching |
+| 5. Convert scene light once | Demand through worlds, results crossing worlds | Strengthened | None. Typed image edges are what let worlds compose. Light carried across an opening is published as scene light, before the receiving camera's conversion |
+| 6. One shadow answer | One reference, demand through worlds | Strengthened | Proposed: past the cascades, sun visibility traced with the field competes with the probes' answer (the sixth bet). If it wins, the far shadow map for terrain (decision 12) may become unnecessary. That is a measurement, not a ruling |
+| 7. Lighting costs what changed | All four | Strongly strengthened | Proposed: per-source storage priced as a few fixed channels; openings designed as lights between two authorities (the fifth bet); probe hits stored by identity once the trace reads a mesh the camera never changes, and shared as a product of geometry alone; certified empty boxes inside the trace (the sixth bet) |
+| 8. One error budget along one chain of meshes | One reference | Generalized | None to its steps. A mesh's recorded error is the first case of every product carrying its error, which makes this the page's central decision |
+| 9. Give memory back, and never show a hole | One reference, demand through worlds | Strengthened | None. A floor is the first product a player fetches entering a zone, and the only one a far neighbour shows |
+| 10. Bake cost what changed | One reference, results crossing worlds | Strengthened, clarified | Applied: step 6 accepts another backend's entry by its audit within the recorded error, never by equal bytes. Proposed: the transport memo amends the register's passage on derived products, so that identity names meaning and a pin from an accepted source supplies trust |
+| 11. One instance table | Work follows change, demand through worlds | Changed in scope | Proposed: design the table from the start to take rows from several residencies, with the crowd as one of its checks |
+| 12. Motion and placement as authored programs | Work follows change | Strengthened | None to its steps. A derived swept box becomes an edge that change travels along as well as a box to cull by. Today's motion envelope (`CreationBlendEnvelope`) bounds a moving blend's seam, not a body's sweep |
+| 13. One shading path | Work follows change | Unchanged | None. A program's counted work is not GPU time, so the bar devices' measurements stay the judge |
+| 14. A nested view at another size | Demand through worlds, results crossing worlds | Central, extended | Proposed: merging beside nesting; the predicted crossing as a consumer's minimum; and a budget for the crossing frame. Its disclosure rule is the fourth principle's permission to derive |
+| 15. Present what the display has room for | Demand through worlds | Unchanged | None. The display's timing is the deadline of the first consumer's demand |
+
+### What the thesis adds to the plan
+
+Each addition is filed where the plan already keeps work of its kind.
+
+- Stage 0 reads the three kinds of frame apart (the new row in
+  [decision 1](#1-measure-before-building)).
+- Stage 2 takes the change-stream memo and its prototype, before decision
+  2's step 3 is considered, and the crossing trial on the paintings
+  ([stage 2](#stage-2-the-frame-thread-and-the-round-trips)).
+- Stage 3 authors an adjacency between two worlds of the debug world,
+  instead of waiting for it at stage 4, and runs the crowd test, both as
+  checks on the one instance table. It also takes the memo on how products
+  travel and are trusted, with the one store as its prototype
+  ([stage 3](#stage-3-one-instance-table-and-one-chain-of-meshes)).
+- Stage 4 takes light carried across an opening, designed with decision
+  7's area lights and decision 15's screens, and the comparison of tracing
+  with the field ([stage 4](#stage-4-scale)).
+- [Research still owed](#research-still-owed) gains four rounds: change
+  propagation in incremental systems, light through openings, trust in
+  shared derived products, and tracing against distance fields.
 
 ## How to read this page
 
@@ -419,6 +1051,7 @@ open.
 | What an empty indirect draw command costs on each bar device | It decides whether compacting the command list is enough on its own | Visibility's compaction step (V1a) | Every bar device. Before compaction |
 | One cascade pass split into walking the commands, vertex work, pixel fill and clears | It decides which of three fixes pays | A GPU capture in the lead's measurement window | Every bar device. Before stage 2's caster culling |
 | What re-uploads about 2,600 draw records a frame when nothing is moving | It may be a defect that is cheaper to fix than any step that claims the same saving | Visibility | The lead machine. Before the draw record is split |
+| Produce, GPU work and counted work, read apart for three kinds of frame: one in which nothing changed, one under continuous change (a moving sun and a turning camera), and the frame in which a player crosses a portal and two worlds each fill much of the screen | A renderer whose work follows change has a different bottleneck in each. The frame bar is read on the slowest frame, which a saving on still frames does not move ([work follows change](#work-follows-change-and-programs-say-how-far-a-change-reaches)) | The benchmark's route: a held stop and a painting crossing, as named spans of its chapters | The lead machine, both backends. Before stage 2 |
 | Garbage collections and bytes allocated per iteration, by source | One run had 47 collections that paused the process for 674 ms in 600 iterations | The job system's work packet | The lead machine. Before stage 2 |
 | The mesh audit over every stored mesh of the world, at the tier each group is stored at, on each backend | Decision 10's contour rule reaches every bake, and the audit that would judge it does not cover the world today. A store audit over a cold store read 238 of 6,544 groups, and the CPU audit disagrees with the device below cells of about 8 mm ([bake detail](open-items.md#bake-detail)) | `puck mesh audit` | The lead machine, both backends. Before stage 1's contour rule |
 | Any pass at all on the RTX 2060 and the Steam Deck, on every backend the device runs: Direct3D 12 and Vulkan on the two RTX cards, Vulkan on the Deck | Four plans wait on it: visibility's device measurement (M2), the author-shader matrix, illumination's first step and transmission's budgets | One GPU session that serves all four plans | The RTX 2060 and the Steam Deck |
@@ -591,12 +1224,21 @@ Three more costs come from the same shape:
    capturing** (the second half of option 2b). After step 2, a residency
    that is shown still captures and packs every frame to learn that nothing
    changed. If the breakdown names that as a cost, a cheap check can let a
-   view stand from change stamps: counters that each writer of an input
-   moves when it changes that input. The packed hash stays the judge
-   whenever a capture does run. This step is built with three guards,
-   because its failure is silent:
-   - one constructor takes every stamp, so a new input cannot be added
-     without one;
+   view stand on the records of change that already exist at their doors,
+   rather than on a stamp each writer must remember to move. The arena
+   marks every committed write by row and key (`StateArena.ChangedKeys`).
+   A recipient's projection arrives as a delta (`WorldProjectionFeed`).
+   Clocks are anchored again only where prediction misses
+   (`WorldClockAnchorLedger`). The GPU tables journal their changed rows
+   (`GpuChangedRows`). An input that reaches the view through none of these
+   doors, such as a body's pose between ticks, a presentation driver or the
+   camera, is either given a door or left to the hash: the view captures
+   whenever such an input may have moved. The packed hash stays the judge
+   whenever a capture does run. The design is the change-stream memo
+   ([the first bet](#the-big-bets-and-the-incremental-fixes)). This step is
+   built with three guards, because its failure is silent:
+   - one constructor takes every door's record, so a new input cannot be
+     added without naming its door or declaring that it has none;
    - an audit switch packs every view the cheap check let stand, compares
      the hash, and counts disagreements;
    - the change gets an adversarial review, because a guard every writer
@@ -652,8 +1294,9 @@ view shows, and those need no freshness answer at all.
 - State indexed by position shifts when a view is skipped, which is why the
   re-keying is part of the step.
 - The cheap check of step 3 is a second answer to a question the packed
-  hash answers today, and two answers can disagree. A stamp that a writer
-  forgets to move shows as a picture that should have redrawn and did not.
+  hash answers today, and two answers can disagree. An input whose change
+  no door records, and that the check wrongly trusts, shows as a picture
+  that should have redrawn and did not.
   No counter notices, because a view that wrongly stands also lowers the
   capture count the step is judged by. This is why step 3 is optional, why
   it comes after step 2, and why it carries an audit.
@@ -2273,7 +2916,12 @@ equality with the old output ([rule 4](../../AGENTS.md#core-rules)).
    directions, by geometry, materials, seams and appearance in motion, on
    each bar device. Each entry records which backend derived it. Whether
    the bake kernel's floating-point results reproduce across GPU vendors is
-   read in the same check.
+   read in the same check. An entry from the other backend is accepted by
+   those checks within its recorded error, never by equal bytes: the CPU
+   sampler and the device already differ near creases by design
+   (`SdfMeshCpuField.TapSpacing`). A store fetched from another machine is
+   a separate question, of trust, which the transport memo answers
+   ([results cross between worlds](#results-cross-between-worlds-under-each-worlds-rules)).
 
 Steps 2 and 6 change what the register says a mesh's identity is: "the
 methods its call graph reaches and its kernels' bytecode"
@@ -3322,7 +3970,9 @@ unsettled and not out of date. The critical-path run decides it.
 Other engines start from meshes. Puck starts from an authored distance
 field, identifies every derived product by its inputs, treats behaviour as
 authored programs, and composes worlds into one frame. Seven combinations
-follow from that. Each has a way to fail.
+follow from that. Each has a way to fail. [What Puck's renderer is](#what-pucks-renderer-is)
+gathers them into four principles; this list keeps each combination with
+its own way to fail.
 
 - **One chain of meshes, measured against the field.** The floor is a tier
   of the same shape, built by the one mesher and identified by its inputs.
@@ -3447,7 +4097,7 @@ draft said "the tour", it meant the same thing.
 | [1](#stage-1-fix-what-the-player-sees-everywhere) | Fix what the player sees everywhere: colour, shadow roles, lighting lag, contour defects, nested-view quality | The lead machine's part of stage 0. An HDR display for the colour check |
 | [2](#stage-2-the-frame-thread-and-the-round-trips) | Shorten the frame thread's work, compact the draw list and remove the round trips | Stage 0's breakdowns. Stage 1's headroom rule and its closing bake run |
 | [3](#stage-3-one-instance-table-and-one-chain-of-meshes) | One instance table and one chain of meshes | Stage 2's compaction and instance updates. The shader matrix measured on the bar devices |
-| [4](#stage-4-scale) | Scale: populations, far shadows, nested views, presentation | Stage 3's table and chain. The terrain research round. A Steam Deck. An adjacency authored between two debug-world worlds |
+| [4](#stage-4-scale) | Scale: populations, far shadows, nested views, presentation, light through openings | Stage 3's table and chain, and the adjacency it authors. The terrain research round. A Steam Deck |
 
 ### Stage 0: measure
 
@@ -3639,6 +4289,11 @@ lighting branch merged and run in a World for the first time.
   `transmit-plane`.
 - Decision 11's receiver masks as a conservative union, and boxes for
   rigidly skinned draws.
+- The change-stream memo and its prototype
+  ([the first bet](#the-big-bets-and-the-incremental-fixes)), before
+  decision 2's step 3 is considered.
+- The crossing trial on the paintings (the second bet), extending the
+  consumers' minimums this stage builds with the capture order.
 
 **It needs.** Stage 0's breakdowns of produce and of the tick. Stage 1's
 headroom rule, before the GPU work list raises the background work's use of
@@ -3722,6 +4377,19 @@ independent of each other.
   is judged by the casters it admits and the shadow that results. A
   rigidly skinned draw is culled when it cannot show and still shadows a
   visible receiver.
+- **The change stream.** The memo lists every input of a view's signature
+  with the door that records its change, or says it has none. In the
+  prototype a still view in the gallery stands on that record, its audit
+  reads zero disagreements over the route, and produce at a held stop
+  falls to the residencies' upkeep. A stop where nothing moved that still
+  captures shows the claim false.
+- **The crossing trial.** On the three walks (cross and look back at once,
+  approach and turn away, drop through the endless fall repeatedly), the
+  report counts bytes resident at the first turn, transfers wasted on the
+  turn away, evictions, missed presents in the hall, and the crossing
+  frame's work against one world's. If prediction moves a hitch into the
+  hall, the arrival minimum alone stays. Prediction advances no
+  destination's simulation.
 - The slowest frame of every chapter is compared with the stage's starting
   build on the lead machine, under the rule above. The stage's closing
   build is frozen, and stage 3 is compared with it.
@@ -3745,6 +4413,12 @@ independent of each other.
 - One mesh store, judged separately from the cold bake's figure.
 - The one shading path.
 - The rest of the eye-centred cascade memo.
+- An adjacency authored between two worlds of the debug world, and a crowd
+  of characters with different looks, both as checks on the one instance
+  table, with the memo on merging worlds into one view
+  ([the third bet](#the-big-bets-and-the-incremental-fixes)).
+- The memo on how products travel and are trusted (the fourth bet), with
+  the one store as its prototype.
 
 **It needs.** Stage 2's instance updates and compaction, for the grouping.
 The shader matrix measured on the bar devices, for the shading path. Stage
@@ -3797,6 +4471,16 @@ The shader matrix measured on the bar devices, for the shading path. Stage
   store, with floors on, and still reads about a minute or less. Reuse
   across backends is shown in both directions by audit, materials, seams
   and captures in motion, on each bar device.
+- **Merged worlds.** Across the authored adjacency, the neighbour's
+  geometry is drawn from its floors beyond the band that crosses the
+  border, without the viewer joining the neighbour. A scene of N
+  characters with different looks, at three values of N, shows one
+  residency, captures that do not grow with N, and a bake for each
+  distinct look, shared by every identical one.
+- **How products travel.** The memo separates a product's identity of
+  meaning from a pin on its bytes, names where trust comes from and how
+  disclosure limits what may be derived, and prices fetching against
+  deriving. Its check is the one store's.
 - The slowest frame of every chapter is measured on all three bar devices
   and compared with stage 2's frozen build, under the rule above. Each
   device's table from stage 0 is updated. On the RTX 2060 and the Steam
@@ -3820,11 +4504,15 @@ The shader matrix measured on the bar devices, for the shading path. Stage
 - Decision 13's history split and its three smaller changes.
 - Decision 11's smaller per-pass savings.
 - Decision 15's admission rule, overlay, machine cadence and Linux timing.
+- Light carried across an opening
+  ([the fifth bet](#the-big-bets-and-the-incremental-fixes)), designed with
+  decision 7's area lights and decision 15's screens.
+- The comparison of tracing with the field (the sixth bet), after stage 3
+  has measured the probe trace against the lighting's mesh.
 
 **It needs.** Stage 3's table and chain. The terrain research round, for
-the tiles. A Steam Deck, for the Linux timing work. An adjacency authored
-between two worlds of the debug world, for the seam check: none exists
-today.
+the tiles. A Steam Deck, for the Linux timing work. The adjacency stage 3
+authors between two worlds of the debug world, for the seam check.
 
 These pieces are independent, except where one names a need above.
 
@@ -3847,6 +4535,19 @@ These pieces are independent, except where one names a need above.
   memory.
 - **Seams between worlds.** A ridge in one world casts its shadow across
   an adjacency into the next, and a body is handed across it in motion.
+- **Light through an opening.** Facing away from the garden painting, its
+  sunset lights the gallery floor, a moved cabinet shadows it, and raising
+  the camera's exposure never brightens it. A few samples by position and
+  direction are kept only if they beat an average against a reference
+  that samples the far scene in full, at well under the cost of a second
+  view. With the shedding table's two deals, no derived light differs
+  between the spectator's two worlds.
+- **Tracing with the field.** On a walk from the skylights toward moving
+  foliage, with the blinds falling, the report counts traversal steps
+  saved, evaluator calls, bytes held and boxes made stale for the triangle
+  trace, certified empty boxes and distance bricks. One false "clear"
+  fails a method. A field method is adopted only where it replaces the
+  triangle trace for that use.
 - At `valley-rim`, ridges cast shadows and the frame bar holds under a
   moving sun.
 - **Optional work.** A nested world that is deliberately overloaded leaves
@@ -3914,7 +4615,7 @@ with it.
 | An authored colour is decoded exactly once on its way into shading, and a display colour never is (decision 5) | Not enforced in the current tree: one grammar is parsed at 22 places. To build: a scene colour and a display colour are two types, and only a scene colour can be packed for shading | A site that parses a colour into the wrong type. The list of parse sites and one swatch for each kind of colour cover that |
 | Every cascade texel a receiver can read, for as long as that shadow map is shown, is marked, or else the cascade culls nothing (decision 11, option 11b) | Today the far cascade's mark covers its one kind of reader in the frame it is built. To build: the marking uses one geometric bound, the authored maximum radius, and the receiver cannot sample outside it. A mask records its layer, its projection and the region it is valid for, and a receiver outside that region takes the probes' answer. A cascade with no mark keeps every caster | A kind of read added later without widening the bound. The culling comparison in motion covers that |
 | A lit, admitted light holds the primary cascade role (decision 6, option 6b) | To build: one resolver assigns roles, and `SdfMeshShadowCascades.Fit` reads roles and not slot 0 | The fade between roles. It is authored, and the walk through the exchange and the crossing check it |
-| A view's last picture stands only if nothing it shows has changed (decision 2) | Today the packed hash, taken after the capture, and the rule that a standing view must still be bound to the same resolved view (`SdfWorldResidency.IsUnchanged`, `SdfWorldPasses.Refresh`). Both stay. If the cheap check of decision 2's step 3 is built: one constructor takes every change stamp, and an audit switch compares the cheap answer with the packed hash. Until a check covers it, the cheap answer stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | A writer that changes an input without moving its stamp, where the audit is not running |
+| A view's last picture stands only if nothing it shows has changed (decision 2) | Today the packed hash, taken after the capture, and the rule that a standing view must still be bound to the same resolved view (`SdfWorldResidency.IsUnchanged`, `SdfWorldPasses.Refresh`). Both stay. If the cheap check of decision 2's step 3 is built: one constructor takes every door's record of change, an input with no door makes the view capture, and an audit switch compares the cheap answer with the packed hash. Until a check covers it, the cheap answer stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | An input wrongly declared as passing a door that records its change, where the audit is not running |
 | Every residency does its upkeep every frame, captured or not (decision 2) | To build: upkeep is its own step, run for every residency before any is chosen for capture | Upkeep that is later added inside the capture. The checks on an unseen residency's memory and shader reload cover that |
 | A reused published result was derived only from rows its consumer is delivered (decision 7's shared pool, decision 14's standing feeds) | Not enforced in the current tree. To build: the reuse key is built from the content identities of the delivered inputs a result read, so no reuse can be written without them. The same test runs when an image is bound to a reader and when a finished job installs its result. Until a check covers it, this stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | What the authority chooses to deliver, which belongs to [disclosure](disclosure.md). Pixels already delivered |
 | A group within reach always has a surface to draw, and a place whose floors do not exist yet is not published with holes (decision 9) | The streaming plan's floor, built by its decision 5. To build: the frame keeps the last complete scene, or a window's authored fallback, until the new place's floors and lighting stand | A floor that fails its acceptance test. Such a group keeps a finer tier |
@@ -4204,6 +4905,24 @@ Each item names the first stage that needs it.
 - **Nested views in shipped engines**, and transparency with bounded
   memory, if decision 14 still leaves a portal-crossing frame costing close
   to two views.
+- **Change propagation in incremental systems**, before stage 2's
+  change-stream memo. How build systems and incremental compilers (Salsa
+  among them) track what a result read, what tracking costs against the
+  work it saves, and how they recover from a dependency they missed.
+- **Light through openings**, before stage 4's opening prototype. Light
+  fields sampled on a plane (Levoy and Hanrahan), how shipped engines light
+  a room through a portal, and how a published sample's age and scope are
+  bounded.
+- **Trust in shared derived products**, before stage 3's transport memo.
+  How shared caches are authenticated (Unreal's shared derived-data cache
+  is unauthenticated by its own documentation), content addressing under a
+  signed manifest, and the bandwidth at which fetching beats deriving on
+  each bar device.
+- **Tracing against distance fields**, before stage 4's comparison. Shaft
+  culling (Haines and Wallace), distance-field shadows and occlusion in
+  shipped engines, layouts for sparse bricks, and what Puck's own distance
+  volume showed when it was measured against meshes
+  ([the register](../decisions/rendering.md#the-frame-does-not-interpret-sdf-programs)).
 
 ## Existing systems each decision extends
 
