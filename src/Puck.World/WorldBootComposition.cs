@@ -1020,7 +1020,11 @@ public static class WorldBootComposition {
             stateRoot: sp.GetService<Puck.World.Server.WorldStateRoot>(),
             timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
             readings: sp.GetRequiredService<PresentationReadings>(),
-            gpuTiming: sp.GetRequiredService<WorldGpuTiming>()
+            gpuTiming: sp.GetRequiredService<WorldGpuTiming>(),
+            server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
+            instances: sp.GetRequiredService<WorldInstanceHost>(),
+            seatRouter: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>(),
+            client: sp.GetRequiredService<Puck.World.Client.WorldClient>()
         ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();

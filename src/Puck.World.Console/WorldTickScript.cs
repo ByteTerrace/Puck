@@ -40,6 +40,7 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         internal Func<InputRouter>? Router { get; init; }
         internal TextCommandSession? Session { get; set; }
         internal int Slot { get; init; }
+        internal bool Quiet { get; init; }
 
         /// <summary>Gets the handler's answer, empty until the line answers.</summary>
         public string Answer { get; internal set; } = string.Empty;
@@ -78,6 +79,24 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// submission, an immediate answer, or a simulation line's settled verdict when its tick applies.</summary>
     public event Action<Line, CommandResult>? Answered;
 
+    /// <summary>Raised on the host pump in the authority tick-complete hook, with the just-completed tick, before that
+    /// tick's armed lines run: the point a program that steers a seat from the tick's state submits the seat's next
+    /// input (<see cref="SubmitSeat"/>), which applies in the tick after, as an armed seat step does.</summary>
+    public event Action<ulong>? Ticked;
+
+    /// <summary>Submits a line through a seat's ordinary ingress now, as an armed seat step submits at its tick. Called
+    /// from <see cref="Ticked"/>, so the line applies in the tick after the one just completed; the line is neither
+    /// logged nor narrated, since a steering program submits one each time a control moves.</summary>
+    /// <param name="text">The command line.</param>
+    /// <param name="slot">The seat slot.</param>
+    /// <param name="router">Resolves the live seat router.</param>
+    /// <returns>The line, which answers through <see cref="Line.Outcome"/> and <see cref="Line.Answer"/>.</returns>
+    public Line SubmitSeat(string text, int slot, Func<InputRouter> router) {
+        var line = new Line(text: text, tick: CompletedTick) { Router = router, Slot = slot, Quiet = true };
+
+        Run(line: line);
+        return line;
+    }
     /// <summary>Arms a test step through a seat's ordinary ingress, on the same scheduler as world.at. It submits
     /// at the authority tick-complete hook, before sibling instances advance.</summary>
     /// <param name="tick">The completed tick after which to submit.</param>
@@ -175,6 +194,7 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
     /// drain before the next tick steps.</summary>
     /// <param name="tick">The boot world's just-completed tick.</param>
     public void PublishTick(ulong tick) {
+        Ticked?.Invoke(obj: tick);
         if (!m_pending.TryTake(rows: out var due, tick: tick)) {
             return;
         }
@@ -225,8 +245,11 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         Answered?.Invoke(arg1: line, arg2: result);
         line.Answer = result.Output.ReplaceLineEndings(replacementText: " ");
         line.Outcome = (result.Faulted ? "faulted" : (result.IsError ? "refused" : "ran"));
-        Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.at] tick {line.Tick} {line.Outcome}: {line.Text}{((line.Answer.Length > 0) ? $" -> {line.Answer}" : string.Empty)}"));
         line.Session?.Dispose();
+        if (line.Quiet && !result.IsError) {
+            return;
+        }
+        Console.Error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.at] tick {line.Tick} {line.Outcome}: {line.Text}{((line.Answer.Length > 0) ? $" -> {line.Answer}" : string.Empty)}"));
     }
     private void OnSettled(string text, CommandResult result) {
         if (
@@ -272,7 +295,9 @@ public sealed class WorldTickScript(Func<ulong> completedTick, Func<TextCommandS
         var simulation = commands.RoutesToSimulation(line: line.Text, slot: session.Slot);
 
         line.Outcome = Pending;
-        Log(line: line);
+        if (!line.Quiet) {
+            Log(line: line);
+        }
 
         var settling = ((simulation && (line.Router is null)) ? m_settling.AddLast(value: line) : null);
         var result = commands.SubmitSession(line: line.Text, session: session);

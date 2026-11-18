@@ -628,8 +628,8 @@ The frame thread's CPU work, largest first:
   thread is the presentation view's last cut
   ([runtime plan](runtime-and-delivery.md#the-presentation-view)).
   What a tick spends, from a `dotnet-sampled-thread-time` trace of a warm
-  headless debug World playing the seam chapter 'seam walk: the valley into
-  the gallery, walking' (shares of `WorldTick.StepCore`): body advance about
+  headless debug World playing the seam walk's valley crossing at a walk
+  (shares of `WorldTick.StepCore`): body advance about
   a third (field support queries through `FixedStepUp.TrySnap` and
   `BodySupportMemo.Query` into `FixedFieldColliderContact.Solve`, whose
   `SdfBoundsCache` keys exact boxes and so misses on every box of a moving
@@ -1028,8 +1028,8 @@ the tour's remaining reds and the Moth's shin groups share, then
 
 Owner: rendering lane (rendering, verification) · high · Next:
 [the streaming and memory plan](streaming-and-memory.md#the-build-order)'s
-step 0's baseline legs (`puck bench frames --window` over
-`worlds/debug/seam-walk.sweep.json`, both backends, a quiet window), steps 1,
+step 0's baseline legs (`puck benchmark --route seams`, both backends, a
+quiet window), steps 1,
 2 and 3's windowed readings and step 7's remaining implementation after its
 contiguous fallback, shared retirement timeline, destination page proofs,
 native-pool pressure trim and Vulkan's ordered binding door: native sparse
@@ -1087,17 +1087,11 @@ and every memory owner are its steps. This packet holds the defects beside it.
   (`SHADERPIPE_BUDGET`) until the bias has made room. The plan's step 5 is
   what gives way.
 - [low] A test schedule admits no authored command (`WorldScheduleCommands`,
-  `WorldSchedule`), so the seam walk's lift leg writes the car's mailbox
-  (`world.state.cell.set liftCall`) where a player presses the car's buttons.
-  Admit authored commands in schedules under the step's own principal, then
-  drive the lift through its button reach boxes.
-- [medium] The seam walk's window counts its opening tick and each burst's
-  tick from the route program's first line (`opens` and `captures[].at` in
-  `worlds/debug/seam-walk.sweep.json`), by hand: a retimed program turns the
-  window off course or moves its burst, and nothing ties the two. The burst
-  ticks are estimates to correct after the first windowed reading. Free
-  flight is not walked yet (the fastest leg is run plus dash), and the window
-  does not drive the mixed-sound recording `capture.start` offers.
+  `WorldSchedule`). Admit authored commands in schedules under the step's own
+  principal.
+- [medium] The `seams` route walks no free flight yet (its fastest leg is the
+  run with the dash), and a benchmark run does not drive the mixed-sound
+  recording `capture.start` offers.
 - `world.instance.stop` on a routed world leaves that world's per-view
   residencies (`session$N$2`) in `world.residency`, and at the meadow stop the
   garden painting's windows stay scheduled as `waiting` for hundreds of ticks.
@@ -2986,9 +2980,11 @@ runs.
 
 ### The benchmark
 
-Owner: one benchmark lane per stage · high · Next: stage 4's goal chapters,
-the seat program that plays them and wall-contact failure, on the places and
-navigation domains built
+Owner: one benchmark lane per stage · high · Next: the owner's windowed watch
+of `puck benchmark --route debug --loops 2` on both backends, then stage 4's
+remainder (a route played by `puck test`, the per-tick accepted-input and state
+hash sequence, waypoint coverage, the seat-started bindable run, a recorded
+walkthrough reduced to goals) on the goal chapters and seat program built
 ([the route is places](benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)),
 beside the lead's windowed reading of `puck benchmark` on both backends
 ([the build order](benchmark.md#the-build-order)'s stage 3).
@@ -2997,11 +2993,16 @@ The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
 
-- [medium] The baseline route's third chapter goes off course headless at
-  (24.1, 33.53) in `place-east-wing`, with or without navigation domains: its
-  places visited show it reaching `place-wonderland-threshold` and turning back
-  into the lobby without crossing the painting. Stage 4's goal chapters replace
-  its tick-pinned stick program.
+- [medium] The lift chapters' hitch lists hold iterations of 250 to 315 ms of
+  simulate time in `place-lift` while the car runs, headless. The likely cause,
+  inferred from the code path and not yet traced, is each door's response swap:
+  its colliders differ, so `WorldPopulation.InstallResponseSolids` compiles the
+  contact field and the navigation runtime again on the tick
+  (`CompileSolidConsumers`). Trace one swap and make it cost what the door
+  changed.
+- [low] A route chapter's control-line refusals are counted when the chapter
+  ends (`WorldSeatDriver.Refused`), so a line still settling then is not
+  counted; count each line's verdict as it arrives.
 
 - [high] The same route runner is built four times: the tour's route stops
   (`SweepRoute`), the window (`FrameBenchmarks`), `puck motion --route` and
@@ -3638,9 +3639,8 @@ content on the owner's call.
   `puck-fixture` generator and a stub chat client.
 - [medium] The streaming campaign's scale workloads and walk
   ([the seam walk](streaming-and-memory.md#the-seam-walk)): a hub of large
-  worlds and a crowd of distinct looks, and the three seam-walk route
-  segments: the valley into the gallery, a painting portal into the garden,
-  and the lift.
+  worlds and a crowd of distinct looks; the walk's three crossings are the
+  debug world's `seams` route.
 - [medium] The lift (`worlds/debug/hall.puck`), the owner's example of polish
   as engine systems doing real work, on the owner's go: its displays as one
   emulated machine running an authored cartridge, mirrored to every panel and

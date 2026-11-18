@@ -12,6 +12,14 @@ public interface IRegionalContactField : IContactField {
     /// <param name="region">The world box the queries stay inside.</param>
     /// <returns>The part, which never changes.</returns>
     IContactField Within(in FixedAabb region);
+    /// <summary>Bounds where this field and another part of the same provider differ: every query whose body and sweep
+    /// stay clear of the box answers alike in both.</summary>
+    /// <param name="other">The other part.</param>
+    /// <param name="changed">The box holding every collider one of the two holds and the other does not; empty when they
+    /// hold the same colliders.</param>
+    /// <returns><see langword="true"/> when the two can be compared (the same kind of field under the same tuning);
+    /// otherwise the difference is unbounded.</returns>
+    bool TryDifference(IContactField other, out FixedAabb changed);
 }
 
 /// <summary>The analytic contact provider over a fixed set of static colliders: the relaxation solver
@@ -175,6 +183,39 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
     /// <inheritdoc/>
     public bool TryUp(in FixedVector3 position, out FixedVector3 up) {
         up = FixedVector3.UnitY;
+        return true;
+    }
+    /// <inheritdoc/>
+    public bool TryDifference(IContactField other, out FixedAabb changed) {
+        changed = FixedAabb.Empty;
+        if ((other is not FixedStaticContactField field) || (field.m_solver != m_solver)) {
+            return false;
+        }
+
+        // A collider counted once per copy on each side: what remains unmatched on either side changed.
+        var counts = new Dictionary<FixedStaticCollider, int>();
+
+        foreach (var collider in m_colliders) {
+            counts[collider] = (counts.GetValueOrDefault(key: collider) + 1);
+        }
+        foreach (var collider in field.m_colliders) {
+            counts[collider] = (counts.GetValueOrDefault(key: collider) - 1);
+        }
+
+        var mine = Set.Boxes;
+        var theirs = field.Set.Boxes;
+
+        for (var index = 0; (index < m_colliders.Length); index++) {
+            if (counts[m_colliders[index]] > 0) {
+                changed = changed.Enclose(other: mine[index]);
+            }
+        }
+        for (var index = 0; (index < field.m_colliders.Length); index++) {
+            if (counts[field.m_colliders[index]] < 0) {
+                changed = changed.Enclose(other: theirs[index]);
+            }
+        }
+
         return true;
     }
     /// <inheritdoc/>

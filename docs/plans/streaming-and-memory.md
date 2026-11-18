@@ -1247,18 +1247,18 @@ bench gains a window that spans a route stop's timeline display-paced with
 nothing settled first, reporting the slowest frame, the counters' change
 across the window and a presented burst.
 
-The route segments are the `seam walk:` tests of
-[`walkthrough-tests.puck`](../../worlds/debug/walkthrough-tests.puck) and their
-stops are [`seam-walk.sweep.json`](../../worlds/debug/seam-walk.sweep.json):
-`puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop <stop> --window`
-([the verb](../reference/cli.md#puck-bench-frames)). The three speeds are the
-walk (5 m/s), the run (10 m/s, Left Shift held) and the run with the dash on each
-cooldown (0.48 m a tick); the lift crossing is entered at each, and its car is
-called through the `liftCall` mailbox, the `gallery.lift` command's own write,
-because a test's schedule admits no authored command. Free flight is not walked
-yet: the fastest leg is the dash. A crossing between authorities drops the seat's
-held controls, so a leg re-presses the stick on a fixed cadence, as a player
-does.
+The walk is the debug world's `seams` route
+([`benchmark-route.puck`](../../worlds/debug/benchmark-route.puck)): each crossing
+at the walk (5 m/s), the run (10 m/s, Left Shift held) and the run with the dash
+on each cooldown, a chapter each, played by the standard's seat program through
+the seat's own controls ([the benchmark](benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
+`puck benchmark --route seams --chapter 'the lift'` plays a crossing as a player
+takes it and reports each chapter's frames, hitches, GPU passes and counters
+([the verb](../reference/cli.md#puck-benchmarkthe-route-benchmark)). The lift is
+ridden by its buttons: the landing's call plate and the car's panel, pressed with
+the context button. Free flight is not walked yet: the fastest leg is the dash. A
+crossing between authorities drops the seat's held controls, so the seat program
+asserts its controls again when the seat's world changes, as a player does.
 
 **Check.** The report carries every reading of
 [what a window reads](#what-a-window-reads) that exists today, and names each

@@ -176,6 +176,124 @@ public sealed partial class NavigationRuntime {
             );
         }
 
+        /// <summary>Takes a bake from the domain this one replaces when only part of the geometry changed: where the
+        /// replaced domain was baked under equal tuning and its geometry part bounds its difference from this one's
+        /// (<see cref="IRegionalContactField.TryDifference"/>), its cells and edges are copied and only those the changed
+        /// colliders could reach are proved again, on the calling thread. The result is the bake a whole bake of this
+        /// domain's geometry gives, for a cost that follows the change: a door that swaps re-proves the cells round the
+        /// door, never the whole floor.</summary>
+        /// <param name="previous">The domain this one replaces.</param>
+        /// <returns><see langword="true"/> when this domain adopted a bake; otherwise it bakes whole as a new domain does.</returns>
+        internal bool TryRebakeFrom(Domain previous) {
+            if (
+                (previous.m_bake is not { } baked) ||
+                (previous.Tuning != Tuning) ||
+                (previous.CellCount != CellCount) ||
+                (Tuning.Kind == NavigationKind.Medium) ||
+                (m_geometry is not IRegionalContactField part) ||
+                !part.TryDifference(changed: out var changed, other: previous.m_geometry)
+            ) {
+                return false;
+            }
+
+            var allocated = GC.GetAllocatedBytesForCurrentThread();
+            var walkable = (bool[])baked.Walkable.Clone();
+            var ground = (FixedQ4816[])baked.Ground.Clone();
+            var edges = (uint[])baked.Edges.Clone();
+            var work = new BakeCounts();
+
+            if (!changed.IsEmpty) {
+                // A cell is re-proved where its own sample or an edge sweep from it could meet a changed collider: its
+                // center within the agent's radius and two cells of the change across, inside the band its probe and
+                // agent span vertically. Its neighbours' edges are re-proved with it, since a diagonal edge is admitted
+                // through the walkability of the cells beside it.
+                var across = (Tuning.AgentRadius + (Tuning.CellSize * FixedQ4816.FromInteger(value: 2)));
+                var reach = new FixedAabb(
+                    Maximum: new FixedVector3(X: (changed.Maximum.X + across), Y: (changed.Maximum.Y + Tuning.ProbeDown + across), Z: (changed.Maximum.Z + across)),
+                    Minimum: new FixedVector3(X: (changed.Minimum.X - across), Y: (changed.Minimum.Y - (Tuning.ProbeUp + Tuning.AgentHeight + across)), Z: (changed.Minimum.Z - across))
+                );
+                var sampled = new bool[CellCount];
+                var touched = new bool[CellCount];
+
+                for (var node = 0; (node < CellCount); node++) {
+                    Coordinates(node: node, x: out var x, y: out var y, z: out var z);
+
+                    var center = GridPosition(x: x, y: y, z: z);
+
+                    if ((center.X < reach.Minimum.X) || (center.X > reach.Maximum.X) || (center.Z < reach.Minimum.Z) || (center.Z > reach.Maximum.Z) ||
+                        (center.Y < reach.Minimum.Y) || (center.Y > reach.Maximum.Y)) {
+                        continue;
+                    }
+
+                    sampled[node] = true;
+                    walkable[node] = false;
+                    ground[node] = FixedQ4816.Zero;
+                    if (TrySampleCell(geometry: m_geometry, node: node, routeY: out var routeY, work: ref work)) {
+                        ground[node] = routeY;
+                        walkable[node] = true;
+                    }
+                }
+                for (var node = 0; (node < CellCount); node++) {
+                    if (!sampled[node]) {
+                        continue;
+                    }
+
+                    touched[node] = true;
+                    foreach (var step in Neighbors(node: node)) {
+                        touched[step.Node] = true;
+                    }
+                }
+                // Every edge with a touched end is dropped from both ends and proved again, each pair once.
+                for (var node = 0; (node < CellCount); node++) {
+                    if (!touched[node]) {
+                        continue;
+                    }
+
+                    foreach (var step in Neighbors(node: node)) {
+                        edges[node] &= ~NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
+                        edges[step.Node] &= ~NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
+                    }
+                }
+                for (var current = 0; (current < CellCount); current++) {
+                    if (!touched[current] || !walkable[current]) {
+                        continue;
+                    }
+
+                    foreach (var step in Neighbors(node: current)) {
+                        var next = step.Node;
+
+                        if (
+                            (touched[next] && (next <= current)) ||
+                            !CanTraverseStatic(current: current, dx: step.Dx, dy: step.Dy, dz: step.Dz, geometry: m_geometry, ground: ground, next: next,
+                                walkable: walkable, work: ref work, x: step.X, y: step.Y, z: step.Z)
+                        ) {
+                            continue;
+                        }
+                        edges[current] |= NeighborBit(dx: step.Dx, dy: step.Dy, dz: step.Dz);
+                        edges[next] |= NeighborBit(dx: -step.Dx, dy: -step.Dy, dz: -step.Dz);
+                        work.Edges++;
+                    }
+                }
+            }
+
+            work.Walkable = walkable.LongCount(predicate: static cell => cell);
+            Adopt(bake: new NavigationDomainBake(
+                edges: edges,
+                ground: ground,
+                walkable: walkable,
+                work: new NavigationBakeWork(
+                    AllocatedBytes: (GC.GetAllocatedBytesForCurrentThread() - allocated),
+                    Cells: CellCount,
+                    EdgeProofs: work.EdgeProofs,
+                    Edges: work.Edges,
+                    Grounds: work.Grounds,
+                    Occupancies: work.Occupancies,
+                    Walkable: work.Walkable
+                )
+            ));
+            return true;
+        }
+
         private struct BakeCounts {
             public long Walkable;
             public long Grounds;

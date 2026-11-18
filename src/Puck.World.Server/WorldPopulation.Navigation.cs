@@ -238,6 +238,42 @@ public sealed partial class WorldPopulation {
 
         return status;
     }
+    /// <summary>Plans the path a seat program steers a body along: the route across the navigation domains from the
+    /// walkable cell the body stands on, or the nearest one to it (<see cref="NavigationRuntime.TryLocateNear"/>), to a
+    /// goal, straightened to the corners a walker turns at (<see cref="NavigationRuntime.Straighten"/>). Bakes the
+    /// domains it reaches.</summary>
+    /// <param name="from">The body's foot.</param>
+    /// <param name="goal">The cells the route may end at.</param>
+    /// <param name="margin">The clearance, in metres, a straight segment keeps from the edge of the walkable cells.</param>
+    /// <param name="route">Receives the full route, cleared first.</param>
+    /// <param name="corners">Receives the straightened route, cleared first; its foot points are the steering points.</param>
+    /// <param name="work">The search's work.</param>
+    /// <returns>The search's status; <see cref="NavigationStatus.OutsideDomain"/> when no walkable cell lies near the body.</returns>
+    public NavigationStatus PlanSteering(FixedVector3 from, INavigationRouteGoal goal, FixedQ4816 margin, List<NavigationRouteNode> route, List<NavigationRouteNode> corners, out NavigationRouteWork work) {
+        ArgumentNullException.ThrowIfNull(argument: corners);
+        corners.Clear();
+        work = default;
+        if (!m_navigation.TryLocateNear(cell: out var cell, domain: out var domain, position: in from, reach: 2)) {
+            route.Clear();
+            return NavigationStatus.OutsideDomain;
+        }
+
+        var status = m_navigation.FindRoute(
+            fromCell: cell,
+            fromDomain: domain,
+            goal: goal,
+            maxExpanded: checked((int)Math.Min(val1: m_navigation.CellCount, val2: int.MaxValue)),
+            maxNodes: WorldNavigationCapacity.MaxPathNodes * WorldNavigationCapacity.MaxDomains,
+            route: route,
+            work: out work
+        );
+
+        m_navigation.Straighten(corners: corners, margin: margin, route: route);
+        return status;
+    }
+    /// <summary>Gets the domain a route node lies in, for straight-line checks between two of its points.</summary>
+    /// <param name="index">The domain's index.</param>
+    public NavigationRuntime.Domain NavigationDomain(int index) => m_navigation[index];
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.

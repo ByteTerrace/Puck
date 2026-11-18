@@ -139,13 +139,14 @@ iteration of it and writes the report under the state directory.
 
 ```text
 world.benchmark                                  # the running route's chapter and tick, or the last run's summary
-world.benchmark run <source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [output <directory>]
+world.benchmark run <route>|<source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [output <directory>]
 world.benchmark stop
 ```
 
-It is the operator's verb until the route lives in the world's document
-([below](#the-route-is-a-program-the-world-plays)); the bindable form a seat
-starts from a pad arrives with that step.
+`<route>` names a `routes` row of the running world's document
+([below](#the-route-is-places-played-by-an-authored-seat-program-stage-4)); a
+`.puck` source plays its `test` blocks. It is the operator's verb; the bindable
+form a seat starts from a pad is stage 4's.
 
 `puck benchmark` is the command, built in stage 3. It boots a World through
 `WorldLaunch` (windowed under the GPU lease, one World per backend, or headless),
@@ -159,9 +160,12 @@ Attaching to a running World is the verb typed by hand, and its run is `attached
 
 ### The route is a program the World plays
 
-A chapter is a controller program with an arrival: a `test` block's `when`
-and `expect`. A route is the `test` blocks of one `.puck` source whose names
-share a prefix, played in declaration order.
+A chapter is a controller program with an arrival. A route is the world
+document's `routes` row, whose chapters are goals a seat program plays
+([below](#the-route-is-places-played-by-an-authored-seat-program-stage-4)), or
+the `test` blocks of one `.puck` source whose names share a prefix, played in
+declaration order, each a `test` block's `when` and `expect`. The rest of this
+section describes the second.
 
 - **One canonical timed program.** The compiler lowers a `test` block to a
   `schedule` (`WorldScheduleRow`: a tick, a seat and a command line). A
@@ -240,25 +244,58 @@ from them. In this order:
    walkable cell, to a place, a spawn point, a body or a point, and checks it
    against the full contact field; `world.navigation map` draws a domain's
    cells.
-3. **A chapter is goals, not ticks.** A chapter lists where to go and how: a
-   place or waypoint to reach at a pace (walk, run, dash), a rest (stand for a
-   time, facing a heading), an interaction (the context button at a spot, then
-   wait for a state the world answers, such as the lift car arriving), and a
-   crossing. The chapter lowers to one canonical goal list in the document's
-   `routes` section, which `world.benchmark` plays and `puck test` runs.
-4. **An authored seat program plays it.** A seat-driving controller program,
-   authored as camera and motion programs are and evaluated in fixed point
-   each tick from the authority's delivered pose and the navigation domain's
-   route, emits the seat's own input (the left stick toward the next path
-   point, the right stick turning the camera onto it, the run and dash
-   buttons) through the seat's ingress, the door `player.signal` uses. Load
-   therefore still runs through the router, the bindings and intent
-   composition, and a shed tick, a scale change or a nudge re-plans from where
-   the body is instead of carrying the rest of the chapter off course.
-5. **A chapter fails where a player would see it fail.** Any wall contact
-   while driven (the body's latched obstruction witness, `world.contacts`) and
-   leaving the current goal's corridor of places each fail the chapter, named
-   with the place and the tick.
+3. **A chapter is goals, not ticks** (built). A route is a `routes` row of the
+   world's document (`WorldRoute`): the seat program that plays it and its
+   chapters, each an ordered list of steps (`WorldRouteStep`). A step poses the
+   body at a spawn point or a point, submits a seat line (a view choice), goes
+   to a place or a point at a pace, crosses a threshold no navigation domain
+   joins (a portal) by walking a heading until a place is entered or a distance
+   is walked, rests facing a heading or looking toward a point, or presses an
+   action and waits until the world carries the body into a place (the lift
+   arriving at a level). Paces and actions are the program's words, not the
+   engine's. However a source spells a route (`let`, functions, `for`, `map`),
+   it lowers to these rows. The debug world authors two routes in
+   `worlds/debug/benchmark-route.puck`: `debug`, the owner's walk and one pass
+   over each seam, and `seams`, each crossing at each pace.
+4. **An authored seat program plays it** (built). A `seatPrograms` row
+   (`WorldSeatProgram`) is an ordered list of operations, each driving an input
+   source: `move` deflects a stick toward the step's steering point in the
+   camera's frame, slowing for a corner sharper than its threshold and to stop at
+   a final point against the body's own planar speed; `turn` deflects a stick's
+   X to turn the camera onto the way ahead or a rest's facing, at the seat's own
+   look rate; `hold` holds a button through some paces (run), `pulse` taps one on
+   a period (the dash on its cooldown), and `tap` presses one for an action (the
+   context button). The standard authors `walker` in
+   `worlds/standard/benchmark.puck`. `WorldSeatDriver` is the engine's one
+   evaluator: each tick, in the authority's tick-complete hook
+   (`WorldTickScript.Ticked`), it reads the seat body's fixed-point pose, planar
+   velocity, places and contact witness in whichever world the seat stands in,
+   and the seat view's facing, runs the step, evaluates the operations in fixed
+   point, and submits each control that changed through the seat's own ingress
+   (`WorldTickScript.SubmitSeat`, the door `player.signal` and test steps use),
+   so the line lands in the next tick. A move is framed against the facing the
+   tick's turn leaves, since the seat turns its camera before it composes its
+   move. Held sticks are asserted again every `ReassertTicks` and every control
+   when the seat's world changes, as a player holding a stick across a crossing
+   presses again. A `go` plans with `WorldPopulation.PlanSteering`: the route
+   across the domains (`NavigationRuntime.FindRoute`, whose step cost charges a
+   cell's length for each cell short of `RouteClearanceCells` it stands from the
+   edge of the walkable ground, so a route keeps off walls and passes a doorway
+   through its middle), straightened to the corners a walker turns at
+   (`NavigationRuntime.Straighten`, over `Domain.IsStraightClear` with the route's
+   margin). A body that strays a metre from its line, or makes no progress for two
+   seconds, plans again from where it stands, so a shed tick, a scale change or a
+   nudge is steered from rather than carried off course.
+5. **A chapter fails where a player would see it fail** (built). A driven wall
+   contact (the body's latched obstruction witness while the move stick is
+   deflected), standing in none of the places the step's path crosses (its
+   corridor: the innermost place at each route node, the goal and where the
+   body stood when it planned), a path that cannot be found, a step that makes
+   no progress after three plans, a pose that did not land, and the chapter's
+   time limit each fail the chapter, named with the kind, the tick and the
+   innermost place, and the driver lets go every control. The report keeps every
+   place the body entered with its tick (`visits`, `placesVisited`), the steps
+   reached, the plans made and the control lines submitted.
 
 The owner's recorded walkthroughs (`replay.record` tapes with a
 `world.view.trace`) are the source of the debug world's goals: recording a
@@ -271,18 +308,35 @@ Each step's check, run headless unless named:
 |---|---|
 | Places | `body.place` names the stage, the hall's entrance, the lobby, the east wing's portal and the wonderland threshold at the owner's waypoints; a benchmark hitch lists its place, and a chapter its places visited |
 | Navigation | `world.navigation` lists each domain with its compiled and clear cell counts; `world.navigation route place-stage <place>` returns a route to every place with `walls=0/<samples>`; the bake's cost is read from `world.navigation` and `host.memory` |
-| Goals and the seat program | A chapter from the stage into the hall arrives with no wall contact at 1× pace, with ticks shed under load, and with the body at wonderland's 0.25 scale; `puck test` and `world.benchmark` give the same accepted input per chapter tick |
-| Failure | A chapter whose goal lies behind a wall fails, naming the wall contact's place and tick; one sent out of its corridor fails naming the place it left |
-| The owner watches | A windowed `puck benchmark --loops 2` of the debug route, both backends, every chapter arriving |
+| Goals and the seat program | Built: `puck benchmark --headless --route debug --loops 2` arrives in every chapter of both loops with no wall contact, the stage chapter under the boot's shed ticks and the Wonderland chapter with the body at a quarter scale; the same chapter takes the same ticks in both loops. Open: `puck test` playing a route, and the same accepted input per chapter tick headless and live |
+| Failure | Built: a driven contact fails a chapter naming it (`wall at tick <t> in <place>: a driven wall contact at (x, y, z), normal (…), on step <n> (…)`), and a body that steps out of its path's places fails naming the place it entered |
+| The owner watches | A windowed `puck benchmark --route debug --loops 2`, both backends, every chapter arriving. A lane's windowed Direct3D 12 run played the first five chapters to arrival in the ticks the headless runs take, with 39 to 104 ticks shed in each |
 
 What exists and is reused: the region facet and its occupancy
-(`WorldPlacementRegion`, `WorldEventFeed.IsOccupant`), navigation domains and
-their bounded route search (`WorldNavigationDomain`, the producers'
-`navigated(domain, register)` target the pond's spiders follow), the latched
-obstruction witness, `WorldSeatViewState`'s camera yaw, and `player.signal`'s
-ingress. A producer program is not the driver: it writes a body's intent on
-the server, which skips the seat's input path the benchmark exists to load.
-A scoped replay (`replays`) writes state cells, not seat input.
+(`WorldPlacementRegion`, `WorldEventFeed.IsOccupant`, `WorldEventFeed.TryPlaceShape`),
+navigation domains and their route search (`NavigationRuntime.FindRoute`), the
+latched obstruction witness (`WorldBody.LastObstructionNormal`), the seat view's
+facing (`WorldClient.TrySeatLook`, the yaw intent composition reads), and the
+seat ingress test steps use. A producer program is not the driver: it writes a
+body's intent on the server, which skips the seat's input path the benchmark
+exists to load. A camera or motion program runs in presentation or in the body
+step and drives no seat. A scoped replay (`replays`) writes state cells, not
+seat input. The seat program is therefore a program kind of its own, with one
+evaluator, and its operations are input mechanisms (a stick toward a point, a
+stick turning a camera, a button by pace or action) whose parameters are the
+author's.
+
+Playing the routes found and fixed three engine defects. A portal's hole field
+(`WorldPortalHoleContactField`) took back the push the wall behind a door made
+but left that wall's obstruction normal in the resolution, so every body walking
+through a painting latched a wall contact; the obstruction now goes with the push.
+A lift door's response swap rebuilds the navigation runtime, and the domains whose
+geometry part held the door baked whole again on the pump at the next route
+search, about 19 s for the ground and valley domains; a rebuilt domain now takes
+its predecessor's bake and proves again only the cells the changed colliders reach
+(`Domain.TryRebakeFrom`, over `IRegionalContactField.TryDifference`): a door swap
+re-proves some 66 ground cells and 247 edges. And `world.benchmark sample` refused
+every call, so no chapter ever sampled its GPU passes.
 
 ### Where a run starts
 
@@ -590,9 +644,21 @@ a reference only where it is itself correct.
 
 ## The debug world's route
 
-The debug world's first route passes through each place where lighting,
-shadows, streaming and seams break, in one direction of travel, in about four
-minutes of simulation. Each chapter is 20 to 40 seconds.
+The debug world's routes are authored in `worlds/debug/benchmark-route.puck`
+and played by the standard's `walker` seat program. `debug` is the owner's walk
+from two walks of the world: the stage into the hall and its lobby, the east
+wing into the painting room, through the looping pair and back to the lobby,
+into Wonderland through the big painting to the machines and out through the
+mouse hole, then one pass over each seam (the valley floor into the lobby and
+back at a run, the garden painting at a walk, the lift ridden by its buttons
+from level 0 to level 3 and back). `seams` is the seam walk: each of the three
+crossings at the walk, the run and the run with the dash on each cooldown, a
+chapter each, from its own spawn.
+
+The walk is the owner's to correct after watching it. The proposal below names
+the places a later route passes for what each loads, where lighting, shadows,
+streaming and seams break, in about four minutes of simulation; each chapter is
+20 to 40 seconds.
 
 | Chapter | Travel | What it loads |
 |---|---|---|
@@ -606,9 +672,9 @@ minutes of simulation. Each chapter is 20 to 40 seconds.
 | Night | The lawn's trees and the night field at night, reached the way the debug world authors night | Night lighting, where the owner's walkthrough found the most |
 | Flight | The dash on each cooldown, then free flight back up the valley | Streaming at the fastest travel the standard authors |
 
-The seam walk's nine legs become a second route, `seams`, whose chapters are
-the three crossings at three speeds. The streaming plan's conditions (a fresh
-process per crossing) are `--route seams --chapter <name> --fresh`.
+The streaming plan's conditions for the seam walk (a fresh process per
+crossing) are `--route seams --chapter <name>` on a fresh `puck benchmark` boot;
+a `--fresh` that boots once per chapter is not built.
 
 The gallery's row-by-row inspection is a third route, `exhibits`, built in
 stage 7, before the fold deletes the tour that inspects it today.
@@ -621,7 +687,7 @@ stage 7, before the fold deletes the tour that inspects it today.
 | The tour's settled-still baselines | Nothing replaces them in the benchmark. A still of a place is not evidence of how the place looks in play, and equality with an older still is not a goal |
 | Exhibit stills judged against plaques, with the mesh audit beside them | Kept as the `exhibits` route's capture pass: a presented series while the walker stands at each exhibit, so shimmer at rest shows. The judgement stays against the plaque's intent |
 | Route stops and `SweepRoute` | Deleted at stage 10, after the exhibits route replaces the inspection they carry; `world.benchmark` already plays the same `test` blocks |
-| `puck bench frames` and `--window`, `worlds/debug/seam-walk.sweep.json`, `worlds/debug/measure-water.json` | Deleted at stage 10. The window's readings are the benchmark's report, the seam walk is the `seams` route, a settled stop is a chapter that stands, and the `boot` window is the report's `boot` span over the first rendered iterations |
+| `puck bench frames` and `--window`, `worlds/debug/measure-water.json` | Deleted at stage 10. The window's readings are the benchmark's report, a settled stop is a chapter that stands, and the `boot` window is the report's `boot` span over the first rendered iterations. The seam walk's tick-pinned segments and their window plan are already gone: the seam walk is the `seams` route |
 | `puck motion --route` and `worlds/debug/forest.route.json` | Deleted. The forest becomes a chapter, its paired comparison is `puck measure`'s, and its workload check is the comparer's |
 | Lockstep, `world.at` and the settled `world.screenshot` | Kept as engine mechanisms. `puck motion --reproduce` is the one tool that compares stills exactly, for a change that claims to change nothing (rule 4). It is not part of the benchmark and no landing waits on it |
 | `puck sweep`'s headless leg and scenarios | Unchanged |

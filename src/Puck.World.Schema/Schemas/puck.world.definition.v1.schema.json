@@ -228,6 +228,12 @@
     "roles": {
       "$ref": "./schema/roles.schema.json"
     },
+    "seatPrograms": {
+      "$ref": "./schema/seatPrograms.schema.json"
+    },
+    "routes": {
+      "$ref": "./schema/routes.schema.json"
+    },
     "basis": {
       "$ref": "./schema/basis.schema.json"
     },

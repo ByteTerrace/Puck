@@ -361,11 +361,15 @@ public sealed partial class NavigationRuntime {
 
             return ((height >= -Tuning.ProbeDown) && (height <= (Tuning.ProbeUp + Tuning.AgentRadius)));
         }
-        // Writes the cells one step from a cell that a route may take, with each step's length in millimetres.
+        // Writes the cells one step from a cell that a route may take, with each step's cost in millimetres: its length,
+        // and on a surface one cell's length more for each cell short of RouteClearanceCells that the cell stepped onto
+        // stands from the edge of the walkable ground (RouteClearance), so a route keeps off a wall where the ground
+        // allows and passes a doorway through its middle, rather than hugging the corners the shortest line touches.
         internal int RouteSteps(int node, Span<int> next, Span<int> cost) {
             EnsureBaked();
 
             var straight = Millimetres(value: Tuning.CellSize);
+            var clearance = RouteClearance();
             var count = 0;
 
             foreach (var step in Neighbors(node: node)) {
@@ -374,11 +378,63 @@ public sealed partial class NavigationRuntime {
                 }
 
                 next[count] = step.Node;
-                cost[count] = checked((straight * step.Cost) / StraightCost);
+                cost[count] = checked(((straight * step.Cost) / StraightCost) + ((clearance.Length == 0) ? 0 : (straight * (RouteClearanceCells - clearance[step.Node]))));
                 count++;
             }
 
             return count;
+        }
+
+        // The clearance, in cells, past which a route step costs no more than its length.
+        private const int RouteClearanceCells = 3;
+
+        private byte[] m_clearance = [];
+        private bool[]? m_clearanceOf;
+
+        // The cells, counted as king moves, from each walkable surface cell to the nearest cell no route stands on,
+        // capped at RouteClearanceCells (a cell beside the edge of the walkable ground is one); empty for a volume or
+        // medium domain. Derived from the baked walkability once per bake.
+        private byte[] RouteClearance() {
+            if (Tuning.Kind != NavigationKind.Surface) {
+                return [];
+            }
+            if (ReferenceEquals(objA: m_clearanceOf, objB: m_walkable)) {
+                return m_clearance;
+            }
+
+            var walkable = m_walkable;
+            var clearance = new byte[walkable.Length];
+
+            for (var cell = 0; (cell < clearance.Length); cell++) {
+                clearance[cell] = (byte)(walkable[cell] ? RouteClearanceCells : 0);
+            }
+            for (var ring = 1; (ring < RouteClearanceCells); ring++) {
+                for (var z = 0; (z < Tuning.Depth); z++) {
+                    for (var x = 0; (x < Tuning.Width); x++) {
+                        var cell = Index(x: x, y: 0, z: z);
+
+                        if (clearance[cell] != RouteClearanceCells) {
+                            continue;
+                        }
+
+                        for (var dz = -1; ((dz <= 1) && (clearance[cell] == RouteClearanceCells)); dz++) {
+                            for (var dx = -1; (dx <= 1); dx++) {
+                                var nx = (x + dx);
+                                var nz = (z + dz);
+
+                                if ((nx >= 0) && (nx < Tuning.Width) && (nz >= 0) && (nz < Tuning.Depth) && (clearance[Index(x: nx, y: 0, z: nz)] == (ring - 1))) {
+                                    clearance[cell] = (byte)ring;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            m_clearance = clearance;
+            m_clearanceOf = walkable;
+            return clearance;
         }
     }
 }

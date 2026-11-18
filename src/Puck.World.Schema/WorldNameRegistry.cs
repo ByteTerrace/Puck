@@ -1351,6 +1351,14 @@ public static partial class WorldNameRegistry {
         ),
     ];
     private static readonly WorldNameExclusion[] Exclusions = [
+        new(typeof(WorldSeatProgram), nameof(WorldSeatProgram.Name), "a seat program's name, which only a route's program member reads"),
+        new(typeof(WorldSeatProgramOp.Move), nameof(WorldSeatProgramOp.Move.Source), "an input-source id, in the input vocabulary"),
+        new(typeof(WorldSeatProgramOp.Turn), nameof(WorldSeatProgramOp.Turn.Source), "an input-source id, in the input vocabulary"),
+        new(typeof(WorldSeatProgramOp.Hold), nameof(WorldSeatProgramOp.Hold.Source), "an input-source id, in the input vocabulary"),
+        new(typeof(WorldSeatProgramOp.Pulse), nameof(WorldSeatProgramOp.Pulse.Source), "an input-source id, in the input vocabulary"),
+        new(typeof(WorldSeatProgramOp.Tap), nameof(WorldSeatProgramOp.Tap.Source), "an input-source id, in the input vocabulary"),
+        new(typeof(WorldRoute), nameof(WorldRoute.Name), "a route's name, which world.benchmark and puck benchmark take"),
+        new(typeof(WorldRouteChapter), nameof(WorldRouteChapter.Name), "a chapter's name, local to its route"),
         new(
             typeof(Puck.World.Authoring.PalettePaintDocument),
             nameof(Puck.World.Authoring.PalettePaintDocument.Parent),

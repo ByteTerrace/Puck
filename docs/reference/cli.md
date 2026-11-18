@@ -2898,9 +2898,10 @@ every content search in this repo through the checkout's own `puck search` build
 ## `puck benchmark`—the route benchmark
 
 `puck benchmark` plays a route through a World in real time and reports what the host did: the benchmark of
-[the benchmark plan](../plans/benchmark.md), whose stage 3 is this verb. A route is the `test` blocks of one `.puck`
-source (`--route`, optionally the chapters whose names start with `--chapter`), each block a chapter: its `when`
-lines are a controller program and its `expect` lines its arrival. The verb boots a fresh World paused before its
+[the benchmark plan](../plans/benchmark.md), whose stage 3 is this verb. A route (`--route`, optionally the chapters
+whose names start with `--chapter`) is either the name of a `routes` row of the world's document, each chapter a list of
+places to go to and how that the route's seat program plays through the seat's own controls, or a `.puck` source whose
+`test` blocks are the chapters, each block's `when` lines a controller program and its `expect` lines its arrival. The verb boots a fresh World paused before its
 first tick (`--paused`), waits for the renderer with authority held, sends the in-game verb `world.benchmark run`
 and resumes. The World plays the route itself, as a `timedemo` does, arming each chapter's rows through the seat's own
 ingress at ticks it computes from the run's start; the verb is the launcher and the comparer, holds no copy of the route
@@ -2908,10 +2909,12 @@ and pins no steps. Every process uses `--devices none` and its own state directo
 lease through `WorldLaunch`.
 
 ```sh
-puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the valley into the gallery, fastest' --backend directx vulkan
-puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the garden painting' --loops 3 --at 120
-puck benchmark --headless --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the lift, walking' --output artifacts/benchmark
-puck benchmark --route worlds/debug/walkthrough-tests.puck --chapter 'seam walk: the lift, walking' --against artifacts/benchmark/<earlier run id>
+puck benchmark --route debug --loops 2 --backend directx vulkan
+puck benchmark --route seams --chapter 'the valley, dash' --backend directx vulkan
+puck benchmark --route seams --chapter 'the garden painting' --loops 3 --at 120
+puck benchmark --headless --route seams --chapter 'the lift, walk' --output artifacts/benchmark
+puck benchmark --route seams --chapter 'the lift, walk' --against artifacts/benchmark/<earlier run id>
+puck benchmark --headless --route worlds/debug/free-camera-tests.puck
 puck benchmark compare <baseline report.json or directory> <candidate report.json or directory> [--all] [--json]
 ```
 
@@ -2926,7 +2929,10 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   again from the state the run left, armed as each loop ends, and the report calls the first loop cold, the second warm and
   the rest steady. A chapter arrives from whatever state the one before it left: its first tick releases every control
   the chapter before it left held, and its program chooses its view and poses the body, which in first person also lands
-  the look on the posed heading.
+  the look on the posed heading. A route chapter's length is known only once it ends, so the World arms each chapter as
+  the one before it ends, from its tick hook; its arrival is its seat program's (`arrived`, or `failed` with the kind,
+  the tick and the place: a driven wall contact, a step out of the places its path crosses, a lost path, a pose that did
+  not land, its time limit).
 - **Pace.** A run is display-paced with the ordinary lighting budget; nothing in it pauses, settles or waits, and the run
   turns lockstep presentation off at its start and records that it did. `--uncapped` boots with the immediate present mode for a throughput
   trend, and the report records it in the run's conditions; the presentation target itself is the host's own cap (`world.target`
@@ -2940,7 +2946,9 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   `benchmark` section holds, for each backend: its `conditions` (backend, shape, size, whether it ran uncapped, budget,
   start tick, loops, operating system, logical processors), whether the run `complete`d and how it `ended`, whether it
   began in lockstep, its `boot` span, each loop's `run` statistics and each chapter's report. A chapter reports its identity
-  (the hash of its program), arrival (`arrived`, `off course` with the gates it failed, or `unmeasured`), the end state
+  (the hash of its program), arrival (`arrived`, `off course` with the gates it failed, `failed` with a route chapter's
+  `failure`, or `unmeasured`; a route chapter adds every place it entered with its tick, its steps reached, its plans and its
+  control lines), the end state
   hash, `disturbed` reasons, the frame statistics (iterations, seconds, rate, interval and work as mean, median, 95th, 99th and
   99.9th percentile and maximum, the 1% and 0.1% lows, iterations over the budget, twice it, 50 ms and 100 ms, pacing
   deviation, ticks stepped, collections and pauses, bytes allocated per iteration, the longest span that stepped no tick),
@@ -2970,7 +2978,7 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   a completed comparison. `2`: a refusal, a usage error, a build or boot that failed.
 
 `puck measure request ... -- benchmark --route ...` admits the verb, with `--metric /metrics/<name>/median` over the report's
-metric names (`/metrics/directx.cold.seam-walk-the-lift-walking.frames.interval.p99/median`); the runner supplies
+metric names (`/metrics/directx.cold.the-lift-walk.frames.interval.p99/median`); the runner supplies
 `--world-artifact` and `--output`. The verb takes no sample count of its own: the loops are separate metrics and the pairs are
 the measurement's replication.
 
@@ -3456,7 +3464,7 @@ window. Filing a request uses the same option grammar and stop/pass selection
 as execution, so unsupported metric names are refused with available pointers.
 
 `--window` (with `--plan`) reads each selected stop's own timeline as a player
-takes it, the seam walk's instrument
+takes it
 ([streaming and memory](../plans/streaming-and-memory.md#step-0-the-walks-instrument)):
 the stop's lines pose the body while authority is held, then the stop's timeline
 (a route stop's test program) is armed and the World runs display-paced with
@@ -3484,8 +3492,8 @@ of each sample is a fresh process, so a window reads the first crossing after
 boot:
 
 ```sh
-puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop seam-valley-walking --window --backend directx
-puck bench frames --plan worlds/debug/seam-walk.sweep.json --stop seam-valley-walking --window --headless
+puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --backend directx
+puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --headless
 ```
 
 `--backend`, `--width` and `--height` select the renderer and window (1280×720

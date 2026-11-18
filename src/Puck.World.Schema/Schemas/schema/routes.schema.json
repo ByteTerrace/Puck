@@ -1,0 +1,283 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "A route through the world a seat plays as a player would (routes rows): chapters of steps that say where to go and how, played by the seat program the route names (WorldSeatProgram) through the seat\u0027s own controls. world.benchmark run \u003Croute\u003E plays one in real time and reports each chapter; a chapter fails where a player would see it fail, on a driven contact with a wall or by leaving the places its path crosses.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The route\u0027s name, unique within the document.",
+        "type": "string"
+      },
+      "program": {
+        "description": "The seat program that plays it.",
+        "type": "string"
+      },
+      "chapters": {
+        "description": "The chapters, played in order.",
+        "type": "array",
+        "items": {
+          "description": "One chapter of a WorldRoute: its steps, played in order, and the time it may take.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "name": {
+              "description": "The chapter\u0027s name, unique within its route; a report addresses the chapter by it.",
+              "type": "string"
+            },
+            "steps": {
+              "description": "The steps.",
+              "type": "array",
+              "items": {
+                "description": "One step of a WorldRouteChapter. A place is a region placement\u0027s id (place-lobby), the volume body.place answers from; a heading is a yaw in degrees (0 faces -Z, 90 faces -X).",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "required": [
+                  "$type"
+                ],
+                "anyOf": [
+                  {
+                    "description": "Sets the seat\u0027s body down at a spawn point, or at a point facing a heading (the seat\u0027s grant to pose is the world author\u0027s).",
+                    "properties": {
+                      "$type": {
+                        "const": "pose"
+                      },
+                      "spawn": {
+                        "description": "The spawn point\u0027s id, or null for Point.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "point": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "description": "The point, or null for Spawn.",
+                        "default": null
+                      },
+                      "yawDegrees": {
+                        "description": "The heading a point pose faces.",
+                        "type": "number",
+                        "default": 0
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepPoseBody"
+                  },
+                  {
+                    "description": "Submits one console line as the seat (a view choice, player.camera.view first).",
+                    "properties": {
+                      "$type": {
+                        "const": "line"
+                      },
+                      "text": {
+                        "description": "The line.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepLine"
+                  },
+                  {
+                    "description": "Travels to a place or a point at a pace. Unless Direct, the path is the navigation domains\u0027 route from where the body stands, straightened to the corners a walker turns at and searched again from wherever the body has got to when it strays from it; the places the path crosses are the step\u0027s corridor, and standing in none of them fails the chapter. A place is reached on entering it, a point within Within.",
+                    "properties": {
+                      "$type": {
+                        "const": "go"
+                      },
+                      "place": {
+                        "description": "The place, or null for Point.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "point": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "description": "The point, or null for Place.",
+                        "default": null
+                      },
+                      "pace": {
+                        "description": "The pace, a word the route\u0027s program reads (walk, run).",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "direct": {
+                        "description": "Whether the body steers straight at the goal with no navigation (a lift car\u0027s floor, a world with no domains), its corridor only Corridor.",
+                        "type": "boolean",
+                        "default": false
+                      },
+                      "within": {
+                        "description": "The distance, in metres, at which a point is reached.",
+                        "type": "number",
+                        "default": 0.5
+                      },
+                      "corridor": {
+                        "description": "Places the body may also stand in on the way.",
+                        "type": [
+                          "array",
+                          "null"
+                        ],
+                        "items": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "default": null
+                      }
+                    },
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepGo"
+                  },
+                  {
+                    "description": "Crosses a threshold no navigation domain joins (a portal) or walks where no domain reaches (a world it crossed into): turns the camera onto a heading, then holds the stick straight ahead, as a player walking through does, so a crossing that turns the world\u0027s axes carries the walk on through it. It ends on entering a place, or with none after walking a distance.",
+                    "properties": {
+                      "$type": {
+                        "const": "cross"
+                      },
+                      "headingDegrees": {
+                        "description": "The heading walked: in the frame of the world the step starts in, or with Relative a turn from the facing the step starts with.",
+                        "type": "number"
+                      },
+                      "until": {
+                        "description": "The place that ends the step, in whichever world the walk reaches, or null to walk Metres.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "pace": {
+                        "description": "The pace.",
+                        "type": "string",
+                        "default": ""
+                      },
+                      "metres": {
+                        "description": "The distance walked, in metres: the whole step with no Until, otherwise the distance past which the step fails short of it. A crossing\u0027s jump across the world is no distance walked.",
+                        "type": "number",
+                        "default": 30
+                      },
+                      "relative": {
+                        "description": "Whether HeadingDegrees turns from the step\u0027s starting facing.",
+                        "type": "boolean",
+                        "default": false
+                      }
+                    },
+                    "required": [
+                      "headingDegrees"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepCross"
+                  },
+                  {
+                    "description": "Stands for a time, the camera turned onto a heading or toward a point; with neither it holds the facing it has.",
+                    "properties": {
+                      "$type": {
+                        "const": "rest"
+                      },
+                      "seconds": {
+                        "description": "The time stood.",
+                        "type": "number"
+                      },
+                      "faceDegrees": {
+                        "description": "The heading faced, or null.",
+                        "type": [
+                          "number",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "lookAt": {
+                        "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                        "description": "The point looked toward, or null.",
+                        "default": null
+                      }
+                    },
+                    "required": [
+                      "seconds"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepRest"
+                  },
+                  {
+                    "description": "Presses an action where the body stands (the program\u0027s button for it), then stands until the body is in a place the world carries it to (a lift arriving) or, with none, for Seconds.",
+                    "properties": {
+                      "$type": {
+                        "const": "press"
+                      },
+                      "action": {
+                        "description": "The action, a word the route\u0027s program maps to a button.",
+                        "type": "string"
+                      },
+                      "until": {
+                        "description": "The place that ends the wait, or null.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
+                      },
+                      "seconds": {
+                        "description": "The time stood after the press with no Until, or the time past which the wait for it fails.",
+                        "type": "number",
+                        "default": 1
+                      }
+                    },
+                    "required": [
+                      "action"
+                    ],
+                    "additionalProperties": false,
+                    "title": "WorldRouteStepPressAction"
+                  }
+                ],
+                "title": "WorldRouteStep"
+              }
+            },
+            "timeoutSeconds": {
+              "description": "The simulated time after which an unfinished chapter fails.",
+              "type": "number",
+              "default": 120
+            }
+          },
+          "required": [
+            "name",
+            "steps"
+          ],
+          "additionalProperties": false,
+          "title": "WorldRouteChapter"
+        }
+      },
+      "seat": {
+        "description": "The 1-based seat that plays it.",
+        "type": "integer",
+        "default": 1
+      },
+      "margin": {
+        "description": "The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top of the walker\u0027s own radius the navigation domains already keep.",
+        "type": "number",
+        "default": 0.25
+      }
+    },
+    "required": [
+      "name",
+      "program",
+      "chapters"
+    ],
+    "additionalProperties": false,
+    "title": "WorldRoute"
+  },
+  "default": null
+}

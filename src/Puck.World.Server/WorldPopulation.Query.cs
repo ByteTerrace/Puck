@@ -284,7 +284,7 @@ public sealed partial class WorldPopulation {
         }
         var total = m_navigation.BakeWork;
 
-        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
+        return $"[world.navigation: retained={m_navigation.RetainedDomainCount},rebuilt={m_navigation.RebuiltDomainCount},rebaked={m_navigation.RebakedDomainCount} cells={m_navigation.CellCount} edges={total.Edges} bake=grounds:{total.Grounds},occupancies:{total.Occupancies},edgeProofs:{total.EdgeProofs},allocated:{total.AllocatedBytes} workspaceBytes={m_navigation.WorkspaceBytes} routeWorkspaceBytes={m_navigation.RouteWorkspaceBytes} junctions={m_navigation.JunctionCount}; {string.Join(
             separator: "; ",
             values: rows
         )}]";

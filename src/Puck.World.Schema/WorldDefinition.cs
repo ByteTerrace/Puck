@@ -97,7 +97,9 @@ public sealed partial record WorldDefinition(
     [property: JsonPropertyName("timeline"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldTimelineSection? TimelineRaw = null,
     [property: JsonPropertyName("commands"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldConsoleCommand>? CommandsRaw = null,
     [property: JsonPropertyName("replays"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldScopedReplay>? ReplaysRaw = null,
-    [property: JsonPropertyName("roles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRole>? RolesRaw = null
+    [property: JsonPropertyName("roles"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRole>? RolesRaw = null,
+    [property: JsonPropertyName("seatPrograms"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldSeatProgram>? SeatProgramsRaw = null,
+    [property: JsonPropertyName("routes"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRoute>? RoutesRaw = null
 ) {
     /// <summary>Gets the companion roles this world declares; absent declares none, so every companion is refused at
     /// reservation.</summary>
@@ -379,6 +381,12 @@ public sealed partial record WorldDefinition(
     /// ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldConsoleCommand> Commands => (CommandsRaw ?? []);
+    /// <summary>Gets the seat programs the document authors (<see cref="WorldSeatProgram"/>) — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldSeatProgram> SeatPrograms => (SeatProgramsRaw ?? []);
+    /// <summary>Gets the routes a seat plays through the world (<see cref="WorldRoute"/>) — ABSENT resolves to none.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<WorldRoute> Routes => (RoutesRaw ?? []);
     /// <summary>Gets the declared probe rows — ABSENT resolves to none.</summary>
     [JsonIgnore]
     public IReadOnlyList<WorldProbe> Probes => (ProbesRaw ?? []);

@@ -19,6 +19,8 @@ documentId: "debug"
 import "../standard/skies"
 import "../standard/free-camera"
 import "../standard/benchmark"
+// The benchmark's route through this world (`world.benchmark run debug`).
+import "benchmark-route"
 import "shapes"
 import "studio"
 import "controls"
