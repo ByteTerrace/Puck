@@ -3,8 +3,8 @@
 // The variants put red's first unit somewhere in blue's fog (cell 1, 5 or 0), take it off the board, or move red's third
 // unit within the fog later in the run; red's second unit steps in every world, then seat 2 (blue) starts both of its
 // computer players and reads the same way in each, with a replica and a presentation session watching. The sharp
-// player's answer is public and scored over red's real cells, so the search door is expected to differ; the fair
-// player's is blue's own and scored over blue's memory.
+// player plans as the world over red's real cells, so its authority-only answer is expected to differ; the fair
+// player plans as blue over blue's memory, and its answer is blue's own.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
