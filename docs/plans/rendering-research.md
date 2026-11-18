@@ -725,10 +725,11 @@ from that plan.
 **The problem.** Background GPU work is everything that is not drawing
 the frame: relighting probes, tracing their rays, sampling the field for
 the bake, and uploading meshes. It is slow because it waits on round
-trips, not because the GPU is busy. The lighting admits one job at a
-time, blocks on each answer, and is granted work for each rendered frame,
-so a game presenting 30 frames a second gets half the lighting of one
-presenting 60. A group's bake makes about twenty round trips. A full bake
+trips, not because the GPU is busy. The lighting now keeps several jobs
+in flight and commits a batch once (`SdfMeshProbeGpuWork.Run`,
+`SdfMeshProbeGpuWork.RecordCommit`), but it is still granted work for each
+rendered frame, so a game presenting 30 frames a second gets half the
+lighting of one presenting 60. A group's bake makes about twenty round trips. A full bake
 batch is about 32 ms of GPU work against an allowance of 4.2 ms, so a
 bake during play already submits jobs several frames long.
 
@@ -740,9 +741,10 @@ bake during play already submits jobs several frames long.
    leave of the display's period, with a lower limit so lighting never
    starves. Every job is cut to fit one frame's allowance.
 2. *Cut bake jobs to the allowance.*
-3. *Let several lighting jobs run at once*, let relights that a lighting
-   change made stale share the worker with traces still owed, and grant
-   lighting work for each second, not each frame.
+3. *Let several lighting jobs run at once* and let relights that a
+   lighting change made stale share the worker with traces still owed
+   (both built; the [convergence checks](../../.claude/skills/rendering/references/mesh-gi.md#lighting-switch-convergence-checks)
+   read them), then grant lighting work for each second, not each frame.
 4. *Move the lighting's work list onto the GPU*, so the CPU reads only
    counters.
 5. *Hand background jobs to the GPU before the frame's own passes are
@@ -762,17 +764,15 @@ before the render size moves. The work list on the GPU and the early
 hand-off sit in two classes of defect that only review catches.
 
 **What we still have to find out.** How much of its allowance the
-background work uses today. How the 44 seconds divides between its three
-causes. The overlapping jobs exist on an unmerged branch that has never
-run in a World.
+background work uses today. How much host time the faster lighting
+costs while it works ([open items](open-items.md#lighting-and-gi)).
 
 **Against the budget.** The background row: at least 1.5 ms of GPU time
 a frame, taken only from what the views leave.
 
-**Evidence.** Checked: the one-at-a-time admission, the blocking wait,
-the grant for each frame, the bake's batch size, and the load source.
-Not checked: the 25 ms round trip, the 44 seconds and the 12.6 ms are
-single readings, and the 12.6 ms records no window size.
+**Evidence.** Checked: the grant for each frame, the bake's batch size,
+and the load source. Not checked: the 12.6 ms is a single reading and
+records no window size.
 
 **Owning plans.** [Illumination](illumination.md) for the lighting, and
 the bake's packet in [open items](open-items.md#bake-proportional-to-change)
