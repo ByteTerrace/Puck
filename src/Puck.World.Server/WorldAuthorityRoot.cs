@@ -51,7 +51,7 @@ public readonly record struct WorldAuthorityRoot(
         ReceiptHash: null,
         ReceiptIndexHash: null,
         Sequence: 0,
-        Version: 1
+        Version: WorldAuthorityRootCodec.CurrentVersion
     );
     /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
@@ -89,6 +89,7 @@ public readonly record struct WorldAuthorityOperationReceipt(
 /// <summary>Encodes the additive mutable authority root and immutable receipt nodes. Existing checkpoint, journal, and
 /// definition payloads are passed through unchanged.</summary>
 internal static class WorldAuthorityRootCodec {
+    internal const int CurrentVersion = 2;
     // The one serializer configuration for authority roots, receipt nodes and recovery roots.
     internal static readonly JsonSerializerOptions Options = new() {
         PropertyNamingPolicy = null,
@@ -112,17 +113,20 @@ internal static class WorldAuthorityRootCodec {
             Options
         );
     }
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityRoot root, out string reason) =>
-        TryDecode(bytes, out root, out reason, out _, migrating: false);
-
-    internal static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityRoot root, out string reason, out bool retiredFields, bool migrating) {
-        retiredFields = false;
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityRoot root, out string reason) {
         try {
             using var document = JsonDocument.Parse(bytes.ToArray());
 
             if (document.RootElement.ValueKind != JsonValueKind.Object) {
                 root = default;
                 reason = "authority root must be a JSON object";
+                return false;
+            }
+            if (document.RootElement.TryGetProperty("version", out var version) &&
+                version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out var declaredVersion) &&
+                declaredVersion != CurrentVersion) {
+                reason = $"AuthorityRootVersionUnsupported: root version {declaredVersion}, expected {CurrentVersion}";
+                root = default;
                 return false;
             }
             var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) {
@@ -137,10 +141,6 @@ internal static class WorldAuthorityRootCodec {
                     root = default;
                     reason = $"duplicate root member '{property.Name}'";
                     return false;
-                }
-                if (migrating && property.Name is "drawSeed" or "drawGeneration") {
-                    retiredFields = true;
-                    continue;
                 }
                 if (!allowed.Contains(item: property.Name)) {
                     root = default;
@@ -170,7 +170,7 @@ internal static class WorldAuthorityRootCodec {
             ) {
                 reason = "rewind boundary is not a full SHA-256 policy pin"; root = default; return false;
             }
-            var scalarFieldsValid = ((root.Version == 1) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
+            var scalarFieldsValid = ((root.Version == CurrentVersion) && (root.Epoch >= 0) && (root.Sequence >= 0) && (root.CheckpointOrdinal >= -1) && (root.DurableOrdinal >= -1) && (root.JournalEntryCount >= 0) && (root.JournalSequence >= -1) && (root.CheckpointCoverageSequence >= -1));
             var journalCoverageValid = (scalarFieldsValid && (root.CheckpointCoverageSequence <= root.JournalSequence) &&
                 ((root.JournalHash is null)
                 ? ((root.JournalEntryCount == 0) && (root.JournalSequence == root.CheckpointCoverageSequence))
@@ -179,7 +179,7 @@ internal static class WorldAuthorityRootCodec {
                     : ((root.JournalSequence - root.CheckpointCoverageSequence) == root.JournalEntryCount))));
 
             if (!journalCoverageValid) {
-                reason = "root version or monotonic fields are invalid";
+                reason = "root monotonic fields are invalid";
                 root = default;
                 return false;
             }

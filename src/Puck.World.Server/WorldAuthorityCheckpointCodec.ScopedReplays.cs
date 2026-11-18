@@ -70,7 +70,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         });
         writer.WriteArray(items: scope.Intents, writeItem: static (w, input) => { w.WriteInt32(value: input.Tick); WriteIntentSubmission(submission: input.Intent, writer: w); });
     }
-    private static WorldScopedReplayCheckpoint ReadScopedReplay(ref WireReader reader, bool retiredDrawFields = false) {
+    private static WorldScopedReplayCheckpoint ReadScopedReplay(ref WireReader reader) {
         var name = reader.ReadString(field: "scope name", maxBytes: MaxStringBytes);
         var start = reader.ReadOptionalClass(readValue: ReadScopeStart);
         var bodies = reader.ReadArray(field: "scope bodies", maximum: MaxCollectionCount, readItem: ReadPopulationEntry);
@@ -88,7 +88,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         var hashes = reader.ReadArray(field: "scope hashes", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => r.ReadUInt64());
         var cursor = reader.ReadInt32(); var inputCursor = reader.ReadInt32();
         var recording = reader.ReadBoolean(); var active = reader.ReadBoolean(); var diverged = reader.ReadBoolean();
-        var words = retiredDrawFields ? [] : reader.ReadArray("scope draw inputs", static (ref WireReader r) =>
+        var words = reader.ReadArray("scope draw inputs", static (ref WireReader r) =>
             (r.ReadInt32(), WorldReplaySnapshot.ReadPrivateWord(ref r)), MaxCollectionCount);
         var commands = reader.ReadArray(field: "scope commands", maximum: MaxCollectionCount, readItem: static (ref WireReader r) => {
             var tick = r.ReadInt32();

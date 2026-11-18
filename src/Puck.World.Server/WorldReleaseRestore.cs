@@ -195,10 +195,12 @@ public sealed class WorldReleaseRestore(IObjectBlobStore blobs, ObjectStorageTar
                 bytes: bytes.Span,
                 checkpoint: out var checkpoint,
                 reason: out var reason
-            ) ||
-                (checkpoint!.Server.LastCompletedTick != row.Value.Tick)
+            )
             ) {
-                throw new InvalidDataException(message: $"'{row.Key}' recovery checkpoint is invalid: {reason}");
+                throw new InvalidDataException(message: $"'{row.Key}' rewind checkpoint refused — {reason}. Select a point captured with the current authority.");
+            }
+            if (checkpoint!.Server.LastCompletedTick != row.Value.Tick) {
+                throw new InvalidDataException(message: $"'{row.Key}' rewind checkpoint tick differs from its inventory");
             }
             checkpoints.Add(item: checkpoint);
             using var document = JsonDocument.Parse(checkpoint.Server.DefinitionJson);

@@ -4,15 +4,22 @@ namespace Puck.World;
 
 /// <summary>The credential created by a host for one activation. Tape and journal controls stay with the server.</summary>
 public sealed class WorldPrivateDrawKeys : WorldDrawSampler {
-    private WorldPrivateDrawKeys(byte[] seed, bool recordedOnly = false, bool canInstall = true, bool preview = false)
-        : base(seed, recordedOnly, canInstall, preview) { }
+    private WorldPrivateDrawKeys(byte[] seed, bool recordedOnly = false, bool canInstall = true, bool preview = false, bool scenario = false)
+        : base(seed, recordedOnly, canInstall, preview) => IsScenario = scenario;
+
+    internal bool IsScenario { get; }
+    internal void RequireArenaSampler(bool scenario) {
+        if (PreviewWords || (IsScenario && !scenario)) {
+            throw new InvalidDataException("PrivateDrawSamplerRefused: preview and scenario samplers cannot run a live authority.");
+        }
+    }
 
     /// <summary>Creates an independent stream family before the activation begins.</summary>
     public static WorldPrivateDrawKeys Create() => new(RandomNumberGenerator.GetBytes(32));
     /// <summary>A deterministic sampler for an isolated authoring run.</summary>
     public new static WorldPrivateDrawKeys Preview => new(new byte[32], preview: true);
     /// <summary>The authority for a reproducible scenario run. Its draws are live state within that run.</summary>
-    public static WorldPrivateDrawKeys ForScenario() => new(new byte[32]);
+    public static WorldPrivateDrawKeys ForScenario() => new(new byte[32], scenario: true);
     internal new static WorldPrivateDrawKeys Missing => new(new byte[32], canInstall: false);
     internal static WorldPrivateDrawKeys Recorded => new(new byte[32], recordedOnly: true);
     internal new void AdvanceGeneration() => base.AdvanceGeneration();

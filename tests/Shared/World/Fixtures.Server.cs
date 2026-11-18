@@ -176,6 +176,7 @@ internal static partial class Fixtures {
         drawKeys ??= WorldPrivateDrawKeys.ForScenario();
         var server = new WorldServer(
             drawKeys: drawKeys,
+            scenario: true,
             definition: definition,
             population: population,
             profiles: profiles,

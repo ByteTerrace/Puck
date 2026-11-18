@@ -48,6 +48,47 @@ public sealed partial class WorldScopedReplayTests {
     }
 
     [Fact]
+    public void AWholeTapeAndHistoryReproduceAnExtraPrivateReadThatRewound() {
+        var document = Document();
+        var draw = new Draw(PrivateStream: true, Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw));
+        document = document.WithWorldState([
+            .. document.AuthoredState.Select(row => row.Name.Value == "counter" ? row with { Draw = draw } : row),
+            StateFixtures.IntSlot("zero")
+        ]) with {
+            Rules = [new WorldRule(Name: CellName.Parse("extra-roll"), Effects: [new ActionEffect.Transaction([
+                new ActionEffect.Generate("counter"),
+                new ActionEffect.SetState("counter", Expression: new ExpressionProgram([
+                    Instruction.Constant(1m), Instruction.Operand(name: "zero"), Instruction.Of(ExpressionOp.Divide)
+                ]))
+            ])], Gate: new ActionPredicate.CompareState("witness", ExpressionOp.Greater, 0), Mode: ActionTriggerMode.Level)]
+        };
+        using var harness = new WorldHistoryHarness(definition: document, on: false);
+        void RequestScope(int request, int ticks) {
+            harness.Tape.RequestScope(harness.Tape.Scopes[0], request, Principal.Console);
+            harness.Steps(ticks);
+        }
+        RequestScope(4, 2);
+        RequestScope(1, 8);
+        var scope = harness.Fixture.Server.ScopedReplays[0];
+        var first = scope.Checkpoint();
+        Assert.Empty(first.Words);
+        Assert.Equal(3, Read(harness.Fixture, "control", "status"));
+
+        Assert.True(harness.History.TryOn(WorldHistory.DefaultWindowSeconds, WorldHistory.DefaultBudgetBytes, out var reason), reason);
+        Assert.True(harness.Tape.TryBeginRecording("extra-private-read", out reason), reason);
+        harness.Submit(new WorldMutation.UpsertStateCell(Principal.Console, "witness", "$value", 1, WorldDocumentWriteKind.Set));
+        RequestScope(1, 8);
+        Assert.Equal(first.Hashes[^1], scope.Hash());
+        Assert.Equal(-1, Read(harness.Fixture, "control", "status"));
+        var target = harness.Tick;
+        harness.Steps(2);
+        var stop = harness.Tape.StopRecording();
+        Assert.True(stop.Verdict!.Passing, stop.Verdict.Describe());
+        Assert.True(harness.Tape.Verify("extra-private-read").Passing);
+        _ = harness.SeekAndProve(target);
+    }
+
+    [Fact]
     public void ARefusedScopeRestoreEndsItsDriveAndCanBeStartedAgain() {
         using var fixture = Fixtures.FreshServer(GrowingInventory());
         Request(fixture, 4);

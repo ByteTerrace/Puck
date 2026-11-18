@@ -429,6 +429,14 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         return 1;
     }
     using var compositionWorkspace = worldSource.Staging;
+    if (batchHost is null && connectTarget is null) {
+        try {
+            LocalWorldMigration.RemoveRetiredPrivateDrawFiles(stateRoot);
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+            Console.Error.WriteLine($"[world] LocalWorldMigrationRefused: {error.Message}");
+            return 1;
+        }
+    }
     if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
         // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authorityNamespace absent
         // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
@@ -607,6 +615,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         ExtensionsConfiguration = extensionsConfiguration,
         FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
         ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
+        Scenario = batchHost is not null,
         StorageTarget = storageTarget,
         StorageUserId = parseResult.GetValue(option: userIdOption),
         Unpaced = unpaced,

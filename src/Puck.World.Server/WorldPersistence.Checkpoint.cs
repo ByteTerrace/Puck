@@ -516,7 +516,7 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
-        var keys = drawKeys ?? WorldPrivateDrawKeys.Create();
+        var keys = drawKeys ?? WorldPrivateDrawKeys.Missing;
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
             drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);

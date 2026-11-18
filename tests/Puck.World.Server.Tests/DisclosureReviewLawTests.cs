@@ -11,6 +11,38 @@ public sealed class DisclosureReviewLawTests {
     ]) with { Rules = [] };
 
     [Fact]
+    public void LiveArenaRefusesPublicSamplersAndMissingKeysByName() {
+        var document = PrivateDice();
+        using var fixture = Fixtures.FreshServer(document);
+        WorldServer Open(WorldPrivateDrawKeys? keys) => new(document, new WorldPopulation(document),
+            fixture.Server.Profiles, new WorldRenderEnvelope(), fixture.Server.Machines, drawKeys: keys);
+
+        var preview = WorldPrivateDrawKeys.Preview;
+        Assert.True(WorldDefinitionLoader.TryDraw(document, "preview", "boot", out var drawn, out var reason, preview), reason);
+        Assert.Null(drawn.AuthoredState[0].Draw!.Secret!.Open(WorldPrivateDrawKeys.Create()));
+        foreach (var sampler in new[] { preview, WorldPrivateDrawKeys.ForScenario() }) {
+            Assert.Contains("PrivateDrawSamplerRefused", Assert.Throws<InvalidDataException>(() => Open(sampler)).Message);
+        }
+        Assert.Contains("PrivateDrawSeedMissing", Assert.Throws<InvalidDataException>(() => Open(null)).Message);
+        Assert.True(fixture.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var checkpoint, out reason), reason);
+        Assert.Contains("PrivateDrawSeedMissing", Assert.Throws<InvalidDataException>(() =>
+            WorldServer.FromCheckpoint(checkpoint!, fixture.Server.Profiles, fixture.Server.Machines, "boot")).Message);
+    }
+
+    [Fact]
+    public void AScenarioNeighbourWithoutRecordedPrivateWordsRefusesByName() {
+        using var files = new Puck.Testing.TemporaryDirectory();
+        var path = files.PathOf("neighbour.world.json");
+        File.WriteAllBytes(path, WorldDefinitionSerialization.Serialize(PrivateDice()));
+        using var host = new WorldInstanceHost(WorldEmbodiedSeats.None, new WorldSessionResolver(), Guid.NewGuid(),
+            new WorldStateRoot(files.RootPath), TestContext.Current.CancellationToken, Fixtures.MachineHostFactory, scenario: true);
+
+        Assert.False(host.TryStart("neighbour", path, out var instance, out var reason));
+        Assert.Null(instance);
+        Assert.Contains("MissingPrivateDraw: scenario instance 'neighbour' has no recorded private draw words", reason);
+    }
+
+    [Fact]
     public void SearchCannotSampleAnInstalledPrivateSite() {
         var keys = WorldPrivateDrawKeys.Create();
         using var fixture = Fixtures.FreshServer(PrivateDice(), drawKeys: keys);

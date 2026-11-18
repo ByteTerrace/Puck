@@ -85,7 +85,7 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
             out _,
             out var reason
         )) {
-            throw new InvalidDataException(message: ("receipt snapshot source root is invalid: " + reason));
+            throw new InvalidDataException(message: $"receipt snapshot source root refused — {reason}. Select a capture made by the current authority.");
         }
         var receipts = new Dictionary<Guid, WorldAuthorityOperationReceipt>();
 

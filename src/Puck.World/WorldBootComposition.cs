@@ -154,8 +154,9 @@ public static class WorldBootComposition {
     /// The authoritative core registers every server-safe service in every boot shape.
     /// </summary>
     /// <param name="services">The service collection.</param>
+    /// <param name="scenario">Whether the process hosts an isolated deterministic scenario.</param>
     /// <returns>The same service collection, for chaining.</returns>
-    public static IServiceCollection AddWorldAuthoritativeCore(this IServiceCollection services) {
+    public static IServiceCollection AddWorldAuthoritativeCore(this IServiceCollection services, bool scenario = false) {
         ArgumentNullException.ThrowIfNull(argument: services);
         Puck.Memory.PuckMemoryServiceRegistration.AddPuckAllocator(services: services);
 
@@ -866,7 +867,7 @@ public static class WorldBootComposition {
         // by construction, so it works identically headless or windowed. The engine is boot-free at construction —
         // this factory admits the desktop's one boot row (AdmitBoot) immediately after building the host, so every
         // other resolver sees a fully admitted registry.
-        services.AddSingleton(implementationFactory: static sp => {
+        services.AddSingleton(implementationFactory: sp => {
             var host = new WorldInstanceHost(
                 seats: sp.GetRequiredService<IWorldEmbodiedSeats>(),
                 resolver: sp.GetRequiredService<WorldSessionResolver>(),
@@ -880,7 +881,8 @@ public static class WorldBootComposition {
                 machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
                 pacing: sp.GetRequiredService<HostPacing>(),
                 presents: (sp.GetService<WorldHostSettings>() is not { Headless: true }),
-                jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>()
+                jobs: sp.GetRequiredService<Puck.Hosting.Jobs.JobPool>(),
+                scenario: scenario
             );
             var bootOrigin = sp.GetRequiredService<WorldDefinitionSource>();
             var bootServer = sp.GetRequiredService<WorldServer>();
@@ -1091,7 +1093,9 @@ public static class WorldBootComposition {
         services.AddSingleton<Puck.Hosting.Jobs.JobPool>();
         services.AddSingleton(implementationInstance: new WorldCaptureRoot(path: inputs.CaptureDirectory));
         services.AddSingleton(implementationInstance: new WorldScheduleRoot(path: inputs.ScheduleDirectory));
-        services.AddSingleton(implementationInstance: worldSource.DrawKeys as WorldPrivateDrawKeys ?? WorldPrivateDrawKeys.Create());
+        if (worldSource.DrawKeys is WorldPrivateDrawKeys drawKeys) {
+            services.AddSingleton(implementationInstance: drawKeys);
+        }
         services.AddSingleton(implementationInstance: worldSource);
         services.AddSingleton(implementationInstance: worldSource.Definition);
         if (worldSource.Admission is { } bootAdmission) {
@@ -1169,12 +1173,12 @@ public static class WorldBootComposition {
         // The authoritative core registers in every shape; the GPU host, render root, overlays, audio device,
         // screens/machines, gamepads, and editor register only when presentation is composed. WorldPostBuildWiring
         // holds the shared every-shape wiring that runs once the container is built.
-        services.AddWorldAuthoritativeCore();
-        if (inputs.ConnectionSubject is { } connectionSubject) {
-            services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<WorldServer>(
-                sp,
-                connectionSubject
-            ));
+        services.AddWorldAuthoritativeCore(scenario: inputs.Scenario);
+        if (inputs.Scenario || inputs.ConnectionSubject is not null) {
+            object[] arguments = inputs.ConnectionSubject is { } connectionSubject
+                ? [connectionSubject, inputs.Scenario]
+                : [inputs.Scenario];
+            services.AddSingleton(implementationFactory: sp => ActivatorUtilities.CreateInstance<WorldServer>(sp, arguments));
         }
 
         services.AddSingleton(implementationInstance: new WorldServiceExtensionOptions(Configuration: inputs.ExtensionsConfiguration));

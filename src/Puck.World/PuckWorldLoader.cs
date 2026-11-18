@@ -205,18 +205,24 @@ internal static class PuckWorldLoader {
         }
 
         if (compiled!.Worlds.Count > 0) {
-            return TryBootComposition(
-                preview: preview,
-                caches: caches,
-                catalog: catalog,
-                catalogFingerprint: catalogFingerprint,
-                failure: out failure,
-                named: entry,
-                overrides: overrides,
-                path: path,
-                source: out source,
-                worlds: compiled.Worlds
-            );
+            try {
+                return TryBootComposition(
+                    preview: preview,
+                    caches: caches,
+                    catalog: catalog,
+                    catalogFingerprint: catalogFingerprint,
+                    failure: out failure,
+                    named: entry,
+                    overrides: overrides,
+                    path: path,
+                    source: out source,
+                    worlds: compiled.Worlds
+                );
+            } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+                source = null!;
+                failure = $"[world] composition refused: {error.Message}";
+                return false;
+            }
         }
 
         if (entry is not null) {
