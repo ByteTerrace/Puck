@@ -199,7 +199,7 @@ public sealed partial class NavigationRuntime {
                 RelaxRoute(bounds: in bounds, cost: checked((workspace.Cost[current] + cost[step])), node: (workspace.Offsets[domainIndex] + next[step]), order: order, parent: current, workspace: workspace);
             }
 
-            var position = domain.Position(node: cell);
+            var position = domain.Foot(node: cell);
 
             for (var other = 0; (other < m_domains.Length); other++) {
                 if ((other != domainIndex) && !workspace.Joined[((domainIndex * m_domains.Length) + other)] && m_domains[other].CoversRouteHeight(position: in position)) {
@@ -275,6 +275,10 @@ public sealed partial class NavigationRuntime {
     }
     // Records every junction between two domains, in both directions, the first time a search needs them.
     private void Join(int first, int second, RouteWorkspace workspace) {
+        // The cached result is a property of the pair, independent of the search that first reached it.
+        if (first > second) {
+            (first, second) = (second, first);
+        }
         workspace.Joined[((first * m_domains.Length) + second)] = true;
         workspace.Joined[((second * m_domains.Length) + first)] = true;
 
@@ -293,13 +297,13 @@ public sealed partial class NavigationRuntime {
                 continue;
             }
 
-            var position = left.Position(node: cell);
+            var position = (surfaces ? left.Foot(node: cell) : left.Position(node: cell));
 
-            if (!right.CoversRouteHeight(position: in position) || !right.TryCell(node: out var other, position: in position)) {
+            if (!right.TryCell(node: out var other, position: in position)) {
                 continue;
             }
 
-            var shared = right.Position(node: other);
+            var shared = (surfaces ? right.Foot(node: other) : right.Position(node: other));
 
             if (
                 (shared.X != position.X) ||

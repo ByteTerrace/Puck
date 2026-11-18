@@ -15,8 +15,8 @@ public interface IRegionalContactField : IContactField {
     /// <summary>Bounds where this field and another part of the same provider differ: every query whose body and sweep
     /// stay clear of the box answers alike in both.</summary>
     /// <param name="other">The other part.</param>
-    /// <param name="changed">The box holding every collider one of the two holds and the other does not; empty when they
-    /// hold the same colliders.</param>
+    /// <param name="changed">The box holding the geometry that changed, including changes to collider order; empty
+    /// when the two parts are equal.</param>
     /// <returns><see langword="true"/> when the two can be compared (the same kind of field under the same tuning);
     /// otherwise the difference is unbounded.</returns>
     bool TryDifference(IContactField other, out FixedAabb changed);
@@ -192,28 +192,28 @@ public sealed class FixedStaticContactField : IRegionalContactField, IEquatable<
             return false;
         }
 
-        // A collider counted once per copy on each side: what remains unmatched on either side changed.
-        var counts = new Dictionary<FixedStaticCollider, int>();
+        // Contact relaxation visits colliders in order. Keep the equal prefix and suffix; a reorder in the middle
+        // can change the result even when both parts contain the same colliders.
+        var first = 0;
+        var end = m_colliders.Length;
+        var otherEnd = field.m_colliders.Length;
 
-        foreach (var collider in m_colliders) {
-            counts[collider] = (counts.GetValueOrDefault(key: collider) + 1);
+        while ((first < end) && (first < otherEnd) && (m_colliders[first] == field.m_colliders[first])) {
+            first++;
         }
-        foreach (var collider in field.m_colliders) {
-            counts[collider] = (counts.GetValueOrDefault(key: collider) - 1);
+        while ((first < end) && (first < otherEnd) && (m_colliders[(end - 1)] == field.m_colliders[(otherEnd - 1)])) {
+            end--;
+            otherEnd--;
         }
 
         var mine = Set.Boxes;
         var theirs = field.Set.Boxes;
 
-        for (var index = 0; (index < m_colliders.Length); index++) {
-            if (counts[m_colliders[index]] > 0) {
-                changed = changed.Enclose(other: mine[index]);
-            }
+        for (var index = first; (index < end); index++) {
+            changed = changed.Enclose(other: mine[index]);
         }
-        for (var index = 0; (index < field.m_colliders.Length); index++) {
-            if (counts[field.m_colliders[index]] < 0) {
-                changed = changed.Enclose(other: theirs[index]);
-            }
+        for (var index = first; (index < otherEnd); index++) {
+            changed = changed.Enclose(other: theirs[index]);
         }
 
         return true;

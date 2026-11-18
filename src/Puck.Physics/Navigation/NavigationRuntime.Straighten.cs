@@ -37,12 +37,17 @@ public sealed partial class NavigationRuntime {
                 var misses = 0;
 
                 for (var next = (anchor + 1); ((next < route.Count) && ((next - anchor) <= MaxSightNodes) && (route[next].Domain == from.Domain)); next++) {
-                    if (domain.IsStraightClear(from: start, margin: margin, to: domain.Foot(node: route[next].Cell))) {
+                    if (domain.CheckStraight(from: start, margin: margin, to: domain.Foot(node: route[next].Cell), checkContact: false)) {
                         best = next;
                         misses = 0;
                     } else if (++misses >= MaxSightMisses) {
                         break;
                     }
+                }
+                // A path through clear cells is only a candidate. Sweep the actual shortcut before keeping it;
+                // the original graph edge to the immediate neighbour already has its own sweep proof.
+                while ((best > (anchor + 1)) && !domain.IsStraightClear(from: start, margin: margin, to: domain.Foot(node: route[best].Cell))) {
+                    best--;
                 }
             }
 
@@ -54,18 +59,25 @@ public sealed partial class NavigationRuntime {
     /// <summary>Finds the walkable cell a body standing at a position starts a route from: the cell
     /// <see cref="TryLocate"/> names there, or, where the body stands closer to an edge than a cell's center may (against
     /// a wall, in a doorway), the nearest walkable cell within <paramref name="reach"/> cells of it in a domain whose
-    /// height band holds the position. Bakes each domain it asks.</summary>
+    /// height band holds the position. A surface cell must also admit the sweep from the body's exact position to
+    /// its center. Bakes each domain it asks.</summary>
     /// <param name="position">The body's foot.</param>
     /// <param name="reach">The most cells, along X or Z, the search looks away from the position's own cell.</param>
     /// <param name="domain">The cell's domain, or -1.</param>
     /// <param name="cell">The cell, or -1.</param>
+    /// <param name="connects">Optional connector proof for a live body, with its actual collider and contact field.</param>
     /// <returns><see langword="true"/> when a cell was found.</returns>
-    public bool TryLocateNear(in FixedVector3 position, int reach, out int domain, out int cell) {
-        if (TryLocate(cell: out cell, domain: out domain, position: in position)) {
+    public bool TryLocateNear(in FixedVector3 position, int reach, out int domain, out int cell, Func<Domain, int, bool>? connects = null) {
+        var start = position;
+
+        connects ??= (candidate, node) => candidate.ConnectsTo(position: in start, node: node);
+        if (TryLocate(cell: out cell, domain: out domain, position: in position) && connects(m_domains[domain], cell)) {
             return true;
         }
 
-        var best = Int128.MaxValue;
+        cell = -1;
+        domain = -1;
+        var best = FixedQ4816.MaxValue;
 
         for (var index = 0; (index < m_domains.Length); index++) {
             var candidate = m_domains[index];
@@ -86,10 +98,9 @@ public sealed partial class NavigationRuntime {
                         continue;
                     }
 
-                    var offset = (candidate.Foot(node: node) - position);
-                    var distance = ((((Int128)offset.X.Value) * offset.X.Value) + (((Int128)offset.Y.Value) * offset.Y.Value) + (((Int128)offset.Z.Value) * offset.Z.Value));
+                    var distance = (candidate.Foot(node: node) - position).LengthSquared;
 
-                    if (distance < best) {
+                    if ((distance < best) && connects(candidate, node)) {
                         best = distance;
                         domain = index;
                         cell = node;
@@ -106,13 +117,17 @@ public sealed partial class NavigationRuntime {
         /// sample along the segment, half a cell apart, stands on a walkable cell, and so does every point
         /// <paramref name="margin"/> from it along X and along Z; each sample's ground lies within a step of the one
         /// before it and of its margin points' grounds; and each move from one sample's cell to the next is an edge
-        /// the bake proved traversable. A volume or medium domain answers <see langword="false"/>. Bakes the
+        /// the bake proved traversable. The agent also sweeps clear along the actual line between the samples.
+        /// A volume or medium domain answers <see langword="false"/>. Bakes the
         /// domain.</summary>
-        /// <param name="from">The start, a body's foot or a cell's foot; only X and Z are read.</param>
+        /// <param name="from">The start, a body's foot or a cell's foot.</param>
         /// <param name="to">The end.</param>
         /// <param name="margin">The clearance, in metres, kept from the edge of the walkable cells.</param>
         /// <returns><see langword="true"/> when the segment is clear.</returns>
-        public bool IsStraightClear(in FixedVector3 from, in FixedVector3 to, FixedQ4816 margin) {
+        public bool IsStraightClear(in FixedVector3 from, in FixedVector3 to, FixedQ4816 margin) =>
+            CheckStraight(from: in from, to: in to, margin: margin, checkContact: true);
+
+        internal bool CheckStraight(in FixedVector3 from, in FixedVector3 to, FixedQ4816 margin, bool checkContact) {
             if (Tuning.Kind != NavigationKind.Surface) {
                 return false;
             }
@@ -125,6 +140,7 @@ public sealed partial class NavigationRuntime {
             var step = Tuning.MaxStepHeight;
             var previous = -1;
             var previousGround = FixedQ4816.Zero;
+            var previousFoot = from;
 
             for (var index = 0; (index <= samples); index++) {
                 var fraction = (FixedQ4816.FromInteger(value: index) / FixedQ4816.FromInteger(value: samples));
@@ -144,12 +160,37 @@ public sealed partial class NavigationRuntime {
                 if (!MarginClear(ground: ground, margin: margin, point: in point, step: step)) {
                     return false;
                 }
+                if (checkContact) {
+                    var foot = ((index == 0) ? from : ((index == samples) ? to : point with { Y = (ground - Tuning.AgentRadius) }));
+
+                    if (!SurfaceSweepClear(startFoot: in previousFoot, endFoot: in foot)) {
+                        return false;
+                    }
+                    previousFoot = foot;
+                }
 
                 previous = cell;
                 previousGround = ground;
             }
 
             return true;
+        }
+
+        internal bool ConnectsTo(in FixedVector3 position, int node) => ((Tuning.Kind == NavigationKind.Surface)
+            ? SurfaceSweepClear(startFoot: in position, endFoot: Foot(node: node))
+            : AdmitsLocomotion(from: in position, to: Position(node: node)));
+
+        // A connection between actual foot points uses the same raised clearance volume as a baked surface edge.
+        private bool SurfaceSweepClear(in FixedVector3 startFoot, in FixedVector3 endFoot) {
+            if (FixedQ4816.Abs(value: (startFoot.Y - endFoot.Y)) > Tuning.MaxStepHeight) {
+                return false;
+            }
+
+            var height = (FixedQ4816.Max(x: startFoot.Y, y: endFoot.Y) + m_lift);
+            var start = startFoot with { Y = height };
+            var end = endFoot with { Y = height };
+
+            return FixedContactProbe.IsClear(field: m_geometry, start: start, end: end, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent);
         }
 
         // Whether the four points a margin from a sample along X and Z stand on walkable cells whose ground lies within
