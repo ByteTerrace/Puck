@@ -1,5 +1,5 @@
 ---
-description: "Incidental rule. The task is a build error after a rename; at stake only in passing is AGENTS.md:382-383 ('When you are the delegate': merge the integration tip into your own branch before reporting and re-run checks). verification/SKILL.md:210-212 records the cost of skipping it: a CLI copy older than the merge rejected documents that used new schema members."
+description: "Incidental rule. The task is a build error after a rename; at stake only in passing is AGENTS.md 'When you are the delegate' (merge the integration tip into your own branch before reporting, and take the build and the boot on that merged head). verification/SKILL.md:210-212 records the cost of skipping it: a CLI copy older than the merge rejected documents that used new schema members."
 tags: [capability]
 runs: 5
 max_turns: 8

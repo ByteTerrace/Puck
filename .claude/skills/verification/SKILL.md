@@ -15,10 +15,12 @@ What the owner says in a session overrides this skill and is written into it in
 that session.
 
 During the refactoring campaign the owner has lifted every test requirement
-([AGENTS.md](../../../AGENTS.md#puck-is-pre-release)): the landing bar below
-reduces to building what a change touched and running what it changed. Suites,
-coverage, red legs and focused tests are optional tools, and a red one holds
-nothing back.
+([AGENTS.md](../../../AGENTS.md#puck-is-pre-release)), and the owner's ruling
+is code first, verification after: for a lane, the landing bar below reduces
+to building what it touched and booting the debug world once. Windowed runs,
+benchmarks, look critics and broad tests are the lead's batch pass over many
+landed changes. Suites, coverage, red legs and focused tests are optional
+tools, and a red one holds nothing back.
 
 For settled mesh comparisons, `world.wait bakes` finishes CPU bake/contour work;
 `world.wait ready` finishes renderer startup. Neither proves GPU mesh landing.
@@ -45,8 +47,9 @@ before the measured interval when comparing only the boot world's work. Use
 not totals that include neighboring worlds' earlier work.
 ## The landing bar
 
-Iteration uses load-independent evidence and only the scenarios a change
-reaches: `puck test <source> --filter '<test-name-or-glob>' --reproduce --jobs 1`.
+A check a brief asks for beyond the build and the boot uses load-independent
+evidence and only the scenarios the change reaches:
+`puck test <source> --filter '<test-name-or-glob>' --reproduce --jobs 1`.
 Repeat `--filter` for alternatives; generated world names and authored test
 names both match, and the verb reports the skipped count. The same selection
 governs `--record` and `--compare`. The lead runs full suites once per batch.
@@ -100,9 +103,11 @@ sampling and timing would consume their deadline. Preflight console recipes
 after integration: memory compaction is `host.memory collect`; renderer-only
 probe help is absent in a headless World.
 
-Steps 1 to 3 make a lane ready for a batch. Steps 4 and 5 need a windowed World,
-so the integration lane's sweep reads them
-([orchestration](../orchestration/SKILL.md#land-in-batches)).
+Steps 1 and 2 make a lane ready for a batch, with step 3 where the change
+touches a test. Steps 4 and 5 need a windowed World, so the lead's batch pass
+reads them once over the merged batch
+([orchestration](../orchestration/SKILL.md#land-in-batches)); a lane never
+runs them to prove its own change, and never re-runs a check for confidence.
 
 1. A zero-warning, zero-error Release build of what the change touched
    (`dotnet build <project> -c Release -nodeReuse:false`; a coding lane never
@@ -111,16 +116,24 @@ so the integration lane's sweep reads them
    current tip merged in. A build or check that passed before the integration
    branch moved says nothing about the merged head: merge the tip, then build
    and run again.
-2. The change shown working by running or measuring it: run `Puck.World` or the
-   verb, drive a stdin script, take a capture, read a count. The commit body
-   says what you ran and what it showed.
+2. The debug world booted once on that merged head, and the change seen
+   running in it where a headless boot can show it: a console answer, a count,
+   a log line, or the verb's own output for a tool change. The commit body
+   says what you ran and what it showed. A check that needs a window goes to
+   the lead as a verification request
+   ([delegate](../delegate/SKILL.md#build-and-run)).
 3. Tests kept honest: write one only where running cannot show the behavior and
    it will outlive the next rewrite; a test the change breaks is updated or
    deleted in the same change. Run the tests you added or touched.
 4. Frame time held, for a change that reaches the running World (simulation,
-   presentation, physics, rendering, addons, the debug world's documents): the
-   bar devices hold the frame bar at the highest settings (AGENTS.md), and that
-   is the owner's floor, not a goal. The integration lane's sweep reads it under
+   presentation, physics, rendering, addons, the debug world's documents): each
+   bar device holds the frame bar at its own highest quality (AGENTS.md, "Upper
+   hardware enhances"), and that is the owner's floor, not a goal. The bar is
+   read at 2560 by 1440 on the RTX 4070, the device the work meets first, with
+   the authority in process and again remote. `puck benchmark` and `bench
+   frames` open that size by default; a reading at another `--width` and
+   `--height`, or from `bench startup` (which keeps 1280 by 720, since it times
+   boot), is not a bar reading. The integration lane's sweep reads it under
    a granted GPU leg: in a windowed World with its bakes settled, `host.frames`
    after standing still and again after the batch's workload (walk the area it
    touches, `player.move` in a `world.at` script), and the sweep's report states
@@ -271,8 +284,11 @@ gates, and it is read in the integration lane's sweep on that quiet machine.
 
 A change that is not about performance still owes a cost check when it puts
 work on a per-tick or per-frame path (delivery, disclosure, snapshot, rule
-evaluation, a recorder): read the debug world's allocated bytes and the counts
-of the work it adds per tick, before and after, from a headless boot. Disclosure
+evaluation, a recorder): the debug world's allocated bytes and the counts of
+the work it adds per tick, from a headless boot. The lane reads them in its one
+boot and names the path in its hand-back; the comparison with the previous tip
+is the batch's counter sweep
+([orchestration](../orchestration/SKILL.md#coding-lanes-and-the-integration-lane)). Disclosure
 step 1 passed every correctness check and review while re-serializing the whole
 21.7 MB definition every tick, which took the debug world to about 6 FPS; one
 allocation reading per tick would have shown it.
@@ -300,7 +316,13 @@ enough. Read the scene from the world before judging any pixel:
 
 The judge is a reader that did not build the change (a fresh `reviewer` or a
 look-critic brief) given the captures, the picks and the reference, never the
-builder's own account.
+builder's own account. A creation gets at most two critic rounds per wave; a
+third failure changes the approach or goes to the owner. A defect whose cause
+is an engine limit is not sculpted around: the lane stops and names the gap,
+which goes to the front of its owning plan's order (AGENTS.md, "Puck's
+purpose"). A change that still misses the bar may land when it is a material
+improvement on what the tree holds, with its failures and the gaps behind them
+stated in the commit; the verdict stays a fail.
 
 ## Run verbs from your own CLI copy
 

@@ -24,6 +24,13 @@ did my change create it, reveal it, or merely walk past it?
 The test is ownership, not effort: a one-line fix to a file outside your change
 is still recorded, not fixed. A finding recorded nowhere was dropped, not left.
 
+Duplicate code is the one exception, by AGENTS.md's vigilance against
+duplication: a second implementation, copied logic or parallel helper you read
+or touch is refactored to one in the same change, with every caller fixed.
+Only a duplicate too large for the change is recorded, in the refactoring
+packet with its file and line, and it is dispatched in the next wave. "Code
+first, verification after" defers verification, never this.
+
 ## Every code change owns a documentation audit
 
 Before calling a code change done, state its contract delta (names, behavior,

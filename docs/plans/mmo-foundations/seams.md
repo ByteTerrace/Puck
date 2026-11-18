@@ -432,7 +432,7 @@ Each leading option can be proved in `worlds/debug` with a small, concrete scena
 
 ### Opened files in this worktree (`[opened]`)
 
-- `AGENTS.md:1-456`
+- `AGENTS.md`, the whole file
 - `.claude/skills/delegate/SKILL.md:1-145`
 - `docs/architecture/worlds.md:1-1503` (specifically `#the-idea-in-plain-terms` at `:15-167`, `#portal-composition` at `:466-487`, `#adjacency-and-crossing` at `:488-555`, `#references-destinations-and-sessions` at `:557-600`, `#joining-admission-and-observation` at `:745-935`, `#nested-views` at `:1080-1169`, `#transfer-determinism-and-replay` at `:1170-1343`, `#federated-transfer` at `:1344-1391`, `#scale-and-authority` at `:1392-1415`, and `#decisions-and-exclusions` at `:1449-1470`)
 - `docs/plans/mmo-foundations.md:1-119`

@@ -374,7 +374,16 @@ What a first swallow taught, in the order it went wrong:
 - **Judge every side.** A side view read right while the front showed a
   screaming face. Capture front, side, three-quarter, back and close, plus a
   presented burst for motion, and keep going while any of them shows a
-  defect. Work you can see fails is not shown as progress.
+  defect your authoring can fix. Work you can see fails is not shown as
+  progress.
+- **A creation that pushes the engine is a probe (AGENTS.md, "Puck's
+  purpose").** When a defect is an engine limit (a tear the bake cannot close,
+  detail the animated bake cannot hold), stop sculpting around it: name the
+  limit with its evidence and hand it back, so the gap goes to the front of its
+  owning plan. A creation gets at most two look-critic rounds per wave. One
+  that still misses the bar may land when it is a material improvement on what
+  the tree holds, with its failures and the gaps behind them stated in the
+  commit.
 - **Push a live edit as a row when `world.reload` is refused.** The debug
   world's rebuild exceeds the transport cap (open items), so compile the
   `.puck` and send the creation's document with
