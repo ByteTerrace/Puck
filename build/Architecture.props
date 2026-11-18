@@ -120,7 +120,8 @@
     <!--
         PROVIDER INDEPENDENCE (PUCKARCH009) — Azure and Entra are today's deployment and identity providers, never part
         of an engine, protocol or trust contract (AGENTS.md, "Puck is provider-independent"). A project that implements
-        a provider declares <PuckProvider> in its csproj, read like <PuckLayer>; a project that declares no
+        a provider declares <PuckProvider> in its csproj, read like <PuckLayer> (a file-based app, whose project is
+        synthesized, declares it as a `#:property PuckProvider=<name>` directive); a project that declares no
         provider, or another one, may hold neither a provider project nor a provider's SDK assemblies in its resolved
         closure. A host reaches a provider through Puck's own abstraction (a store target from an installed extension's
         storage provider, an authenticator from its authentication provider), never a reference.

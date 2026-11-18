@@ -642,7 +642,9 @@ lattice's own representation. `FindCheckedRoute` searches one route across the
 domains (`NavigationRuntime.FindRoute`) to a cell or a place
 (`WorldNavigationPlaceGoal`, a region's volume) and stands the default seat
 kit's body along it in the contact field, the read-back `world.navigation
-route` prints; `TryRouteEndpoint` picks a route's start.
+route` prints; `TryRouteEndpoint` picks a route's start. When the live contact
+check blocks a graph route, the command reports `status=obstructed` and keeps
+the path and first blocked sample for inspection.
 
 Navigation plans against the static part of the contact provider the bodies
 collide with (`NavigationGeometry` in `WorldPopulation.Resolve.cs`): the analytic

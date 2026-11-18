@@ -1,5 +1,6 @@
 #!/usr/bin/env dotnet
 #:sdk Microsoft.NET.Sdk
+#:property PuckProvider=Azure
 #:package Azure.Deployments.Expression@1.812.0
 #:package Azure.Identity@1.21.0
 #:package Azure.ResourceManager.Authorization@1.1.7

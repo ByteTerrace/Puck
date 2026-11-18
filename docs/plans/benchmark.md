@@ -334,8 +334,9 @@ A lift door's response swap rebuilds the navigation runtime, and the domains who
 geometry part held the door baked whole again on the pump at the next route
 search, about 19 s for the ground and valley domains; a rebuilt domain now takes
 its predecessor's bake and proves again only the cells the changed colliders reach
-(`Domain.TryRebakeFrom`, over `IRegionalContactField.TryDifference`): a door swap
-re-proves some 66 ground cells and 247 edges. And `world.benchmark sample` refused
+(`Domain.TryBeginRebakeFrom`, over `IRegionalContactField.TryDifference`). The
+partial bake runs on a worker, and searches wait for the current geometry's result.
+And `world.benchmark sample` refused
 every call, so no chapter ever sampled its GPU passes.
 
 ### Where a run starts
@@ -345,7 +346,8 @@ point is not one: the authority's hash includes the tick, and machines, rule
 latches, random streams and other seats are not reset by a pose.
 
 - **A fresh run** boots paused before the first tick, waits for the renderer
-  with authority held, arms the route at a named tick (`at <tick>`) and
+  with authority held, and prepares the boot world's navigation on workers if
+  a selected chapter plans a route. It then arms the route at a named tick (`at <tick>`) and
   resumes. Every line then lands on the same absolute tick in every run, from
   the boot image, so the state at each chapter's end is comparable between
   runs of one build. This is the only start whose hashes are compared.

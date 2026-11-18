@@ -83,11 +83,10 @@ public sealed partial class NavigationRuntime {
                 capacity: capacity
             ));
             if (reused is not null) { m_retained[index] = true; retained++; continue; }
-            // A domain whose geometry changed in part takes its predecessor's bake and proves again only what the change
-            // reaches, so a door that swaps never re-bakes a floor or makes the next route wait for one.
+            // Start a bounded replacement bake without holding the installing thread on its contact queries.
             if (previous is not null) {
                 foreach (var candidate in previous.m_domains) {
-                    if ((candidate.Name == row.Name) && m_domains[index].TryRebakeFrom(previous: candidate)) {
+                    if ((candidate.Name == row.Name) && m_domains[index].TryBeginRebakeFrom(previous: candidate)) {
                         rebaked++;
                         break;
                     }
@@ -110,8 +109,7 @@ public sealed partial class NavigationRuntime {
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
     public int RebuiltDomainCount { get; }
-    /// <summary>Gets how many of the rebuilt domains took their predecessor's bake and proved again only the cells a
-    /// change of geometry reached.</summary>
+    /// <summary>Gets how many rebuilt domains scheduled a partial bake from their predecessor's bake.</summary>
     public int RebakedDomainCount { get; }
     /// <summary>Gets the number of domains whose bake has finished. Reading it never waits for a bake.</summary>
     public int BakedDomainCount => m_domains.Count(predicate: static domain => domain.IsBaked);
@@ -167,6 +165,8 @@ public sealed partial class NavigationRuntime {
         // the immutable tuning, agent volumes and geometry part.
         private Task<NavigationDomainBake>? m_pending;
         private CancellationTokenSource? m_cancellation;
+        // While a delta is running, a newer replacement can start from the same immutable bake and obsolete the delta.
+        private (NavigationDomainBake Bake, IContactField Geometry)? m_rebakeBasis;
         private INavigationMediumField? m_fields;
 
         private readonly int m_mediumField;
@@ -230,10 +230,14 @@ public sealed partial class NavigationRuntime {
                 return;
             }
             var geometry = m_geometry;
+            StartBake(bake: cancellation => Bake(cancellation: cancellation, geometry: geometry));
+        }
+
+        private void StartBake(Func<CancellationToken, NavigationDomainBake> bake) {
             var cancellation = new CancellationTokenSource();
 
             m_cancellation = cancellation;
-            m_pending = Task.Run(cancellationToken: CancellationToken.None, function: () => Bake(cancellation: cancellation.Token, geometry: geometry));
+            m_pending = Task.Run(cancellationToken: cancellation.Token, function: () => bake(cancellation.Token));
         }
         // Stops a bake in flight for a domain no runtime reads any more; its fault is observed here, never left for the
         // unobserved-task handler.
@@ -254,6 +258,7 @@ public sealed partial class NavigationRuntime {
             );
             m_pending = null;
             m_cancellation = null;
+            m_rebakeBasis = null;
         }
         /// <summary>Adopts this domain's occupancy sweep and static edge bake, once: a bake in flight is waited for, and
         /// with none in flight the bake runs on the calling thread.</summary>
@@ -270,6 +275,7 @@ public sealed partial class NavigationRuntime {
         private void Adopt(NavigationDomainBake bake) {
             m_bake = bake;
             m_pending = null;
+            m_rebakeBasis = null;
             m_cancellation?.Dispose();
             m_cancellation = null;
             m_walkable = bake.Walkable;
@@ -278,15 +284,15 @@ public sealed partial class NavigationRuntime {
         }
 
         // A retained workspace is safe only when its bake means the same thing under the replacement: equal tuning and
-        // an equal geometry part, which answers every query the bake asked as the old part did. A domain neither baked
-        // nor baking holds nothing the geometry decided, so it adopts any replacement part. Medium revisions are part of
-        // the proof because IsWalkable/edge admission consults the live field beside the geometry.
+        // an equal geometry part, which answers every query the bake asked as the old part did. A diagnostic that starts
+        // a bake must not change which workspaces authority retains. Medium revisions are part of the proof because
+        // IsWalkable/edge admission consults the live field beside the geometry.
         internal bool TryRebind(NavigationDomainInput row, IContactField geometry, INavigationMediumField? fields, NavigationCapacity capacity) {
             if (
                 (row != Tuning) ||
                 (capacity != m_capacity) ||
                 ((Tuning.Kind == NavigationKind.Medium) && !SameMediumRevision(fields: fields)) ||
-                (((m_bake is not null) || (m_pending is not null)) && !Equals(objA: m_geometry, objB: geometry))
+                !Equals(objA: m_geometry, objB: geometry)
             ) {
                 return false;
             }
@@ -374,9 +380,9 @@ public sealed partial class NavigationRuntime {
             ))
             ) { return false; }
             return (
-                !Touches(foot: from, geometry: m_geometry, volumes: m_agent) &&
-                !Touches(foot: to, geometry: m_geometry, volumes: m_agent) &&
-                ((from == to) || !SweepMeets(from: from, geometry: m_geometry, to: to, volumes: m_agent))
+                FixedContactProbe.IsClear(field: m_geometry, start: from, end: from, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent) &&
+                FixedContactProbe.IsClear(field: m_geometry, start: to, end: to, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent) &&
+                ((from == to) || FixedContactProbe.IsClear(field: m_geometry, start: from, end: to, orientation: FixedQuaternion.Identity, up: FixedVector3.UnitY, volumes: m_agent))
             );
         }
         public FixedVector3 Position(int node) {

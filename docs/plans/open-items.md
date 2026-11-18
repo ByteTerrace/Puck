@@ -908,6 +908,16 @@ Next: the three kinds of triangle the lattice's facing does not judge, which
 the tour's remaining reds and the Moth's shin groups share, then
 [moving blends](moving-blends.md)' step 4.
 
+- [medium] `SdfMeshLattice.Dims` reports two samples along a million-metre
+  axis requested at 0.1 mm. The cell count saturates to `int.MaxValue` and
+  adding the final endpoint wraps. Check dimensions and their product before
+  forming array indices, and let the bake coarsen or partition a box that
+  exceeds the sample budget.
+- [medium] `SdfMeshGeometryBuilder.RelativePose` gives another slot at
+  +3,000,000 m and +4,000,000 m the same key and bakes both at −2,097,152 m.
+  Its rounded component shares an out-of-range sentinel with the stored
+  coordinate. Carry the supported large offsets through the rounded pose,
+  the key and the uploaded rows, with absence represented independently.
 - [high] `puck mesh audit --cpu` still differs from the device wherever a
   lattice's gradient taps lie closer than the fixed-point evaluator resolves
   (`SdfMeshCpuField.ResolutionSpacing`, 8 × 2⁻¹⁶ m). That is every group at a
@@ -2108,6 +2118,24 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high, unconfirmed] A route change does not withdraw a picture already
+  published. When a viewer's disclosure narrows (a full replica becomes a
+  private view, or observation is revoked while a second viewer keeps the
+  shared residency alive), route settlement leaves the shared scene and
+  package freshness goes false, but nothing withdraws the published image. A
+  cadence hold, a budget deferral, an unscheduled screen read, or a paused
+  node returning its last surface can show the old pixels
+  (`WorldSessionRoute`, `SdfWorldPasses`, `RenderGraphScheduler`,
+  `WorldScreenBinder`, `WorldViewGraphHost`, `ShaderPipelineRenderNode`).
+  Enforce the current viewer's disclosure at publication and reuse,
+  previous-frame reads, aliases and retained composites included. Invalidate
+  that viewer's old output at once, and show an authorized replacement or an
+  authored fallback while the private graph builds. The other viewer's
+  publication stays usable. Verify on the first delivered frame of both cases
+  with a detail visible only in the full replica. Found by the rendering
+  research's decision-2 review; the code paths are cited there and not yet
+  reproduced.
+
 - [high] Authored search must plan over what its actor is disclosed. Today an
   actor-less job reads true state under the audience check (an AI can read a
   hidden hand), and search refuses private draws (an AI can never choose to
@@ -2476,20 +2504,10 @@ checkpoints.
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · high · Next: the Azure release's three causes and the
-production deploy's catalog listing, which a push to `main` needs; then the
-silo's cold activation, CI's steady state, the shader cache and the GC-hole
-retirement.
+Owner: delivery lane · high · Next: the production deploy's catalog listing,
+which a push to `main` needs; then the silo's cold activation, CI's steady
+state, the shader cache and the GC-hole retirement.
 
-- [high] The Azure release of `main` fails at three causes, so nothing
-  deploys: the world-silo build image lacks `xz`, so `tar -xJf` cannot unpack
-  the LLVM tarball; PUCKARCH009 refuses
-  `src/Puck.Azure.Resources/bootstrap.cs`, a file-based app holding Azure SDK
-  references outside a `<PuckProvider>` project; and the WebAssembly publish's
-  trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
-  (`Activator.CreateInstance` on an unannotated type).
-  After the trim fix, re-run the browser AOT publish and Node harness; the
-  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
@@ -3026,13 +3044,14 @@ The owner's words: "it's slow as shit and mostly just static shots that miss
 all of the issues we see while on the move". The memo owns the design and
 the stages; this packet holds what a stage does not.
 
-- [medium] The lift chapters' hitch lists hold iterations of 250 to 315 ms of
-  simulate time in `place-lift` while the car runs, headless. The likely cause,
-  inferred from the code path and not yet traced, is each door's response swap:
-  its colliders differ, so `WorldPopulation.InstallResponseSolids` compiles the
-  contact field and the navigation runtime again on the tick
-  (`CompileSolidConsumers`). Trace one swap and make it cost what the door
-  changed.
+- [medium] The headless lift chapter still has isolated simulate spikes around
+  door swaps. A thread trace showed rigid surface probes and full replica frame
+  serialization (`WorldSessionSink.DeliverState`, `WorldDeliveryCursor.FrameMoved`).
+  The partial navigation bake now runs on a worker, and response swaps keep the
+  attached door's sampled pose so its new collider does not wake remote rigid
+  bodies. Profile the remaining spikes with `puck benchmark --headless --route
+  debug --chapter "the lift"` and make the remaining contact install and recipient
+  delivery cost follow the changed rows.
 - [low] A route chapter's control-line refusals are counted when the chapter
   ends (`WorldSeatDriver.Refused`), so a line still settling then is not
   counted; count each line's verdict as it arrives.

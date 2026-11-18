@@ -347,10 +347,9 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
             // A dynamic bound is a sphere about the slot's position offset along world axes; about the slot's origin in its
             // own frame, its center is that offset turned back by the slot's orientation in this frame.
             // An explicitly slot-local bound already lies in that frame, whatever pose the owner starts in.
-            var orientation = ((instance.IsDynamic && (instance.Slot < transforms.Count)) ? SdfMeshGeometryBuilder.PoseOf(transform: transforms[instance.Slot]).Orientation : Quaternion.Identity);
-            // Rounded as the geometry rounds a pose, so one geometry bakes over one box whatever frame turned it back.
+            // Round the world-axis offset after carrying it through the same turn the bake's shader reads.
             var center = ((instance.IsDynamic && !instance.BoundInSlotFrame)
-                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: Quaternion.Inverse(value: orientation)))
+                ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: SdfMeshGeometryBuilder.BoundTurnOf(slot: instance.Slot, transforms: transforms)))
                 : instance.Center);
             var glass = program.IsGlassRange(end: instance.End, first: instance.First);
             T group;
