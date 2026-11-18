@@ -51,6 +51,7 @@ public sealed partial class NavigationRuntime {
         m_domains = new Domain[domains.Count];
         m_retained = new bool[domains.Count];
         var retained = 0;
+        var rebaked = 0;
 
         for (var index = 0; (index < domains.Count); index++) {
             var row = domains[index];
@@ -81,7 +82,17 @@ public sealed partial class NavigationRuntime {
                 fields: fields,
                 capacity: capacity
             ));
-            if (reused is not null) { m_retained[index] = true; retained++; }
+            if (reused is not null) { m_retained[index] = true; retained++; continue; }
+            // A domain whose geometry changed in part takes its predecessor's bake and proves again only what the change
+            // reaches, so a door that swaps never re-bakes a floor or makes the next route wait for one.
+            if (previous is not null) {
+                foreach (var candidate in previous.m_domains) {
+                    if ((candidate.Name == row.Name) && m_domains[index].TryRebakeFrom(previous: candidate)) {
+                        rebaked++;
+                        break;
+                    }
+                }
+            }
         }
         // A prior domain nothing kept has no reader left: stop its bake rather than let it run on.
         if (previous is not null) {
@@ -91,6 +102,7 @@ public sealed partial class NavigationRuntime {
         }
         RetainedDomainCount = retained;
         RebuiltDomainCount = (domains.Count - retained);
+        RebakedDomainCount = rebaked;
     }
 
     public int Count => m_domains.Length;
@@ -98,6 +110,9 @@ public sealed partial class NavigationRuntime {
     public int RetainedDomainCount { get; }
     /// <summary>Gets the number of domain workspaces compiled for this runtime installation.</summary>
     public int RebuiltDomainCount { get; }
+    /// <summary>Gets how many of the rebuilt domains took their predecessor's bake and proved again only the cells a
+    /// change of geometry reached.</summary>
+    public int RebakedDomainCount { get; }
     /// <summary>Gets the number of domains whose bake has finished. Reading it never waits for a bake.</summary>
     public int BakedDomainCount => m_domains.Count(predicate: static domain => domain.IsBaked);
     /// <summary>Gets whether every domain's bake has finished, so no read of this runtime waits for one. Reading it never

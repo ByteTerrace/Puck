@@ -35,7 +35,7 @@ public static partial class BenchmarkCommand {
 
     private sealed class RunOptions {
         public readonly Option<string> World = new("--world") { DefaultValueFactory = _ => "worlds/debug", Description = "The world's asset package folder, .puck source or .world.json document (default worlds/debug)." };
-        public readonly Option<string> Route = new("--route") { Description = "The .puck source whose test blocks are the route, each a chapter: its when lines are the controller program and its expect lines the arrival.", Required = true };
+        public readonly Option<string> Route = new("--route") { Description = "The route: the name of a `routes` row of the world's document (each chapter a list of places its seat program walks to), or a .puck source whose test blocks are the route, each a chapter: its when lines are the controller program and its expect lines the arrival.", Required = true };
         public readonly Option<string?> Chapter = new("--chapter") { Description = "Play only the chapters whose names start with this prefix; omitted plays every chapter in declaration order." };
         public readonly Option<string[]> Backends = new("--backend") { AllowMultipleArgumentsPerToken = true, Description = "Windowed graphics backends to play on, each in its own fresh World: directx and vulkan. Omitted plays both on Windows and vulkan elsewhere. Ignored with --headless." };
         public readonly Option<bool> Headless = new("--headless") { Description = "Play without a window or renderer: the arrival, state hash and host iterations are reported and every reading that needs a renderer is absent." };
@@ -133,10 +133,12 @@ public static partial class BenchmarkCommand {
 
     private static int Run(RunOptions options, ParseResult parse, BenchHostSample? sampleHost, CancellationToken token) {
         var root = RepositoryPaths.RequireRoot();
-        var route = Path.GetFullPath(path: parse.GetValue(options.Route)!);
+        // A route names a `routes` row of the world's document, which the World resolves, unless it names a .puck source.
+        var named = parse.GetValue(options.Route)!;
+        var route = (File.Exists(path: named) ? Path.GetFullPath(path: named) : named);
 
-        if (!File.Exists(path: route)) {
-            return CliExit.Refuse(Verb, "--route", $"{PuckPaths.Normalize(path: route)} does not exist.");
+        if (named.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase) && !File.Exists(path: named)) {
+            return CliExit.Refuse(Verb, "--route", $"{PuckPaths.Normalize(path: Path.GetFullPath(path: named))} does not exist.");
         }
 
         var world = Path.GetFullPath(path: parse.GetValue(options.World)!);
@@ -161,7 +163,7 @@ public static partial class BenchmarkCommand {
 
         using var held = build;
         using var host = new BenchHostRecorder(sampleHost);
-        var routeName = RouteName(root: root, path: route);
+        var routeName = (File.Exists(path: route) ? RouteName(root: root, path: route) : route);
         var prefix = (parse.GetValue(options.Chapter) ?? string.Empty);
         var runs = new JsonArray();
         var print = (parse.GetValue(options.Json) ? Console.Error : Console.Out);
@@ -278,7 +280,7 @@ public static partial class BenchmarkCommand {
         }
 
         var runDirectory = Path.Combine(directory, "world");
-        var line = string.Create(CultureInfo.InvariantCulture, $"world.benchmark run {CommandEcho.Quote(PuckPaths.Normalize(route))} {(prefix.Length == 0 ? "-" : CommandEcho.Quote(prefix))}{((parse.GetValue(options.At) is { } at) ? $" at {at}" : string.Empty)}{((parse.GetValue(options.Budget) is { } budgetMs) ? $" budget {budgetMs}" : string.Empty)} timeout {timeout} loops {parse.GetValue(options.Loops)} output {CommandEcho.Quote(PuckPaths.Normalize(runDirectory))}");
+        var line = string.Create(CultureInfo.InvariantCulture, $"world.benchmark run {CommandEcho.Quote(File.Exists(path: route) ? PuckPaths.Normalize(route) : route)} {(prefix.Length == 0 ? "-" : CommandEcho.Quote(prefix))}{((parse.GetValue(options.At) is { } at) ? $" at {at}" : string.Empty)}{((parse.GetValue(options.Budget) is { } budgetMs) ? $" budget {budgetMs}" : string.Empty)} timeout {timeout} loops {parse.GetValue(options.Loops)} output {CommandEcho.Quote(PuckPaths.Normalize(runDirectory))}");
         var armed = live.Run(line, 60);
 
         if (!armed.Ok) {

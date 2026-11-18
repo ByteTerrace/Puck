@@ -1,0 +1,220 @@
+{
+  "type": [
+    "array",
+    "null"
+  ],
+  "items": {
+    "description": "An authored seat program: how a seat\u0027s own controls are worked to carry its body along a route, the way a player at a pad works them (seatPrograms rows). A route (WorldRoute) says where to go and how (a place at a pace, a rest facing a heading, an action pressed); the program says which controls do it, in an ordered list of operations the engine evaluates once each tick from the seat body\u0027s authoritative pose, its camera\u0027s facing and the route\u0027s next steering point. Every value it produces enters through the seat\u0027s own ingress (the door player.signal uses), so the router, the bindings and intent composition carry it as they carry a pad. Paces and actions are the author\u0027s words: the engine knows only the ones a program\u0027s operations name.",
+    "type": [
+      "object",
+      "null"
+    ],
+    "properties": {
+      "name": {
+        "description": "The program\u0027s name, unique within the document, which a route names.",
+        "type": "string"
+      },
+      "operations": {
+        "description": "The operations, evaluated in order each tick; each drives the input sources it names.",
+        "type": "array",
+        "items": {
+          "description": "One operation of a WorldSeatProgram: the input sources it drives and how it reads the tick\u0027s steering state. A source is an input-source id (gamepad.leftStick, keyboard.shiftLeft); a stick source takes an X and a Y deflection, a button source a press or a release.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "required": [
+            "$type"
+          ],
+          "anyOf": [
+            {
+              "description": "Deflects a stick to carry the body toward the tick\u0027s steering point, the direction expressed in the camera\u0027s frame the seat moves against (X strafes right, Y advances). The deflection is full except where the body must slow: before a corner sharper than CornerDegrees, so it reaches the corner no faster than CornerSpeed braking at Brake, and before a final point, so it stops there. The slowing is read against the body\u0027s own planar speed, so it holds at any pace and any body scale. With no steering point (a rest, a wait) the stick is centred.",
+              "properties": {
+                "$type": {
+                  "const": "move"
+                },
+                "source": {
+                  "description": "The stick source.",
+                  "type": "string"
+                },
+                "brake": {
+                  "description": "The deceleration, in m/s\u00B2, the slowing plans for.",
+                  "type": "number",
+                  "default": 30
+                },
+                "cornerSpeed": {
+                  "description": "The speed, in m/s, a sharp corner is taken at.",
+                  "type": "number",
+                  "default": 4
+                },
+                "cornerDegrees": {
+                  "description": "The turn, in degrees, from which a corner is sharp.",
+                  "type": "number",
+                  "default": 30
+                },
+                "least": {
+                  "description": "The least deflection the stick keeps while the body is still short of its point.",
+                  "type": "number",
+                  "default": 0.2
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpMove"
+            },
+            {
+              "description": "Deflects a stick\u0027s X to turn the seat\u0027s camera onto the tick\u0027s facing: the travel direction while the body moves, the heading or look target a rest names while it stands. Each tick it removes Gain of the remaining turn, no more than full deflection turns the camera in a tick (the seat\u0027s own look rate), and holds the stick centred within DeadbandDegrees.",
+              "properties": {
+                "$type": {
+                  "const": "turn"
+                },
+                "source": {
+                  "description": "The stick source.",
+                  "type": "string"
+                },
+                "gain": {
+                  "description": "The fraction of the remaining turn taken each tick, in (0, 1].",
+                  "type": "number",
+                  "default": 0.5
+                },
+                "deadbandDegrees": {
+                  "description": "The turn, in degrees, inside which the stick stays centred.",
+                  "type": "number",
+                  "default": 1
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpTurn"
+            },
+            {
+              "description": "Holds a button down while the step the route is on travels at one of Paces, and lets it go otherwise (a run button).",
+              "properties": {
+                "$type": {
+                  "const": "hold"
+                },
+                "source": {
+                  "description": "The button source.",
+                  "type": "string"
+                },
+                "paces": {
+                  "description": "The paces, the route\u0027s own words, the button is held through.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "source",
+                "paces"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpHold"
+            },
+            {
+              "description": "Taps a button once every PeriodSeconds while the step the route is on travels at one of Paces (a dash on its cooldown): pressed for one tick, released the next.",
+              "properties": {
+                "$type": {
+                  "const": "pulse"
+                },
+                "source": {
+                  "description": "The button source.",
+                  "type": "string"
+                },
+                "paces": {
+                  "description": "The paces the button is tapped through.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "periodSeconds": {
+                  "description": "The time from one tap to the next.",
+                  "type": "number"
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "source",
+                "paces",
+                "periodSeconds"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpPulse"
+            },
+            {
+              "description": "Taps a button when a route step presses Action (the context button a lift\u0027s call plate answers): pressed for one tick, released the next.",
+              "properties": {
+                "$type": {
+                  "const": "tap"
+                },
+                "action": {
+                  "description": "The action, the route\u0027s own word, this button answers.",
+                  "type": "string"
+                },
+                "source": {
+                  "description": "The button source.",
+                  "type": "string"
+                },
+                "driven": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "action",
+                "source"
+              ],
+              "additionalProperties": false,
+              "title": "WorldSeatProgramOpTap"
+            }
+          ],
+          "title": "WorldSeatProgramOp"
+        }
+      }
+    },
+    "required": [
+      "name",
+      "operations"
+    ],
+    "additionalProperties": false,
+    "title": "WorldSeatProgram"
+  },
+  "default": null
+}

@@ -56,3 +56,22 @@ hud {
     }
   ]
 }
+
+// The seat program a route plays (`routes` rows, `world.benchmark run <route>`): the standard pad's controls worked as a
+// player works them. The left stick carries the body toward the route's next steering point in the camera's frame,
+// slowing to take a corner sharper than 30 degrees at 4 m/s and to stop at a final point, against the body's own speed
+// and a 30 m/s² brake (her shaping releases at 50); the right stick turns the camera onto the way ahead, half the
+// remaining turn a tick; Left Shift is held through a run and a dash, the dash button tapped on its 0.8 s cooldown; and
+// the context button answers the `interact` action. Paces and actions are this program's words, which routes use.
+seatPrograms [
+  {
+    name: "walker"
+    operations [
+      { $type: "move", source: "gamepad.leftStick", brake: 30, cornerSpeed: 4, cornerDegrees: 30, least: 0.2 }
+      { $type: "turn", source: "gamepad.rightStick", gain: 0.5, deadbandDegrees: 1 }
+      { $type: "hold", source: "keyboard.shiftLeft", paces ["run", "dash"] }
+      { $type: "pulse", source: "gamepad.buttonWest", paces ["dash"], periodSeconds: 0.8 }
+      { $type: "tap", action: "interact", source: "gamepad.rightShoulder" }
+    ]
+  }
+]

@@ -719,6 +719,33 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         );
     }
 
+    /// <summary>Reads a seat's live facing, the yaw its stick movement is framed against (the same yaw intent
+    /// composition reads), and the turn one tick of full right-stick look deflection gives it under the seat's look
+    /// preference.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="yaw">The facing yaw, in radians (0 faces -Z, a quarter turn faces -X).</param>
+    /// <param name="yawPerTick">The yaw change, in radians, of one tick at full positive X deflection: negative, since
+    /// a look to the right lowers the yaw, unless the preference inverts it.</param>
+    /// <returns><see langword="true"/> when the seat is joined and its body's pose is known.</returns>
+    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick) {
+        yaw = 0f;
+        yawPerTick = 0f;
+        if ((m_roster.Seat(slot: slot) is not { } seat) || (m_seatRouter.TryRoute(slot: slot) is not { } route)) {
+            return false;
+        }
+
+        var definition = route.Endpoint.Definition;
+
+        if (!route.Endpoint.TryEntityPose(index: route.EntityIndex, orientation: out var bodyOrientation, position: out _)) {
+            return false;
+        }
+
+        var preference = (seat.Profile?.SeatLook ?? definition.PlayerDefaults.SeatLook);
+
+        yaw = seat.View.LogicalYaw(bodyOrientation: bodyOrientation, views: definition.Views);
+        yawPerTick = ((-preference.StickLookRate / definition.SimulationRateHz) * (preference.InvertYaw ? -1f : 1f));
+        return true;
+    }
     /// <summary>Consumes each seat's right-stick and toggled motion-control samples into its seat-owned view state
     /// exactly once this tick, then runs the world's follow camera for a seat with no manual look input. Gyro is
     /// angular velocity in the provider-neutral gamepad frame (+X right, +Y up, +Z back); the seat preference applies

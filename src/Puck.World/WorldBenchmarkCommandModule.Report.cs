@@ -115,13 +115,13 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["startTick"] = chapter.Start,
             ["durationTicks"] = chapter.Duration,
             ["status"] = ((chapter.EndIndex >= 0) ? "ended" : ((chapter.BeginIndex >= 0) ? "unfinished" : "unreached")),
-            ["arrival"] = ((chapter.EndIndex < 0) || !read ? "unmeasured" : ((failed.Count > 0) ? "off course" : "arrived")),
+            ["arrival"] = ((chapter.EndIndex < 0) ? "unmeasured" : (chapter.Driven ? (chapter.Arrived ? "arrived" : "failed") : (!read ? "unmeasured" : ((failed.Count > 0) ? "off course" : "arrived")))),
             ["arrivalFailed"] = Strings(values: failed),
             ["arrivalUnjudged"] = Strings(values: unjudged),
             ["pose"] = chapter.Where?.Answer,
             ["startPlaces"] = PlacesOf(line: chapter.StartPlace),
             ["endPlaces"] = PlacesOf(line: chapter.EndPlace),
-            ["placesVisited"] = Visited(chapter: chapter),
+            ["placesVisited"] = (chapter.Driven ? Strings(values: chapter.Visited.Select(selector: static visit => visit.Place)) : Visited(chapter: chapter)),
             ["stateHash"] = chapter.Hash?.Answer,
             ["disturbed"] = Strings(values: Disturbances(chapter: chapter, statistics: statistics)),
             ["ticksShed"] = chapter.Shed,
@@ -129,6 +129,18 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["endIteration"] = chapter.EndIndex,
         };
 
+        if (chapter.Driven) {
+            node["stepsReached"] = chapter.StepReached;
+            node["plans"] = chapter.Plans;
+            node["controlLines"] = chapter.ControlLines;
+            node["visits"] = new JsonArray([.. chapter.Visited.Select(selector: static visit => (JsonNode)new JsonObject { ["tick"] = visit.Tick, ["place"] = visit.Place })]);
+            node["failure"] = ((chapter.Failure is null) ? null : new JsonObject {
+                ["kind"] = chapter.FailureKind,
+                ["tick"] = chapter.FailureTick,
+                ["place"] = chapter.FailurePlace,
+                ["reason"] = chapter.Failure,
+            });
+        }
         if (statistics is not null) {
             node["frames"] = Describe(statistics: statistics);
             if ((recording is not null) && (statistics.WorstIndex >= 0)) {

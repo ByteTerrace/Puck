@@ -1,151 +1,158 @@
-// The benchmark's baseline route through the debug world, played by `puck benchmark --route
-// worlds/debug/benchmark-route.puck` and `world.benchmark run worlds/debug/benchmark-route.puck -`. Each test block is a
-// chapter: it sets the body down at its start, then a controller program runs or walks legs between waypoints taken from
-// the owner's own walks of the world, so the line goes where a player goes and never into a wall.
+// The debug world's benchmark routes: `world.benchmark run debug` (or `puck benchmark --route debug`) plays the walk, and
+// `seams` the three crossings at each pace. Each chapter is a list of places to go to and how, played by the standard's
+// `walker` seat program (standard/benchmark.puck) through seat 1's own controls: the left stick toward the next corner of
+// the navigation path, the right stick turning the camera onto the way ahead, Left Shift held to run and the dash tapped on
+// its cooldown, the context button pressed where a step presses `interact`. A step that strays plans its path again from
+// where the body stands, so a shed tick, a Wonderland-sized body or a nudge does not carry the rest of the chapter off
+// course, and a chapter fails, naming the place and the tick, on a driven wall contact or on leaving the places its path
+// crosses.
 //
-// The seat steers as a player does. The left stick moves the body relative to the camera and the seat turns the body to
-// the camera's heading every tick, so a pose's yaw does not hold; every turn is the right stick, which turns the camera
-// 6.68 degrees a tick at full deflection and in proportion below it. Turns are relative, so the chapters chain: each
-// starts at the heading the one before ended on, and the first at the stage's (0). Headings are yaws: 0 faces -Z,
-// 90 faces -X, 180 faces +Z and 270 faces +X; the right stick's +X turns clockwise, lowering the yaw.
-//
-// Paces are the standard package's: a walk is 5 m/s (six ticks a metre at 30 Hz), a run 10 m/s with Left Shift held
-// (three ticks a metre). A leg re-asserts the stick every fifteen ticks, as a player holding it does across a crossing.
-let stickForward = "player.signal gamepad.leftStick 0 1"
-let stickRest = "player.signal gamepad.leftStick 0 0"
-let shiftPress = "player.signal keyboard.shiftLeft press"
-let shiftRelease = "player.signal keyboard.shiftLeft release"
-let walk = { ticksPerMetre: 6, shift: shiftRelease }
-let run = { ticksPerMetre: 3, shift: shiftPress }
-let routeChunk = 15
-let degreesPerTick = 6.68
+// The walk is the owner's: from the stage into the hall and its lobby, along the east wing into the painting room,
+// through the looping pair, back to the lobby, into Wonderland through the big painting to the machines and out
+// through the mouse hole. Then the seams: the valley into the lobby and back, the garden painting, and the lift ridden by
+// its buttons. Places are places.puck's regions (`place-*`); headings are yaws (0 faces -Z, 90 faces -X, 180 faces +Z,
+// 270 faces +X); points are world coordinates on the floor.
 
-function step(line, wait) = { line: line, wait: wait }
+// A floor's height in the hall (shapes.puck's galleryFloor).
+let floor0 = 0.05
+let floor3 = 13.55
 
-// The signed turn from one heading to another, in -180 .. 180 (positive raises the yaw: counter-clockwise).
-function turnDegrees(from, to) = (((to - from) > 180) ? ((to - from) - 360) : ((((to - from) < -180) ? ((to - from) + 360) : (to - from))))
-function turnMagnitude(from, to) = ((turnDegrees(from, to) < 0) ? (0 - turnDegrees(from, to)) : turnDegrees(from, to))
-function turnSign(from, to) = ((turnDegrees(from, to) < 0) ? 1 : -1)
-function turnTicks(from, to) = floor(turnMagnitude(from, to) / degreesPerTick)
-function turnRest(from, to) = ((turnMagnitude(from, to) / degreesPerTick) - turnTicks(from, to))
-// A turn: the right stick at full deflection for the whole ticks, one tick at the remainder's deflection, then centred.
-function turn(from, to) = concat(
-  [step(stickRest, 1)],
-  ((turnTicks(from, to) > 0) ? [step($"player.signal gamepad.rightStick {turnSign(from, to)} 0", turnTicks(from, to))] : []),
-  ((turnRest(from, to) > 0) ? [step($"player.signal gamepad.rightStick {(turnSign(from, to) * turnRest(from, to))} 0", 1)] : []),
-  [step("player.signal gamepad.rightStick 0 0", 3)]
-)
+// The lift (hall.puck): the landing's call plate reach box before the car's door, the car's door, and the car's panel,
+// whose buttons for levels 0 to 3 stand left to right from the viewer facing it (+Z).
+let liftPad = 17
+let liftPadZ = 35.4
+let liftDoorX = 15.9
+let liftPanelZ = 38.85
+function liftButton(level) = (16.85 - ((1.9 / 6) * (level + 0.5)))
 
-// A leg: turn from the heading the body faces to the leg's, then hold the stick for the leg's ticks at its pace.
-function legTicks(pace, metres) = floor((metres * pace.ticksPerMetre) + 0.5)
-function leg(pace, from, to, metres) = concat(
-  turn(from, to),
-  [step(pace.shift, 0)],
-  map(range(0, floor(legTicks(pace, metres) / routeChunk)), chunk => step(stickForward, routeChunk)),
-  (((legTicks(pace, metres) % routeChunk) > 0) ? [step(stickForward, (legTicks(pace, metres) % routeChunk))] : [])
-)
-// Standing: turn to a heading and hold the stick at rest for a number of ticks (a player looking at something).
-function stand(from, to, ticks) = concat(turn(from, to), [step(stickRest, ticks)])
+// Steps the chapters share.
+function stand(seconds) = { $type: "rest", seconds: seconds }
+function face(heading, seconds) = { $type: "rest", seconds: seconds, faceDegrees: heading }
+function go(place, pace) = { $type: "go", place: place, pace: pace }
+function goTo(point, pace, within = 0.5) = { $type: "go", point: point, pace: pace, within: within }
+function step(point, within = 0.3) = { $type: "go", point: point, pace: "walk", direct: true, within: within }
+function press(action, seconds) = { $type: "press", action: action, seconds: seconds }
 
-// A chapter's start: the body set down at a point (its heading held), first person, and a second standing.
-function start(x, y, z) = [step($"body.pose {x} {y} {z} - - - 0", 1), step("player.camera.view first", 9), step(stickRest, 30)]
-let finish = [step(stickRest, 10), step(shiftRelease, 20)]
-function lines(program) = map(program, s => s.line)
-function waits(program) = map(program, s => s.wait)
+// Riding the lift from the landing a body stands on to another: call the car at the landing's plate, step in through
+// the door, press the level's button on the panel, ride until the car reaches that level, and step out as its doors
+// open. Inside the car every step walks.
+function ride(from, to, level, pace) = [
+  goTo([liftPad, from, liftPadZ], pace, 0.15)
+  face(180, 0.5)
+  press("interact", 3)
+  step([liftDoorX, from, 35.2])
+  step([liftDoorX, from, 37.6])
+  step([liftButton(level), from, liftPanelZ], 0.12)
+  face(180, 0.5)
+  { $type: "press", action: "interact", until: $"place-gallery-level-{level}", seconds: 40 }
+  stand(4)
+  step([liftDoorX, to, 37])
+  step([liftDoorX, to, 34.8])
+]
 
-// Chapter 1: from the stage spawn across the valley floor and through the hall's south entrance (x 14 .. 18 at z 12)
-// into the gallery hall, running. Starts facing 0, ends facing 202.
-let stageToHall = concat(
-  start(0, 0.02, 0),
-  leg(run, 0, 235, 18),
-  leg(run, 235, 202, 9.2),
-  finish
-)
-test "baseline: the stage into the gallery hall" {
-  when {
-    for (line, index) in lines(stageToHall) {
-      seat1: {line}
-      repeat waits(stageToHall)[index] {
-        ticks 1
-      }
-    }
-  }
-  expect {
-    // Arrival: inside the hall past the entrance, about (18.1, 18.9) on the owner's walk, standing.
-    bodyPosition(body, 0, x) > 15.5
-    bodyPosition(body, 0, x) < 21
-    bodyPosition(body, 0, z) > 16
-    bodyPosition(body, 0, z) < 22
-    bodyPosition(body, 0, y) > 0
-    bodyPosition(body, 0, y) < 0.2
-    fact(body, 0, Grounded) == 1
-  }
+// The seams (docs/plans/streaming-and-memory.md#the-seam-walk), each from its own spawn so a chapter fails alone. The
+// valley floor from 36 m out into the lobby and back out, then in again; the garden painting, eight metres into the
+// garden and back through its arrival frame; the lift from level 0 to level 3 and back.
+function valleySeam(name, pace) = {
+  name: name
+  steps [
+    { $type: "pose", spawn: "seam-valley" }
+    stand(1)
+    goTo([16, floor0, 20], pace)
+    goTo([16, floor0, -14], pace)
+    go("place-lobby", pace)
+    stand(1)
+  ]
+}
+function gardenSeam(name, pace) = {
+  name: name
+  steps [
+    { $type: "pose", spawn: "portal-garden" }
+    stand(1)
+    { $type: "cross", headingDegrees: 180, pace: pace, metres: 11 }
+    stand(1)
+    { $type: "cross", headingDegrees: 180, relative: true, until: "place-garden-painting", pace: pace, metres: 14 }
+    stand(1)
+  ]
+}
+function liftSeam(name, pace) = {
+  name: name
+  steps: concat(
+    [{ $type: "pose", spawn: "gallery-level-0" }, stand(1)],
+    ride(floor0, floor3, 3, pace),
+    [stand(1)],
+    ride(floor3, floor0, 0, pace),
+    [go("place-lobby", pace)]
+  )
 }
 
-// Chapter 2: east along the hall, then north-east through the east wing's portal (about x 66.7, z 33.8), which carries
-// the body back to about x 40 on the wing's far side; the run carries on east through the arrival. Starts facing 202,
-// ends facing 270.
-let eastWingPortal = concat(
-  start(18.1, 0.07, 18.9),
-  leg(run, 202, 270, 24.3),
-  leg(run, 270, 238, 28.7),
-  leg(run, 238, 270, 10),
-  finish
-)
-test "baseline: the east wing's portal" {
-  when {
-    for (line, index) in lines(eastWingPortal) {
-      seat1: {line}
-      repeat waits(eastWingPortal)[index] {
-        ticks 1
-      }
-    }
-  }
-  expect {
-    // Arrival: past the portal's far side, heading east along z 34.7, about (50.5, 34.7) on the owner's walk.
-    bodyPosition(body, 0, x) > 44
-    bodyPosition(body, 0, x) < 59
-    bodyPosition(body, 0, z) > 32.5
-    bodyPosition(body, 0, z) < 37
-    bodyPosition(body, 0, y) > 0
-    bodyPosition(body, 0, y) < 0.2
-    fact(body, 0, Grounded) == 1
-  }
-}
+// The paces the seams route plays each crossing at, the walker program's words: 5 m/s, 10 m/s with Left Shift held, and
+// the run with the dash on each cooldown.
+let seamPaces = ["walk", "run", "dash"]
 
-// Chapter 3: back west along the hall to the lobby, running; then walking to the machines by the wonderland portal,
-// standing at them for eight seconds, stepping up to a metre short of the portal's threshold (about x 2, z 30.8, where
-// wonderland shrinks the body) for four, and walking back east into the lobby. Starts facing 270, ends facing 270.
-let lobbyAndWonderland = concat(
-  start(59.2, 0.07, 29.3),
-  leg(run, 270, 76, 15.6),
-  leg(run, 76, 91, 19.9),
-  leg(run, 91, 100, 9.5),
-  leg(walk, 100, 126, 7.2),
-  leg(walk, 126, 120, 2.4),
-  stand(120, 64, 240),
-  leg(walk, 64, 104, 4),
-  stand(104, 104, 120),
-  leg(walk, 104, 270, 13.5),
-  finish
-)
-test "baseline: the lobby and the wonderland portal" {
-  when {
-    for (line, index) in lines(lobbyAndWonderland) {
-      seat1: {line}
-      repeat waits(lobbyAndWonderland)[index] {
-        ticks 1
-      }
-    }
+routes [
+  {
+    name: "debug"
+    program: "walker"
+    chapters: concat(
+      [
+        {
+          name: "the stage into the hall"
+          steps [
+            { $type: "pose", spawn: "stage" }
+            { $type: "line", text: "player.camera.view first" }
+            stand(1)
+            go("place-hall-entrance", "run")
+            go("place-lobby", "run")
+            goTo([16, floor0, 20], "walk")
+          ]
+        }
+        {
+          name: "the east wing and the looping pair"
+          steps [
+            go("place-east-wing", "run")
+            go("place-painting-room", "run")
+            go("place-loop-portal-east", "walk")
+            goTo([68.4, floor0, 34.5], "walk", 0.1)
+            face(270, 0.5)
+            { $type: "cross", headingDegrees: 270, until: "place-loop-portal-west", pace: "walk", metres: 6 }
+            stand(1)
+            { $type: "rest", seconds: 2, lookAt [57, 1.5, 39.4] }
+            go("place-east-wing", "run")
+            go("place-lobby", "run")
+          ]
+        }
+        {
+          name: "Wonderland's machines"
+          steps [
+            go("place-wonderland-threshold", "walk")
+            goTo([11.6, floor0, 30.5], "walk", 0.15)
+            face(90, 0.5)
+            { $type: "cross", headingDegrees: 90, until: "place-wonderland", pace: "walk", metres: 4 }
+            goTo([3.6, floor0, 30.5], "walk", 0.2)
+            { $type: "rest", seconds: 4, lookAt [1.4, 0.6, 30.5] }
+            goTo([8.7, floor0, 30.5], "walk", 0.08)
+            face(270, 0.5)
+            { $type: "cross", headingDegrees: 270, until: "place-lobby", pace: "walk", metres: 3 }
+            goTo([16, floor0, 26], "walk")
+          ]
+        }
+      ],
+      [
+        valleySeam("the valley's seam", "run")
+        gardenSeam("the garden painting", "walk")
+        liftSeam("the lift", "walk")
+      ]
+    )
   }
-  expect {
-    // Arrival: back in the lobby, about (16.5, 30.9) on the owner's walk, standing.
-    bodyPosition(body, 0, x) > 13.5
-    bodyPosition(body, 0, x) < 19.5
-    bodyPosition(body, 0, z) > 28.5
-    bodyPosition(body, 0, z) < 33.5
-    bodyPosition(body, 0, y) > 0
-    bodyPosition(body, 0, y) < 0.2
-    fact(body, 0, Grounded) == 1
+  {
+    name: "seams"
+    program: "walker"
+    chapters: concat(
+      [{ name: "first person", steps [{ $type: "line", text: "player.camera.view first" }] }],
+      map(seamPaces, pace => valleySeam($"the valley, {pace}", pace)),
+      map(seamPaces, pace => gardenSeam($"the garden painting, {pace}", pace)),
+      map(seamPaces, pace => liftSeam($"the lift, {pace}", pace))
+    )
   }
-}
+]

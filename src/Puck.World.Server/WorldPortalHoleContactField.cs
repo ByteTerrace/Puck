@@ -138,6 +138,12 @@ public sealed class WorldPortalHoleContactField : IContactField {
         }
         velocity = velocity.LimitAlong(maximum: FixedVector3.Dot(left: steppedVelocity, right: normal), unitAxis: normal);
 
+        // The push out of the door was taken back, so a wall behind the glass that made it obstructs nothing: the
+        // obstruction it reported goes with it, as a ground facing out of the door no longer grounds.
+        if (FixedVector3.Dot(left: resolution.ObstructionNormal, right: normal) > FixedQ4816.Zero) {
+            resolution = (resolution with { ObstructionNormal = FixedVector3.Zero });
+        }
+
         return ((resolution.Grounded && (FixedVector3.Dot(left: resolution.GroundNormal, right: normal) > FixedQ4816.Zero))
             ? (resolution with {
                 Grounded = false,

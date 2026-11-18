@@ -1079,6 +1079,8 @@ public sealed partial class WorldBody {
     /// <summary>Gets the body's response-shaped planar speed (world units/second) — the coast/momentum witness the
     /// <c>world.contacts</c> read reports.</summary>
     public float PlanarSpeed => ((float)((double)m_planarVelocity.Length));
+    /// <summary>Gets the body's response-shaped planar velocity, in metres per second, in world axes.</summary>
+    public FixedVector3 FixedPlanarVelocity => m_planarVelocity;
     /// <summary>Gets the avatar's current world-space position (the ground foot point under the grounded program, where Y is
     /// pinned to the plane; a free craft's position is unconstrained in all three axes).</summary>
     public Vector3 Position => m_position.ToVector3();

@@ -79,6 +79,8 @@ export type WorldDefinition = {
   commands?: (WorldConsoleCommand | null)[] | null;
   replays?: (WorldScopedReplay | null)[] | null;
   roles?: (WorldRole | null)[] | null;
+  seatPrograms?: (WorldSeatProgram | null)[] | null;
+  routes?: (WorldRoute | null)[] | null;
   /**
    * Gets the basis document this file layers over, as a file path resolved against this document's own directory — the document-composition member (see WorldDocumentBasis). A file naming a basis is a delta: it authors only what differs, inheriting every omitted member from the (recursively composed) basis chain. Unrelated to the coordinate basis the validator's geometry speaks of.
    */
@@ -12310,6 +12312,154 @@ export type WorldRole = {
   look?: string | null;
 };
 
+export type WorldRoute = {
+  /**
+   * The route's name, unique within the document.
+   */
+  name: string;
+  /**
+   * The seat program that plays it.
+   */
+  program: string;
+  /**
+   * The chapters, played in order.
+   */
+  chapters: (WorldRouteChapter | null)[];
+  /**
+   * The 1-based seat that plays it.
+   */
+  seat?: number;
+  /**
+   * The clearance, in metres, a straightened path keeps from the edge of the walkable ground on top of the walker's own radius the navigation domains already keep.
+   */
+  margin?: number;
+};
+
+export type WorldRouteChapter = {
+  /**
+   * The chapter's name, unique within its route; a report addresses the chapter by it.
+   */
+  name: string;
+  /**
+   * The steps.
+   */
+  steps: (WorldRouteStep | null)[];
+  /**
+   * The simulated time after which an unfinished chapter fails.
+   */
+  timeoutSeconds?: number;
+};
+
+export type WorldRouteStep = WorldRouteStepPoseBody | WorldRouteStepLine | WorldRouteStepGo | WorldRouteStepCross | WorldRouteStepRest | WorldRouteStepPressAction | null;
+
+export type WorldRouteStepCross = {
+  $type?: "cross";
+  /**
+   * The heading walked: in the frame of the world the step starts in, or with Relative a turn from the facing the step starts with.
+   */
+  headingDegrees: number;
+  /**
+   * The place that ends the step, in whichever world the walk reaches, or null to walk Metres.
+   */
+  until?: string | null;
+  /**
+   * The pace.
+   */
+  pace?: string;
+  /**
+   * The distance walked, in metres: the whole step with no Until, otherwise the distance past which the step fails short of it. A crossing's jump across the world is no distance walked.
+   */
+  metres?: number;
+  /**
+   * Whether HeadingDegrees turns from the step's starting facing.
+   */
+  relative?: boolean;
+};
+
+export type WorldRouteStepGo = {
+  $type?: "go";
+  /**
+   * The place, or null for Point.
+   */
+  place?: string | null;
+  /**
+   * The point, or null for Place.
+   */
+  point?: DocumentVector3;
+  /**
+   * The pace, a word the route's program reads (walk, run).
+   */
+  pace?: string;
+  /**
+   * Whether the body steers straight at the goal with no navigation (a lift car's floor, a world with no domains), its corridor only Corridor.
+   */
+  direct?: boolean;
+  /**
+   * The distance, in metres, at which a point is reached.
+   */
+  within?: number;
+  /**
+   * Places the body may also stand in on the way.
+   */
+  corridor?: (string | null)[] | null;
+};
+
+export type WorldRouteStepLine = {
+  $type?: "line";
+  /**
+   * The line.
+   */
+  text: string;
+};
+
+export type WorldRouteStepPoseBody = {
+  $type?: "pose";
+  /**
+   * The spawn point's id, or null for Point.
+   */
+  spawn?: string | null;
+  /**
+   * The point, or null for Spawn.
+   */
+  point?: DocumentVector3;
+  /**
+   * The heading a point pose faces.
+   */
+  yawDegrees?: number;
+};
+
+export type WorldRouteStepPressAction = {
+  $type?: "press";
+  /**
+   * The action, a word the route's program maps to a button.
+   */
+  action: string;
+  /**
+   * The place that ends the wait, or null.
+   */
+  until?: string | null;
+  /**
+   * The time stood after the press with no Until, or the time past which the wait for it fails.
+   */
+  seconds?: number;
+};
+
+export type WorldRouteStepRest = {
+  $type?: "rest";
+  /**
+   * The time stood.
+   */
+  seconds: number;
+  /**
+   * The heading faced, or null.
+   */
+  faceDegrees?: number | null;
+  /**
+   * The point looked toward, or null.
+   */
+  lookAt?: DocumentVector3;
+};
+
 /**
  * The row-to-entity assignment declaration — nothing about Sequence/Rows is kit-specific, so the same primitive distributes the kit table (a way of moving) and the look table (a way of looking) across the population. Resolved once at construction into each entry's fixed row index (precompute; zero steady-state cost). The kit assignment affects the simulation (it selects the compiled tuning/action bindings); the look assignment is presentation-only (it selects the appearance row). A Select overrides the sequence for each body whose own state.body register maps to a row, and follows that register as the simulation writes it.
  */
@@ -13130,6 +13280,104 @@ export type WorldSeatModeState = {
    * The control application this state drives, or null for an ordinary state (the seat drives its own body normally). "camera" is the only admitted value: entering the state possesses the seat's declared camera body (see CameraPlacementIdPrefix) through the authority's input runtime and ordinary Engage door, diverting the seat's own body intent to Idle and resolving its view through views.cameraRig instead.
    */
   target?: string | null;
+};
+
+export type WorldSeatProgram = {
+  /**
+   * The program's name, unique within the document, which a route names.
+   */
+  name: string;
+  /**
+   * The operations, evaluated in order each tick; each drives the input sources it names.
+   */
+  operations: (WorldSeatProgramOp | null)[];
+};
+
+export type WorldSeatProgramOp = WorldSeatProgramOpMove | WorldSeatProgramOpTurn | WorldSeatProgramOpHold | WorldSeatProgramOpPulse | WorldSeatProgramOpTap | null;
+
+export type WorldSeatProgramOpHold = {
+  $type?: "hold";
+  /**
+   * The button source.
+   */
+  source: string;
+  /**
+   * The paces, the route's own words, the button is held through.
+   */
+  paces: (string | null)[];
+  driven?: string | null;
+};
+
+export type WorldSeatProgramOpMove = {
+  $type?: "move";
+  /**
+   * The stick source.
+   */
+  source: string;
+  /**
+   * The deceleration, in m/s², the slowing plans for.
+   */
+  brake?: number;
+  /**
+   * The speed, in m/s, a sharp corner is taken at.
+   */
+  cornerSpeed?: number;
+  /**
+   * The turn, in degrees, from which a corner is sharp.
+   */
+  cornerDegrees?: number;
+  /**
+   * The least deflection the stick keeps while the body is still short of its point.
+   */
+  least?: number;
+  driven?: string | null;
+};
+
+export type WorldSeatProgramOpPulse = {
+  $type?: "pulse";
+  /**
+   * The button source.
+   */
+  source: string;
+  /**
+   * The paces the button is tapped through.
+   */
+  paces: (string | null)[];
+  /**
+   * The time from one tap to the next.
+   */
+  periodSeconds: number;
+  driven?: string | null;
+};
+
+export type WorldSeatProgramOpTap = {
+  $type?: "tap";
+  /**
+   * The action, the route's own word, this button answers.
+   */
+  action: string;
+  /**
+   * The button source.
+   */
+  source: string;
+  driven?: string | null;
+};
+
+export type WorldSeatProgramOpTurn = {
+  $type?: "turn";
+  /**
+   * The stick source.
+   */
+  source: string;
+  /**
+   * The fraction of the remaining turn taken each tick, in (0, 1].
+   */
+  gain?: number;
+  /**
+   * The turn, in degrees, inside which the stick stays centred.
+   */
+  deadbandDegrees?: number;
+  driven?: string | null;
 };
 
 export type WorldSeatViewControl = {

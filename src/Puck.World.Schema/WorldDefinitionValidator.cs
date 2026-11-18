@@ -1632,6 +1632,10 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
+        ValidateRoutes(
+            definition: definition,
+            errors: errors
+        );
         ValidateVerdicts(
             definition: definition,
             errors: errors
