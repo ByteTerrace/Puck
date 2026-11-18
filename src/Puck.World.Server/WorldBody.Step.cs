@@ -1864,6 +1864,13 @@ public sealed partial class WorldBody {
             (faceX != FixedQ4816.Zero) ||
             (faceZ != FixedQ4816.Zero)
         ) {
+            // A hard teleport earlier in this tick commands the heading. This tick's intent was composed before it,
+            // against the pose the body left, so its facing does not undo the teleport; the next tick's intent is
+            // composed against the posed body.
+            if (m_continuity.Kind == EntityContinuityKind.Teleport) {
+                return;
+            }
+
             SnapYaw(
                 scratch: ref scratch,
                 yaw: (new FixedVector3(
