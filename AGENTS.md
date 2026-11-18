@@ -298,7 +298,16 @@ agent works in that mode by default, without asking:
     baseline depends on. Such a path is a second implementation, so it earns
     its place: it reads the same data, gives the same result within the
     still tolerance, is measured to pay on that hardware, and falls back to
-    the baseline path automatically.
+    the baseline path automatically. The bar is read at 2560 by 1440 on the
+    RTX 4070 and 1920 by 1080 on the Steam Deck (the owner's ruling), and
+    in both topologies: the authority in the same process, and a remote
+    authority on the Azure deployment, which the lead may change as that
+    testing needs. The work meets both bars on the lead machine's RTX 4070
+    first (the owner's ruling): other devices' code paths are written as if
+    the hardware were on hand (a quality table authored per device, a
+    memory bar per device), but testing on the RTX 2060, the Steam Deck and
+    an HDR display waits until the engine meets the bars there, and missing
+    hardware holds up no fundamental work.
   - The visual bar (the owner's ruling: "I need you to ensure that some bar
     is defined and adhered to"), with the frame bar's standing, and both hold
     at once. Every place in the debug world reads as what it is and meets its
