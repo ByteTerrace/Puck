@@ -60,7 +60,7 @@ unchanged consumer locks can pass restore while retaining older assemblies than
 their project dependencies, which fails compilation. Update container SDK pins
 in the same change.
 Every workflow installs the SDK through the `setup-dotnet` action's `global-json-file`, so the pin
-`global.json` names, a .NET 11 release candidate until general availability, is the only SDK version a
+`global.json` names, the .NET 11 general-availability SDK, is the only SDK version a
 runner installs. The container builds pin the matching SDK image tag in each Dockerfile and track the
 `11.0` runtime image, whose base is Ubuntu 26.04. The Functions app builds with the Azure.Functions.Sdk
 MSBuild SDK, which supports .NET 11 where the `Microsoft.Azure.Functions.Worker.Sdk` package does not,

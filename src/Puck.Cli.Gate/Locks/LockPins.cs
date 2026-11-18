@@ -6,7 +6,7 @@ namespace Puck.Cli.Locks;
 
 /// <summary>Keeps the versions the lock files already pin when a restore has re-resolved them. A restore that rewrites a
 /// lock file (its project's references changed, or the restore evaluated the whole graph afresh) resolves every floating
-/// range, <c>[10.*, )</c> and the like, to the newest package the feed holds, so an unrelated package advances with the
+/// range, <c>[11.*, )</c> and the like, to the newest package the feed holds, so an unrelated package advances with the
 /// reference change that rewrote its project's lock file. <see cref="Hold"/> takes the rewritten text back to the
 /// versions the previous text pinned wherever the same project still asks for the same package the same way, and a
 /// package the file did not list before to the version the solution already pins (<see cref="Collect"/>), so one

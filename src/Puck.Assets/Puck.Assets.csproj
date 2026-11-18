@@ -16,7 +16,7 @@
         <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="System.IO.Hashing" Version="[10.*, )" />
+        <PackageReference Include="System.IO.Hashing" Version="[11.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Abstractions/Puck.Abstractions.csproj" />
