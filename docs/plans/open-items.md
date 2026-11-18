@@ -2094,6 +2094,23 @@ the single disclosure build table; the rd2-review
 findings are answered in decision 3a. Then the researcher brief's priorities
 ([security review](../development/security-review.md)).
 
+- [high] Authored search must plan over what its actor is disclosed. Today an
+  actor-less job reads true state under the audience check (an AI can read a
+  hidden hand), and search refuses private draws (an AI can never choose to
+  draw). Two attempts failed. The first copied and recompiled the whole world
+  per job and broke the debug world's boot. The second (search1, reverted)
+  hid values on the live arena; a review found 14 high findings, four of which
+  corrupt live state. Build the actor's position from what the disclosure
+  path would deliver to that actor (an allow-list), never by hiding what it
+  should not see. A seat's AI then plans on exactly what that seat's client
+  holds, and hidden values are sampled from the job's own seed. Every job
+  compiles only its judge's rules, and authority-only search is explicit
+  (`actor: "world"`). Write a design memo with an adversarial design review
+  before code, and prove it by booting the debug world and running the game
+  tests with `--reproduce`. The reviews hold the cases to close:
+  `SearchLawTests`, and the failing cases in sec6's and search1's findings
+  (both reverted merges' commit messages cite them).
+
 - [medium] Player and spectator replay needs a recording of the observations delivered to each recipient. The disclosure lane owns this work. Verify it with two seats that receive different hidden hands and replay only what each seat saw.
 
 - [high, D0b1 incomplete] sec1 has introduced declaration-only row descriptors,
