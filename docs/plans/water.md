@@ -171,6 +171,9 @@ place and the pavilion overlap (A4, A5 settle the layout together); a camera
 inside a water body renders a flat wash, since the glass pass has no
 inside-the-medium case (an engine gap the swimmer's own view meets, recorded
 under R4's enhancements as the first thing a swimmer's camera needs).
+[Rendering research decision 14](rendering-research.md#14-treat-a-nested-view-as-the-same-view-at-another-size)
+says how it is built: the glass pass's sum for each pixel is started with
+the medium the eye is in, and each ray is cut at its own exit.
 
 ### The gap list
 
