@@ -49,13 +49,19 @@ This page is not a queue.
   runs the simulation step and then builds the frame. On the lead machine
   under Vulkan the step takes about 8 ms and building the frame about 17 ms,
   where 60 frames a second allows 16.7 ms for both. Only about 1 ms of the
-  17 has a breakdown by part ([decisions 1 to 3](#1-measure-before-building)).
+  17 has a breakdown by part, and the step has no breakdown by phase at all
+  ([decisions 1 to 3](#1-measure-before-building)).
 - **Indirect light follows a lighting change minutes late.** After a switch
   to night, the finest lighting data was up to 44 seconds old. The GPU work
-  is small. The delay comes from waiting: each lighting job takes about 25 ms
-  to go through the frame's queue and back, for 1 to 2 ms of GPU work. The
-  automatic exposure meters that stale light, so a night scene is exposed as
-  if it were day ([decisions 4](#4-run-background-gpu-work-without-waiting-a-frame-for-each-job)
+  is small. The one run that measured this shows three causes and does not
+  say how much each contributes. Each lighting job takes about 25 ms to go
+  through the frame's queue and back, for 1 to 2 ms of GPU work. Relights
+  that the change made stale wait behind ray traces that are still owed: a
+  second switch in the same run, with no traces owed, relit the finest level
+  in about 3 seconds. And the lighting did not register the change at all
+  until about 46 seconds after the day was set. The automatic exposure
+  meters that stale light, so a night scene is exposed as if it were day
+  ([decisions 4](#4-run-background-gpu-work-without-waiting-a-frame-for-each-job)
   and [7](#7-make-a-lighting-change-cost-what-changed)).
 - **Lighting and shadows look wrong almost everywhere, and three of the
   causes are defects, not tuning.** Linear light values are shown as if they
@@ -67,32 +73,46 @@ This page is not a queue.
   through portals and onto screens get no shadow maps and no ambient
   occlusion at any size
   ([decision 14](#14-treat-a-nested-view-as-the-same-view-at-another-size)).
-- **The cold bake misses its one-minute bar by seconds.** Baking every mesh
-  of the debug world from an empty store takes 60.6 s on Direct3D 12 and
-  64.7 s on Vulkan. Six of the fourteen blend exhibits fail the mesh audit
-  ([decision 10](#10-bring-the-cold-bake-inside-its-minute-and-close-the-contour-defects)).
+- **A change to bake code costs a whole bake, and the whole bake is just
+  over its figure.** The wait that matters most is the one between making a
+  change and seeing it. An edit to a creation rebakes only that creation's
+  meshes. An edit to the bake's own code, in C# or in a shader, rebakes
+  every mesh, because one identity covers the whole mesh store. Baking every
+  mesh of the debug world from an empty store takes 60.6 s on Direct3D 12
+  and 64.7 s on Vulkan. The figure of about a minute exists to stop that
+  time drifting, not as a finish line. Six of the fourteen blend exhibits
+  fail the mesh audit
+  ([decision 10](#10-make-a-bake-cost-what-changed-and-close-the-contour-defects)).
 - **GPU memory is never given back, and a mesh that has not arrived is a
   hole in the picture** ([decision 9](#9-give-memory-back-and-never-show-a-hole)).
 - **Every measurement comes from one class of GPU.** Nothing has been
-  measured on the RTX 2060 or the Steam Deck, so every gain ranked on this
-  page is an assumption on those devices.
+  measured on the RTX 2060 or the Steam Deck. Every gain ranked on this page
+  is an assumption on those devices, and nothing says how far either is from
+  its frame-rate bar.
 
 ### What we propose to do first
 
-1. **Measure.** Add the missing measurements and change no behaviour: where
-   the 17 ms of frame building goes, when each frame was actually displayed,
-   what limits the cold bake, and the same readings on the RTX 2060 and the
-   Steam Deck ([stage 0](#stage-0-measure)).
+1. **Measure, and build what the measuring needs.** The benchmark's route
+   has three chapters today, and the checks on this page name chapters that
+   do not exist yet. The benchmark also does not apply the quality setting
+   the frame-rate bar is defined at. So the first stage builds the route,
+   states once how the bar is read, and takes the missing measurements:
+   where the 17 ms of frame building goes, when each frame was actually
+   displayed, what limits the cold bake, how long each kind of edit takes to
+   show, and how far the RTX 2060 and the Steam Deck are from their bars. It
+   changes nothing a player sees ([stage 0](#stage-0-measure)).
 2. **Fix what the player sees everywhere.** Convert scene light to display
-   values once, in every path. Give the main shadow maps to the light that is
-   actually lit, and let the lighting probes answer where no shadow map
-   reaches. Let lighting jobs overlap, inside a budget that follows the GPU
-   time the frame actually leaves free. Fix the bake's contour defects. Make
-   what a nested view gives up an authored table instead of two engine
+   values once, in every path, and retune the debug world to the corrected
+   values in the same piece of work. Give the main shadow maps to the light
+   that is actually lit, and let the lighting probes answer where no shadow
+   map reaches. Let lighting jobs overlap, inside a budget that follows the
+   GPU time the frame actually leaves free. Fix the bake's contour defects.
+   Make what a nested view gives up an authored table instead of two engine
    constants ([stage 1](#stage-1-fix-what-the-player-sees-everywhere)).
-3. **Then the frame thread.** Capture and prepare only what a frame will
-   show, and split the simulation step across a thread pool without adding a
-   frame of input latency
+3. **Then the frame thread and the draw list.** Capture and prepare only
+   what a frame will show. Split the simulation step across a thread pool
+   without adding a frame of input latency. Shrink the list of draw commands
+   to the draws that survive culling
    ([stage 2](#stage-2-the-frame-thread-and-the-round-trips)).
 4. **Then the shared structures that scale.** One table of instances and one
    visibility test for every pass, and one chain of meshes per shape from
@@ -104,31 +124,52 @@ This page is not a queue.
 
 - Where most of the frame-building time goes. The order of the frame-thread
   work follows that measurement, not this page.
+- Where the simulation step's time goes. The planned split of the step may
+  not reach the parts that cost most in the debug world.
 - Whether the cold bake is limited by its processors or by waiting on the
   GPU. Two fixes are ready, and one measured run decides which goes first.
-- Whether anything here holds on the RTX 2060 or the Steam Deck.
-- Three designs have no precedent outside Puck that we could find: a shadow
-  filter sized in metres and read from a depth pyramid, a relight that stores
-  light per light source and rescales it, and a chain of meshes in which
-  every step is measured against the authored shape. Each has its own check
+- How far the RTX 2060 and the Steam Deck are from their bars, and whether
+  the gains this page plans can close that distance. The first stage sizes
+  it. If the planned gains cannot close it for a device, the order is
+  re-cut for that device and what remains goes to the owner.
+- Three designs have no direct precedent outside Puck that we could find: a
+  shadow filter sized in metres and read from a depth pyramid, a relight
+  that stores light per light source and rescales it, and a chain of meshes
+  in which every step is measured against the authored shape. Each decision
+  names the nearest published relative and gives the design its own check
   before it is adopted.
-- The first review did not reach large parts of this page
-  ([what the review did not reach](#what-the-review-did-not-reach)).
+- Three reviews have read this page, and none of them ran anything. All
+  three read code, documents and sources. No World was booted and no
+  measurement was taken for any of them
+  ([what the attack and the second review changed](#what-the-attack-and-the-second-review-changed)).
 
 ### What we need from the owner
 
+- **Three calls about what the engine does.** Each has a default the work
+  proceeds on, so none blocks a step.
+  - What a bar device does if the planned gains cannot bring it to its bar.
+    Until the owner says otherwise it keeps the highest quality, misses the
+    bar, and reports each slow frame with its cause.
+  - The window size the bar is read at on the two desktop devices. Until
+    the owner names one, it is the benchmark's own default window of 1280 by
+    720, with a second reading at 1920 by 1080 so the cost of a larger
+    window is known.
+  - Whether sharpening may act on bloom's scattered light. The register
+    rules that it does not, and this page keeps that.
+- **Hardware, earlier than this page first said.** An RTX 2060 and a Steam
+  Deck for the device measurements. The Deck is needed beside the first
+  stage, because Puck's windowed Linux path has never run on hardware. An
+  HDR display is needed for the colour check.
 - **A comparison of two build orders.** The owner agreed to the summary's
-  priorities before a reviewer from another model family read the page. That
-  review moved work between stages. The order is a corrected proposal until
-  the owner has compared it with the draft's
+  priorities before any reviewer read the page. The reviews moved work
+  between stages and left the sequence of stages as it was. The order is a
+  corrected proposal until the owner has compared it with the draft's
   ([what changed in the build order](#what-changed-in-the-build-order)).
-- **Time on an RTX 2060 and a Steam Deck.** The device measurements need the
-  hardware.
 - **No look decisions.** The tone curve, exposure, a light's softness, the
   look of night and the quality tables are values the standard package and
   any author set over a neutral engine default
   ([authored looks](#looks-are-authored)).
-- Four further calls come to the owner only if a measurement or another plan
+- Further calls come to the owner only if a measurement or another plan
   raises them ([the owner's calls](#the-owners-calls)).
 
 ## How to read this page
@@ -160,6 +201,8 @@ where a decision first leans on it.
 | Round trip | The CPU submits a GPU job, waits for it, and reads the result back before it can submit the next. |
 | Bar devices | The three devices the frame-rate bar is set on: the RTX 2060 and RTX 4070 at 60 frames a second (16.7 ms a frame), and the Steam Deck at 45 (22.2 ms). |
 | The recipe | The one way a bar is measured: on a quiet machine with the display on and composing ([streaming and memory](streaming-and-memory.md#how-the-bars-are-read)). |
+| Route, chapter | The benchmark plays a scripted walk through the debug world (`worlds/debug/benchmark-route.puck`). A chapter is one named leg of it, and each chapter is reported on its own. |
+| Preset | A named set of quality settings. The frame-rate bar is defined at the `world.quality high` preset. |
 | The register | The record of settled rendering decisions ([decisions](../decisions/rendering.md)). |
 
 ### How evidence is marked
@@ -212,7 +255,7 @@ parentheses.
 
 The nine passes summarized 166 sources. 140 could be fetched and 26 could
 not. A verification pass then reopened the claims that support each area's
-first three candidates: 63 claims from 36 outside sources, and 12 claims
+first three candidates: 63 claims from 35 outside sources, and 12 claims
 about 10 files in this repository.
 
 | Area | Confirmed | Partial | Refuted | Unreachable |
@@ -262,7 +305,7 @@ existing plan. Twelve of those disagreements changed this page.
    machine with the display on and composing, which is what the recipe
    requires. So neither bake fix is ranked ahead of the other until one such
    run shows which is on the critical path
-   ([decision 10](#10-bring-the-cold-bake-inside-its-minute-and-close-the-contour-defects)).
+   ([decision 10](#10-make-a-bake-cost-what-changed-and-close-the-contour-defects)).
 3. **Two records disagree on how much the coarser levels save.** The
    mesh-bake reference and the handbook say the first two levels keep 11% and
    6% of the stored triangles. A later cold bake's completion line reads 29%
@@ -321,12 +364,14 @@ existing plan. Twelve of those disagreements changed this page.
     The research areas wrote the floor down as the decision. Decisions 7 and
     8 keep the plan's rule.
 12. **One fix that is already built covers less than its name suggests.** An
-    unmerged branch keeps several probe jobs in flight and commits a batch
-    once. It was built and never run in a World. Its measurements are of the
-    tree it branched from. It still grants lighting work per rendered frame
-    (`SdfMeshIrradiance.Grant` at that branch's commit).
+    unmerged branch makes three changes. It keeps several probe jobs in
+    flight. It commits a batch once. And it lets relights made stale by a
+    lighting change share the worker with owed traces instead of waiting
+    behind them. It was built and never run in a World. Its measurements
+    are of the tree it branched from. It still grants lighting work per
+    rendered frame (`SdfMeshIrradiance.Grant` at that branch's commit).
     [Decision 4](#4-run-background-gpu-work-without-waiting-a-frame-for-each-job)
-    treats the two halves as separate steps.
+    treats these as separate steps.
 
 Evidence for this section: items 2, 8 and 12 rest on code and commit
 messages read for this page. Item 3's later figures are measured. Item 10's
@@ -343,24 +388,38 @@ Some instruments exist. The console verb `host.frames` splits a loop
 iteration into coarse phases. `world.counters render.record` splits the
 recording of GPU commands. `world.gpu-timing`, `world.counters gpu`,
 `world.residency` and [the benchmark](benchmark.md)'s report per chapter of
-its route also exist. The table lists what is missing.
+its route also exist. The table lists what is missing. Its last column says
+which devices each reading is taken on and the first step that needs it, so
+that a reading which only ranks a later step does not hold the first stage
+open.
 
-| Missing measurement | Why a decision waits for it | Where it is built |
-|---|---|---|
-| Produce split by part: pumping, capture, packing, staging the lighting, exposure, scheduling, preparing packages, recording and flushing | Produce takes about 17 ms and the tick about 8 ms on Vulkan. Recording sums to about 1 ms. So most of produce is unexplained | The job system's work packet, following the pattern of `RenderRecordWork` |
-| For each presented frame: how long it stood on the display, what happened to it (shown, skipped, queued or unknown), and which signal said so | `host.frames` reports the loop's interval, not the display's. A skipped Vulkan present is counted but never placed on the timeline. The Vulkan presenter polls the present from two frames back once, stamps a success with the CPU's clock, and advances the present id on a timeout too (`VulkanFramePresenter.RecordPresentTiming`). So nothing says when a frame was displayed or dropped | The benchmark's displayed-time stage (stage 8), extended. A host that cannot report display time says so as a capability, and the column is left out |
-| Captures and prepares during produce, counted by what asked for each: a scheduled render, an upload that is owed, or the question "has this view changed?" | Decision 2 saves the captures that no scheduled render reads. That question triggers a prepare too, so it has to be counted | The job system's work packet |
-| GPU time per benchmark chapter, split into the root view, nested views and background work, beside how much of its allowance the background work used | Decision 4 raises that use, and the root frame and the allowance already add up to more than a frame | `world.gpu-timing`, `world.counters gpu` |
-| One cold bake that records worker activity, the wait on each GPU request, GPU timestamps and the total time together, on a quiet machine with the display composing and an empty store | It shows which of decision 10's two fixes is on the critical path | The bake's work packet |
-| Shadow queries the relight actually issued, and pairs of hit and light it actually tested, separate from the scheduler's predicted cost | Decision 7 sizes its stores by executed work | `world.counters gpu` |
-| Triangles drawn per level, and per tier relative to the tier that was asked for. Bytes held by each level that no pass selected | Decision 8's reasoning about unused detail has no counter behind it | `world.counters gpu`, `world.residency` |
-| How much of each cascade's grid of receiver cells is occupied | It decides whether shadow storage could be allocated on demand, and it sizes decision 11's caster culling | The virtual geometry plan's shadow measurement (D8) |
-| For each pass, one node per session and one per nested view, naming the residency each one reads | Decisions 2, 11 and 14 depend on it. The boot world's sessions are views of its one residency, and a session routed to another world has its own | The visibility plan's owed measurements |
-| What an empty indirect draw command costs on each bar device | It decides whether compacting the command list is enough on its own | Visibility's compaction step (V1a) |
-| One cascade pass split into walking the commands, vertex work, pixel fill and clears | It decides which of three fixes pays | A GPU capture in the lead's measurement window |
-| What re-uploads about 2,600 draw records a frame when nothing is moving | It may be a defect that is cheaper to fix than any step that claims the same saving | Visibility |
-| Garbage collections and bytes allocated per iteration, by source | One run had 47 collections that paused the process for 674 ms in 600 iterations | The job system's work packet |
-| Any pass at all on the RTX 2060 and the Steam Deck, on every backend the device runs: Direct3D 12 and Vulkan on the two RTX cards, Vulkan on the Deck | Four plans wait on it: visibility's device measurement (M2), the author-shader matrix, illumination's first step and transmission's budgets | One GPU session that serves all four plans |
+| Missing measurement | Why a decision waits for it | Where it is built | Read on, and needed before |
+|---|---|---|---|
+| Produce split by part: pumping, capture, packing, staging the lighting, exposure, scheduling, preparing packages, recording and flushing | Produce takes about 17 ms and the tick about 8 ms on Vulkan. Recording sums to about 1 ms. So most of produce is unexplained | The job system's work packet, following the pattern of `RenderRecordWork` | The lead machine, both backends. Before stage 2 |
+| The tick split by phase, per chapter, and by world instance | Decision 3 shortens the tick by splitting two of its phases. Open items records the debug world's tick as about a third body movement and under a third rule evaluation, with serial causes named. Every world instance also steps in series on the frame thread (`WorldInstanceHost.StepInstances`). No report says which of these dominates | The job system's work packet | The lead machine. Before stage 2 |
+| Delivery time and bytes for each session | A world nobody sees still steps and still delivers to its sessions. Decision 2 saves presentation work only, and this row sizes what it leaves | The worlds area ([open items](open-items.md#transfers-federation-and-server)) | The lead machine. Before stage 4 |
+| For each attempt to present a frame: whether it was submitted, what happened to it (shown, skipped, dropped or unknown), how long it stood on the display, and which signal said so. The report states the share of attempts whose outcome is unknown | `host.frames` reports the loop's interval, not the display's. Every presenter already reports its latest confirmed present (`IPresentTimingFeedback`). On Direct3D 12 that is the scan-out time. On Vulkan it is the CPU's clock when a wait for the present from two frames back returned (`VulkanFramePresenter.RecordPresentTiming`), and a skipped present is counted but never placed on the timeline. No record is kept per present, so nothing says which frame was shown or dropped | The benchmark's displayed-time stage (stage 8), extending `PresentTimingSample`. A host that cannot report display time says so as a capability, and the column is left out | Every bar device and backend. Before stage 2's frame checks |
+| From the earliest input a frame used to the time that frame was displayed, or submitted where no display time exists. Motion the tick integrates and pointer look applied between ticks (`WorldSeatViewState.PresentedLook`) are reported apart | Two decisions turn on latency and nothing measures it: whether the tick ever moves to its own thread (decision 3), and whether waiting for a present slot before rendering costs or saves latency (decision 15) | One joined column of the present record | Every bar device and backend. Before decision 15's admission rule |
+| Captures and prepares during produce, counted by what asked for each: a scheduled render, an upload that is owed, another consumer's minimum, or the question "has this view changed?" | Decision 2 saves the captures that nothing reads. That question triggers a prepare too, so it has to be counted | The job system's work packet | The lead machine. Before stage 2 |
+| GPU time per benchmark chapter, split into the root view, nested views and background work. Over the same span: the background work's GPU time, the time some job was in flight, the elapsed time, and the credit the budget granted and held | Decision 4 raises the background work's use of its allowance. The only figure today divides GPU time by the time a job was in flight, which is not a share of the allowance, so nobody knows how much of the allowance is used | `world.gpu-timing`, `world.counters gpu` | Every bar device and backend. Before stage 1's headroom rule |
+| How long each frame's own GPU work took from submit to completion, per frame, with any background job that ran ahead of it | Pass timings today are means over a window of 32 frames (`ShaderPipelineRenderNode.TimingWindow`), so no per-frame GPU maximum exists. The headroom rule and its check need one | `world.gpu-timing` | Every bar device and backend. Before stage 1's headroom rule |
+| One cold bake that records worker activity, the wait on each GPU request, GPU timestamps and the total time together, on a quiet machine with the display composing and an empty store | It shows which of decision 10's two speed fixes is on the critical path | The bake's work packet | The lead machine, both backends. At the close of stage 1 |
+| A cold arrival in play: a windowed walk into a place whose meshes are not stored | The cold-bake figure is read paused and in lockstep, where the service hands each job to the GPU before it waits (`SdfGpuWork.Drive`). In play the service only pumps (`SdfGpuWork.Pump`), which is the slow path decision 4 describes. The figure never exercises it | A benchmark chapter run from an empty store | The lead machine, both backends. Before stage 2 |
+| The time from saving an edit to seeing it in the running debug world, by phase, for three kinds of edit: a `.puck` document, a shader, and C#. Beside each time, the work it did: groups rebaked, kernels recompiled, projects rebuilt | Decision 10 is judged by this, and it is the wait the owner's ruling puts first. Only scattered readings exist | The edit-to-running procedure's phases ([contributing](../development/contributing.md#edit-to-running), [open items](open-items.md#edit-to-running-hot-reload-and-boot)) | The lead machine. Before stage 1 |
+| Shadow queries the relight actually issued, and pairs of hit and light it actually tested, separate from the scheduler's predicted cost. Beside them, how many distinct pairs of surface and light those were, and the most work in one dispatch | Decision 7 sizes its stores by executed work. Traffic alone does not size a store: one pair asked a thousand times needs one entry, and a thousand pairs asked once need a thousand | `world.counters gpu` | The lead machine. Before stage 3's shared surface lighting |
+| For each probe level, at a walk, a run and in flight: probe cells entering the grid, and probes traced and relit a second | The lighting's lag has only been read standing still. A moving camera brings new cells in, and whether tracing keeps up decides whether the lag check means anything in play | `world.counters gpu` | The lead machine. Before stage 1's lighting check |
+| Triangles drawn per level, and per tier relative to the tier that was asked for. Bytes held by each level that no pass selected | Decision 8's reasoning about unused detail has no counter behind it | `world.counters gpu`, `world.residency` | The lead machine. Before stage 3's chain |
+| Triangles submitted, culled and rasterized in each raster pass | Indexed draws claim to cut vertex work, and no counter shows vertex work | `world.counters gpu` | Every bar device. Before the indexed-draw experiment |
+| How much of each cascade's grid of receiver cells is occupied | It decides whether shadow storage could be allocated on demand, and it sizes decision 11's caster culling. Only the far cascade has a receiver mark today, so the first stage builds a count-only mark for the other two | The virtual geometry plan's shadow measurement (D8) | The lead machine. Before stage 2's caster culling |
+| For each pass, one node per residency and one per view of it, naming the residency each view reads | Decisions 2, 11 and 14 depend on it. Sessions and residencies do not map one to one in either direction. The boot world's sessions are views of its one residency, and every seat and window presented in one other world share that world's one residency (`WorldFramePresenter.AttachWindow`) | The visibility plan's owed measurements | The lead machine. Before stage 2 |
+| The capture and GPU readings again, with one window onto a world that gives the viewer less than a full replica | Every world of the debug world admits everyone at full disclosure (`disclosure: Replica` in `worlds/debug/debug.puck`), so every window joins a shared residency. A restricted viewer gets a residency of its own (`WorldScreenBinder.CreateSessionResidency`). Without this row every sharing claim is measured only where sharing is cheapest | A scratch destination admitted below a replica, in the same process | The lead machine. Before stage 3 |
+| What an empty indirect draw command costs on each bar device | It decides whether compacting the command list is enough on its own | Visibility's compaction step (V1a) | Every bar device. Before compaction |
+| One cascade pass split into walking the commands, vertex work, pixel fill and clears | It decides which of three fixes pays | A GPU capture in the lead's measurement window | Every bar device. Before stage 2's caster culling |
+| What re-uploads about 2,600 draw records a frame when nothing is moving | It may be a defect that is cheaper to fix than any step that claims the same saving | Visibility | The lead machine. Before the draw record is split |
+| Garbage collections and bytes allocated per iteration, by source | One run had 47 collections that paused the process for 674 ms in 600 iterations | The job system's work packet | The lead machine. Before stage 2 |
+| The mesh audit over every stored mesh of the world, at the tier each group is stored at, on each backend | Decision 10's contour rule reaches every bake, and the audit that would judge it does not cover the world today. A store audit over a cold store read 238 of 6,544 groups, and the CPU audit disagrees with the device below cells of about 8 mm ([bake detail](open-items.md#bake-detail)) | `puck mesh audit` | The lead machine, both backends. Before stage 1's contour rule |
+| Any pass at all on the RTX 2060 and the Steam Deck, on every backend the device runs: Direct3D 12 and Vulkan on the two RTX cards, Vulkan on the Deck | Four plans wait on it: visibility's device measurement (M2), the author-shader matrix, illumination's first step and transmission's budgets | One GPU session that serves all four plans | The RTX 2060 and the Steam Deck |
+| For each bar device: the slowest frame of each chapter against the device's bar, split into the tick, produce, the root view, the cascades, nested views and background work | It says how far each device is from its bar and in which part, so that each later step can state its gain against that distance | The same device session | Every bar device and backend. Before stage 1 |
 
 **What we propose.** Take the measurements in the table first, as one stage
 that changes no behaviour (option 1b). Where a measurement serves only one
@@ -370,18 +429,33 @@ probe lookup, how many passes a lighting drain takes, the cost of the
 exposure meter when it is compiled out, and a per-tier audit of each foliage
 prototype.
 
+The device rows produce one table per bar device: the distance from its bar
+in each chapter, by part. From then on each step states its claimed gain
+per device against that table. Where the gains planned for a device do not
+add up to its distance, the order is cut again for that device, and what
+still remains goes to the owner
+([the owner's calls](#the-owners-calls)).
+
 **Why.** A fix ranked by arithmetic can spend weeks on a cost that turns out
 to be small. The measurements are live counters and benchmark reports read
 in real time, which is how the owner's rulings ask for evidence to be taken.
 Nothing is recorded as a baseline.
 
 **What it costs or risks.** Measuring first delays fixes the owner can
-already see. Two limits keep that delay small. The fixes in decisions 5 and
-6 that rest on the code alone do not wait. Only work whose rank depends on a
-number does. There is a second risk: a stage that only explains where cost
-goes proves nothing about whether a later change paid off. So from stage 1
-on, every check names the gain its change claims and what result would show
-the claim false ([the build order](#the-build-order)).
+already see. Three things keep that delay small. The fixes in decisions 5
+and 6 that rest on the code alone do not wait. Only work whose rank depends
+on a number does. And the stage closes device by device: the lead machine's
+readings are enough for stages 1 and 2 to start, so those do not wait for
+the RTX 2060 or the Steam Deck.
+
+There is a second risk: a stage that only explains where cost goes proves
+nothing about whether a later change paid off. So from stage 1 on, every
+check names the gain its change claims and what result would show the claim
+false ([the build order](#the-build-order)).
+
+A third risk is that the ranking goes stale. Stage 1 changes the bake's
+cost, so the cold-bake run that ranks the speed fixes is taken at the close
+of stage 1, not before it.
 
 **What we still have to find out.** Everything in the table.
 
@@ -390,11 +464,18 @@ alone (option 1a) is the fastest start, and it is how a team ends up
 optimizing the wrong thing.
 
 **Evidence.** Code read for this page: the Vulkan presenter's timing
-behaviour. Measured: produce at about 17 ms and the tick at about 8 ms on
-Vulkan, and the 47 collections with 674 ms of pauses in 600 iterations.
+behaviour, the presenters' shared timing interface, the window of 32 frames
+behind a pass timing, the serial step of world instances, the debug world's
+admission at full disclosure, and the routed residency shared by an
+endpoint's seats and windows. From the reviews, checked by their own
+readers and not reopened here: that the cold-bake figure is read paused and
+in lockstep, and the store audit's 238 of 6,544 groups. Measured: produce at
+about 17 ms and the tick at about 8 ms on Vulkan, and the 47 collections
+with 674 ms of pauses in 600 iterations.
 
-**What it rests on.** "Hunt real problems with every instrument" and
-"Evidence is taken as a player takes it"
+**What it rests on.** "Hunt real problems with every instrument", "Evidence
+is taken as a player takes it" and the ruling on waits, which puts the time
+from a change to seeing it first
 ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)).
 
 ### 2. Capture and prepare only what a frame shows
@@ -423,10 +504,9 @@ mirror of simulation state, the field probes that place characters' feet
 (their effectors) and the camera's clearance march, and it packs the poses
 for the GPU.
 
-Reordering alone would not help, because the scheduler asks for the same
-work. Before it schedules, the runtime asks every package whether each
-view's last render still stands (`RenderGraphRuntime.WithUnchanged`). The
-residency answers by preparing
+The scheduler asks for the same work a second time. Before it schedules,
+the runtime asks every package whether each view's last render still stands
+(`RenderGraphRuntime.WithUnchanged`). The residency answers by preparing
 (`src/Puck.SdfVm/SdfWorldResidency.cs:644-646`):
 
 ```csharp
@@ -435,12 +515,29 @@ residency answers by preparing
             !Prepare(context: in context) ||
 ```
 
-Four more costs come from the same shape:
+It then compares a hash of the packed tables with the hash the view last
+rendered at (`SdfWorldTables.ViewSignature`). That is expensive. It is also
+safe: a change the hash covers cannot be missed, because the hash is taken
+after the capture and the pack.
 
-- The frame schedules a second time only when a release left an output
-  standing (`RenderGraphRuntime.RescheduleAfterRelease`). A window that a
-  camera turn reveals releases nothing, so it gets no correction in that
-  frame.
+Two things in today's order are right and have to be kept.
+
+- **The root world's capture produces the cameras and the footprints.** A
+  footprint is how much of the frame a view covers. The root capture places
+  the cameras, and then every view's footprint is completed, at every depth
+  of nesting, before the schedule runs (`WorldViewGraphHost.PublishPanes`,
+  which ends by calling `CompleteFootprints`). So a camera turn that reveals
+  a window, and a second window inside the first, schedules both in the same
+  frame today. A view whose camera is not yet known keeps its footprint, so
+  it is served too much and never missed.
+- **A prepare also does upkeep that has nothing to do with drawing.** It
+  polls finished uploads, answers requests to give memory back, and applies
+  a shader reload (`SdfWorldResidency.Prepare` and the step it runs once a
+  frame). A residency that simply stopped being prepared would stop doing
+  these.
+
+Three more costs come from the same shape:
+
 - Each world that is arriving renders a hidden window at
   `WorldPortalVisibility.ArrivalShare`, because only a scheduled render
   moves a residency's data to the GPU.
@@ -449,44 +546,77 @@ Four more costs come from the same shape:
 - Packing poses looks up the driver of each authored swing by comparing
   strings, on every pack (`src/Puck.World.Client/WorldGaitDrivers.cs:610-626`).
 
-**What we propose.** Five steps, in this order.
+**What we propose.** Six steps, in this order.
 
 1. **Get the breakdown** of produce from decision 1.
-2. **Decide what is shown before capturing anything** (option 2b). This has
-   four parts, and the first makes the others pay.
-   - *A cheap snapshot.* A residency answers "does this view's last render
-     still stand?" and "what does this frame need?" from state that needs no
-     capture: the inputs to the camera and view signature, bake results
-     waiting to be drawn, lighting that is still settling, a source that is
-     waiting, and each published image's change stamp. `Prepare` splits into
-     that cheap step and the heavy capture. Only the cheap step runs before
-     the schedule.
-   - *One bounded correction.* The runtime's own comment says preparation
-     can rebuild live footprints. When a scheduled prepare reveals something
-     the snapshot missed, the frame schedules once more for it. If that
-     second pass reveals a further level, it waits one frame behind its
-     authored fallback image, and the wait is counted.
+2. **Capture only the residencies a frame needs** (option 2b). This has
+   four parts, and they land together.
+   - *The order.* The root world's capture stays first, because nothing
+     else can supply the cameras and the footprints. The footprints are
+     then complete at every depth, as they are today. After that, a
+     residency is captured and packed only if something needs it this
+     frame: a view with a footprint, an upload that is owed, or another
+     consumer's minimum. The schedule follows.
+   - *Upkeep for every residency, every frame.* One small step runs for
+     every residency whether or not it is captured: it polls uploads,
+     answers memory trims and retirements, and applies a pending shader
+     reload. It reads no world state and its cost does not grow with the
+     world.
+   - *Minimums for unseen worlds, in the same piece of work.* The hidden
+     arrival render exists because only a scheduled render moves a
+     residency's data to the GPU. Deleting it with nothing in its place
+     would leave a cold destination unable to make progress. So what each
+     consumer is owed is registered and served in this step: a predicted
+     arrival's first image and its lighting, a screen out of view whose
+     glow lights a visible room, picking, and the lighting trace
+     ([decision 14](#14-treat-a-nested-view-as-the-same-view-at-another-size)).
+     That work runs under the shared budget and never drives the frame.
+     Stage 4 later divides the optional work above these minimums.
    - *State kept by view, not by position.* Exposures, the occlusion test's
      previous visible set and the temporal history are keyed by the view's
      identity. Skipping a view then shifts nobody else's state
      ([visibility V5](visibility.md#v5-multi-view-and-shadow-work)).
-   - *Minimums for unseen worlds.* An unseen residency still gets what
-     another consumer is owed
-     ([decision 14](#14-treat-a-nested-view-as-the-same-view-at-another-size)).
-     That work runs under the shared budget and never drives the frame.
-3. **Cut the largest named parts at their cause** (option 2c), in the order
+
+   Freshness keeps its one judge through this step. For every residency
+   that is captured, the packed hash still decides whether a view's last
+   render stands. The existing rule that a view may stand only while it is
+   bound to the same resolved view also stays (`SdfWorldPasses.Refresh`). A
+   viewer who loses the right to see a world is moved to another residency,
+   and that rule is what stops the old picture standing.
+3. **Only if the breakdown calls for it, answer "has this changed?" without
+   capturing** (the second half of option 2b). After step 2, a residency
+   that is shown still captures and packs every frame to learn that nothing
+   changed. If the breakdown names that as a cost, a cheap check can let a
+   view stand from change stamps: counters that each writer of an input
+   moves when it changes that input. The packed hash stays the judge
+   whenever a capture does run. This step is built with three guards,
+   because its failure is silent:
+   - one constructor takes every stamp, so a new input cannot be added
+     without one;
+   - an audit switch packs every view the cheap check let stand, compares
+     the hash, and counts disagreements;
+   - the change gets an adversarial review, because a guard every writer
+     must remember is a class of defect that reading the change is the only
+     check for ([hazards](../development/hazards.md#silent-invariants)).
+4. **Cut the largest named parts at their cause** (option 2c), in the order
    the breakdown gives: CPU queries of the distance field, draw records that
    are re-uploaded, and motion that is interpreted every frame
    ([decision 12](#12-keep-motion-and-placement-as-authored-programs-at-zone-scale)).
-   Field queries are about a third of the meadow's frame.
-4. **Run what remains in parallel on the one thread pool** (option 2d).
+   Field queries are about a third of the meadow's frame. The field's
+   gradient is the first candidate among them. It takes six samples for
+   each query (`SdfFieldEvaluator.TryFieldGradient`), and open items already
+   holds a version that takes four. One walk that carries the derivatives
+   along is weighed against it by measurement, because it would be a second
+   walker of the field.
+5. **Run what remains in parallel on the one thread pool** (option 2d).
    Packing poses is 0.9 ms of the 3.4 ms it takes to begin a frame. This
    step waits for the job system's bounded waits and its pool (C0 and J1).
-5. **Stop allocating memory every frame**, on the frame thread and the
+6. **Stop allocating memory every frame**, on the frame thread and the
    background threads, at the sources a trace names (option 2e). This runs
-   beside all the other steps. One iteration allocated 68 MB, and the worst
-   frames carried garbage-collection pauses of 20 to 28 ms, which is longer
-   than a whole frame. That causes hitches at any average frame rate.
+   beside all the other steps and needs no pool. One iteration allocated
+   68 MB, and the worst frames carried garbage-collection pauses of 20 to
+   28 ms, which is longer than a whole frame. That causes hitches at any
+   average frame rate.
 
 **Why.** Capture cost today grows with the number of residencies held, not
 with what is on screen. Destiny's renderer extracts only what is visible and
@@ -498,21 +628,40 @@ things: capture that grows with residencies, the hidden render per arriving
 world, and the case of a world behind a rarely updated view that never
 finishes arriving.
 
+Step 2 gets most of that saving without a second answer to "is this view
+fresh?". The residencies that cost the most for nothing are the ones no
+view shows, and those need no freshness answer at all.
+
 **What it costs or risks.**
 
-- The snapshot is a second answer to a question `Prepare` answers today, and
-  two answers can disagree. So the snapshot becomes the only answer to "is
-  this view fresh?". The heavy step reads its result and does not decide
-  again.
-- A dependency that a prepare reveals has no same-frame schedule today,
-  which is why the bounded correction is part of the step.
+- The root capture cannot move. An earlier draft of this page said the
+  cameras and the footprints could be read "from state that needs no
+  capture" and scheduled a correction pass for a window revealed
+  mid-frame. The code does not support the first, and it does not need the
+  second: footprints are already complete before the schedule. That draft's
+  check also accepted a window showing its fallback image for one frame,
+  which today's order never does.
+- A residency that is not captured must still do its upkeep, which is why
+  the upkeep step is separate from the capture.
+- Removing the hidden arrival render before the minimums exist would strand
+  a cold destination, which is why they land together.
 - State indexed by position shifts when a view is skipped, which is why the
   re-keying is part of the step.
+- The cheap check of step 3 is a second answer to a question the packed
+  hash answers today, and two answers can disagree. A stamp that a writer
+  forgets to move shows as a picture that should have redrawn and did not.
+  No counter notices, because a view that wrongly stands also lowers the
+  capture count the step is judged by. This is why step 3 is optional, why
+  it comes after step 2, and why it carries an audit.
 - Switching the garbage collector's mode would hide the allocation problem
   without fixing its cause, so we do not do it.
+- This order has been read by one model family only. The second review,
+  from another family, found the missing minimums but did not examine the
+  capture order itself.
 
 **What we still have to find out.** The breakdown may name parts that none
-of these steps covers. The order follows the breakdown.
+of these steps covers. The order follows the breakdown. Whether capturing a
+shown but unchanged residency is a cost large enough to justify step 3.
 
 **The option we did not take.** Recording several views' commands in
 parallel now (option 2a, the job system plan's R1) would save about half a
@@ -521,19 +670,27 @@ the debug world. The job system plan's own admission rule keeps it on hold.
 
 **Evidence.** Code read for this page: the loop order, the begin-frame call
 ahead of the schedule, the prepare of every residency, the freshness
-question that prepares, the reschedule condition, the arrival window, the
-filming of home sessions and the string lookup. From the scheduling area's
-map: what a prepare captures. Measured: recording at about 1 ms, field
-queries at a third of the meadow's frame, pose packing at 0.9 ms of 3.4 ms,
-68 MB allocated in one iteration and pauses of 20 to 28 ms. Outside sources:
-Tatarchuk on Destiny (slides 57 and 73), confirmed.
+question that prepares and then compares the packed hash, the completion of
+footprints inside the root's capture, the upkeep inside a prepare, the
+arrival window, the filming of home sessions and the string lookup. From the
+attack's readers, not reopened here: that a view with an unknown camera
+keeps its footprint, and that a viewer who loses an entitlement is routed
+to another residency each frame (`WorldSessionRoute.Settle`). From the
+scheduling area's map: what a prepare captures. Measured: recording at about
+1 ms, field queries at a third of the meadow's frame, pose packing at 0.9 ms
+of 3.4 ms, 68 MB allocated in one iteration and pauses of 20 to 28 ms.
+Outside sources: Tatarchuk on Destiny (slides 57 and 73), confirmed.
 
 **What it rests on.** Work proportional to change, and the streaming plan's
 decision 4. The cuts to field queries stay with the visibility plan's steps
 (V2a and V2b). They build no second cache of field answers beside
-`WorldFieldAnswer`. The outcome we hold ourselves to: a view that nothing
-reads costs the frame thread nothing, and a world nobody sees costs only its
-reduced update rate, its minimums and the uploads it owes.
+`WorldFieldAnswer`. The outcome we hold ourselves to is about presentation:
+a view that nothing reads costs the frame thread only its upkeep, and a
+world nobody sees costs only its reduced update rate, its minimums and the
+uploads it owes. That world's simulation step and its deliveries to
+sessions are not presentation work and this decision does not reduce them.
+Decision 1 measures them, and decision 3 names stepping world instances in
+parallel as a candidate.
 
 ### 3. Keep the tick ahead of the frame, and make it shorter
 
@@ -556,9 +713,29 @@ fixes, and that order is a real dependency:
    owns (J1).
 3. Then split the crossing scan and the rigid bodies into partitions (T3,
    T2).
+4. Fix the tick's serial costs at their cause, in the order the tick's
+   breakdown gives.
 
 Only the measurements and the snapshot partitions that are already built
 come before the pool.
+
+Step 4 is there because the two partitions of step 3 may not be where the
+debug world's tick spends its time. The crossing scan is split 32 seats to
+a partition, and the debug world has a handful of seats, so that split
+saves nothing there. The rigid bodies' share of the tick has never been
+measured. One trace of a warm debug world shows about a third of the tick
+in moving bodies and under a third in evaluating rules, each with a serial
+cause that [open items](open-items.md#other-frame-time-findings) names: a
+bounds cache that misses for every box of a moving body
+(`BodySupportMemo.Query`, `SdfBoundsCache`), and a scan of every body's
+facts on every rule pass (`WorldRuleHost.DeriveFacts`). Decision 1 adds the
+tick's breakdown by phase, and that breakdown ranks these fixes against
+the partitions.
+
+One more candidate is ranked by the same measurement. Every world instance
+steps in series on the frame thread (`WorldInstanceHost.StepInstances`),
+and the job system plan forks nothing across instances. Stepping instances
+in parallel is weighed once decision 1 shows what the instances cost.
 
 **Why.** The alternatives make the frame shorter by showing the player an
 older simulation state. The register rules that out: "A lower tier, a
@@ -575,9 +752,14 @@ open across loop iterations and lets the control plane run. Without it, new
 partitions would go through today's join, which waits inside one call. Input
 and the console would then be held for as long as the slowest partition.
 
+The bounded waits and the single pool pay for themselves whatever the
+partitions turn out to save, because every other piece of CPU work this
+page moves off the frame thread runs on that pool.
+
 **What it costs or risks.** Two parts of the tick stay serial until their
 transaction is redesigned. The job system plan calls them kit bodies and
-rule gates. So partitions shorten the tick but do not remove it.
+rule gates. So partitions shorten the tick but do not remove it, and in the
+debug world they may shorten it very little.
 
 The strongest case against this decision is that it leaves time on the
 table today. While the frame is limited by the CPU on a fixed-refresh
@@ -585,11 +767,13 @@ display, a late frame already costs a whole refresh, so a tick on its own
 thread would lose nothing there. That holds only while the bar is missed,
 and the proper fix is to stop missing it.
 
-**What we still have to find out.** Whether the tick and produce each fit a
-frame on their own while their sum does not, once decision 2 has landed. If
-so, moving the tick to its own thread comes back as a question, with a
-measured cost for the hand-off. It would then be the owner's call, because
-it reverses a recorded ruling about what the engine does.
+**What we still have to find out.** Where the tick's time goes, by phase.
+Whether the tick and produce each fit a frame on their own while their sum
+does not, once decision 2 has landed. If so, moving the tick to its own
+thread comes back as a question. It needs a measured cost for the hand-off,
+which is decision 1's reading of the time from input to display. It would
+then be the owner's call, because it reverses a recorded ruling about what
+the engine does.
 
 **Options we did not take.**
 
@@ -643,93 +827,215 @@ worth (`SdfMeshIrradiance.Grant`). A game presenting 30 frames a second is
 therefore granted half the lighting work per second of one presenting 60.
 
 One windowed run measured the result. Each probe job took about 25 ms to go
-out and come back. The service was busy for 0.05 of GPU time, against an
-allowed share of 0.25. After a switch to night, the finest probe level's lighting was up to 44 seconds
-old. That run was on the tree the unmerged lighting branch started from, and
-the way to reproduce it is in [the lighting work packet](open-items.md#lighting-and-gi).
+out and come back. The service's report gave an occupancy of 0.05. That
+figure is GPU time divided by the time some job was in flight
+(`SdfGpuWork.Describe`). It says the GPU was working for a twentieth of the
+time a job was out. It is not a share of the allowance, and nothing yet
+reports how much of the allowance was used.
+
+After a switch to night in that run, the finest probe level's lighting was
+up to 44 seconds old. The run shows two more causes beside the round trips,
+and it does not divide the 44 seconds between them. Relights that the
+change made stale waited behind traces that were still owed: a second
+switch, with no traces owed, relit the finest level in about 90 ticks,
+which is 3 seconds. And the lighting's version, the counter that marks a
+lighting change, moved about 1,380 ticks after the day was set. That is 46
+seconds before the age even starts to count. The run was on the tree the
+unmerged lighting branch started from, and the way to reproduce it is in
+[the lighting work packet](open-items.md#lighting-and-gi).
 
 A group's bake has the same shape. It samples up to five lattices that
 narrow in on the surface, then its final slabs, then up to eleven rounds
 that search for the exact points where the surface crosses a lattice edge,
 then gradients and materials. Each step reads its result back to the CPU. A
 quiet cold bake has medians of 60.6 s on Direct3D 12 and 64.7 s on Vulkan,
-both over the one-minute bar, with only about 4 s of GPU work in a busy span
-of 68 s.
+with only about 4 s of GPU work in a busy span of 68 s.
 
-Two more rates are fixed constants on every device. Bake batches are sized
-by assuming a fixed GPU cost per sample (`SdfMeshPathBake.NanosecondsPerTap`).
-Uploads of finished meshes run at one byte rate
-(`SdfGpuWork.UploadBytesPerSecond`).
+Two more things are sized by fixed constants on every device.
 
-**What we propose.** Five steps, in this order.
+- **Bake jobs are too long for a frame.** The service's contract says a
+  client cuts each job to the frame's allowance at its measured rate,
+  because a job runs whole before the next frame's work starts. Only the
+  probe client does. Bake batches are cut by a count of samples
+  (`SdfMeshPathBake.BatchTaps`) and charged at a fixed cost per sample
+  (`SdfMeshPathBake.NanosecondsPerTap`). A full batch is 8 million samples,
+  about 32 ms at that constant, against an allowance of 4.2 ms. So a bake
+  during play already submits jobs several frames long, on the RTX 4070
+  itself.
+- **Uploads of finished meshes run at one byte rate**
+  (`SdfGpuWork.UploadBytesPerSecond`), and both the allowance for one job
+  and that rate assume a 60 Hz display (`SdfGpuWork.FrameShareSeconds`).
+
+**What we propose.** Six steps, in this order.
 
 1. **Make the budget follow the GPU time the frame actually leaves free**
    (the first half of option 4g). This comes before anything raises the
-   service's use of its share. `SdfGpuWorkBudget` gains a bounded headroom
-   rule: the share is whatever the measured root and nested views leave of
-   the frame. It has a lower limit, which keeps lighting from starving, and
-   an upper limit, which is today's `SdfGpuWork.GpuShare`. Under overload,
-   optional background work gives way first, then the update rate of nested
-   views, and the minimums last. A lockstep drain ignores the measured
-   share, so its result stays a function of its inputs.
-2. **Let several probe jobs run at once, with one commit per batch. Then
-   grant lighting work per second, not per frame** (option 4b). Each
-   increase in throughput is measured beside the root frame's time and the
-   lighting's age, in the same measurement run, on both backends.
-3. **Move the work list onto the GPU** (option 4c). Probe state lives on the
-   device. A kernel selects what to do next by a deterministic key, compacts
-   the selection into indirect arguments capped at a ray budget, and one
-   recorded chain of commands runs it. The CPU reads only counters.
-4. **Hand background jobs to the GPU queue before the frame's own passes
-   are recorded** (option 4e). A wait then names the exact queue position it
-   needs. A job is answered at the next step, not the next frame.
-5. **Price every consumer in one unit** (the rest of option 4g): nested
-   views, uploads, lighting and bake. This is a design round, held until the
-   share is actually in use.
+   service's use of its share. The engine already measures the frame's GPU
+   load for another purpose: dynamic resolution reads the views' GPU time
+   against the display's period, with a dead band of a tenth either side
+   (`IWorldFrameLoadSource`, `WorldDynamicResolution`). The headroom rule is
+   built on that reading and not beside it.
+   - *One reading.* The load source covers the root views today. It is
+     extended to nested views and background work, so one figure says what
+     the frame's own passes took.
+   - *One period.* The period is the display's (`FrameContext.DisplayHertz`),
+     not a constant 60 Hz.
+   - *The share.* The background share is what the root and nested views
+     leave of the period. It has a lower limit, which keeps lighting from
+     starving, and an upper limit, which is today's `SdfGpuWork.GpuShare`.
+   - *Jobs follow the live share.* Every client cuts each job to the live
+     allowance for one frame. A job already in the GPU's queue cannot be
+     recalled, so lowering the next grant does not protect the frame behind
+     it. Each job is therefore admitted against the frame's deadline: its
+     own priced length, the jobs already queued and the credit already
+     banked, with a margin. The budget can bank 25 ms of GPU credit today
+     (`SdfGpuWorkBudget.MostBankSeconds` times the share), which is more
+     than a frame. Banked credit is spent only as jobs that each fit one
+     frame's allowance.
+   - *The loop, written down.* Its input is decision 1's per-frame GPU
+     span. The share moves by a bounded step, inside the same dead band
+     dynamic resolution uses, and a change to a nested view's rate needs
+     the reading to hold for a stated time before it reverses. A loop
+     without these can swing between two states.
+   - *Two controllers, one order.* Dynamic resolution is off in every
+     quality preset today, and then only the background share moves. With
+     it on, both respond to one reading. Optional background work gives
+     way first. The render grid moves only when the frame's own passes
+     exceed the period on their own.
+   - *What gives way under overload, and how far.* Optional background
+     work first. Then the update rate of nested views, but never below the
+     rate tier its author set, which the register calls "a floor held by
+     presentation time". The minimums are last and are always served. They
+     are stated as work per second in authored units: the work that holds
+     the authored lighting age. When the frame's own passes already fill
+     the period, serving the minimum costs frame time. That cost is bounded
+     by the size of one job, and it is the one exception to the rule that
+     overload costs latency and never frame time. Frames that miss their
+     deadline behind a background job and lighting that is overdue are
+     counted apart.
+   - *What measuring costs.* GPU timestamps are recorded only while a
+     reader asks, because they cost a query pool and a readback for each
+     frame in flight. The headroom rule makes that cost permanent, and it
+     is reported. A device that cannot time its passes keeps today's fixed
+     share and says so.
+
+   A lockstep drain ignores the measured share, so its result stays a
+   function of its inputs.
+2. **Cut bake jobs to the allowance.** Open items already holds this, with
+   one failed attempt: cutting by the bake's single measured rate shrank
+   every batch to its costliest group's rate and cut the groups in flight to
+   a third. The rate that works is one per kind of lattice, or one that
+   follows the mean. The cold bake is measured again with it.
+3. **Let several probe jobs run at once, in three parts** (option 4b).
+   - Several jobs in flight, with one commit per batch.
+   - Relights that a lighting change made stale become due at once and
+     share the worker with owed traces.
+   - Then the grant per second, last. The relight's separate credit per
+     frame (`SdfMeshIrradiance.Grant`) is deleted, and the relight draws on
+     the one budget's wall-clock credit. The authored allowance stays in
+     work per second, so it means the same on every device. It is turned
+     into GPU time through a measured rate (`SdfGpuWorkRate`) only to
+     charge the budget. The estimate of an upload's GPU time becomes a
+     measured rate of the same kind. The cap on bytes staged a second is a
+     separate limit and stays.
+
+   Each increase in throughput is measured beside the root frame's time
+   and the lighting's age, in the same measurement run, on both backends.
+   The delay before the lighting's version moves is reported on its own,
+   because the age cannot see it.
+4. **Move the work list onto the GPU** (option 4c). The probe client
+   already chains three things on the device: a kernel that fills its
+   cache, a compaction and an indirect dispatch. This step adds the rest.
+   Probe state lives on the device. A kernel selects what to do next by a
+   deterministic key. The CPU reads only counters.
+
+   The cap on one dispatch has to be a cap on the work actually done. A
+   count of probes does not bound it, because a probe's cost is known only
+   after its rays land. The scheduler charges a point light to a probe when
+   the light's range reaches the probe's origin
+   (`SdfMeshIrradiance.RelightRays`). The kernel tests each hit's own
+   distance to the light. A probe outside every light's range can still see
+   a wall that many lights reach, so its predicted cost is zero and its
+   real cost is large. The kernel therefore counts the tests it makes
+   against the cap, and a probe that would pass the cap stops and resumes
+   in the next dispatch.
+
+   This step lands before the lighting's CPU loops move to the thread pool,
+   because both rewrite the same code (`SdfMeshIrradiance`).
+5. **Hand background jobs to the GPU queue before the frame's own passes
+   are recorded** (option 4e). Two parts of this exist. Each residency's
+   background work is already pumped before any residency prepares. And a
+   frame the graph withholds already hands each job to the queue before it
+   waits (`SdfGpuWork.Drive`). What is new is the same hand-off in an
+   ordinary presented frame (`SdfGpuWork.Pump`). A wait then names the
+   exact queue position it needs, and a job is answered at the next step
+   and not the next frame. It costs one more submit a frame, and it is kept
+   only if a measurement shows the answer does arrive a step earlier. It
+   lands after the job system's rework of waits.
+6. **Price every consumer in one unit** (the rest of option 4g): nested
+   views, uploads, lighting and bake. The scheduler already honours a
+   ceiling on passes times pixels that no caller sets
+   (`RenderGraphFrame.PassPixelBudget`), and that is where nested views
+   join. This is a design round, held until the share is actually in use.
 
 Doing the bake's sampling in one round trip per stage (option 4d) stays a
 candidate. Its rank waits for the measurement of what limits the cold bake
-([decision 10](#10-bring-the-cold-bake-inside-its-minute-and-close-the-contour-defects)).
+([decision 10](#10-make-a-bake-cost-what-changed-and-close-the-contour-defects)).
 
-**Why.** Raising the share or the slot count would do nothing while most of
-the share goes unused. The round trips are the limit. Shipped systems hold
-update cost fixed and let lighting latency vary: Lumen describes "fixed
-update cost, variable lighting latency", and Frostbite's probe system holds
-a fixed budget of 100,000 rays and about 6,000 probes a frame.
+**Why.** Raising the share or the slot count would do nothing while the
+work waits on round trips. Shipped systems hold update cost fixed and let
+lighting latency vary: Lumen describes "fixed update cost, variable
+lighting latency", and Frostbite's probe system holds a fixed budget of
+100,000 rays and about 6,000 probes a frame.
 
 The headroom rule comes first for a reason that is easy to miss. On the
 round's measurements the root frame uses about 12.6 ms of GPU time before
-any nested view, and the background share is 4.2 ms. That is 16.8 ms against
-a 16.7 ms frame. The low use today hides this. The first fix that makes the
-lighting worker effective would otherwise be paid for in frame time.
+any nested view. The background allowance at 60 Hz is 4.2 ms. If the
+background work used all of it, the two would come to 16.8 ms against a
+16.7 ms frame. The 4.2 ms is an allowance and not a measurement, so this is
+a scenario and not a reading. It is the scenario the first fix that makes
+the lighting worker effective would create.
 
 **What it costs or risks.**
 
+- An average budget cannot protect one frame. A long job already queued
+  delays the frame behind it whatever the next grant is. This is why every
+  job is cut to a frame's allowance and admitted against the deadline.
 - Several jobs in flight change the order in which bounces of light are
-  computed inside a batch.
+  computed inside a batch. Every probe of a batch therefore reads the
+  bounce from before the batch, and a drain publishes at stated points, so
+  the size of a batch cannot change what a drain converges to.
 - A per-second grant needs authored units and a bounded catch-up. A lockstep
   drain must give the same result whatever the play rate.
 - A recorded chain cannot be cut short, so its cap must be an input to the
   kernel. One dispatch of 4.4 million rays once ran past the device's
   timeout.
 - A second submit to the GPU each frame is the price of the early hand-off.
-- A measured share feeds back on itself and can oscillate. The price
-  therefore enters the scheduler as an input, so lockstep stays
-  reproducible.
-- The strongest case against the order is the one above: today's low use
-  limits nothing that a working worker does tomorrow, and the share already
-  overruns the frame on paper.
+- The work list on the GPU and the early hand-off both sit in classes of
+  defect that only review catches: a GPU job whose inputs are freed while
+  it runs, and a GPU read at a position another GPU job wrote
+  ([hazards](../development/hazards.md#silent-invariants)). Each gets an
+  invariant row and an adversarial review. One Vulkan device loss in this
+  area is still unexplained.
+- Two controllers on one reading can fight, which is why their order is
+  stated.
+- Standing GPU timestamps cost a little every frame.
+- The strongest case against the order is the scenario above: today's low
+  use limits nothing that a working worker does tomorrow, and the allowance
+  can overrun the frame.
 
 **What we still have to find out.**
 
-- The batch half of step 2 exists on an unmerged branch and has never run in
+- How much of its allowance the background work uses today.
+- How the 44 seconds divides between its three causes.
+- The batch half of step 3 exists on an unmerged branch and has never run in
   a World. By that branch's own account, one admission door makes a query
   that replaces shared probe state run alone, and a batch's last job commits
   only the rows its batch wrote. The per-second grant is not built: the
   branch grants per frame, as the main tree does.
-- No source shows a scheduler that lives on the GPU and still drains to the
-  same result regardless of history. Lumen downloads its feedback to the
-  CPU.
+- Schedulers that keep their work list on the GPU have precedent. What we
+  found no source for is one that also drains to the same result whatever
+  its history. That half is Puck's own to prove.
 - Whether the bake's round trips are on its critical path.
 
 **Options we did not take, or hold for later.**
@@ -739,38 +1045,49 @@ lighting worker effective would otherwise be paid for in frame time.
 - *The bake's sampling in one round trip per stage* (option 4d): the root
   search and the gradients move into the kernel, and the narrowing lattices
   chain on the device. A group's roughly twenty round trips would fall to
-  about four. The risk is two implementations of one rule. The rule that
-  finds a crossing (`SdfSampledLattice`'s root search, with its bracket,
-  tolerance, round limit and step) is written in C# today. Writing it again
-  by hand in shader code would make two copies, whoever is asked to keep
-  them equal. Its first step is therefore one source that both evaluators
-  are generated from or read. No source measures a root search on the GPU.
-  Dreams ran a hierarchical GPU evaluator on a console, which is the nearest
-  precedent.
+  about four. A chained job needs a cap on its samples for the same reason
+  the relight needs one on its tests. The risk is two implementations of
+  one rule. The rule that finds a crossing (`SdfSampledLattice`'s root
+  search, with its bracket, tolerance, round limit and step) is written in
+  C# today. Writing it again by hand in shader code would make two copies,
+  whoever is asked to keep them equal. Its first step is therefore one
+  source that both evaluators are generated from or read. No source
+  measures a root search on the GPU. Dreams ran a hierarchical GPU
+  evaluator on a console, which is the nearest precedent.
 - *A second GPU queue for background compute* (option 4f). It would stop
   long jobs delaying the frame behind them. The only figure is a Khronos
-  sample's 21.8 ms against 22.9 ms, and nothing we read covers the bar
-  devices' queues. It stays an experiment with a stop rule.
+  sample's 21.8 ms against 22.9 ms. That sample is about tile-based mobile
+  GPUs and shows two workloads overlapping. It does not show that a queue
+  can be pre-empted on the bar devices. It stays an experiment with a stop
+  rule, and steps 1 and 2 have to hold without it.
 
 **Evidence.** Code read for this page: the one-at-a-time admission, the
 blocking coordinator, the per-frame grant, the slot count and the shared
-budget, and the commit messages that recorded the 25 ms round trip, the
-0.05 occupancy, the 44 s age and the bake medians. From the area's map: the shape of a
-group's bake, the 4.4 million-ray timeout, and that the pump after an upload
-runs inside the frame's open batch, whose completion signals are shared
-with the batch's owner. Measured: about 4 s of GPU work in 68 s, the 12.6 ms
-root frame and the 4.2 ms share. Reasoned: twenty round trips falling to
-four. Outside sources: Apers on Frostbite and Wright on Lumen's fixed update
-cost, both confirmed. Dreams' GPU evaluator and the Khronos sample's timings
-are unverified.
+budget, how the service's report computes its occupancy, the bake's batch
+size and fixed cost per sample, the allowance and bank constants, the
+dynamic resolution controller and its dead band, the scheduler's unset
+pass-pixel ceiling, the relight's predicted charge against what the kernel
+tests, and the pump ahead of the prepares. Also read: the commit message
+that recorded the 25 ms round trip, the 0.05 occupancy, the 44 s age, the
+second switch and the delay before the version moved, and the bake medians.
+From the area's map: the shape of a group's bake, the 4.4 million-ray
+timeout, and that the pump after an upload runs inside the frame's open
+batch, whose completion signals are shared with the batch's owner.
+Measured: about 4 s of GPU work in 68 s, and the 12.6 ms root frame, whose
+reading records no window size. Reasoned: twenty round trips falling to
+four, 32 ms for a full bake batch, and the 16.8 ms scenario. Outside
+sources: Apers on Frostbite and Wright on Lumen's fixed update cost, both
+confirmed. Dreams' GPU evaluator and the Khronos sample's timings are
+unverified.
 
 **What it rests on.** Work proportional to change, the illumination plan's
 rule that overload degrades latency and never frame time, and one
 implementation. `SdfGpuWork` stays the one service and `SdfGpuWorkBudget`
-the one budget. The job system's `Lighting` class supplies the policy. Waits
-stay on the host's primitives through `HostWaits`. The relight and trace
-allowances and the lighting age are authored (`render.indirect`'s `budget`),
-and their unit becomes work per second.
+the one budget. The frame's load has one reading (`IWorldFrameLoadSource`).
+The job system's `Lighting` class supplies the policy. Waits stay on the
+host's primitives through `HostWaits`. The relight and trace allowances and
+the lighting age are authored (`render.indirect`'s `budget`), and their
+unit becomes work per second.
 
 ### 5. Convert scene light to display values exactly once
 
@@ -842,29 +1159,86 @@ twice.
 once, at the point where scene light becomes a working image (option 5b).
 The rule is stated at the edges of the render graph, not at one pass.
 
-- **Every image declares what it holds.** A view or source publishes either
-  scene light (linear, in nits, exposed or not) or a working image. Each
-  consumer declares which it reads. A graph that joins the two without the
-  conversion does not compose.
+- **Every image declares what it holds.** There are three kinds, not two.
+  *Scene light* is linear luminance in nits with no exposure applied. A
+  *window's image* is scene light with a share of its own world's exposure
+  already applied. A *working image* is encoded for the display. Each
+  consumer declares which it reads, and a graph that joins two kinds
+  without the conversion between them does not compose. Part of this
+  vocabulary exists. An image source already declares how its values are
+  encoded (`ImageColorEncoding`), and one function already turns a source
+  into the working image (`ImageSourceConversion.PassOf`). The declaration
+  adds what that vocabulary lacks for scene light: its scale in nits, and
+  how much exposure has been applied.
 - **The conversion is the last stage of the view's own graph**, so no
-  consumer can bypass it. Bloom is applied there for every view, which
-  merges today's two bloom paths into one. Then comes the authored tone
-  transform, then the encode. A single view, a split view, a filmed view and
-  a view under a matte all publish a working image. The root's `place` pass
-  only places and sharpens. A pane's contract does not change.
-- **A view that is consumed as scene light is not converted.** A window's
-  view publishes unexposed luminance, and the view looking through the glass
-  applies the exposure (`SdfViewSnapshot.Unexposed`). That edge is scene
-  light on both sides. A filmed view shown on a screen is a working image.
-  The screen decodes it, like any encoded picture, before multiplying by its
+  consumer can bypass it. Inside it the order is the register's: sharpen,
+  then bloom, then the authored tone transform, then the encode. Bloom is
+  applied there for every view, which merges today's two bloom paths into
+  one. A single view, a split view, a filmed view and a view under a matte
+  all publish a working image. The root's `place` pass then only places.
+  A pane's contract does not change.
+  - *Sharpening moves with it.* The register rules that bloom is added
+    "after the direct image is sharpened, so sharpening never acts on
+    scattered light". Today `place` sharpens only a view shown at its own
+    size, and adds bloom afterwards. Moving bloom into the view and leaving
+    the sharpen in `place` would reverse that order. So the sharpen moves
+    into the view's conversion too, ahead of bloom, for a view shown at its
+    own size. A view that is scaled when placed is reconstructed in `place`
+    as today, now from encoded values.
+  - *Screen fidelity is an input of the same stage.* An engaged screen
+    fades toward its exact pixels by its fidelity. Today `place` blends in
+    the untouched source after the sharpen and the tone curve. In the
+    view's conversion the same share fades the sharpen, the bloom and the
+    tone transform and leaves the encode, so a fully framed screen still
+    shows its exact pixels.
+  - *A camera read two ways publishes two images.* The register rules that
+    a camera used both as scene light and as a direct picture blooms only
+    where it is shown directly. So such a view publishes its scene light
+    for the first reader and the converted working image for the second.
+    The conversion is an added output, not a replacement.
+- **A window carries part of its world's exposure, and the viewer applies
+  the rest.** The view beyond the glass multiplies its light by its own
+  exposure raised to a share of three quarters
+  (`SdfPhotometry.WindowAdaptation`), and the view looking through applies
+  the remainder of its own. The register adopted that and rejected the
+  alternative, "a window published unexposed for the viewer to expose,
+  under which a sunlit world seen from a dim room blows to white". An
+  earlier draft of this page described the rejected design. The edge is
+  scene light on both sides, and the declaration carries the share so that
+  the two sides cannot disagree about it. The share is a look, so it moves
+  from an engine constant to authored data
+  ([authored looks](#looks-are-authored)).
+- **A filmed view shown on a screen is a working image.** The screen
+  decodes it, like any encoded picture, before multiplying by its
   brightness in nits. The same decode applies where a screen's picture is
   reduced to the glow it casts into its room.
-- **Authored colour is decoded once**, at the one place that packs it for
-  the GPU.
+- **Authored colour is decoded by its type, not by where it is packed.**
+  There is no single place that packs colour. One grammar for a hex colour
+  (`HexColor`) is parsed at 22 places outside the tests. Surface colours
+  and the text drawn on screens go through one resolver
+  (`WorldBakedColors.Resolve`). Sky, fog and light colours go through
+  another (`WorldEnvironmentResolve`). A letterbox colour, a text tint and
+  a source's own colour are meant for the display and must stay encoded.
+  So the step starts by listing every parse site with what its colour
+  means. Then a scene colour and a display colour become two types. Only a
+  scene colour can enter shading, and making one decodes it. A site cannot
+  then pick the wrong meaning by accident.
 - **The encode is the engine's and the curve is the author's.** The encode
   is required and has no parameter. The tone transform before it is authored
   data whose neutral default is no transform at all
   ([authored looks](#looks-are-authored)).
+- **The mechanism lands together with the retuned world.** Every place in
+  the debug world is tuned against the missing encode. A corrected engine
+  with the old values would look wrong everywhere, and AGENTS.md lets a
+  look change land only when its captures meet the reference. So the same
+  merge carries the mechanism, the standard package's values and the debug
+  world's values: the hall's `compensation: 2` goes, and each place's
+  exposure and lights are set again against its reference.
+- **The lane builds its instruments first.** Two are missing. No grey card
+  or luminance patch is authored anywhere. And a capture of a presented
+  frame returns 8-bit pixels through the SDR encode, so HDR output has
+  never been observed. The lane authors the card and the patches, and adds
+  a readback of the presented image in the display's own format.
 
 **Why.** What a pixel value means is a matter of correctness, not of look.
 The register already rules that lights, screens and the camera are
@@ -880,19 +1254,30 @@ shading layers migrate to authored programs
 
 **What it costs or risks.**
 
-- Every place's look moves at once. The whole debug world is tuned against
-  today's missing encode, so the lead has to walk the full tour again and
-  retune it.
+- Every place's look moves at once, which is why the retune is part of the
+  same merge and not a later pass.
 - A single full-screen view gains a pass it did not have.
 - `SdfPhotometry.RangeThreshold` is expressed as a share of display white.
-  Unless it is restated, light ranges get longer.
-- The sharpen pass assumes values between 0 and 1.
+  Unless it is restated, light ranges get longer, and longer ranges mean
+  more relight work (decision 7). The step's check reads the lamps' ranges
+  before and after.
+- The sharpen measures a pixel's headroom against a value of 2, on linear
+  exposed light. It keeps reading linear light in its new place, so its
+  constants do not change.
+- The display encoder has three outputs, not two: SDR in two cases
+  (depending on whether the target encodes sRGB when written), scRGB, and
+  HDR10, which converts to another set of primaries and applies its own
+  curve. A neutral grey passes even if that conversion's matrix is
+  transposed, so the check needs coloured patches as well.
+- The temporal resolve averages linear samples. It is not changed here, but
+  a bright edge in motion is where a conversion change would show first,
+  so the check includes one.
 - No source we fetched states this requirement in so many words. The case
   rests on the code disagreeing with itself and on the transfer functions
   that `transfer.hlsli` already cites.
 
-**What we still have to find out.** Nothing blocks the fix. The tour's new
-look is judged after it lands.
+**What we still have to find out.** Nothing blocks the fix. Which display
+outputs each bar device exposes is read when the instruments exist.
 
 **Options we did not take.**
 
@@ -904,26 +1289,42 @@ look is judged after it lands.
   branch* (option 5c). This removes the double decode on HDR. It contradicts
   the photometric decision, and a linear scene sample and an encoded pane
   sample would still mean different things inside one image.
+- *Leave the sharpen in `place`, after bloom, on encoded values.* This is
+  the simpler build, and sharpening an encoded image is common practice.
+  It needs the register's bloom ruling amended, because sharpening would
+  then act on scattered light. The sharpen's constants would also need
+  restating for encoded values. The debug world authors a sharpness of
+  zero, so neither order shows there today. This page keeps the recorded
+  order. The alternative is listed among
+  [the owner's calls](#the-owners-calls), because it reverses a recorded
+  decision about what the engine does.
 
 If an author wants today's appearance, they write it as a tone transform
 over the corrected conversion, and it is judged on SDR and HDR. The filmic
 curve's constants sit in engine shader code today. Under "Authors rule" that
 is a leak, and they move into authored data in the same piece of work.
 
-**Evidence.** Code read for this page: the display encode, the `place`
-comment, the hex colour comment, the debug world's compensation, the
-terrain pass's grey card, and the three paths a view takes. Reasoned: the
-0.104 target showing as 1% of white where an encode would give code 0.36.
-Outside sources: Lottes, that brightness belongs before the tonemap and not
-as a gamma applied afterwards (slide 54), confirmed. Gran Turismo 7 blends
-in a linear space with 1.0 tied to a reference luminance. That claim is
-partial, because the source says it of its tone mapping and not of its whole
-pipeline.
+**Evidence.** Code read for this page: the display encode and its three
+outputs, the `place` pass's order (sharpen at the view's own size, then
+bloom, then the tone curve, then fidelity), its comment, the hex colour
+comment and its 22 parse sites, the debug world's compensation, the
+terrain pass's grey card, the three paths a view takes, the window's
+exposure share and the register's passage that rejects an unexposed
+window. From the attack's readers, not reopened here: the two colour
+resolvers and what must stay encoded, that a presented capture is 8-bit,
+that the debug world's sharpness is zero, and that the temporal resolve
+averages linear samples. Reasoned: the 0.104 target showing as 1% of white
+where an encode would give code 0.36. Outside sources: Lottes, that
+brightness belongs before the tonemap and not as a gamma applied afterwards
+(slide 54), confirmed. Gran Turismo 7 blends in a linear space with 1.0
+tied to a reference luminance. That claim is partial, because the source
+says it of its tone mapping and not of its whole pipeline. That sharpening
+encoded values is common practice is unverified.
 
-**What it rests on.** The photometric decision in the register, and
-correctness being the engine's. This is decided by the evidence, with no
-owner call: no preference for the present tones keeps the present
-conversion.
+**What it rests on.** The photometric decision in the register, its bloom
+decision, and correctness being the engine's. This is decided by the
+evidence, with no owner call: no preference for the present tones keeps the
+present conversion.
 
 ### 6. Give every receiver the same shadow answer
 
@@ -991,8 +1392,10 @@ every cascade disappears.
 Two smaller costs come from the same code. Each cascade's bounding sphere
 sits on the view's forward axis. A camera turn therefore moves the far
 cascade's centre and forces a redraw that could otherwise have been held.
-And glass shadows keep three optical-depth buffers at full resolution
-whatever the quality tier: 144 MB of the 252 MB a shadowed view holds.
+And a program with glass shadows holds three optical-depth buffers for each
+shadowed view. They are sized with the shadow tier
+(`SdfWorldPackage.WithShadows`), so at the highest tier they are 144 MB of
+the 252 MB such a view holds, and every cascade draw clears a whole buffer.
 
 **What we propose.** The outcome: a light is shadowed by the cascade that
 contains the point, and by the lighting probes where no cascade does. That
@@ -1002,12 +1405,43 @@ depends only on the light and on the gap between blocker and receiver.
 1. **Give cascades to lights by role, and admit a light by what it
    contributes** (option 6b). A light with zero luminance is admitted to
    nothing. The primary role, which carries the near and far cascades, goes
-   to the brightest admitted directional light, whichever slot it holds. A
-   handover fades between roles through the authored fade slots.
+   to the brightest admitted directional light, whichever slot it holds.
+
+   The allocator already ranks the candidates (`WorldShadowAllocator`), and
+   today that rank is only printed. Carrying it to the cascade fit is more
+   than one edit, because the slot table holds no role (`SdfShadowSlots`)
+   and fades are kept per slot.
+
+   A change of role is a transition of its own. Two lit lights can swap
+   which is brighter while each keeps its slot. The allocator then sees no
+   change of slot and starts no fade, so the near and far cascades would
+   jump from one light to the other in a single frame. A role change
+   therefore fades as a slot change does. The outgoing light keeps its last
+   cascades, tied to the light that drew them, while the incoming light's
+   are drawn, and the two are blended over the authored fade time. Where
+   there is no spare storage for both sets, the incoming light takes the
+   cascades at once and the outgoing light is answered by the probes for
+   the length of the fade.
+
+   The data model comes first. Step 4 replaces three named cascades with
+   one indexed set. A resolver written against the three names would be
+   written twice, so the set's shape is fixed in step 4's memo before the
+   resolver is built: a list of entries, each with a light, a role and a
+   radius.
 2. **Where no cascade contains a point, use the probes' answer for that
    light** (option 6c), per pixel and per slot. "Asked, and no cascade holds
    it" then takes the probes' record of whether that light reaches. Nested
-   views and glass become the same rule with zero cascades.
+   views and glass become the same rule with zero cascades. A band blends
+   from the last cascade into the probes' answer, so the edge of coverage
+   is a gradient and not a line.
+
+   What the fallback promises is limited, and the page says so. Past the
+   far cascade only the coarsest probe level answers, and its probes are
+   32 m apart. A probe that has not been measured yet answers dark, not
+   lit. And a residency has one set of probe windows. They enclose every
+   view when the views fit inside a level, and otherwise they follow the
+   first view (`SdfMeshIrradiance.WindowLow`). A second view far from the
+   first is then answered only by the coarsest level that still covers it.
 
    Steps 1 and 2 are one piece of work, because the probes' answer must
    follow the same light identity as the role. It is checked through a
@@ -1020,22 +1454,40 @@ depends only on the light and on the gap between blocker and receiver.
    from a reduced-resolution pyramid of the same cascade. A band blends
    between two cascades.
 
+   The pyramid is a new one. The engine's existing depth pyramid keeps one
+   representative pixel for each block (`sdf-mesh-pyramid.hlsli`), which is
+   right for ambient occlusion and can miss a thin blocker. The shadow
+   pyramid keeps the least and the greatest depth of each block, with the
+   body and the layer each came from.
+
    This comes in two parts. The prototype is a bounded experiment behind a
    switch that leaves the shipped receiver untouched. It compares the
-   metre-sized filter with a brute-force filter at one stop on the route,
-   with one blocker deep and directly above and another displaced to the
-   side. The production rewrite is one piece of work with the transmission
-   plan's `transmit-plane` step, which rewrites the same function. It
-   follows `transmit-identity`, which supplies the table of bodies and the
-   depth layers that a wide sample must read consistently
+   metre-sized filter with a brute-force filter in a burst of presented
+   frames at one stop on the route, to a stated bound on the difference. It
+   uses four blockers: one deep and directly above, one displaced to the
+   side, one thin and moving, and one whose soft edge spans two levels of
+   the pyramid. The production rewrite is one piece of work with the
+   transmission plan's `transmit-plane` step, which rewrites the same
+   function. It follows `transmit-identity`, which supplies the table of
+   bodies and the depth layers that a wide sample must read consistently
    ([transmission's steps](transmission.md#implementation-steps)).
 4. **Centre the cascades on the eye and author them as one set of radii**
    (option 6d), with entries beyond 120 m that are held between refreshes.
-   This comes after decision 11's caster culling, behind a design memo.
+   This comes after decision 11's caster culling, behind a design memo. The
+   memo states the set's data model, which step 1 builds against, and what
+   centring on the eye costs in texels at each field of view.
 5. **Replace the exit layer with the transmission plan's per-body depth
    layers** (option 6e), on that plan's schedule. The exit layer is the
    second layer each cascade draws today, holding the faces turned away from
    the light.
+6. **Clear glass shadow storage only where glass cast into it** (option
+   6f), with decision 11's glass list. The buffers are already sized with
+   the shadow tier. What is left is the clear of a whole buffer for every
+   cascade draw, 48 MiB at the highest tier. The tiles to clear are the
+   ones the previous draw wrote, kept as a list with the buffer, so that a
+   caster which has left is still cleared. A buffer's first use clears all
+   of it. The sum the buffer stores does not depend on draw order, and that
+   is kept.
 
 **Why.**
 
@@ -1049,8 +1501,11 @@ depends only on the light and on the gap between blocker and receiver.
   the short sideways search. Microsoft's cascade guidance describes a band
   that tests both cascades and interpolates, though it gives no width.
   NVIDIA's soft-shadow notes name only a minimum clamp on the filter. The
-  pyramid follows the rule the ambient occlusion samples already use and has
-  no outside source.
+  pyramid's nearest published relative is a hierarchical shadow map that
+  keeps the least and greatest depth of each block and classifies a region
+  before filtering it (Guennebaud, Barthe and Paulin, 2006). That paper
+  reports visible steps in a soft edge where the filter changes level,
+  which is why the prototype includes that case.
 - *Eye-centred cascades* stop any camera turn from ending the far cascade's
   hold. They also replace three named cascades, which the code refers to in
   132 places, with one indexed set, and the terrain's shadow map becomes one
@@ -1060,10 +1515,11 @@ depends only on the light and on the gap between blocker and receiver.
 
 - The exchange at the horizon must not flicker between lights. A light that
   keeps its slot through a handover must still take the primary role when
-  the other goes dark.
+  the other goes dark, and two lights that swap brightness must cross
+  without a jump in either direction.
 - The probe fallback is only as fine as the probe spacing at the edge of
   coverage. A probe volume that has not filled yet darkens the area until it
-  does.
+  does, and a camera cut lands in exactly that state.
 - A sample from the pyramid darkens slightly. Wide, sparse filters lean on
   the views filter and the temporal resolve to hide noise.
 - A pyramid that keeps only the nearest depth cannot say which body or
@@ -1074,22 +1530,25 @@ depends only on the light and on the gap between blocker and receiver.
   authored day speed.
 - The per-body layers need 144 MiB against today's 96 MiB for three
   cascades. The Steam Deck's budget for that is unmeasured.
+- The glass sum has a limit. Each shadow texel stores one total of optical
+  depth down to its first opaque surface, with the nearest glass entry
+  (`sdfMeshShadowGap`). That total is exact in any draw order. It is right
+  for a receiver behind all the glass. A receiver standing between two
+  separate panes is charged for both when the texel's opaque surface lies
+  beyond them. Whether that shows is checked with a receiver in front of,
+  between and behind two panes, and the answer decides whether glass needs
+  storage by depth.
 - The strongest case against the metre-sized filter is that nothing outside
-  Puck shows one over a depth pyramid. That is why the prototype comes
-  first.
+  Puck shows one over a depth pyramid in a moving game scene. That is why
+  the prototype comes first.
 
 **What we still have to find out.** The noon measurement of which light
 holds which slot. Whether the metre-sized filter matches a brute-force
 reference. The far entries' refresh design. The Steam Deck's memory budget.
+Whether a receiver between two panes shows the glass sum's limit.
 
-**Options we did not take, or have not placed.**
+**Options we did not take.**
 
-- *Size glass shadow storage to the shadow tier, and clear it only where
-  glass casters project* (option 6f). This was read from the code. It would
-  recover most of a view's shadow memory and a 48 MiB clear per cascade
-  draw. The sum it stores does not depend on draw order, and that is kept. A
-  moving glass caster's new footprint must be cleared too. The round
-  describes this option but does not place it in a stage.
 - *Cached or sparse virtual shadow maps, refitting the projection every
   frame, moment shadow maps, and ray-traced sun shadows* (option 6g). Each
   fails on the moving sun, on the wind, or on the baseline hardware
@@ -1097,22 +1556,27 @@ reference. The far entries' refresh design. The Steam Deck's memory budget.
 
 **Evidence.** Code read for this page: the cascade test, the texel clamp and
 the fully-lit return, the search on the light's plane, the per-view cascade
-flag, the allocator's ordering, the moon's and key light's authoring, `Fit`,
-and slot retention. From the shadows area's map: the cascade spheres on the
-view axis, the glass buffers' 144 of 252 MB, and the 132 references.
-Reasoned: the texel sizes and the 26 cm and 1.95 m caps, the sideways-reach
-consequence, and which light holds which cascade by day and by night.
-Outside sources: NVIDIA's soft-shadow deck, Microsoft's cascade article and
-Dybisz on Cyberpunk 2077 (one shadow system for sun and moon, and distant
-shadows refreshed over frames), all confirmed. Unreal's clipmap levels each
-covering twice the radius of the last is unverified. No outside source
-answers the question behind option 6e.
+flag, the allocator's ordering and its retention of slots, the moon's and
+key light's authoring, `Fit`, the sizing of glass shadow storage by tier,
+and the one optical-depth total a receiver reads. From the shadows area's
+map: the cascade spheres on the view axis, the glass buffers' 144 of
+252 MB, and the 132 references. From the attack's readers, not reopened
+here: the probe windows' rule, that an unmeasured probe answers dark, and
+the existing pyramid's one pixel per block. Reasoned: the texel sizes and
+the 26 cm and 1.95 m caps, the sideways-reach consequence, and which light
+holds which cascade by day and by night. Outside sources: NVIDIA's
+soft-shadow deck, Microsoft's cascade article and Dybisz on Cyberpunk 2077
+(one shadow system for sun and moon, and distant shadows refreshed over
+frames), all confirmed. Guennebaud's hierarchical shadow map was opened by
+an attack reader and not by this page's verification pass. Unreal's clipmap
+levels each covering twice the radius of the last is unverified. No outside
+source answers the question behind option 6e.
 
 **What it rests on.** The illumination plan's second decision, and the
 register's ruling that a light is shadowed wherever it lights
 ([register](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 A light's softness is its authored `angularRadius`. The widest soft edge,
-the blend band and a far entry's refresh are authored values with neutral
+the blend bands and a far entry's refresh are authored values with neutral
 defaults ([authored looks](#looks-are-authored)). Point and spot lights keep
 the probes' answer until the illumination plan builds shadow maps for local
 lights. This decision does not move that.
@@ -1186,55 +1650,111 @@ The steps, in order:
    group. Publishing a probe combines the groups using the frame's current
    source values. This is built for a stated class of edits:
    - A *source group* is a set of sources that always scale together: each
-     shadow-casting directional light, the sky under one gain, and each
-     local light on its own unless an author binds several to one value.
+     shadow-casting directional light, the sky under one gain, each local
+     light on its own unless an author binds several to one value, every
+     emitting material together, and each screen or opening that lights a
+     room. The last kind does not exist in the relight yet. The
+     illumination plan makes screens, portals and windows emitters in the
+     relight, and that step is designed inside this store, not beside it.
+   - *The bounce is stored per group too.* The relight adds a material's
+     own emission to a hit, and then reflects the whole previous volume off
+     it. Running that once for each group would count emission once per
+     group and mix every group's bounce into every other. So each group's
+     next bounce reads that group's own previous volume, and emission is a
+     group of its own. That history is part of the memory price.
    - A *multiply-only edit* keeps the group's reach, attenuation, direction
-     and materials. A directional light's brightness and colour, the sky's
-     gain and a local light's colour qualify today.
-   - A *local light's brightness* qualifies only after one change. Today its
-     range and taper follow its weight, so dimming it changes where it
-     reaches. Its range would be sized from the brightest value its authored
-     brightness can reach, as the exposure term already is. A dimmer or a
-     switch is then a pure scale. This lengthens some ranges. The cost in
-     rays and in probes reached is measured before the change is adopted.
+     and materials. A directional light's brightness and colour and a local
+     light's colour qualify today.
+   - *The sky's gain* qualifies once one thing moves. An author can set a
+     grid that rounds the lighting's inputs, so that tiny changes do not
+     force a relight (`SdfIndirectLightingGrid`). The sky's gain is applied
+     first and each sample is rounded afterwards, with a step that depends
+     on the largest value. Scaling a stored result is then not the same as
+     rounding the scaled input, unless the gain is a power of two. With
+     per-source storage a gain change no longer forces a relight, so for
+     these groups the rounding moves from the inputs to the combined
+     result. The reference drain changes with it, in the same change.
+   - A *local light's brightness* qualifies only after a change to a
+     recorded decision. Today its range and taper follow its brightness, so
+     dimming it changes where it reaches. The register rules that a light
+     "ends at a range derived from its intensity". Sizing the range from
+     the brightest value the light's authored brightness can reach would
+     make a dimmer or a switch a pure scale. It also changes the light's
+     falloff at every brightness below that, for direct light as well as
+     bounced light. So it is adopted, if at all, for both at once, with the
+     register amended in the same change, and after the cost in rays and in
+     probes reached has been measured.
    - *Everything else invalidates.* A moved light, a changed cone or range,
      a sky whose shape changed, and a change of material or geometry each
      invalidate what they reach, and those entries relight.
-   - *Memory is priced first:* groups times probes times one cube, at the
-     debug world's light count and at a zone's.
-4. **Light each surface once and share it between probes** (option 7b).
+   - *Memory is priced first:* groups times probes times one cube and its
+     bounce history, at the debug world's count of lights and screens and at
+     a zone's. A world can bind up to 32 screens
+     (`SdfProgramBuilder.MaxScreenSurfaces`).
+4. **Rescale the probes a relight has not reached yet.** A moving sun is
+   not a multiply-only edit, so step 3 sends it to a full relight. While
+   that relight works through the grid, a probe it has not reached is
+   scaled by the change in the sun's and the sky's mean brightness. The
+   illumination plan already holds this as an unbuilt step, and a shipped
+   game does the same. It is an approximation that bridges a transition,
+   and a relight replaces it.
+5. **Light each surface once and share it between probes** (option 7b).
    Each surface entry is lit once, keyed from the exact cached hits. This
-   comes after step 3, so that entries are built once per source group.
-5. **Store which lights reach each surface as geometry** (option 7c): one
+   comes after step 3, so that entries are built once per source group. The
+   entry's key is defined against the three-word hit the transmission plan
+   introduces, and it includes which instance the surface belongs to,
+   because that plan's shadow rule needs the receiver's identity.
+6. **Store which lights reach each surface as geometry** (option 7c): one
    bit per light per entry, made stale only by the ray segments that a
    changed bounding box crosses. How far a light reaches is sized from the
-   lowest exposure in use at the time. The store itself is sized from
-   decision 1's counted queries and tested pairs, not from the predicted
-   charge.
-6. **Trace against a mesh that the camera never changes** (option 7d). The
+   brightest exposure any authored key reaches, which is a fixed value and
+   not the exposure of the moment. The store is sized by how many distinct
+   pairs of surface and light are alive at once, under motion and eviction.
+   Query traffic does not size it: one pair asked a thousand times needs
+   one entry.
+7. **Trace against a mesh that the camera never changes** (option 7d). The
    lighting gets its own class of demand. Its tier is chosen by the probe
    spacing of the finest probe level that reaches the group. That tier is
    the group's floor wherever the floor passes a lighting check. This goes
    with the streaming plan's step 9.
-7. **Converge coarse to fine** (option 7e): the far level, then the
+
+   The lighting check is defined here. It runs at bake time. It compares
+   the floor's recorded deviation from the authored field (decision 8) with
+   the spacing of the finest probe level that reaches the group. A floor
+   passes when its deviation is small against that spacing and it has lost
+   no part, closed no hole and joined no two surfaces. A group that fails
+   keeps a finer mesh for the lighting. The bake reports how many groups
+   passed, failed and were not judged.
+8. **Converge coarse to fine** (option 7e): the far level, then the
    storey-sized level, then the finest. A count from a test harness decides
-   whether this is adopted.
-8. **One lighting budget and one pool of probes across residencies**
+   whether this is adopted. The count that matters is the time until the
+   light near the player is right, not only the number of passes.
+9. **One lighting budget and one pool of probes across residencies**
    (option 7g): minimums first, the rest divided by pixels presented.
    Probes in open air update at a coarse level's rate. The probe grid covers
    a region of space around the camera. When that region moves, it is
    published slot by slot. The level table becomes authored data in the
    standard package. This goes with the job system's `Lighting` class and
    decision 4's single price.
+10. **Light from emitting surfaces as areas, not points** (option 7h). The
+    hall's ceiling strips light its floor in blotches. The illumination
+    plan already makes screens, portal openings and windows area emitters
+    in the relight, citing the standard technique for polygon lights as
+    read. This step extends that to static emitting faces. It shares the
+    store with step 3's screen groups and with decision 15's screens as
+    selected lights, so the three are designed together.
 
 **Why.**
 
 - *Per-source storage.* At fixed geometry, materials and reach, the light a
   surface receives is linear in a source's radiance. So a change of
   brightness or colour is a multiplication, and the stale night metering
-  goes away. Other probe systems do not solve this. One paper answers an
-  abrupt change with a hysteresis rule of thumb. One shipped system freezes
-  its lighting at 60 Hz.
+  goes away. The nearest shipped relative is cruder and solves a different
+  half of the problem: Assassin's Creed Shadows rescales every probe it did
+  not update in a frame when the sun or sky changes, from one stored value
+  per probe, and keeps the light of local sources out of that rescale. That
+  is step 4. Storing light per source, so that a change is exact and not an
+  estimate, is the part with no precedent we found.
 - *Shared surface lighting* cuts shadow rays and lookups per sweep by the
   number of hits that share an entry. The illumination plan already holds
   this step, with its bar for adoption.
@@ -1249,57 +1769,95 @@ The steps, in order:
   shown, and the dark period while the whole probe grid of a newly visited
   area is measured.
   It also moves a look, the level table, out of engine data.
+- *Area emitters* fix a defect a player sees in the debug world's largest
+  interior, with a technique the illumination plan has already read.
 
 **What it costs or risks.**
 
 - Per-source storage has limits. Two lamps in one group cannot be scaled
   apart. A change in the sky's shape is not a scale. A source at zero must
   still be relit per unit, or switching it on has nothing to multiply. A
-  cube per group per probe costs memory that grows with the number of
-  groups.
-- The strongest case against it is that nothing we fetched applies it to a
-  dynamic probe volume. Its check is therefore Puck's own. After an edit,
-  the cubes must equal a from-scratch drain within `ConvergedShare`, in four
-  cases: a colour-only change, one of two lamps changed, a light taken from
-  zero to on, and a receiver sitting at the old range boundary of a lamp
-  that was brightened.
-- The sharing ratio of step 4 is unmeasured. Its error is bounded by
-  measurement, not by proof.
-- Storing visibility per probe texel would cost about 179 MB, so step 5
-  needs step 4's shared entries.
+  cube and a bounce history per group per probe cost memory that grows with
+  the number of groups.
+- The strongest case against it is that nothing we fetched stores light per
+  source in a dynamic probe volume. Its check is therefore Puck's own.
+  After an edit, the cubes must equal a from-scratch drain within
+  `ConvergedShare`, in seven cases: a colour-only change, one of two lamps
+  changed, a light taken from zero to on, a receiver sitting at the old
+  range boundary of a lamp that was brightened, a sky gain that is not a
+  power of two with a rounding grid set, a live screen changing its
+  picture, and two coloured lamps with an emitting object and a wall lit
+  only by bounce, where one lamp is switched off after several bounces.
+- The rescale of step 4 has a known error. The illumination plan measured
+  one kind of estimate from a probe's mean sky light at about half the true
+  light for a window low in a wall. The rescale is the same kind of
+  estimate, which is why a relight always replaces it.
+- The sharing ratio of step 5 is unmeasured. Its error is bounded by
+  measurement, not by proof. A surface entry is valid only where the pool
+  already holds one, so a cold arrival has a miss path, and the time until
+  a newly visited place is lit correctly is part of the step's check.
+- Storing visibility per probe texel would cost about 179 MB, so step 6
+  needs step 5's shared entries.
+- The hit cache grows. The transmission plan adds a third word to each
+  cached hit (`SdfMeshProbeTrace.HitWords` is two today), which takes the
+  cache from about 90 MB to about 135 MB. Stores sized before that step
+  are sized at three words.
 - A floor can cover a wall and still erase a recess, or join two surfaces
   on either side of a probe. Passing the coverage check therefore does not
   qualify a floor for lighting. A group near a fine probe level may need a
-  third mesh.
+  third mesh. A check that only asks whether the light stays the same as
+  the eye moves cannot catch a mesh that leaks the same amount everywhere,
+  so the trace mesh is compared with the light traced against full detail.
+- The probe level table stays engine data until step 9, because fixing its
+  authored format before the pool is designed would fix it twice. Until
+  then every store and tier that depends on it reads it through one
+  function (`SdfMeshIrradiance.LevelsOf`), and each is also sized against a
+  table that differs from the default, so that none is quietly tuned to
+  today's 2.4 m storey.
 - Indoors, a coarse-first start may look poor.
 - For the sky, the refresh decision lags a readback. Identical packed
   inputs can be bound to new pixels, so a key without the picture is wrong.
   A picture that is cold or absent must stay an explicit state.
 - For the pool, a small share starves without a minimum. A probe that is
-  put to sleep lights a passing body with older light. A pooled volume may
+  put to sleep lights a passing body with older light, and needs something
+  to wake it when the scene inside its region changes. A pooled volume may
   serve only viewers who are permitted the same picture
   ([decision 14](#14-treat-a-nested-view-as-the-same-view-at-another-size)).
+- An area emitter's light can be blocked, and the standard technique for
+  polygon lights does not include that. How an emitting face is shadowed
+  is an open design question inside step 10.
 
 **What we still have to find out.** The rays actually issued. The sharing
-ratio. The memory cost of per-source cubes. Whether floors pass the lighting
-check.
+ratio. The memory cost of per-source cubes with their bounce history.
+Whether floors pass the lighting check. Whether moving the rounding grid to
+the combined result changes anything an author relied on.
 
-**The option we did not judge.** Integrating a light-emitting surface over
-the solid angle it covers (option 7h) would fix the blotches under the
-hall's ceiling strips. No source was fetched for it, and it needs its own
-research round.
+**The option we did not take yet.** The probes' cached hits live in memory only.
+Keeping them in the store, identified by their inputs like a baked mesh,
+would save a visited place its trace. It is priced after step 7, because
+until the trace reads a mesh the camera never changes, a hit depends on
+which mesh happened to be loaded.
 
 **Evidence.** Code read for this page: the reuse condition, how
 `RelightRays` counts against what the kernel tests, the range formula and
-the taper, and the sky's three renderers. Measured: the 13,800-ray charge.
-Reasoned: the 72 MB table and 90 MB hit cache, the linearity of transport,
-and the 179 MB for per-texel visibility. Outside sources, confirmed: Apers
-on Frostbite freezing lighting at 60 Hz, Brixelizer's screen-fed cache
-taking effect "only when they are in view", GI-1.0's leak flag in its key,
-and the Spatial Hash Radiance Cache's 160 MiB at 2^22 elements. Partial:
-Majercik's hysteresis rule. Unverified: Lumen's "we cache geometry here
-instead of lighting", Apers's light-space sample at probe hits (slide 27),
-Majercik's 30 to 50% saved by sleeping probes, and Brixelizer's nested
+the taper, the sky's three renderers, the order in which the kernel adds
+emission and the previous volume's bounce, the sky gain applied before the
+rounding grid, and the register's passage on a local light's range.
+Measured: the 13,800-ray charge. Reasoned: the 72 MB table and 90 MB hit
+cache, the linearity of transport, the 179 MB for per-texel visibility, and
+135 MB for a three-word hit. From the attack's readers, who downloaded the
+deck: that Assassin's Creed Shadows rescales unselected probes on a sun or
+sky change, keeps local lights out of that rescale, and halves its probe
+budget at 60 frames a second. From the illumination plan: its unbuilt
+rescale step, its area emitters, and its measured 0.49 for a window low in
+a wall. Outside sources, confirmed: Apers, that one title on Frostbite's
+system freezes its lighting to hold 60 Hz (the attack adds that this
+title's lighting is fixed, which was not reopened), Brixelizer's screen-fed
+cache taking effect "only when they are in view", GI-1.0's leak flag in its
+key, and the Spatial Hash Radiance Cache's 160 MiB at 2^22 elements.
+Partial: Majercik's hysteresis rule. Unverified: Lumen's "we cache geometry
+here instead of lighting", Apers's light-space sample at probe hits (slide
+27), Majercik's 30 to 50% saved by sleeping probes, and Brixelizer's nested
 volumes sharing one atlas.
 
 **What it rests on.** It extends the illumination plan's first decision by
@@ -1522,7 +2080,7 @@ Nanite's root page and its page priorities, confirmed.
 **What it rests on.** The streaming plan's decisions and the owner's ruling
 quoted above.
 
-### 10. Bring the cold bake inside its minute, and close the contour defects
+### 10. Make a bake cost what changed, and close the contour defects
 
 **The problem.** The cold bake misses its bar, and some shapes bake wrongly.
 
