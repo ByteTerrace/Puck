@@ -45,7 +45,6 @@ public sealed partial class WorldRuleHost {
     private readonly Dictionary<int, FixedVector3> m_preflightRigidVelocity = [];
     private readonly Dictionary<WorldInputConsumeEffect, (Puck.Commands.Principal Owner, WorldInputMatch Match)> m_preflightInput = [];
 
-    private WorldArenaPublication? m_proposedPublication;
     // The firing's document rows, past every gate and waiting on the commit.
     private WorldDocument.WorldPreparedMutation? m_preparedDocument;
 
@@ -74,7 +73,6 @@ public sealed partial class WorldRuleHost {
         m_documentArms.Clear();
         m_preflightRigidVelocity.Clear();
         m_preflightInput.Clear();
-        m_proposedPublication = null;
     }
     /// <inheritdoc/>
     public bool PrepareTransactional(in EffectFiring firing, out EffectRefusal refusal) {
@@ -112,22 +110,14 @@ public sealed partial class WorldRuleHost {
         m_preparedDocument = null;
         m_documentArms.Clear();
 
-        // The unit was composed against the proposed document, and its install re-seeds the arena from what it
-        // composed, so that proposal is what is installed under it. The scope has committed with nothing written
-        // since, so the arena holds exactly what the proposal read.
-        _ = Host.AdoptPublication(
-            publication: Proposed(),
-            reconcile: false
-        );
-        m_proposedPublication = null;
+        // Publish the committed state writes before the staged document reconciles their consumers.
+        _ = Host.PublishArena(reconcile: false);
         prepared.Install(
             connectionId: SubmissionEnvelope.LocalConnectionId,
             correlationId: 0
         );
     }
 
-    // The proposal is taken once per firing: its preflights run after the firing's last arena write.
-    private WorldArenaPublication Proposed() => (m_proposedPublication ??= Host.ProposePublication() with { Definition = Host.MaterializeArena() });
     // One row travels as itself, so its journal entry is the mutation it always was; several travel as one batch.
     private static WorldMutation DocumentUnit(List<WorldMutation> rows) => ((rows.Count == 1)
         ? rows[0]
@@ -779,27 +769,8 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        // The batch so far is composed against the document the firing proposes, so each row is judged against what
-        // the rows before it leave and a row that cannot follow them is refused by name. Every other gate runs once,
-        // over the whole unit, in PrepareTransactional. Nothing is installed here: the firing's scope is still open,
-        // and a document carrying writes that may yet rewind would keep them.
+        // The transaction composes the complete sequence once while the firing can still rewind.
         m_documentArms.Add(item: mutation);
-
-        return (WorldDocument.TryCompose(
-            authority: Host.GrantTable,
-            candidate: out _,
-            current: Proposed().Definition,
-            engineTick: firing.EngineTick,
-            evictedKey: out _,
-            instanceIdentity: Host.InstanceIdentity,
-            mutation: DocumentUnit(rows: m_documentArms),
-            reason: out var composeReason,
-            tick: firing.Tick,
-            refusalCode: out _
-        ) || Refuse(
-            code: RuleEffectRefusal.MutationRejected,
-            reason: composeReason,
-            refusal: out refusal
-        ));
+        return true;
     }
 }
