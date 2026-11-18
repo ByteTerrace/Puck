@@ -17,6 +17,7 @@
     { "name": "body.hold", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.impulse", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.motion", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "body.place", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.pose", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.press", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.reconcile", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
