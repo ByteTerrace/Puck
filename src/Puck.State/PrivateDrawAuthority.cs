@@ -76,10 +76,6 @@ public abstract class PrivateDrawAuthority : IJournalParticipant {
     /// <summary>Replay-only samplers require a recorded address for every read.</summary>
     protected virtual bool RecordedOnly => false;
 
-    /// <summary>Opens a raw stream for generator kernels.</summary>
-    protected static PrivateDrawStream FromKey(ClosedBitset256 key) =>
-        new((seed, stream, cursor) => PrivateDrawStream.Word(key, seed, stream, cursor), 0, null);
-
     /// <summary>Binds a private declaration at the allocated ordinal.</summary>
     protected Draw InstallStream(Draw draw, long installation) {
         if (!CanInstall) { throw new InvalidDataException("PrivateDrawSeedMissing: a private draw requires an authority seed."); }

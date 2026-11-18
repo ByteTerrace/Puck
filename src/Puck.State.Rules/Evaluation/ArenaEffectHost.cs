@@ -153,7 +153,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             Arena: Arena,
             Generators: m_generators,
             Seeds: m_seeds,
-            Hypothetical: Hypothetical,
+            Draws: CandidateDraws,
             Time: Time
         );
 
@@ -232,15 +232,17 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
 
         return changed;
     }
-    /// <summary>A hypothetical candidate cannot inspect a private stream.</summary>
-    protected virtual bool Hypothetical => false;
+    /// <summary>Gets the draw declaration of every catalog ordinal this host samples with, or <see langword="null"/>
+    /// for the arena's own. A hypothetical host returns each private site bound to a sampler it owns
+    /// (<see cref="Draw.Imagined"/>), so a candidate never reads the authority's stream.</summary>
+    protected virtual IReadOnlyList<Draw?>? CandidateDraws => null;
 
     private bool ApplyGenerate(in Mutation mutation, out EffectRefusal refusal) {
         var ordinal = mutation.RowOrdinal;
 
         if (
             (((uint)ordinal) >= ((uint)Arena.Rows.Count)) ||
-            (Arena.Rows[ordinal].Draw is not { } draw)
+            (new ArenaTransformContext(Arena: Arena, Time: Time, Draws: CandidateDraws).DrawAt(rowOrdinal: ordinal) is not { } draw)
         ) {
             refusal = EffectRefusal.Of(
                 code: RuleEffectRefusal.MutationRejected,
@@ -250,7 +252,7 @@ public class ArenaEffectHost : IEffectHost, IArenaTransformHost, IArenaUndoHost 
             return false;
         }
         if (!GeneratorEngine.TryResolveExecutableSource(
-            draw: Hypothetical ? draw.WithoutStream() : draw,
+            draw: draw,
             generator: out var generator,
             generators: m_generators,
             reason: out var resolveReason

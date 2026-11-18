@@ -154,6 +154,10 @@ public sealed record WorldSearchChance(string Row, int AtDepth);
 /// <see cref="SearchMethod.MonteCarlo"/>, whose outcome backprop alternates sign along the path.</param>
 /// <param name="Enabled">Optional integer slot; zero suspends candidate work.</param>
 /// <param name="Revision">Optional integer slot copied to best.revision with the completed answer.</param>
+/// <param name="Actor">Whose sight the job plans over. Omitted, the job sees what the public may read; a principal
+/// (<c>seat2</c>), what that principal may read; either way every other cell the job reads holds a value imagined from
+/// the plan's own seed, and every output's audience must lie inside the actor's. <c>world</c> plans over the
+/// authority's true state, and every output's audience must then be one every row the job reads encloses.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldSearchRow(
     string Name,
@@ -176,8 +180,14 @@ public sealed record WorldSearchRow(
     WorldSearchChance? Chance = null,
     string? Scores = null,
     string? Enabled = null,
-    string? Revision = null
+    string? Revision = null,
+    Puck.Commands.Principal? Actor = null
 ) {
+    /// <summary>Gets whether the job plans over the authority's true state (<c>actor: world</c>) rather than over an
+    /// actor's sight.</summary>
+    [JsonIgnore]
+    public bool ReadsAuthority => (Actor is { Kind: Puck.Commands.PrincipalKind.World });
+
     /// <summary>The one candidate shape a job with none authored enumerates: a plain relocation that evicts
     /// whatever stood on the target — this section's original, unconditional behavior.</summary>
     private static readonly IReadOnlyList<WorldSearchShape> DefaultShapes = [new WorldSearchShape.Relocate(Displace: true)];
@@ -1509,6 +1519,48 @@ public static class WorldSearchCompilation {
         return true;
     }
 
+    // What a job lands may be read only by those who may read what it planned over. A job over the authority's true
+    // state lands into audiences every row it reads encloses, judged from the declarations; a job over an actor's
+    // sight read nothing but what the actor may read and its own imagined values, so each output's audience lies
+    // inside the actor's (the public's encloses every audience).
+    private static bool TryAdmitAudience(WorldSearchRow row, ArenaSearchPlan resolved, CompiledRule[] judge, CompiledExpressionToken[]? score,
+        WorldFactsCompileContext context, out string reason) {
+        reason = string.Empty;
+
+        if (row.ReadsAuthority) {
+            try {
+                RuleCompiler.RequireEnclosedAudience(
+                    resolved.Dependencies(RuleDataflow.KeyRows(judge, score)), resolved.Outputs(),
+                    row.Name, context, RuleRefusal.SearchWidensAudience);
+            } catch (RuleException exception) {
+                reason = exception.Message;
+                return false;
+            }
+            return true;
+        }
+
+        var sight = ((row.Actor is { } actor) ? new StateVisibility(Readers: [actor.Describe()]) : null);
+
+        foreach (var output in resolved.Outputs()) {
+            if ((context.FindRowAt(rowOrdinal: output) is { } target) && !StateVisibility.Encloses(policy: sight, audience: target.Visibility)) {
+                reason = $"search '{row.Name}' refused {RuleRefusal.SearchWidensAudience}: it plans over what '{row.Actor?.Describe()}' may read and lands into '{target.Name}', whose audience is wider; narrow '{target.Name}' to '{row.Actor?.Describe()}', or plan over the authority's state with actor 'world'";
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether a row's declarations (its own policy, a cell policy its storage admits, a containing zone's) can
+    // withhold a cell from the actor; read from declarations only, so the price never moves with the members.
+    private static bool MayWithhold(StateCatalog catalog, WorldFactsCompileContext context, int ordinal, Puck.Commands.Principal? actor) {
+        var token = actor?.Describe();
+
+        bool Closes(int row) => (context.FindRowAt(rowOrdinal: row) is { } declared) &&
+            (declared.CellVisibility || ((declared.Visibility is { } policy) && ((policy.ReadersFrom is not null) || !policy.Allows(recipient: token))));
+
+        return Closes(ordinal) || catalog.ContainingZones(rowOrdinal: ordinal).Any(Closes);
+    }
+
     /// <summary>Plans search from an existing compilation and its shared work sheet, without compiling rules or
     /// interactions again. The returned plans, judges, and scores follow the definition's search row order.</summary>
     /// <param name="compilation">The unchanged definition's compilation receipt.</param>
@@ -1592,12 +1644,7 @@ public static class WorldSearchCompilation {
             scores[index] = compiledScore;
             if (!ArenaSearchPlan.TryResolve(plan!, definition.StateCatalog, out var resolved, out reason)) { return false; }
             resolvedPlans[index] = resolved!;
-            try {
-                RuleCompiler.RequireEnclosedAudience(
-                    resolved.Dependencies(RuleDataflow.KeyRows(judges[index], compiledScore)), resolved.Outputs(),
-                    rows[index].Name, context, RuleRefusal.SearchWidensAudience);
-            } catch (RuleException exception) {
-                reason = exception.Message;
+            if (!TryAdmitAudience(rows[index], resolved, judges[index], compiledScore, context, out reason)) {
                 return false;
             }
         }
@@ -1612,14 +1659,25 @@ public static class WorldSearchCompilation {
         for (var index = 0; index < plans.Length; index++) {
             var resolved = resolvedPlans[index];
             var keyRows = resolved.Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]));
-            // Every tick checks every job, and a completed job checks again immediately before landing.
-            var disclosure = RuleCompiler.DisclosureCost(keyRows, resolved.Outputs(), context) * 2L;
-            if (!disclosure.IsKnown) { reason = $"search '{plans[index].Name}' has unbounded audience checks"; return false; }
-            upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, disclosure.Units);
+            // A job over the authority's state checks its audience every tick, and again immediately before landing.
+            if (rows[index].ReadsAuthority) {
+                var disclosure = RuleCompiler.DisclosureCost(keyRows, resolved.Outputs(), context) * 2L;
+                if (!disclosure.IsKnown) { reason = $"search '{plans[index].Name}' has unbounded audience checks"; return false; }
+                upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, disclosure.Units);
+            }
             foreach (var ordinal in keyRows) {
                 positions[index] = Puck.Maths.BinaryIntegerFunctions.AddSaturating(positions[index], context.RowCapacity(ordinal));
                 if (!outputs.Contains(ordinal)) {
                     upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, context.RowCapacity(ordinal));
+                }
+            }
+            // A job over an actor's sight asks the sight of every cell of a key row whose declarations can withhold from
+            // the actor when it folds its stamp, and imagines each such cell when it opens its veil: a read and a write.
+            if (!rows[index].ReadsAuthority) {
+                foreach (var ordinal in keyRows) {
+                    if (MayWithhold(definition.StateCatalog, context, ordinal, rows[index].Actor)) {
+                        upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, 2L * context.RowCapacity(ordinal));
+                    }
                 }
             }
         }

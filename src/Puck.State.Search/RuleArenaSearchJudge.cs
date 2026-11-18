@@ -58,6 +58,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
     /// <inheritdoc/>
     public JudgeOutcome Judge(in ArenaSearchView view) {
         m_host.SearchPly = view.Ply;
+        m_host.Imagine(seed: view.Imagined);
         m_host.Advance(
             engineTick: view.EngineTick,
             tick: view.Tick
@@ -89,6 +90,7 @@ public sealed class RuleArenaSearchJudge : IArenaSearchJudge {
         }
 
         m_host.SearchPly = view.Ply;
+        m_host.Imagine(seed: view.Imagined);
         m_host.Advance(
             engineTick: view.EngineTick,
             tick: view.Tick

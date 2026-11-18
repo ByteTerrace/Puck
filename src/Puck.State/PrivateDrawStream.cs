@@ -15,6 +15,11 @@ public sealed class PrivateDrawStream {
         Owner = owner;
     }
 
+    /// <summary>Opens a stream under a caller-owned key no authority issued: a hypothetical evaluation's own sampler,
+    /// which reads no authority word and moves no authority's read count or timeline.</summary>
+    internal static PrivateDrawStream FromKey(ClosedBitset256 key) =>
+        new((seed, stream, cursor) => Word(key, seed, stream, cursor), 0, null);
+
     /// <summary>The installation ordinal in the authority continuation.</summary>
     public long Installation { get; }
 

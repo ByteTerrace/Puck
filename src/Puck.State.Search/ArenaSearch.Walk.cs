@@ -23,7 +23,7 @@ public sealed partial class ArenaSearch {
         var cells = plan.CellCount;
         var work = plan.Work;
 
-        if (job.TokenCount != job.Legal.Length) {
+        if (job.TokenCount > job.Legal.Length) {
             job.Running = false;
 
             return spent;

@@ -16,10 +16,58 @@ namespace Puck.State;
 /// </remarks>
 public class ArenaSearchEffectHost : ArenaEffectHost, IStateReader {
     private int m_queued;
-    protected override bool Hypothetical => true;
+    private Draw?[]? m_imagined;
+    private ulong m_imaginedSeed;
+    private ulong m_boundSeed;
+    private IReadOnlyList<StateRow>? m_checkedRows;
+    private bool m_hasPrivate;
 
     /// <summary>Gets or sets the hypothetical ply supplied by the search judge.</summary>
     public int SearchPly { get; set; }
+
+    /// <summary>Gets each catalog ordinal's draw declaration with every private site bound to the sampler the current
+    /// imagination seed keys (<see cref="Imagine"/>), so a candidate samples words no authority issued; a host whose
+    /// catalog declares no private site samples with the arena's own declarations.</summary>
+    protected override IReadOnlyList<Draw?>? CandidateDraws {
+        get {
+            if (!ReferenceEquals(objA: m_checkedRows, objB: Arena.Rows)) {
+                m_checkedRows = Arena.Rows;
+                m_hasPrivate = Arena.Rows.Any(predicate: static row => (row.Draw?.PrivateStream == true));
+                m_imagined = null;
+            }
+            if (!m_hasPrivate) {
+                return null;
+            }
+            if ((m_imagined is null) || (m_boundSeed != m_imaginedSeed)) {
+                Bind();
+            }
+
+            return m_imagined;
+        }
+    }
+
+    /// <summary>Keys every private draw site a candidate samples to <paramref name="seed"/>, the seed the job imagines
+    /// with at its current inputs.</summary>
+    /// <param name="seed">The imagination seed.</param>
+    public void Imagine(ulong seed) => m_imaginedSeed = seed;
+    private void Bind() {
+        var generator = Puck.Maths.Pcg32XshRr.Create(state: m_imaginedSeed, stream: 0UL);
+        var key = new ClosedBitset256(
+            Word0: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
+            Word1: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
+            Word2: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32(),
+            Word3: (((ulong)generator.NextUInt32()) << 32) | generator.NextUInt32()
+        );
+        var rows = Arena.Rows;
+        var draws = new Draw?[rows.Count];
+
+        for (var ordinal = 0; (ordinal < draws.Length); ordinal++) {
+            draws[ordinal] = rows[ordinal].Draw?.Imagined(key: key);
+        }
+
+        m_imagined = draws;
+        m_boundSeed = m_imaginedSeed;
+    }
 
     /// <summary>Initializes a host over the arena a search opens its candidate scopes on.</summary>
     /// <param name="arena">The store every read and write addresses.</param>

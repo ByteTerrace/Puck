@@ -67,6 +67,14 @@ public sealed record Draw(
     [JsonIgnore]
     public PrivateDrawStream? Secret { get; internal init; }
 
+    /// <summary>Binds a private site to an imagined sampler under <paramref name="key"/>, which a hypothetical
+    /// evaluation (a search candidate) owns: it draws words no authority issued, so it never reads the authority's
+    /// stream, its read count or its timeline. A public site is returned as it stands, since its words are what
+    /// every reader computes.</summary>
+    /// <param name="key">The imagined sampler's key.</param>
+    /// <returns>The site bound to the imagined sampler, or this site when it is public.</returns>
+    public Draw Imagined(ClosedBitset256 key) => (PrivateStream ? (this with { Secret = PrivateDrawStream.FromKey(key: key) }) : this);
+
     /// <summary>Returns the authored declaration for a recipient.</summary>
     public Draw WithoutStream() => Secret is null ? this : this with { Secret = null };
 }

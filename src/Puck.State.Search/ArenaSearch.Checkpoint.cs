@@ -245,14 +245,23 @@ public sealed partial class ArenaSearch {
                 job: job
             );
 
-            for (var token = 0; (token < job.TokenKeys.Length); token++) {
-                if (!m_arena.TryKeyAt(
-                    key: out job.TokenKeys[token],
-                    position: token,
-                    rowOrdinal: job.Plan.TokensOrdinal
-                )) {
-                    job.TokenKeys[token] = default;
+            // A job planning over a sight walked the tokens as the veil shows them at its restored stamp.
+            job.VeilRefused = false;
+            if (!OpenVeil(job: job)) {
+                continue;
+            }
+            try {
+                for (var token = 0; (token < job.TokenKeys.Length); token++) {
+                    if (!m_arena.TryKeyAt(
+                        key: out job.TokenKeys[token],
+                        position: token,
+                        rowOrdinal: job.Plan.TokensOrdinal
+                    )) {
+                        job.TokenKeys[token] = default;
+                    }
                 }
+            } finally {
+                CloseVeil();
             }
         }
 
