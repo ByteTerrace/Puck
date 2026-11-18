@@ -250,6 +250,8 @@ public sealed partial class WorldPopulation {
         var domain = m_navigation[target.NavigationDomainIndex];
 
         if (
+            !domain.CoversRouteHeight(position: in self) ||
+            !domain.CoversRouteHeight(position: in goal) ||
             !domain.TryCell(
             node: out var start,
             position: in self
@@ -321,14 +323,15 @@ public sealed partial class WorldPopulation {
                 onCachedRoute = false;
                 goto Replan;
             }
-            var waypoint = domain.Position(node: state.Path[state.Waypoint]);
+            var waypoint = domain.Foot(node: state.Path[state.Waypoint]);
+            var distanceToWaypoint = (waypoint - self).LengthSquared;
 
-            if ((waypoint - self).LengthSquared > arrivalSquared) {
+            if (distanceToWaypoint > arrivalSquared) {
                 state.Status = NavigationStatus.Active;
                 return new BodySensorTarget(
                     Index: targetIndex,
                     Position: waypoint,
-                    DistanceSquared: (waypoint - self).LengthSquared
+                    DistanceSquared: distanceToWaypoint
                 );
             }
             state.Waypoint++;

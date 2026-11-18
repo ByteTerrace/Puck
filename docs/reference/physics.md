@@ -587,19 +587,21 @@ construction; per-body route storage is a host concern, so a steady-state
 search allocates nothing here.
 
 When a host replaces its document, a domain keeps its workspace when its tuning
-and capacity are unchanged and it is neither baked nor baking, or when its
-geometry part compares equal to the one its bake read: equal parts answer every
+and capacity are unchanged and its geometry part compares equal to the one it
+replaces. Equal parts answer every
 query the bake asked identically, so the bake (finished or in flight) and its
 shared destination trees carry over without sampling anything. Medium domains
 also require the same field revision. A domain whose tuning is unchanged but whose
 geometry part changed in part (a door's response swap) takes its predecessor's
 finished bake when the two parts bound their difference
-(`IRegionalContactField.TryDifference`): `Domain.TryRebakeFrom` copies the cells
-and edges and proves again, on the calling thread, only the cells whose sample or
+(`IRegionalContactField.TryDifference`). `Domain.TryBeginRebakeFrom` schedules a
+worker to copy the cells and edges and prove again only the cells whose sample or
 edge sweeps the changed colliders could reach and the edges of their neighbours,
 which gives the bake a whole bake would (`world.navigation` counts these as
-`rebaked=`). Any other domain compiles fresh, and a prior domain no runtime keeps
-has its bake in flight cancelled.
+`rebaked=`). A newer swap can use the same finished bake as its starting point
+while that worker is still running. A route read waits for the current bake.
+Any other domain compiles fresh, and a prior domain no runtime keeps has its
+bake in flight cancelled.
 
 A domain carrying `Shared` runs queued reverse-Dijkstra searches instead,
 with stable `(cost, nodeOrdinal)` ties and one aggregate expansion allowance
@@ -632,13 +634,13 @@ the walkable ground, so a route keeps off walls and passes a doorway through its
 middle; the heuristic is the horizontal Chebyshev distance to the goal, which
 never exceeds the cost left. `Straighten` cuts a route to the corners a walker
 turns at, keeping each junction hop: from each kept node, the farthest later node
-of its domain it can reach in a straight line (`Domain.IsStraightClear`: every
-sample half a cell apart, and the points a margin from it along X and Z, on
-walkable cells within a step of each other, each move between cells a proved
-edge). `TryLocateNear` finds the cell a body standing nearer a wall than a cell's
-center may starts from. Two domains join at a
+of its domain it can reach in a straight line. `Domain.IsStraightClear` checks
+the baked cells and clearance margin, then sweeps the agent along the actual
+line between samples. `TryLocateNear` also sweeps between the body's exact foot
+point and the candidate surface cell, so a cell across a wall cannot start the
+route. Two domains join at a
 junction, a pair of walkable cells whose route positions share X and Z
-exactly and, between two surfaces, differ in height by no more than the lower
+exactly and, between two surfaces, whose feet differ in height by no more than the lower
 step height (two volume cells must coincide; a medium domain joins none), so a
 route crosses between domains only where both prove the same ground and the
 hop holds no unproven segment. Junctions exist only where grids align: cell
