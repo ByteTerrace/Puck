@@ -129,6 +129,11 @@ orders, verifying a change by building and running it, and fixing a defect at it
 - A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
   for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
   for nothing.
+- Code first (AGENTS.md, "Code first, verification after"). Write the change properly, build what
+  you touched, boot the debug world once, and hand back. Windowed runs, benchmarks, look critics and
+  broad testing are the lead's batched passes after landing, not your gate: ask for them under
+  **Needs you** as a verification request instead of running them, unless your brief makes one your
+  finish line. Never re-run the same check to gain confidence.
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.

@@ -1737,9 +1737,18 @@ the work after that.
 
 ### How the work is run
 
-**What finishes a lane.** A lane builds the projects it touched and runs
-what it changed in the debug world. Its evidence is what a player would
-meet and what the engine counts:
+**Code first, verification after** (AGENTS.md). The owner's priorities are
+velocity, code quality and feature expansion, in that order. A lane writes
+its change properly, builds what it touched, boots the debug world once,
+and lands. The evidence below is gathered after landing, by the lead's
+batched passes over many landed lanes and by the area fix passes that
+clean up and test what the wave wrote; a lane asks for its windowed check
+as a verification request rather than running it, unless its entry makes
+that check its finish line. A defect a batch pass finds goes back as a fix,
+not as a reason for every lane to test more first.
+
+**What the batched passes read.** What a player would meet and what the
+engine counts:
 
 - a boot of the debug world on the lane's build, and the check the lane's
   entry names;
@@ -1753,15 +1762,14 @@ meet and what the engine counts:
   `puck benchmark` route is the lead's, run once per integration batch on
   the merged tip (below), never once per lane.
 
-A lane lands when that evidence holds. Test requirements are lifted for the
+A lane lands on its build and boot; this evidence is gathered across the batch. Test requirements are lifted for the
 refactoring campaign ([AGENTS.md](../../AGENTS.md#puck-is-pre-release)): no
 suite, coverage figure or recorded baseline is required of a change, and a
 test a change breaks is updated or deleted in that change. Equality with the
 previous build's output is never a finish line.
 
-**Measurement runs beside the work.** A lane without a GPU grant hands its
-windowed check to the lead as a verification request, and the lead runs
-those in batches. A question about time goes to the lead's quiet window
+**Measurement runs beside the work.** A lane hands its windowed check to
+the lead as a verification request, and the lead runs those in batches. A question about time goes to the lead's quiet window
 (`puck measure request`) with the two builds frozen, and the lane lands on
 its counts meanwhile. No lane waits for a measurement, for a review, or for
 the RTX 2060, the Steam Deck or an HDR display.
@@ -2686,6 +2694,15 @@ Twelve came from the research round on the renderer, and three from
 Each owns the files its entry names. Where two lanes meet in a file, the
 merge order is given after the entries, and the later lane merges the
 integration tip before it hands back.
+
+Every lane finishes on code written properly, a build of what it touched
+and one boot of the debug world (code first, verification after). An
+entry's "Finish line" is what the lead's batched pass checks after the lane
+lands, not a gate the lane works through. The exceptions are readings that
+decide what the lane builds: `views` splits its pass before choosing the
+cut, `water` compares the sloping bed before choosing gap 5's design, and
+`direct3d` reads the capabilities before choosing its draw. Those readings
+come first, are short, and are taken once.
 
 The model class follows what the work risks: Opus (`specialist`) where an
 invariant carries the change, Sonnet (`implementer`) where the result is

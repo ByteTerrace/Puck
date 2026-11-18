@@ -190,6 +190,16 @@ agent works in that mode by default, without asking:
   real mouse and foreground window) is left out through one list,
   `build/CoverageHardwareOnly.txt`.
 - The owner's velocity rulings:
+  - Code first, verification after (the owner's ruling). The owner's
+    priorities, in order, are velocity, code quality and feature expansion.
+    A lane's job is to get the code written properly and landed; it proves
+    its change only as far as a build of what it touched and a boot of the
+    debug world. Windowed runs, benchmarks, look critics, cleanup and tests
+    happen afterwards, in the lead's batched passes and the area fix passes
+    across many landed changes, never as a gate one lane works through
+    before handing back. Time spent re-running and re-testing one change is
+    the waste this ruling removes; determinism (rule 4) and the hazards
+    reviews still hold, and run beside the next work.
   - Waits are judged with judgement about who waits and why (the owner's
     ruling). People tolerate an occasional long start, as they do a game's first
     boot or a loading screen, but every wait between making a change and seeing
