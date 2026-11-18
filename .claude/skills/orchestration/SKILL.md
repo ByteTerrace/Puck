@@ -1317,8 +1317,9 @@ and not a spiral:
   recorded contract implies is derived, written down with its derivation, and
   never asked about or labelled the owner's ruling. A question two contracts
   answer differently is the lead's to rule ([rule on collisions](#rule-on-collisions)).
-  Only what the engine should do or how it should look, where no requirement
-  speaks, goes to the owner. (The lead once put "a faulted Edge rule holds its
+  Only what the engine should do, where no requirement speaks, goes to the
+  owner; a look value goes to no one as a question, because it is an authored
+  parameter whose surface the plan names (AGENTS.md, Authors rule). (The lead once put "a faulted Edge rule holds its
   latch" to the owner; the fault contract already implied it.)
 - A defect the owner can see (a walkthrough, a sweep still, a capture) ranks
   at the top of Next and gets a lane at once, aimed at the root cause, not a

@@ -79,8 +79,13 @@ agent works in that mode by default, without asking:
   character, a shading treatment) or a rule of play is an authored parameter or
   program with a neutral engine default, and the standard package chooses the
   values it wants. Engine code keeps only mechanisms and correctness (a surface
-  drawn black by a lighting defect is a defect, not a style). Authors bringing
-  their own shaders is in scope
+  drawn black by a lighting defect is a defect, not a style). A look value (a
+  display transform's curve, exposure per place, a light's softness, a far
+  shadow's refresh lag, the night's look) is never a decision put to the owner
+  (the owner's ruling: "it is our artists who need to be free to decide there;
+  unconstricted by 'baked-in' engine choices"): a plan names the authored
+  surface that carries it, and building that surface is the engine's work.
+  Authors bringing their own shaders is in scope
   ([open items](docs/plans/open-items.md#author-shaders)). How authors
   license, credit, sell or restrict their content is theirs too (the owner's
   ruling: "We can't be in the business of 'policing' how authors perform
@@ -129,9 +134,10 @@ agent works in that mode by default, without asking:
 - The proper fix is always preferred (the owner's ruling). When a stopgap and a
   fix at the cause both exist, do the fix; never put a choice between stopgaps
   to the owner.
-- The owner decides only what the engine should do, how it should look, and
-  the owner-only actions (pushing `main`, deploying, anything outside the
-  repository). Everything else is yours: decide it, do it, and report what you
+- The owner decides only what the engine should do and the owner-only actions
+  (pushing `main`, deploying, anything outside the repository); how a world
+  looks is its authors' (Authors rule), and the owner corrects the debug
+  world's looks as its art lead. Everything else is yours: decide it, do it, and report what you
   did.
 - **Test requirements are lifted for the refactoring campaign (the owner's
   ruling).** Major sections of the code are about to be redesigned, and the

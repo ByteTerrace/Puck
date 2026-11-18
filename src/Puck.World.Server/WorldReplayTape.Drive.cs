@@ -439,8 +439,10 @@ public sealed partial class WorldReplayTape {
     /// when fast-forwarding). Refuses, leaving the session untouched, when the tape is busy, recorded nothing, its
     /// active seat set differs from the live one (join or leave to match — a seat cannot be respawned through the
     /// session door), the tape pins addons and a guest already holds state the rebuild door cannot reset, an
-    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline, or the
-    /// boot-image rebuild is rejected. A stepped machine and a moved screen selector are no obstacle: the start
+    /// engagement is in flight, a remote connection or transfer obligation depends on the current timeline, the tape
+    /// lands travelers from or sends travelers to another authority, or the boot-image rebuild is rejected. A crossing
+    /// through a portal pair standing in this world re-applies from the tape, and the host's portal scan mints none
+    /// for the replaying row. A stepped machine and a moved screen selector are no obstacle: the start
     /// checkpoint the reset installs restores the machine cores, the screen slots and the sessions over the running
     /// host. The host tick thread owns this operation.</summary>
     /// <param name="name">The saved tape's name.</param>
@@ -521,6 +523,11 @@ public sealed partial class WorldReplayTape {
 
         if (source.Ticks.Any(predicate: static tick => tick.Authority.Any(predicate: static entry => (entry is WorldReplayEntry.Arrival)))) {
             refusal = $"'{name}' lands travelers another authority handed over — driving it here would embody them with no source releasing them; replay.verify lands them again offline";
+            return false;
+        }
+
+        if (source.Ticks.Any(predicate: static tick => tick.Authority.Any(predicate: static entry => (entry is WorldReplayEntry.Departure)))) {
+            refusal = $"'{name}' sends travelers to another authority — driving it here would release them with no destination landing them; replay.verify re-drives the crossing set offline";
             return false;
         }
 

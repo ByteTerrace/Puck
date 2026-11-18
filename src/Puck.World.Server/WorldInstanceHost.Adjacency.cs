@@ -172,7 +172,7 @@ public sealed partial class WorldInstanceHost {
     // junction tie is distributed by a stable hash of the entity generation and authority identity over the sorted
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
-    private void ScanInstanceAdjacencies(WorldInstance instance) {
+    private void ScanInstanceAdjacencies(WorldInstance instance, bool decides) {
         if (instance.Server.Configuration.Adjacencies is not { Count: > 0 }) {
             return;
         }
@@ -260,19 +260,34 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            EnqueueAdjacencyTransfer(
-                hit: in winner,
-                instance: instance
-            );
+            if (decides) {
+                EnqueueAdjacencyTransfer(
+                    hit: in winner,
+                    instance: instance
+                );
+            }
         }
     }
     private void ScanInstanceBoundaries(WorldInstance instance) {
         instance.Server.ExecuteAuthorityAction(state: (Host: this, Instance: instance),
             operation: static state => state.Host.ScanInstanceBoundariesCore(instance: state.Instance));
     }
+    // An instance driving its own tape takes every crossing from the tape: each recorded in-place crossing re-applies at
+    // its own position among the tick's authority inputs (WorldReplaySnapshot.ApplyRecordedTick), as the offline
+    // re-drive applies it, and a tape that departs travelers does not drive live (WorldReplayTape.TryBeginDrive). A crossing the scan minted as well would move the body a second time, so a replaying
+    // instance's scan still observes every face (its occupancy latch follows the driven bodies and is current when live
+    // input returns) but mints nothing.
     private void ScanInstanceBoundariesCore(WorldInstance instance) {
-        ScanInstanceAdjacencies(instance: instance);
-        ScanInstancePortals(instance: instance);
+        var decides = (instance.Tape is not { Mode: WorldReplayMode.Replaying });
+
+        ScanInstanceAdjacencies(
+            decides: decides,
+            instance: instance
+        );
+        ScanInstancePortals(
+            decides: decides,
+            instance: instance
+        );
     }
 
     // One instance's own portal scan: every placement's every portal-carrying face, against every body that can
@@ -291,7 +306,7 @@ public sealed partial class WorldInstanceHost {
     // in hand.
     private PortalEdgeHit?[]? m_portalWinners;
 
-    private void ScanInstancePortals(WorldInstance instance) {
+    private void ScanInstancePortals(WorldInstance instance, bool decides) {
         SeedFederatedArrivalOccupancy(instance: instance);
 
         var definition = instance.Server.Configuration;
@@ -362,7 +377,10 @@ public sealed partial class WorldInstanceHost {
 
         m_portalWinners = winners;
 
-        if (hits is not null) {
+        if (
+            decides &&
+            (hits is not null)
+        ) {
             ResolveAndEnqueueCoalescedTransfers(
                 hits: hits,
                 instance: instance

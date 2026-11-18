@@ -263,9 +263,13 @@ public sealed class WorldInputProducer {
         return true;
     }
 
-    /// <summary>Acknowledges an authority-cleared toggle without assigning an event to a nonexistent interval.</summary>
-    public void AcknowledgeClearedToggle(ushort handle) {
-        if (!m_handles.TryGetValue(key: handle, value: out var index) || (m_sources[index].Source.Kind != WorldInputContributionKind.Toggle) ||
+    /// <summary>Acknowledges that a source the authority holds released and awaiting neutral is neutral at its origin,
+    /// without assigning an event to a nonexistent interval: an authority-cleared toggle, or a button whose release
+    /// its router dispatched before this producer could observe it. The neutral is reported with the next
+    /// publication, which re-arms the source.</summary>
+    /// <param name="handle">The source's registry handle.</param>
+    public void AcknowledgeNeutral(ushort handle) {
+        if (!m_handles.TryGetValue(key: handle, value: out var index) || (m_sources[index].Source.Kind == WorldInputContributionKind.Relative) ||
             !m_sources[index].AwaitingNeutral || (m_sources[index].RawValue != 0)) { return; }
         m_observed[index] = true;
         m_observedRaw[index] = 0;
