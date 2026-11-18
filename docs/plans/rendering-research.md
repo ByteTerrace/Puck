@@ -3464,6 +3464,9 @@ draft said "the tour", it meant the same thing.
   device, the benchmark and the quiet session running there, a way for a
   Deck session to get its meshes, and the least display timing a valid
   reading needs.
+- The device session's first task on the RTX 2060 is the gap between its
+  two backends that open items already holds unexplained. It was read with
+  no record of the GPU's clock state, which is now a recorded condition.
 
 No behaviour changes.
 
@@ -3904,15 +3907,25 @@ with it.
 
 | The property | What enforces it | Where the guarantee stops |
 |---|---|---|
-| Scene light is converted exactly once before anything reads it as a working image (decision 5) | Not enforced in the current tree. To build: every port of a render graph declares what it holds, and composition refuses a mismatch. The conversion sits in the producing view's graph | It does not cover the values a kernel writes inside a declared kind. The grey card through each path covers those |
-| Every cascade texel a receiver can read is marked, or else the cascade culls nothing (decision 11, option 11b) | Today the far cascade's mark covers its one kind of reader. To build: the receiver stage and the marking kernel call one function for the set of reads, and a cascade with no mark keeps every caster | A surface that came into view after the mask was built. The culling comparison in motion covers that |
-| A lit, admitted light holds the primary cascade role (decision 6, option 6b) | To build: one resolver assigns roles, and `SdfMeshShadowCascades.Fit` reads roles and not slot 0 | The fade between roles. It is authored, and the walk through the exchange checks it |
-| A reused published result was derived from the projection its consumer may see (decision 7's shared pool, decision 14's standing feeds) | Not enforced in the current tree. To build: the type of the reuse key carries the recipient view's generation, so no reuse can be written without it. Until a check covers it, this stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | What the authority chooses to deliver. That belongs to [disclosure](disclosure.md) |
-| A group within reach always has a surface to draw (decision 9) | The streaming plan's floor, built by its decision 5 | A floor that fails its acceptance test. Such a group keeps a finer tier |
-| A frame whose lighting has converged shows light that is a function of its scene, its lighting and where its probe grid sits (decisions 4 and 7) | A frame the graph withholds drives its own background work to completion and does not pump it under budgets (`SdfWorldResidency.FrameWithheld`). The headroom rule and the per-second grant must stay out of that path | Ordinary presented play, where budgets apply and the lighting's age varies |
+| Scene light is converted exactly once before anything reads it as a working image (decision 5) | Not enforced in the current tree. To build: every port of a render graph declares which of three kinds of image it holds, and composition refuses a mismatch. The conversion sits in the producing view's graph | It does not cover the values a kernel writes inside a declared kind. The card and patches through each path and each display output cover those |
+| An authored colour is decoded exactly once on its way into shading, and a display colour never is (decision 5) | Not enforced in the current tree: one grammar is parsed at 22 places. To build: a scene colour and a display colour are two types, and only a scene colour can be packed for shading | A site that parses a colour into the wrong type. The list of parse sites and one swatch for each kind of colour cover that |
+| Every cascade texel a receiver can read, for as long as that shadow map is shown, is marked, or else the cascade culls nothing (decision 11, option 11b) | Today the far cascade's mark covers its one kind of reader in the frame it is built. To build: the marking uses one geometric bound, the authored maximum radius, and the receiver cannot sample outside it. A mask records its layer, its projection and the region it is valid for, and a receiver outside that region takes the probes' answer. A cascade with no mark keeps every caster | A kind of read added later without widening the bound. The culling comparison in motion covers that |
+| A lit, admitted light holds the primary cascade role (decision 6, option 6b) | To build: one resolver assigns roles, and `SdfMeshShadowCascades.Fit` reads roles and not slot 0 | The fade between roles. It is authored, and the walk through the exchange and the crossing check it |
+| A view's last picture stands only if nothing it shows has changed (decision 2) | Today the packed hash, taken after the capture, and the rule that a standing view must still be bound to the same resolved view (`SdfWorldResidency.IsUnchanged`, `SdfWorldPasses.Refresh`). Both stay. If the cheap check of decision 2's step 3 is built: one constructor takes every change stamp, and an audit switch compares the cheap answer with the packed hash. Until a check covers it, the cheap answer stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | A writer that changes an input without moving its stamp, where the audit is not running |
+| Every residency does its upkeep every frame, captured or not (decision 2) | To build: upkeep is its own step, run for every residency before any is chosen for capture | Upkeep that is later added inside the capture. The checks on an unseen residency's memory and shader reload cover that |
+| A reused published result was derived only from rows its consumer is delivered (decision 7's shared pool, decision 14's standing feeds) | Not enforced in the current tree. To build: the reuse key is built from the content identities of the delivered inputs a result read, so no reuse can be written without them. The same test runs when an image is bound to a reader and when a finished job installs its result. Until a check covers it, this stays under adversarial review ([hazards](../development/hazards.md#silent-invariants)) | What the authority chooses to deliver, which belongs to [disclosure](disclosure.md). Pixels already delivered |
+| A group within reach always has a surface to draw, and a place whose floors do not exist yet is not published with holes (decision 9) | The streaming plan's floor, built by its decision 5. To build: the frame keeps the last complete scene, or a window's authored fallback, until the new place's floors and lighting stand | A floor that fails its acceptance test. Such a group keeps a finer tier |
+| A frame whose lighting has converged shows light that is a function of its scene, its lighting and where its probe grid sits (decisions 4 and 7) | A frame the graph withholds drives its own background work to completion and does not pump it under budgets (`SdfWorldResidency.FrameWithheld`). The headroom rule and the per-second grant must stay out of that path. To build: every probe of a batch reads the bounce from before the batch | Ordinary presented play, where budgets apply and the lighting's age varies |
 | A query that replaces shared probe state runs alone, and a batch's commit copies only the rows that batch wrote (decision 4, option 4b) | The unmerged branch's single admission door (`SdfMeshProbeGpuWork.TryTake`), by that branch's own account | A running World. The branch has not been measured in one |
+| No background job runs longer than one frame's allowance, and no dispatch does more work than its cap (decision 4) | Today only the probe client sizes its jobs. To build: every client sizes a job through one rate type (`SdfGpuWorkRate`) against the live allowance, and a kernel counts its own work against a cap it is given and resumes later | A job whose cost has not been measured yet. The service's count of jobs over the allowance covers that |
+| A background job handed to the GPU early keeps its inputs alive until it finishes (decision 4, option 4e) | Not built. To build: one place hands a job to the queue and takes the holds on its inputs, and a job cannot be submitted another way. Adversarial review ([hazards](../development/hazards.md#silent-invariants)) | A lost device |
+| A position one GPU job wrote is bounded before another job reads at it (decision 4, option 4c) | Not built. To build: the reading kernel clamps to a length it is given as an input. Adversarial review | Nothing beyond the clamp: a wrong position inside the bounds reads the wrong probe, which the drain comparison covers |
 | The rule that finds a surface crossing has one definition (decision 4, option 4d) | Today the rule exists on the CPU only. To build, with the GPU sampling: both evaluators derived from one source | Floating-point differences between the evaluators. The bracket and residual checks measure those |
-| What play did to an occurrence survives the eviction of its cell (decision 12, option 12b) | To build: changes are simulation state keyed by the canonical identity, and a cell's buffer is a cache | An identity that changes with how the scatter is written. The equivalence check covers that |
+| Size on screen has one definition (decision 8) | Not enforced: four places compute it. To build: one function in one home, called by all four, with the scale passed to shaders as data | Rounding differences between the host and a shader's use of the scale |
+| A rung is drawn by choice only when its recorded deviation, measured over the authored group's own bounds, fits the consumer's budget (decision 8) | To build: the chain selects from records, and a rung with no record cannot be selected | What the measure's sampling can miss. A group with such features is recorded as not qualified |
+| What play did to an occurrence survives the eviction of its cell (decision 12, option 12b) | To build: changes are simulation state keyed by the canonical identity and filed under the cell an occurrence is in now. A cell's buffer is a cache | An identity that changes with how the scatter is written. The equivalence check covers that |
+| The authority and a presenter evaluate the same occurrences for a cell (decision 12, option 12b) | Today one list serves both, for a whole world. To build: one function evaluates a cell, and both demands call it | Nothing in the arithmetic, which is fixed-point. The comparison of a headless World's cell bytes with a presenting one's covers the rest |
+| A present's outcome is credited to the attempt that made it (decision 15, option 15a) | Not built: the driver's id starts again on a new swap chain. To build: the record's key is the host's own attempt number, with the driver's id and its swap chain stored beside it | A driver that reports an outcome with no id |
 
 ## Who decides what
 
@@ -3923,32 +3936,38 @@ evidence. Look values belong to authors. A short list belongs to the owner.
 
 Each of these is settled by the code, a measurement or a recorded ruling:
 
-1. Measure first.
-2. Capture by a cheap snapshot, after the schedule.
+1. Measure first, and build the route and the reading of the bar that the
+   measuring needs.
+2. Capture only the residencies a frame needs, after the root's capture has
+   produced the cameras and footprints, with the packed hash kept as the
+   judge of freshness.
 3. The tick stays ahead of produce and is built in the job system plan's
    order.
-4. Background work runs as chains on the GPU, budgeted against measured
-   headroom.
+4. Background work is budgeted against the one measured reading of the
+   frame's load, in jobs that each fit a frame's allowance.
 5. One conversion from scene light to the working image, at the edge where
-   one becomes the other, and one convention for colour.
+   one becomes the other, with the sharpen ahead of bloom as the register
+   rules, and two types for colour.
 6. A shadow filter sized in metres, lights admitted by role, and a per-pixel
    probe fallback.
 7. What each kind of lighting change costs, for the edits that keep a
    light's reach.
-8. One projection function and one chain of meshes measured against the
-   field.
+8. One function for size on screen, and one chain of meshes measured
+   against the field over the authored shape's own bounds.
 9. The streaming plan's order, with this round's additions and its test in
    physical bytes.
-10. The contour rule and the exact removal of triangles, with the bake's
-    other fixes ranked by one measured run.
-11. One instance table, a conservative receiver mask for every cascade, and
-    the indexed-draw experiment.
-12. One compiled form for motion programs, and placement streams with a
-    canonical identity.
+10. A mesh's key by bake stage, the contour rule inside the existing
+    refinement, and the exact removal of triangles, with the bake's speed
+    fixes ranked by one measured run.
+11. One instance table in the visibility plan's order, a conservative
+    receiver mask for every cascade, and indexed draws as an experiment.
+12. One compiled form for motion programs, and placement evaluated cell by
+    cell by one function for collision and drawing.
 13. One shading path.
 14. Consumers' minimums before pixel share, the fitted window, and glass by
     coverage.
-15. The present record and the admission rule.
+15. The present record keyed by the host's own attempt, and the admission
+    rule.
 
 ### Looks are authored
 
@@ -3966,7 +3985,7 @@ is the mechanism and its neutral default, never the value.
 
 | Look | Where an author sets it | State today | Engine default |
 |---|---|---|---|
-| The tone curve and its constants | `render.tonemap` (`WorldTonemap`) | A switch exists. It names one curve whose constants are in engine shader code. To build with decision 5: the curve as authored data or a program in the standard package, chosen per world and per camera | No curve: the encode alone |
+| The tone curve and its constants | `render.tonemap` (`WorldTonemap`) | A switch exists. It names one curve whose constants are in engine shader code. To build with decision 5: the curve as authored data in the standard package, chosen per world and per camera | No curve: the encode alone |
 | Exposure: the manual value, the bounds, the compensation, the meter's band, percentiles and centre weight, the adaptation time and the local share | `render.exposure` (`WorldRenderExposure`) | Exists. The value, the bounds, the compensation and the hold can each be bound to a literal, a state row, or keys on a clock | `SdfExposure.Default` |
 | Exposure per place | The same members, bound to a state row that a world's rules write when the player enters a place. The gallery's inspection lever pins its hold this way | Exists for a stepped change. To build: a blend across a doorway or a portal, as authored data | No per-place behaviour |
 | A light's softness | A directional light's `angularRadius` (`WorldRenderLight.Directional`), which can be bound | Exists | The pinned soft edge |
@@ -3978,11 +3997,13 @@ is the mechanism and its neutral default, never the value.
 | Indirect light: the tier, the source gains, the bounces, the lighting grid, the relight and trace allowances and the lighting age | `render.indirect` (`WorldRenderIndirect`) | Exists. With decision 4 the allowances' unit becomes work per second. To build with decision 7 (option 7g): the probe levels (`SdfMeshIrradiance.LevelsOf`) as authored data | The Medium tier and unlimited allowances |
 | The quality presets | `render.low`, `render.medium` and `render.high` (`WorldQualityPreset`), authored in `worlds/standard/quality.puck` | Exists | No presets |
 | What a nested view gives up at each presented size | A table in the quality presets | To build with decision 14 (option 14c), replacing `WorldSessionSceneEmitter.ReducedQuality` and `WorldScreenBinder.CameraViewQuality` | No restriction |
-| The detail budgets: a tier's share of a pixel, a level's error in pixels, and its hysteresis | Members of the quality presets | To build with decision 8 (option 8b), replacing `SdfMeshTier.PixelShare` and `SdfMeshDetail.CoarserPixels` | The values of the recorded rulings |
+| The detail budgets: a tier's share of a pixel, a level's error in pixels, and its hysteresis | Members of the quality presets | To build with decision 8 (option 8b), replacing `SdfMeshTier.PixelShare` and `SdfMeshDetail.CoarserPixels` | The values of the recorded rulings. This is the one row whose default is a ruled engine behaviour and not a neutral value |
 | How ground cover thins with distance | A curve on a scatter | To build with decision 8 (option 8g) | Everything is kept |
-| Bloom, sharpening, the cel style and the atmosphere | `render.bloom`, `render.upscaleSharpness`, `render.toon` with the materials' styles, and `render.atmosphere` | Exist | Off or absent |
+| Bloom, sharpening, the cel style and the atmosphere | `render.bloom`, `render.upscaleSharpness`, `render.toon` with the materials' styles, and `render.atmosphere` | Exist. One default is not neutral: a world that authors no atmosphere still gets fog (`SdfAtmosphere.Default`). That fog is a look held in the engine, and it moves to the standard package with decision 5's retune | Off or absent, once the default fog has moved |
 | What a fixed-refresh display shows when the loop cannot hold its rate | A presentation setting beside the quality presets, which a player's option overrides | To build with decision 15 (option 15b), over `PresentPacingPolicy` | Frames as they arrive |
 | The back of a portal's glass | A property of the portal | To build. Decision 14's fitted window culls by facing where the authored back shows no image | No image |
+| How much of its own exposure a window's world applies before the viewer applies the rest | A member beside the exposure settings | To build with decision 5, replacing the constant `SdfPhotometry.WindowAdaptation`. The standard package authors today's three quarters | None of its own: the viewer's exposure alone |
+| The share of the display at which a nested view's update rate steps down | Members of the quality presets | To build with decision 14, replacing the thresholds behind `SdfUpdateRateTiers.ViewHertz` | Every view at the display's rate |
 
 No step of the build order waits for a look to be chosen. A mechanism lands
 with its neutral default and with the standard package's value beside it.
@@ -3990,24 +4011,25 @@ After decision 5, every place is judged again against its reference. The
 exposure compensation that each place authors today stands in for the
 missing encode.
 
-Open items still lists several of these values among the owner's sittings
-and calls: the exposure calibration, the shadow softness in the outdoor
-lighting direction, the terrain pass's compensation, the tonemapping and
-exposure-per-place entries awaiting review, and the back of a portal's
-glass. Changing those entries to match this section is open work for the
-lead, because it changes the owner's list on another page.
+Open items listed several of these values among the owner's sittings and
+calls. That page now matches this section: its owner's list holds engine
+behaviour and owner-only actions, and the look values point here.
 
 ### The owner's calls
 
 The owner's list holds engine behaviour and owner-only actions. Only the
-hardware blocks a step above.
+hardware blocks a step. Every other call has a default the work proceeds
+on.
 
 1. **Whether a frame of latency ever comes back** (decision 3, option 3c).
    It returns only on the measurement decision 3 names, and it would reverse
    a recorded ruling.
-2. **Restricting the shading interpreter to edit time**, on a device where
-   no way of running shading programs passes. The author-shader plan sends
-   that to the owner with the measurements (decision 13).
+2. **Restricting when authors' shading programs may be interpreted**
+   (decision 13). It comes to the owner only when a device has an
+   otherwise workable way of running programs and the readings show the
+   interpreter alone breaks its frame, with the use that would be lost
+   named. A device on which every way misses is not this call: its cause
+   lies elsewhere and is fixed first.
 3. **The engine default of a recorded ruling.** The one-pixel level, its
    hysteresis and a cascade's texel rule are the owner's rulings, and they
    stay the engine's defaults. An author's quality table may differ. The
@@ -4017,10 +4039,43 @@ hardware blocks a step above.
    each presented with the design's own choice first
    ([the plan's calls](transmission.md#the-owners-calls)). The plan's Steam
    Deck session consumes them (decision 6, option 6e).
-5. **An RTX 2060 and a Steam Deck**, for stage 0's device measurements and
-   stage 4's Linux timing work.
-6. **The corrected build order.** The owner agreed to the summary's
-   priorities before the review, and compares the order above with the
+5. **What a bar device does when the planned gains cannot bring it to its
+   bar.** Stage 0 measures how far each device is from its bar. If the
+   gains planned for a device do not add up to that distance, the order is
+   cut again for the device, and what still remains comes here.
+   - *Until the owner says otherwise:* the device keeps the highest
+     quality, as the register rules. It misses its bar, and every slow
+     frame is reported with its cause. The lighting's minimum is still
+     served, in jobs bounded to one frame's allowance.
+   - *What the owner would choose between:* more engine work aimed at that
+     device before anything else; a quality preset below the highest on
+     that device, which reverses "lower qualities wait"; dynamic
+     resolution on that device, which exists and is off in every preset;
+     or a different bar for that device.
+6. **The window size the frame bar is read at on the two desktop
+   devices.** The register sets the bar at the highest quality and a native
+   render scale, and names no size. The benchmark's default window is 1280
+   by 720, and one other bar in the register is quoted at 1280 by 900.
+   - *Until the owner says otherwise:* 1280 by 720, with a second reading
+     at 1920 by 1080 so the cost of a larger window is on record. The
+     Steam Deck is read at its own panel's size.
+7. **Whether sharpening may act on bloom's scattered light** (decision 5).
+   - *What this page does:* it keeps the register's order. The sharpen
+     moves into the view's own conversion, ahead of bloom. Nothing in the
+     register changes. The cost is that a view must know whether it is
+     shown at its own size.
+   - *The alternative:* leave the sharpen in the placement pass, after the
+     conversion. That is less work. Sharpening then acts on scattered
+     light and on encoded values, the register's bloom passage is amended,
+     and the sharpen's constants are set again.
+   - The debug world authors no sharpening, so the two look the same
+     there today.
+8. **Hardware.** An RTX 2060 and a Steam Deck for stage 0's device
+   measurements. The Deck is needed beside stage 0 and not only at stage
+   4, because its windowed path has never run on hardware. An HDR display
+   for stage 1's colour check.
+9. **The corrected build order.** The owner agreed to the summary's
+   priorities before any review, and compares the order above with the
    draft's ([what changed in the build order](#what-changed-in-the-build-order)).
 
 Two calls recorded elsewhere block nothing here. The streaming plan's
@@ -4037,24 +4092,39 @@ then.
 
 - **The produce breakdown names a part that no decision covers.** Decision
   2's order follows the breakdown, not this page.
+- **Capturing a shown but unchanged residency turns out to be cheap.** The
+  cheap freshness check of decision 2's step 3 is not built.
+- **The tick's breakdown shows the two partitions save little.** The tick's
+  serial fixes come first, and stepping world instances in parallel is
+  weighed.
 - **Tick and produce each fit a frame, and their sum does not**, after
   decision 2. A tick on its own thread returns as a question, with a
   measured hand-off, as the owner's call.
 - **The measured headroom is below the lighting's minimum.** If the GPU
   frame alone misses the bar once the CPU stops being the limit, the
-  lighting gets its minimum and no more. The views pass (decision 13,
-  option 13d) and the cascades (decisions 6 and 11) then come first.
+  lighting gets its minimum and no more, in jobs bounded to one frame's
+  allowance. The views pass (decision 13, option 13d) and the cascades
+  (decisions 6 and 11) then come first.
+- **The planned gains do not add up to a bar device's distance from its
+  bar.** The order is cut again for that device. What remains is the
+  owner's call, with the default stated there.
 - **The cold bake is limited by its processors and not by its GPU
   requests**, or the reverse. The fix on the critical path lands first
   (decision 10). The other waits for a measurement that shows it pays.
+- **The cold bake is still well over its figure after the first speed
+  fix.** The second fix moves up from stage 3. Nothing after stage 2 waits
+  for the figure.
+- **A bake stage's product is too large to keep.** That stage is not keyed
+  on its own, and an edit to it still costs the stages before it.
 - **A cube per source group costs more memory than a zone has.** Decision
   7's per-source storage narrows to the directional lights and the sky.
   Local lights keep the full relight.
 - **A bar device behaves differently.** A Steam Deck limited by vertex work
   moves three things ahead of the instance table: the removal of redundant
-  triangles (option 10b), indexed draws (option 11c) and the far cascade's
-  floor tier. A device limited by memory bandwidth moves the per-pass
-  savings (option 11g) and the planar visibility record (option 13c) up.
+  triangles (option 10b), the indexed-draw experiment (option 11c) and the
+  far cascade's floor tier. A device limited by memory bandwidth moves the
+  per-pass savings (option 11g) and the planar visibility record (option
+  13c) up.
 - **Fewer than four probe hits share each surface entry.** The visibility
   bits (option 7c) then need a different store, with compressed rows, and
   hardware ray queries are measured sooner.
@@ -4065,17 +4135,24 @@ then.
 - **The floor fails its acceptance test on thin geometry.** The far cascade
   keeps the coarsest collapse level for those groups.
 - **Recording a rung's deviation from the field costs too much bake time.**
-  The chain stops at the floor, whose coverage the bake already checks.
-- **Per-copy tiers pop on thin parts in motion.** The chain stops at the
-  floor. Meshes baked over many copies and the thinning curve carry the far
+  The chain stops at the levels of the tier that was asked for. The floor
+  is still drawn where a mesh is missing, as detail that is owed. Nothing
+  steps down to it by distance, because its coverage test does not bound
+  how far it moved an edge.
+- **Per-copy tiers pop on thin parts in motion.** The chain stops the same
+  way. Meshes baked over many copies and the thinning curve carry the far
   distance.
-- **Indexed draws do not speed up the passes on any bar device.** The
-  packed vertex layout does not return, and clusters lose their cheapest
-  precondition.
+- **Indexed draws are unsupported or slower on a bar device.** They do not
+  become the baseline's format, and the packed vertex layout does not
+  return. Grouping goes ahead on today's draws. Where indexed draws pay on
+  stronger hardware they may be an enhancement there.
 - **The metre-sized filter cannot match a brute-force reference**, to
   within what the views filter leaves over. The blend band stays. The
   pyramid is replaced by more samples, in the near cascade only.
-- **A capture shows that machine frames are not dropped** at the debug
+- **The fixed layers and every way of running shading programs miss on a
+  device.** Shading programs are not the cause there. The per-phase
+  readings name what is, and that is fixed first.
+- **The trace shows that machine frames are not dropped** at the debug
   world's tick rate. The machine cadence work (option 15d) shrinks to not
   uploading unchanged frames.
 - **An author wants today's appearance.** It is written as a tone transform
@@ -4083,31 +4160,44 @@ then.
   and judged on SDR and HDR. The working image's convention changes only if
   every producer and consumer changes together.
 - **A bar device's driver provides no display time.** That device's
-  displayed interval stays an absent column. Its frame bar is read from the
-  loop's interval, with that limit stated.
+  displayed interval stays an absent column. Its frame bar is then read
+  from the work of each frame the host produced, with skipped and dropped
+  presents reported. That shows what the host did. It does not show the
+  bar was met on screen.
 
 ## Research still owed
 
-- **Terrain.** No terrain source was read. Before tiles are built at scale,
-  clipmap and chunked terrain, seams between tiers of dual-contoured meshes,
-  and hybrids with height fields are weighed against the overlap rule.
-- **Small and area light sources, and many lights.** Integrating a source
-  over its solid angle or polygon at probe hits, sizing a light's range from
-  its emitted luminance, and clustered light selection. These serve
-  decision 7 (options 7h and 7c) and decision 15 (option 15e).
-- **Linux and the Steam Deck.** Presentation-time and tearing protocols,
-  the compositor's frame limiter, timer wake-up jitter, and the driver's
+Each item names the first stage that needs it.
+
+- **Display timing on the bar devices**, before stage 0's present record
+  is designed. Which present-timing and present-id extensions each
+  device's driver exposes, and which stages of a present each surface can
+  time, read from the device.
+- **Linux and the Steam Deck**, for the bring-up beside stage 0 and for
+  stage 4's timing work. Presentation-time and tearing protocols, the
+  compositor's frame limiter, timer wake-up jitter, and the driver's
   present wait.
-- **Display timing on the bar devices.** Which present-timing and
-  present-id extensions each device's driver exposes, read from the device,
-  before the present record is designed around either.
-- **The temporal history.** Karis's notes and the body of the survey,
-  before the window's layout or its sample count changes.
-- **A mesh store shared across GPUs.** Whether the bake kernel's
-  floating-point results reproduce across vendors, before one store is
-  judged.
-- **Root search and compaction on the GPU.** Nothing we read measures
-  either.
+- **Root search and compaction on the GPU**, before stage 2. Nothing we
+  read measures either, so stage 2 measures its own.
+- **A mesh store shared across GPUs**, in stage 3's store check. Whether
+  the bake kernel's floating-point results reproduce across vendors is read
+  on each bar device there.
+- **The temporal history**, before stage 4's history split. Karis's notes
+  and the body of the survey, before the window's layout or its sample
+  count changes.
+- **Terrain**, before stage 4's tiles. Almost no terrain source was read.
+  The open questions are which seam is right between dual-contoured tiles
+  at different tiers, weighed against the overlap rule; how tiles scale;
+  and what a hybrid with a height field costs. Clipmap and chunked terrain
+  are read for the same round.
+- **Many lights, and the shadow of an area light**, before stage 4's
+  emitters and screens. How a light-emitting face is blocked, sizing a
+  light's range from its emitted luminance, and clustered light selection.
+  These serve decision 7 (options 7h and 7c) and decision 15 (option 15e).
+- **Light and shadow across the edge of a world**, before stage 4's seam
+  check. Whether a neighbour's geometry casts shadows and bounces light
+  across an adjacency. One limit is known: a seam's shared band holds at
+  most eight placements and eight bodies (`WorldAdjacencyGeometry`).
 - **Nested views in shipped engines**, and transparency with bounded
   memory, if decision 14 still leaves a portal-crossing frame costing close
   to two views.
@@ -4118,14 +4208,22 @@ Each decision extends a mechanism Puck already has. None adds a second.
 
 | What the work needs | The existing mechanism it extends |
 |---|---|
-| Schedule a residency's capture | The scheduler of views (`RenderGraphScheduler`) takes capture as one more item with an update rate |
-| Run every kind of background GPU job | The one background service and its budget (`SdfGpuWork`, `SdfGpuWorkBudget`). Its probe client (`SdfMeshProbeGpuWork`) already chains a cache kernel, a compaction and an indirect dispatch |
+| Schedule a residency's capture | The runtime already hands a frame's footprints to its packages before they prepare (`RenderGraphRuntime`), and the scheduler of views (`RenderGraphScheduler`) takes capture as one more item with an update rate |
+| Know how loaded the GPU frame is | Dynamic resolution's reading of the views' GPU time against the display's period (`IWorldFrameLoadSource`, `WorldDynamicResolution`), and the scheduler's unset ceiling on passes times pixels (`RenderGraphFrame.PassPixelBudget`) |
+| Run every kind of background GPU job | The one background service and its budget (`SdfGpuWork`, `SdfGpuWorkBudget`), and its measured rate per kind of work (`SdfGpuWorkRate`). Its probe client (`SdfMeshProbeGpuWork`) already chains a cache kernel, a compaction and an indirect dispatch |
+| Say what an image holds | How an image source's values are encoded (`ImageColorEncoding`) and the conversion of a source into the working image (`ImageSourceConversion`) |
+| Give cascades to lights by role | The allocator's ranking of candidates (`WorldShadowAllocator`) |
 | Compaction, grouping, every cascade's mask and the glass list | The one place that classifies draws (`SdfMeshOcclusion`) |
 | Requests for detail, and tiers | `SdfMeshDemand` and `SdfMeshTier`, under the selector (`SdfResidencySelector`) and the memory account (`MemoryAccount`). Baked meshes stay in `SdfMeshLibrary` and `SdfMeshStore` |
-| Work for worlds nobody sees | The update-rate tiers (`SdfUpdateRateTiers`), the test of whether a portal is in sight (`SdfPortalSight`) and the cached field answers (`WorldFieldAnswer`) |
-| Shading | `SdfShadeProgram`, and the bins of `SdfShadeDispatch`, which glass reuses |
+| Measure a rung against the field | The existing measure of a level against the field's surface (`SdfMeshFieldLevels.Measure`) |
+| Sample a cell more finely | The bake's refinement of a flagged cell (`SdfSampledLattice.Refine`, `SdfDualContouring.ExtractRefined`) |
+| Work for worlds nobody sees, and a view's share of the display | The update-rate tiers (`SdfUpdateRateTiers`), the host's measure of each view's share (`WorldViewGraphHost`), the test of whether a portal is in sight (`SdfPortalSight`) and the cached field answers (`WorldFieldAnswer`) |
+| Fit a window's camera to its glass | The existing fit through the whole opening (`WorldWindowFrustumFit`) |
+| Shading, and the kernel for a motion program | `SdfShadeProgram` and its table of operations (`SdfShadeOps`), and the bins of `SdfShadeDispatch`, which glass reuses |
+| The occurrences of a placement, and what play did to them | The compiled list both drawing and collision read (`CompiledPlacementStamp`), and keyed state over placements (`WorldPlacementDeal`, `WorldPlacementResponse`) |
 | Sharing static geometry, and moved transforms | `WorldRigidAssets` and `SdfMovedTransforms` |
-| Waits, workers, GPU completion, pacing, the frame's timeline and colour conversion | `HostWaits`, `JobPool`, `GpuQueueTimeline`, `PresentPacingPolicy`, `HostFrameTimeline` and `ImageSourceConversion` |
+| When a present was shown, and waiting for room to present | What every presenter reports (`IPresentTimingFeedback`, `PresentTimingSample`) and the wait both backends share (`ISwapChainPacing`) |
+| Waits, workers, GPU completion, pacing and the frame's timeline | `HostWaits`, `JobPool`, `GpuQueueTimeline`, `PresentPacingPolicy` and `HostFrameTimeline` |
 
 ### Outside techniques not taken
 
@@ -4137,16 +4235,18 @@ them. The last column says what would reopen each.
 | Virtual shadow maps with cached pages | Rejected. The virtual geometry plan's shadow decision (D8) stands | A moving light and deforming casters invalidate cached pages, and the day clock and the wind run by default. The one account of a moving sun could not be fetched | A measurement showing that redrawing static geometry under unchanged projections dominates a cascade |
 | Sparse shadow pages without caching | Waits for a measurement | The culling half is the receiver mask Puck already has. The storage half is unmeasured | The occupied share of a cascade's cells measured to be small |
 | Refitting the projection every frame, scrolling cascades, static slices for the sun, baked time-of-day visibility | Rejected | Each gives up the snapped, held fit, or assumes a still light or a fixed world | Nothing, while the day clock is authored |
-| Moment, variance and exponential shadow maps | Rejected | Light bleeds between storeys. For translucent casters, the moment paper's experiments blend sorted geometry and name unsorted alternatives such as stochastic transparency (unverified). So sorting is one implementation and not a requirement. Puck keeps its additive optical depth, because that sum is already exact in any order, and each alternative adds cost or noise | A concrete deficiency in the optical-depth path on layered glass |
+| Moment, variance and exponential shadow maps | Rejected for opaque shadows. Open for glass | Light bleeds between storeys. For translucent casters, the moment paper's experiments blend sorted geometry and name unsorted alternatives such as stochastic transparency (unverified). So sorting is one implementation and not a requirement. Puck's sum of optical depth is exact in any draw order, but only for the whole span down to the first opaque surface. It cannot say how much glass lies in front of a receiver that stands between two panes, which is what storage by depth answers | The check decision 6 names: a receiver in front of, between and behind two panes |
 | Sun shadows by ray tracing or by marching the field | Rejected for the baseline | It puts a field march in the frame, or it is a second implementation with no stable baseline to match | Decision 6 landed, and a measurement on the RTX 4070 |
 | A cluster hierarchy traversed on the GPU. A simplifier library as a dependency | Watched | A second builder beside the one mesher. Weak on aggregates of small things. Puck is independent work | The virtual geometry plan's cluster measurement (G9) |
-| Mesh shaders, work graphs, device-generated commands | Enhancement only | Not available on the RTX 2060, on the Steam Deck, or on both backends | The baseline holds, and the path is measured to pay, with a fallback |
+| Mesh shaders | Enhancement only, and not built | The visibility plan records the feature as present on both RTX cards' generations and enabled by the Steam Deck's open driver, with the actual drivers unqualified. So the reason is not that the hardware lacks it. Puck's backends have no mesh-shader path, and it would be a second way to draw | The feature read from each bar device, the baseline holding, and the path measured to pay with a fallback |
+| Work graphs, device-generated commands | Enhancement only | Work graphs are absent on the RTX 2060 and the Steam Deck and have no Vulkan equivalent. Device-generated commands were not read on any bar device | The baseline holds, and the path is measured to pay, with a fallback |
 | A rasterizer written in compute | Deferred | Hardware rasterization is the qualified baseline. The cited benchmark's depth-only variant runs on mobile parts with 32-bit atomics (unverified), so a portable subset exists. A visibility id with depth, clipping and depth ties, and Puck's cost on it, are unqualified. No pass has been shown to be limited by what it would replace | A bar device measured to be limited by rasterizing small triangles, with the atomic width or other feature the chosen variant needs named |
 | Arrivals requested by the GPU alone, pages below the mesh, slabs | Rejected | Decision 9: a group that is not in memory cannot report | Nothing |
 | Hints for refinement from geometry already in memory | Held as an experiment | Decision 9 (option 9d): prediction keeps arrivals and camera turns, and the hint uses the observation channel | Over-fetching or slow refinement still measured once observation decides what is kept |
 | Transition cells between tiers, geomorphing | Rejected | Both tie a tile to its neighbour's tier or add a position per vertex | Pops shown in motion after decision 8 |
 | Contouring or placement on the GPU. Contouring without gradients | Rejected, and watched | A second mesher. Only an abstract was read | The paper read in full |
-| Quadrics with attributes, a cap on triangles | Rejected | They cannot model creases, and detail follows size on screen | Nothing |
+| A cap on triangles | Rejected | Detail follows size on screen, not a count | Nothing |
+| An error measure for the collapse that includes attributes (quadrics with attributes) | Open to a measurement, inside the one collapse | An earlier draft rejected it for good on the grounds that it cannot model creases. That was wrong: the method penalizes moving a vertex off a sharp edge, though it does not promise every seam survives. As a second simplifier it stays rejected | It is tried inside the existing collapse, under its crease and material rules, and judged by deviation from the field, thin features and bake time |
 | Radiance caches fed from the screen or by reservoirs, and per-pixel gathers, as whole systems | Rejected, with ideas taken | They are per view, stochastic or dependent on history, which breaks a reproducible drain | A sparse cache whose behaviour from cold is measured to be no worse |
 | Hysteresis, random rotation, moment-based visibility, probes switched off, frozen lighting, a drain started warm | Rejected | The relight is a fixed quadrature, and stale light is the defect being fixed | Nothing |
 | Hardware ray queries for probe rays | Deferred | Decision 7 removes most of the rays it would speed up | Shadow rays still dominating after shared surface lighting (option 7b) |
@@ -4165,23 +4265,26 @@ them. The last column says what would reopen each.
 A reviewer from another model family read this synthesis against the code.
 It produced findings only and took no GPU measurement. Its host stopped it
 for low memory after it had written thirty-five findings and four passages
-it judged sound. It is being run again on this page.
+it judged sound. It has since been run again on the corrected page, and
+[the next section](#what-the-attack-and-the-second-review-changed) answers
+that second review together with a separate attack on the page.
 
 Each finding was checked in the current source before it changed anything.
 All thirty-five hold. "Fixed" means the page changed where the last column
 says. One finding is fixed with part of the original step kept, and the row
-gives the reason.
+gives the reason. Where a later review changed an answer again, the last
+column gives the answer as it stands now.
 
 | Finding | Severity | What it found | Outcome | Where it is answered |
 |---|---|---|---|---|
-| RR-01 | High | The proposed colour conversion could be skipped or applied twice: a single view, a pane and a filmed view each bypass or double it | Fixed | Decision 5: each image declares what it holds at the graph's edges, and the conversion is in the producing view's graph, checked through five paths |
+| RR-01 | High | The proposed colour conversion could be skipped or applied twice: a single view, a pane and a filmed view each bypass or double it | Fixed | Decision 5: each image declares which of three kinds it holds at the graph's edges, and the conversion is in the producing view's graph, checked through every path and every display output |
 | RR-02 | High | A floor can pass its silhouette check and still fail for lighting | Fixed | Decisions 7 (option 7d) and 8: probe spacing selects the lighting's tier, and the floor is shared only where a lighting check passes |
-| RR-03 | High | The caster culling leaves out receivers that this plan itself adds | Fixed, first step kept | Decision 11 (option 11b): the mask is a union by construction. The mask for the near and second cascades stays an early step. In the current tree an opaque surface reads the first cascade that contains it and glass reads none, so no reader exists yet that the opaque mark misses |
+| RR-03 | High | The caster culling leaves out receivers that this plan itself adds | Fixed, first step kept | Decision 11 (option 11b): the mask is a union by construction, built from one geometric bound and valid for as long as its shadow map is shown. The mask for the near and second cascades stays an early step. In the current tree an opaque surface reads the first cascade that contains it and glass reads none, so no reader exists yet that the opaque mark misses |
 | RR-04 | Medium | The 26 cm limit is a sideways limit | Fixed | Decision 6: the sideways reach, the gap along the light and the filter radius are stated separately, with a check for each failure |
 | RR-05 | High | The thread pool landed after the work that needs it | Fixed | Decision 3 and stage 2: bounded waits, then the pool, then the partitions, with threads counted by kind |
-| RR-06 | High | The budget that higher GPU use needs landed two stages late | Fixed | Decision 4: a headroom rule on the one budget, in stage 1, before any step raises use |
-| RR-07 | High | The proposed lighting storage changes when a lamp's brightness changes | Fixed | Decision 7 (option 7a): source groups, the multiply-only class of edits, a fixed reach for a local light's brightness, memory priced first, and four comparisons with a fresh drain |
-| RR-08 | High | Scheduling first depends on a freshness question that already captures | Fixed | Decision 2: a snapshot before the schedule, a bounded correction, and state keyed by view |
+| RR-06 | High | The budget that higher GPU use needs landed two stages late | Fixed | Decision 4: a headroom rule on the one budget and the one reading of the frame's load, in stage 1, before any step raises use |
+| RR-07 | High | The proposed lighting storage changes when a lamp's brightness changes | Fixed | Decision 7 (option 7a): source groups with their own bounce, the multiply-only class of edits, a fixed reach for a local light's brightness as a change to the register, memory priced first, and seven comparisons with a fresh drain |
+| RR-08 | High | Scheduling first depends on a freshness question that already captures | Fixed | Decision 2: only the residencies a frame needs are captured, after the root's capture has produced the footprints. The packed hash stays the judge of freshness, and state is keyed by view |
 | RR-09 | Medium | A stable view already republishes its last output | Fixed | Decision 14 (option 14d): the existing rule is extended after one feed's cause is explained |
 | RR-10 | High | Refusing a dark light does not necessarily promote the lit one | Fixed | Decision 6 (option 6b): roles assigned by name, and the exchange walked in both directions |
 | RR-11 | High | The rewrite of the shadow receiver came before the identity data it reads | Fixed | Decision 6 (option 6a) and stage 2: the prototype behind a switch, and the production rewrite after `transmit-identity` |
@@ -4191,23 +4294,23 @@ gives the reason.
 | RR-15 | Medium | Sharing a store can turn the second backend's cold run into a warm hit | Fixed | Decision 10 (option 10f): each backend's bar is timed from its own empty store. The claim that the bar is met was wrong and is removed |
 | RR-16 | High | The ordering of the cold bake's fixes rested on a different display state | Fixed | Item 2 of the disagreements, and decisions 1 and 10: one run under the recipe ranks the fixes |
 | RR-17 | Medium | A predicted ray charge was reported as executed work | Fixed | Decision 7, and decision 1's measurement |
-| RR-18 | High | Stage 0 required a display observation that a host may never provide | Fixed | Decisions 1 and 15 (option 15a) and stage 0: a capability, or an absent column with its follow-up |
-| RR-19 | Medium | Admission, queue depth and physical display carry different guarantees | Fixed | Decision 15 (option 15b) |
+| RR-18 | High | Stage 0 required a display observation that a host may never provide | Fixed | Decisions 1 and 15 (option 15a) and stage 0: a capability, or an absent column with its follow-up, and a record keyed by the host's own attempt |
+| RR-19 | Medium | Admission, queue depth and physical display carry different guarantees | Fixed | Decision 15 (option 15b), and the duplicates table, which no longer treats the counts of frames in flight as one number |
 | RR-20 | Medium | The machine cadence check required frame rates that cannot exist | Fixed | Decision 15 (option 15d) and stage 4 |
-| RR-21 | High | A tier qualified by coverage has no error bound across tiers | Fixed | Decision 8 (option 8c): every rung is measured against the field |
+| RR-21 | High | A tier qualified by coverage has no error bound across tiers | Fixed | Decision 8 (option 8c): every rung is measured against the field over the authored shape's own bounds, and a switch between two rungs budgets both deviations |
 | RR-22 | High | The eviction check could pass without releasing physical memory | Fixed | Decision 9 and stage 3 |
 | RR-23 | Medium | Sampling for the bake on the GPU would create a second authoritative root-search rule | Fixed | Decision 4 (option 4d): one source for both evaluators |
 | RR-24 | Medium | Two owner questions that block nothing had become prerequisites of a stage | Fixed | The owner's calls, and each stage's needs |
 | RR-25 | Medium | The tile-size result came from a different kernel | Fixed | Decision 13 (option 13a): the inference is removed, and the three phases are measured separately |
 | RR-26 | Medium | The moment shadow paper permits unsorted implementations | Fixed | The table of outside techniques |
 | RR-27 | Medium | Compute rasterization was classed by the wrong capability | Fixed | The table of outside techniques, as its own row |
-| RR-28 | High | Share of presented pixels cannot express every consumer of a world | Fixed | Decisions 2 and 14 (option 14a): consumers' minimums first |
-| RR-29 | Medium | A contour check that passes can hide lost surfaces | Fixed | Decision 10 and stage 1 |
+| RR-28 | High | Share of presented pixels cannot express every consumer of a world | Fixed | Decisions 2 and 14 (option 14a): consumers' minimums first, landing in stage 2 with the capture order |
+| RR-29 | Medium | A contour check that passes can hide lost surfaces | Fixed | Decision 10 and stage 1: judged over the whole world, with the audit's own blind spot stated |
 | RR-30 | Medium | Stage 1 still hard-coded a visible policy for nested views | Fixed | Decision 14 (option 14c's first step), in stage 1 |
-| RR-31 | Medium | Explaining cost alone lets a slower stage pass | Fixed | The build order: a claimed gain and what would show it false for each check, and no chapter slower at the end of stage 3 |
+| RR-31 | Medium | Explaining cost alone lets a slower stage pass | Fixed | The build order: a claimed gain and what would show it false for each check, and each landing compared with its frozen base against the base's own spread |
 | RR-32 | Medium | Predicted arrivals and refinement requests from the GPU can coexist | Fixed | Decision 9 (option 9d) |
-| RR-33 | High | Sharing a published result must respect the recipient's view | Fixed | Decision 14 and the invariants |
-| RR-34 | Medium | A harvested occurrence needs authoritative state outside the cell cache | Fixed | Decision 12 (option 12b) |
+| RR-33 | High | Sharing a published result must respect the recipient's view | Fixed | Decision 14 and the invariants: a result is keyed by the content of the delivered rows it read, and tested again when it is bound and when it is installed |
+| RR-34 | Medium | A harvested occurrence needs authoritative state outside the cell cache | Fixed | Decision 12 (option 12b): state keyed by occurrence and filed under the cell the occurrence is in now |
 | RR-35 | Medium | The colour conversion was treated as a look for the owner to choose | Fixed | Decision 5, and what would change the answer |
 
 The four passages the review judged sound are unchanged:
@@ -4223,7 +4326,9 @@ The four passages the review judged sound are unchanged:
 
 The sequence of stages is the summary's: measure, fix what the player
 sees, the frame thread and the round trips, the table and the chain, then
-scale. The review moved work between them.
+scale. The first review moved work between them, as listed here. What the
+two later reviews moved is in
+[the next section](#what-moved).
 
 - **Stage 0 gained six measurements.** The display outcome, as a capability
   or an absent column for each device and backend pair (RR-18). Captures
@@ -4262,9 +4367,11 @@ scale. The review moved work between them.
 ### What the review did not reach
 
 The reviewer left no account of what it had read. This list is inferred
-from where its findings and its four sound passages point. Nothing below has
-a finding or a "sound" against it. That means it was not reviewed, not that
-the reviewer agreed with it.
+from where its findings and its four sound passages point. Nothing below had
+a finding or a "sound" against it after the first review. That meant it was
+not reviewed, not that the reviewer agreed with it. The attack and the
+second review have since read most of this list, and their findings on it
+are answered in the next section.
 
 - Decision 1's measurements, apart from the display row and the list of
   devices.
@@ -4297,6 +4404,281 @@ the reviewer agreed with it.
   edits, the chain measured against the field, the authored looks and the
   invariants.
 
+## What the attack and the second review changed
+
+Two more reviews read the page after the first.
+
+- **The attack.** Ten readers each attacked the page from one angle:
+  whether its code citations are true, whether its sources say what it
+  claims, the build order, the rules in AGENTS.md, MMO scale, measurement,
+  missing work, the bar devices' hardware, existing systems, and risk.
+  Their overlapping findings were merged into 93. A second set of readers
+  then tried to refute each one, two readers for each finding raised as
+  critical or high and one for each of the rest. They confirmed 2 as
+  raised and 90 in a narrower form, and disagreed about 1. None was
+  refuted outright. They lowered the severity of 78. Every reader in the
+  attack was of the same model family as the page's authors.
+- **The second review.** The reviewer from another model family, whose
+  first review was cut short, read the corrected page in full. It raised 42
+  findings, 17 of them high. It also went back over the first review's 35
+  answers. It found that 19 hold and that 16 hold only in part, each with a
+  case the correction did not cover. Those cases are among its 42 findings.
+
+Both reviews read code, documents and sources. Neither ran anything. Both
+quote the page as it stood before it was rewritten in plain prose, so each
+finding was matched to the present text before it was answered.
+
+All 135 findings are answered by a change to this page. None was left as it
+was. In a few, part of the proposed change was not taken, and the tables
+below say which part and why. The attack's findings had already been
+checked against the code by its own second readers. For the second
+review's, the code each one cites was opened for this page. Three of them
+rest on an outside source that was not reopened here: the paper on
+transmittance to each surface behind decision 6's glass limit, the paper on
+quadrics behind the reopened collapse measure, and the dual contouring
+paper's remark on its threshold. The page records those as the reviewer's
+reading.
+
+### What moved
+
+- **Stage 2's capture order was redesigned.** The first correction had a
+  cheap snapshot run before the schedule. The cameras and footprints that
+  snapshot needed are produced by the root world's capture, so the order
+  was not possible. The page now captures only the residencies a frame
+  needs, after the root's capture, and keeps the packed hash as the judge
+  of freshness. Letting a picture stand on change stamps became an
+  optional later step with an audit (decision 2).
+- **The minimums for unseen worlds moved from stage 4 to stage 2**, because
+  stage 2 removes the hidden render they replace.
+- **Compacting the draw list got a stage.** It and the two instance-update
+  steps the visibility plan puts ahead of it moved into stage 2. Grouping
+  stays in stage 3. Indexed draws changed from part of that format change
+  to an experiment.
+- **The headroom rule was rebuilt on the load reading dynamic resolution
+  already takes**, and cutting bake jobs to a frame's allowance joined it
+  in stage 1 (decision 4).
+- **The colour fix now lands together with the retuned world**, and the
+  sharpen moves into the view's conversion so that the register's order of
+  sharpen and bloom is kept (decision 5).
+- **The bake decision leads with what an edit costs.** A mesh's key by bake
+  stage is new and sits in stage 1. The run that ranks the bake's speed
+  fixes moved from stage 0 to the close of stage 1 (decision 10).
+- **The per-source relight grew three parts:** each group's own bounce, the
+  rounding grid moved to the combined result, and the rescale of probes a
+  relight has not reached yet (decision 7).
+- **Placement by cell became the placement's own**, evaluated by one
+  function for collision and for drawing (decision 12).
+- **Reuse is keyed by the content a result read**, not by a counter for
+  each recipient, and is tested again when a picture is bound and when a
+  job installs its result (decision 14).
+- **Steps that had no stage got one:** the clear of glass shadow storage by
+  tile and keeping what was observed in use (stage 3), and light from
+  emitting surfaces, screens as selected lights and thinned ground cover
+  (stage 4).
+- **How every check is read is now stated once**, at the top of the build
+  order: how the bar is read, how a change is judged, and that needs are
+  per item.
+
+### What stage 0 gained
+
+- The benchmark applying the quality preset the bar is defined at, and
+  recording the conditions two runs must share.
+- The route's missing chapters, a way to reach night that a route can run,
+  and a capture at a chapter's tick.
+- The Steam Deck's bring-up, beside the stage.
+- Eleven measurements: the tick by phase and by world instance, deliveries
+  by session, the time from input to display, the per-frame GPU span,
+  matched readings of the background work's use of its allowance, a cold
+  arrival in play, the time from an edit to seeing it, per-level lighting
+  work in motion, triangle work per raster pass, a restricted window's
+  readings, and a mesh audit over the whole world.
+- One table for each bar device of how far it is from its bar, by part.
+- A last column in decision 1's table saying where each reading is taken
+  and which step first needs it, so the stage can close device by device.
+
+It lost one thing: the cold bake that ranks the speed fixes, which is now
+taken at the close of stage 1.
+
+### What is now the owner's call, and why
+
+Four entries in [the owner's calls](#the-owners-calls) are new, and one is
+restated.
+
+- **What a bar device does when the planned gains cannot reach its bar.**
+  The register forbids a lower tier as the fix for a missed bar, so this
+  page cannot choose one. Only the owner can relax the bar, the quality or
+  the device. The engine's behaviour until then is stated there.
+- **The window size the bar is read at on the desktops.** A frame-rate bar
+  means little without one, and no ruling or plan names it. The page works
+  at the benchmark's default and reads a second size for comparison.
+- **Whether sharpening may act on bloom's scattered light.** Decision 5
+  could be built either way. One way keeps a recorded decision and the
+  other amends it. The page keeps it, and the owner may reverse that.
+- **Hardware.** The Steam Deck is needed beside stage 0, not at stage 4,
+  and an HDR display is needed for stage 1's colour check.
+- **Restated: restricting when authors' shading programs are interpreted.**
+  It was written as following from a matrix rule that cannot choose. It
+  now comes to the owner only when a device has a workable path that the
+  interpreter alone breaks.
+
+### What only one model family has read
+
+The second review, from another family, did not examine the redesign of
+the capture order, because the attack's findings on it came later. So
+decision 2's order, its optional stamp-based check, its upkeep step and its
+handling of a withdrawn view have been read by the authors' family only. A
+reader from another family should take those four before stage 2 is
+briefed.
+
+### Every finding from the attack
+
+Severity is as the attack's second readers corrected it, with the severity
+as raised in parentheses where it differs. Where two readers disagreed, the
+higher is shown.
+
+| Finding | Severity | What it found | Outcome | Where the page changed |
+|---|---|---|---|---|
+| RA-01 | High (raised as critical) | Nothing sized how far the weaker bar devices are from their bars | Fixed | Decision 1 (the device rows and the paragraph after the table), stage 0's done list, the owner's call 5, what would change the answer |
+| RA-02 | Medium (raised as high) | The route the checks are read on did not exist | Fixed | Summary, stage 0 (what lands and its done list), the words table |
+| RA-03 | Medium (raised as high) | How the frame bar is read was never pinned down | Fixed | The build order's rule on how the bar is read, stage 0, the owner's call 6 |
+| RA-04 | Medium (raised as high) | "No slower" had no baseline, no tolerance and no rule for a spoiled chapter | Fixed | The build order's rule on how a change is judged, the last done item of stages 2 and 3 |
+| RA-05 | Medium (raised as high) | The Steam Deck's readings assumed a windowed path that has never run | Fixed | Stage 0 (what lands, needs, done list), decision 15's risks, the owner's call 8 |
+| RA-06 | High | The headroom rule duplicated a GPU load reading the engine already has | Fixed | Decision 4 step 1, the duplicates table, the existing-systems table, stage 1's lighting check |
+| RA-07 | Medium (raised as high) | The order in which work yields under overload could hold a weak device below full quality | Fixed | Decision 4 step 1 (what gives way under overload), stage 3's last done item |
+| RA-08 | Medium (raised as high) | The headroom check could pass without testing anything, and the feedback loop was undescribed | Fixed | Decision 1 (the per-frame GPU span row), decision 4 step 1, stage 1's lighting check |
+| RA-09 | High | Bake jobs are sized by fixed constants and run several frames long | Fixed | Decision 4 (the problem, step 2, option 4d's cap), decision 9 step 2, stage 1's lighting check, the invariants |
+| RA-10 | Medium (raised as high) | The 44-second lighting lag was blamed on round trips alone | Fixed | Summary, the disagreements' item 12, decision 4 (the problem and step 3), stage 1's lighting check |
+| RA-11 | Medium (raised as high) | Moving bloom ahead of the sharpen contradicted a settled ruling | Fixed | Decision 5 (the conversion's order, fidelity, the camera read two ways, the option not taken), stage 1's colour check, the owner's call 7 |
+| RA-12 | High | The cheap snapshot read things that only the capture produces | Fixed | Decision 2 (the problem, step 2, the risks), stage 2's capture check |
+| RA-13 | High | Letting a picture stand on change stamps had no check for a picture that should have redrawn | Fixed | Decision 2 step 3 and its risks, stage 2's freshness check, the invariants |
+| RA-14 | High | Skipping the prepare for unseen worlds dropped upkeep the prepare also does | Fixed | Decision 2 (the problem, step 2), stage 2 (what lands and the capture check), the invariants |
+| RA-15 | Medium, contested (raised as high) | The rule that a reused picture matches what its viewer may see could be lost in stage 2 | Fixed | Decision 2 step 2 (freshness keeps its one judge), stage 2's capture check, the invariants |
+| RA-16 | Medium (raised as high) | A reuse key that always carries the recipient shares nothing | Fixed | Decision 14 (reuse must respect who is watching, and still share), the combinations list, the invariants, stage 4's recipients check |
+| RA-17 | Medium (raised as high) | Every check ran with all worlds in one process at full disclosure | Fixed | Decision 1 (the restricted-window row), the build order's rule on stating the arrangement of worlds, stage 3's table check |
+| RA-18 | Medium (raised as high) | A world nobody sees still costs its tick and its deliveries | Fixed | Decision 1 (two rows), decision 2's "what it rests on", decision 3; an entry in open items |
+| RA-19 | High | The list of a scatter's occurrences already exists, and evaluating it per renderer cell would fork collision from drawing | Fixed | Decision 12 (the problem, step 2, the risks), the invariants, stage 4's populations check |
+| RA-20 | Medium (raised as high) | Scale was proven on multiples of one world, and seams between worlds were not looked at | Fixed | Stage 4 (needs, the populations and seams checks), research still owed |
+| RA-21 | Medium (raised as high) | The planned tick partitions do not reach what the debug world's tick spends | Fixed | Decision 1 (the tick row), decision 3 (step 4 and the paragraphs after it), stage 2's pool check |
+| RA-22 | Medium (raised as high) | Decisions rested on input latency, and nothing measured it | Fixed | Decision 1 (the latency row), decision 3's unknowns, decision 15 steps 1 and 2, stage 4's admission check |
+| RA-23 | Medium (raised as high) | The fix for blotchy light from emitting surfaces was in no stage, though a sister plan already holds the technique | Fixed | Decision 7 step 10 and its risks, stage 4, research still owed; a cross-reference in the illumination plan |
+| RA-24 | High | Compacting the draw list had no stage, though a stage 2 check needed it | Fixed | Decision 11 steps 1, 4 and 5, stage 2 (what lands and the draw-list check), stage 3 |
+| RA-25 | Medium (raised as high) | The colour fix was accepted before the world was retuned to it | Fixed | Decision 5 (the mechanism lands with the retuned world), stage 1's retune check |
+| RA-26 | Medium (raised as high) | Switching nested-view shadows by size rebuilds a render graph at each threshold | Fixed | Decision 14 step 3 and its risks, stage 1's nested-quality check |
+| RA-27 | Medium (raised as high) | The contour fix was checked on fourteen exhibits with an audit that does not cover the world | Fixed | Decision 1 (the audit row), decision 10 (how a contour fix is judged), stage 1's contour check |
+| RA-28 | Medium (raised as high) | The GPU work list and the early hand-off landed with no check and no invariant | Fixed | Decision 4's risks, stage 2's background-work check, the invariants |
+| RA-29 | Medium (raised as high) | The per-source relight claimed no precedent, though a shipped game rescales its probes | Fixed | Summary, decision 7 (step 4, the first "why" bullet, the risks, the evidence) |
+| RA-30 | Medium | Authored colour has no single place where it is packed | Fixed | Decision 5 (authored colour is decoded by its type), stage 1's colour check, the invariants |
+| RA-31 | Medium | The HDR check had no instrument and expected the wrong value | Fixed | Decision 5 (the lane builds its instruments first), stage 1's colour check |
+| RA-32 | Low (raised as medium) | Stage 1's pieces were called independent and are not | Fixed | Stage 1 (what lands, needs, the lighting check), the owner's call 8 |
+| RA-33 | Low (raised as medium) | Stage 2 called one pair independent while other pairs share code | Fixed | Decision 4 steps 4 and 5, stage 2's paragraph on what is serial |
+| RA-34 | Medium | Stage 0's bake ranking would be stale by the time it was used, and the minute was checked once | Fixed | Decision 1's risks, decision 10 step 5, stage 1's ranking bake, stages 3 and 4, decision 8's risks |
+| RA-35 | Low (raised as medium) | Stage 0 could close without five of its own table's readings | Fixed | Decision 1's table (the last column and the cascade row), stage 0's done list |
+| RA-36 | Medium | Some proposed steps were in no stage, and some landed items had no check | Fixed | The "what lands" and done lists of stages 1 to 4 |
+| RA-37 | Low (raised as medium) | Whole-stage needs let one unmet item hold everything after it | Fixed | The build order's rules, each stage's needs, what would change the answer |
+| RA-38 | Low (raised as medium) | The cold-bake figure never takes the slow round trip the plan blames | Fixed | Decision 1 (the cold-arrival row), decision 4 steps 4 and 5, the build order's reading conditions |
+| RA-39 | Low (raised as medium) | The per-second grant and the measured upload rate already have homes | Fixed | Decision 4 step 3, the existing-systems table |
+| RA-40 | Medium | Lighting lag was judged by a median at one probe level, standing still | Fixed | Decision 1 (the per-level row), stage 1's lighting check |
+| RA-41 | Low (raised as medium) | Nested views regain shadows with no cost check, and one shadow-memory option was stale | Fixed | Decision 6 (the problem and step 6), stage 1's nested-quality check, stage 3 |
+| RA-42 | Low (raised as medium) | The check at the edge of the shadow maps ignored the limits the plan itself listed | Fixed | Decision 6 step 2 and its risks, stage 1's shadow check |
+| RA-43 | Low (raised as medium) | A residency's probe windows follow its first view | Fixed | Decision 6 step 2, stage 1's shadow check |
+| RA-44 | Low (raised as medium) | The shadow filter's depth pyramid was said to have no outside source | Fixed | Decision 6 step 3, its "why" and its evidence, the sources |
+| RA-45 | Low (raised as medium) | Two steps seemed to size a light's range by opposite rules | Fixed | Decision 7 step 6 |
+| RA-46 | Medium | The source groups left out screens and openings | Fixed | Decision 7 step 3 and its risks, stage 2's lighting check |
+| RA-47 | Low (raised as medium) | The probe level table stays engine data until stage 4 | Fixed | Decision 7's risks |
+| RA-48 | Low (raised as medium) | The lighting check that qualifies a floor was never defined | Fixed | Decision 7 step 7, stage 3's lighting-tier check |
+| RA-49 | Low (raised as medium) | A third word in each cached hit arrives after stores are built on two | Fixed | Decision 7 step 5 and its risks |
+| RA-50 | Medium | "One projection function with a host twin" is two implementations | Fixed | Decision 8 steps 1 and 2, the duplicates table, the invariants, stage 3 |
+| RA-51 | Low (raised as medium) | A rung's qualification did not name the error measure that already exists | Fixed | Decision 8 step 4, the existing-systems table |
+| RA-52 | Low (raised as medium) | The detail budgets are both an authored look and a ruled engine default | Fixed | Decision 8's "what it rests on", the looks table |
+| RA-53 | Low (raised as medium) | Memory pressure coarsens everything by one shared amount | Fixed | Decision 9 step 5 |
+| RA-54 | Low (raised as medium) | The contour rule's finer sampling is the refinement that already exists | Fixed | Decision 10 step 3, stage 1's contour check, the existing-systems table |
+| RA-55 | Medium | Indexed draws were welded to a one-time format change with unstated needs | Fixed | Decision 1 (the triangle counters row), decision 11 step 6, stage 3's indexed-draw check, what would change the answer |
+| RA-56 | Medium | The motion program named no compiler | Fixed | Decision 12 step 1, the existing-systems table; a cross-reference in the visibility plan |
+| RA-57 | Low (raised as medium) | Record formats were fixed "once" without deciding the render origin | Fixed | Decision 11 step 5, stage 3 |
+| RA-58 | Medium | The shading matrix's pass rule cannot choose while every column misses the bar | Fixed | Decision 13 step 1, the owner's call 2; a note in the author-shader plan |
+| RA-59 | Low (raised as medium) | A source on the temporal history was owed before the history changes | Fixed | Decision 5's risks, decision 13's risks, stage 1's colour check, research still owed |
+| RA-60 | Low (raised as medium) | The measure and rate tiers for nested views already exist in the view graph's host | Fixed | Decision 14 step 1, the looks table, the existing-systems table |
+| RA-61 | Low (raised as medium) | One row of the looks table was wrong | Fixed | The looks table; an entry in open items |
+| RA-62 | Low (raised as medium) | The window's exposure was described as a design the register rejected | Fixed | Decision 5 (a window carries part of its world's exposure), the looks table |
+| RA-63 | Low (raised as medium) | One table cell reopened a deferred hook | Fixed | The looks table's tone curve row |
+| RA-64 | Low (raised as medium) | What an image holds already has a vocabulary | Fixed | Decision 5 (every image declares what it holds), the existing-systems table |
+| RA-65 | Low (raised as medium) | Machine-rate playback did not restate the video source's contract | Fixed | Decision 15 step 4 |
+| RA-66 | Low (raised as medium) | The display row restated seams that exist | Fixed | Decision 1 (the present row), decision 15 steps 1 and 2, the existing-systems table |
+| RA-67 | Low (raised as medium) | A present-timing extension does not by itself give a display time | Fixed | Decision 15 step 1, research still owed |
+| RA-68 | Low (raised as medium) | Owed research had no place in the build order | Fixed | Research still owed, stage 0's needs, decision 15's evidence |
+| RA-69 | Low (raised as medium) | The question of one store across GPU vendors had no owning stage | Fixed | Decision 10 step 6, stage 3's store check, research still owed |
+| RA-70 | Low (raised as medium) | One mesh store would change what the register says a mesh's identity is | Fixed | Decision 10 (the paragraph after step 6) |
+| RA-71 | Low (raised as medium) | A cheaper gradient was not weighed for the largest frame-thread cost | Fixed | Decision 2 step 4 |
+| RA-72 | Low (raised as medium) | The recipe records no clock or power state | Fixed | The build order's reading conditions, stage 0 |
+| RA-73 | Low | A scheduler that lives on the GPU has precedent | Fixed | Decision 4's unknowns |
+| RA-74 | Low | The eye-centred cascade memo came after work built on three named cascades | Fixed | Decision 6 steps 1 and 4, stage 1 |
+| RA-75 | Low | Thinned ground cover named no existing system | Fixed | Decision 8 step 5, stage 4's populations check |
+| RA-76 | Low | The eye-in-a-medium step did not name the water plan | Fixed | Decision 14 step 6 and "what it rests on"; a cross-reference in the water plan |
+| RA-77 | Low | One deck was quoted for grouping and against clusters | Fixed | Decision 11 step 8 and its evidence |
+| RA-78 | Low | The smaller visibility buffer's gain needs several samples a pixel | Fixed | Decision 11 step 8 and its evidence |
+| RA-79 | Low | The second-queue figure lacked its context | Fixed | Decision 4 (option 4f) |
+| RA-80 | Low | Mesh shaders were classed as missing on hardware that has them | Fixed | The table of outside techniques |
+| RA-81 | Low | Three figures under decision 7 lacked their conditions | Fixed | Decision 7's evidence |
+| RA-82 | Low | The source counts did not reconcile | Fixed | How the research was checked, the sources |
+| RA-83 | Low | Two documentation sweeps were deferred | Fixed | The looks section's closing paragraph; open items, the rendering skill and the mesh-bake reference |
+| RA-84 | Low | Removing a listed duplicate hinged on a timing | Fixed | Decision 13 step 3 and its risks, the duplicates table |
+| RA-85 | Low | Two thresholds lacked motion or a device | Fixed | Decision 6 step 3, decision 13 step 3, stage 1 |
+| RA-86 | Low | "Systems that shade below full rate also denoise" was unsourced | Fixed | Decision 13's risks and evidence |
+| RA-87 | Low | Probe hits are not kept in the store | Fixed | Decision 7 (the option not taken yet) |
+| RA-88 | Low | The shadow role resolver has a base in the allocator | Fixed | Decision 6 step 1, the existing-systems table |
+| RA-89 | Low | Compaction and the pyramid named no existing kernels | Fixed | Decision 11 step 4, decision 6 step 3, the duplicates table |
+| RA-90 | Low | The fitted window extends a fit that exists | Fixed | Decision 14 step 2, the existing-systems table |
+| RA-91 | Low | The overlay keeps its own copy of a glyph atlas | Fixed | Decision 15 step 3 |
+| RA-92 | Low | Two plans target the collapse's share of the bake | Fixed | Decision 10 step 5; the visibility plan |
+| RA-93 | Low | Edits to a scatter had no stated effect on harvested state | Fixed | Decision 12 step 2, stage 4's populations check |
+
+### Every finding from the second review
+
+| Finding | Severity | What it found | Outcome | Where the page changed |
+|---|---|---|---|---|
+| R2-01 | High | Stage 2 asked caster culling to deliver what only compaction can | Fixed | Decision 11 steps 1 and 4 and its risks, stage 2 (the draw-list and caster-culling checks). Same problem as RA-24 |
+| R2-02 | High | Removing the hidden arrival render needs the minimums that replace it | Fixed | Decision 2 step 2, decision 14 step 1, stage 2's capture check. Same problem as RA-14 |
+| R2-03 | High | A caster mask built for one frame is used for a shadow map shown for several | Fixed | Decision 11 step 2 (how long it holds), the invariants, stage 2's caster-culling check |
+| R2-04 | High | One total of optical depth cannot answer for a receiver between two panes | Fixed | Decision 6's risks and unknowns, the table of outside techniques |
+| R2-05 | Medium | One row pooled three GPU features and misstated which devices have them | Fixed | The table of outside techniques. Same problem as RA-80 |
+| R2-06 | High | The window exposure claim reversed a recorded decision | Fixed | Decision 5 (every image declares what it holds; a window carries part of its world's exposure), the looks table, stage 1's colour check. Same problem as RA-62 |
+| R2-07 | High | The reported GPU occupancy was divided by the wrong thing | Fixed | Decision 1 (the GPU time row), decision 4 (the problem, the "why", the unknowns) |
+| R2-08 | High | An average GPU budget cannot protect one presented frame | Fixed | Decision 4 step 1 and its risks, stage 1's lighting check, the owner's call 5 |
+| R2-09 | High | A uniform sky gain is not always a pure scale after capture | Fixed | Decision 7 step 3 (the sky's gain; a local light's brightness), its seven comparison cases, stage 2's lighting check |
+| R2-10 | Medium | Shared vertices cannot carry a different facing for each triangle | Fixed | Decision 14 step 6, decision 11's risks, stage 4's windows-and-glass check |
+| R2-11 | Medium | Stage 0 could finish without several readings that rank the work | Fixed | Decision 1's table, stage 0's done list. Same problem as RA-35 |
+| R2-12 | High | The mesh under audit chooses where the coverage check looks | Fixed | Decision 8 step 4 and its risks, decision 10 (how a contour fix is judged), the invariants, stage 3's chain check, what would change the answer |
+| R2-13 | High | A floor kept in memory cannot cover a place whose floor does not exist yet | Fixed | Decision 9 step 4, the invariants, stage 3's residency check |
+| R2-14 | High | One present id cannot join attempts, skips and replaced swap chains | Fixed | Decision 15 step 1 and its risks, the invariants, stage 4's admission check, what would change the answer |
+| R2-15 | High | A change of recipient must take effect where a picture is delivered | Fixed | Decision 14 (a changed key is not enough on its own), the invariants, stage 4's recipients check |
+| R2-16 | Medium | The shader matrix's failure branch named no workable path | Fixed | Decision 13 step 1 and its risks, stage 3's shading check, the owner's call 2. Same problem as RA-58 |
+| R2-17 | Medium | The population proposal left out the consumer that already exists | Fixed | Decision 12 (the problem and step 2), stage 4's populations check. Same problem as RA-19 |
+| R2-18 | Medium | A fitted window needs one mapping for every reader of its image | Fixed | Decision 14 step 2, stage 4's windows-and-glass check |
+| R2-19 | High | A cap on probes does not bound the GPU work list | Fixed | Decision 4 step 4 and its risks, the invariants, stage 2's background-work check |
+| R2-20 | High | Factoring the direct lights also needs the bounce factored | Fixed | Decision 7 step 3 (the bounce is stored per group too), its risks and comparison cases |
+| R2-21 | Medium | Query traffic does not size the visibility store | Fixed | Decision 1 (the shadow-queries row), decision 7 step 6 and its risks, the combinations list |
+| R2-22 | High | The fade slots do not see a change of role | Fixed | Decision 6 step 1 and its risks, stage 1's shadow check |
+| R2-23 | Medium | Boxes for blended draws cannot ride on the evidence for rigid ones | Fixed | Decision 11 step 3 and its risks, stage 2 |
+| R2-24 | Medium | Baking the largest chunks first can put unseen work ahead of what the player sees | Fixed | Decision 10 step 5, stage 2's bake check |
+| R2-25 | Medium | The permanent rejection of attribute quadrics rested on a false premise | Fixed | The table of outside techniques, decision 10 step 5 |
+| R2-26 | Medium | The history's bandwidth saving assumed a full, still window | Fixed | Decision 13 (the problem, step 2, the "why", the risks), stage 4's history check |
+| R2-27 | Medium | One probe lookup for a view cannot serve glass automatically | Fixed | Decision 13 step 3, stage 4's history-and-lookup check |
+| R2-28 | Medium | A clear of only the glass tiles must know the tiles before drawing | Fixed | Decision 14 step 5, decision 6 step 6, stage 4's windows-and-glass check |
+| R2-29 | Medium | Routed sessions share residencies too | Fixed | Decision 1 (the residency row), decision 11's risks, stage 3's table check |
+| R2-30 | High | Stable lighting can pass with a trace mesh that is consistently wrong | Fixed | Decision 7's risks, stage 3's lighting-tier check |
+| R2-31 | Medium | The memory-release check needs a case where release is possible | Fixed | Decision 9 (the eviction paragraph), stage 3's residency check |
+| R2-32 | Medium | Different resource lifetimes were listed as one duplicate | Fixed | The duplicates table, decision 4 step 5 |
+| R2-33 | Medium | Knowing the eye is inside a medium does not give the water's path length | Fixed | Decision 14 (the problem and step 6), stage 4's windows-and-glass check. Related to RA-76 |
+| R2-34 | Medium | A tick cadence does not prove every tick's frame was uploaded | Fixed | Decision 15 (the problem and step 4) |
+| R2-35 | Medium | Stage 4 could pass without looking at several things it ships | Fixed | Decision 15 (the problem, step 6, the risks), stage 4's overlay and Steam Deck checks |
+| R2-36 | Low | The terrain research gap is narrower than the page said | Fixed | Decision 12's risks, research still owed |
+| R2-37 | Medium | The cited line shows the largest scale, not the nearest copy | Fixed | Decision 8's problem, stage 3's chain check |
+| R2-38 | High | Marking receivers cannot depend on the shadow map it is about to produce | Fixed | Decision 11 step 2 (what it covers), the invariants, stage 2's caster-culling check |
+| R2-39 | Medium | Indexed draws were an experiment in one place and compulsory in another | Fixed | Decision 11 steps 5 and 6, stage 3, what would change the answer. Same problem as RA-55 |
+| R2-40 | Medium | One slowest-frame comparison can pass a regression and fail a gain | Fixed | The build order's rule on how a change is judged. Related to RA-04 |
+| R2-41 | Medium | The colour checks left out a display output and did not define the patch | Fixed | Decision 5's risks, stage 1's colour check. Related to RA-31 |
+| R2-42 | Low | What Ju's paper calls experimental is one threshold | Fixed | Decision 10's evidence and unknowns |
+
 ## Sources
 
 The decisions cite a source by its first author or its product; each list
@@ -4305,6 +4687,13 @@ confirmed when the verification pass found in it at least one quotation this
 page uses. That is a statement about the quotation: nine of those sources
 also carried a claim the pass narrowed, and the narrowing is stated where
 the claim is used.
+
+The 63 outside claims the pass checked come from 35 sources. 27 are in the
+confirmed list. Two more had a quotation confirmed that no decision on this
+page uses, and they are listed separately. Four are partial. The last two
+carry a confirmed claim about an overview or an abstract only, and stay in
+the list of sources that were read and not checked: Gyrling's talk on
+fibers and Carrera's paper on contouring signed distance data.
 
 **Confirmed.**
 
@@ -4328,14 +4717,18 @@ the claim is used.
 - "Driving Toward Reality: Physically Based Tone Mapping and Perceptual Fidelity in Gran Turismo 7", SIGGRAPH 2025: <https://blog.selfshadow.com/publications/s2025-shading-course/pdi/s2025_pbs_pdi_slides_v1.1.pdf>
 - Ju, Losasso, Schaefer and Warren, "Dual Contouring of Hermite Data": <https://www.cs.wustl.edu/~taoju/research/dualContour.pdf>
 - Schaefer, Ju and Warren, "Manifold Dual Contouring": <https://www.cs.wustl.edu/~taoju/research/dualsimp_tvcg.pdf>
-- meshoptimizer release notes: <https://github.com/zeux/meshoptimizer/releases>
 - Remedy at REAC 2024: <https://enginearchitecture.org/downloads/REAC_2024_Remedy.pdf>
 - "Nanite Foliage", Epic: <https://dev.epicgames.com/documentation/en-us/unreal-engine/nanite-foliage>
 - GPU Gems 3, chapter 16, "Vegetation Procedural Animation and Shading in Crysis": <https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-16-vegetation-procedural-animation-and-shading-crysis>
-- Bevy pull request 17413, two-phase occlusion culling: <https://github.com/bevyengine/bevy/pull/17413>
 - "Reduce latency with DXGI 1.3 swap chains", Microsoft (archived): <https://learn.microsoft.com/en-us/previous-versions/windows/apps/dn448914(v=win.10)>
 - "Advanced API Performance: Swap Chains", NVIDIA: <https://developer.nvidia.com/blog/advanced-api-performance-swap-chains>
 - The `VK_EXT_present_timing` and `VK_KHR_present_wait2` proposals: <https://docs.vulkan.org/features/latest/features/proposals/VK_EXT_present_timing.html>, <https://docs.vulkan.org/features/latest/features/proposals/VK_KHR_present_wait2.html>
+
+**Confirmed, and used by no decision.** The pass found the quoted words, and
+this page does not rest on them.
+
+- meshoptimizer release notes: <https://github.com/zeux/meshoptimizer/releases>
+- Bevy pull request 17413, two-phase occlusion culling: <https://github.com/bevyengine/bevy/pull/17413>
 
 **Partial**: the source holds the words but says something narrower.
 
@@ -4356,6 +4749,16 @@ extraction or an abstract, or under a candidate the pass did not reach.
 - Scheduling and the frame: O'Donnell, "FrameGraph": <https://www.slideshare.net/slideshow/framegraph-extensible-rendering-architecture-in-frostbite/72795495>; the Render Dependency Graph and parallel rendering overviews, Epic: <https://dev.epicgames.com/documentation/unreal-engine/render-dependency-graph-in-unreal-engine>, <https://dev.epicgames.com/documentation/en-us/unreal-engine/parallel-rendering-overview-for-unreal-engine>; Gyrling on fibers (overview only): <https://gdcvault.com/play/1022187/Parallelizing-the-Naughty-Dog-Engin>; Arntzen, "Render graphs and Vulkan": <https://themaister.net/blog/2017/08/15/render-graphs-and-vulkan-a-deep-dive/>; "Vulkan Dos and Don'ts": <https://developer.nvidia.com/blog/vulkan-dos-donts>; the Khronos async compute sample, queue priority and frame-in-flight pages: <https://docs.vulkan.org/samples/latest/samples/performance/async_compute/README.html>, <https://docs.vulkan.org/tutorial/latest/Advanced_Vulkan_Compute/08_Asynchronous_Compute/04_queue_priority.html>, <https://docs.vulkan.org/tutorial/latest/Synchronization/Frame_in_Flight/01_introduction.html>; NVIDIA on async compute and on synchronization: <https://developer.nvidia.com/blog/advanced-api-performance-async-compute-and-overlap>, <https://developer.nvidia.com/blog/advanced-api-performance-synchronization/>; the GDC 2017 async compute deep dive: <https://gpuopen.com/download/GDC2017-Asynchronous-Compute-Deep-Dive.pdf>; .NET latency modes: <https://learn.microsoft.com/en-us/dotnet/api/system.runtime.gcsettings.latencymode>, <https://learn.microsoft.com/dotnet/standard/garbage-collection/latency>; Reflex: <https://www.nvidia.com/en-gb/geforce/news/reflex-low-latency-platform>; Zanni, synchronized tracing of implicit surfaces: <https://arxiv.org/html/2304.09673>
 - Foliage and terrain: van Muijden, "GPU-Based Procedural Placement in Horizon Zero Dawn": <https://www.guerrilla-games.com/media/News/Files/GDC2017_VanMuijden_GPUBasedProceduralPlacementInHorizonZeroDawn.pdf>; McLaren, deferred texturing in Horizon Forbidden West: <https://www.guerrilla-games.com/read/adventures-with-deferred-texturing-in-horizon-forbidden-west>; procedural generation with work graphs: <https://gpuopen.com/learn/work_graphs_mesh_nodes/work_graphs_mesh_nodes-procedural_generation/>; neural geometric level of detail: <https://research.nvidia.com/labs/toronto-ai/nglod/assets/nglod.pdf>; Simplygon's vegetation optimization: <https://www.simplygon.com/features/vegetationoptimization>; Broadleaf: <https://80.lv/articles/broadleaf-developing-a-real-time-solution-for-rendering-trees/>; instancing leaves with mesh shaders: <https://jysandy.github.io/posts/mesh-shaders>; Johansen's erosion filter: <https://blog.runevision.com/2026/03/fast-and-gorgeous-erosion-filter.html>; the Ghost of Tsushima grass and wind talks (abstracts only): <https://gdcvault.com/play/1027214/contactUs>, <https://gdcvault.com/play/1027350/Blowing-from-the-West-Simulating>
 - Presentation: the `VK_KHR_present_wait` reference page: <https://docs.vulkan.org/refpages/latest/refpages/source/VK_KHR_present_wait.html>; dynamic rate control, libretro: <https://docs.libretro.com/development/cores/dynamic-rate-control/>; Lengyel, font rendering from glyph outlines: <https://jcgt.org/published/0006/02/02/paper.pdf>; Chlumsky, Sloup and Simecek, multi-channel distance fields: <https://dcgi.fel.cvut.cz/wp-content/wpallimport-dist/publications/pdf/publications-2018-sloup-cgf-msdf-paper.pdf>; Vello's architecture page: <https://skia.googlesource.com/external/github.com/linebender/vello/+/refs/heads/sparse/ARCHITECTURE.md>; Levien, a sort-middle architecture for 2D: <https://raphlinus.github.io/rust/graphics/gpu/2020/06/12/sort-middle.html>; Hillesland, texel shading: <https://gpuopen.com/learn/texel-shading/>; the view instancing specification: <https://microsoft.github.io/DirectX-Specs/d3d/ViewInstancing.html>; Persson, practical clustered shading: <https://www.humus.name/Articles/PracticalClusteredShading.pdf>; the Wayland commit-timing protocol: <https://wayland.app/protocols/commit-timing-v1>
+
+**Opened by a later review's reader.** This page's verification pass did not
+reopen them, and each is used as that reader's account.
+
+- Guennebaud, Barthe and Paulin, soft shadow mapping with a hierarchical shadow map, EGSR 2006: <https://www.labri.fr/perso/guenneba/docs/SoftShadowMapping-egsr06.pdf>
+- The `VK_EXT_present_timing` reference page: <https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_present_timing.html>
+- Peters and others, on transmittance to each surface, I3D 2018: <https://momentsingraphics.de/I3D2018.html>
+- Kubisch, "Introduction to Turing Mesh Shaders", NVIDIA: <https://developer.nvidia.com/blog/introduction-turing-mesh-shaders/>
+- The Mesa 23.0 release notes: <https://docs.mesa3d.org/relnotes/23.0.0.html>
+- Lengyel's transition cells: <https://transvoxel.org/>
 
 **Not fetched or not reachable.** Nothing on this page rests on them.
 
