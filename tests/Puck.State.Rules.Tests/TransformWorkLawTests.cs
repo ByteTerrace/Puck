@@ -254,7 +254,7 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
     [Fact]
     public void PrivateSamplingIsPricedFromTheDeclarationAndRequiresTheKeyToExecute() {
         var section = Section();
-        var key = new ClosedBitset256(1, 2, 3, 4);
+        var authority = new PrivateDrawAuthority(new byte[32]);
         var row = section.Rows!.Single(row => row.Draw is not null);
         var declared = row.Draw! with { PrivateStream = true };
         long Cost(Draw draw) {
@@ -263,10 +263,10 @@ public sealed class TransformWorkLawTests(ITestOutputHelper output) {
         }
 
         Assert.True(Cost(declared) > Cost(row.Draw!));
-        Assert.Equal(Cost(declared), Cost(declared with { Secret = key }));
+        Assert.Equal(Cost(declared), Cost(authority.InstallStream(declared, 1)));
         Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), declared, out _, out _));
-        Assert.True(GeneratorEngine.TryResolveExecutableSource(Generators(), declared with { Secret = key }, out _, out _));
-        Assert.False(GeneratorEngine.TryResolveExecutableSource(Generators(), row.Draw! with { Secret = key }, out _, out _));
+        Assert.True(GeneratorEngine.TryResolveExecutableSource(Generators(), authority.InstallStream(declared, 1), out _, out _));
+        Assert.Throws<ArgumentException>(() => authority.InstallStream(row.Draw!, 1));
     }
 
     [Fact]

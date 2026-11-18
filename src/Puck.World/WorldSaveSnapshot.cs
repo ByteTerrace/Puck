@@ -1,4 +1,7 @@
+using System.Globalization;
 using Puck.Launcher;
+using Puck.World.Machines;
+using Puck.World.Transpiler;
 using Puck.World.Client;
 using Puck.World.Server;
 
@@ -9,6 +12,26 @@ namespace Puck.World;
 /// <see cref="WorldSessionLevers.Fold"/> folds the presentation levers. Both keep every section the session left alone
 /// as its author wrote it, so the snapshot of an untouched world is its authored document.</summary>
 internal static class WorldSaveSnapshot {
+    /// <summary>Writes the authored document and its local authority continuation before compacting the journal.</summary>
+    internal static bool TryWrite(WorldDefinition snapshot, string target, WorldDefinitionSource source, WorldServer server,
+        WorldMachineCatalog catalog, string catalogFingerprint, WorldStateRoot stateRoot, out string result) {
+        if (target.EndsWith(".puck", StringComparison.OrdinalIgnoreCase)) {
+            if (!WorldSourceSave.TrySave(definition: snapshot, path: target, catalog: catalog, catalogFingerprint: catalogFingerprint,
+                bytesWritten: out var bytes, written: out var sources, reason: out result)) { return false; }
+            var changes = sources.Count == 0 ? "unchanged" : $"{bytes} bytes in {string.Join(", ", sources.Select(WorldDocumentLabel.Of))}";
+            result = $"{target} ({changes}, source preserved)";
+        } else {
+            var bytes = WorldDefinitionSerialization.SavePreservingBasis(definition: snapshot, path: target, catalog: catalog,
+                catalogFingerprint: catalogFingerprint, basisPath: out var basisPath, imports: out var imports, note: out var note);
+            var derivation = basisPath is not null || imports.Count > 0
+                ? $", basis: {basisPath ?? "none"}, imports: {imports.Count.ToString(CultureInfo.InvariantCulture)}" : note.Length > 0 ? $", {note}" : string.Empty;
+            result = $"{target} ({bytes} bytes{derivation})";
+        }
+        WorldDrawSave.Save(stateRoot, target, source, server, snapshot);
+        server.Compact();
+        return true;
+    }
+
     /// <summary>Composes the save snapshot of <paramref name="server"/>'s live definition.</summary>
     /// <param name="server">The authoritative server whose definition, population, and machines fold.</param>
     /// <param name="tick">The server's completed tick, the instant cycling and easing state settles at.</param>

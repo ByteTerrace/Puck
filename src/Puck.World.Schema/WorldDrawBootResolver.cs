@@ -273,12 +273,15 @@ public static class WorldDrawBootResolver {
     /// <param name="resolved">The document with every first-fill site resolved, on success. The input instance
     /// is retained when neither a draw site nor a boot-time row read changes the document.</param>
     /// <param name="reason">Why a site refused, on failure.</param>
+    /// <param name="previous">The live state when installing a writer’s rebuild.</param>
     /// <param name="keys">The authority credential, or the isolated preview sampler for an authoring read.</param>
     /// <returns><see langword="true"/> when every first-fill site resolved.</returns>
-    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null) {
+    public static bool TryResolve(WorldDefinition definition, string instanceIdentity, out WorldDefinition resolved, out string reason, WorldPrivateDrawKeys? keys = null, WorldDefinition? previous = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
+        keys ??= WorldPrivateDrawKeys.Preview;
+        definition = previous is null ? keys.InstallAtBoot(definition) : keys.Install(definition, previous);
         resolved = definition;
         reason = string.Empty;
 
@@ -292,13 +295,6 @@ public static class WorldDrawBootResolver {
 
         for (var index = 0; (index < authored.Count); index++) {
             var row = authored[index];
-            if (!(keys ?? WorldPrivateDrawKeys.Authority).TryInstall(definition, instanceIdentity, row, null, out var installed, out reason)) { return false; }
-            if (!ReferenceEquals(row, installed)) {
-                state ??= new List<WorldStateRow>(authored);
-                row = installed;
-                state[index] = installed;
-                changed = true;
-            }
             // FIRST FILL ONLY: a row already carrying a cell — authored with a literal, or loaded from a save that
             // already drew — is left exactly as it is, cursor included.
             if (!NeedsFirstFill(row: row)) {

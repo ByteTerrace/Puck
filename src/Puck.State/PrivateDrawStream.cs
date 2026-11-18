@@ -5,8 +5,28 @@ namespace Puck.State;
 
 /// <summary>Deterministic private stream samples. The authority provisions the key before simulation; simulation
 /// consumes no system entropy. Cursor addressing preserves constant-time resume.</summary>
-internal static class PrivateDraw {
-    internal static uint Sample(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {
+public sealed class PrivateDrawStream {
+    private readonly Func<ulong, ulong, long, uint> m_sample;
+    internal PrivateDrawAuthority? Owner { get; }
+
+    internal PrivateDrawStream(Func<ulong, ulong, long, uint> sample, long installation, PrivateDrawAuthority? owner) {
+        m_sample = sample;
+        Installation = installation;
+        Owner = owner;
+    }
+
+    /// <summary>The installation ordinal in the authority continuation.</summary>
+    public long Installation { get; }
+
+    /// <summary>Returns the word at this address.</summary>
+    public uint Sample(ulong seed, ulong stream, long cursor) => m_sample(seed, stream, cursor);
+
+    /// <summary>Opens a raw stream for generator kernels.</summary>
+    public static PrivateDrawStream FromKey(ClosedBitset256 key) =>
+        new((seed, stream, cursor) => Word(key, seed, stream, cursor), 0, null);
+
+    /// <summary>Computes one word from an installed key.</summary>
+    internal static uint Word(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {
         Span<byte> key = stackalloc byte[32];
 
         BinaryPrimitives.WriteUInt64LittleEndian(

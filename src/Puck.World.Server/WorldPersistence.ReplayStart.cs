@@ -36,8 +36,9 @@ public sealed partial class WorldPersistence {
     [Replaces(root: typeof(StateArena))]
     public void RestoreReplayStart(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true, string? documentDirectory = null) {
         lock (Host.AuthorityGate) {
-            var admission = ((documentDirectory is null) ? CheckpointAdmission(json: checkpoint.Server.DefinitionJson)
-                : WorldDefinitionSerialization.DeserializeForAdmission(documentDirectory: documentDirectory,
+            var keys = checkpoint.Server.OpenDrawKeys(Host.DrawKeys);
+            var admission = ((documentDirectory is null && checkpoint.Server.DrawPositions is null) ? CheckpointAdmission(json: checkpoint.Server.DefinitionJson)
+                : WorldDefinitionSerialization.DeserializeForAdmission(drawKeys: keys, positions: checkpoint.Server.DrawPositions, documentDirectory: documentDirectory ?? Host.Configuration.DocumentDirectory,
                     utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog));
             var definition = admission.Definition;
             // Refuse authority before a configuration rewind can replace machines, geometry or population.
@@ -56,6 +57,7 @@ public sealed partial class WorldPersistence {
                 // before the machines or the definition move.
                 try {
                     validated = ValidateCheckpointRestore(
+                        keys: keys,
                         admission: admission,
                         checkpoint: checkpoint,
                         machinePlan: machines,
@@ -72,11 +74,11 @@ public sealed partial class WorldPersistence {
                 Host.Document.RestoreSolidField(solids, checkpoint.Server.SolidRevision);
                 Host.Document.Install(
                     authority: authority, definition: definition, rebuildPopulation: true, compilation: admission.Compilation);
-                RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
+                RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
                     restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan, validated: validated);
                 return;
             }
-            RestoreCheckpointCore(checkpoint, admission, resetSessionEpochs: true,
+            RestoreCheckpointCore(keys, checkpoint, admission, resetSessionEpochs: true,
                 restoreOwnedIdentities: restoreOwnedIdentities, preparedAddons: addonPlan);
         }
     }

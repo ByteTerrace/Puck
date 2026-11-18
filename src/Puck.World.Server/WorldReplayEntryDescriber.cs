@@ -145,6 +145,7 @@ public static class WorldReplayEntryDescriber {
             WorldReplayEntry.SessionEvent { Value: WorldServerEvent.SessionEnded ended } => $"sessionEnded {ended.Session.Describe()} revoked={ended.RevokedGrants.Count}",
             WorldReplayEntry.Rebuild rebuild => DescribeRebuild(rebuild: rebuild),
             WorldReplayEntry.ScreenOp screenOp => DescribeScreenOp(screenOp: screenOp),
+            WorldReplayEntry.PrivateWord => "private draw",
             WorldReplayEntry.RateLever lever => (lever.Paused
             ? "rate paused"
             : "rate resumed"),

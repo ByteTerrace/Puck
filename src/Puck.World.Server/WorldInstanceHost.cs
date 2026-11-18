@@ -1235,9 +1235,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         // The instance's own NAME is the seed ladder's instance rung, so two instances of one document draw
         // independently while each stays reproducible from (document, instance name, draw history).
+        var keys = Boot?.Server.DrawKeys.NewInstance() ?? WorldPrivateDrawKeys.Preview;
         var admission = prepared?.Admission;
+        if (admission?.Definition.AuthoredState.Any(r => r.Draw?.PrivateStream == true) == true) { admission = null; }
 
         if ((admission is null) && !WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: keys,
             catalog: m_machineCatalog,
             catalogFingerprint: m_catalogFingerprint,
             admission: out admission,
@@ -1290,6 +1293,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 machines: machines,
                 instanceIdentity: name,
                 authorityIdentity: LifetimeAuthority(name: name),
+                drawKeys: keys,
                 // The receipt travels when it names this exact document and the catalog this host validates
                 // against; a loader that deferred provider admission to a different catalog leaves construction
                 // to prove it.

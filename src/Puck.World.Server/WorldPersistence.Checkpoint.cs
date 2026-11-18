@@ -161,6 +161,10 @@ public sealed partial class WorldPersistence {
             kept.Add(item: entry);
         }
 
+        if (Host.Configuration.StateRaw?.DrawInstallCount > 0) {
+            candidate = Host.DrawKeys.Install(candidate, previous: Host.MaterializeArena());
+        }
+
         // Field storage is boot allocated. Prove the final replay result can retain the live lattice before building
         // or swapping any other derived runtime product; InstallFields is then an infallible compatible plan swap.
         if (!Host.Population.CanInstallFields(
@@ -532,11 +536,14 @@ public sealed partial class WorldPersistence {
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
 
+        var keys = checkpoint.Server.OpenDrawKeys();
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+            drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: documentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: machines.ValidationCatalog);
         var definition = admission.Definition;
         var population = new WorldPopulation(definition: definition);
         var server = new WorldServer(
+            drawKeys: keys,
             admission: admission,
             authorityIdentity: (authorityIdentity ?? checkpoint.Server.AuthorityIdentity),
             definition: definition,
@@ -549,7 +556,7 @@ public sealed partial class WorldPersistence {
 
         server.Adjacencies = adjacencies;
 
-        server.Persistence.RestoreCheckpointCore(admission: admission, authorityIdentity: authorityIdentity, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+        server.Persistence.RestoreCheckpointCore(keys: keys, admission: admission, authorityIdentity: authorityIdentity, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
 
         return (server, population);
     }
@@ -699,6 +706,9 @@ public sealed partial class WorldPersistence {
 
             var definitionJson = WorldServerCheckpoint.DocumentBytes(definition: Host.Configuration);
             var server = new WorldServerCheckpoint(
+                DrawSeed: Host.DrawKeys.SerializeAuthorityState(),
+                DrawPositions: WorldPrivateDrawKeys.Positions(Host.Configuration),
+                BaseDrawPositions: WorldPrivateDrawKeys.Positions(Host.Document.Base),
                 AuthorityIdentity: Host.AuthorityIdentity,
                 Input: Host.Input.Capture(),
                 ScopedReplays: Host.ScopedReplays.Select(selector: scope => scope.Checkpoint()).ToArray(),
@@ -763,10 +773,12 @@ public sealed partial class WorldPersistence {
     [Replaces(root: typeof(StateArena))]
     public void RestoreCheckpoint(WorldAuthorityCheckpoint checkpoint, bool restoreOwnedIdentities = true) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        var keys = checkpoint.Server.OpenDrawKeys();
         var admission = WorldDefinitionSerialization.DeserializeForAdmission(
+            drawKeys: keys, positions: checkpoint.Server.DrawPositions,
             documentDirectory: Host.Document.Definition.DocumentDirectory, utf8Json: checkpoint.Server.DefinitionJson, machines: Host.Machines.ValidationCatalog);
 
-        RestoreCheckpointCore(admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
+        RestoreCheckpointCore(keys: keys, admission: admission, checkpoint: checkpoint, restoreOwnedIdentities: restoreOwnedIdentities);
     }
 
     // A base loaded from a file names that file relative to the base's own document directory, which the loader set to
@@ -819,7 +831,7 @@ public sealed partial class WorldPersistence {
     // machine plan are the live ones for a restore in place; a restore that first moves the configuration passes the
     // population its definition would build and the plan that moves the machines, so the validation reads the host the
     // restore will run against, never the one it is about to replace.
-    private ValidatedCheckpoint ValidateCheckpointRestore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, WorldPopulation population, IWorldMachinePreparedPlan? machinePlan = null) {
+    private ValidatedCheckpoint ValidateCheckpointRestore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, WorldPopulation population, IWorldMachinePreparedPlan? machinePlan = null) {
         var server = checkpoint.Server;
         var restoredDefinition = admission.Definition;
 
@@ -839,9 +851,9 @@ public sealed partial class WorldPersistence {
         }
         // Equal canonical images are the same operation-owned document. A distinct journal base still needs its
         // own validation.
-        var restoredBase = (server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
+        var restoredBase = (server.BaseDrawPositions is null && server.BaseDefinitionJson.AsSpan().SequenceEqual(other: server.DefinitionJson)
             ? restoredDefinition
-            : WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson));
+            : keys.Install(WorldDefinitionSerialization.Deserialize(documentDirectory: restoredDefinition.DocumentDirectory, utf8Json: server.BaseDefinitionJson), restore: server.BaseDrawPositions));
         var restoredArena = PrepareCheckpointArena(compilation: admission.Compilation, server: server);
 
         Host.Events.ValidateCheckpoint(checkpoint: checkpoint.EventFeed);
@@ -870,10 +882,11 @@ public sealed partial class WorldPersistence {
             Origin: restoredOrigin
         );
     }
-    private void RestoreCheckpointCore(WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
+    private void RestoreCheckpointCore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
         var server = checkpoint.Server;
         var restoredDefinition = admission.Definition;
         var (restoredArena, restoredBase, restoredOrigin) = (validated ?? ValidateCheckpointRestore(
+            keys: keys,
             admission: admission,
             checkpoint: checkpoint,
             population: Host.Population
@@ -925,6 +938,8 @@ public sealed partial class WorldPersistence {
             ));
         }
         Host.Document.Pending.Clear();
+        keys.WordRead = Host.DrawKeys.WordRead;
+        Host.DrawKeys = keys;
         Host.Tick.RestoreClock(
             completedEngineTicks: server.LastCompletedEngineTicks,
             completedTick: server.LastCompletedTick,

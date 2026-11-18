@@ -302,12 +302,7 @@ public sealed class StateDisclosureLawTests {
     }
     [Fact]
     public void SecretStreamsResumeAndRefuseIncompatibleSources() {
-        var key = new ClosedBitset256(
-            Word0: 1,
-            Word1: 2,
-            Word2: 3,
-            Word3: 4
-        );
+        var key = PrivateDrawStream.FromKey(new(Word0: 1, Word1: 2, Word2: 3, Word3: 4));
         var generator = new StateGenerator(Source: GeneratorSource.StreamDraw);
 
         Assert.True(condition: GeneratorEngine.TryFire(

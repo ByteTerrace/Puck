@@ -90,7 +90,7 @@ public static class ArenaDraws {
     /// <see langword="null"/>.</exception>
     /// <remarks>The write-back is two arena writes, so a caller that wants the draw to rewind with a refused firing
     /// fires it inside a journal scope.</remarks>
-    public static bool TryFire(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.FireResult result, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
+    public static bool TryFire(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.FireResult result, out string reason, PrivateDrawStream? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: generator);
 
@@ -150,7 +150,7 @@ public static class ArenaDraws {
     /// <see langword="null"/>.</exception>
     /// <remarks>Nothing is written until <see cref="TryClose"/> stores the advanced cursor, so a caller that refuses
     /// between the two leaves the site where it was.</remarks>
-    public static bool TryOpen(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.DrawStream stream, out string reason, ClosedBitset256? secret = null, long skip = 0L) {
+    public static bool TryOpen(StateArena arena, int rowOrdinal, StateGenerator generator, DrawSeed seed, out GeneratorEngine.DrawStream stream, out string reason, PrivateDrawStream? secret = null, long skip = 0L) {
         ArgumentNullException.ThrowIfNull(argument: arena);
         ArgumentNullException.ThrowIfNull(argument: generator);
 

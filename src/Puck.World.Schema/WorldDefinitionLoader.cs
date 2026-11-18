@@ -20,6 +20,10 @@ public sealed record WorldDefinitionSource(WorldDefinition Definition, string So
     /// <summary>Gets the boot operation's validation result. A changed definition must clear or replace it;
     /// post-build composition must complete its environment checks before the host starts.</summary>
     public WorldDefinitionAdmission? Admission { get; init; }
+    /// <summary>The sampler for this boot when it installs a live authority.</summary>
+    public WorldPrivateDrawKeys? DrawKeys { get; init; }
+    /// <summary>The original composition and selected entry corresponding to its boot-private staged path.</summary>
+    public (string StagedPath, string Source, string Entry)? CompositionOrigin { get; init; }
     /// <summary>The file the current document origin resolves to; see the class remarks for why this is settable and
     /// who the one writer is.</summary>
     public string SourcePath { get; set; } = SourcePath;
@@ -74,9 +78,9 @@ public static partial class WorldDefinitionLoader {
     // consume or replace; only the final document earns a receipt and compiles its rules.
     private static bool TryPrepareAndAdmit(WorldDefinition definition, string sourceName, string instanceIdentity,
         IWorldNeighbourResolver? neighbours, out WorldDefinitionAdmission? resolved, out string reason, IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, bool proveNeighbours = true) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, bool proveNeighbours = true, WorldPrivateDrawKeys? keys = null) {
         resolved = null;
-        if (!TryPrepareBootValues(compiled: compiled, definition: definition, instanceIdentity: instanceIdentity, overrides: overrides, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return false; }
+        if (!TryPrepareBootValues(keys: keys, compiled: compiled, definition: definition, instanceIdentity: instanceIdentity, overrides: overrides, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return false; }
         if (!WorldDefinitionValidator.TryAdmitCore(admission: out resolved, definition: prepared!, machines: catalog, neighbours: neighbours, proveNeighbours: proveNeighbours, reason: out var refusal)) {
             reason = $"{sourceName} document validation refused: {refusal}";
             return false;
@@ -93,14 +97,16 @@ public static partial class WorldDefinitionLoader {
     /// <param name="drawn">The drawn, resolved definition, or <see langword="null"/> on refusal.</param>
     /// <param name="reason">The named refusal, or empty on success.</param>
     /// <returns><see langword="true"/> when the document drew and every reference resolved.</returns>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryDraw(WorldDefinition definition, string sourceName, string instanceIdentity,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? drawn, out string reason) {
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? drawn, out string reason, WorldPrivateDrawKeys? keys = null) {
         drawn = null;
         if (!WorldDefinitionValidator.TryValidateBootInputs(definition: definition, reason: out var inputReason)) {
             reason = $"{sourceName} document validation refused: {inputReason}";
             return false;
         }
         if (!WorldDrawBootResolver.TryResolve(
+            keys: keys,
             definition: definition,
             instanceIdentity: instanceIdentity,
             reason: out reason,
@@ -130,12 +136,13 @@ public static partial class WorldDefinitionLoader {
     }
 
     private static bool TryPrepareBootValues(WorldDefinition definition, string sourceName, string instanceIdentity,
-        out WorldDefinition? resolved, out string reason, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null) {
+        out WorldDefinition? resolved, out string reason, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldPrivateDrawKeys? keys = null) {
         resolved = null;
 
         WorldDefinition? drawn;
 
         if (compiled is not null) {
+            compiled.DrawKeys = keys;
             if (!compiled.TryResolve(
                 authored: definition,
                 drawn: out drawn,
@@ -146,6 +153,7 @@ public static partial class WorldDefinitionLoader {
                 return false;
             }
         } else if (!TryDraw(
+            keys: keys,
             definition: definition,
             drawn: out drawn,
             instanceIdentity: instanceIdentity,
@@ -185,12 +193,12 @@ public static partial class WorldDefinitionLoader {
     /// <param name="documentDirectory">The directory the document's relative paths resolve beside
     /// (<see cref="WorldDefinition.DocumentDirectory"/>), which bytes carry no trace of; <see langword="null"/> for a
     /// document that has none.</param>
-    /// <param name="drawOwner">The owner authenticated by the hosted storage address.</param>
     /// <returns>The admitted document with its retained programs, or its named refusal.</returns>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static async ValueTask<(WorldDefinitionAdmission? Admission, string Reason)> LoadAsync(
         ReadOnlyMemory<byte> utf8, string sourceName, string instanceIdentity,
         Func<string, CancellationToken, ValueTask<WorldNeighbourResolution>> resolve, CancellationToken cancellationToken,
-        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? documentDirectory = null, Guid? drawOwner = null
+        string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, string? documentDirectory = null, WorldPrivateDrawKeys? keys = null
     ) {
         cancellationToken.ThrowIfCancellationRequested();
         if (
@@ -208,8 +216,7 @@ public static partial class WorldDefinitionLoader {
         )
         ) { return (null, reason); }
         var input = parsed! with { DocumentDirectory = documentDirectory };
-        if (drawOwner.HasValue) { input = input with { Generation = (input.Generation ?? WorldGenerationDefaults.Default) with { DrawOwner = drawOwner } }; }
-        if (!TryPrepareBootValues(definition: input, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
+        if (!TryPrepareBootValues(keys: keys, definition: input, instanceIdentity: instanceIdentity, reason: out reason, resolved: out var prepared, sourceName: sourceName)) { return (null, reason); }
         var neighbours = new ResolvedNeighbours();
 
         foreach (var reference in (prepared!.References ?? [])) {
@@ -300,8 +307,9 @@ public static partial class WorldDefinitionLoader {
     /// <param name="compiledWorlds">The cache the boot reads its compiled world from and writes one into on a miss, or
     /// <see langword="null"/> to draw the document without one.</param>
     /// <returns><see langword="true"/> when the boot may proceed.</returns>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryResolve(string path, out WorldDefinitionSource source, out string failure, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldCache? compiledWorlds = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldCache? compiledWorlds = null, WorldPrivateDrawKeys? keys = null) {
         try {
             path = Path.GetFullPath(path: path);
         } catch (Exception exception) when ((exception is ArgumentException or NotSupportedException or PathTooLongException)) {
@@ -329,6 +337,7 @@ public static partial class WorldDefinitionLoader {
         );
 
         if (TryLoadFileForAdmission(
+            keys: keys,
             path: path,
             admission: out var loaded,
             contentHash: out _,
@@ -347,7 +356,7 @@ public static partial class WorldDefinitionLoader {
             source = new WorldDefinitionSource(
                 Definition: loaded!.Definition,
                 SourcePath: path
-            ) { Admission = loaded };
+            ) { Admission = loaded, DrawKeys = keys };
             failure = string.Empty;
 
             return true;

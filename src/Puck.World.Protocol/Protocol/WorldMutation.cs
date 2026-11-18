@@ -403,8 +403,9 @@ public abstract record WorldMutation(Principal Principal) {
     /// projection — which is what lets a bound press (<c>player.state.cell.toggle</c>) flip a cell in whatever world
     /// the seat is actually in.</param>
     /// <param name="Vector">The vector value for a vector row, or <see langword="null"/>.</param>
+    /// <param name="CommandTail">The console spelling to parse after the row kind is known.</param>
     [MutationKind(ordinal: 47, section: WorldSection.State)]
-    public sealed record UpsertStateCell(Principal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null, StateVector? Vector = null) : WorldMutation(Principal);
+    public sealed record UpsertStateCell(Principal Principal, string Row, string Key, long Value, WorldDocumentWriteKind Kind, string? Text = null, string? RawToken = null, IReadOnlyList<string>? CycleTokens = null, StateVector? Vector = null, string? CommandTail = null) : WorldMutation(Principal);
     /// <summary>Removes one cell from an already-declared <see cref="WorldStateRow"/>. Rejected if <see cref="Row"/>
     /// names no state row, or if no cell inside it carries <see cref="Key"/>. Checked twice — see
     /// <see cref="UpsertStateCell"/>'s remarks.</summary>

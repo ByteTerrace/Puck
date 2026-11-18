@@ -192,6 +192,7 @@ public sealed partial class WorldReplayTape {
         }
 
         m_capturing = wanted;
+        m_liveServer.DrawKeys.WordRead = wanted ? word => m_currentAuthority.Add(new WorldReplayEntry.PrivateWord(word)) : null;
 
         if (wanted) {
             AttachTaps();

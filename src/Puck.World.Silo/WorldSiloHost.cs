@@ -1334,6 +1334,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         // This activation's own read admitted the document against this host's catalog, so
                         // construction installs those programs instead of validating and compiling again.
                         admission: recovery.Admission,
+                        drawKeys: recovery.DrawKeys,
                         definition: definition,
                         envelope: new WorldRenderEnvelope(),
                         instanceIdentity: identity.World.Value,

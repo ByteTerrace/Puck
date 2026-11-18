@@ -507,9 +507,33 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
         );
         writer.WriteNullableString(value: section.AuthorityIdentity);
+        writer.WriteOptionalClass(section.DrawSeed, static (w, seed) => w.WriteBlock(seed));
+        WriteDrawPositions(writer, section.DrawPositions);
+        WriteDrawPositions(writer, section.BaseDrawPositions);
 
         return writer.ToArray();
     }
+    private static void WriteDrawPositions(WireWriter writer, WorldDrawPositions? positions) =>
+        writer.WriteOptionalClass(positions, static (w, p) => {
+            w.WriteInt64(p.Last);
+            w.WriteArray(p.Sites.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToArray(), static (v, pair) => {
+                v.WriteString(pair.Key);
+                v.WriteInt64(pair.Value);
+            });
+        });
+
+    private static WorldDrawPositions? ReadDrawPositions(ref WireReader reader) => reader.ReadOptionalClass(static (ref WireReader r) => {
+        var last = r.ReadInt64();
+        var sites = r.ReadArray(field: "private draw sites", maximum: MaxCollectionCount, readItem: static (ref WireReader v) =>
+            KeyValuePair.Create(v.ReadString("private draw site"), v.ReadInt64()));
+        var byName = new Dictionary<string, long>(StringComparer.Ordinal);
+        var ordinals = new HashSet<long>();
+        if (last < 0 || sites.Any(site => site.Value <= 0 || site.Value > last || !byName.TryAdd(site.Key, site.Value) || !ordinals.Add(site.Value))) {
+            r.Fail(WireRefusal.PayloadMalformed, "invalid private draw installation table");
+        }
+        return new WorldDrawPositions(last, byName);
+    });
+
     private static bool TryDecodeServer(byte[] bytes, string definitionHash, out string reason, out WorldServerCheckpoint section) => TryDecodeSection(
         bytes: bytes,
         name: "server",
@@ -725,7 +749,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
 
+        var drawSeed = reader.ReadOptionalClass(static (ref WireReader r) => r.ReadBlock("draw seed", 32));
+        if (drawSeed is not null && (drawSeed.Length != 32 || drawSeed.AsSpan().IndexOfAnyExcept((byte)0) < 0)) {
+            reader.Fail(WireRefusal.PayloadMalformed, "invalid private draw seed");
+        }
+        var positions = ReadDrawPositions(ref reader);
+        var basePositions = ReadDrawPositions(ref reader);
         return new WorldServerCheckpoint(
+            DrawSeed: drawSeed, DrawPositions: positions, BaseDrawPositions: basePositions,
             Arena: arena,
             AuthorityIdentity: authorityIdentity,
             BaseDefinitionJson: baseDefinitionJson,

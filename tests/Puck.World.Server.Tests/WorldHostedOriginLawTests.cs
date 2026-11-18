@@ -1,3 +1,4 @@
+using Puck.World.Protocol;
 using Puck.Testing;
 using System.Numerics;
 
@@ -266,6 +267,32 @@ public sealed class WorldHostedOriginLawTests {
         );
     }
     [Fact]
+    public async Task ASecondActivationResumesTheFirstPrivateStream() {
+        using var directory = new TemporaryDirectory();
+        var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
+        var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("private-world"));
+        var token = TestContext.Current.CancellationToken;
+        WorldAuthorityBlobStore Open() => new(PuckStorageTestComposition.BuildStore(), target, timeProvider: new VirtualClock());
+        var first = Open();
+        var row = new WorldStateRow(CellName.Parse("dice"), CellKind.Int, Draw: new Draw(PrivateStream: true,
+            Timing: DrawTiming.Event, Generator: new StateGenerator(Source: GeneratorSource.StreamDraw)));
+        var document = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] };
+        Assert.True((await first.PublishDefinitionAsync(identity, document, token)).Ok);
+        Assert.Null((await first.LoadRecoveryAsync(identity, token))!.Value.DrawKeys!.SerializeAuthorityState());
+        Assert.NotNull(await first.AcquireActivationAsync(identity, token));
+        var live = (await first.LoadRecoveryAsync(identity, token))!.Value;
+        var second = Open();
+        Assert.NotNull(await second.AcquireActivationAsync(identity, token));
+        var recovered = (await second.LoadRecoveryAsync(identity, token))!.Value;
+        var stream = live.Definition!.AuthoredState[0].Draw!.Secret!;
+        var resumed = recovered.Definition!.AuthoredState[0].Draw!.Secret!;
+        Assert.NotNull(live.DrawKeys!.SerializeAuthorityState());
+        Assert.Equal(live.DrawKeys.SerializeAuthorityState(), recovered.DrawKeys!.SerializeAuthorityState());
+        Assert.NotEqual(live.DrawKeys.SerializeAuthorityState(), live.DrawKeys.NewInstance().SerializeAuthorityState());
+        for (var cursor = 0; cursor < 8; cursor++) { Assert.Equal(stream.Sample(3, 5, cursor), resumed.Sample(3, 5, cursor)); }
+    }
+
+    [Fact]
     public async Task FiveQuiltDocuments_PublishedToADirectoryStore_ResolveByIdAndValidate() {
         using var directory = new TemporaryDirectory();
 
@@ -335,12 +362,17 @@ public sealed class WorldHostedOriginLawTests {
 
             Assert.True(
                 condition: origin.TryLoad(
-                    definition: out _,
+                    definition: out var loaded,
                     instanceIdentity: id,
                     reason: out var reason
                 ),
                 userMessage: $"'{id}': {reason}"
             );
+            using var hosted = Fixtures.FreshServer(loaded);
+            var recipient = new WorldRecipientView(() => hosted.Server.Definition, () => hosted.Server.Arena,
+                Puck.Commands.Principal.Seat(0), WorldDisclosureTier.Replica, () => true, new WorldDisclosureImages(),
+                hosted.Server.AuthorityIdentity, () => hosted.Server.DeliveryTime, () => false);
+            Assert.Equal(loaded!.DocumentId, recipient.Definition.DocumentId);
         }
     }
     [Fact]

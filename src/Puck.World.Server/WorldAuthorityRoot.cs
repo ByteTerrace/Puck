@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Puck.Assets;
 
 namespace Puck.World.Server;
@@ -53,6 +54,8 @@ public readonly record struct WorldAuthorityRoot(
         Sequence: 0,
         Version: 1
     );
+    /// <summary>The seed provisioned by the first fenced activation.</summary>
+    internal string? DrawSeed { get; init; }
     /// <summary>The immutable closed-group rewind policy and inventory pin. Once established, hosting must
     /// enforce that boundary before admission; older root readers refuse this member.</summary>
     [JsonPropertyName("rewindBoundary"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -67,6 +70,8 @@ public readonly record struct WorldAuthorityRecovery(
     WorldAuthorityCheckpointBlob? Checkpoint,
     WorldAuthorityJournalTail Journal
 ) {
+    /// <summary>The sampler that filled the admitted definition.</summary>
+    public WorldPrivateDrawKeys? DrawKeys { get; init; }
     /// <summary>The root-qualified, fully validated definition, or <see langword="null"/> when no definition is published.</summary>
     public WorldDefinition? Definition => Admission?.Definition;
     /// <summary>This read's own validation result for the published definition, or <see langword="null"/> when no
@@ -103,10 +108,11 @@ internal static class WorldAuthorityRootCodec {
     )
     );
 
-    public static byte[] Encode(WorldAuthorityRoot root) => JsonSerializer.SerializeToUtf8Bytes(
-        options: Options,
-        value: root
-    );
+    internal static JsonObject SerializeAuthorityState(WorldAuthorityRoot root) {
+        var image = JsonSerializer.SerializeToNode(root, Options)!.AsObject();
+        if (root.DrawSeed is { } seed) { image["drawSeed"] = seed; }
+        return image;
+    }
     public static byte[] EncodeReceipt(WorldAuthorityOperationReceipt receipt, string? previousHash) {
         return JsonSerializer.SerializeToUtf8Bytes(
             new ReceiptNode(
@@ -128,7 +134,7 @@ internal static class WorldAuthorityRootCodec {
             var allowed = new HashSet<string>(comparer: StringComparer.Ordinal) {
                 "version", "epoch", "fence", "sequence", "definition", "checkpoint", "checkpointOrdinal",
                 "checkpointTick", "journal", "journalCount", "journalSequence", "checkpointCoverageSequence",
-                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary",
+                "receipt", "receiptIndex", "durableOrdinal", "durableTick", "rewindBoundary", "drawSeed",
             };
             var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
 
@@ -160,6 +166,16 @@ internal static class WorldAuthorityRootCodec {
                 options: Options,
                 utf8Json: bytes
             );
+            if (document.RootElement.TryGetProperty("drawSeed", out var drawSeed)) {
+                var encoded = drawSeed.GetString();
+                Span<byte> seed = stackalloc byte[32];
+                if (encoded is null || !Convert.TryFromBase64String(encoded, seed, out var length) || length != 32 || seed.IndexOfAnyExcept((byte)0) < 0) {
+                    root = default;
+                    reason = "invalid private draw authority seed";
+                    return false;
+                }
+                root = root with { DrawSeed = encoded };
+            }
             if (
                 (root.RewindBoundary is { } boundary) &&
                 !ContentPin.TryParse(pin: out _, text: boundary)

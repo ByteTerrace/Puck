@@ -17,15 +17,15 @@ public sealed class DisclosureReviewLawTests {
         var server = fixture.Server;
         var visible = View(server, Principal.Console).Definition.AuthoredState[0];
         Assert.Null(visible.Draw!.Secret);
-        var key = drawn.AuthoredState[0].Draw!.Secret;
+        var key = server.ExportDefinition().AuthoredState[0].Draw!.Secret;
         Assert.NotNull(key);
-        Assert.False(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, drawn.AuthoredState[0])));
+        Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, drawn.AuthoredState[0])));
         Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, visible with { Max = long.MaxValue })));
         Assert.Equal(key, server.ExportDefinition().AuthoredState[0].Draw!.Secret);
         var generate = new WorldMutation.Generate(Principal.Console, "dice");
         Assert.True(Apply(server, generate));
         var saved = server.ExportDefinition();
-        Assert.True(WorldDefinitionLoader.TryLoad(WorldDefinitionSerialization.SerializeAuthored(saved), "save", out var loaded, out reason), reason);
+        Assert.True(WorldDefinitionLoader.TryLoad(WorldDefinitionSerialization.Serialize(saved), "save", out var loaded, out reason), reason);
         using var resumed = Fixtures.FreshServer(loaded);
         for (var i = 0; i < 3; i++) {
             Assert.True(Apply(server, generate));
@@ -35,8 +35,7 @@ public sealed class DisclosureReviewLawTests {
             Assert.Equal(expected.DrawCursor, actual.DrawCursor);
             Assert.Equal(expected.Cells![0].Value, actual.Cells![0].Value);
         }
-        Assert.False(WorldDefinitionLoader.TryLoad(WorldDefinitionSerialization.Serialize(saved), "source", out _, out reason));
-        Assert.Contains("secret", reason, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"secret\"", System.Text.Encoding.UTF8.GetString(WorldDefinitionSerialization.Serialize(saved)));
         var replacement = visible with { Draw = visible.Draw with { Timing = DrawTiming.TickPeriod } };
         Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, replacement)));
         Assert.NotEqual(key, server.ExportDefinition().AuthoredState[0].Draw!.Secret);
@@ -44,11 +43,97 @@ public sealed class DisclosureReviewLawTests {
     }
 
     [Fact]
+    public void ARemoteRebuildAndRowEditsRetainTheLiveStreamAndPosition() {
+        var name = CellName.Parse("dice");
+        var declared = new WorldStateRow(name, CellKind.Int,
+            Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event, PrivateStream: true));
+        var document = Fixtures.BuildDocument().WithWorldState([declared]) with { Rules = [] };
+        using var fixture = Fixtures.FreshServer(document);
+        var server = fixture.Server;
+        Assert.True(Apply(server, new WorldMutation.Generate(Principal.Console, "dice")));
+        var before = server.ExportDefinition().AuthoredState[0];
+        var foreign = WorldPrivateDrawKeys.FromAuthorityState(Enumerable.Repeat((byte)47, 32).ToArray()).Install(document);
+        var authored = System.Text.Json.Nodes.JsonNode.Parse(WorldDefinitionSerialization.Serialize(foreign))!;
+        authored["state"]!["world"]![0]!["draw"]!["secret"] = "author-supplied";
+        Assert.Throws<InvalidDataException>(() => WorldDefinitionSerialization.Deserialize(System.Text.Encoding.UTF8.GetBytes(authored.ToJsonString())));
+        var request = new WorldRebuildRequest(WorldRebuildKind.Load, Definition: foreign,
+            Origin: new WorldRebuildOrigin.File(Path.GetFullPath("private.world.json")), Force: true, ContentHash: "pin");
+        Assert.True(WorldSubmissionCodec.TryEncodeRebuild(request, out var wire, out _));
+        Assert.True(WorldSubmissionCodec.TryDecodeRebuild(wire, out var received, out _));
+        Assert.Null(received!.Definition!.AuthoredState[0].Draw!.Secret);
+        server.EnqueueRebuild(received, Principal.Console);
+        fixture.Step();
+        Assert.Equal(WorldBaseOriginKind.Load, server.Document.BaseOrigin.Kind);
+        var installed = server.ExportDefinition().AuthoredState[0];
+        Assert.Same(before.Draw!.Secret, installed.Draw!.Secret);
+        Assert.True(installed.DrawCursor >= before.DrawCursor);
+        Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, declared with { DrawCursor = 0, DrawnMasks = [new(99)] })));
+        Assert.Equal(installed.DrawCursor, server.ExportDefinition().AuthoredState[0].DrawCursor);
+        Assert.Equal(installed.DrawnMasks, server.ExportDefinition().AuthoredState[0].DrawnMasks);
+        Assert.True(Apply(server, new WorldMutation.RemoveStateRow(Principal.Console, name.Value)));
+        Assert.True(Apply(server, new WorldMutation.UpsertStateRow(Principal.Console, declared)));
+        Assert.NotEqual(installed.Draw.Secret!.Installation, server.ExportDefinition().AuthoredState[0].Draw!.Secret!.Installation);
+    }
+
+    [Fact]
+    public void AuthorityCheckpointAndKeylessTapeReproduceInSeparateStores() {
+        var row = new WorldStateRow(CellName.Parse("dice"), CellKind.Int,
+            Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw), Timing: DrawTiming.Event, PrivateStream: true));
+        var definition = Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] };
+        using var first = Fixtures.FreshServer(definition);
+        using var second = Fixtures.FreshServer(definition);
+        Assert.True(first.Server.TryCaptureCheckpoint(WorldAuthorityHostRowCheckpoint.Empty, out var start, out var reason), reason);
+        var seed = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        var bytes = WorldAuthorityCheckpointCodec.Encode(start! with { Server = start.Server with { DrawSeed = seed } });
+        Assert.True(WorldAuthorityCheckpointCodec.TryDecode(bytes, out var checkpoint, out reason), reason);
+        first.Server.RestoreCheckpoint(checkpoint!);
+        second.Server.RestoreCheckpoint(checkpoint!);
+        var generate = new WorldMutation.Generate(Principal.Console, "dice");
+        using var roots = new Puck.Testing.TemporaryDirectory();
+        WorldReplayTape Tape(WorldServer server, string directory) => new(server, server.Profiles,
+            new LoopbackTransport(server), [], Fixtures.MachineHostFactory, static (_, _) => new NullAddonHost(), new WorldStateRoot(directory));
+        var recording = Tape(first.Server, roots.PathOf("first"));
+        var verify = Tape(second.Server, roots.PathOf("second"));
+        Assert.True(recording.TryBeginRecording("draw", out reason), reason);
+        for (var i = 0; i < 3; i++) {
+            foreach (var server in new[] { first.Server, second.Server }) {
+                server.Submit(new SubmissionEnvelope(SubmissionEnvelope.LocalConnectionId, 0, i + 1, i + 1, Principal.Console,
+                    new WorldSubmissionPayload.Mutation(generate), Guid.NewGuid()), _ => { });
+            }
+            first.Step();
+            second.Step();
+            recording.NoteTick();
+            Assert.Equal(first.Server.ExportDefinition().AuthoredState[0].Cells![0].Value,
+                second.Server.ExportDefinition().AuthoredState[0].Cells![0].Value);
+        }
+        var stopped = recording.StopRecording();
+        Assert.True(stopped.Verdict!.Passing, stopped.Verdict.Describe());
+        var tapeBytes = File.ReadAllBytes(stopped.Path);
+        Assert.Equal(-1, tapeBytes.AsSpan().IndexOf(seed));
+        using var tapeStream = new MemoryStream(tapeBytes);
+        Assert.Null(WorldReplaySnapshot.Read(tapeStream).StartCheckpoint!.Server.DrawSeed);
+        Assert.DoesNotContain("\"secret\"", System.Text.Encoding.UTF8.GetString(WorldStateExport.ToCanonicalJson(first.Server)));
+        var destination = verify.PathFor("draw");
+        Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+        File.Copy(stopped.Path, destination);
+        Assert.True(verify.Verify("draw").Passing);
+    }
+
+    [Fact]
+    public void ProgrammaticTextKeepsItsQuotes() {
+        var row = new WorldStateRow(CellName.Parse("caption"), CellKind.Text);
+        using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] });
+        Assert.True(Apply(fixture.Server, new WorldMutation.UpsertStateCell(Principal.Console, "caption", StateRow.SlotKey.Value,
+            0, WorldDocumentWriteKind.Set, RawToken: "\"x\"")));
+        Assert.Equal("\"x\"", fixture.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.AsText);
+    }
+
+    [Fact]
     public void QuotedNumericAddUsesTheCommandOperandBoundaries() {
         var row = new WorldStateRow(CellName.Parse("score"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(7))]);
         using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([row]) with { Rules = [] });
         var mutation = new WorldMutation.UpsertStateCell(Principal.Console, "score", StateRow.SlotKey.Value, 0, WorldDocumentWriteKind.Set,
-            RawToken: "\"5\" add");
+            CommandTail: "\"5\" add");
         Assert.True(Apply(fixture.Server, mutation));
         Assert.Equal(12, fixture.Server.ExportDefinition().AuthoredState[0].Cells![0].Value.Raw);
     }
@@ -60,13 +145,12 @@ public sealed class DisclosureReviewLawTests {
     [InlineData(false)]
     [InlineData(true)]
     public void ReplicaDrawsNeverCarryTheAuthoritySecret(bool restricted) {
-        var secret = new ClosedBitset256(1, 2, 3, 4);
         var definition = Fixtures.BuildDocument() with {
             Rules = [],
             StateRaw = new WorldStateSection(World: [new WorldStateRow(
                 CellName.Parse("dice"), CellKind.Int,
                 Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw),
-                    Timing: DrawTiming.Event, PrivateStream: true) { Secret = secret },
+                    Timing: DrawTiming.Event, PrivateStream: true),
                 Visibility: restricted ? new StateVisibility(Readers: ["seat1"]) : null)])
         };
         using var fixture = Fixtures.FreshServer(definition);
@@ -81,7 +165,7 @@ public sealed class DisclosureReviewLawTests {
         Assert.Null(Assert.Single(WorldStateDisclosure.Disclose(
             fixture.Server.Definition, fixture.Server.Arena, Principal.Seat(1), unrestricted: true)
             .Definition.AuthoredState).Draw!.Secret);
-        Assert.Equal(secret, Assert.Single(fixture.Server.ExportDefinition().AuthoredState).Draw!.Secret);
+        Assert.NotNull(Assert.Single(fixture.Server.ExportDefinition().AuthoredState).Draw!.Secret);
     }
 
     private static WorldRecipientView View(WorldServer server, Principal recipient, WorldDisclosureTier tier = WorldDisclosureTier.Replica) =>

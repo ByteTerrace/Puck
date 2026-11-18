@@ -699,6 +699,7 @@ public sealed partial class WorldReplayTape {
         // captures.
         if (
             (m_liveServer.NextInputTick > 1UL) ||
+            m_liveServer.Definition.StateRaw?.DrawInstallCount > 0 ||
             m_liveServer.AnyAddonEverPumped ||
             m_liveServer.AnyMachineEverPumped ||
             m_liveServer.AnyScreenOpEverApplied

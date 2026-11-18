@@ -501,6 +501,9 @@ public sealed partial class WorldServer : IWorldServerHost {
         m_authorityGate.Enter();
     }
 
+    /// <summary>The installed authority sampler.</summary>
+    public WorldPrivateDrawKeys DrawKeys { get; internal set; }
+
     /// <summary>Initializes a new instance of the <see cref="WorldServer"/> class over the world it authoritatively owns.</summary>
     /// <param name="definition">The loaded world definition (the initial live definition and journal base).</param>
     /// <param name="population">The entity table (all bodies, seats included).</param>
@@ -526,20 +529,25 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// document names no <c>host.authorityNamespace</c>, or <see langword="null"/> for <paramref name="instanceIdentity"/>. A
     /// host starting a name again passes a fresh one, so the incarnations of the bodies the new lifetime seats never
     /// equal an incarnation the earlier lifetime minted; a replay or history shadow passes the live authority's.</param>
+    /// <param name="drawKeys">The installed world authority, or an isolated preview for a test server.</param>
     /// <param name="jobs">The engine's job pool the tick's partitioned phases fork onto, or <see langword="null"/> to
     /// run every phase serially. Shared, not owned: the composition root disposes it.</param>
     public WorldServer(WorldDefinition definition, WorldPopulation population, WorldOwnedWorlds profiles, WorldRenderEnvelope envelope, IWorldMachineHost machines, string instanceIdentity = "boot", IWorldNarrationSink? narrationSink = null,
-        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null, string? authorityIdentity = null, Puck.Hosting.Jobs.JobPool? jobs = null) {
+        WorldDefinitionAdmission? admission = null, Func<int, string?>? landingRefusal = null, string? authorityIdentity = null, Puck.Hosting.Jobs.JobPool? jobs = null, WorldPrivateDrawKeys? drawKeys = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: population);
         ArgumentNullException.ThrowIfNull(argument: profiles);
         ArgumentNullException.ThrowIfNull(argument: envelope);
         ArgumentNullException.ThrowIfNull(argument: machines);
         ArgumentException.ThrowIfNullOrEmpty(argument: instanceIdentity);
-        WorldPrivateDrawKeys.Authority.PrepareAuthority();
+        DrawKeys = drawKeys ?? WorldPrivateDrawKeys.Preview;
 
         if ((admission is not null) && !admission.AppliesTo(definition: definition, machines: machines.ValidationCatalog)) {
             throw new ArgumentException(message: "The admission result belongs to a different definition or machine catalog.", paramName: nameof(admission));
+        }
+        if (definition.AuthoredState.Any(r => r.Draw is { PrivateStream: true } draw && !DrawKeys.Owns(draw.Secret))) {
+            definition = DrawKeys.Install(definition, restore: WorldPrivateDrawKeys.Positions(definition));
+            admission = null;
         }
         // A caller with no receipt admits here, so settle first: the rows this constructor installs are then the
         // exact rows validation reads, and installation reuses its programs rather than compiling them again. A

@@ -799,7 +799,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
                 return link.Submit(mutation: new WorldMutation.UpsertStateCell(
                     Principal: context.Principal, Row: args[0].ToString(), Key: args[1].ToString(),
                     Value: 0L, Kind: WorldDocumentWriteKind.Set,
-                    RawToken: WorldCommandArguments.RawAfter(context, in args, tokens: 3, preserveQuotes: true)
+                    CommandTail: WorldCommandArguments.RawAfter(context, in args, tokens: 3, preserveQuotes: true)
                 ), echoes: echoes, verb: "world.state.cell.set");
             },
             routing: CommandRouting.Simulation

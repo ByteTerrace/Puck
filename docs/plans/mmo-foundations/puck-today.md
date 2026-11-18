@@ -915,34 +915,11 @@ section 8.
 
 ### Private draws
 
-A site may carry an authority-provisioned secret; each sample is then an
-HMAC of the cursor under that key **[opened]**
-(`src/Puck.State/Draw.cs:53`, `src/Puck.State.Generators/PrivateDraw.cs:6-8`):
-
-```csharp
-/// <param name="Secret">An authority-provisioned 256-bit secret for an independently keyed streamDraw sample at each cursor. Never sent in observations.</param>
-```
-
-```csharp
-/// <summary>Deterministic private stream samples. The authority provisions the key before simulation; simulation
-/// consumes no system entropy. Cursor addressing preserves constant-time resume.</summary>
-internal static class PrivateDraw {
-```
-
-Restricted readers have cursor metadata zeroed
-(`WorldStateDisclosure.WithoutStorageMetadata`, `src/Puck.World.Schema/WorldStateDisclosure.cs:458-465`)
-**[opened]**. The code site that strips `Secret` from observations was not
-found by a search for `.Secret` over the world and state projects
-**[unverified]**. A `Replica` tier sends the document verbatim, which would
-include an authored secret **[inference]** from `WorldDisclosureTier.Replica`.
+A private draw samples an HMAC keyed by the world authority and the site’s installation ordinal. The document declares the stream. A replica receives the declaration with its sampler removed. See [private streams](../../reference/state/generators.md#keep-draws-private) and [the disclosure projection](../../../src/Puck.World.Schema/WorldStateDisclosure.cs).
 
 ### Who can change them
 
-The seed, the secret and the cursor are document data, so whoever can change
-the authority's document can change them: the operator through its console
-and file, and any principal whose grants admit the mutation **[inference]**.
-No participant contributes entropy to any seed **[inference]** from the seed
-fold above.
+An authorized writer can change the declaration. A matching declaration retains its live cursor and masks. Removing and reinstalling a site allocates a fresh ordinal. Only the authority persists the seed. See [the installer](../../../src/Puck.World.Schema/WorldPrivateDrawKeys.cs).
 
 ## Premise verdicts
 
@@ -1100,9 +1077,6 @@ mobility admissions, with leases at `:273` and `:294`.
 - Whether the deployed App Configuration enables `AttestKeys`, and the Entra
   access-token lifetime for the platform's app: outside the repository; the
   owner or an Azure read can settle both.
-- Where `Draw.Secret` is kept out of observations, if anywhere: a focused read
-  of the projection and sink composers, or a run that observes a secret row as
-  a restricted recipient, settles it; this lane did neither.
 - Whether a body step after contact bounds displacement elsewhere (a speed or
   step clamp downstream of the contact field): a read of `WorldBody.Step`
   after `ResolveEntitySweep` settles it.
@@ -1143,7 +1117,7 @@ Code and documents opened at this tree:
 `DefaultUserProvisioningService.cs`), `src/Puck.Networking/Peers/`
 (`PeerIdentity.cs`, `PeerAuthenticator.cs`, `QuicPeerTransport.cs`),
 `src/Puck.Physics/FixedDynamicBodyContacts.cs`, `src/Puck.State/Draw.cs`,
-`src/Puck.State.Generators/` (`GeneratorEngine.Streams.cs`, `PrivateDraw.cs`),
+`src/Puck.State.Generators/` (`GeneratorEngine.Streams.cs`),
 `src/Puck.World/` (`Program.cs`, `IdentityCommandModule.cs`,
 `WorldOwnedWorldRegistration.cs`, `WorldConnectionAuthentication.cs`,
 `WorldBootComposition.cs`), `src/Puck.Azure.Resources/main.bicepparam`,

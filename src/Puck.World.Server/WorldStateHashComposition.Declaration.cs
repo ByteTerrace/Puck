@@ -261,16 +261,6 @@ public static partial class WorldStateHashComposition {
         hash.Add(value: ((byte)draw.Timing));
         hash.Add(value: draw.Skip);
         hash.Add(value: (byte)(draw.PrivateStream ? 1 : 0));
-        hash.Add(value: ((byte)((draw.Secret is null)
-            ? 0
-            : 1)));
-
-        if (draw.Secret is { } secret) {
-            hash.Add(value: secret.Word0);
-            hash.Add(value: secret.Word1);
-            hash.Add(value: secret.Word2);
-            hash.Add(value: secret.Word3);
-        }
     }
     private static void AppendDynamics(ref Fnv1aHash hash, StateDynamics? dynamics) {
         hash.Add(value: ((byte)((dynamics is null)

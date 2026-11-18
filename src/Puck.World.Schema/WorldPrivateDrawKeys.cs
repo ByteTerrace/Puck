@@ -1,96 +1,97 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
-using Puck.Abstractions;
-using Puck.Confinement;
 
 namespace Puck.World;
 
-/// <summary>Installs the executable form of an authored draw declaration. The authority's private seed is
-/// an input to the simulation, held outside world packages and compiled products.</summary>
-public sealed class WorldPrivateDrawKeys {
-    private readonly Lazy<byte[]> m_seed;
+/// <summary>The installation ordinals of a document's private streams. These addresses carry no keys.</summary>
+public sealed record WorldDrawPositions(long Last, Dictionary<string, long> Sites);
 
-    private WorldPrivateDrawKeys(Func<byte[]> seed) => m_seed = new(seed);
+/// <summary>One world's sampler. Only authority persistence receives its seed. Replays consume recorded words.</summary>
+public sealed class WorldPrivateDrawKeys : PrivateDrawAuthority {
+    private readonly bool m_authority;
+    private WorldDefinition? m_savedRows;
 
-    /// <summary>The native authority's persisted credential. Reading it happens before simulation.</summary>
-    public static WorldPrivateDrawKeys Authority { get; } = new(() =>
-        LoadSeed(Path.Join(PuckUserDirectory.Resolve("authority", requireUserProfile: true), "private-draw.key")));
-
-    /// <summary>Reproducible sample values for authoring and cost previews, isolated from every authority.</summary>
-    public static WorldPrivateDrawKeys Preview { get; } = new(static () => new byte[32]);
-
-    private static byte[] LoadSeed(string path) {
-        if (!File.Exists(path)) {
-            using var pending = AtomicFile.StageAllBytes(path, RandomNumberGenerator.GetBytes(32),
-                UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            try { pending.Commit(overwrite: false); }
-            catch (IOException) when (File.Exists(path)) { /* Another authority process installed its seed first. */ }
-        }
-        var seed = File.ReadAllBytes(path);
-        if (seed.Length != 32 || seed.AsSpan().IndexOfAnyExcept((byte)0) < 0) {
-            throw new InvalidDataException("The authority's private draw seed must be a nonzero 32-byte key.");
-        }
-        return seed;
+    private WorldPrivateDrawKeys(byte[] seed, bool authority) : base(seed) {
+        m_authority = authority;
     }
 
-    /// <summary>Reads the credential or caches its failure before a simulation accepts row declarations.</summary>
-    public void PrepareAuthority() => TryGetSeed(out _, out _);
+    /// <summary>A fresh authority lifetime.</summary>
+    public static WorldPrivateDrawKeys Create() => new(RandomNumberGenerator.GetBytes(32), true);
 
-    private bool TryGetSeed(out byte[] seed, out string reason) {
-        try {
-            seed = m_seed.Value;
-            reason = string.Empty;
-            return true;
-        } catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException) {
-            seed = [];
-            reason = $"The authority's private draw credential is unavailable: {failure.Message}";
-            return false;
-        }
+    /// <summary>Creates another lifetime of the same kind for a named instance.</summary>
+    public WorldPrivateDrawKeys NewInstance() => m_authority ? Create() : Preview;
+
+    /// <summary>A deterministic isolated sampler for proofs and tests.</summary>
+    public static WorldPrivateDrawKeys Preview => new(new byte[32], false);
+
+    /// <summary>Restores the seed carried by this world's authority state.</summary>
+    public static WorldPrivateDrawKeys FromAuthorityState(byte[] seed) =>
+        seed.Length == 32 && seed.AsSpan().IndexOfAnyExcept((byte)0) >= 0
+            ? new(seed, true) : throw new InvalidDataException("Invalid private draw authority state.");
+
+    /// <summary>Restores saved private rows before their next first-fill pass.</summary>
+    public void ResumeSave(WorldStateSection rows, WorldDrawPositions positions) =>
+        m_savedRows = Install(new WorldDefinition(StateRaw: rows), restore: positions);
+
+    internal WorldDefinition InstallAtBoot(WorldDefinition definition) => Install(definition, previous: m_savedRows, resumeCells: true);
+
+    /// <summary>Returns a copy for the authority's private store.</summary>
+    public byte[]? SerializeAuthorityState() => m_authority ? CopySeed() : null;
+
+    /// <summary>Records the nonsecret stream addresses beside an authority or replay document.</summary>
+    public static WorldDrawPositions? Positions(WorldDefinition definition) {
+        if (definition.StateRaw is not { DrawInstallCount: > 0 } state) { return null; }
+        return new(state.DrawInstallCount, definition.AuthoredState.Where(r => r.Draw?.Secret is not null)
+            .ToDictionary(r => r.Name.Value, r => r.Draw!.Secret!.Installation, StringComparer.Ordinal));
     }
 
-    /// <summary>Refuses a submitted key and installs the private draw declared by a source or row edit.</summary>
-    /// <param name="definition">The world that owns the site.</param>
-    /// <param name="instance">The authority's instance identity.</param>
-    /// <param name="submitted">The submitted declaration.</param>
-    /// <param name="previous">The installed row when editing.</param>
-    /// <param name="installed">The row the authority can execute.</param>
-    /// <param name="reason">The refusal when the declaration supplied a key.</param>
-    public bool TryInstall(WorldDefinition definition, string instance, WorldStateRow submitted, WorldStateRow? previous,
-        out WorldStateRow installed, out string reason) {
-        installed = submitted;
-        reason = string.Empty;
-        if (submitted.Draw is not { } draw) { return true; }
-        if (draw.Secret.HasValue) {
-            reason = $"state row '{submitted.Name}': draw.secret is authority-owned; declare privateStream instead.";
-            return false;
+    /// <summary>Binds declarations to the world's streams. A writer can supply neither an installation ordinal
+    /// nor a position in a retained stream. Restore takes its ordinals from the authority continuation.</summary>
+    public WorldDefinition Install(WorldDefinition definition, WorldDefinition? previous = null, WorldDrawPositions? restore = null, bool resumeCells = false) {
+        var last = restore?.Last ?? previous?.StateRaw?.DrawInstallCount ?? 0L;
+        List<WorldStateRow>? rows = null;
+        for (var index = 0; index < definition.AuthoredState.Count; index++) {
+            var row = definition.AuthoredState[index];
+            if (row.Draw?.PrivateStream != true) { continue; }
+            long? ordinal = null;
+            if (restore is not null) {
+                if (!restore.Sites.TryGetValue(row.Name.Value, out var id) || id <= 0 || id > last) {
+                    throw new InvalidDataException("Invalid private draw installation in the authority continuation.");
+                }
+                ordinal = id;
+            }
+            var old = previous is null ? null : WorldDefinitionRows.FindStateRow(previous.AuthoredState, row.Name.Value);
+            var installed = InstallRow(row, old, ref last, ordinal, preservePosition: previous is null);
+            if ((resumeCells || row.DrawCursor > 0) && old?.Draw?.Secret is { } stream && ReferenceEquals(stream, installed.Draw?.Secret)) {
+                installed = installed with { Cells = old.Cells };
+            } else if (previous is not null && row.DrawCursor > 0 && !row.IsKeyed) {
+                installed = installed with { Cells = null };
+            }
+            rows ??= new(definition.AuthoredState);
+            rows[index] = installed;
         }
-        if (!draw.PrivateStream) { return true; }
-        // Canonical bytes compare the contents of an inline generator's lists after a JSON view round trip.
+        if (rows is not null) { definition = definition.WithWorldState(rows); }
+        return WithLast(definition, last);
+    }
+
+    /// <summary>Updates the private-site allocator on a speculative document. Refused edits drop the allocation.</summary>
+    public static WorldDefinition WithLast(WorldDefinition definition, long last) =>
+        (definition.StateRaw?.DrawInstallCount ?? 0) == last ? definition :
+        definition.WithStateSection((definition.StateRaw ?? new()) with { DrawInstallCount = last });
+
+    /// <summary>The installation door shared by first fill, rebuild, row edits and authority restore.</summary>
+    public WorldStateRow InstallRow(WorldStateRow submitted, WorldStateRow? previous, ref long last, long? ordinal = null, bool preservePosition = false) {
+        if (submitted.Draw is not { PrivateStream: true } draw) { return submitted; }
         var declaration = JsonSerializer.SerializeToUtf8Bytes(draw, WorldJsonContext.Authored.Draw);
         if (previous?.Draw is { Secret: not null } old &&
             declaration.AsSpan().SequenceEqual(JsonSerializer.SerializeToUtf8Bytes(old, WorldJsonContext.Authored.Draw))) {
-            installed = submitted with { Draw = old };
-            return true;
+            return submitted with { Draw = old, DrawCursor = previous.DrawCursor, DrawnMasks = previous.DrawnMasks };
         }
-        if (!TryGetSeed(out var seed, out reason)) { return false; }
-        using var buffer = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(buffer)) {
-            writer.WriteStartArray();
-            writer.WriteStringValue(definition.Generation?.DrawOwner?.ToString("D"));
-            writer.WriteStringValue(definition.Host.AuthorityNamespace);
-            writer.WriteStringValue(definition.DocumentId);
-            writer.WriteStringValue(instance);
-            writer.WriteNumberValue(definition.Generation?.WorldSeed ?? 0UL);
-            writer.WriteStringValue(WorldDrawSites.StateRow(submitted.Name));
-            writer.WriteRawValue(declaration);
-            writer.WriteEndArray();
-        }
-        var digest = HMACSHA256.HashData(seed, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
-        var key = new ClosedBitset256(BinaryPrimitives.ReadUInt64LittleEndian(digest),
-            BinaryPrimitives.ReadUInt64LittleEndian(digest.AsSpan(8)), BinaryPrimitives.ReadUInt64LittleEndian(digest.AsSpan(16)),
-            BinaryPrimitives.ReadUInt64LittleEndian(digest.AsSpan(24)));
-        installed = submitted with { Draw = draw with { Secret = key } };
-        return true;
+        var installation = ordinal ?? checked(++last);
+        return submitted with {
+            Draw = InstallStream(draw, installation),
+            DrawCursor = preservePosition ? submitted.DrawCursor : 0,
+            DrawnMasks = preservePosition ? submitted.DrawnMasks : null
+        };
     }
 }

@@ -81,7 +81,7 @@ public sealed record WorldAuthorityReceiptSnapshot(Guid Owner, string World, Wor
             reason: out var worldReason
         )) { throw new InvalidDataException(message: ("receipt snapshot world is invalid: " + worldReason)); }
         if (!WorldAuthorityRootCodec.TryDecode(
-            WorldAuthorityRootCodec.Encode(root: Source.Root),
+            JsonSerializer.SerializeToUtf8Bytes(Source.Root),
             out _,
             out var reason
         )) {

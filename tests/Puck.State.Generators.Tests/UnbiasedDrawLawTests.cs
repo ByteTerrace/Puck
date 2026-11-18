@@ -33,7 +33,8 @@ public sealed class UnbiasedDrawLawTests {
 
     [Fact]
     public void PrivateBatchAndSingleDrawsUseTheSameHmacWordsAndRawCursor() {
-        var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
+        var rawKey = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
+        var key = PrivateDrawStream.FromKey(rawKey);
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
         var values = new long[4];
 
@@ -41,7 +42,7 @@ public sealed class UnbiasedDrawLawTests {
             out _, out var advances, out var reason, secret: key), userMessage: reason);
         Assert.Equal(values.Length, advances);
         for (var index = 0; (index < values.Length); index++) {
-            Assert.Equal(PrivateWord(key, Seed.State, Seed.Stream, (7 + index)), values[index]);
+            Assert.Equal(PrivateWord(rawKey, Seed.State, Seed.Stream, (7 + index)), values[index]);
             Assert.True(condition: GeneratorEngine.TryFire(source, CellKind.Int, Seed.State, Seed.Stream, (7 + index), null,
                 out var single, out reason, key), userMessage: reason);
             Assert.Equal(single.Numeric, values[index]);
@@ -154,7 +155,7 @@ public sealed class UnbiasedDrawLawTests {
     }
     [Fact]
     public void SourceFailureAfterARejectedPrivateWordRestoresTheWholeSelection() {
-        var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
+        var key = PrivateDrawStream.FromKey(new(Word0: 1, Word1: 2, Word2: 3, Word3: 4));
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
 
         // Independently calculated HMAC word at seed 3, cursor long.MaxValue - 1: its bounded product rejects.
@@ -169,7 +170,7 @@ public sealed class UnbiasedDrawLawTests {
     [Fact]
     public void PrivateBoundedDrawsKeepTheHmacSourceAndResumeAtTheAcceptedWord() {
         var source = new StateGenerator(Source: GeneratorSource.StreamDraw);
-        var key = new ClosedBitset256(Word0: 1, Word1: 2, Word2: 3, Word3: 4);
+        var key = PrivateDrawStream.FromKey(new(Word0: 1, Word1: 2, Word2: 3, Word3: 4));
         // Fixed vectors calculated with an independent HMAC implementation and exact integer products.
         // Each tuple pins seed, rejected words, accepted index, last raw word and following raw word.
         var traces = new (ulong Seed, int Rejections, uint Value, uint Last, uint Next)[] {

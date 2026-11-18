@@ -384,10 +384,10 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<CellSetExpression> CellSetExpression => For<CellSetExpression>();
 
     /// <summary>Gets the one shared instance.</summary>
-    public static WorldJsonContext Default { get; } = new(untrusted: false);
+    public static WorldJsonContext Default => Authored;
 
     /// <summary>The document contract for source, published worlds and console declarations.</summary>
-    public static WorldJsonContext Authored { get; } = new(untrusted: false, authored: true);
+    public static WorldJsonContext Authored { get; } = new(untrusted: false);
 
     /// <summary>Gets the type info for <see cref="Draw"/>.</summary>
     public JsonTypeInfo<Draw> Draw => For<Draw>();
@@ -523,7 +523,7 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     /// <summary>Gets the type info for the <see cref="WorldViewDefaults.Post"/> list.</summary>
     public JsonTypeInfo<IReadOnlyList<WorldViewPostPass>> WorldViewPostPassList => For<IReadOnlyList<WorldViewPostPass>>();
 
-    private WorldJsonContext(bool untrusted, bool authored = false) {
+    private WorldJsonContext(bool untrusted) {
         var options = new JsonSerializerOptions(options: WorldJsonSourceContext.Default.Options) {
             AllowDuplicateProperties = !untrusted,
             RespectNullableAnnotations = untrusted,
@@ -533,15 +533,11 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
                 .WithAddedModifier(modifier: OptionalWhenNullable),
         };
 
-        if (authored || untrusted) {
-            options.TypeInfoResolver = options.TypeInfoResolver.WithAddedModifier(static info => {
-                if (info.Type == typeof(Draw)) {
-                    info.Properties.Remove(info.Properties.Single(property => property.Name == "secret"));
-                } else if (info.Type == typeof(WorldGenerationDefaults)) {
-                    info.Properties.Remove(info.Properties.Single(property => property.Name == "drawOwner"));
-                }
-            });
-        }
+        options.TypeInfoResolver = options.TypeInfoResolver.WithAddedModifier(static info => {
+            if (info.Type == typeof(Draw) && info.Properties.FirstOrDefault(p => p.Name == "secret") is { } runtime) {
+                info.Properties.Remove(runtime);
+            }
+        });
         options.MakeReadOnly();
         Options = options;
     }
@@ -1567,7 +1563,7 @@ public static partial class WorldDefinitionSerialization {
     /// <param name="path">The destination document path.</param>
     /// <returns>The canonical UTF-8 bytes with relocated document fields.</returns>
     public static byte[] SerializeBeside(WorldDefinition definition, string path) {
-        var bytes = SerializeAuthored(definition);
+        var bytes = Serialize(definition);
 
         if (definition.DocumentDirectory is not { } origin) {
             return bytes;
@@ -1589,12 +1585,6 @@ public static partial class WorldDefinitionSerialization {
 
         return CanonicalJsonDocument.Serialize(node: tree);
     }
-    /// <summary>Writes the definition a source file or published world can carry.</summary>
-    /// <param name="definition">The definition to publish.</param>
-    /// <returns>The canonical source bytes.</returns>
-    public static byte[] SerializeAuthored(WorldDefinition definition) =>
-        CanonicalJsonDocument.Serialize(definition, WorldJsonContext.Authored.WorldDefinition);
-
     /// <summary>Serializes a definition to its canonical UTF-8 bytes (no BOM, LF newlines, one trailing newline).</summary>
     /// <param name="definition">The definition to serialize.</param>
     /// <returns>The canonical UTF-8 byte form.</returns>

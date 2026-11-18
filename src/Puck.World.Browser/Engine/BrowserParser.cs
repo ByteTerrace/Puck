@@ -99,7 +99,7 @@ public static class BrowserParser {
 
         return new BrowserParseResult(
             Deferred: deferred,
-            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.SerializeAuthored(definition: definition!)),
+            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition!)),
             Errors: null,
             Ok: true
         );
@@ -167,7 +167,7 @@ public static class BrowserParser {
 
         return new BrowserParseResult(
             Deferred: strippedDeferred,
-            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.SerializeAuthored(definition: definition!)),
+            Document: Encoding.UTF8.GetString(bytes: WorldDefinitionSerialization.Serialize(definition: definition!)),
             Errors: null,
             Ok: true
         );
