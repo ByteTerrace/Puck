@@ -29,6 +29,48 @@ How the file stays usable:
   sides in a sentence each. A ruling the owner has made goes to its owning
   home, never here.
 
+## Hand-off
+
+The rendering plan is the active programme, and another session orchestrates
+it. Read this, then [the plan's first wave](rendering-research.md#the-first-wave).
+The next lead rewrites this section when it hands off in turn.
+
+- **Start here:** dispatch the plan's first wave of twelve lanes at once, in
+  the merge order the plan gives where lanes meet. The evidence bar is
+  building what a lane touched and running it in the debug world at 2560 by
+  1440, never a test suite. Measurement runs beside the lanes. Adversarial
+  review is only for the classes [hazards](../development/hazards.md#silent-invariants)
+  names.
+- **The 1440p baseline** is the plan's measured column ([the bars and the
+  budget](rendering-research.md#the-bars-and-the-budget)), read on a quiet
+  machine. The slowest frames are the lift chapter's simulation steps; the
+  largest GPU part is the views pass. That run used the debug world's boot
+  settings, not a device's `high` table, until the `bench` lane applies one.
+- **In flight:** `vkalloc`, on branch `worktree-agent-afb2961687c8173ec`, hunts
+  Vulkan's per-frame allocation, several times Direct3D 12's at 1440p. If its
+  session ended before it handed back, start it again from the branch's last
+  commit or from scratch, and land it if its evidence holds.
+- **Settled this round and recorded in their homes:** the frame bar's sizes,
+  topologies and device order (AGENTS.md); deployed data is scratch
+  (AGENTS.md); named engine gaps are filled first, and a material improvement
+  may land below the bar (AGENTS.md); the four engine questions of the
+  rendering plan ([what the owner settled](rendering-research.md#what-the-owner-settled-1));
+  shared products in the [decision register](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth).
+- **Release rehearsal.** Release Azure dispatched without deploying on
+  `lead/authoring` now builds every artifact. Its last fixes (retrying
+  downloads, the AGB toolchain, the TraceEvent version, the registry) are on
+  the branch; read the latest dispatched run before the owner pushes `main`.
+- **Before the owner pushes `main`:** the [security review](#security-review)'s
+  write-door leaks are a high finding, and AGENTS.md requires each high finding
+  from the riskiest areas to be fixed or explicitly deferred by the owner. The
+  hosted dev store is reset at that deploy. Pushing `main` is the owner's.
+- **Restored branches awaiting the owner's word:** `lane/g5` (the
+  occlusion-aware rate floor, review answered, needs a merge and its windowed
+  check), `lane/toon-3` (a `world.toon off` fix that lands alone),
+  `lane/companion-v1` (prior art for custody steps 9 and 10), and
+  `lane/moth-suit`, `lane/moth-pilot` and `lane/swallow-7` (the owner's pair
+  session; their rotation libraries are prior art).
+
 ## Next
 
 Ranked whole at the latest batch. The frame bar, the cold-bake bar and the
@@ -88,9 +130,9 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     and 6, with step 0's fuzzer and step 0b's principals.
 15. [high, before `main`] [Rule faults](rule-faults.md): what its page lists
     as not built.
-16. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): the Azure
-    release's three causes and the production deploy, which a push to `main`
-    needs.
+16. [high] [Delivery, launcher and CI](#delivery-launcher-and-ci): a green
+    end-to-end Release Azure rehearsal, then the production deploy, which a
+    push to `main` needs.
 17. [high] [Transfers, federation and server](#transfers-federation-and-server):
     the custody protocol's steps 6 to 10, then
     [settlement](#settlement-trust-roles-and-revocation)'s specification.
@@ -2528,6 +2570,16 @@ checkpoints.
 Owner: delivery lane · high · Next: the production deploy's catalog listing,
 which a push to `main` needs; then the silo's cold activation, CI's steady
 state, the shader cache and the GC-hole retirement.
+
+- [medium] A world whose checkpoint saved a running machine's image cannot
+  activate when the new host cannot prepare that machine
+  (`CheckpointRestore.Validate` refuses the whole restore by name). That
+  keeps a saved image from being dropped silently, but at scale one machine's
+  missing content makes the whole world unrecoverable until a later deploy.
+  Bring the world up with that machine refused and keep its saved row in the
+  next checkpoint, so a later deploy that can prepare it restores the image.
+  The opposite direction (a refused row on a machine that now prepares) was
+  fixed to boot it from power-on.
 
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
