@@ -401,8 +401,10 @@ public static class ArtifactsCommand {
             ("Puck.World.Azure.Tests", "EntraWorldAuthenticatorTests"),
             ("Puck.World.Schema.Tests", "WorldSiloDefinitionLawTests"),
             ("Puck.World.Silo.Tests", "WorldSiloLifecycleLawTests"),
+            ("Puck.World.Silo.Tests", "WorldReleaseCutoverLawTests"),
+            ("Puck.World.Silo.Tests", "WorldSiloDocumentDirectoryLawTests"),
         }) {
-            var report = (project + ".trx");
+            var report = $"{project}.{testClass}.trx";
 
             if (File.Exists(path: Path.Combine(path1: Results, path2: report))) { throw new IOException(message: $"Use a fresh test report: {report}"); }
             // The test assembly is portable: dotnet runs the Windows build's dll here without its apphost. A run in
