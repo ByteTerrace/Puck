@@ -6342,6 +6342,7 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldStateSection), true, JsonTypeInfoKind.Object, null,
             [],
             [
+                M("drawInstallCount", typeof(global::System.Int64), typeof(global::Puck.World.WorldStateSection), "DrawInstallCount", None),
                 M("world", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldStateRow>), typeof(global::Puck.World.WorldStateSection), "World", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).World),
                 M("body", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.ActionStateSlot>), typeof(global::Puck.World.WorldStateSection), "Body", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).Body),
                 M("identity", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.ActionStateSlot>), typeof(global::Puck.World.WorldStateSection), "Identity", Read | Write, static value => ((global::Puck.World.WorldStateSection)value).Identity),
