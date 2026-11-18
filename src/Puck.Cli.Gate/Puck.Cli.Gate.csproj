@@ -11,8 +11,8 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[5.*, )" />
         <!-- host heap: the runtime's own heap dump of another process, read from its event stream. -->
-        <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="[3.1.*, )" />
-        <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Diagnostics.Tracing.TraceEvent" Version="[4.*, )" />
+        <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="[11.*, )" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="../Puck.Cli.Core/Puck.Cli.Core.csproj" />

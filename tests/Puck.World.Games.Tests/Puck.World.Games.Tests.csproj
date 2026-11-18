@@ -42,7 +42,6 @@
         <Compile Include="../Shared/World/CarryFixtures.cs" Link="World/CarryFixtures.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.Compile.cs" Link="World/CompiledWorldFixtures.Compile.cs" />
         <Compile Include="../Shared/World/CompiledWorldFixtures.cs" Link="World/CompiledWorldFixtures.cs" />
-        <Compile Include="../Shared/World/ConsoleRedirectionCollection.cs" Link="World/ConsoleRedirectionCollection.cs" />
         <Compile Include="../Shared/World/CreationFixtures.cs" Link="World/CreationFixtures.cs" />
         <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
         <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />

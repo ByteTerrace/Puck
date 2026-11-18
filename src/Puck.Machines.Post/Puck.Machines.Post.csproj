@@ -5,7 +5,7 @@
         <PuckLayer>Validation</PuckLayer>
     </PropertyGroup>
     <ItemGroup>
-        <PackageReference Include="System.CommandLine" Version="[2.*, )" />
+        <PackageReference Include="System.CommandLine" Version="[3.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- MachineSnapshot<>/SnapshotDivergence (HashDivergenceReport's shared byte-walk), the

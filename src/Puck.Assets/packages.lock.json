@@ -4,9 +4,9 @@
     "net11.0": {
       "System.IO.Hashing": {
         "type": "Direct",
-        "requested": "[10.*, )",
-        "resolved": "10.0.14",
-        "contentHash": "lVqovhCt3HlZe7ONG5ydaj6BYwYI004gldVfMMkJl/lR5ueeCtWNpW4nejOX75sPmzm8vXCxB69GqwHaYCnyUQ=="
+        "requested": "[11.*, )",
+        "resolved": "11.0.0",
+        "contentHash": "U+Bv2qCYt6eONi+arSP0QIp4uTO6os6uceBsqiAwruZ+Wo2HrRhO/0tj38M9URJtS+4DhAtT3ka2TGNFYsnhyQ=="
       },
       "ByteTerrace.Puck.Abstractions": {
         "type": "Project",

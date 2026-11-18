@@ -73,7 +73,7 @@ public static class LocksCommand {
                                   holds, which the fresh evaluation would otherwise record) and let a locked
                                   restore judge the result. Names each lock file it wrote, and any package a new
                                   reference forced past its pin.
-            puck locks --update   also re-evaluate every floating version ([10.*, ) and the like), taking the
+            puck locks --update   also re-evaluate every floating version ([11.*, ) and the like), taking the
                                   newest packages each range admits: the explicit dependency update.
             puck locks --check    run `dotnet {string.Join(separator: ' ', values: LockFiles.CheckArguments)}` and report each
                                   project whose lock file drifted, and each project that has none. Writes no

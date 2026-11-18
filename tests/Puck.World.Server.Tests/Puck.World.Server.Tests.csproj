@@ -14,7 +14,7 @@
     <ItemGroup>
         <!-- Composes IObjectBlobStore through PuckStorageServiceRegistration.AddCore so the backend law suite drives the
              real routed store rather than a second, hand-rolled dispatch. -->
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[10.*, )" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="[11.*, )" />
     </ItemGroup>
     <ItemGroup>
         <!-- The authoritative simulation and what drives it, and nothing above it: no client, renderer, backend or
@@ -58,7 +58,6 @@
         <Compile Include="../Shared/World/CrossingDurabilityFixture.cs" Link="World/CrossingDurabilityFixture.cs" />
         <Compile Include="../Shared/World/CrossingIdentityFixtures.cs" Link="World/CrossingIdentityFixtures.cs" />
         <Compile Include="../Shared/World/DeferredVerbFixtures.cs" Link="World/DeferredVerbFixtures.cs" />
-        <Compile Include="../Shared/World/DocumentCompositionCollection.cs" Link="World/DocumentCompositionCollection.cs" />
         <Compile Include="../Shared/World/EditorBarFixtures.cs" Link="World/EditorBarFixtures.cs" />
         <Compile Include="../Shared/World/EditorPlacementFixtures.cs" Link="World/EditorPlacementFixtures.cs" />
         <Compile Include="../Shared/World/EndingSink.cs" Link="World/EndingSink.cs" />
