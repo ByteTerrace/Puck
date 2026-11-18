@@ -94,10 +94,9 @@ public sealed partial class ShaderPipelineRenderNode {
         commands.Add(item: command);
         SubmitCounted(
             commands: commands,
-            fence: m_slots[slot].Fence!
+            slot: slot
         );
         m_frameLeases.MoveTo(destination: m_slots[slot].Leases);
-        m_latestSlot = slot;
         m_publishedBinding = null;
         Publish(surface: Surface.SameDeviceImage(
             copy.ImageHandle,

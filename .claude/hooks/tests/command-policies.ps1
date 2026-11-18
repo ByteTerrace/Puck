@@ -399,7 +399,7 @@ Add-Case session-launch 'codex exec -sdanger-full-access "hi"' ask deny
 Add-Case session-launch 'codex exec -s=danger-full-access "hi"' ask deny posix
 Add-Case session-launch 'codex exec -capproval_policy=never "hi"' ask deny
 Add-Case session-launch 'codex exec -c=approval_policy=never "hi"' ask deny posix
-Add-Case session-launch 'codex exec -m gpt-6.1-sol "hi"' pass deny
+Add-Case session-launch 'codex exec -m gpt-6.2-sol "hi"' pass deny
 # command with a combined option cluster holding v or V only reports how a name resolves.
 Add-Case git-safety 'command -pv git stash' pass pass posix
 Add-Case git-safety 'command -pV git stash' pass pass posix
