@@ -67,7 +67,8 @@ public sealed partial class SdfMeshIrradiance {
     // Allocation tokens never repeat. Selection validates both words on the device, so a cached CPU description
     // cannot reuse hits after its slot was reclaimed. Only the coordinator allocates or frees, between jobs.
     // The device hit cache holds GpuHitCapacity slots: every window cell's owner, plus two fresh slots for each probe a
-    // batch places (its first trace and its trial traces, PlaceBatch), so it follows the published tier.
+    // batch places (its first trace and the trial it keeps, PlaceBatch), so it follows the published tier. A placement
+    // round's other trials borrow free slots only until the round lands, and never more than are free.
     private GpuRangeAllocator m_hitSlots = new(size: 1u, maxRanges: 1);
     private readonly Dictionary<(int Level, (int X, int Y, int Z) Cell), (uint Slot, ulong Token)> m_hitOwners = [];
     private ulong m_hitToken;

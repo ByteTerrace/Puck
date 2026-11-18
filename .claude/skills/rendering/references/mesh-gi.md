@@ -124,7 +124,7 @@ only meshes that scene names.
 last change's payload bytes, separately from staging allocation sizes.
 Queries run several at a time across the service's slots (`SdfMeshProbeGpuWork`'s
 `m_inFlight`), taken in submission order. A query that replaces, clears or fills
-shared state (the hit cache, the meter cache, the feedback volume's size, the
+shared state (the hit cache, the camera-sample cache, the feedback volume's size, the
 batch output) is exclusive: `TryTake` admits it only with nothing in flight and
 admits nothing beside it, and a scene upload likewise starts only with no query
 in flight. The scene and feedback regions stage through the taking job's own
@@ -146,10 +146,10 @@ is taken and every earlier job of the batch ran; so every probe of a batch reads
 the bounce the volume held before it, as the CPU reference does. The batch
 lands only once that commit completed, then frame upload copies the ready slots
 into the published GPU table. The CPU retains depth/sky and diagnostic lighting, and releases full
-hit arrays once the batch is relit. Once the device has answered a meter, the camera sample reads
+hit arrays once the batch is relit. Once the device has answered a camera sample, the camera sample reads
 the GPU kernel's small answer rather than traversing the hierarchy on the frame. A job whose scene's meshes
 are not resident within `AdmissionWait` is cancelled like an obsolete one, so it
-never holds the coordinator or the meter behind it without bound.
+never holds the coordinator or the camera sample behind it without bound.
 
 A relight's GPU time is rays, not probes: each hit texel traces toward every
 shadowing light that reaches the probe, and a probe that cannot reuse its
