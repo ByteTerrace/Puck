@@ -89,80 +89,38 @@ public unsafe sealed class VulkanNativeFramePresentationApi : IVulkanFramePresen
             paramName: nameof(request)
         );
 
+        // vkQueuePresentKHR consumes every host struct and array synchronously, so they live on the stack.
         var queuePresent = request.Device.QueuePresentKhr;
-        var waitSemaphorePointer = m_allocator.Alloc(size: IntPtr.Size);
-        var swapchainPointer = m_allocator.Alloc(size: IntPtr.Size);
-        var imageIndexPointer = m_allocator.Alloc(size: sizeof(uint));
-        // Closed-loop present timing: chain a VkPresentIdKHR (the present id plus its single-element id array) ONLY when
-        // a non-zero id is requested — i.e. only when VK_KHR_present_id/present_wait are enabled. A zero id leaves the
-        // present byte-for-byte unchanged (PNext stays 0).
-        var hasPresentId = (request.PresentId != 0UL);
-        var presentIdValuePointer = (hasPresentId
-            ? m_allocator.Alloc(size: sizeof(ulong))
-            : 0
-        );
-        var presentIdPointer = (hasPresentId
-            ? m_allocator.Alloc(size: Marshal.SizeOf<VkPresentIdKhr>())
-            : 0
-        );
+        var waitSemaphore = request.RenderFinishedSemaphoreHandle;
+        var swapchain = request.SwapchainHandle;
+        var imageIndex = request.ImageIndex;
+        var presentIdValue = request.PresentId;
+        var presentInfo = new VkPresentInfoKhr {
+            PImageIndices = ((nint)(&imageIndex)),
+            PSwapchains = ((nint)(&swapchain)),
+            PWaitSemaphores = ((nint)(&waitSemaphore)),
+            SType = StructureTypePresentInfoKhr,
+            SwapchainCount = 1,
+            WaitSemaphoreCount = 1,
+        };
+        // Closed-loop present timing chains a VkPresentIdKHR only for a nonzero id, which only a device with
+        // VK_KHR_present_id and VK_KHR_present_wait requests; a zero id leaves PNext zero.
+        var presentId = new VkPresentIdKhr {
+            PNext = 0,
+            PPresentIds = ((nint)(&presentIdValue)),
+            SType = StructureTypePresentIdKhr,
+            SwapchainCount = 1,
+        };
 
-        try {
-            Marshal.WriteIntPtr(
-                ptr: waitSemaphorePointer,
-                val: request.RenderFinishedSemaphoreHandle
-            );
-            Marshal.WriteIntPtr(
-                ptr: swapchainPointer,
-                val: request.SwapchainHandle
-            );
-            Marshal.WriteInt32(
-                ptr: imageIndexPointer,
-                val: unchecked((int)request.ImageIndex)
-            );
-
-            var presentInfo = new VkPresentInfoKhr {
-                PImageIndices = imageIndexPointer,
-                PSwapchains = swapchainPointer,
-                PWaitSemaphores = waitSemaphorePointer,
-                SType = StructureTypePresentInfoKhr,
-                SwapchainCount = 1,
-                WaitSemaphoreCount = 1,
-            };
-
-            if (hasPresentId) {
-                Marshal.WriteInt64(
-                    ptr: presentIdValuePointer,
-                    val: unchecked((long)request.PresentId)
-                );
-                Marshal.StructureToPtr(
-                    fDeleteOld: false,
-                    ptr: presentIdPointer,
-                    structure: new VkPresentIdKhr {
-                        PNext = 0,
-                        PPresentIds = presentIdValuePointer,
-                        SType = StructureTypePresentIdKhr,
-                        SwapchainCount = 1,
-                    }
-                );
-
-                presentInfo.PNext = presentIdPointer;
-            }
-
-            GpuQueueWork.Process.Present();
-            return queuePresent(
-                request.PresentQueueHandle,
-                in presentInfo
-            );
-        } finally {
-            m_allocator.Free(ptr: waitSemaphorePointer);
-            m_allocator.Free(ptr: swapchainPointer);
-            m_allocator.Free(ptr: imageIndexPointer);
-
-            if (hasPresentId) {
-                m_allocator.Free(ptr: presentIdValuePointer);
-                m_allocator.Free(ptr: presentIdPointer);
-            }
+        if (presentIdValue != 0UL) {
+            presentInfo.PNext = ((nint)(&presentId));
         }
+
+        GpuQueueWork.Process.Present();
+        return queuePresent(
+            request.PresentQueueHandle,
+            in presentInfo
+        );
     }
     /// <inheritdoc/>
     public VkResult Submit(VulkanFrameSubmitRequest request) {

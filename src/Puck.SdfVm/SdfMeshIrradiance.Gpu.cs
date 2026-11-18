@@ -51,6 +51,10 @@ public sealed partial class SdfMeshIrradiance {
     private Vector4[]? m_gpuLightingRows;
     private int[] m_gpuUpdateAt = [];
     private uint[] m_gpuUpdateData = [];
+    // The full snapshot of the volume a job carries when the feedback must be rewritten whole: the volume runs to
+    // megabytes, so a fresh array each time would land on the large object heap. Like the updates above, a batch may
+    // overwrite it because SdfMeshProbeGpuWork.Run answers or cancels every job before it returns or throws.
+    private uint[] m_gpuVolumeSnapshot = [];
     // Set by a device reattach; cleared once a completed job carried the volume's full snapshot into the new feedback.
     private bool m_republishOwed;
 
@@ -325,7 +329,11 @@ public sealed partial class SdfMeshIrradiance {
             }
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
-                updates = new(Words: new int[] { 0 }, Data: (uint[])m_volume.Clone(), Count: 1, Length: m_volume.Length);
+                GrowScratch(array: ref m_gpuUpdateAt, length: 1);
+                GrowScratch(array: ref m_gpuVolumeSnapshot, length: m_volume.Length);
+                m_gpuUpdateAt[0] = 0;
+                m_volume.CopyTo(array: m_gpuVolumeSnapshot, index: 0);
+                updates = new(Words: m_gpuUpdateAt, Data: m_gpuVolumeSnapshot.AsMemory(start: 0, length: m_volume.Length), Count: 1, Length: m_volume.Length);
                 m_gpuVolume = m_volume;
                 snapshotOf = m_volume;
             } else {

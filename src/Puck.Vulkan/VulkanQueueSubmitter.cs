@@ -101,59 +101,37 @@ public sealed unsafe class VulkanQueueSubmitter {
     }
 
     // Submits a batch's deferred submissions in one vkQueueSubmit, a submit info each with its own waits, arming one
-    // fence for the whole batch (VulkanSubmissionBatch).
-    internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, nint fenceHandle) {
-        var commandBuffers = 0;
-        var waits = 0;
-
-        foreach (var entry in entries) {
-            commandBuffers += entry.CommandBuffers.Length;
-            waits += entry.WaitSemaphores.Length;
-        }
-
+    // fence for the whole batch (VulkanSubmissionBatch). Each entry names its ranges in the batch's command buffers,
+    // waits and stages (every stage holds AllCommands: an external wait holds its whole submission, as a single
+    // submission's does); the caller sizes the timeline and submit structures to the entries.
+    internal static void SubmitBatch(VulkanDeviceCommands device, VkQueue graphicsQueue, ReadOnlySpan<VulkanBatchedSubmission> entries, ReadOnlySpan<nint> commandBuffers,
+        ReadOnlySpan<nint> waitSemaphores, ReadOnlySpan<ulong> waitValues, ReadOnlySpan<uint> stages, Span<VkTimelineSemaphoreSubmitInfo> timelines,
+        Span<VkSubmitInfo> submits, nint fenceHandle) {
         if (fenceHandle != 0) { GpuQueueWork.Process.Signal(); }
 
-        var allCommandBuffers = new nint[commandBuffers];
-        var allWaits = new nint[waits];
-        var allValues = new ulong[waits];
-        var allStages = new uint[waits];
-        var timelines = new VkTimelineSemaphoreSubmitInfo[entries.Length];
-        var submits = new VkSubmitInfo[entries.Length];
-
-        // An external wait holds every stage of its submission, as a single submission's does.
-        Array.Fill(array: allStages, value: VulkanPipelineStageFlags.AllCommands);
-
-        fixed (nint* commandBuffersPointer = allCommandBuffers)
-        fixed (nint* waitsPointer = allWaits)
-        fixed (ulong* valuesPointer = allValues)
-        fixed (uint* stagesPointer = allStages)
+        fixed (nint* commandBuffersPointer = commandBuffers)
+        fixed (nint* waitsPointer = waitSemaphores)
+        fixed (ulong* valuesPointer = waitValues)
+        fixed (uint* stagesPointer = stages)
         fixed (VkTimelineSemaphoreSubmitInfo* timelinesPointer = timelines)
         fixed (VkSubmitInfo* submitsPointer = submits) {
-            var commandBuffer = 0;
-            var wait = 0;
-
             for (var index = 0; (index < entries.Length); index++) {
                 var entry = entries[index];
 
-                entry.CommandBuffers.CopyTo(destination: allCommandBuffers.AsSpan(start: commandBuffer));
-                entry.WaitSemaphores.CopyTo(destination: allWaits.AsSpan(start: wait));
-                entry.WaitValues.CopyTo(destination: allValues.AsSpan(start: wait));
                 timelinesPointer[index] = new VkTimelineSemaphoreSubmitInfo {
-                    PWaitSemaphoreValues = ((nint)(valuesPointer + wait)),
+                    PWaitSemaphoreValues = ((nint)(valuesPointer + entry.WaitStart)),
                     SType = VkTimelineSemaphoreSubmitInfo.StructureType,
-                    WaitSemaphoreValueCount = ((uint)entry.WaitSemaphores.Length),
+                    WaitSemaphoreValueCount = ((uint)entry.WaitCount),
                 };
                 submitsPointer[index] = new VkSubmitInfo {
-                    CommandBufferCount = ((uint)entry.CommandBuffers.Length),
-                    PCommandBuffers = ((nint)(commandBuffersPointer + commandBuffer)),
-                    PNext = ((entry.WaitSemaphores.Length == 0) ? 0 : ((nint)(timelinesPointer + index))),
-                    PWaitDstStageMask = ((nint)(stagesPointer + wait)),
-                    PWaitSemaphores = ((nint)(waitsPointer + wait)),
+                    CommandBufferCount = ((uint)entry.CommandBufferCount),
+                    PCommandBuffers = ((nint)(commandBuffersPointer + entry.CommandBufferStart)),
+                    PNext = ((entry.WaitCount == 0) ? 0 : ((nint)(timelinesPointer + index))),
+                    PWaitDstStageMask = ((nint)(stagesPointer + entry.WaitStart)),
+                    PWaitSemaphores = ((nint)(waitsPointer + entry.WaitStart)),
                     SType = StructureTypeSubmitInfo,
-                    WaitSemaphoreCount = ((uint)entry.WaitSemaphores.Length),
+                    WaitSemaphoreCount = ((uint)entry.WaitCount),
                 };
-                commandBuffer += entry.CommandBuffers.Length;
-                wait += entry.WaitSemaphores.Length;
             }
 
             device.QueueSubmit(

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+using System.Buffers;
 using System.Text;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
@@ -24,6 +24,8 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     private const uint StructureTypeRenderPassBeginInfo = 43;
     private const uint SubpassContentsInline = 0;
     private const ulong WholeSize = ulong.MaxValue;
+    // The barriers of each kind one run keeps on the stack (64 image barriers are 4.5 KiB); a longer run rents.
+    private const int StackBarriers = 64;
 
     // The clear value of a render pass whose request names none: its one color attachment, opaque black.
     private static readonly VkClearValue[] OpaqueBlack = [VkClearValue.OfColor(alpha: 1f, blue: 0f, green: 0f, red: 0f)];
@@ -349,27 +351,18 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = sourceMipLevel,
             },
         };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageBlit>());
 
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: blit
-            );
-            blitImage(
-                commandBufferHandle,
-                sourceImageHandle,
-                sourceImageLayout,
-                destinationImageHandle,
-                destinationImageLayout,
-                1,
-                pointer,
-                filter
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
+        // vkCmdBlitImage consumes the host struct synchronously, so it lives on the stack.
+        blitImage(
+            commandBufferHandle,
+            sourceImageHandle,
+            sourceImageLayout,
+            destinationImageHandle,
+            destinationImageLayout,
+            1,
+            ((nint)(&blit)),
+            filter
+        );
     }
     /// <inheritdoc/>
     public void ClearColorImage(
@@ -533,26 +526,17 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 MipLevel = 0,
             },
         };
-        var copyPointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageCopy>());
 
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: copyPointer,
-                structure: imageCopy
-            );
-            copyImage(
-                commandBufferHandle,
-                sourceImageHandle,
-                sourceImageLayout,
-                destinationImageHandle,
-                destinationImageLayout,
-                1,
-                copyPointer
-            );
-        } finally {
-            m_allocator.Free(ptr: copyPointer);
-        }
+        // vkCmdCopyImage consumes the host struct synchronously, so it lives on the stack.
+        copyImage(
+            commandBufferHandle,
+            sourceImageHandle,
+            sourceImageLayout,
+            destinationImageHandle,
+            destinationImageLayout,
+            1,
+            ((nint)(&imageCopy))
+        );
     }
     /// <inheritdoc/>
     public void Dispatch(VulkanDeviceCommands device, nint commandBufferHandle, uint groupCountX, uint groupCountY, uint groupCountZ) {
@@ -773,14 +757,30 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     public void PipelineBarriers(VulkanDeviceCommands device, nint commandBufferHandle, uint sourceStageMask, uint destinationStageMask, (uint Source, uint Destination)? memory, ReadOnlySpan<VulkanBufferBarrier> buffers, ReadOnlySpan<VulkanImageBarrier> images) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
-        // vkCmdPipelineBarrier consumes the host structs synchronously; a batch is a few to a few dozen barriers.
+        // vkCmdPipelineBarrier consumes the host structs synchronously, so a run of a few dozen barriers lives on the
+        // stack and only a longer one rents its storage.
+        var rentedBuffers = ((buffers.Length > StackBarriers) ? ArrayPool<VkBufferMemoryBarrier>.Shared.Rent(minimumLength: buffers.Length) : null);
+        var rentedImages = ((images.Length > StackBarriers) ? ArrayPool<VkImageMemoryBarrier>.Shared.Rent(minimumLength: images.Length) : null);
+        var bufferBarriers = ((rentedBuffers is null) ? stackalloc VkBufferMemoryBarrier[StackBarriers] : rentedBuffers.AsSpan())[..buffers.Length];
+        var imageBarriers = ((rentedImages is null) ? stackalloc VkImageMemoryBarrier[StackBarriers] : rentedImages.AsSpan())[..images.Length];
+
+        try {
+            PipelineBarriers(device: device, commandBufferHandle: commandBufferHandle, sourceStageMask: sourceStageMask, destinationStageMask: destinationStageMask,
+                memory: memory, buffers: buffers, images: images, bufferBarriers: bufferBarriers, imageBarriers: imageBarriers);
+        } finally {
+            if (rentedBuffers is not null) { ArrayPool<VkBufferMemoryBarrier>.Shared.Return(array: rentedBuffers); }
+            if (rentedImages is not null) { ArrayPool<VkImageMemoryBarrier>.Shared.Return(array: rentedImages); }
+        }
+    }
+    // Fills the native barriers of one run into storage the caller holds and records them in one vkCmdPipelineBarrier.
+    private static void PipelineBarriers(VulkanDeviceCommands device, nint commandBufferHandle, uint sourceStageMask, uint destinationStageMask, (uint Source, uint Destination)? memory,
+        ReadOnlySpan<VulkanBufferBarrier> buffers, ReadOnlySpan<VulkanImageBarrier> images, Span<VkBufferMemoryBarrier> bufferBarriers,
+        Span<VkImageMemoryBarrier> imageBarriers) {
         var global = new VkMemoryBarrier {
             DstAccessMask = (memory?.Destination ?? 0u),
             SType = StructureTypeMemoryBarrier,
             SrcAccessMask = (memory?.Source ?? 0u),
         };
-        var bufferBarriers = new VkBufferMemoryBarrier[buffers.Length];
-        var imageBarriers = new VkImageMemoryBarrier[images.Length];
 
         for (var index = 0; (index < buffers.Length); index++) {
             bufferBarriers[index] = new VkBufferMemoryBarrier {
@@ -1046,28 +1046,19 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
                 LevelCount = 1,
             },
         };
-        var pointer = m_allocator.Alloc(size: Marshal.SizeOf<VkImageMemoryBarrier>());
 
-        try {
-            Marshal.StructureToPtr(
-                fDeleteOld: false,
-                ptr: pointer,
-                structure: barrier
-            );
-            pipelineBarrier(
-                commandBufferHandle,
-                sourceStageMask,
-                destinationStageMask,
-                0,
-                0,
-                0,
-                0,
-                0,
-                1,
-                pointer
-            );
-        } finally {
-            m_allocator.Free(ptr: pointer);
-        }
+        // vkCmdPipelineBarrier consumes the host struct synchronously, so it lives on the stack.
+        pipelineBarrier(
+            commandBufferHandle,
+            sourceStageMask,
+            destinationStageMask,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            ((nint)(&barrier))
+        );
     }
 }
