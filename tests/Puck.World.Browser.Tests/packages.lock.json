@@ -204,13 +204,13 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.IO.Hashing": "[10.*, )"
+          "System.IO.Hashing": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
-          "System.Formats.Cbor": "[10.*, )"
+          "System.Formats.Cbor": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Commands": {
@@ -219,7 +219,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
+          "System.CommandLine": "[3.*, )"
         }
       },
       "ByteTerrace.Puck.Confinement": {

@@ -4,15 +4,15 @@
     "net11.0": {
       "Microsoft.NET.ILLink.Tasks": {
         "type": "Direct",
-        "requested": "[11.0.0-rc.3.26522.148, )",
-        "resolved": "11.0.0-rc.3.26522.148",
-        "contentHash": "SWnTMx96mhBr9LCOySJg1ETlEFFHVsPGdVT02JnYhtqk1+Vke1J7RU3VkKwEiErBr4FJ42Uu4k7GdOtkRuvs/Q=="
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "gK2aq4XvChj5kvozpPHrkfKkr7zc5Z4xoTrJb4GPZzDEPMlCk0TX632bwY3LsWcX2UVcVRQBBGzsBGC2lq6YhA=="
       },
       "Microsoft.NET.Sdk.WebAssembly.Pack": {
         "type": "Direct",
-        "requested": "[11.0.0-rc.3.26522.148, )",
-        "resolved": "11.0.0-rc.3.26522.148",
-        "contentHash": "Z8JRMYBrAuZpMbXVtooGSRMnaSgiNrFcWcMZYJYJW3deUXCXmD6m8GV6ijt0tHfX55QpUhJig/Yp1fooAA0KJw=="
+        "requested": "[11.0.0, )",
+        "resolved": "11.0.0",
+        "contentHash": "fvNAQsY36JwF/UNNkcPw+jEbcfHCNVkqKlgL7PBlolyXa+rSODtI5bQ4QLl3jr3QyRIAC6bIXGpXghH35+jI0w=="
       },
       "Parlot": {
         "type": "Transitive",
@@ -47,13 +47,13 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Confinement": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.IO.Hashing": "[10.*, )"
+          "System.IO.Hashing": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Attestation": {
         "type": "Project",
         "dependencies": {
-          "System.Formats.Cbor": "[10.*, )"
+          "System.Formats.Cbor": "[11.*, )"
         }
       },
       "ByteTerrace.Puck.Commands": {
@@ -62,7 +62,7 @@
           "ByteTerrace.Puck.Abstractions": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Assets": "[0.1.0-alpha, )",
           "ByteTerrace.Puck.Maths": "[0.1.0-alpha, )",
-          "System.CommandLine": "[2.*, )"
+          "System.CommandLine": "[3.*, )"
         }
       },
       "ByteTerrace.Puck.Confinement": {
