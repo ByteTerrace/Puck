@@ -19,6 +19,28 @@ public sealed class StateReadAccessLawTests {
     }
 
     [Fact]
+    public void FilteredReductionsSaturateAndAcquireTheFilterEvenOnAnEmptyRow() {
+        var first = CellName.Parse("a");
+        var second = CellName.Parse("b");
+        var section = new StateSection(Rows: [
+            new(CellName.Parse("values"), CellKind.Int, Cells: [new(first, CellValue.Int(long.MaxValue)), new(second, CellValue.Int(1))]),
+            new(CellName.Parse("gate"), CellKind.Int, Cells: [new(first, CellValue.Int(1)), new(second, CellValue.Int(1))]),
+            new(CellName.Parse("empty"), CellKind.Int, Domain: StateDomain.Keys.Instance),
+        ]);
+        var arena = new StateArena(StateCatalog.Compile(section), section, ArenaTime.Origin);
+        var showFilter = true;
+        var access = arena.RestrictReads(ordinal => ordinal != 1 || showFilter);
+        var values = access.ResolveRow("values");
+        var filter = access.ResolveRow("gate");
+        var empty = access.ResolveRow("empty");
+        Assert.Equal(long.MaxValue, StateReader.ReduceRaw(access, values, StateReduceOp.Sum, ArenaTime.Origin, filter));
+        Assert.Equal(1L, StateReader.ReduceRaw(access, values, StateReduceOp.Count, ArenaTime.Origin, filter, (0L, 1L)));
+        showFilter = false;
+        Assert.Throws<StateUnavailableException>(() => StateReader.ReduceRaw(access, empty, StateReduceOp.Count, ArenaTime.Origin, filter));
+        Assert.True(access.Failed);
+    }
+
+    [Fact]
     public void RowAdmissionDoesNotAcquireAnInlineGeneratorProgram() {
         var section = new StateSection(Rows: [new(CellName.Parse("draw"), CellKind.Int,
             Draw: new Draw(Generator: new StateGenerator(Source: GeneratorSource.StreamDraw,

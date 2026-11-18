@@ -46,19 +46,36 @@ public static partial class StateReader {
 
     /// <summary>Reduces live cells in member order, without materializing rows.</summary>
     public static long ReduceRaw(StateReadAccess arena, StateReadRow rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) {
-        if (op == StateReduceOp.Count) { return arena.CellCount(rowOrdinal: rowOrdinal); }
+        var time = ArenaTime.At(tick: tick, engineTick: engineTick);
+        return ReduceRaw(arena, rowOrdinal, op, in time);
+    }
+
+    /// <summary>Reduces admitted cells at the evaluator's time with an optional key-matched filter and numeric range.</summary>
+    public static long ReduceRaw(StateReadAccess arena, StateReadRow rowOrdinal, StateReduceOp op, in ArenaTime time,
+        StateReadRow? filter = null, (long Lower, long Upper)? range = null) {
+        if (filter is { } required) { arena.EnsureAvailable(required); }
+        if (op == StateReduceOp.Count && filter is null && range is null) { return arena.CellCount(rowOrdinal); }
         if (op == StateReduceOp.ArrangementRank) {
             if ((arena.Domain(rowOrdinal) is not StateDomain.KeysOf { Ordered: true } zone) ||
                 !arena.TryResolveRow(name: zone.Row, rowOrdinal: out var domain)) { return -1L; }
             Span<int> ordinals = stackalloc int[MaxArrangementTokens];
-            var count = DomainOrdinals(arena: arena, rowOrdinal: rowOrdinal, domainOrdinal: domain, ordinals: ordinals);
+            var count = DomainOrdinals(arena, rowOrdinal, domain, ordinals);
             return count < 0 ? -1L : ArrangementRank(domainOrdinals: ordinals[..count]);
         }
-        var time = ArenaTime.At(tick: tick, engineTick: engineTick);
-        var cursor = 0; var any = false; var result = 0L;
-        while (arena.TryNextCell(rowOrdinal: rowOrdinal, cursor: ref cursor, key: out var key)) {
-            if (!arena.TryReadLiveNumber(rowOrdinal: rowOrdinal, key: key, time: in time, value: out var raw)) { continue; }
-            result = !any ? raw : op switch { StateReduceOp.Sum => unchecked(result + raw), StateReduceOp.Max => Math.Max(result, raw), _ => Math.Min(result, raw) };
+        var cursor = 0;
+        var any = false;
+        var result = 0L;
+        while (arena.TryNextCell(rowOrdinal, ref cursor, out var key)) {
+            if (filter is { } gate && (!arena.TryReadLiveNumber(gate, key, in time, out var enabled) || enabled == 0)) { continue; }
+            if (!arena.TryReadLiveNumber(rowOrdinal, key, in time, out var value) ||
+                range is { } bounds && (value < bounds.Lower || value > bounds.Upper)) { continue; }
+            result = op switch {
+                StateReduceOp.Count => result + 1,
+                StateReduceOp.Sum => Puck.Maths.BinaryIntegerFunctions.AddSaturating(result, value),
+                StateReduceOp.Max => any ? Math.Max(result, value) : value,
+                StateReduceOp.Min => any ? Math.Min(result, value) : value,
+                _ => throw new ArgumentOutOfRangeException(nameof(op)),
+            };
             any = true;
         }
         return result;
@@ -67,6 +84,15 @@ public static partial class StateReader {
     /// <summary>Reduces an authority catalog row through the shared read kernel.</summary>
     public static long ReduceRaw(StateArena arena, int rowOrdinal, StateReduceOp op, ulong tick, ulong engineTick) =>
         ReduceRaw(arena.ReadAccess, arena.ReadAccess.AuthorityRow(rowOrdinal), op, tick, engineTick);
+
+    /// <summary>Resolves the evaluator's authority ordinals before entering the shared reduction.</summary>
+    public static long ReduceRaw(StateArena arena, int rowOrdinal, StateReduceOp op, in ArenaTime time,
+        int filterOrdinal, (long Lower, long Upper)? range) {
+        if ((uint)rowOrdinal >= (uint)arena.Catalog.Count || filterOrdinal >= arena.Catalog.Count) { return 0L; }
+        var access = arena.ReadAccess;
+        return ReduceRaw(access, access.AuthorityRow(rowOrdinal), op, in time,
+            filterOrdinal < 0 ? null : access.AuthorityRow(filterOrdinal), range);
+    }
 
     /// <summary>Returns the winning live cell key, resolving equal values to the lowest participant index.</summary>
     public static string? ArgExtremum<TState>(StateArena arena, StateHandle handle, StateReduceOp op, ulong tick, ulong engineTick,

@@ -41,6 +41,7 @@ public sealed class StateReadAccess {
         RequireSource(row.Ordinal);
         return row.Ordinal;
     }
+    internal void EnsureAvailable(StateReadRow row) => _ = Require(row);
     // Catalog ordinals enter only through the explicit authority overloads of the shared kernels.
     internal StateReadRow AuthorityRow(int ordinal) {
         if (m_admits is not null) { Unavailable(); }
