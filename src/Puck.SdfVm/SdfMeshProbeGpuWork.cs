@@ -411,7 +411,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         recording.ReserveReadback(bytes: bytes + 4);
         var command = recording.CommandBuffer;
         if (query.CameraSample) {
-            var cacheBytes = (ulong)query.Origins.Length * (1 + SdfMeshProbeDepth.HitWords) * 4;
+            var cacheBytes = CameraSampleCacheBytes(query: query);
             if (m_cameraSampleCache is null || m_cameraSampleCache.SizeBytes < cacheBytes) {
                 m_cameraSampleCache?.Dispose();
                 m_cameraSampleCache = null;
@@ -550,7 +550,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // token words match no allocation token, and left readable by compute. The clear stays owed until a job that
     // recorded it completes (Complete): a job handed back unsubmitted discarded it, and the next job clears again.
     private void FitHitCache(Job query, uint capacity, nint command) {
-        var bytes = (ulong)capacity * SdfMeshProbeRelight.CacheWords * sizeof(uint);
+        var bytes = HitCacheBytes(capacity: capacity);
         if (m_hitCache?.SizeBytes != bytes) {
             m_hitCache?.Dispose();
             m_hitCache = null;
