@@ -335,7 +335,11 @@ limit.
    Puck's measured per-material, crease and normal bounds, measured against
    the collapse's share of bake thread-seconds
    ([packet](open-items.md#bake-proportional-to-change)) and its
-   `puck mesh audit` scores.
+   `puck mesh audit` scores. It comes second: the collapse's own cheaper
+   acceptance search, and a different error measure inside it, are tried
+   first ([rendering research](rendering-research.md#10-make-a-bake-cost-what-changed-and-close-the-contour-defects)).
+   If a simplifier is then adopted it replaces the collapse. The two are
+   never both kept.
 3. **Field-derived coarse levels** were measured offline and not adopted
    ([the virtual geometry plan](virtual-geometry.md#d1-the-unit-of-detail)):
    `SdfMeshCollapse` stays the level source, and item 2's simplifier is one of
@@ -565,13 +569,15 @@ times are taken in the lead's settle windows, never by a lane under load.
 | V2b. Retained instance updates | rendering | `Dress` without a rebuild; uploads by change | `dotnet-trace` of the frame thread at the meadow: no list rebuild and record staging proportional to moved slots; `world.reload` of one blade geometry rebakes one mesh and every instance follows |
 | V2c. Authored motion on the GPU | rendering, principal-grade review | The eligibility test, the compiled kernel, program-derived bounds, previous pose on the GPU, CPU evaluation for picks | At the meadow with wind on: blades move as before (a presented burst against V2b's); `world.debug-view motion` shows blade motion and none on still ground; a blade pick lands on the drawn blade; swept-box inflation reported; an author's non-foliage presentation program in a scratch world runs the same path |
 | V3a. Lossless lowering | rendering | Collinear runs on isolated meshes; exact lowering where the program proves it; the rendering skill's one-contouring rule rewritten to name the lowering choice | `puck mesh audit` clean on the blade groups; triangles per blade part against M2's; cold bake thread-seconds per stage; meadow stills compared tolerantly |
-| V3b. Faster simplifier | rendering | An error-aware simplifier under Puck's bounds beside `SdfMeshCollapse`, keeping the better | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
+| V3b. Faster simplifier | rendering | After the cheaper collapse has been tried: an error-aware simplifier under Puck's bounds, measured against `SdfMeshCollapse`, and one of the two kept | Land-stage thread-seconds against the collapse's; `puck mesh audit` scores no worse; `world.detail 1` and `2` stills at the gallery compared tolerantly |
 | V4a. Early-depth variant | rendering | The non-fading pipeline with `[earlydepthstencil]` | Mesh-pass GPU time and shaded fragments at the meadow on the 2060 and at the Deck's resolution; the faded avatar still reveals the room behind her at `debug.go stage` |
 | V4b. Packed visibility target | rendering | The `uint2` target and depth reconstruction | `surface` and `pyramid` GPU time against V4a's; AO and stills compared tolerantly at the gallery and meadow |
 | V5. Views and shadows | rendering | Classification shared across views; extend far-cascade culling to other cascades if measured; static caching only with receiver coverage preserved | Cascade GPU time and vertices at the meadow and the gallery; `debug.go portals` with nested views: per-view counts, no stale child image |
 
 V2a and V2b run ahead of V1a (M1's verdict), so V2b builds the instance table
-V1b consumes. V3a and V4a share no files with V1 and run beside it. V1b waits
+V1b consumes. Which compiler emits V2c's kernel, and what the shading
+operation table lacks for motion, is settled with
+[rendering research decision 12](rendering-research.md#12-keep-motion-and-placement-as-authored-programs-at-zone-scale). V3a and V4a share no files with V1 and run beside it. V1b waits
 on V1a; V2c on V2b; V5 on V1b.
 
 ---

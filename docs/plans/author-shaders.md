@@ -50,6 +50,15 @@ Steps 2 and 4 read this matrix, and step 6 reads it again on the final set.
   player build ships every program specialized and a runtime miss is reported,
   not interpreted). That is a quality-versus-bar trade this plan does not make:
   it goes to the owner with the readings.
+- **A gap in the rule, and how it is read meanwhile.** No device meets its
+  bar before the rendering research's last stage, so every column fails and
+  the rule chooses nothing. Until this plan is revised the matrix is read as
+  [rendering research decision 13](rendering-research.md#13-shade-through-one-path-and-shrink-the-image-history)
+  restates it: a column passes when it is no slower than the base column on
+  the same device and stop, beyond the base's own spread. A program that
+  arrives with no compiled kernel is derived and counted, never refused. The
+  owner's call is raised only where a device has a workable column that the
+  interpreter alone breaks.
 
 The RTX 4070's columns are read on both backends: the binned path costs less
 than unsplit views at the stops measured, so `world.shaders.bins` stays on by
