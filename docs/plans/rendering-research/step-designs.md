@@ -2149,7 +2149,7 @@ equality with the old output ([rule 4](../../../AGENTS.md#core-rules)).
    those checks within its recorded error, never by equal bytes: the CPU
    sampler and the device already differ near creases by design
    (`SdfMeshCpuField.TapSpacing`). This step is the first use of the shared
-   product's name, which awaits the owner's confirmation
+   product's name, which the owner confirmed
    ([how a shared product is named and trusted](../rendering-research.md#how-a-shared-product-is-named-and-trusted)).
    The keys of step 2 are local cache keys and are not affected.
 

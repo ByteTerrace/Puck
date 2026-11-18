@@ -84,11 +84,12 @@ Three things live elsewhere:
 5. **Then the shared structures that scale:** one table of instances
    tested once for every pass, and one chain of meshes per shape from fine
    to coarse, each measured against the authored shape.
-6. **Hold every decision to a budget per device.** [The budget
-   table](#the-bars-and-the-budget) gives each pass its milliseconds and
-   each store its bytes on all three devices. The RTX 4070's column is
-   measured. The other two are targets, and their code paths are written
-   as if the hardware were on hand.
+6. **Hold every decision to a budget.** [The budget
+   table](#the-bars-and-the-budget) splits the RTX 4070's frame and caps
+   each store per viewer. Its shares are provisional and reset from stage
+   0's readings at 2560 by 1440. The other devices get quality tables
+   authored to fit, checked by counted work, and their code paths are
+   written as if the hardware were on hand.
 
 ### What we are unsure of
 
@@ -101,23 +102,17 @@ Three things live elsewhere:
 - What it costs a weak device to turn a received program into a first
   surface. An MMO client depends on that number and nothing has measured
   it ([the fifth bet](#the-bets)).
-- Seven designs rest on something no engine we read does. Each is a bet
+- Eight designs rest on something no engine we read does. Each is a bet
   with a number that ends it ([the bets](#the-bets)).
 
-### What the owner is asked
+### What the owner settled
 
-Four questions about what the engine does, listed in full under
-[questions for the owner](#questions-for-the-owner):
+The owner's four questions about what the engine does are answered
+([what the owner settled](#what-the-owner-settled-1)): how a shared product
+is named and trusted, the memory caps, render scale, and who draws a world
+for a viewer that may not receive its data.
 
-1. Confirm how a derived product that is shared between machines is named
-   and trusted. The lead recommends a design, and it is written into this
-   page marked as awaiting that confirmation.
-2. Confirm the memory bar's figures for each device.
-3. Whether a device's quality table may lower the render scale.
-4. Whether a world that shows a viewer only pictures renders them once for
-   an audience, and never once for each observer.
-
-No look value is among them. The tone curve, exposure, a light's softness,
+No look value was among them. The tone curve, exposure, a light's softness,
 the look of night and the quality tables are authored values over a neutral
 engine default ([looks are authored](#looks-are-authored)).
 
@@ -231,7 +226,7 @@ Notes on reading it.
   pixels, shadow texels and dispatches, which are deterministic and read
   the same on every machine. The memory bars for the RTX 2060 (4.5 GB of
   its 6) and the Steam Deck (10 GB for the process and GPU together, the
-  streaming plan's figure) are [a question for the owner](#questions-for-the-owner).
+  streaming plan's figure) are [settled by the owner](#what-the-owner-settled-1).
 
 Each decision below states what it claims against this table. Stage 1's
 fixes add GPU work: an encode pass for a single view, shadows for nested
@@ -309,15 +304,43 @@ rendering is the view. Worlds reach a view in three ways.
   places in the near world, the pictures a viewer gets when it is allowed
   only pictures, the light leaving an opening, and a machine's frame.
 
-Publication also settles who renders the pictures for a viewer that is
-allowed only pictures. We propose that a
-picture is rendered once, by the publishing world's host, for a camera and
-an audience the world declares, at a rate it authors, and travels as an
-image. It is never rendered once for each observer, which at MMO scale
-would mean a server rendering for every player. A viewer who wants a
-camera of its own needs rows. This is
-[a question for the owner](#questions-for-the-owner). Today only the
-in-process case exists, and a remote world's screens show nothing.
+Publication also settles who draws a world for a viewer that may not
+receive its data: a casino screen showing a private table, a spectator's
+window, a portal into a zone the viewer is not cleared for. The viewer's
+machine cannot draw what it was never sent, and a server that draws one
+picture for every observer does not survive MMO scale (two hundred people
+watching thirty screens is six thousand renders). The owner settled the
+model as three tiers, chosen by the author for each portal or screen, with
+per-observer server rendering never among them.
+
+- **Published pictures, the floor.** The publishing world's host renders
+  each declared camera once, for a declared audience, at an authored rate,
+  and every observer receives the same image. A casino screen is one
+  render however many watch it, as the lift's displays are one machine
+  mirrored to every screen. It gives up parallax: the picture does not
+  shift as a viewer walks past. This is built first.
+- **The visible part, with secrets withheld (the target for most cases).**
+  "Pictures only" is usually stronger than the real rule, which is that a
+  viewer must not receive data it is not entitled to. The viewer is sent
+  the part of the destination that can be seen through the opening from
+  the region it can stand in, redacted cell by cell by the disclosure
+  engine (card backs, not card faces; a hidden room left out), and its own
+  GPU draws it with full perspective at no server cost. Per-recipient
+  disclosure and portals exist; the new part is a visible set through a
+  fixed opening from a region of eye positions, which a distance field
+  can prove rather than estimate (`SdfFieldEvaluator.TryCertifiedLineOfSight`
+  exists with no caller). This is [the eighth bet](#the-bets).
+- **Layered pictures, when the geometry itself is the secret.** The host
+  renders the view once per opening as colour and depth in a few layers,
+  and each viewer reprojects them to its own eye, which gives parallax.
+  Layered depth images are established; the opening being a fixed window
+  bounds what is captured, and depth reveals only what a viewer could see
+  by walking past.
+
+All three follow change: a destination is published again only when it
+changes, and a still view is a derived product keyed by its inputs. Today
+only the in-process case exists, and a remote world's screens show
+nothing.
 
 ### What is Puck's own, and what is borrowed
 
@@ -406,8 +429,9 @@ Five ideas Puck is placed to try were absent, and each now has a home.
 
 ## How a shared product is named and trusted
 
-*This section is the lead's recommendation and awaits the owner's
-confirmation. Nothing is built on it until then.*
+*The owner confirmed this design, with the receiver-owned tolerance, the
+format's meaning and the Steam Deck's local floor below, which came from
+the plan's review.*
 
 **The problem.** A baked mesh's identity today hashes the bake's own code
 and each backend's compiled kernels (`SdfMeshBakeIdentity`). That is right
@@ -424,14 +448,27 @@ is not available.
 - **A local cache key** stays as it is: computed from every input, the
   baker's code included, and never recorded.
 - **A shared product's name** says what the product means: the source
-  program, the authored parameters, and the version of the product's byte
-  format. The baker's code is not part of it.
+  program, the authored parameters, and the version of the product's
+  format. That version covers what the bytes mean, not only their layout:
+  today's mesh codec warns that the same bytes can decode to another mesh
+  (`SdfMeshStoreCodec`), so a change in how normal bits are read is a new
+  version even when the layout is the same. The baker's code is not part
+  of the name.
 - **Trust comes from checking the product, not from who made it.** A
   machine that receives a product, or keeps one across a patch, verifies
-  it against the analytic source within the tolerance the product
-  declares. The check covers every attribute the product carries:
-  geometry, normals and material ids, not distance alone. A product that
-  passes is accepted whichever baker, backend or machine made it.
+  it against the analytic source within **the tolerance the receiver
+  needs**, never one the product declares, so a producer cannot pass a
+  loose product by claiming a loose tolerance. The receiver also sets the
+  coverage the check must reach and what evidence qualifies each
+  attribute: geometry, normals and material ids, not distance alone. When
+  verification is inconclusive, the receiver derives locally. A product
+  that passes is accepted whichever baker, backend or machine made it.
+- **Fetching shortens a wait; it is never the only way to play.** A newly
+  authored creation can miss every store, and the register rules that a
+  miss is derived again. So every device, the Steam Deck included, keeps a
+  local floor bake that fits its memory account, with an authored image
+  while it completes; a fetched product replaces that wait when one
+  verifies.
 - **A better baker re-derives only where better quality is wanted.** An
   old product that still verifies stays valid. The engine or an author
   asks for a tighter tolerance where it matters, and only those products
@@ -467,7 +504,7 @@ the encoder and decoder share.
 
 ## The bets
 
-Most of this plan is ordinary repair. Seven items are different: each
+Most of this plan is ordinary repair. Eight items are different: each
 rests on something no engine we read does, and each can fail without
 anyone noticing or at great expense. A bet gets a design memo and a
 bounded prototype before anything is built on it. It also gets a number
@@ -484,6 +521,7 @@ passes its box without a result is stopped and reported.
 | 5. A program received cold shows a surface quickly | On the RTX 4070 the median creation of the debug world takes more than 2 seconds from program to drawn floor. The Steam Deck's target is 5 seconds | Measurement 2 days, prototype 5 | A program whose floor cannot be baked. The frame must show the authored fallback and count the failure, never a hole |
 | 6. Light carried across an opening between two worlds | A few samples of light cost more than a quarter of a second view's GPU time, or differ from a full reference by more than a tenth on the lit floor, or any derived light differs between two deals a spectator may not tell apart | 8 days | The opening's light is made to depend on a private hand. The disclosure check must catch the difference |
 | 7. Tracing light with the field instead of triangles | Neither field method cuts the probe trace's steps by a third at equal quality, or one false "clear" occurs against the current geometry | 6 days, after stage 3 measures the trace | A blocker is added after a box was proved empty, and the proof is not withdrawn. The check must report the false "clear" |
+| 8. A viewer is sent the visible part of a world, with secrets withheld | On the gallery's portals, the visible set through an opening sends more than half the destination's disclosed cells, or the viewer's local draw of it costs more than a published picture's share of the frame, or a visibility proof takes longer than the publication rate it replaces | Memo 4 days, prototype 8 | A cell the viewer may not see is placed inside the opening's visible region. The disclosure check must withhold it, and a cell hidden behind a wall must not be sent at all |
 
 ### The first bet stands on the client's records
 
@@ -1540,32 +1578,31 @@ One default is not neutral. The detail budgets (one pixel of error for a
 level, one texel for a shadow map) are the owner's recorded rulings. They
 stay the engine's defaults, and an authored table may differ.
 
-### Questions for the owner
+### What the owner settled
 
-Each is about what the engine does. Each has a default the work proceeds
-on, so none blocks a step.
-
-1. **How a shared product is named and trusted.** The design is
-   [above](#how-a-shared-product-is-named-and-trusted). It changes what
-   the register says a mesh's identity is, for products that leave the
-   machine that made them. *Until confirmed:* local cache keys only, and
-   nothing is fetched.
-2. **The memory bar's figures.** The Steam Deck's is the streaming plan's
-   10 GB for the process and the GPU together. This page proposes 8 GB of
-   GPU memory on the RTX 4070 and 4.5 GB on the RTX 2060, which leaves
-   room on each card for the rest of the desktop. *Until confirmed:* the
-   work is held to those figures.
-3. **Whether a device's quality table may lower the render scale.** The
-   register sets the bar at a native render scale. A device's table can
-   already choose its shadow tier, its probe tier, its detail budgets and
-   what nested views give up. *Until the owner says otherwise:* no table
-   lowers the render scale.
-4. **Whether pictures are published, never rendered for each observer.**
-   A world may show a viewer only pictures. We propose the world's host
-   renders each picture once for a declared camera and audience
-   ([three ways worlds compose](#three-ways-worlds-compose)). The other
-   choice is a server that renders for every observer. *Until the owner
-   says otherwise:* published pictures only.
+1. **How a shared product is named and trusted.** Confirmed as
+   [above](#how-a-shared-product-is-named-and-trusted): a local cache key
+   computed from everything, a shared name from meaning, trust from a
+   check at the receiver's own tolerance, and a local floor on every
+   device. The decision register records it
+   ([engine design](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+2. **The memory caps.** Confirmed: 8 GB of GPU memory on the RTX 4070 and
+   4.5 GB on the RTX 2060, leaving room on each card for the rest of the
+   desktop, and the Steam Deck's 10 GB for the process and the GPU
+   together. Each is a cap on what is resident around the viewer, never on
+   a world's size.
+3. **Render scale.** Delegated to the lead, adjustable as feedback
+   arrives. The frame bar is measured at a native render scale on every
+   device, so meeting it says something about the engine. Render scale is
+   an authored setting in each device's quality table, so authors and the
+   standard package may lower it for players; that choice does not count
+   as the engine meeting its bar.
+4. **Who draws a world for a viewer that may not receive its data.** Three
+   tiers, authored per portal or screen, and never per-observer server
+   rendering ([three ways worlds compose](#three-ways-worlds-compose)):
+   published pictures first, the visible part with secrets withheld as the
+   target ([the eighth bet](#the-bets)), and layered pictures when the
+   geometry itself is secret.
 
 Four things are not questions. The size the bar is read at, the two
 topologies and the order of devices are ruled. A tick on its own
