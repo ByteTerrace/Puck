@@ -5,15 +5,19 @@ FROM scratch AS shader-cache
 
 FROM rust:1.96.0 AS rust-toolchain
 
-FROM mcr.microsoft.com/dotnet/sdk:11.0.100 AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0.100-resolute AS build
 WORKDIR /source
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
 COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup
-ENV PATH="/usr/local/cargo/bin:/opt/llvm/bin:${PATH}"
-ADD https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.6/LLVM-19.1.6-Linux-X64.tar.xz /tmp/llvm.tar.xz
-RUN echo 'd55dcbb309de7ade4e3073ec3ac3fac4d3ff236d54df3c4de04464fe68bec531  /tmp/llvm.tar.xz' | sha256sum -c - \
-    && mkdir -p /opt/llvm && tar -xJf /tmp/llvm.tar.xz -C /opt/llvm --strip-components=1 \
+ENV PATH="/usr/local/cargo/bin:/usr/lib/llvm-19/bin:${PATH}"
+# clang and ld.lld for world prepare's AGB BIOS come from this distribution's own LLVM 19 packages (19.1.7 on Ubuntu
+# 26.04), which machine setup's 19.1.6 floor admits. LLVM's Linux release tarball cannot serve here: its lld needs
+# libxml2.so.2, and Ubuntu 26.04 ships only libxml2.so.16.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends clang-19 lld-19 \
+    && rm -rf /var/lib/apt/lists/* \
+    && clang --version && ld.lld --version \
     && rustup target add --toolchain 1.96.0 wasm32-unknown-unknown
 # The same archive and checksum .github/actions/setup-dxc installs on Linux: the cache keys every entry by the DXC
 # binaries' content, so a different DXC here would miss every entry CI restores.

@@ -2472,20 +2472,10 @@ checkpoints.
 
 ### Delivery, launcher and CI
 
-Owner: delivery lane · high · Next: the Azure release's three causes and the
-production deploy's catalog listing, which a push to `main` needs; then the
-silo's cold activation, CI's steady state, the shader cache and the GC-hole
-retirement.
+Owner: delivery lane · high · Next: the production deploy's catalog listing,
+which a push to `main` needs; then the silo's cold activation, CI's steady
+state, the shader cache and the GC-hole retirement.
 
-- [high] The Azure release of `main` fails at three causes, so nothing
-  deploys: the world-silo build image lacks `xz`, so `tar -xJf` cannot unpack
-  the LLVM tarball; PUCKARCH009 refuses
-  `src/Puck.Azure.Resources/bootstrap.cs`, a file-based app holding Azure SDK
-  references outside a `<PuckProvider>` project; and the WebAssembly publish's
-  trim analysis fails IL2072 at `WorldDocumentWalker.Cursor.RewritePair`
-  (`Activator.CreateInstance` on an unannotated type).
-  After the trim fix, re-run the browser AOT publish and Node harness; the
-  confined capture cleanup in `ConsoleControlSession` still needs that payload check.
 - [high] Production deploy fails at "Publish containers and apply application
   configuration": `az acr repository list` answers "authentication required",
   because `ReusePublishedContainerAsync` begins with a catalog listing
