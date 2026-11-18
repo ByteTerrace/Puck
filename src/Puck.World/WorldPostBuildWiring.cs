@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Numerics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -11,7 +10,6 @@ using Puck.World.Client;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
-using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -434,45 +432,9 @@ public static class WorldPostBuildWiring {
                     tick: tick
                 );
 
-                if (target.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
-                    if (!WorldSourceSave.TrySave(
-                        bytesWritten: out var sourceBytes,
-                        catalog: machineCatalog,
-                        catalogFingerprint: machineCatalogFingerprint,
-                        definition: snapshot,
-                        path: target,
-                        reason: out var sourceReason,
-                        written: out var sources
-                    )) {
-                        Console.Error.WriteLine(value: $"[world.rule: save effect refused — {sourceReason}; nothing written]");
-                        return;
-                    }
-                    worldServer.Compact();
-                    Console.Error.WriteLine(value: $"[world.rule: save effect -> {target} ({((sources.Count == 0) ? "unchanged" : $"{sourceBytes} bytes in {string.Join(separator: ", ", values: sources.Select(selector: WorldDocumentLabel.Of))}")}, source preserved)]");
-                    return;
-                }
-                var bytes = WorldDefinitionSerialization.SavePreservingBasis(
-                    basisPath: out var basisPath,
-                    catalog: machineCatalog,
-                    catalogFingerprint: machineCatalogFingerprint,
-                    definition: snapshot,
-                    imports: out var preservedImports,
-                    note: out var note,
-                    path: target
-                );
-
-                worldServer.Compact();
-
-                var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
-                    ? $", basis: {((basisPath is { })
-                        ? basisPath
-                        : "none")}, imports: {preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)}"
-                    : ((note.Length > 0)
-                        ? $", {note}"
-                        : ""
-                ));
-
-                Console.Error.WriteLine(value: $"[world.rule: save effect -> {target} ({bytes} bytes{derivation})]");
+                var saved = WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, worldServer, machineCatalog,
+                    machineCatalogFingerprint, services.GetRequiredService<WorldStateRoot>(), out var result);
+                Console.Error.WriteLine(saved ? $"[world.rule: save effect -> {result}]" : $"[world.rule: save effect refused — {result}; nothing written]");
             } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) {
                 Console.Error.WriteLine(value: $"[world.rule: save effect refused — could not write {target} ({exception.Message.ReplaceLineEndings(replacementText: " ")})]");
             }

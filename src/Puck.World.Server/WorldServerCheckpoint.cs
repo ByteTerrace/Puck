@@ -63,8 +63,14 @@ public sealed record WorldServerCheckpoint(
     ArenaUndoSnapshot? Undo = null,
     WorldInputRuntimeCheckpoint? Input = null,
     IReadOnlyList<WorldScopedReplayCheckpoint>? ScopedReplays = null,
+    byte[]? DrawSeed = null,
+    WorldDrawPositions? DrawPositions = null,
+    WorldDrawPositions? BaseDrawPositions = null,
     string? AuthorityIdentity = null
 ) {
+    internal WorldPrivateDrawKeys OpenDrawKeys(WorldPrivateDrawKeys? fallback = null) => DrawSeed is { } seed
+        ? WorldPrivateDrawKeys.FromAuthorityState(seed) : fallback ?? WorldPrivateDrawKeys.Preview;
+
     /// <summary>Serializes a document into the form <see cref="DefinitionJson"/> and <see cref="BaseDefinitionJson"/>
     /// hold: the compact canonical bytes, the form a compiled world stores and a definition travels in. Every writer
     /// of those fields goes through here, so a base byte-identical to the live document is still written once.</summary>

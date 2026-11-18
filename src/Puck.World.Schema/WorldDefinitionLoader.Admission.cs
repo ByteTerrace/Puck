@@ -19,20 +19,22 @@ public static partial class WorldDefinitionLoader {
     /// <param name="documentDirectory">The directory the document's relative paths resolve beside
     /// (<see cref="WorldDefinition.DocumentDirectory"/>), or null for bytes that came from no file.</param>
     /// <returns>Whether the document loaded and validated.</returns>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryLoadForAdmission(ReadOnlyMemory<byte> utf8, string sourceName,
         out WorldDefinitionAdmission? admission, out string reason, string instanceIdentity = BootInstanceName,
         IWorldNeighbourResolver? neighbours = null, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, string? documentDirectory = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, string? documentDirectory = null, WorldPrivateDrawKeys? keys = null) {
         admission = null;
         if (!TryDecode(json: out var json, reason: out reason, sourceName: sourceName, utf8: utf8)) { return false; }
         if (compiled is null) {
             if (!WorldDefinitionFileSource.TryParseDocument(definition: out var parsed, json: json,
                 reason: out reason, sourceName: sourceName)) { return false; }
-            return TryPrepareAndAdmit(catalog: catalog, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, neighbours: neighbours,
+            return TryPrepareAndAdmit(keys: keys, catalog: catalog, definition: (parsed! with { DocumentDirectory = documentDirectory }), instanceIdentity: instanceIdentity, neighbours: neighbours,
                 overrides: overrides, reason: out reason, resolved: out admission, sourceName: sourceName);
         }
         // A compiled world keyed by these bytes answers the drawn definition, so the authored one is parsed only when
         // the compiled world misses.
+        compiled.DrawKeys = keys;
         if (!compiled.TryResolve(
             composed: utf8,
             documentDirectory: documentDirectory,
@@ -140,10 +142,11 @@ public static partial class WorldDefinitionLoader {
     /// <param name="displayName">What every refusal calls the document, or <see langword="null"/> to call it by its path. A
     /// host that must not name the file's directory (the owned-world catalog) passes the file name.</param>
     /// <returns>Whether the document loaded and validated.</returns>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryLoadFileForAdmission(string path, out WorldDefinitionAdmission? admission, out string contentHash, out string reason,
         string instanceIdentity = BootInstanceName, IWorldNeighbourResolver? neighbours = null, bool proveNeighbours = true,
         string catalogFingerprint = "", IMachineValidationCatalog? catalog = null,
-        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null, string? displayName = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, IWorldDocumentSource? documents = null, string? displayName = null, WorldPrivateDrawKeys? keys = null) {
         var shown = (displayName ?? path);
 
         admission = null;
@@ -151,7 +154,7 @@ public static partial class WorldDefinitionLoader {
         try {
             if (!WorldDefinitionFileSource.TryLoadParsed(catalog: catalog, catalogFingerprint: catalogFingerprint, contentHash: out var parsedHash,
                     definition: out var parsed, displayName: displayName, documents: documents, path: path, reason: out reason) ||
-                !TryPrepareAndAdmit(catalog: catalog, compiled: compiled, definition: parsed!, instanceIdentity: instanceIdentity, neighbours: neighbours,
+                !TryPrepareAndAdmit(keys: keys, catalog: catalog, compiled: compiled, definition: parsed!, instanceIdentity: instanceIdentity, neighbours: neighbours,
                     overrides: overrides, proveNeighbours: proveNeighbours, reason: out reason, resolved: out admission, sourceName: shown)) {
                 return false;
             }

@@ -377,21 +377,11 @@ declaration derives a key for the new declaration. The authored schema
 refuses `draw.secret`, including on operator row writes. Observers see the
 declaration and can price its work.
 
-`WorldPrivateDrawKeys` derives each site's key from the native authority's
-private seed, the hosted owner where applicable, the authority namespace,
-document and instance identities, world seed, row name and draw declaration.
-The seed is created once in `authority/private-draw.key` under the Puck
-user directory. Private draws require a per-user application data directory.
-Back up this file with authority state and provision the
-same seed to an authority that will resume its saves or replays. Independent
-authority accounts use independent seeds. Browser and cost previews use a
-separate reproducible sampler.
+A world receives a random 256-bit seed at authority installation. Each new private site takes the next installation ordinal. Removing a site and declaring it again allocates a fresh ordinal. A matching row edit or rebuild retains the live cursor and masks.
 
-Each sample is an HMAC-SHA256 of the seed, stream id and cursor under the
-site key. Authority snapshots carry installed keys. Source saves carry the
-cursor and cells and recover the key on load. A compiled world retains the
-undrawn source for a private first fill. Resuming at a cursor takes constant
-time. Private sites support neither `skip` nor an `extended` table.
+The local authority save lives under `world-authorities/` in the state directory. Move that directory with the world and keep its launch-relative document path. A hosted activation recovers its seed from the fenced authority root. Checkpoints carry the seed and the live and journal-base installation ordinals. A compiled world keeps the undrawn source for a private first fill.
+
+Each sample is an HMAC-SHA256 over the public seed ladder and cursor under the site key. Tapes record the consumed words at their addresses so an independent replay needs no authority secret. State exports and document fingerprints use the authored form. Source proofs and test servers use an isolated deterministic sampler. Private sites support neither skip nor an extended table.
 
 ## Extend a source's equidistribution
 

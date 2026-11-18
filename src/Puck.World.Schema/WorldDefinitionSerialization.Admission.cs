@@ -13,12 +13,15 @@ public static partial class WorldDefinitionSerialization {
     /// <returns>The admitted definition and its compilation.</returns>
     /// <exception cref="ArgumentNullException">An argument is null.</exception>
     /// <exception cref="InvalidDataException">The embedded definition is malformed or refused by the host.</exception>
-    public static WorldDefinitionAdmission DeserializeForAdmission(byte[] utf8Json, IMachineValidationCatalog machines, string? documentDirectory = null) {
+    /// <param name="drawKeys">The receiving authority sampler when restoring a checkpoint.</param>
+    /// <param name="positions">Installation ordinals from that checkpoint.</param>
+    public static WorldDefinitionAdmission DeserializeForAdmission(byte[] utf8Json, IMachineValidationCatalog machines, string? documentDirectory = null, WorldPrivateDrawKeys? drawKeys = null, WorldDrawPositions? positions = null) {
         ArgumentNullException.ThrowIfNull(argument: utf8Json);
         ArgumentNullException.ThrowIfNull(argument: machines);
         try {
             var definition = ParseEmbedded(documentDirectory: documentDirectory, utf8Json: utf8Json);
 
+            if (drawKeys is not null) { definition = drawKeys.Install(definition, restore: positions); }
             if (!WorldDefinitionValidator.TryAdmitLocally(admission: out var admission, definition: definition,
                 machines: machines, reason: out var reason)) {
                 throw new InvalidOperationException(message: reason);
@@ -32,7 +35,7 @@ public static partial class WorldDefinitionSerialization {
     private static WorldDefinition ParseEmbedded(byte[] utf8Json, string? documentDirectory) {
         WorldBootWork.Count(kind: WorldBootWork.Parses);
 
-        var definition = ((JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Default.WorldDefinition)
+        var definition = ((JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Authored.WorldDefinition)
             ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null.")) with { DocumentDirectory = documentDirectory });
 
         if (!WorldStateDocumentValues.TryResolve(definition: definition, reason: out var reason, resolved: out var resolved)) {

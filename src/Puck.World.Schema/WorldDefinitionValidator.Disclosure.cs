@@ -44,7 +44,7 @@ public static partial class WorldDefinitionValidator {
             errors
         );
         if (row.Draw is { } draw) {
-            if (draw.Secret is { } secret && (!draw.PrivateStream || secret.IsEmpty)) {
+            if (draw.Secret is not null && !draw.PrivateStream) {
                 errors.Add(item: $"state row {row.Name}: a draw secret requires privateStream and a nonzero key.");
             }
             if (draw.PrivateStream && (!GeneratorEngine.TryResolveSource(definition.Generators, draw, out var generator, out _) ||

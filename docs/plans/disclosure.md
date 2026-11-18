@@ -2089,7 +2089,7 @@ Vector detachment uses `CellValue.DetachedCopy`, shared with pool seed records
 and disclosure images.
 
 Private draw sites install their keys at authority load and whole-row
-composition through `WorldPrivateDrawKeys.TryInstall`. An operator editing
+composition through `WorldPrivateDrawKeys.InstallRow`. An operator editing
 a row reads its replica declaration. Submitting that declaration preserves
 the installed key, and the source contract refuses a submitted secret.
 The [generator reference](../reference/state/generators.md#keep-draws-private)
@@ -2118,7 +2118,7 @@ operator replicas. `WorldStateDisclosure.DiscloseRow` removes it for initial
 documents and refreshed image skeletons; authority persistence keeps it.
 `DisclosureReviewLawTests.ReplicaDrawsNeverCarryTheAuthoritySecret` failed for
 both public and restricted rows before this correction and covers both plus
-operator observations and the persistence control.
+operator observations and the authority control.
 
 `WorldDocument.TryPrepareMutation` now admits before choosing the state or
 document route. Successful transaction completion is the sole constructor of

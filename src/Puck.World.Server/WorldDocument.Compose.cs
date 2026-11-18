@@ -1214,15 +1214,14 @@ public sealed partial class WorldDocument {
                         return false;
                     }
 
-                    if (!WorldPrivateDrawKeys.Authority.TryInstall(current, instanceIdentity, m.Row, previousRow, out var installed, out reason)) {
-                        candidate = current;
-                        return false;
-                    }
+                    var last = current.StateRaw?.DrawInstallCount ?? 0;
+                    var installed = authority.DrawKeys.InstallRow(m.Row, previousRow, ref last);
                     var declared = current.WithWorldState(rows: Upsert(
                         list: current.AuthoredState,
                         item: installed,
                         keyOf: static row => row.Name
                     ));
+                    declared = WorldPrivateDrawKeys.WithLast(declared, last);
                     var time = ComposeTime(
                         definition: declared,
                         engineTick: engineTick,

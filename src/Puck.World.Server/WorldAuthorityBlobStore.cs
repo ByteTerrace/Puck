@@ -198,7 +198,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
     public async Task<WorldAuthorityStoreOutcome> PublishDefinitionAsync(WorldAuthorityIdentity identity, WorldDefinition composed, CancellationToken cancellationToken, WorldAuthorityFence? fence = null) {
         ArgumentNullException.ThrowIfNull(composed);
         return await PublishDefinitionRootAsync(
-            bytes: WorldDefinitionSerialization.SerializeAuthored(definition: composed),
+            bytes: WorldDefinitionSerialization.Serialize(definition: composed),
             cancellationToken: cancellationToken,
             identity: identity,
             suppliedFence: fence
@@ -300,7 +300,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         op: ct => m_store.WriteAsync(
             m_target,
             RootAddress(identity: identity),
-            WorldAuthorityRootCodec.Encode(root: root),
+            JsonSerializer.SerializeToUtf8Bytes(WorldAuthorityRootCodec.SerializeAuthorityState(root)),
             mode,
             ifMatchVersion,
             ct
@@ -703,36 +703,16 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity: identity
             ).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (current is null) {
-                var token = Guid.NewGuid();
-                var candidate = WorldAuthorityRoot.Empty with { Epoch = 1, FenceToken = token, Sequence = 1 };
-                var created = await WriteRootAsync(
-                    cancellationToken: cancellationToken,
-                    identity: identity,
-                    ifMatchVersion: null,
-                    mode: ObjectBlobWriteMode.CreateOnly,
-                    root: candidate
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
-                if (
-                    created.Succeeded &&
-                    (created.VersionToken is { Length: > 0 } createdVersion)
-                ) return new WorldAuthorityFence(
-                    candidate.Epoch,
-                    token,
-                    createdVersion
-                );
-                continue;
-            }
+            var root = current?.Root ?? WorldAuthorityRoot.Empty;
             var nextToken = Guid.NewGuid();
-            var next = current.Value.Root with { Epoch = checked((current.Value.Root.Epoch + 1)), FenceToken = nextToken, Sequence = checked((current.Value.Root.Sequence + 1)) };
-            var result = await WriteRootAsync(
-                identity,
-                next,
-                current.Value.VersionToken,
-                ObjectBlobWriteMode.Overwrite,
-                cancellationToken
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            var next = root with {
+                DrawSeed = root.DrawSeed ?? Convert.ToBase64String(WorldPrivateDrawKeys.Create().SerializeAuthorityState()!),
+                Epoch = checked(root.Epoch + 1),
+                FenceToken = nextToken,
+                Sequence = checked(root.Sequence + 1)
+            };
+            var result = await WriteRootAsync(identity, next, current?.VersionToken,
+                current is null ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
 
             if (
                 result.Succeeded &&
@@ -1077,6 +1057,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         }
         WorldDefinitionAdmission? admission = null;
 
+        var keys = rooted.Root.DrawSeed is { } seed ? WorldPrivateDrawKeys.FromAuthorityState(Convert.FromBase64String(seed)) : WorldPrivateDrawKeys.Preview;
         if (definitionBytes is { } bytes) {
             var resolver = new WorldStorageNeighbourResolver(
                 m_store,
@@ -1091,7 +1072,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 identity.World.Value,
                 resolver.ResolveHostedAsync,
                 cancellationToken,
-                drawOwner: identity.Owner,
+                keys: keys,
                 catalog: m_machines,
                 documentDirectory: m_documentDirectory
             ).ConfigureAwait(continueOnCapturedContext: false);
@@ -1106,7 +1087,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
                 CheckpointOrdinal: rooted.Root.CheckpointOrdinal,
                 Entries: journal.Entries
             )
-        ) { Admission = admission };
+        ) { Admission = admission, DrawKeys = keys };
     }
 
     private async Task<WorldAuthorityStoreOutcome> AppendRootAsync(WorldAuthorityIdentity identity, WorldAuthorityJournalEntry entry, WorldAuthorityFence? suppliedFence, WorldAuthorityOperationReceipt? receipt, CancellationToken cancellationToken) {

@@ -27,8 +27,9 @@ public static class WorldSourceLoader {
     /// <returns><see langword="true"/> when the document composed, loaded and was admitted.</returns>
     /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/>, empty or white space.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="document"/> is <see langword="null"/>.</exception>
+    /// <param name="keys">The installed world sampler, or null for an authoring preview.</param>
     public static bool TryLoadForAdmission(string path, byte[] document, out WorldDefinitionAdmission? admission, out string reason, string catalogFingerprint = "",
-        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null) {
+        IMachineValidationCatalog? catalog = null, Func<WorldDefinition, WorldDefinition>? overrides = null, CompiledWorldRequest? compiled = null, WorldCompiledSource? sourceCompilation = null, WorldPrivateDrawKeys? keys = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
         ArgumentNullException.ThrowIfNull(argument: document);
 
@@ -49,6 +50,7 @@ public static class WorldSourceLoader {
         var directory = WorldDocumentPaths.DirectoryOf(documentPath: path);
 
         return WorldDefinitionLoader.TryLoadForAdmission(
+            keys: keys,
             admission: out admission,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,

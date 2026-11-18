@@ -63,7 +63,10 @@ public sealed record Draw(
     long Skip = 0L,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PrivateStream = false
 ) {
-    /// <summary>The installed authority key. Authority snapshots serialize this member.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ClosedBitset256? Secret { get; init; }
+    /// <summary>The installed authority key. Only an installed site can sample the stream.</summary>
+    [JsonIgnore]
+    public PrivateDrawStream? Secret { get; internal init; }
+
+    /// <summary>Returns the authored declaration for a recipient.</summary>
+    public Draw WithoutStream() => Secret is null ? this : this with { Secret = null };
 }

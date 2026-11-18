@@ -533,6 +533,13 @@ public sealed partial class WorldDocument {
         // Cross-document claims were proved before enqueue. Apply-time validation runs from Step, so it repeats only
         // document-local checks and never reaches transport from the tick path, and a prepared admission of this exact
         // candidate already holds them.
+        if (candidate.AuthoredState.Any(r => r.Draw?.PrivateStream == true) || priorDefinition.StateRaw?.DrawInstallCount > 0) {
+            if (!WorldDrawBootResolver.TryResolve(candidate, Host.InstanceIdentity, out candidate, out var drawReason, Host.DrawKeys, Host.MaterializeArena()) ||
+                !WorldStateDocumentValues.TryResolve(candidate, out candidate, out drawReason)) {
+                RejectRebuild(verb, drawReason, connectionId, correlationId);
+                return false;
+            }
+        }
         var admitted = ((admission is not null) && admission.AppliesTo(definition: candidate, machines: Host.Machines.ValidationCatalog))
             ? admission
             : null;

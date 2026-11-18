@@ -98,6 +98,9 @@ public abstract record WorldReplayEntry {
     /// <param name="Value">The screen op.</param>
     /// <param name="Actor">The principal that submitted the op.</param>
     internal sealed record ScreenOp(WorldScreenOp Value, Principal Actor) : WorldReplayEntry;
+    /// <summary>One private stream word consumed at a recorded address.</summary>
+    internal sealed record PrivateWord(PrivateDrawWord Word) : WorldReplayEntry;
+
     /// <summary>A pause or resume of the boot instance's own live schedule lever (<c>world.rate pause</c>/
     /// <c>resume</c>) — recorded so a saved tape carries a legible history of when a pause/resume happened, alongside
     /// the header's own <see cref="WorldReplaySnapshot.SimulationRate"/> (the initial authored rate). Purely
@@ -315,7 +318,7 @@ public sealed partial class WorldReplaySnapshot {
     // authority, every arrival a commit decided with its outcome and each traveler as its identity projection alone,
     // federated input, the seat identity a fork switches to, and the optional start checkpoint a mid-session recording
     // or a saved history branch starts from.
-    private const uint Version = 14u;
+    private const uint Version = 15u;
 
     /// <summary>Gets the recorded authority's identity — the namespace its crossings are keyed under, so a set of
     /// tapes pairs one authority's departure with another's arrival.</summary>
@@ -429,6 +432,7 @@ public sealed partial class WorldReplaySnapshot {
     /// <exception cref="WorldReplayCodecException">An authority-entry kind this apply does not handle.</exception>
     internal static void ApplyRecordedTick(WorldServer server, WorldPopulation population, WorldReplayTickInput input, List<bool> expectedMutationOutcomes, Queue<bool> replayedMutationOutcomes, Func<WorldReplayEntry.Rebuild, (WorldDefinition? Verified, string? Pin)> rebuildSource) {
         server.ReplaysInput = true;
+        server.DrawKeys.Replay(input.Authority.OfType<WorldReplayEntry.PrivateWord>().Select(entry => entry.Word).ToArray());
         foreach (var entry in input.Authority) {
             switch (entry) {
                 case WorldReplayEntry.Command command:
@@ -545,6 +549,7 @@ public sealed partial class WorldReplaySnapshot {
                     server.Events.ObserveLinkDelivery(adjacencyName: linkDelivery.Adjacency);
 
                     break;
+                case WorldReplayEntry.PrivateWord:
                 case WorldReplayEntry.RateLever:
                     // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
                     // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
@@ -928,6 +933,8 @@ public sealed partial class WorldReplaySnapshot {
                 return ReadArrivalEntry(reader: ref reader);
             case 21:
                 return ReadDepartureEntry(reader: ref reader);
+            case 26:
+                return new WorldReplayEntry.PrivateWord(new(reader.ReadInt64(), reader.ReadUInt64(), reader.ReadUInt64(), reader.ReadInt64(), reader.ReadUInt32()));
             case 25: {
                     var encoded = reader.ReadBlock(
                         field: "custody record",
@@ -1531,6 +1538,14 @@ public sealed partial class WorldReplaySnapshot {
                     principal: designation.Actor
                 );
 
+                break;
+            case WorldReplayEntry.PrivateWord(var word):
+                writer.WriteByte(26);
+                writer.WriteInt64(word.Installation);
+                writer.WriteUInt64(word.Seed);
+                writer.WriteUInt64(word.Stream);
+                writer.WriteInt64(word.Cursor);
+                writer.WriteUInt32(word.Value);
                 break;
             case WorldReplayEntry.RateLever rateLever:
                 writer.WriteByte(value: 9);

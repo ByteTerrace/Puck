@@ -9,10 +9,6 @@ namespace Puck.World;
 /// <param name="WorldSeed">Folded into every site's <c>Pcg32XshRr</c> starting state. Defaults to <c>0</c>.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldGenerationDefaults(ulong WorldSeed = 0UL) {
-    // Trusted storage supplies the tenant. A checkpoint carries it so subsequent row declarations derive
-    // under the same owner after recovery. The source contract cannot set it.
-    [JsonInclude, JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    internal Guid? DrawOwner { get; init; }
     /// <summary>Gets the section's default — world seed 0.</summary>
     public static WorldGenerationDefaults Default { get; } = new WorldGenerationDefaults(WorldSeed: 0UL);
 }

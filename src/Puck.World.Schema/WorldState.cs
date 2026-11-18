@@ -34,6 +34,10 @@ public sealed record WorldStateSection(
     IReadOnlyList<StatePool>? Pools = null,
     IReadOnlyList<StatePairPool>? PairPools = null
 ) : IStateSection {
+    /// <summary>Last allocated private site ordinal. Copied with speculative state and committed with the edit.</summary>
+    [JsonIgnore]
+    public long DrawInstallCount { get; init; }
+
     /// <inheritdoc cref="World"/>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<WorldStateRow>? World { get => field; init => field = StateLists.Freeze(items: MarkHostOwned(rows: value)); } = StateLists.Freeze(items: MarkHostOwned(rows: World));

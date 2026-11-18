@@ -6,7 +6,6 @@ using Puck.Audio.Mixing;
 using Puck.World.Protocol;
 using Puck.World.Machines;
 using Puck.World.Server;
-using Puck.World.Transpiler;
 using static Puck.World.WorldCommandDefinition;
 
 namespace Puck.World;
@@ -30,7 +29,7 @@ namespace Puck.World;
 /// one — and that identity is not a formality: <see cref="WorldServer"/>'s per-section <see cref="WorldCapability.Mutate"/>
 /// grant check applies to EVERY submitted mutation regardless of which module produced it, so revoking a
 /// principal's grant over a section refuses that principal's writes here exactly like any other's.</para></remarks>
-internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldReload reload) : ICommandModule {
+internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldRenderSettings renderSettings, Client.WorldAudioDirector audioDirector, PresentPacingControl pacing, Client.WorldBindingBarVisibility bindingBarVisibility, Client.WorldEditorSeats editorSeats, Client.WorldTextCatalog textCatalog, WorldMachineCatalog machineCatalog, WorldScheduleRoot scheduleRoot, WorldReload reload, WorldStateRoot stateRoot) : ICommandModule {
     private static readonly CommandForms WorldKitDefaultForms = CommandForms.Of(verb: "world.kit.default", "<name>");
     private static readonly CommandForms WorldGrantSetForms = CommandForms.Of(verb: "world.grant.set", WorldGrantCommandModule.GrantForm);
     private static readonly CommandForms WorldGrantRemoveForms = CommandForms.Of(verb: "world.grant.remove", WorldGrantCommandModule.RevokeForm);
@@ -383,45 +382,10 @@ internal sealed class WorldMutationCommandModule(WorldServer server, IServerLink
                         tick: (server.NextInputTick - 1UL)
                     );
 
-                    if (target.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")) {
-                        if (!WorldSourceSave.TrySave(
-                            definition: snapshot,
-                            path: target,
-                            bytesWritten: out var sourceBytes,
-                            written: out var sources,
-                            reason: out var sourceReason,
-                            catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog),
-                            catalog: machineCatalog
-                        )) {
-                            return CommandResult.Error(output: $"[world.save: {sourceReason}; nothing written]");
-                        }
-                        server.Compact();
-                        return new CommandResult(Output: $"[world.save: {target} ({((sources.Count == 0) ? "unchanged" : $"{sourceBytes} bytes in {string.Join(separator: ", ", values: sources.Select(selector: WorldDocumentLabel.Of))}")}, source preserved)]");
-                    }
-                    var bytes = WorldDefinitionSerialization.SavePreservingBasis(
-                        basisPath: out var basisPath,
-                        definition: snapshot,
-                        imports: out var preservedImports,
-                        note: out var note,
-                        path: target,
-                        catalogFingerprint: WorldBootComposition.MachineCatalogFingerprint(machineCatalog: machineCatalog),
-                        catalog: machineCatalog
-                    );
-
-                    server.Compact();
-
-                    var derivation = (((basisPath is { }) || (preservedImports.Count > 0))
-                        ? $", basis: {((basisPath is { })
-                            ? basisPath
-                            : "none")}, imports: {((preservedImports.Count > 0)
-                            ? preservedImports.Count.ToString(provider: CultureInfo.InvariantCulture)
-                            : "0")}"
-                        : ((note.Length > 0)
-                            ? $", {note}"
-                            : ""
-                    ));
-
-                    return new CommandResult(Output: $"[world.save: {target} ({bytes} bytes{derivation})]");
+                    return WorldSaveSnapshot.TryWrite(snapshot, target, definitionSource, server, machineCatalog,
+                        WorldBootComposition.MachineCatalogFingerprint(machineCatalog), stateRoot, out var result)
+                        ? new CommandResult(Output: $"[world.save: {result}]")
+                        : CommandResult.Error(output: $"[world.save: {result}; nothing written]");
                 } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)) {
                     return CommandResult.Error(output: $"[world.save: could not write {target} ({exception.Message})]");
                 }

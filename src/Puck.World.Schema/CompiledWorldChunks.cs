@@ -43,6 +43,7 @@ public sealed record CompiledWorldProduct(ReadOnlyMemory<byte> Payload, IReadOnl
 /// keys, the instance its draws are seeded for, the document it stands for, and the products chunks have produced so
 /// far.</summary>
 public sealed class CompiledWorldContext {
+    internal WorldPrivateDrawKeys? DrawKeys { get; set; }
     private readonly Lazy<WorldDefinition> m_authored;
 
     /// <summary>Initializes a new instance of the <see cref="CompiledWorldContext"/> class.</summary>
@@ -248,6 +249,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
         product = null;
 
         if (!WorldDefinitionLoader.TryDraw(
+            keys: context.DrawKeys,
             definition: context.Authored,
             drawn: out var drawn,
             instanceIdentity: context.InstanceIdentity,
@@ -292,7 +294,7 @@ public sealed class DefinitionChunk : ICompiledWorldChunk {
         }
 
         if (drawn!.AuthoredState.Any(row => row.Draw?.PrivateStream == true)) {
-            if (!WorldDefinitionLoader.TryDraw(drawn, context.SourceName, context.InstanceIdentity, out var installed, out reason)) { return false; }
+            if (!WorldDefinitionLoader.TryDraw(drawn, context.SourceName, context.InstanceIdentity, out var installed, out reason, context.DrawKeys)) { return false; }
             context.Drawn = installed with { DocumentDirectory = context.DocumentDirectory };
             return true;
         }

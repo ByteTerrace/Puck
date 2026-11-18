@@ -21,7 +21,7 @@ internal static class PuckWorldLoader {
     // entry from there. The directory is the source's alone and is restaged whole on every boot, so a world the
     // source no longer declares cannot be reached.
     private static bool TryBootComposition(string path, IReadOnlyList<WorldCompiledWorld> worlds, string? named, out WorldDefinitionSource source, out string failure, string catalogFingerprint,
-        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches) {
+        IMachineValidationCatalog catalog, Func<WorldDefinition, WorldDefinition>? overrides, WorldStateRoot stateRoot, WorldCacheRoots caches, bool authority) {
         source = null!;
 
         var directory = Path.Combine(
@@ -62,7 +62,9 @@ internal static class PuckWorldLoader {
             )
         );
 
+        if (!WorldDrawSave.TryOpen(authority, stateRoot, path, entryName, out var keys, out failure)) { return false; }
         if (!WorldDefinitionLoader.TryLoadFileForAdmission(
+            keys: keys,
             admission: out var loaded,
             catalog: catalog,
             contentHash: out _,
@@ -86,7 +88,7 @@ internal static class PuckWorldLoader {
         source = new WorldDefinitionSource(
             Definition: loaded!.Definition,
             SourcePath: entryPath
-        ) { Admission = loaded };
+        ) { Admission = loaded, DrawKeys = keys, CompositionOrigin = (entryPath, path, entryName) };
         failure = string.Empty;
 
         return true;
@@ -106,8 +108,9 @@ internal static class PuckWorldLoader {
     /// overrides nothing the document carries.</param>
     /// <param name="entry">The declared world of a composition source to boot in place of its <c>entry world</c>, or
     /// null for the declared entry.</param>
+    /// <param name="authority">Whether this boot owns the local world authority save.</param>
     public static bool TryResolveWorld(string worldPath, out WorldDefinitionSource source, out string failure, WorldStateRoot stateRoot, WorldCacheRoots caches, IMachineValidationCatalog catalog, string catalogFingerprint = "",
-        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null) {
+        Func<WorldDefinition, WorldDefinition>? overrides = null, string? entry = null, bool authority = false) {
         string path;
 
         try {
@@ -145,7 +148,9 @@ internal static class PuckWorldLoader {
                 return false;
             }
 
+            if (!WorldDrawSave.TryOpen(authority, stateRoot, path, null, out var documentKeys, out failure)) { source = null!; return false; }
             return WorldDefinitionLoader.TryResolve(
+                keys: documentKeys,
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 compiledWorlds: CompiledWorlds(caches: caches),
@@ -189,6 +194,7 @@ internal static class PuckWorldLoader {
 
         if (compiled!.Worlds.Count > 0) {
             return TryBootComposition(
+                authority: authority,
                 caches: caches,
                 stateRoot: stateRoot,
                 catalog: catalog,
@@ -214,7 +220,9 @@ internal static class PuckWorldLoader {
             documentPath: path
         );
 
+        if (!WorldDrawSave.TryOpen(authority, stateRoot, path, null, out var keys, out failure)) { source = null!; return false; }
         if (!WorldSourceLoader.TryLoadForAdmission(
+            keys: keys,
             admission: out var loaded,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
@@ -239,7 +247,7 @@ internal static class PuckWorldLoader {
         source = new WorldDefinitionSource(
             Definition: loaded!.Definition,
             SourcePath: path
-        ) { Admission = loaded };
+        ) { Admission = loaded, DrawKeys = keys };
         failure = string.Empty;
         return true;
     }

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Puck.Assets;
 
 namespace Puck.World.Server;
@@ -63,7 +64,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
         [property: JsonPropertyName("operation")] Guid OperationId,
         [property: JsonPropertyName("rootVersion")] string RootVersion,
         [property: JsonPropertyName("capturedAt")] DateTimeOffset CapturedAt,
-        [property: JsonPropertyName("root")] WorldAuthorityRoot Root
+        [property: JsonPropertyName("root")] JsonObject Root
     );
 
     public static byte[] Encode(WorldAuthorityIdentity identity, Guid operationId, WorldAuthorityRootSnapshot root) => JsonSerializer.SerializeToUtf8Bytes(
@@ -74,7 +75,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
             operationId,
             root.VersionToken,
             DateTimeOffset.UtcNow,
-            root.Root
+            WorldAuthorityRootCodec.SerializeAuthorityState(root.Root)
         ),
         WorldAuthorityRootCodec.Options
     );
