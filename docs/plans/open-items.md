@@ -46,10 +46,25 @@ The next lead rewrites this section when it hands off in turn.
   machine. The slowest frames are the lift chapter's simulation steps; the
   largest GPU part is the views pass. That run used the debug world's boot
   settings, not a device's `high` table, until the `bench` lane applies one.
-- **In flight:** `vkalloc`, on branch `worktree-agent-afb2961687c8173ec`, hunts
-  Vulkan's per-frame allocation, several times Direct3D 12's at 1440p. If its
-  session ended before it handed back, start it again from the branch's last
-  commit or from scratch, and land it if its evidence holds.
+- **Allocation, after `vkalloc` landed:** the per-frame recording path and
+  the irradiance snapshot no longer allocate. What remains, for the plan's
+  second-wave allocation lane:
+  - the warm loop re-bakes on both backends, about 4 GB of allocation in a
+    chapter where it runs, as the detail level falls over the route
+    (`SdfResidencySelector` and the bake);
+  - every code version shares one mesh store, so a less-used identity stays
+    cold, and each backend has its own set because the bake identity
+    includes the kernel bytecode; compare allocation across backends or
+    builds only on a warmed store (the dotnet-performance skill says how);
+  - `SdfMeshIrradiance.RelightGpu` uploads the whole volume whenever
+    `Stands` fails, about twice a second while walking;
+  - irradiance scene rebuilds allocate `Node[]` through `SharedArrayPool`
+    misses;
+  - the lift allocates in spikes (frame thread 2.2 MB mean against 60 KB
+    median).
+- **In flight:** nothing from this session. The GPU capabilities research
+  round adds its section to the rendering plan when it lands; if it has not,
+  re-run it from the plan's first wave context.
 - **Settled this round and recorded in their homes:** the frame bar's sizes,
   topologies and device order (AGENTS.md); deployed data is scratch
   (AGENTS.md); named engine gaps are filled first, and a material improvement
