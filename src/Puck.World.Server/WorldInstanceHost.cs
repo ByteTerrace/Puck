@@ -83,6 +83,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // `destinations` row can never mint a doorless, keyless row Orleans never placed.
     private readonly bool m_admitsSpawn;
     private readonly bool m_presents;
+    private readonly bool m_scenario;
     private readonly CancellationToken m_applicationStopping;
     // The host-selected machine metadata used by every live instance load, neighbour composition, and reload.
     private readonly string m_catalogFingerprint;
@@ -1233,7 +1234,8 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             resolvedPath: resolvedPath
         ));
 
-        var keys = WorldPrivateDrawKeys.Create();
+        // A neighbour boot has no tape of its initial words. Refuse private sites instead of opening a live key.
+        var keys = m_scenario ? WorldPrivateDrawKeys.Missing : WorldPrivateDrawKeys.Create();
         var admission = prepared?.Admission;
         if (admission?.Definition.AuthoredState.Any(r => r.Draw?.PrivateStream == true) == true) { admission = null; }
 
@@ -1248,6 +1250,9 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             path: resolvedPath,
             reason: out reason
         )) {
+            if (m_scenario && reason.Contains("PrivateDrawSeedMissing", StringComparison.Ordinal)) {
+                reason = $"MissingPrivateDraw: scenario instance '{name}' has no recorded private draw words. {reason}";
+            }
             return false;
         }
         var definition = admission!.Definition;
@@ -1514,8 +1519,10 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <see langword="false"/>, and its session mirrors drop the snapshots their destinations send.</param>
     /// <param name="jobs">The engine's job pool every spawned row's server forks its partitioned tick phases onto, or
     /// <see langword="null"/> for serial servers.</param>
-    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null) {
+    /// <param name="scenario">Whether neighbour starts run in a deterministic scenario with no live entropy.</param>
+    public WorldInstanceHost(IWorldEmbodiedSeats seats, WorldSessionResolver resolver, Guid machineId, WorldStateRoot stateRoot, CancellationToken applicationStopping, Func<IReadOnlyList<WorldScreen>, IEnumerable<IMachineEngine>, WorldOutputHub?, IWorldMachineHost> machineHostFactory, bool admitsSpawn = true, string catalogFingerprint = "", IMachineValidationCatalog? machineCatalog = null, Action<WorldRemoteAuthority>? travelerRouteStarted = null, HostPacing? pacing = null, Func<WorldDefinition, WorldServer, IWorldAddonHost>? addonHostFactory = null, bool presents = true, Puck.Hosting.Jobs.JobPool? jobs = null, bool scenario = false) {
         m_presents = presents;
+        m_scenario = scenario;
         m_pacing = (pacing ?? HostPacing.WallClockInline);
         m_jobs = jobs;
         ArgumentNullException.ThrowIfNull(argument: seats);

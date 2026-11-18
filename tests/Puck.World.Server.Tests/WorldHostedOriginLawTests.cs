@@ -268,7 +268,7 @@ public sealed class WorldHostedOriginLawTests {
         );
     }
     [Fact]
-    public async Task FirstReadRewritesARootWithRetiredDrawFieldsOnce() {
+    public async Task RetiredDrawRootsRefuseWithoutWritingFromReadsOrActivation() {
         using var directory = new TemporaryDirectory();
         var target = WorldAuthorityBlobStore.DirectoryTarget(directory.RootPath);
         var identity = new WorldAuthorityIdentity(Guid.NewGuid(), SafeName.Parse("table"));
@@ -276,17 +276,23 @@ public sealed class WorldHostedOriginLawTests {
         var store = new WorldAuthorityBlobStore(blobs, target);
         var token = TestContext.Current.CancellationToken;
         var address = new ObjectBlobAddress(identity.Owner, $"{WorldOwnedWorldSync.HostedPrivateNamespace}/table/authority/root");
-        var image = System.Text.Json.JsonSerializer.SerializeToNode(WorldAuthorityRoot.Empty)!.AsObject();
+        var image = System.Text.Json.JsonSerializer.SerializeToNode(WorldAuthorityRoot.Empty with { Version = 1 })!.AsObject();
         image["drawSeed"] = Convert.ToBase64String(Enumerable.Repeat((byte)7, 32).ToArray());
         image["drawGeneration"] = 14;
-        Assert.True((await blobs.WriteAsync(target, address, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(image), ObjectBlobWriteMode.CreateOnly, cancellationToken: token)).Succeeded);
-        var migrated = Assert.IsType<WorldAuthorityRootSnapshot>(await store.LoadRootAsync(identity, token));
-        Assert.Equal(WorldAuthorityRoot.Empty, migrated.Root);
+        var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(image);
+        var published = await blobs.WriteAsync(target, address, bytes, ObjectBlobWriteMode.CreateOnly, cancellationToken: token);
+        Assert.True(published.Succeeded);
+        foreach (var read in new Func<Task>[] {
+            () => store.LoadRootAsync(identity, token),
+            () => store.LoadPublishedDefinitionBytesAsync(identity, token),
+            () => store.AcquireActivationAsync(identity, token)
+        }) {
+            var error = await Assert.ThrowsAsync<InvalidDataException>(read);
+            Assert.Contains("AuthorityRootVersionUnsupported", error.Message);
+        }
         var persisted = (await blobs.ReadAsync(target, address, token))!.Value;
-        var clean = System.Text.Json.Nodes.JsonNode.Parse(persisted.Content.Span)!.AsObject();
-        Assert.False(clean.ContainsKey("drawSeed"));
-        Assert.False(clean.ContainsKey("drawGeneration"));
-        Assert.Equal(migrated, await store.LoadRootAsync(identity, token));
+        Assert.Equal(bytes, persisted.Content.ToArray());
+        Assert.Equal(published.VersionToken, persisted.VersionToken);
     }
 
     [Fact]

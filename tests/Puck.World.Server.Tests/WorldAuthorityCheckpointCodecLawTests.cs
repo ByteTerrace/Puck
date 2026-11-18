@@ -828,7 +828,7 @@ public sealed partial class WorldAuthorityCheckpointCodecLawTests {
         var refusal = Assert.Throws<InvalidDataException>(testCode: () => WorldReplaySnapshot.Read(stream: stream));
         Assert.StartsWith(expectedStartString: "ShapeMismatch:", actualString: refusal.Message);
         Assert.Contains(expectedSubstring: "version 13", actualString: refusal.Message);
-        Assert.Contains(expectedSubstring: "version 14 only", actualString: refusal.Message);
+        Assert.Contains(expectedSubstring: "this build reads magic", actualString: refusal.Message);
     }
     // Every older layout lacks a section the current reader requires, and a newer one is unknown to it; the envelope
     // refuses both by version before any payload is read with the wrong layout.

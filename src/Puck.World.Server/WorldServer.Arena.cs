@@ -185,6 +185,11 @@ public sealed partial class WorldServer {
     // The one assignment of the live arena: the work counters and the store bound document values read follow it.
     [Replaces(root: typeof(StateArena))]
     private void AssignArena(StateArena arena) {
+        foreach (var row in arena.Rows) {
+            if (row.Draw is { PrivateStream: true } draw && !DrawKeys.Owns(draw.Secret)) {
+                throw new InvalidDataException($"PrivateDrawSamplerRefused: row '{row.Name}' does not belong to this authority.");
+            }
+        }
         m_arena = arena;
         m_arenaWork.Retarget(target: arena);
         (m_liveValues ??= new WorldLiveValues(clock: () => m_ruleHost.Time)).Arena = arena;

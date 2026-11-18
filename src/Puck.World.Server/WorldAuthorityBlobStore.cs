@@ -246,36 +246,13 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
         )
     ).ConfigureAwait(continueOnCapturedContext: false);
     private async Task<WorldAuthorityRootSnapshot?> ReadRootSnapshotAsync(WorldAuthorityIdentity identity, CancellationToken cancellationToken) {
-        for (var attempt = 0; attempt < MaxCasAttempts; attempt++) {
-            var content = await ReadAsync(RootAddress(identity), cancellationToken).ConfigureAwait(false);
-            if (content is not { } found) { return null; }
-            if (found.VersionToken is not { Length: > 0 } token) { throw new InvalidDataException("authority root has no CAS version token"); }
-            if (!WorldAuthorityRootCodec.TryDecode(found.Content.Span, out var root, out var reason, out var retiredFields, migrating: true)) {
-                throw new InvalidDataException($"authority root is corrupt — {reason}");
-            }
-            if (!retiredFields) { return new(root, token); }
-
-            root = await MigratePrivateDrawCheckpointAsync(identity, root, cancellationToken).ConfigureAwait(false);
-            var result = await WriteRootAsync(identity, root, token, ObjectBlobWriteMode.Overwrite, cancellationToken).ConfigureAwait(false);
-            if (result.Succeeded && result.VersionToken is { Length: > 0 } migrated) { return new(root, migrated); }
-            if (!result.PreconditionFailed) { throw new IOException("Could not publish the migrated authority root."); }
+        var content = await ReadAsync(RootAddress(identity), cancellationToken).ConfigureAwait(false);
+        if (content is not { } found) { return null; }
+        if (found.VersionToken is not { Length: > 0 } token) { throw new InvalidDataException("authority root has no CAS version token"); }
+        if (!WorldAuthorityRootCodec.TryDecode(found.Content.Span, out var root, out var reason)) {
+            throw new InvalidDataException($"authority root refused — {reason}");
         }
-        throw new IOException("Authority root moved during private-draw migration.");
-    }
-    private async Task<WorldAuthorityRoot> MigratePrivateDrawCheckpointAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, CancellationToken cancellationToken) {
-        // Publish the replacement checkpoint before the CAS. A lost race leaves the winning root intact.
-        if (root.CheckpointHash is { } oldHash) {
-            var blob = await ReadCheckpointBlobAsync(identity, root, oldHash, cancellationToken).ConfigureAwait(false);
-            if (!WorldAuthorityCheckpointCodec.TryDecodeCore(blob.Encoded.Span, migrating: true, out var checkpoint, out var reason, m_documentDirectory)) {
-                throw new InvalidDataException($"cannot migrate private-draw checkpoint — {reason}");
-            }
-            var bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint!);
-            var hash = WorldDefinitionFileSource.ComputeContentHash(bytes);
-            var put = await PutImmutableAsync(CheckpointCandidateAddress(identity, root.CheckpointOrdinal, hash), bytes, cancellationToken).ConfigureAwait(false);
-            if (!put.Ok) { throw new IOException(put.Detail); }
-            root = root with { CheckpointHash = hash };
-        }
-        return root;
+        return new(root, token);
     }
     private async Task<ObjectBlobWriteResult> WriteRootAsync(WorldAuthorityIdentity identity, WorldAuthorityRoot root, string? ifMatchVersion, ObjectBlobWriteMode mode, CancellationToken cancellationToken) => await UnderTimeoutAsync(
         cancellationToken: cancellationToken,
@@ -631,7 +608,7 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
             snapshot: present
         )
         ) return WorldAuthorityStoreOutcome.StaleFence(detail: "activation fence is no longer current");
-        var basis = saved.RequiresDrawMigration ? await MigratePrivateDrawCheckpointAsync(identity, saved.Root, cancellationToken).ConfigureAwait(false) : saved.Root;
+        var basis = saved.Root;
         var restored = basis with {
             Epoch = checked((Math.Max(
             val1: present.Root.Epoch,

@@ -349,6 +349,7 @@ public sealed partial class WorldReplayTape {
             );
             var shadow = new WorldServer(
                 definition: definition,
+                drawKeys: WorldPrivateDrawKeys.Recorded,
                 population: population,
                 profiles: m_profiles,
                 envelope: new WorldRenderEnvelope(),

@@ -57,7 +57,11 @@ agent works in that mode by default, without asking:
   is a constraint (the owner's ruling: protecting them "limits our greenfield
   development"). Change one whenever the design is better for it, migrate every
   caller, and re-record what it invalidates in the same change; a brief never
-  makes one a stopping condition. Determinism itself stays (rule 4).
+  makes one a stopping condition. Determinism itself stays (rule 4). Data
+  already deployed (the hosted dev store, Azure roots and checkpoints) is
+  scratch until the owner says otherwise (the owner's ruling): a format change
+  resets it at the next deploy, and no code is written to migrate or tolerate
+  the old shape.
 - The engine is generic (the owner's ruling). No one feature's, world's or
   game's look or vocabulary enters an engine contract: core design tokens,
   enums, schema names and defaults, default shader paths, or engine prose. CRT

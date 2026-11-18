@@ -30,7 +30,7 @@ public sealed class PrivateDrawStream {
 
     /// <summary>Opens this site's word source for its issuing authority. Public previews need no credential.</summary>
     public PrivateDrawSample? Open(PrivateDrawAuthority? authority) =>
-        ReferenceEquals(Owner, authority) || Owner.PreviewWords ? m_sample : null;
+        ReferenceEquals(Owner, authority) || (authority is null && Owner.PreviewWords) ? m_sample : null;
 
     /// <summary>Computes one word from an installed key.</summary>
     internal static uint Word(ClosedBitset256 secret, ulong seed, ulong stream, long cursor) {

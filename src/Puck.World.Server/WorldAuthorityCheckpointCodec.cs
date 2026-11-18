@@ -125,11 +125,7 @@ public static partial class WorldAuthorityCheckpointCodec {
     /// <param name="reason">The one-line refusal reason, or empty on success.</param>
     /// <param name="documentDirectory">The captured definition's asset directory, when its paths are relative.</param>
     /// <returns><see langword="true"/> when the blob decoded exactly.</returns>
-    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) =>
-        TryDecodeCore(bytes, migrating: false, out checkpoint, out reason, documentDirectory);
-
-    // Only the durable root migration calls this with the retired layout. Every public checkpoint reader stays strict.
-    internal static bool TryDecodeCore(ReadOnlySpan<byte> bytes, bool migrating, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory) {
+    public static bool TryDecode(ReadOnlySpan<byte> bytes, out WorldAuthorityCheckpoint? checkpoint, out string reason, string? documentDirectory = null) {
         checkpoint = null;
 
         var reader = new WireReader(bytes: bytes);
@@ -149,10 +145,10 @@ public static partial class WorldAuthorityCheckpointCodec {
 
         if (
             !reader.Failed &&
-            (migrating ? version is not (35 or 36) : version != SupportedVersion)
+            (version != SupportedVersion)
         ) {
             reader.Fail(
-                detail: migrating ? $"checkpoint version {version} is not a retired private-draw layout" : $"checkpoint version {version} is not the supported version {SupportedVersion}",
+                detail: $"CheckpointVersionUnsupported: checkpoint version {version} is not the supported version {SupportedVersion}",
                 refusal: WireRefusal.PayloadMalformed
             );
         }
@@ -244,7 +240,6 @@ public static partial class WorldAuthorityCheckpointCodec {
         }
 
         if (!TryDecodeServer(
-            version: version,
             bytes: serverBytes,
             definitionHash: definitionHash,
             reason: out reason,

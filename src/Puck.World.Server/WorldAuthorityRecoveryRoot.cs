@@ -24,9 +24,7 @@ public readonly record struct WorldRecoveryRootReference(
     WorldAuthorityRoot Root,
     string CapturedRootVersion,
     DateTimeOffset CapturedAt
-) {
-    internal bool RequiresDrawMigration { get; init; }
-}
+);
 /// <summary>Optional recovery-root persistence implemented by the directory and cloud authority store. Keeping this
 /// as a capability lets existing authority-store test doubles remain small while managed hosting requires the real
 /// immutable snapshot implementation.</summary>
@@ -180,10 +178,10 @@ internal static class WorldAuthorityRecoveryRootCodec {
                 !WorldAuthorityRootCodec.TryDecode(
                 Encoding.UTF8.GetBytes(s: rootElement.GetRawText()),
                 out var root,
-                out rootReason, out var retiredFields, migrating: true
+                out rootReason
             )
             ) {
-                reason = $"recovery-root authority root is corrupt — {rootReason}";
+                reason = $"recovery-root authority root refused — {rootReason}. Capture a new recovery root with the current authority.";
                 return false;
             }
             reference = new WorldRecoveryRootReference(
@@ -194,7 +192,7 @@ internal static class WorldAuthorityRecoveryRootCodec {
                 Root: root,
                 CapturedRootVersion: envelope.RootVersion,
                 CapturedAt: envelope.CapturedAt
-            ) { RequiresDrawMigration = retiredFields };
+            );
             reason = string.Empty;
             return true;
         } catch (Exception error) when ((error is JsonException or InvalidOperationException or FormatException or ArgumentException)) {
