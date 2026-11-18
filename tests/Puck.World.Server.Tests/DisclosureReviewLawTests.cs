@@ -33,7 +33,7 @@ public sealed class DisclosureReviewLawTests {
 
     private static WorldRecipientView View(WorldServer server, Principal recipient, WorldDisclosureTier tier = WorldDisclosureTier.Replica) =>
         new(() => server.Definition, () => server.Arena, recipient, tier, () => true, new WorldDisclosureImages(),
-            server.AuthorityIdentity, () => server.DeliveryTime);
+            server.AuthorityIdentity, () => server.DeliveryTime, () => server.Grants.IsOperator(recipient));
 
     [Theory]
     [InlineData(false)]

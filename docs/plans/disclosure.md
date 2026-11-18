@@ -2077,7 +2077,7 @@ beside the seeded `StateRow`; both use `StateRowShape` for domain and value
 rules. A declaration carries neither cells nor storage cursors, a phase
 sequence, a draw secret, an arena or a live value binder. `StateReadAccess`
 checks whole-row admission before each operation, gives restricted callers
-local row and key identities, copies vector payloads, and retains an unavailable
+access-bound row handles and local key identities, copies vector payloads, and retains an unavailable
 fault for its lifetime. Missing and withheld acquisitions of the **named row** throw the same
 failure. This does not close the dependent-row existence channel R5: the
 [structural write footprint](#the-structural-write-footprint) still owns that closure.
@@ -2128,21 +2128,13 @@ fault currently prevents further reads through that access; no transaction
 completion consumes it yet. These primitives must not be treated as a closed
 acquisition wall or as permission to start D0b2–D0b4.
 
-The checkpoint passed Release builds of `Puck.State.Tests`,
-`Puck.World.Server.Tests` and `Puck.Cli`, each with zero warnings and errors.
-Fifty focused state cases passed, including seven `StateReadAccessLawTests`
-cases and the existing cell-value and pool-read controls. Eighteen filtered
-server cases passed: the three missing/withheld parser pairs, operator
-acquisition and revocation, and existing diagnostic, hash and vector-disclosure
-controls. The parser fixture
-observes the simulation command's settled result, not its enqueue
-acknowledgement. A headless debug World completed `world.state.hash`,
-`world.state.hash authoritative` and `world.state.hash components`, then
-stopped with exit code zero, including a recheck after merging the integration
-tip. The subsequent shared-copy refactor was checked by the focused laws.
-Documentation links passed. These checks cover
-the checkpoint's stated invariants; the complete D0a witness packet and
-D0b1's build-negative/public-surface fixtures remain open.
+`StateReadAccessLawTests` covers access-bound handles, sticky failure, detached
+vectors and declaration acquisition. The console acquisition laws observe
+settled compose results and denied echoes, including numeric, add and multiword
+text writes to a row declared earlier in the same drain. Operator acquisition
+laws cover revocation of retained hash capabilities. These checks cover the
+checkpoint's stated invariants; the complete D0a witness packet and D0b1's
+build-negative/public-surface fixtures remain open.
 
 Step 3's completed run compares every pair of variants, not only each with its base:
 all 46 pairs over the five fixtures have identical write-door transcripts, including echoes

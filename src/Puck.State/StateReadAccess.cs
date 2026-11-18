@@ -105,18 +105,19 @@ public sealed class StateReadAccess {
     /// <summary>Reads membership count after whole-row admission.</summary>
     public int CellCount(StateReadRow rowOrdinal) => m_arena.CellCount(Require(rowOrdinal));
     /// <summary>Reads a value after whole-row admission.</summary>
-    public bool TryRead(StateReadRow rowOrdinal, CellKey key, out CellValue value) {
-        var row = Require(rowOrdinal);
-        value = default;
-        if (!TrySourceKey(key, out var source) || !m_arena.TryRead(row, source, out value)) { return false; }
-        value = Detach(value);
-        return true;
-    }
+    public bool TryRead(StateReadRow rowOrdinal, CellKey key, out CellValue value) =>
+        TryReadValue(rowOrdinal, key, ArenaTime.Origin, live: false, out value);
     /// <summary>Reads an effective value after whole-row admission.</summary>
-    public bool TryReadLive(StateReadRow rowOrdinal, CellKey key, in ArenaTime time, out CellValue value) {
+    public bool TryReadLive(StateReadRow rowOrdinal, CellKey key, in ArenaTime time, out CellValue value) =>
+        TryReadValue(rowOrdinal, key, time, live: true, out value);
+
+    // Stored and effective cell reads share admission, key ownership and payload detachment.
+    private bool TryReadValue(StateReadRow rowOrdinal, CellKey key, in ArenaTime time, bool live, out CellValue value) {
         var row = Require(rowOrdinal);
         value = default;
-        if (!TrySourceKey(key, out var source) || !m_arena.TryReadLive(row, source, in time, out value)) { return false; }
+        if (!TrySourceKey(key, out var source) || !(live
+            ? m_arena.TryReadLive(row, source, in time, out value)
+            : m_arena.TryRead(row, source, out value))) { return false; }
         value = Detach(value);
         return true;
     }
