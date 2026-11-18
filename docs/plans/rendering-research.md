@@ -1413,7 +1413,8 @@ Open items still lists several of these values among the owner's sittings
 and calls: the exposure calibration, the outdoor lighting direction's shadow
 softness, the terrain pass's compensation, the tonemapping and
 exposure-per-place entries awaiting review, and the back of a portal's
-glass. Those entries are swept to match this section.
+glass. Sweeping those entries to match this section is open work for the
+lead, since it changes the owner's list on another page.
 
 ### The owner's calls
 
