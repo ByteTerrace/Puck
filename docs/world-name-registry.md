@@ -272,6 +272,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.compensation` | State | Binding | Binding | `WorldRenderExposure.Compensation` |
 | `render.exposure.hold` | State | Binding | Binding | `WorldRenderExposure.Hold` |
 | `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
+| `render.shade.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
+| `render.shade.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `screens[].source[machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
@@ -1480,22 +1482,24 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[near].of[placement].placementId` | Placement | Names | Read | `OverlaySubject.Placement.PlacementId` |
 | `hud.panels[].elements[].sources[].when[state].binding` | State | Binding | Binding | `OverlayPredicate.State.Binding` |
 | `state.world[].field.material.toonSelect.state` | State | Binding | Read | `PaletteToonSelectDocument.State` |
+| `state.world[].field.material.shade.outputs[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
+| `state.world[].field.material.shade.values[].value.arguments[]…` | | | | re-enters `SdfShadeExpression` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
-| `state.world[].name` | State | Declares |  | `StateRow.Name` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
+| `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
+| `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
+| `state.world[].name` | State | Declares |  | `StateRowShape.Name` |
 | `state.world[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].domain[keysOf].row` | State | Names | Read | `StateDomain.KeysOf.Row` |
 | `state.world[].domain[cellsOf].topology` | Topology | Names | Read | `StateDomain.CellsOf.Topology` |
-| `state.world[].valuesFrom` | State | Names | Read | `StateRow.ValuesFrom` |
+| `state.world[].valuesFrom` | State | Names | Read | `StateRowShape.ValuesFrom` |
 | `state.world[].inverse.tokens` | State | Names | Read | `StateInverse.Tokens` |
 | `state.world[].inverse.codes` | State | Names | Read | `StateInverse.Codes` |
 | `state.world[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
 | `state.world[].knowledge.source` | State | Names | Read | `StateKnowledge.Source` |
 | `state.world[].knowledge.mask` | State | Names | Read | `StateKnowledge.Mask` |
-| `state.world[].phaseOf` | State | Names | Read | `StateRow.PhaseOf` |
-| `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
-| `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
+| `state.world[].phaseOf` | State | Names | Read | `StateRowShape.PhaseOf` |
 | `state.lattices[].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.lattices[][grid].name` | Topology | Declares |  | `LatticeTopology.Name` |
 | `state.lattices[][ring].name` | Topology | Declares |  | `LatticeTopology.Name` |
@@ -2974,6 +2978,12 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[panel].name` | `WorldRenderSkyLayer.Panel.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
+| `render.shade.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
+| `render.shade.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
+| `render.shade.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |
+| `render.shade.outputs[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
+| `render.shade.values[].name` | `SdfShadeValue.Name` | a value local to its shade program |
+| `render.shade.values[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
 | `screens[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
@@ -2985,6 +2995,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `cameras[].rig.operations[][blend].b` | `WorldCameraProgramOp.Blend.B` | a camera program name |
 | `cameras[].rig.operations[][selectProgram].cases[].program` | `WorldCameraSelectCase.Program` | a camera program name |
 | `cameras[].rig.operations[][selectProgram].default` | `WorldCameraProgramOp.SelectProgram.Default` | a camera program name |
+| `cameras[].anchors[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `bodies.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `bodies.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `bodies.peerVariation.phase.name` | `WorldSequence.Name` | a sequence name |
@@ -3032,11 +3043,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onPress.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3066,11 +3080,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onRelease.effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3100,11 +3117,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `kits.rows[].actions{*}.onFact[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3136,6 +3156,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bindingOverlays[].bindingBar.banks[].id` | `WorldBindingBarBank.Id` | a binding bar bank id |
 | `bindingOverlays[].bindingBar.layouts{*}.tables{*}[].source` | `WorldBindingBarSlotPlacement.Source` | an input source id |
 | `bindingOverlays[].bindingBar.layouts{*}.banks{*}.pieces[].table` | `WorldBindingBarPiece.Table` | a key of the layout's own tables |
+| `bindingOverlays[].bindingBar.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `placements.rows[].distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `placements.rows[].distribution.fill.name` | `WorldSequence.Name` | a sequence name |
 | `placements.rows[].inhabit.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
@@ -3180,16 +3201,27 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `looks.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `looks.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
 | `looks.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
+| `hud.defaults.cursor.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `hud.defaults.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `hud.panels[].id` | `WorldHudPanel.Id` | a HUD panel id |
+| `hud.panels[].visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `hud.panels[].elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `hud.panels[].elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `hud.panels[].elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `hud.panels[].elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `hud.panels[].elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `hud.panels[].elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `hud.panels[].elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `icons.rows[].name` | `WorldIconRow.Name` | an icon name |
 | `icons.badges[].source` | `WorldIconBadgeRow.Source` | an input source id |
 | `icons.badges[].overrides[].family` | `WorldIconBadgeOverride.Family` | a badge override family is a controller family name, not a state row |
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
+| `state.world[].field.material.shade.name` | `SdfShadeDefinition.Name` | a shade program's label, local to the material that carries it |
+| `state.world[].field.material.shade.parameters[].name` | `SdfShadeParameter.Name` | a parameter local to its shade program |
+| `state.world[].field.material.shade.outputs[].name` | `SdfShadeOutput.Name` | a stage output in the shading vocabulary |
+| `state.world[].field.material.shade.outputs[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
+| `state.world[].field.material.shade.values[].name` | `SdfShadeValue.Name` | a value local to its shade program |
+| `state.world[].field.material.shade.values[].value.name` | `SdfShadeExpression.Name` | a stamp member or a parameter or value local to its shade program |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
@@ -3202,8 +3234,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].draw.generator.start` | `StateGenerator.Start` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].key` | `GeneratorContext.Key` | a context key is local to its generator |
 | `state.world[].draw.generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |
-| `state.world[].enum` | `StateRow.Enum` | an enum name is local to the document |
 | `state.world[].cells[].key` | `StateCell.Key` | a cell key is local to its row |
+| `state.world[].enum` | `StateRowShape.Enum` | an enum name is local to the document |
 | `state.body` | `WorldStateSection.Body` | per-body slots, the body-state lane's own namespace |
 | `state.body[].name` | `ActionStateSlot.Name` | a per-body slot name, the body-state lane's own namespace |
 | `state.identity` | `WorldStateSection.Identity` | per-body slots, the identity lane's own namespace |
@@ -3250,11 +3282,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `rules[].effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `rules[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3285,11 +3320,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.options[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.options[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3320,11 +3358,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `rules[].decision.onNoChoice[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.onNoChoice[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3368,11 +3409,14 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][designate].register` | `WorldEffect.Designate.Register` | a target register name |
 | `interactions.interactions[].effects[][emitCue].name` | `WorldEffect.EmitCue.Name` | a cue name |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.id` | `WorldHudPanel.Id` | a HUD panel id |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].id` | `WorldHudElement.Id` | a HUD element id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].source[probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `interactions.interactions[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.region[points].names` | `WorldDistributionRegion.Points.Names` | spawn point ids |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -3423,7 +3467,16 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `editor.bar.banks[].id` | `WorldBindingBarBank.Id` | a binding bar bank id |
 | `editor.bar.layouts{*}.tables{*}[].source` | `WorldBindingBarSlotPlacement.Source` | an input source id |
 | `editor.bar.layouts{*}.banks{*}.pieces[].table` | `WorldBindingBarPiece.Table` | a key of the layout's own tables |
+| `editor.bar.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |
 | `replays[].name` | `WorldScopedReplay.Name` | a replay scope identity, local to the replays section |
 | `roles[].name` | `WorldRole.Name` | a companion role name, which crossing companions carry and destinations declare |
+| `seatPrograms[].name` | `WorldSeatProgram.Name` | a seat program's name, which only a route's program member reads |
+| `seatPrograms[].operations[][move].source` | `WorldSeatProgramOp.Move.Source` | an input-source id, in the input vocabulary |
+| `seatPrograms[].operations[][turn].source` | `WorldSeatProgramOp.Turn.Source` | an input-source id, in the input vocabulary |
+| `seatPrograms[].operations[][hold].source` | `WorldSeatProgramOp.Hold.Source` | an input-source id, in the input vocabulary |
+| `seatPrograms[].operations[][pulse].source` | `WorldSeatProgramOp.Pulse.Source` | an input-source id, in the input vocabulary |
+| `seatPrograms[].operations[][tap].source` | `WorldSeatProgramOp.Tap.Source` | an input-source id, in the input vocabulary |
+| `routes[].name` | `WorldRoute.Name` | a route's name, which world.benchmark and puck benchmark take |
+| `routes[].chapters[].name` | `WorldRouteChapter.Name` | a chapter's name, local to its route |

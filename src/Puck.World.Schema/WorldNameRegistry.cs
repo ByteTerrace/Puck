@@ -1381,6 +1381,17 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldRole), nameof(WorldRole.Name), "a companion role name, which crossing companions carry and destinations declare"),
         new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
         new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
+        // Presentation readings are host-side sources (frame time, counters, bound HUD values); they never name simulation
+        // state, so an aliased import has nothing to prefix in them.
+        new(typeof(OverlayPredicate.Reading), nameof(OverlayPredicate.Reading.Name), "a presentation reading's source name, in the readings vocabulary"),
+        new(typeof(WorldHudElement), nameof(WorldHudElement.PlotReferenceBinding), "a presentation reading's source name, in the readings vocabulary"),
+        // An authored shade program is local to the material that carries it: its names bind references inside the
+        // program and do not enter its identity (SdfShadeModel).
+        new(typeof(Puck.SignedDistance.SdfShadeDefinition), nameof(Puck.SignedDistance.SdfShadeDefinition.Name), "a shade program's label, local to the material that carries it"),
+        new(typeof(Puck.SignedDistance.SdfShadeParameter), nameof(Puck.SignedDistance.SdfShadeParameter.Name), "a parameter local to its shade program"),
+        new(typeof(Puck.SignedDistance.SdfShadeValue), nameof(Puck.SignedDistance.SdfShadeValue.Name), "a value local to its shade program"),
+        new(typeof(Puck.SignedDistance.SdfShadeOutput), nameof(Puck.SignedDistance.SdfShadeOutput.Name), "a stage output in the shading vocabulary"),
+        new(typeof(Puck.SignedDistance.SdfShadeExpression), nameof(Puck.SignedDistance.SdfShadeExpression.Name), "a stamp member or a parameter or value local to its shade program"),
         new(typeof(StatePoolField), nameof(StatePoolField.Name), "a field local to its record"),
         new(typeof(StatePoolField), nameof(StatePoolField.Enum), "an enum name is local to the document"),
         new(typeof(WorldPoolBodyCarrier), nameof(WorldPoolBodyCarrier.Field), "a field local to its pool record"),
