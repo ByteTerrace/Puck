@@ -32,12 +32,14 @@ public static partial class StateReader {
     }
 
     /// <summary>Reads an admitted row and cell from columns.</summary>
-    public static void ReadCell(StateArena arena, int rowOrdinal, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
+    public static void ReadCell(StateArena arena, int rowOrdinal, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) =>
+        ReadCell(arena.ReadAccess, arena.ReadAccess.AuthorityRow(rowOrdinal), key, tick, engineTick, out rawValue, out text);
+
+    /// <summary>Reads a named cell in the acquired row and returns its numeric or text representation.</summary>
+    public static void ReadCell(StateReadAccess arena, StateReadRow rowOrdinal, string? key, ulong tick, ulong engineTick, out long? rawValue, out string? text) {
         rawValue = null; text = null;
-        if (!CellName.TryParse(candidate: key ?? StateRow.SlotKey.Value, name: out var name, reason: out _) ||
-            !arena.Keys.TryResolve(name: name, key: out var cell)) { return; }
         var time = ArenaTime.At(tick: tick, engineTick: engineTick);
-        if (!arena.TryReadLive(rowOrdinal: rowOrdinal, key: cell, time: in time, value: out var value)) { return; }
+        if (!arena.TryReadNamedValue(row: rowOrdinal, name: key, time: in time, value: out var value)) { return; }
         if (value.Kind == CellKind.Text) { rawValue = 0L; text = value.AsText; }
         else if (value.Kind != CellKind.Vector) { rawValue = value.Raw; }
     }

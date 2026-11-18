@@ -2073,8 +2073,10 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   are implemented: restricted row handles are typed, declaration bindings are
   admitted, unavailable cell writes compose raw intent, and retained operator
   hash access rechecks its live grant under the authority gate. Replica draw
-  secrets are stripped at the shared row-observation boundary. The preparation transaction, compiler
-  and evaluator migration, removal of raw/lazy acquisition, DISC001 and the
+  secrets are stripped at the shared row-observation boundary. Preparation
+  checks admission before routing and consumes its read fault before minting
+  an installable result. Migrating all preparation reads, the compiler and
+  evaluator, removal of raw/lazy acquisition, DISC001 and the
   complete public-surface law remain unfinished. The existing admission
   predicates remain in force. Do not treat this checkpoint as completion of
   D0b1 or start D0b2–D0b4 from it.

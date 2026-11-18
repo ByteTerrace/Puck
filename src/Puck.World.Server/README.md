@@ -323,13 +323,13 @@ judges against is a proposal and the installed document never carries a write
 that may rewind.
 
 The mutation door is two steps for the same reason.
-`WorldDocument.TryPrepareMutation` runs every gate that can refuse a mutation,
-against a document the caller names, and moves nothing: admission, composition,
-whole-document validation, the render envelope and field capacities, the solid
-field build, the replacement state arena when the install needs one, and the
-addon and machine staging. `WorldDocument.InstallPrepared` installs what it
-produced and refuses nothing. `TryApplyMutation` is the two in sequence; a rule
-firing prepares before its arena scope commits and installs after.
+`WorldDocument.TryPrepareMutation` checks admission before choosing the execution
+path. State commands stage their writes in an arena journal scope. Document
+edits stage their candidate, compiled rules, solids, replacement arena and host
+plans. Successful preparation mints a `WorldPreparedMutation`. Its install
+consumes the result once. Disposal rewinds pending state writes or releases
+pending host plans. A rule firing prepares before its own scope commits and
+installs after.
 Value-only installs reuse the arena and preflight their import against its
 live key and visibility budgets, including names retained after cell removal.
 

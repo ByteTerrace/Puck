@@ -21,8 +21,7 @@ public sealed partial class WorldServer {
                 reason = string.Empty;
                 return true;
             }
-            var arena = Arena;
-            var access = arena.RestrictReads(ordinal => view.Admits(arena.Catalog.Descriptors[ordinal].Name));
+            var access = ReadForWrite(view);
             try {
                 declaration = access.Declaration(access.ResolveRow(name));
             } catch (StateUnavailableException) {
@@ -32,5 +31,9 @@ public sealed partial class WorldServer {
             reason = string.Empty;
             return true;
         }
+    }
+    internal StateReadAccess ReadForWrite(WorldRecipientView view) {
+        var arena = Arena;
+        return view.IsAuthority ? arena.ReadAccess : arena.RestrictReads(ordinal => view.Admits(arena.Catalog.Descriptors[ordinal].Name));
     }
 }

@@ -47,7 +47,7 @@ public sealed partial class WorldRuleHost {
 
     private WorldArenaPublication? m_proposedPublication;
     // The firing's document rows, past every gate and waiting on the commit.
-    private WorldPreparedMutation? m_preparedDocument;
+    private WorldDocument.WorldPreparedMutation? m_preparedDocument;
 
     /// <inheritdoc/>
     public bool Apply(in Mutation mutation, out EffectRefusal refusal) => Host.ArenaHost.Apply(
@@ -84,7 +84,8 @@ public sealed partial class WorldRuleHost {
             return true;
         }
         if (!Host.Document.TryPrepareMutation(
-            current: Proposed().Definition,
+            preMetered: false,
+            denied: out _,
             engineTick: firing.EngineTick,
             mutation: DocumentUnit(rows: m_documentArms),
             prepared: out var prepared,
@@ -119,10 +120,9 @@ public sealed partial class WorldRuleHost {
             reconcile: false
         );
         m_proposedPublication = null;
-        Host.Document.InstallPrepared(
+        prepared.Install(
             connectionId: SubmissionEnvelope.LocalConnectionId,
-            correlationId: 0,
-            prepared: prepared
+            correlationId: 0
         );
     }
 

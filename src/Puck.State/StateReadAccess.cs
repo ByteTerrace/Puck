@@ -121,6 +121,18 @@ public sealed class StateReadAccess {
         value = Detach(value);
         return true;
     }
+    /// <summary>Reads a cell by its submitted name without interning a new key.</summary>
+    public bool TryReadNamedValue(StateReadRow row, string? name, in ArenaTime time, out CellValue value) {
+        var ordinal = Require(row);
+        if (CellName.TryParse(name ?? StateRow.SlotKey.Value, out var parsed, out _) &&
+            m_arena.Keys.TryResolve(parsed, out var key) && m_arena.TryReadLive(ordinal, key, in time, out value)) {
+            value = Detach(value);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
     /// <summary>Reads an effective numeric value after whole-row admission.</summary>
     public bool TryReadLiveNumber(StateReadRow rowOrdinal, CellKey key, in ArenaTime time, out long value) {
         var row = Require(rowOrdinal);

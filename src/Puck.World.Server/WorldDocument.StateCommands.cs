@@ -11,24 +11,7 @@ public sealed partial class WorldDocument {
         WorldMutation.Batch batch => batch.Mutations.All(predicate: member => IsStateCommand(mutation: member)),
         _ => false,
     };
-    private bool TryApplyStateCommand(WorldMutation mutation, ulong tick, ulong engineTick, int connectionId, long correlationId, bool derived) {
-        var mark = Host.BeginStateTransaction();
-        var time = ComposeTime(definition: m_definition, engineTick: engineTick, tick: tick);
-
-        if (!TryStateMembers(evicted: out var evicted, mutation: mutation, reason: out var reason, time: in time)) {
-            Host.RewindStateTransaction(mark: mark);
-            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason);
-            return false;
-        }
-        if (!Host.TryCommitStateTransaction(mark: mark, principal: mutation.Principal, reason: out reason)) {
-            Reject(connectionId: connectionId, correlationId: correlationId, mutation: mutation, reason: reason);
-            return false;
-        }
-        Host.PublishArena();
-        RecordCommittedMutation(mutation: mutation, tick: tick, engineTick: engineTick, connectionId: connectionId, correlationId: correlationId, evictedKey: evicted, derived: derived);
-        return true;
-    }
-    private bool TryStateMembers(WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
+    private bool TryStateMembers(StateReadAccess reads, WorldMutation mutation, in ArenaTime time, out string reason, out CellName? evicted) {
         reason = string.Empty; evicted = null;
         if (!Host.Grants.IsOperator(mutation.Principal)) {
             var view = Host.WriteView(mutation.Principal);
@@ -68,17 +51,15 @@ public sealed partial class WorldDocument {
                 List<(WorldStateExpectation Guard, long Before)>? exact = null;
                 foreach (var guard in (batch.ExpectedCells ?? [])) {
                     if (guard.Change is null) { continue; }
-                    if (!WorldStateReader.TryRead(m_definition, guard.Row, guard.Key, time.Tick, time.EngineTick,
-                        out _, out var before, out _, Host.Arena) || (before is null)) { reason = "an exact change requires a numeric cell"; return false; }
-                    (exact ??= []).Add(item: (guard, before.Value));
+                    if (!TryReadChangeOperand(reads, guard, in time, out var before)) { reason = "an exact change requires a numeric cell"; return false; }
+                    (exact ??= []).Add(item: (guard, before));
                 }
                 foreach (var member in batch.Mutations) {
-                    if (!TryStateMembers(evicted: out var dropped, mutation: member, reason: out reason, time: in time)) { return false; }
+                    if (!TryStateMembers(reads, evicted: out var dropped, mutation: member, reason: out reason, time: in time)) { return false; }
                     evicted ??= dropped;
                 }
                 foreach (var (guard, before) in (exact ?? [])) {
-                    if (!WorldStateReader.TryRead(m_definition, guard.Row, guard.Key, time.Tick, time.EngineTick,
-                        out _, out var after, out _, Host.Arena) || (after is null) || ((((Int128)after.Value) - before) != guard.Change)) {
+                    if (!TryReadChangeOperand(reads, guard, in time, out var after) || ((((Int128)after) - before) != guard.Change)) {
                         reason = $"state '{guard.Row}' constraints prevent the exact required change"; return false;
                     }
                 }
@@ -86,6 +67,15 @@ public sealed partial class WorldDocument {
             default: reason = "the command is not a state batch"; return false;
         }
     }
+    private static bool TryReadChangeOperand(StateReadAccess reads, WorldStateExpectation guard, in ArenaTime time, out long value) {
+        value = default;
+        if (!reads.TryResolveRow(guard.Row, out var row)) { return false; }
+        StateReader.ReadCell(reads, row, guard.Key, time.Tick, time.EngineTick, out var raw, out _);
+        if (raw is not { } number) { return false; }
+        value = number;
+        return true;
+    }
+
     private bool CheckStateExpectations(WorldMutation.Batch batch, in ArenaTime time, out string reason) =>
         Host.WriteView(batch.Principal).CheckGuards(batch, out reason);
 }

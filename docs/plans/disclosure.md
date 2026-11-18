@@ -1313,7 +1313,7 @@ numbers here are W1–W8 to distinguish them from rd2's F1–F4 above.
 | W4, high: reverse dependencies | `StateCatalog` builds `DependentRows` only from `KeysOf`; `ValidateDerivedBoard` compares token/code membership and order. Its shown error names the board and codes, **not the hidden keys themselves**. The packet overstates that text claim | Reverse invalidation comes from check reads, including the owner and negative lookups. All checks that could veto the change run restricted. Lower-tier general writes refuse by shape; scope checks cannot have outside dependents | Change tokens while a fixed hidden inverse's code membership varies; remove/reshape public sources of knowledge, phase, readers and witness checks. Add absent-dependent pairs below replica, and assert public state unchanged on refusal |
 | W5, high as a lower-tier oracle: empty selection | `WorldDefinitionFingerprint.Compute` filters `StateRaw.World` only; other sections remain. `DisclosedPlacements` deliberately emits one back per hidden cell under `Placeholder`. **One versus two backs is permitted disclosure to the seat in the packet, not a valid hidden-equivalent seat pair** | Every expected-definition form uses the actual read universe, never the write view. Null, empty and nonempty selection have identical ceiling admission | Recast the example as a Frames/Presentation writer not delivered those bytes; all forms refuse identically. Replica controls use their actual delivered fingerprints: equal for `Omit` hidden-only changes, different for a permitted back-count change |
 | W6, medium: console pre-reads | `WorldStateCommandModule.HandleCellSet` branches on `FindRow(server.ReadView(context))`; `WorldRowCommandModule.TryReadMutationRow` distinguishes `Withheld` from missing before admission; `WorldServer.ReadView` throws for unavailable sessions | Console submits raw edit intent; schema-dependent parsing/read-modify-write occurs inside preparation. Handler needs no write-side `ReadView` call | Multiword text, invalid vector and row set/remove/step/add through the real console for seats and session tiers, with Observe revoked too; compare synchronous reply, queued echo, outcome and stream survival |
-| W7, medium: route before admission | `WorldDocument.TryApplyMutation` calls `IsStateCommand` first; `TryApplyStateCommand` and the document path format denials differently | Classification is a transaction read; one outcome adapter handles every route and failure | Generate/upsert inside a batch also naming a placeholder, both state-only and mixed edits; same input, hidden row present/absent; compare the complete ordered transcript |
+| W7, medium: route before admission | The former dispatch path inspected the installed row before admission and emitted denials separately on its two routes | `WorldPreparedMutation.TryPrepare` now admits before classification. `WorldDocument.DenyMutation` emits the admission refusal on both routes. Classification still reads installed rows directly | Generate/upsert inside a batch also naming a placeholder, both state-only and mixed edits; same input, hidden row present/absent; compare the complete ordered transcript |
 | W8, medium: adjacent read doors | `WorldPopulationCommandModule.DescribeParked` reads population/body poses and its Anyone handler ignores context; `WorldHudCommandModule.ResolveDynamicTemplate` looks up the row before checking withholding | Parked read becomes a caller-stamped query over the existing body-observation policy, counts and deadlines included. HUD validation and substitution share a restricted read operation; unavailable/absent answer alike. Decision 6 prevents a handler obtaining population/authority state directly | Parked bodies with denied Observe and differing poses/membership; HUD placeholders naming withheld/absent rows and cells. Drive actual registered handlers for all ingresses; no GPU needed |
 
 The other W1 locations are leads, not proof that every submitted payload passes
@@ -2116,18 +2116,19 @@ documents and refreshed image skeletons; authority persistence keeps it.
 both public and restricted rows before this correction and covers both plus
 operator observations and the persistence control.
 
-The sec2 hand-back closes X1 and F1–F6 only; it does not complete D0b1.
-The whole-preparation invariant is **not enforced**. The remaining D0b1 work
-is the transaction-only mint of `WorldPreparedMutation`, the world-wide
-declarations carrier, compiler/evaluator migration (including removal of
-`IStateReader.Arena`), removal of preparation materialization and lazy authority
-binders, raw server surface closure, and DISC001 with its complete negative
-fixtures. In particular, `WorldDocument.TryPrepareMutation` still takes a raw
-definition, `RuleCompileContext` still owns seeded rows, and
-`WorldConsoleAuthorityExtensions.TryResolveServer` still exposes a server. A sticky read
-fault currently prevents further reads through that access; no transaction
-completion consumes it yet. These primitives must not be treated as a closed
-acquisition wall or as permission to start D0b2–D0b4.
+`WorldDocument.TryPrepareMutation` now admits before choosing the state or
+document route. Successful transaction completion is the sole constructor of
+`WorldPreparedMutation`. It checks the transaction's sticky read fault before
+transferring ownership of the journal mark or staged document resources. A
+refusal rewinds the mark or disposes the plans. Exact-change guards take both
+samples through the transaction's read access.
+
+The whole-preparation invariant remains open. Document staging still exports
+the arena, and classification, validators and transform kernels still have raw
+access. The world-wide declarations carrier, compiler and evaluator migration
+(including `IStateReader.Arena` and the seeded rows in `RuleCompileContext`),
+removal of lazy authority binders, raw server surface closure, DISC001 and the
+negative fixtures remain D0b1 work. D0b2–D0b4 depend on that wall.
 
 `StateReadAccessLawTests` covers access-bound handles, sticky failure, detached
 vectors and declaration acquisition. The console acquisition laws observe
