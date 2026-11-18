@@ -1,5 +1,5 @@
 ---
-description: "Multi-turn. Resumes lane json-context with its own background build running when the lead's stop order arrives: the packet's premise was wrong. Models orchestration/SKILL.md:150-152 (a lane was sent to add a source-generated JSON context that already existed, because the packet said none did) and SKILL.md:161-164 (recall every lane on a wrong premise; a stop is a stop, not a pause), the 'stop message mid-build' decision point docs/plans/open-items.md:3078-3080 names. AGENTS.md:395-397: after a stop order only the owner's own message restarts work."
+description: "Multi-turn. Resumes lane json-context with its own background build running when the lead's stop order arrives: the packet's premise was wrong. Models orchestration/SKILL.md:150-152 (a lane was sent to add a source-generated JSON context that already existed, because the packet said none did) and SKILL.md:161-164 (recall every lane on a wrong premise; a stop is a stop, not a pause), the 'stop message mid-build' decision point docs/plans/open-items.md:3078-3080 names. AGENTS.md 'When you are the delegate': after a stop order only the owner's own message restarts work."
 tags: [capability]
 runs: 5
 max_turns: 10

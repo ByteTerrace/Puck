@@ -31,7 +31,9 @@ overrides this skill and is written into it in that session.
     brief gives the reviewer the diff and the author's claim, not the author's
     reasoning, and asks it to break the change.
 - A pass runs beside the next work and never blocks a landing or pauses an
-  author. Docs and world content get none.
+  author: a lane lands on its build and its boot, and review comes after
+  (AGENTS.md, "Code first, verification after"). Docs and world content get
+  none.
 - A pass fixes what it finds. Only a finding too large for the pass goes into
   the open items'
   [work packets](../../../docs/plans/open-items.md#work-packets), with its
@@ -254,7 +256,10 @@ These are the reviewer's own rules, whichever family runs the pass.
   `Set-Content -LiteralPath <path> -Value @'...'@` (a single-quoted here-string
   expands nothing). The hand-back repeats them in short and never replaces the
   file, because a read-only lane makes no commit and its hand-back alone can be
-  lost.
+  lost. The one exception is a Claude pass given a worktree of its own: the
+  harness removes that worktree when the pass ends, so its findings go in full
+  in its hand-back
+  ([lane work](../orchestration/references/lane-work.md#delegated-work)).
 - A review-and-fix pass reports every finding with its severity and
   `file:line`, fixes what is local and clear in its own tree, and leaves the
   rest open in its end list, as its instructions block says.
@@ -290,10 +295,12 @@ These are the reviewer's own rules, whichever family runs the pass.
    diff is one unit. Keep every commit that may be rewritten local, including
    verification repairs; never push them before step 5.
 3. **Verify the fixes.** Brief one agent, in the review worktree, to build
-   each touched project with zero warnings, show each fix working by running
-   or measuring it, run a test only where a finding cannot be settled another
-   way or the brief asks for one, and resolve or report each open finding as verified, repaired, or rejected with the
-   reason. A law a fix added that still passes with the fix withheld pins
+   each touched project with zero warnings, boot the debug world once when a
+   fix reaches code a World runs, run a test only where a finding cannot be
+   settled another way or the brief asks for one, and resolve or report each
+   open finding as verified, repaired, or rejected with the reason. Windowed
+   runs, benchmarks and broad tests of the fixes are the lead's batch pass, as
+   for any lane (AGENTS.md, "Code first, verification after"). A law a fix added that still passes with the fix withheld pins
    nothing, so a passing law does not make a fix right; a rejected fix is not
    landed as written. For documentation-only fixes, run `puck docs links <changed .md
    files>` and build only for changed XML comments. The lead reads the

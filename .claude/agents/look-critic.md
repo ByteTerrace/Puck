@@ -31,5 +31,10 @@ hierarchy, palette, the selected treatment, contacts with what it stands on
 or meets. Name what a modern stylized game would show that this does not.
 
 Answer with `PASS` or `FAIL` on the first line, then one line per defect:
-the capture, where in it, what is wrong, and what would fix it. A `PASS`
+the capture, where in it, what is wrong, and what would fix it. Say when a
+defect looks like a limit of the engine and not of the authoring (a tear the
+mesh cannot close, detail the bake does not hold, lighting no author value
+controls): the lead sends such a gap to the front of its owning plan. A `PASS`
 lists what you checked. Never pass with caveats: a defect worth naming fails.
+Whether a failing change still lands as a material improvement is the lead's
+call, not part of your verdict.

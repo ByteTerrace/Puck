@@ -600,6 +600,12 @@ its streams captured, is this recipe:
 dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
 
+Add `--headless` for a boot with no window and no GPU, which is the one boot a
+lane owes its change (AGENTS.md, "Code first, verification after"): it needs no
+grant and no lease. A windowed boot is a granted GPU leg, and a check that
+needs one goes to the lead as a verification request
+([delegate](../delegate/SKILL.md#build-and-run)).
+
 ### An agent's World opens no physical device
 
 A World the owner plays in boots from the main checkout (`puck_world_start` with

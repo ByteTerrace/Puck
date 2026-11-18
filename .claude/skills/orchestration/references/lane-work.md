@@ -13,8 +13,9 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
 - A delegated session has exactly one long-lived working branch, and every
   brief it receives lands there. A brief starts by merging the integration
   branch's current tip into it: merge, never rebase. A local lane never pushes.
-  A ready lane (its own focused checks hold on that merged head) joins the
-  integration lane's next batch, and the lead handles any push
+  A ready lane (it builds what it touched and has booted the debug world on
+  that merged head) joins the integration lane's next batch, and the lead
+  handles any push
   ([land in batches](../SKILL.md#land-in-batches)).
 - Create no per-review or per-batch remote branch, and no per-lane one except
   the backup of a finished lane branch that waits to merge (`lane/<id>`,
@@ -47,12 +48,14 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
 
 When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds
-the whole task, the integration branch, a finish line (the command that must
-pass or the state that must hold), a stopping condition, and whether it grants
-the GPU. A stopping condition is for a look call or an owner-only action; it
-never protects a file format, replay, checkpoint, ABI or recorded hash, since
-the owner rules those change freely (AGENTS.md). The integrator inspects the
-combined result and runs its checks; a
+the whole task, the integration branch, a finish line, a stopping condition,
+and whether it grants the GPU. The finish line is the code written, a build of
+what the lane touched and one boot of the debug world, plus a named command or
+state only where the brief says seeing or measuring it is the work (AGENTS.md,
+"Code first, verification after"). A stopping condition is for a look call or
+an owner-only action; it never protects a file format, replay, checkpoint, ABI
+or recorded hash, since the owner rules those change freely (AGENTS.md). The
+integrator inspects the combined result and runs the batch's checks; a
 worker's report is evidence to check, not a substitute. Check a reported defect
 against the current files before acting on it. Delegating to subagents needs no
 one's permission; choose each one's model by fit
@@ -66,8 +69,14 @@ names it to read first. Choose the launch path from the
 assumptions about a model family.
 
 A read-only brief (a review, an audit) makes no commit, so its output must
-outlive the lane: the brief names a findings path outside any worktree Claude
-may remove, and the lead never relies on the hand-back alone. A `codex exec`
+outlive the lane. A Claude lane with a worktree of its own cannot write
+outside it, and the harness removes a worktree holding only ignored files the
+moment the lane ends, so that lane's findings travel in full in its hand-back
+and the lead saves them on arrival
+([launch capabilities](../SKILL.md#launch-capabilities)). Every other
+read-only lane (a `reviewer` in the lead's checkout, a Codex or Antigravity
+lane) gets a findings path in its brief, outside any worktree Claude may
+remove, and its hand-back repeats the findings in short. A `codex exec`
 lane's command hook sometimes refuses a write outside its worktree; one review
 wrote outside it and another could not. So a Codex review brief names
 `<worktree>/.claude/scratch/<lane>-findings.md` as the fallback, in a worktree
@@ -93,8 +102,10 @@ batches and raises objections there. Never ask permission because a change is
 large, never settle for a cheaper patch over the structurally right fix, and
 never offer a change that makes the engine healthier or faster as something to
 discuss: state it as the plan and do it, delegating it if it is large. Ask the
-owner only about product trade-offs (what the engine should do), taste and
-visual judgement, and the owner-only actions above. Acknowledge an instruction
+owner only about product trade-offs (what the engine should do) and the
+owner-only actions above. A look is never a question for the owner: it is its
+authors' call, the lead's and the lanes' for the debug world, and the owner
+corrects it as art lead (AGENTS.md, Authors rule). Acknowledge an instruction
 in a line rather than restating it.
 
 In Claude, a command started in the background already reports when it exits. Never start
