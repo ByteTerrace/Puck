@@ -17,7 +17,8 @@ public sealed class TransformDisclosureLawTests {
                 var hidden = new WorldStateRow(CellName.Parse("hidden"), CellKind.Int, Capacity: 4, CellVisibility: true,
                     Cells: hiddenPresent ? [new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat1"]))] : []);
                 var marker = new WorldStateRow(CellName.Parse("marker"), CellKind.Int, Cells: [new StateCell(StateRow.SlotKey, CellValue.Int(0))]);
-                using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument().WithWorldState([hidden, marker]));
+                var definition = Fixtures.BuildDocument().WithWorldState([hidden, marker]);
+                using var fixture = actor == Dealer ? WithDealer(definition) : Fixtures.FreshServer(definition);
                 var write = new WorldMutation.UpsertStateCell(actor, "marker", StateRow.SlotKey.Value, 1, WorldDocumentWriteKind.Set);
                 WorldMutation[] mutations = [
                     new WorldMutation.UpsertStateCell(actor, "hidden", "secret", 5, WorldDocumentWriteKind.Set),
@@ -100,10 +101,17 @@ public sealed class TransformDisclosureLawTests {
         Assert.Equal(7, fixture.Server.ExportDefinition().State[0].Cells![0].Value.AsInt);
     }
 
+    // The eight-body fixture admits its first peer in slot seven. The authored audience must name that identity.
     private static readonly Principal Dealer = Principal.Peer(
         generation: 1,
-        index: 4
+        index: 7
     );
+
+    private static WorldFixture WithDealer(WorldDefinition definition) {
+        var fixture = Fixtures.FreshServerWithPeer(definition, out var peer);
+        Assert.Equal(Dealer, peer);
+        return fixture;
+    }
 
     private static StateCell Cell(string key, long value) => new(
         Key: CellName.Parse(candidate: key),
@@ -141,7 +149,7 @@ public sealed class TransformDisclosureLawTests {
     // by name and the table stands; sorting seat1's own hand, which only seat1 sees, lands.
     [Fact]
     public void ASubmittedSortOfAWiderZoneByAHiddenRowIsRefusedAndOneWithinItsAudienceLands() {
-        using var fixture = Fixtures.FreshServer(definition: Table());
+        using var fixture = WithDealer(Table());
         var rejections = new List<string>();
 
         fixture.Server.EchoTap = echo => {
@@ -229,7 +237,7 @@ public sealed class TransformDisclosureLawTests {
 
     [Fact]
     public void AGrantedPeerTransferCannotPublishPrivateMembershipButCanReorderItsHand() {
-        using var fixture = Fixtures.FreshServer(definition: Table());
+        using var fixture = WithDealer(Table());
         fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 4,
             Capability: WorldCapability.Mutate, Exclusive: false,
             KindMask: WorldMutationKindCatalog.KindsOf(section: WorldSection.State), Grantee: Dealer,
@@ -271,7 +279,7 @@ public sealed class TransformDisclosureLawTests {
                     Cells = row.Cells!.Select(cell => cell.Key.Value == "a" ? cell with { Visibility = new StateVisibility(Readers: ["seat1", Dealer.Describe()]) } : cell).ToArray() }
                 : row).ToArray(),
         } };
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        using var fixture = WithDealer(definition);
         // An admitted peer needs a metered state mutation grant and edit over the written row. Edit covers
         // an own-value sort's read/write row; no Observe grant over another row is involved in this attack.
         fixture.Server.Grant(actor: Principal.Console, grant: new WorldGrant(Budget: 4,

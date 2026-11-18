@@ -49,9 +49,7 @@ public sealed class VectorStateLawTests {
             Space: "lore"
         );
         var definition = BuildDocumentWithState(spaces: [space], rows: [memoriesRow]);
-        using var fixture = Fixtures.FreshServer(definition: definition);
-
-        var peer = Principal.Peer(generation: 1, index: 4);
+        using var fixture = Fixtures.FreshServerWithPeer(definition, out var peer);
         var vector = SampleVector(dimensions: 8, nonZeroIndex: 0);
 
         // 1. Ungranted write is refused
@@ -1001,8 +999,7 @@ public sealed class VectorStateLawTests {
             rows: [sourceRow, intoMixRow, intoMeanRow, intoNearestRow, intoRememberRow]
         );
 
-        using var fixture = Fixtures.FreshServer(definition: definition);
-        var peer = Principal.Peer(generation: 1, index: 4);
+        using var fixture = Fixtures.FreshServerWithPeer(definition, out var peer);
 
         var kinds = WorldMutationKindCatalog.KindsOf(section: WorldSection.State);
 
