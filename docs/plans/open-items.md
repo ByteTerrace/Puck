@@ -101,7 +101,11 @@ reviewed before code ([orchestration](../../.claude/skills/orchestration/SKILL.m
     `puck benchmark` on both backends ([the memo](benchmark.md#the-build-order)'s stage 3). It replaces
     [the walkthrough](walkthrough.md)'s line, and the lead ranks it at the
     next batch.
-22. Then, by ordinary priority:
+22. [high] [Rendering research](rendering-research.md#the-build-order): the
+    research round's order across the residency, lighting, bake, job-system
+    and visibility packets above, from its stage 0 readings; the lead ranks
+    it at the next batch.
+23. Then, by ordinary priority:
     [edit to running](#edit-to-running-hot-reload-and-boot),
     [the port](#port-the-experimental-worlds-missing-features) (each lane
     ahead of the job-system step it proves),
