@@ -616,7 +616,7 @@ that day. Nothing else waits for a bet.
 
 | Bet | Time box | When it starts |
 |---|---|---|
-| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Memo 3 days, prototype 7 | The memo now. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
+| 1. A view that has not changed keeps its picture, decided from the change records the client already reads | Prototype 7 days | [The memo](rendering-research/bet1-client-records.md) is written. The prototype only if the breakdown of produce shows that capturing a shown, unchanged world is a real cost |
 | 2. A portal crossing prepared ahead | 7 days | When decision 2's minimums exist |
 | 3. Worlds merged into one view, and crowds built from shared parts | Memo 4 days, prototype 10 | The memo any time. The prototype when the instance table takes rows from several worlds (decision 11) |
 | 4. Products shared by a name that says what they mean | Memo 4 days, prototype 8 | Now on the desktop: the owner confirmed the design. The exchange between GPU vendors has its own box when the hardware is on hand |
@@ -799,13 +799,35 @@ Two records exist and are read today.
   and never summed, because a sum can cancel.
 
 The bet is that these two, with a few additions, cover every input a view
-reads. Its first step is a memo that lists what
+reads. [The memo](rendering-research/bet1-client-records.md) lists what
 `SdfWorldResidency.Prepare` reads on the client and names, for each input,
-the client record that covers it: the mirror's revision, the scene's
-revision vector, the tick's snapshot, the clock phase evaluated for the
-presented tick, or the camera. Inputs with no record are listed as gaps.
-The prototype then closes gaps in an existing revision vector. It does not
-join the authority to the frame.
+the client record that covers it or says there is none. It was written
+from the source, with nothing run. Four of its findings shape the
+prototype.
+
+- **The two records are narrower than they look.** The mirror's revision
+  does not move when an easing value is presented between two ticks, or
+  when the presented tick moves. The revision vector covers only which
+  geometry exists. Ten inputs have no record that can be read before a
+  capture, and seven of them are small additions to a type that already
+  knows the answer.
+- **The shortcut should skip the capture and leave alone the decision of
+  whether the picture stands.** Everything the residency reads after the
+  capture is then still covered by today's hash and refusals. A world with
+  a running screen can skip its capture, although its picture can never
+  stand.
+- **The boot world's capture is not a candidate.** It resolves the cameras
+  the other views are fitted to, and it publishes the frame's sound,
+  markers and cursor viewports. The candidates are a world a seat is
+  presented in or seen through a window, a session screen, and an infinity
+  view.
+- **The prototype's first step is a count** of the captures that change
+  nothing, which nothing measures today. That count decides whether there
+  is a cost to save.
+
+The prototype then closes the gaps in a second vector kept beside the
+revision vector, under the same contract. It does not join the authority
+to the frame.
 
 Three rules come with it, because its failure is silent: a view that
 wrongly keeps its picture also lowers the count the work is judged by.
@@ -826,9 +848,9 @@ wrongly keeps its picture also lowers the count the work is judged by.
 
 Checked for this section: the three projects' lack of any `StateArena`
 reference, the mirror's summary and its refresh from the stamp's moved
-rows, and the revision vector's contract. Not checked: that every input of
-`Prepare` reaches the client through one of these. That is the memo's
-job.
+rows, and the revision vector's contract. The memo read which inputs of
+`Prepare` reach the client through one of these. Not checked: any of it in
+a running World.
 
 ## The decisions
 
@@ -2944,9 +2966,9 @@ masked.**
   is deleted.
 - *Owns.* `src/Puck.World.Authoring/Authoring/CreationMotionPlan.cs`, the
   pooled emitter (`WorldCreationInstances.Emit.cs`),
-  `SdfMeshGeometryBuilder`, `SdfMeshSettle.cs` and
-  `SdfMeshPathBake.Settle.cs`, which go, and the group state only they
-  read.
+  `SdfMeshGeometryBuilder`, and the settle rebake and the group state only
+  it read (landed: both are deleted, and `SdfMeshPathBake.Revisit` re-plans
+  a group when its operand moves a step).
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.
 - *Finish line.* G1's checks hold
@@ -3164,7 +3186,6 @@ start as a model is free.
 
 | Work | Outcome | Model |
 |---|---|---|
-| The first bet's memo | Every input `SdfWorldResidency.Prepare` reads on the client has a named change record, or is listed as having none ([the first bet](#the-first-bet-stands-on-the-clients-records)) | Fable `principal`, or Astra |
 | Terrain research | A research round across the families on seams between tiles, how tiles scale, and far shadows. The terrain pass's plan holds its findings | The lead's research round |
 | The stretched primitive's solver | An exhibit and a failing measurement for each of gap 11's two effects, then the design of the closest-point solve with its certificate | Fable `principal`. Any proof that skips work gets an adversarial review |
 | The fourth bet's memo | What a shared product's name holds, the receiver's check for each attribute, and how fetching is priced against deriving | Astra, or Fable `principal` |
