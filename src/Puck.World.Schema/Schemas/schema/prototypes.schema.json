@@ -1340,11 +1340,39 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "description": "The ordinal, case-sensitive identifier an entity-part anchor names."
+                  "description": "The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to the creation; the engine reserves none."
                 },
                 "shapeId": {
                   "type": "integer",
                   "description": "The stable Id whose dynamic pose the part publishes."
+                },
+                "shapes": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The names of the shapes the part covers, each with every shape that hangs from it through Parent; null covers the anchor shape and what hangs from it. A subtree rather than a list, so a hand stays a hand when a finger gains a segment."
+                },
+                "except": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The ids of parts declared earlier whose shapes this part does not cover, so \u0022the trunk without the arms\u0022 is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier one."
                 }
               },
               "required": [
@@ -1352,7 +1380,7 @@
                 "shapeId"
               ],
               "additionalProperties": false,
-              "description": "One authored entity-part identity exported by a creation look."
+              "description": "One named body part of a creation: the anchor shape whose dynamic pose an entity-part anchor or a look\u0027s partDynamics follower reads, and the set of shapes the part covers, which a driver\u0027s mask names (CreationPartCompiler computes it, and is the one place that does)."
             },
             "default": null
           },

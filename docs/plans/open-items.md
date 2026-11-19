@@ -4003,8 +4003,9 @@ reversal brake, then a sitting.
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order; steps 1 to 3 (the
-  compiled rig, its reads and the caps) are built, so step 4 is next.
+  the first three, and its steps are the build lane's order; steps 1 to 4 (the
+  compiled rig, its reads, the caps and parts as sets) are built, so step 5 is
+  next.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full

@@ -1562,35 +1562,13 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors, HashSet<int> shapeIds) {
-        if (document.Parts is not { Count: > 0 } parts) {
+    // The part compiler is the one place a part becomes shapes; validation reports what it refuses.
+    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Parts is not { Count: > 0 }) {
             return;
         }
 
-        var partIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        for (var index = 0; (index < parts.Count); index++) {
-            var part = parts[index];
-
-            if (string.IsNullOrWhiteSpace(value: part.Id)) {
-                errors.Add(item: new(
-                    Message: "a part id is required.",
-                    Path: $"parts[{index}].id"
-                ));
-            } else if (!partIds.Add(item: part.Id)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].id",
-                    Message: $"duplicate part id '{part.Id}'."
-                ));
-            }
-
-            if (!shapeIds.Contains(item: part.ShapeId)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].shapeId",
-                    Message: $"references missing shape id {part.ShapeId}."
-                ));
-            }
-        }
+        _ = CreationPartCompiler.Resolve(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
     }
     // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synthesizer-patch.v1 patch validated through
     // the synth family's OWN canonicalizer (the one pipeline — never a re-implementation), its violations re-pathed
@@ -2680,8 +2658,7 @@ public static partial class CreationCanonicalizer {
         );
         ValidateParts(
             document: document,
-            errors: errors,
-            shapeIds: shapeIds
+            errors: errors
         );
         ValidateChains(
             document: document,

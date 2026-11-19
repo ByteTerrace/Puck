@@ -1695,13 +1695,21 @@ export type CreationDocument = {
    */
   parts?: ({
     /**
-     * The ordinal, case-sensitive identifier an entity-part anchor names.
+     * The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to the creation; the engine reserves none.
      */
     id: string;
     /**
      * The stable Id whose dynamic pose the part publishes.
      */
     shapeId: number;
+    /**
+     * The names of the shapes the part covers, each with every shape that hangs from it through Parent; null covers the anchor shape and what hangs from it. A subtree rather than a list, so a hand stays a hand when a finger gains a segment.
+     */
+    shapes?: (string | null)[] | null;
+    /**
+     * The ids of parts declared earlier whose shapes this part does not cover, so "the trunk without the arms" is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier one.
+     */
+    except?: (string | null)[] | null;
   } | null)[] | null;
   /**
    * The creation-level noise-relief facet (null = none) — see CreationNoiseDocument. Omitted from the wire when null, so a creation authored without it serializes to unchanged bytes.

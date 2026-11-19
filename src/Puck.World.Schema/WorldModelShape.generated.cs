@@ -1663,6 +1663,8 @@ public static partial class WorldModelShape {
             [
                 M("id", typeof(global::System.String), typeof(global::Puck.World.Authoring.CreationPartDocument), "Id", Read | Write | Required, static value => ((global::Puck.World.Authoring.CreationPartDocument)value).Id),
                 M("shapeId", typeof(global::System.Int32), typeof(global::Puck.World.Authoring.CreationPartDocument), "ShapeId", Read | Write | Required, static value => ((global::Puck.World.Authoring.CreationPartDocument)value).ShapeId),
+                M("shapes", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.Authoring.CreationPartDocument), "Shapes", Read | Write, static value => ((global::Puck.World.Authoring.CreationPartDocument)value).Shapes),
+                M("except", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.Authoring.CreationPartDocument), "Except", Read | Write, static value => ((global::Puck.World.Authoring.CreationPartDocument)value).Except),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.CreationPlantDocument), true, JsonTypeInfoKind.Object, null,

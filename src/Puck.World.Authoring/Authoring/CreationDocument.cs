@@ -226,10 +226,24 @@ public sealed record ShapeDocument(
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
 }
-/// <summary>One authored entity-part identity exported by a creation look.</summary>
-/// <param name="Id">The ordinal, case-sensitive identifier an entity-part anchor names.</param>
+/// <summary>One named body part of a creation: the anchor shape whose dynamic pose an entity-part anchor or a look's
+/// <c>partDynamics</c> follower reads, and the set of shapes the part covers, which a driver's mask names
+/// (<see cref="CreationPartCompiler"/> computes it, and is the one place that does).</summary>
+/// <param name="Id">The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to
+/// the creation; the engine reserves none.</param>
 /// <param name="ShapeId">The stable <see cref="ShapeDocument.Id"/> whose dynamic pose the part publishes.</param>
-public sealed record CreationPartDocument(string Id, int ShapeId);
+/// <param name="Shapes">The names of the shapes the part covers, each with every shape that hangs from it through
+/// <see cref="ShapeDocument.Parent"/>; null covers the anchor shape and what hangs from it. A subtree rather than a
+/// list, so a hand stays a hand when a finger gains a segment.</param>
+/// <param name="Except">The ids of parts declared earlier whose shapes this part does not cover, so "the trunk without
+/// the arms" is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier
+/// one.</param>
+public sealed record CreationPartDocument(
+    string Id,
+    int ShapeId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Shapes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Except = null
+);
 /// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
 /// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
 /// scope — irregular rock, terrain, bark. A solid placement collides with the relieved surface: the analytic provider

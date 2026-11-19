@@ -182,6 +182,10 @@ public static partial class CreationCommand {
             }
         }
 
+        foreach (var part in CreationPartCompiler.Compile(document: document).Slots) {
+            Console.Out.WriteLine(value: $"  part: {part.PartId} anchor {CreationMotion.NameOf(document: document, index: part.TransformSlot)}, shapes {string.Join(separator: ", ", values: (part.Shapes ?? [part.TransformSlot]).Select(selector: shape => CreationMotion.NameOf(document: document, index: shape)))}");
+        }
+
         var rig = CreationRig.Of(document: document);
 
         if (rig.Animates) {
