@@ -1,18 +1,9 @@
-// The glass sums the glass raster pass accumulates and the glass shading pass reads (SdfWorldPackage.GlassSumsWritten):
-// SDF_GLASS_SUM_WORDS words a render-extent pixel, laid out as the visibility records are. The first word is the signed
-// sum of every glass face's ray distance before the pixel's opaque hit, in SDF_GLASS_SUM_SCALE steps a world unit, a
-// front face subtracting and a back face adding; the second the count of front faces less back faces. The next six
-// are three 64-bit sums, low word first, of RGB optical depth: each face adds its material's absorption times its
-// distance to the opaque hit, both quantized to whole steps, a front face adding and a back face subtracting. Every sum
-// is two's complement integer arithmetic accumulated atomically, so the order faces rasterize in never moves a word,
-// and a pair of faces cancels its shared distance to the opaque hit exactly, so no error grows with that distance.
-// The rest is the pixel's second glass record (SdfGlassFrontCountWord on): the count of front faces before the opaque
-// hit, each of which claims the next of SdfGlassFrontEntries entries (its draw plus one and its triangle) while one is
-// free, and the nearest back face's ray distance as an atomic maximum of its complemented bits (zero for none). Up to
-// SdfGlassFrontEntries front faces every one is held, so the shading pass names the second-nearest exactly whatever
-// order the entries were claimed in; past that the count says so and no second interface is named.
-// The raster defines SDF_GLASS_ACCUMULATES before including this file and reads and writes sdfGlassSumsRW; the shading
-// pass reads sdfGlassSums.
+// The glass raster accumulates clipped ray intervals in integer words. For each closed draw a back face adds
+// and a front face subtracts the interval from the near plane to the face or opaque hit, whichever comes first.
+// The same difference applies to the RGB optical depth, weighted by the material's absorption. Winding and
+// material keys use every forward face, so a solid still contributes when opaque geometry hides its exit.
+// The front record holds up to three visible entries in any order and the nearest back distance. The compute
+// pass uses them to shade the nearest interfaces and the medium at the start of the ray.
 #ifndef FRAME_SDF_GLASS_HLSLI
 #define FRAME_SDF_GLASS_HLSLI
 #include "sdf-optical-depth.hlsli"
@@ -28,30 +19,26 @@ static const uint SdfGlassFrontCountWord = 8u;
 static const uint SdfGlassFrontEntryWord = 9u;
 static const uint SdfGlassFrontEntries = 3u;
 static const uint SdfGlassNearestBackWord = 15u;
+static const uint SdfGlassWindingWord = 1u;
+static const uint SdfGlassMaterialWord = 16u;
 
 uint sdfGlassSumWord(uint2 pixel, uint2 extent) {
     return (SDF_GLASS_SUM_WORDS * ((pixel.y * extent.x) + pixel.x));
 }
-// The distance a ray travels through glass before its opaque hit at `opaque`, from the sums: the matched faces' sum,
-// plus the opaque distance for each front face whose back face lies behind the opaque hit (a solid holding an opaque
-// object), never more than the distance from the nearest front face at `front` to the opaque hit, and never negative.
-// An unmatched back face (the eye inside a glass solid) pairs with nothing, so the glass before it is not counted.
-float sdfGlassThickness(int sum, int unmatched, float front, float opaque) {
-    float matched = (float(sum) / SDF_GLASS_SUM_SCALE);
-    float thickness = (matched + (float(max(unmatched, 0)) * opaque));
-
-    return clamp(thickness, 0.0, max((opaque - front), 0.0));
+// The clipped intervals' summed length, bounded to the segment being shaded.
+float sdfGlassThickness(int sum, float front, float opaque) {
+    return clamp((float(sum) / SDF_GLASS_SUM_SCALE), 0.0, max((opaque - front), 0.0));
 }
 // The thickness of the pixel whose sums start at `word`.
 float sdfGlassThicknessAt(uint word, float front, float opaque) {
-    return sdfGlassThickness(asint(SDF_GLASS_SUMS_READ[word]), asint(SDF_GLASS_SUMS_READ[(word + 1u)]), front, opaque);
+    return sdfGlassThickness(asint(SDF_GLASS_SUMS_READ[word]), front, opaque);
 }
 // One 64-bit optical depth sum, its low word at `word` and its high word after it, in optical depth.
 float sdfGlassDepthOf(uint word) {
     return sdfOpticalDepthOf(SDF_GLASS_SUMS_READ[word], SDF_GLASS_SUMS_READ[word + 1u]);
 }
 // The RGB optical depth through every glass material before the opaque hit, of the pixel whose sums start at `word`.
-// It is negative only where the eye is inside a glass solid.
+// Each closed, homogeneous solid contributes its clipped intervals.
 float3 sdfGlassOpticalDepthAt(uint word) {
     return float3(sdfGlassDepthOf(word + 2u), sdfGlassDepthOf(word + 4u), sdfGlassDepthOf(word + 6u));
 }
@@ -73,19 +60,35 @@ float sdfGlassNearestBackAt(uint word) {
     return ((key == 0u) ? -1.0 : asfloat(~key));
 }
 
+// A positive winding says the ray begins within a closed glass draw. For a single homogeneous medium
+// the material indices on all fully traversed solids cancel, leaving the containing material.
+int sdfGlassWindingAt(uint word) {
+    return asint(SDF_GLASS_SUMS_READ[word + SdfGlassWindingWord]);
+}
+int sdfGlassInsideMaterialAt(uint word) {
+    return asint(SDF_GLASS_SUMS_READ[word + SdfGlassMaterialWord]) - 1;
+}
+
 #if defined(SDF_GLASS_ACCUMULATES)
-// Adds one glass face at ray distance `t`, before the opaque hit at `opaque`, to the pixel whose sums start at `word`:
-// its signed distance and face count, its material's absorption over the distance from the face to the opaque hit,
-// and to the second record a front face's draw and triangle or a back face's distance. Paired faces subtract out the
-// air between solids; an opaque surface inside a solid clips its interval without needing a back face behind it. The
-// caller keeps helper lanes out.
-void sdfGlassAccumulate(uint word, float t, float opaque, bool front, float3 absorption, uint draw, uint triangleIndex) {
-    int distance = (int)round(t * SDF_GLASS_SUM_SCALE);
+// Writes one crossing to the pixel. The caller excludes helper lanes.
+void sdfGlassAccumulate(uint word, float t, float start, float opaque, bool front, float3 absorption, int material, uint draw, uint triangleIndex, bool clippedDraw) {
+    bool visible = (t < opaque);
+    if (clippedDraw && !visible) return;
+
+    // Integrate a closed draw from the eye to the opaque hit by clamping both endpoints to that hit.
+    // A draw cut by a portal plane can lack either endpoint. Keep its receiver-relative integral.
+    float from = (clippedDraw ? t : start);
+    float to = (clippedDraw ? opaque : max(start, min(t, opaque)));
+    bool positive = (clippedDraw ? front : !front);
+    int distance = (int)round(to * SDF_GLASS_SUM_SCALE) - (int)round(from * SDF_GLASS_SUM_SCALE);
     uint before;
 
-    InterlockedAdd(sdfGlassSumsRW[word], asuint(front ? -distance : distance), before);
-    InterlockedAdd(sdfGlassSumsRW[(word + 1u)], asuint(front ? 1 : -1), before);
-    if (front) {
+    InterlockedAdd(sdfGlassSumsRW[word], asuint(positive ? distance : -distance), before);
+    if (!clippedDraw) {
+        InterlockedAdd(sdfGlassSumsRW[word + SdfGlassWindingWord], asuint(front ? -1 : 1), before);
+        InterlockedAdd(sdfGlassSumsRW[word + SdfGlassMaterialWord], asuint((front ? -1 : 1) * (material + 1)), before);
+    }
+    if (front && visible) {
         uint claim;
 
         InterlockedAdd(sdfGlassSumsRW[(word + SdfGlassFrontCountWord)], 1u, claim);
@@ -95,12 +98,12 @@ void sdfGlassAccumulate(uint word, float t, float opaque, bool front, float3 abs
             sdfGlassSumsRW[at] = (draw + 1u);
             sdfGlassSumsRW[(at + 1u)] = triangleIndex;
         }
-    } else {
+    } else if (!front && (!clippedDraw || visible)) {
         InterlockedMax(sdfGlassSumsRW[(word + SdfGlassNearestBackWord)], ~asuint(max(t, 0.0)), before);
     }
 
     [unroll] for (uint channel = 0u; channel < 3u; channel++) {
-        sdfOpticalDepthAccumulate(sdfGlassSumsRW, word + 2u + 2u * channel, t, opaque, front, absorption[channel]);
+        sdfOpticalDepthAccumulate(sdfGlassSumsRW, word + 2u + 2u * channel, from, to, positive, absorption[channel]);
     }
 }
 #endif

@@ -411,7 +411,7 @@ public sealed class WorldPresentationManifest {
         // and its color. The field rows live in the state section, whose rows the walk never reads.
         public void AddFields(WorldFieldsSection? fields) {
             foreach (var row in (fields?.Fields ?? [])) {
-                if (row.HeightScale <= 0f) {
+                if (!row.DrawsSurface) {
                     continue;
                 }
 

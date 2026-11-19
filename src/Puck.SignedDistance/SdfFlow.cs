@@ -18,6 +18,16 @@ public enum SdfFlowFrame {
     World = 1,
 }
 
+/// <summary>A localized override of the flow velocity. The blend is one at the centre and fades to zero at the radius.</summary>
+/// <param name="Center">Centre in world coordinates.</param>
+/// <param name="Radius">Radius in world units, finite and positive.</param>
+/// <param name="Velocity">Velocity at the centre, in the flow's velocity frame.</param>
+public sealed record SdfFlowRegion(Vector3 Center, float Radius, Vector3 Velocity) {
+    /// <summary>Gets whether the region has finite coordinates, velocity and a positive finite radius.</summary>
+    public bool IsValid => VectorFunctions.IsFinite(vector: Center) && float.IsFinite(f: Radius) && (Radius > 0f) &&
+        VectorFunctions.IsFinite(vector: Velocity);
+}
+
 /// <summary>A material's flow layer: the shading moves along an authored flow while the geometry stays still. The
 /// layer's lookup point advects along <see cref="Velocity"/>, projected onto the surface, by a phase the host integrates
 /// from the presented tick, in two layers half a <see cref="Cycle"/> apart whose weights cross-fade so neither restart
@@ -48,9 +58,10 @@ public enum SdfFlowFrame {
 /// <param name="Frame">The frame <paramref name="Velocity"/> is authored in.</param>
 /// <param name="CoverageLane">The render lane (<see cref="SdfLanes"/>) whose value, saturated to [0, 1], scales
 /// <paramref name="Coverage"/> at shading time; null keeps the constant.</param>
+/// <param name="Region">An optional local change to the velocity, placed in world coordinates.</param>
 public sealed record SdfFlow(Vector3 Velocity, float Scale = 1f, float Stretch = 1f, float Cycle = 1f, float Tilt = 0f,
     float Coverage = 0f, float Softness = 0.1f, SdfSurface? Surface = null, uint Seed = 0, int? Lane = null,
-    SdfFlowFrame Frame = SdfFlowFrame.Object, int? CoverageLane = null) {
+    SdfFlowFrame Frame = SdfFlowFrame.Object, int? CoverageLane = null, SdfFlowRegion? Region = null) {
     /// <summary>The period, in seconds, the host reduces the flow clock by (<c>SdfWorldPackage.FlowClock</c> carries the
     /// presented time over this period, in [-1/2, 1/2]). A power of two, so a whole number of cycles fills it and the
     /// layer joins without a seam where the clock wraps.</summary>
@@ -76,7 +87,7 @@ public sealed record SdfFlow(Vector3 Velocity, float Scale = 1f, float Stretch =
         float.IsFinite(f: Softness) && (Softness >= 0f) && (Softness <= 1f) &&
         ((Coverage <= 0f) || (Surface is { } surface && SdfMaterialLayers.IsSurface(surface: surface))) &&
         SdfLanes.IsLane(lane: Lane) && SdfLanes.IsLane(lane: CoverageLane) &&
-        Enum.IsDefined(value: Frame);
+        Enum.IsDefined(value: Frame) && (Region?.IsValid ?? true);
 
     /// <summary>Returns the flow clock the pass block carries at a presented time: the time in seconds reduced by
     /// <see cref="ClockPeriodSeconds"/>, over that period, in [-1/2, 1/2].</summary>
