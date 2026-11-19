@@ -144,6 +144,7 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
 uint sdfShadeArm(uint2 slice) { return 0u; }
 bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return binding.range.y != 0u && (phase == 0u || !binding.unstyled) && sdfShadeRead(binding.range.xy, phase).y != 0u; }
 uint sdfShadeReadsOf(SdfShadeBinding binding) { return binding.range.y != 0u ? sdfShadeRead(binding.range.xy, 0u).w : 0u; }
+uint sdfShadeAssigned(SdfShadeBinding binding, uint phase) { return phase != 0u && binding.range.y != 0u ? sdfShadeRead(binding.range.xy, phase).w : 0u; }
 void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {
     sdfShadeInterpret(binding.range.xy, binding.range.zw, phase, stamp, outputs);
 }
@@ -151,6 +152,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, o
 uint sdfShadeArm(uint2 slice) { return 0u; }
 bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return false; }
 uint sdfShadeReadsOf(SdfShadeBinding binding) { return 0u; }
+uint sdfShadeAssigned(SdfShadeBinding binding, uint phase) { return 0u; }
 void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) { outputs = (SdfShadeOutputs)0; }
 #endif
 
@@ -188,6 +190,10 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, o
         text.Append(value: "default: return 0u;\n}\n}\nuint sdfShadeReadsOf(SdfShadeBinding binding) {\nswitch (binding.arm) {\n");
         for (var arm = 1; (arm <= programs.Length); arm++) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: return {((uint)programs[arm - 1].Reads)}u;\n");
+        }
+        text.Append(value: "default: return 0u;\n}\n}\nuint sdfShadeAssigned(SdfShadeBinding binding, uint phase) {\nswitch (binding.arm) {\n");
+        for (var arm = 1; (arm <= programs.Length); arm++) {
+            text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: return phase == 1u ? {programs[arm - 1].AssignedOutputs(SdfShadePhase.Light)}u : phase == 2u ? {programs[arm - 1].AssignedOutputs(SdfShadePhase.Compose)}u : 0u;\n");
         }
         text.Append(value: "default: return 0u;\n}\n}\nbool sdfShadeHas(SdfShadeBinding binding, uint phase) { return (phase == 0u || !binding.unstyled) && ((sdfShadeArmPhases(binding.arm) >> phase) & 1u) != 0u; }\n");
         text.Append(value: "void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {\noutputs = (SdfShadeOutputs)0;\nswitch (binding.arm) {\n");

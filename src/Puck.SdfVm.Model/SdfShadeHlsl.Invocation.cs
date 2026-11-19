@@ -103,7 +103,7 @@ void sdfShadeSurfacePhase(SdfShadeBinding binding, inout SdfShadeStamp stamp, in
 SdfLightResponse sdfShadeLightPhase(SdfShadeBinding binding, SdfShadeStamp stamp, SdfLightSource light, SdfShadeSurface surface) {
     bool authored = sdfShadeHas(binding, 1u);
     SdfLightInputs inputs = sdfLightInputs(light, surface, authored);
-    SdfLightResponse response = sdfLightResponse(light, surface, inputs);
+    SdfLightResponse response = sdfLightResponse(light, surface, inputs, authored ? sdfShadeAssigned(binding, 1u) : 0u);
     if (!authored) return response;
     sdfShadeSet_light_direction(stamp, inputs.direction);
     sdfShadeSet_light_position(stamp, light.position);

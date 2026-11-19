@@ -150,7 +150,12 @@ public sealed partial class SdfShadeProgram {
                 }
             }
             var constantsOffset = ((uint)(words.Count / 4));
+            // The surface phase's fourth header word holds the reads; the light and compose phases' hold their assigned
+            // outputs (AssignedOutputs), which the stage reads before the phase runs to leave out the default terms the
+            // phase replaces.
             words[3] = (uint)m_reads;
+            words[7] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Light);
+            words[11] = AssignedOutputs(outputs: bindings, phase: SdfShadePhase.Compose);
 
             words[12] = constantsOffset; words[13] = ((uint)(m_constants.Count / 4));
             words.AddRange(collection: m_constants);
@@ -453,6 +458,14 @@ public sealed partial class SdfShadeProgram {
             ((phase == SdfShadePhase.Light) && (name == "specular"))) ? SdfShadeType.Float3 : SdfShadeType.Float);
     }
 
+    /// <summary>Returns the outputs the program assigns in a phase, one bit an output in the phase's output order (a light
+    /// phase's diffuse, rim, specular and attenuation): the default terms the stage leaves out because the phase
+    /// replaces them.</summary>
+    /// <param name="phase">The phase.</param>
+    /// <returns>The mask, zero for a phase the program does not author.</returns>
+    public uint AssignedOutputs(SdfShadePhase phase) => AssignedOutputs(outputs: Outputs, phase: phase);
+    private static uint AssignedOutputs(IEnumerable<SdfShadeBinding> outputs, SdfShadePhase phase) =>
+        outputs.Where(predicate: o => o.Phase == phase).Aggregate(seed: 0u, func: (mask, o) => mask | (1u << (int)OutputIndex(phase: phase, name: o.Name)));
     private static uint OutputIndex(SdfShadePhase phase, string name) {
         if (((uint)phase) >= OutputNames.Length) { Fail(code: "PUCK126", message: "Unknown shade phase."); }
         var index = Array.IndexOf(array: OutputNames[((int)phase)], value: name);
