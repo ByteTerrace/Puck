@@ -18,7 +18,9 @@ function celBand(cosine, visibility, threshold, softness, combined) = mix(shadeS
 // (metals included) less `form` (0 to 1), the share of the cosine's falloff it keeps so a lit mass still reads round, and
 // the highlight is a bounded disc of `specularSize`.
 // The shade is a painted colour rather than whatever light happens to fill it: `restore` (0 to 1) gives a light's shade
-// side that share of the light back, over the half-cosine so a face turned away still reads its form, and `bleed` (0 to 1)
+// side that share of the light back, over the half-cosine so a face turned away still reads its form, as far as the light
+// reaches the surface's surroundings (`light.probeShare`, the share of the probes about it that see the light), so a
+// closed room's walls take back none of the sun outside them; and `bleed` (0 to 1)
 // is how much of the bounce's own hue the sky and bounce keep, the rest their luminance alone; both then take
 // `shadowTint`. So a lawn's green bounce does not turn every shade olive, and a sunlit scene's shade holds a value near
 // `restore × shadowTint` of its lit side. The result is scene light: the view's display pass tones it, so a cel pixel
@@ -28,7 +30,7 @@ shade template cel(threshold, softness, shadowTint, specularSize, combined = 0, 
     let direct = (light.kind == uint(0)) + (light.kind == uint(2))
     let cosine = max((light.cosine + surface.wrap) / (1 + surface.wrap), 0)
     let band = celBand(cosine, light.visibility, threshold, softness, combined)
-    let shadeSide = shadowTint * ((1 - band) * restore * (0.5 + 0.5 * light.cosine))
+    let shadeSide = shadowTint * ((1 - band) * restore * (0.5 + 0.5 * light.cosine) * light.probeShare)
     let lit = band * mix(1, cosine, form)
     diffuse = direct ? light.color * (light.weight * light.reach) * (shadeSide + [lit, lit, lit]) : (light.kind == uint(256) ? light.color * (light.weight * light.reach * max(light.cosine, 0)) : [0,0,0])
     let halfway = light.direction - surface.rayDirection

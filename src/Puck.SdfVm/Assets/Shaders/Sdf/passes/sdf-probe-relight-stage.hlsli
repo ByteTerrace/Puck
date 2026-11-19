@@ -43,8 +43,8 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
         uint packed = sdfProbeCache[hits + 1 + 2 * texel];
         float3 normal = sdfOctDecode(float2((int)(packed << 8) >> 24, (int)packed >> 24) / SDF_MESH_IRRADIANCE_DEPTH_NORMAL_SCALE);
         float4 ray = sdfProbeDirections[texel];
-        float3 local;
-        float3 varying = sdfProbeShade(origin + ray.xyz * distance, normal, packed & 65535u, reuse, lane, local);
+        float3 local, unanswered;
+        float3 varying = sdfProbeShade(origin + ray.xyz * distance, normal, packed & 65535u, reuse, lane, local, unanswered);
         [unroll] for (uint axis = 0; axis < 6; axis++) {
             float cosine = max(0, ray[axis / 2] * ((axis & 1) == 0 ? 1 : -1));
             probeVarying[axis * SDF_PROBE_GROUP_SIZE + lane] = varying * (ray.w * cosine);

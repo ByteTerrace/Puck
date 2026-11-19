@@ -28,6 +28,7 @@
 #define SDF_PROBE_CACHE_WORDS                        290u
 #define SDF_PROBE_RELIGHT_RESULT_WORDS               302u
 #define SDF_PROBE_CAMERA_SAMPLE_OUTPUT_WORDS         20u
+#define SDF_PROBE_CAMERA_SAMPLE_CLOSURE_PASSES       16u
 #define SDF_PROBE_RECORD_INPUT_WORD                  62u
 #define SDF_PROBE_RELIGHT_PREVIOUS_WORD              4u
 #define SDF_PROBE_SELECT_GROUP_SIZE                  64u
