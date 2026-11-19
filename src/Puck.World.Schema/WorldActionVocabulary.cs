@@ -26,8 +26,8 @@ public static class WorldPredicate {
     public sealed record Held(string Channel) : ActionPredicate;
 }
 /// <summary>The effect arms the world adds to <see cref="ActionEffect"/>, registered by
-/// <see cref="WorldFactsVocabulary"/>. The four body-motion arms (<see cref="SetVerticalVelocity"/>,
-/// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="Designate"/>) are one operation in
+/// <see cref="WorldFactsVocabulary"/>. The body-motion arms (<see cref="SetVerticalVelocity"/>,
+/// <see cref="ScaleVerticalVelocity"/>, <see cref="PlanarImpulse"/>, <see cref="TimedMove"/>, <see cref="Designate"/>) work in
 /// both scopes: a kit's action acts on its own body when it names none, and a world rule, which has no body of its
 /// own, names one with <c>key</c> (<see cref="WorldBodyEffects"/> is the one check and lowering both read). A timer
 /// belongs to a kit's action programs and refuses in a world rule; the document, cue, field, pose, body-state and save
@@ -73,6 +73,21 @@ public static class WorldEffect {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
         ActionTarget Target = ActionTarget.Self,
         bool UseMoveDirection = false
+    ) : ActionEffect;
+    /// <summary>Moves a body along its launch plane and turns it through a signed relative yaw over time.</summary>
+    /// <param name="Right">Travel to the right in body-sized world units.</param>
+    /// <param name="Forward">Travel forward in body-sized world units.</param>
+    /// <param name="YawDegrees">Signed relative turn in degrees, in Puck's yaw convention.</param>
+    /// <param name="DurationSeconds">Positive duration in exact engine ticks, expressed in seconds.</param>
+    /// <param name="Curve">How both travel and yaw are distributed over the duration.</param>
+    /// <param name="Key">The recipient of a world rule. A kit action supplies its own body.</param>
+    public sealed record TimedMove(
+        decimal Right,
+        decimal Forward,
+        decimal YawDegrees,
+        decimal DurationSeconds,
+        BodyMotionCurve Curve = BodyMotionCurve.Linear,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(string State, float Seconds, ActionTarget Target = ActionTarget.Self) : ActionEffect;

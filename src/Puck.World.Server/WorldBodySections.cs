@@ -52,6 +52,7 @@ public readonly record struct BodyPoseSection(
 /// <param name="VerticalVelocity">The vertical velocity.</param>
 /// <param name="DrivePitch">The drive frame's climb attitude scalar.</param>
 /// <param name="OverlayVelocity">The timed impulse overlay's world-space velocity.</param>
+/// <param name="TimedMove">The active authored displacement and yaw, with their progress.</param>
 /// <param name="RigidVelocity">A rigid kit's linear velocity.</param>
 /// <param name="RigidAngularVelocity">A rigid kit's angular velocity.</param>
 /// <param name="RigidResting">A rigid kit's resting latch.</param>
@@ -96,6 +97,7 @@ public readonly record struct BodyMotionSection(
     FixedQ4816 VerticalVelocity,
     FixedQ4816 DrivePitch,
     FixedVector3 OverlayVelocity,
+    WorldTimedBodyMove TimedMove,
     FixedVector3 RigidVelocity,
     FixedVector3 RigidAngularVelocity,
     bool RigidResting,
@@ -152,6 +154,7 @@ public readonly record struct BodyMotionSection(
         writer.WriteFixed(value: section.VerticalVelocity);
         writer.WriteFixed(value: section.DrivePitch);
         writer.WriteFixedVector(value: section.OverlayVelocity);
+        WorldTimedBodyMove.Write(writer, section.TimedMove);
         writer.WriteFixedVector(value: section.RigidVelocity);
         writer.WriteFixedVector(value: section.RigidAngularVelocity);
         writer.WriteBoolean(value: section.RigidResting);
@@ -203,6 +206,7 @@ public readonly record struct BodyMotionSection(
         VerticalVelocity: reader.ReadFixed(),
         DrivePitch: reader.ReadFixed(),
         OverlayVelocity: reader.ReadFixedVector(),
+        TimedMove: WorldTimedBodyMove.Read(ref reader),
         RigidVelocity: reader.ReadFixedVector(),
         RigidAngularVelocity: reader.ReadFixedVector(),
         RigidResting: reader.ReadBoolean(),

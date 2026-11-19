@@ -600,7 +600,7 @@ public static class WorldBootComposition {
         services.AddSingleton<ICommandModule, WorldMachineCommandModule>();
         // The render.lighting read-back — world.lighting. The fields themselves are authored through
         // world.row.set render.
-        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldLightingCommandModule(authority: sp.GetRequiredService<IWorldConsoleAuthority>(), shadowReport: definition => sp.GetService<WorldFramePresenter>()?.DescribeShadowSlots(definition: definition)));
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldLightingCommandModule(authority: sp.GetRequiredService<IWorldConsoleAuthority>(), shadowReport: version => sp.GetService<WorldFramePresenter>()?.DescribeShadowSlots(authority: version)));
         // world.timeline reads the clocks off the authority and the keyed resolutions off the client's state mirror.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTimelineCommandModule(
             authority: sp.GetRequiredService<IWorldConsoleAuthority>(),

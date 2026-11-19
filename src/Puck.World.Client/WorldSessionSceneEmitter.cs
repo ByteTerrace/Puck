@@ -58,10 +58,12 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_shadowObservation.Dispose();
         m_environment.Dispose();
     }
-    /// <summary>Reads the last presented slot census of this session.</summary>
-    /// <param name="definition">The queried authority's definition.</param>
-    /// <returns>The census, or null before a matching frame.</returns>
-    public string? DescribeShadowSlots(WorldDefinition definition) => m_environment.DescribeShadowSlots(definition: definition);
+    /// <summary>Reads the last presented slot census of this session when it presents the queried authority, matched by
+    /// the delivered version's activation.</summary>
+    /// <param name="authority">The queried authority's document version.</param>
+    /// <returns>The census, or <see langword="null"/> for another authority or before a frame.</returns>
+    public string? DescribeShadowSlots(Puck.World.Protocol.WorldDocumentVersion authority) =>
+        ((m_mirror.Document.Version.Activation == authority.Activation) ? m_environment.DescribeShadowSlots() : null);
 
     // The BIND-time resolved camera choice: a validated, currently-present camera NAME, or null for "use the
     // destination's default projection" (its first declared camera, else the spawn-centroid overview) — see this

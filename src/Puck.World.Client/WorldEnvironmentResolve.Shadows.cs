@@ -20,7 +20,7 @@ public sealed partial class WorldEnvironmentResolve {
 
     private readonly Lock m_shadowReportGate = new();
 
-    private WorldDefinition? m_shadowReportDefinition;
+    private bool m_shadowReported;
     private WorldShadowSettings m_shadowReportSettings;
 
     /// <summary>Gets the complete name-keyed selection feeding the frame's stable slots and active handoffs.</summary>
@@ -97,7 +97,7 @@ public sealed partial class WorldEnvironmentResolve {
                 if (light.Kind != SdfLightKind.Directional) { continue; }
                 lights.Set(index: index, light: light with { Shadows = (selected[index] ? 1u : 0u) });
             }
-            m_shadowReportDefinition = m_definition;
+            m_shadowReported = true;
             m_shadowReportSettings = settings;
             m_shadowPresented = tick;
             m_shadowReadout = readout;
@@ -121,12 +121,12 @@ public sealed partial class WorldEnvironmentResolve {
         }
     }
 
-    /// <summary>Formats the last frame's slot owners, tick-derived handoffs and queued crossing reasons.</summary>
-    /// <param name="definition">The queried authority's definition; another authority has no report here.</param>
-    /// <returns>The slot census, or null before a frame of this definition is presented.</returns>
-    public string? DescribeShadowSlots(WorldDefinition definition) {
+    /// <summary>Formats the last frame's slot owners, tick-derived handoffs and queued crossing reasons. Which authority
+    /// the report belongs to is the owner's to match (<see cref="WorldFramePresenter.DescribeShadowSlots"/>).</summary>
+    /// <returns>The slot census, or <see langword="null"/> before this resolver has resolved a frame.</returns>
+    public string? DescribeShadowSlots() {
         lock (m_shadowReportGate) {
-            if (!ReferenceEquals(objA: definition, objB: m_shadowReportDefinition)) { return null; }
+            if (!m_shadowReported) { return null; }
             var count = m_shadowReadout;
             var text = new StringBuilder();
 

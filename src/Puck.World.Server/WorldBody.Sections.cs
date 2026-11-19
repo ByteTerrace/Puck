@@ -62,6 +62,7 @@ public sealed partial class WorldBody {
             MediumThrustRampRemainder: m_mediumThrustRampAccumulator.Remainder,
             OverlayRemainder: (m_overlayAccumulator.XRemainder, m_overlayAccumulator.YRemainder, m_overlayAccumulator.ZRemainder),
             OverlayVelocity: m_overlayVelocity,
+            TimedMove: m_timedMove,
             PlanarFollowerPosition: (m_planarFollower.X.PositionRaw, m_planarFollower.Y.PositionRaw, m_planarFollower.Z.PositionRaw),
             PlanarFollowerPreviousTarget: m_planarPreviousTarget,
             PlanarFollowerSeeded: m_planarFollowerSeeded,
@@ -270,6 +271,7 @@ public sealed partial class WorldBody {
         m_verticalVelocity = motion.VerticalVelocity;
         m_drivePitch = motion.DrivePitch;
         m_overlayVelocity = motion.OverlayVelocity;
+        m_timedMove = motion.TimedMove;
         m_rigidVelocity = motion.RigidVelocity;
         m_angularVelocity = motion.RigidAngularVelocity;
         m_resting = motion.RigidResting;
