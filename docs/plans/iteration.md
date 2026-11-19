@@ -42,8 +42,8 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 ## Order of work
 
 1. The instrument: every loop timed in the World and readable by a verb.
-2. Keys by stage: each bake stage keyed on what it reads, so an engine edit
-   outside the field and its kernel reuses every stored mesh.
+2. Bake keys by stage. `puck mesh identity --against` reports whether sampling,
+   contouring, simplification and landing can reuse their previous products.
 3. The live edit path: a saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
    edits as a progressive rebake of only the creations touched.

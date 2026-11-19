@@ -52,6 +52,7 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SignedDistance", "Puck.SignedDistance.SdfProgram", ".ctor"),
     ];
     private static readonly HashSet<string> StopTypes = new(collection: [
+        "Puck.Abstractions.CacheRetention",
         "Puck.Abstractions.Gpu.GpuRegion",
         "Puck.Abstractions.Gpu.GpuUploadRuns",
         // Memory accounting and storage: admission paces when a group holds its final lattice, never what it meshes, and a
