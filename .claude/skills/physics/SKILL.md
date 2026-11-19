@@ -168,6 +168,13 @@ A field row’s `simulationOnly` flag keeps the height scale in `FieldLattice.St
 
 - **The adjacency sweep's remote side reads a neighbour's unscaled collider**:
   the delivered snapshot carries no per-entity `Scale` yet.
+- **No query crosses a portal door.** Line of sight (`WorldPopulation.HasLineOfSight`),
+  a tether's aim, a hold's reach, body pairs and routes all stop at the glass,
+  and a door that moves is not swept. `WorldPortalHoleContactField` only takes
+  back the push of the wall behind an opening.
+  [Portals in play](../../../docs/plans/portals-in-play.md#2-queries-through-doors)
+  designs the one layer that carries every ray through, composed where the
+  opening and seam layers are.
 - **Approximations the reference names.** Rounded or chamfered circular rims
   use a contained cylinder core with a reported inward bound (the fix is an
   exact rim contact); elliptical and carved primitives stay bounded
