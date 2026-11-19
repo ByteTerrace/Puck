@@ -423,8 +423,8 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
 268-second free-running bake is what a player's first boot pays today.
 
 1. **Let the bake out of the frame budget while it owes the frame meshes.**
-   Built: a lattice of a group in view that draws nothing yet is taken under
-   its own allowance (`SdfGpuWorkBudget.OwedAllowance`), the GPU the frames
+   Built: an arrival's lattices (a group that draws nothing yet, or the first
+   detail over the floor it landed first) are taken under their own allowance (`SdfGpuWorkBudget.OwedAllowance`), the GPU the frames
    leave idle between them, from a quarter of the period up to one period,
    outside the credit. *Saving:* up to about 190 of run C's 268 seconds.
    *Evidence:* run C's `budget-holds:4508, deadline-holds:10773,

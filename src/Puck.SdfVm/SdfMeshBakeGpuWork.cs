@@ -114,7 +114,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) =>
         Take(allowance: allowance, estimatedSeconds: out estimatedSeconds, job: out job, owed: false, tables: tables);
     /// <inheritdoc/>
-    /// <remarks>Takes a batch of the lattices of groups that owe the frame a hole alone
+    /// <remarks>Takes a batch of the lattices of groups that owe the frame alone
     /// (<see cref="SdfMeshPathBake.TryTakeOwed"/>), cut and priced as <see cref="TryTake"/> cuts and prices one.</remarks>
     public bool TryTakeOwed(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) =>
         Take(allowance: allowance, estimatedSeconds: out estimatedSeconds, job: out job, owed: true, tables: tables);

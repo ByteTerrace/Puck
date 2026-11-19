@@ -56,7 +56,7 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 4. Lighting from a stable proxy, relit incrementally, settled at boot with the
    whole GPU.
 5. The cold bake fed: groups in flight bounded by the GPU rather than round
-   trips. Work that owes the frame a hole already takes the GPU the frame
+   trips. An arrival's bake work already takes the GPU the frame
    leaves idle ([the bake-time research](field-programs/research-bake-time.md#ranked-fixes),
    fix 1).
 

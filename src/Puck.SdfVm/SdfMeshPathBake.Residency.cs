@@ -105,13 +105,13 @@ public sealed partial class SdfMeshPathBake {
     // replaces the group list and the copy index (Restart, Revisit, IndexCopies), and a priority only orders work, never
     // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
     // Also marks each group in view (Group.InView: SdfMeshDemand.Sees, which takes every box with no demand point) and
-    // counts the groups that owe the frame a hole (OwesHole), which the bake's owed takes read (OwedHoles).
+    // counts the groups that owe the frame (OwesFrame), which the bake's owed takes read (OwedGroups).
     private void Prioritize() {
         // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
         lock (m_gate) {
             while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
             if (m_doneThrough >= m_groups.Count) {
-                Volatile.Write(location: ref m_owedHoles, value: 0);
+                Volatile.Write(location: ref m_owedGroups, value: 0);
                 return;
             }
         }
@@ -136,9 +136,9 @@ public sealed partial class SdfMeshPathBake {
         var holes = 0;
 
         foreach (var group in m_groups) {
-            if (OwesHole(group: group)) { holes++; }
+            if (OwesFrame(group: group)) { holes++; }
         }
-        Volatile.Write(location: ref m_owedHoles, value: holes);
+        Volatile.Write(location: ref m_owedGroups, value: holes);
         if (!measured) { return; }
         foreach (var group in m_groups) {
             if (group.Done) { continue; }
