@@ -2874,8 +2874,8 @@ the bar as ruled.**
 - *Owns.* `src/Puck.World.Client/WorldShadowAllocator*.cs`,
   `src/Puck.SdfVm/SdfMeshShadowCascades.cs`, the shadow slots in
   `src/Puck.SignedDistance`, `passes/sdf-surface-stage.hlsli`,
-  `shade/sdf-light.hlsli`, `WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`, and the nested table's rows in the
+  `shade/sdf-light.hlsli`, the nested views' quality (`WorldRenderSettings.NestedRestriction`),
+  and the nested table's rows in the
   quality presets.
 - *Needs.* Nothing.
 - *Model.* Opus `specialist`.

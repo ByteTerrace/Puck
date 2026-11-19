@@ -1362,7 +1362,7 @@ separate defects.
 
 *Softness jumps at the boundary between shadow maps.* The first cascade that
 contains a point answers for it, with no blending between cascades
-(`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-surface-stage.hlsli:254`):
+(`src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-surface-stage.hlsli:267`):
 
 ```hlsl
         if (any(abs(plane) > 0.97) || (depth <= c.near) || (depth >= c.far)) {
@@ -2965,8 +2965,8 @@ seen directly.
 - **Nested views lose shadows and ambient occlusion at any size.** Two
   identical constants turn ambient occlusion and every cascade off for all
   session views and camera views
-  (`WorldSessionSceneEmitter.ReducedQuality`,
-  `WorldScreenBinder.CameraViewQuality`). A portal that fills the screen is
+  (one in the session scene emitter, one in the screen binder; the nested-view
+  table, `WorldRenderSettings.NestedRestriction`, replaced them). A portal that fills the screen is
   lit differently from the room behind it.
 - **A sliver of window can cost a full image.** A window's image is sized
   by the projected bounds of its slab. If any corner is at or behind the
