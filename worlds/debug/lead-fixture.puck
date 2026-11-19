@@ -1,0 +1,8 @@
+// The lead fixture world (`lead-world.puck`) with its finger driver leading on `press`. The authority scenarios are
+// `lead-tests.puck`; `lead-plain-fixture.puck` is the same world with the `lead` removed.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "lead-fixture"
+import "lead-world"
+
+leadWorld(led: true)

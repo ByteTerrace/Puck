@@ -80,10 +80,6 @@ public static partial class SdfWorldPackage {
     /// luminance it shades to the display by before its display pass, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
-    /// <summary>The world's default cel style (<c>SdfToon.WriteRows</c>, a material's rows 22 to 25 alike): mode (zero
-    /// off, one banding the cosine under its visibility, two banding both together), diffuse threshold, terminator width and
-    /// specular size (<c>float4</c>).</summary>
-    public const string ToonBands = "toonBands";
     /// <summary>The measurement lever selecting admitted shading programs rather than legacy material layers.</summary>
     public const string ShadePrograms = "shadePrograms";
     /// <summary>The world default's owned code and runtime-parameter ranges in the appearance words.</summary>
@@ -92,9 +88,9 @@ public static partial class SdfWorldPackage {
     public const string ShadeIdentity = "shadeIdentity";
     /// <summary>The default's conservative shadow demand, including unassigned base wrap.</summary>
     public const string ShadeDemand = "shadeDemand";
-    /// <summary>Cel shadow tint and reflected-light exposure gain (<c>float4</c>).</summary>
-    public const string ToonShadow = "toonShadow";
-    /// <summary>Cel outline radius in output pixels, half-width distance, normal threshold and colour shoulder (<c>float4</c>).</summary>
+    /// <summary>The world's default cel style's first row (<c>SdfToon.WriteRows</c>, a material's row 22 alike): its mode
+    /// (<c>SdfToon.Mode</c>, negative while every style is suppressed), outline radius in output pixels, half-width
+    /// distance and crease cosine (<c>float4</c>).</summary>
     public const string ToonOutline = "toonOutline";
     /// <summary>Cel outline's linear RGB multiplier, and the view's render grid, which scales every style's outline radius
     /// from output to render pixels (<c>float4</c>).</summary>
@@ -326,13 +322,11 @@ public static partial class SdfWorldPackage {
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
-        Value(name: ToonBands, type: ShaderValueType.Float4),
         Value(name: ShadePrograms, type: ShaderValueType.Uint),
         Value(name: ShadeDefault, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),
         Value(name: ShadeDemand, type: ShaderValueType.Float4),
         Value(name: ShadeBinWidths, type: ShaderValueType.Uint4),
-        Value(name: ToonShadow, type: ShaderValueType.Float4),
         Value(name: ToonOutline, type: ShaderValueType.Float4),
         Value(name: ToonInk, type: ShaderValueType.Float4),
         Value(name: WorldLanes, type: ShaderValueType.Float4),
@@ -374,7 +368,7 @@ public static partial class SdfWorldPackage {
         Value(name: MeshShadowParameters, type: ShaderValueType.Float4),
         Value(name: MeshShadowSlopes, type: ShaderValueType.Float4),
         Value(name: MeshShadowRoles, type: ShaderValueType.Uint4),
-        Value(name: MeshShadowTexels, type: ShaderValueType.Uint),
+        Value(name: MeshShadowTexels, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceLevels, type: ShaderValueType.Int4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: MeshIrradianceLevelCount, name: MeshIrradianceSpacings, type: ShaderValueType.Float4),
         ShaderWorkCounters.RowMember,
@@ -471,6 +465,8 @@ public static partial class SdfWorldPackage {
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowNearExit, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowFarExit, type: ShaderValueType.Float4),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowSecondExit, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowDistant, type: ShaderValueType.Float4),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: MeshShadowDistantExit, type: ShaderValueType.Float4),
         ShaderWorkCounters.BufferMember,
         Read(element: ShaderValueType.Uint, name: MeshShadowNearOptical),
         Read(element: ShaderValueType.Uint, name: MeshShadowFarOptical),
@@ -502,11 +498,12 @@ public static partial class SdfWorldPackage {
             ShadowRaster(depth: Parts.ShadowNearDepth, exit: Parts.ShadowNearExit, name: Parts.ShadowNear),
             ShadowRaster(depth: Parts.ShadowFarDepth, exit: Parts.ShadowFarExit, name: Parts.ShadowFar),
             ShadowRaster(depth: Parts.ShadowSecondDepth, exit: Parts.ShadowSecondExit, name: Parts.ShadowSecond),
+            ShadowRaster(depth: Parts.ShadowDistantDepth, exit: Parts.ShadowDistantExit, name: Parts.ShadowDistant),
             Pass(inputs: [Parts.MeshTarget], name: Parts.Pyramid, outputs: [Parts.MeshPyramid]),
             Pass(
                 inputs: [
                     Parts.MeshTarget, Parts.MeshPyramid, Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
-                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
+                    Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit, Parts.ShadowDistantDepth, Parts.ShadowDistantExit,
                 ],
                 name: Parts.Surface,
                 outputs: [Parts.Visibility]
@@ -526,6 +523,8 @@ public static partial class SdfWorldPackage {
             ShadowDepth(name: Parts.ShadowNearExit, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowFarExit, texels: MeshShadowResolution),
             ShadowDepth(name: Parts.ShadowSecondExit, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowDistantDepth, texels: MeshShadowResolution),
+            ShadowDepth(name: Parts.ShadowDistantExit, texels: MeshShadowResolution),
             Image(format: MeshTargetFormat, from: null, name: Parts.MeshTarget, retained: true),
             // Two words a pyramid texel; the levels one up hold under a third of the extent's texels, with their tiles'
             // padding, and the kernels bound every level by the buffer's length.
@@ -663,6 +662,14 @@ public static partial class SdfWorldPackage {
         public const string ShadowFar = "shadow-far";
         /// <summary>The second shadow slot's cascade raster pass.</summary>
         public const string ShadowSecond = "shadow-second";
+        /// <summary>The distant shadow map's raster pass: the key light's static casters out to the authored distant
+        /// reach, redrawn only when the light turns past its authored tolerance, the eye crosses a cell of the map's
+        /// grid or a static draw changes (<c>SdfWorldPasses</c>).</summary>
+        public const string ShadowDistant = "shadow-distant";
+        /// <summary>The distant shadow map's depth.</summary>
+        public const string ShadowDistantDepth = "shadowDistantDepth";
+        /// <summary>The distant shadow map's exit layer.</summary>
+        public const string ShadowDistantExit = "shadowDistantExit";
         /// <summary>The near cascade's depth: per texel the reversed-Z orthographic depth of the nearest caster, zero (the
         /// far plane) where none was drawn.</summary>
         public const string ShadowNearDepth = "shadowNearDepth";

@@ -34,4 +34,12 @@ public static class WorldRenderFarDistance {
             Near: (authored?.Near ?? fallback.Near)
         );
     }
+    /// <summary>Resolves an authored distant shadow map (<c>render.distantShadows</c> or a quality preset's row) to the one
+    /// a frame draws: its reach, texels and light tolerance, the tolerance converted from degrees to radians; off when none
+    /// is authored.</summary>
+    /// <param name="authored">The authored map, or <see langword="null"/> for none.</param>
+    /// <returns>The map.</returns>
+    public static SdfDistantShadows ResolveDistantShadows(WorldDistantShadows? authored) => ((authored is { } map)
+        ? new SdfDistantShadows(Reach: map.Reach, Texels: map.Texels, TurnRadians: float.DegreesToRadians(degrees: map.TurnDegrees))
+        : default);
 }

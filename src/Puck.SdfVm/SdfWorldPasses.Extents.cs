@@ -17,8 +17,12 @@ public sealed partial class SdfWorldPasses {
     // Each fragment with its views pass shading in bins (SdfWorldPackage.WithBins), made once for the same reason.
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
 
-    // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade.
-    private const int ShadowShapes = 6;
+    // The sizes a distant map takes, each a power of two from the least through the most (SdfWorldPackage), and none.
+    private static readonly int DistantShapes = ((System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMaxResolution) -
+        System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 2);
+    // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade, with each
+    // distant map.
+    private static readonly int ShadowShapes = (6 * DistantShapes);
 
     // Each fragment with its display stage (SdfWorldPackage.WithDisplay), one per bloom quality in BloomQuality's order,
     // made once for the same reason.
@@ -97,6 +101,13 @@ public sealed partial class SdfWorldPasses {
         // Whether the view's world holds a second stable shadow slot, whose one cascade the view then allocates. The slot
         // count is the world's configured policy, so a handoff between lights never allocates.
         private bool RequestsSecondShadow => ((View?.Residency.Frame?.Lights.ShadowSlots.SlotCount ?? 0) > 1);
+        // The texels a side of the view's distant map while it renders shadows, zero while its world draws none
+        // (SdfDistantShadows.TexelsAt); a power of two from the least through the most the package allows.
+        private int RequestsDistantTexels => (View?.Residency.Frame?.DistantShadows.TexelsAt(resolution: ShadowResolution) ?? 0);
+        // The distant map's shape: zero for none, else one more than its size's power of two above the least.
+        private int DistantShape => ((RequestsDistantTexels is var texels and > 0)
+            ? ((System.Numerics.BitOperations.Log2(value: (uint)texels) - System.Numerics.BitOperations.Log2(value: (uint)SdfWorldPackage.MeshDistantShadowMinResolution)) + 1)
+            : 0);
         // Whether the view's program holds a glass shape, so the view runs the glass passes and allocates their
         // storages (SdfWorldPackage.WithGlass); a view of any other program pays nothing for them.
         private bool RequestsGlass => (View?.Residency.Frame?.Program.HasGlass ?? false);
@@ -112,10 +123,10 @@ public sealed partial class SdfWorldPasses {
             : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment)))));
 
         // The low bits distinguish temporal reconstruction, the shadows, their resolution, the second slot's cascade, the
-        // glass passes and the binned views passes. Render ceilings are quantized fractions from zero through one
-        // (RenderGraphExtent.Quantize): their binary exponents share the two high bits shifted out here, and their
-        // mantissas' low bits, which these bits land in, are zero.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsBins ? 128L : 0L) |
+        // glass passes, the binned views passes and the distant map's shape. Render ceilings are quantized fractions from
+        // zero through one (RenderGraphExtent.Quantize): their binary exponents share the two high bits shifted out here,
+        // and their mantissas' low bits, which these bits land in, are zero.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsShadows ? (((long)DistantShape) << 8) : 0L) | (RequestsBins ? 128L : 0L) |
             (RequestsGlassShadows ? 64L : 0L) | (RequestsGlass ? 32L : 0L) | (RequestsSecondShadow ? 16L : 0L) | (((long)ShadowResolution) << 2) | (RequestsShadows ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
         private RenderGraphPackageFragment Binned(RenderGraphPackageFragment fragment) =>
@@ -130,14 +141,15 @@ public sealed partial class SdfWorldPasses {
             if (RequestsGlassShadows) { fragment = GlassShadowFragments.GetValue(fragment, SdfWorldPackage.WithGlassShadows); }
             var resolution = ShadowResolution;
             var second = RequestsSecondShadow;
+            var distantTexels = RequestsDistantTexels;
             var shaped = ShadowedFragments.GetValue(createValueCallback: static _ => new RenderGraphPackageFragment[ShadowShapes], key: fragment);
-            var index = ((((int)resolution) * 2) + (second ? 1 : 0));
+            var index = ((((((int)resolution) * 2) + (second ? 1 : 0)) * DistantShapes) + DistantShape);
 
             // The first fragment made for a shape is the one every later frame takes, whichever thread made it.
             return (Volatile.Read(location: ref shaped[index]) ?? (Interlocked.CompareExchange(
                 comparand: null,
                 location1: ref shaped[index],
-                value: SdfWorldPackage.WithShadows(fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
+                value: SdfWorldPackage.WithShadows(distantTexels: distantTexels, fragment: fragment, second: second, texels: SdfShadowResolutions.Texels(resolution: resolution))
             ) ?? shaped[index]!));
         }
 

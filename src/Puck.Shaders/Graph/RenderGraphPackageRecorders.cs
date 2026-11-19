@@ -135,9 +135,11 @@ public interface IRenderGraphPackageRecorder : IDisposable {
     /// <param name="recording">The frame's command buffer and bound versions.</param>
     /// <returns>Whether the recording wrote its outputs, or left each to stand for its input.</returns>
     RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording);
-    /// <summary>Commits package-owned history metadata after the frame's submission succeeds. Called only for a pass
-    /// that recorded, before any export handoff. Recording and submission failures, skipped passes and standing passes
-    /// call nothing. The default has no metadata to commit.</summary>
+    /// <summary>Commits package-owned history metadata once the frame's submission has reached the queue. Called only for
+    /// a pass that recorded, before its export handoff: when the frame commits, or, for a submission an open batch
+    /// defers, once that batch's hand-over has taken it, which may be after other instances of the frame have recorded
+    /// but always before this pass records again. Recording failures, a submission that never reaches the queue, skipped
+    /// passes and standing passes call nothing. The default has no metadata to commit.</summary>
     void Submitted() { }
     /// <summary>Notifies a pass that its retained outputs stood for this frame. No work or barriers were recorded.</summary>
     void Stood() { }

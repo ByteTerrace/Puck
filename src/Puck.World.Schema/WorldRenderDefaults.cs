@@ -87,6 +87,8 @@ public static class WorldApplicationDefaults {
 /// <param name="Bloom">The optical scatter cost gate.</param>
 /// <param name="RayQueries">Whether the preset lets the indirect volume's background rays take the device's ray hardware
 /// where it has it (<c>world.rays</c>); the software walk answers the same hits elsewhere.</param>
+/// <param name="DistantShadows">The distant shadow map the device draws past the far cascade (its reach, texels and the
+/// light turn a held map tolerates): far shadows by rasterization, which need no ray hardware. Absent draws none.</param>
 [method: JsonConstructor]
 public readonly record struct WorldQualityPreset(
     ShadowTier Shadows,
@@ -103,7 +105,8 @@ public readonly record struct WorldQualityPreset(
     [property: JsonConverter(typeof(StrictEnumConverter<SdfIndirectTier>)), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfIndirectTier? Indirect = null,
     float SkyFieldScale = 1f,
     Puck.Hosting.BloomQuality Bloom = Puck.Hosting.BloomQuality.High,
-    bool RayQueries = false
+    bool RayQueries = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null
 );
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
@@ -153,9 +156,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
 /// tone curve. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
-/// <param name="Toon">The world's default cel style, which every material that authors no style of its own shades with
-/// (<see cref="ToonStyleDocument"/>), on unless it says <c>enabled: false</c>, and which the live <c>world.toon</c> lever
-/// turns on or off. Absent is off.</param>
+/// <param name="Toon">The world's default cel style (<see cref="ToonStyleDocument"/>), which every material that authors
+/// no style of its own takes: its ink, and the styled mark the live <c>world.toon off</c> suppresses with the
+/// <see cref="Shade"/> default it inks. On unless it says <c>enabled: false</c>; absent is off.</param>
 /// <param name="Bloom">Optional camera scatter. Absent is off.</param>
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
@@ -173,6 +176,8 @@ public readonly record struct WorldQualityPreset(
 /// and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration
 /// structures (<c>world.rays</c>). The software walk answers the same hits wherever it is off or the device has none.
 /// Absent is off.</param>
+/// <param name="DistantShadows">The distant shadow map the world boots drawing past the far cascade
+/// (<see cref="WorldDistantShadows"/>); a quality preset's row replaces it. Absent draws none.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,
@@ -204,7 +209,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
-    bool RayQueries = false
+    bool RayQueries = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;
@@ -374,6 +380,46 @@ public sealed record WorldRenderShadowCoverage(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Near = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Far = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Casters = null);
+/// <summary>The key light's distant shadow map: one more shadow map past the far cascade, with texels of its own, so ridges
+/// shadow walls hundreds of metres off without costing the near cascades precision. It draws only what stands still and
+/// holds what it drew while the light turns within <paramref name="TurnDegrees"/> and the eye stays within an eighth of
+/// the reach of where it was centred, so it costs a frame nothing between those changes. A device's quality row chooses it
+/// (<see cref="WorldQualityPreset.DistantShadows"/>); a view's shadow quality halves its texels as it does the cascades'.
+/// </summary>
+/// <param name="Reach">The distance, in metres from the eye in every direction, the map covers: past the far cascade's
+/// reach and up to the far distance, within [1, 8192].</param>
+/// <param name="Texels">The texels along each side of the map at full shadow quality: a power of two from 256 through
+/// 4096. Its texel is about twice the reach over this.</param>
+/// <param name="TurnDegrees">The light turn, in degrees, a held map tolerates before it is drawn again: the most its
+/// shadows lag a moving sun by, in (0, 10].</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldDistantShadows(float Reach, int Texels, float TurnDegrees) {
+    /// <summary>The fewest texels a side a map may ask for: the render graph's least distant map
+    /// (<c>SdfWorldPackage.MeshDistantShadowMinResolution</c>, which this project cannot reference).</summary>
+    public const int MinTexels = 256;
+    /// <summary>The most texels a side a map may ask for: the render graph's largest distant map
+    /// (<c>SdfWorldPackage.MeshDistantShadowMaxResolution</c>).</summary>
+    public const int MaxTexels = 4096;
+    /// <summary>The widest light turn, in degrees, a held map may tolerate.</summary>
+    public const float MaxTurnDegrees = 10f;
+
+    /// <summary>Returns why the map cannot be drawn, or <see langword="null"/> when it can.</summary>
+    /// <param name="path">The document path the refusal names the map by.</param>
+    /// <returns>The refusal, or <see langword="null"/>.</returns>
+    public string? Refusal(string path) {
+        if (!float.IsFinite(f: Reach) || (Reach < WorldRenderDefaults.MinFarDistance) || (Reach > WorldRenderDefaults.MaxFarDistance)) {
+            return $"{path}.reach is {Reach}; it lies within [{WorldRenderDefaults.MinFarDistance}, {WorldRenderDefaults.MaxFarDistance}] metres.";
+        }
+        if ((Texels < MinTexels) || (Texels > MaxTexels) || !System.Numerics.BitOperations.IsPow2(value: Texels)) {
+            return $"{path}.texels is {Texels}; it is a power of two from {MinTexels} through {MaxTexels}.";
+        }
+        if (!float.IsFinite(f: TurnDegrees) || (TurnDegrees <= 0f) || (TurnDegrees > MaxTurnDegrees)) {
+            return $"{path}.turnDegrees is {TurnDegrees}; it lies within (0, {MaxTurnDegrees}] degrees.";
+        }
+
+        return null;
+    }
+}
 /// <summary>One row of the nested-view table (<c>render.nested</c>): what a view shown inside another (through a window or
 /// portal, on a screen a camera films, or a session's screen) gives up while it is presented at or below a share of the
 /// display's height. A nested view takes the first row, in ascending <paramref name="Share"/>, whose share it does not

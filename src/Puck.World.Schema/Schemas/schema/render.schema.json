@@ -693,7 +693,7 @@
     },
     "toon": {
       "$ref": "./common.schema.json#/$defs/ToonStyleDocument",
-      "description": "The world\u0027s default cel style, which every material that authors no style of its own shades with (ToonStyleDocument), on unless it says enabled: false, and which the live world.toon lever turns on or off. Absent is off.",
+      "description": "The world\u0027s default cel style (ToonStyleDocument), which every material that authors no style of its own takes: its ink, and the styled mark the live world.toon off suppresses with the Shade default it inks. On unless it says enabled: false; absent is off.",
       "default": null
     },
     "bloom": {
@@ -967,6 +967,11 @@
       "description": "Whether the indirect volume\u0027s background rays (its probe trace, the relight\u0027s shadow rays and the camera sample) boot taking the device\u0027s ray hardware where it has it, through the scene\u0027s acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.",
       "type": "boolean",
       "default": false
+    },
+    "distantShadows": {
+      "$ref": "./common.schema.json#/$defs/WorldDistantShadows",
+      "description": "The distant shadow map the world boots drawing past the far cascade (WorldDistantShadows); a quality preset\u0027s row replaces it. Absent draws none.",
+      "default": null
     }
   },
   "additionalProperties": false,

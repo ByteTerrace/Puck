@@ -535,6 +535,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             // answers, so it is the presenting session's lever (render.rayQueries at its boot, then `world.rays`, a quality
             // preset or a device profile), never the destination document's: a painting world authors no device's cost.
             RayQueries = (Session?.RayQueries ?? m_mirror.Definition.Render.RayQueries),
+            // The distant shadow map's reach, texels and tolerance are a device table's row, so the presenting session's
+            // lever too, as the rays are.
+            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
             IndirectSources = environment.Indirect.Gains.Sources,
             IndirectGains = environment.Indirect.Gains,
             IndirectBounces = environment.Indirect.Bounces,
@@ -543,9 +546,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             IndirectApply = environment.Indirect.Apply,
             Lights = environment.Lights,
             Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
-            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: Session?.ToonOverride),
+            Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, shown: Session?.ToonOverride),
             Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
-            ShadePrograms = Session?.ShadePrograms ?? false,
+            ShadePrograms = Session?.ShadePrograms ?? true,
             ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),
             Sky = environment.Sky,

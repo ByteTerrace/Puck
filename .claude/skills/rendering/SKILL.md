@@ -369,6 +369,23 @@ include a moving camera and reduced/temporal render grids. The receiver scratch
 shares the depth allocation and its existing slot-fence retirement; early
 compute samples camera depth, late compute samples light depth, in separate sets.
 
+## The distant shadow map
+
+The cascade set's fourth entry (`SdfMeshShadowCascades.DistantEntry`, primary role) is the far shadows past the
+far cascade, authored per device row (`WorldQualityPreset.DistantShadows`) and at boot (`render.distantShadows`),
+carried on `SdfFrame.DistantShadows`; the [handbook](../../../docs/rendering/sdf/handbook/frame-rendering.md#the-distant-shadow-map)
+owns the behaviour. Its invariant is that a held map draws only what cannot move while it stands: the
+`shadow-distant` pass stages `staticOnly`, so the selection kernel rejects every record carrying
+`SdfMeshRecord.DynamicFlag` (set from `SdfMeshDraw.IsStatic` in `SdfMeshRegion.WriteDraw`, derived so a skinned or
+displaced draw, which moves without its record changing, is never static), and its
+signature (`SdfWorldPasses.DistantSignatureOf`) folds `SdfWorldTables.StaticDrawRevision`, which only
+`StageChangedDraws` and `Unname` advance. A new path that changes a static draw's record outside those two leaves a
+stale map standing. Readers take the camera through `CascadesOf`, which reads the committed one
+(`SubmittedDistant`, which like every package commit runs only once the frame's submission reached the queue:
+`ShaderPipelineRenderNode.CommitPackages`) or none; an entry without a committed camera writes no role (`SdfFrameBlock.WriteMeshShadows`
+through `SdfMeshShadowCascades.Holds`), and the surface pass reads no optical term for it. Because its count makes
+the set four long while the secondary entry may be empty, test entries with `Holds`, never `index < Count`.
+
 ## Evidence-preserving diagnostics
 
 `world.debug-view colliders|contacts` uses the beauty path through temporal
@@ -500,8 +517,8 @@ add the row you found.
 
 A view is a chain of separate dispatches: `mesh` (graphics, in two occlusion
 phases with the occlusion kernel between them, `SdfMeshOcclusion`) →
-`shadow-near`, `shadow-far`, `shadow-second` (graphics, the far cascade reading
-current camera receivers) → `pyramid` (the ambient occlusion's
+`shadow-near`, `shadow-far`, `shadow-second`, `shadow-distant` (graphics, the far cascade reading
+current camera receivers, the distant map held between changes) → `pyramid` (the ambient occlusion's
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
@@ -711,20 +728,27 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   that lights behind its face) widens the tile test in the same change, or
   tiles cut its light off. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the tiles' saving. Index a vector at
   run time only through `sdfComponent`.
-- **Cel shading is a style per material, not a whole-image filter.** A palette
-  row's `toon` (`SdfMaterial.Toon`, material rows 22 to 25) shades that material;
-  every other material inherits the world's default (`render.toon`, which
-  `world.toon` overrides live) through the pass block's toon members. Both are
-  written by `SdfToon.WriteRows` and read by `sdfToonStyle`
-  (`shade/sdf-toon.hlsli`): keep the row layout and the pass block's alike.
-  The band keeps visibility apart (`band(cosine) × visibility`) unless the style
-  says `band: Combined`; rim lights, the environment reflection and ambient
-  occlusion stay in the cel response. `sdf-toon-outline.hlsli` reads
-  depth/normal edges in views, before temporal resolve, at the pixel's own
-  style's width. Keep screen pictures, portal pictures, sky and self-emission
-  out of both the banding and ink. Nested worlds take the live enable override
-  but retain their own document styles. The tuning belongs to the lighting
-  cadence signature, never the bake closure.
+- **Cel shading is a style per material, not a whole-image filter, and the
+  banding is a program.** The standard's `cel` shade program
+  (`worlds/standard/shading.puck`) is the one implementation of the band; no
+  kernel bands. A palette row's `toon` (`SdfMaterial.Toon`, material rows 22 and
+  25) is the style row the engine keeps beside it: the styled mark and the ink.
+  Every other material inherits the world's default (`render.toon`) through the
+  pass block's `toonOutline` and `toonInk`, both written by `SdfToon.WriteRows`
+  and read by `sdfToonStyle` and `sdfToonAuthored` (`shade/sdf-toon.hlsli`):
+  keep the row layout and the pass block's alike. `world.toon off` writes a
+  negative default mode, and `sdfShadeBinding` then marks a styled material's
+  binding unstyled: `sdfShadeHas` reads its light and compose phases as omitted
+  while its surface phase (a terrain under cel) still runs.
+  A program that omits the surface phase keeps the material's layers
+  (`sdfShadeHas(binding, 0u)` in both stages; `SdfShadeProgram.Authors` on the
+  CPU, which `SdfAppearance.ResolveShadeReads` reads). The program's result is
+  scene light for the display pass's one `render.tone`; never expose or
+  compress inside a material. `sdf-toon-outline.hlsli` reads depth/normal
+  edges in views, before temporal resolve, at the pixel's own style's width.
+  Keep screen pictures, portal pictures, sky and self-emission out of both the
+  banding and ink. The tuning belongs to the lighting cadence signature, never
+  the bake closure.
 - **The frame shades luminance in nits, and each view's composite applies its
   exposure** (`SdfPhotometry`, `SdfViewExposures`, the pass block's `exposure`).
   A light record carries illuminance or intensity over π; emission, sky layers
@@ -1291,6 +1315,13 @@ world.budget           # program words, instances, scopes, segments
 world.counters gpu.queue      # native executes, lists, signals and presents by category and split cause
 world.counters render.record  # record jobs' host time per phase, serial sum and per-frame critical path
 ```
+
+The bodies lever rates every stamp pool the presentation packs: the boot world's
+and each routed scene's (a shared session scene among them), each by the views and
+shadow cascades of its own frame (`WorldCreationInstances.ShadowBy`). A pool no view
+rates poses every registration every frame and re-stages each of its mesh rows, which
+shows as `capture` and `pack` in `host.frames` and as `sdf.creations.slots.posed` far
+above the transform rows `sdf.transforms` packs.
 
 Divide `gpu.queue` and `render.record` deltas by their `frames` deltas; [gpu
 cost](references/gpu-cost.md#count-queue-work-and-record-jobs) reads them, and

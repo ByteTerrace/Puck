@@ -1,0 +1,14 @@
+// The lead fixture world (`lead-world.puck`) with two local seats, both live from boot: `body.rig 0` then reads that this
+// client offers no guess while two seats present on it.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "lead-seats-fixture"
+import "lead-world"
+
+bodies {
+  localSeats: 2
+  seatActivation [Eager, Eager]
+  seatSpawns ["stage", "stage"]
+}
+
+leadWorld(led: true)

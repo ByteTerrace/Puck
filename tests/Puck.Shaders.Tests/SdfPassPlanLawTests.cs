@@ -25,6 +25,7 @@ public sealed partial class SdfPassPlanLawTests {
         SdfWorldPackage.Parts.ShadowNear,
         SdfWorldPackage.Parts.ShadowFar,
         SdfWorldPackage.Parts.ShadowSecond,
+        SdfWorldPackage.Parts.ShadowDistant,
         SdfWorldPackage.Parts.Pyramid,
         SdfWorldPackage.Parts.Surface,
         SdfWorldPackage.Parts.ViewsProbes,
@@ -104,6 +105,7 @@ public sealed partial class SdfPassPlanLawTests {
             SdfWorldPackage.Parts.ShadowNear, SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.ShadowSecond,
             SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth,
             SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit,
+            SdfWorldPackage.Parts.ShadowDistant, SdfWorldPackage.Parts.ShadowDistantDepth, SdfWorldPackage.Parts.ShadowDistantExit,
         ];
 
         foreach (var fragment in new[] { SdfWorldPackage.NativeFragment, SdfWorldPackage.Fragment, SdfWorldPackage.TemporalFragment }) {
@@ -119,19 +121,22 @@ public sealed partial class SdfPassPlanLawTests {
             Assert.Equal(actual: surface.InputAccesses.Count, expected: surface.Inputs.Count);
         }
     }
-    // THE LAW: a view allocates the cascades its shadow quality and its world's shadow slots draw: every cascade depth at
-    // the quality's texels a side, and the second slot's cascade, its pass and its read only while the world holds a second
-    // slot. The full shape is the fragment itself, so a view keeps its fragment's identity.
+    // THE LAW: a view allocates the cascades its shadow quality, its world's shadow slots and its distant map draw: every
+    // cascade depth at the quality's texels a side, the second slot's cascade, its pass and its read only while the world
+    // holds a second slot, and the distant map's only while its world draws one, at its own texels.
     [Fact]
     public void AShadowedFragmentSizesItsCascadesAndHoldsTheSecondOnlyWhenAsked() {
         foreach (var fragment in new[] { SdfWorldPackage.NativeFragment, SdfWorldPackage.Fragment, SdfWorldPackage.TemporalFragment }) {
-            Assert.Same(expected: fragment, actual: SdfWorldPackage.WithShadows(fragment: fragment, second: true, texels: SdfWorldPackage.MeshShadowResolution));
+            var distant = SdfWorldPackage.WithShadows(distantTexels: 4096, fragment: fragment, second: true, texels: SdfWorldPackage.MeshShadowResolution);
 
-            var single = SdfWorldPackage.WithShadows(fragment: fragment, second: false, texels: 512);
+            Assert.Contains(collection: distant.Passes, filter: static pass => (pass.Name == SdfWorldPackage.Parts.ShadowDistant));
+            Assert.Equal(expected: 2, actual: distant.Resources.Count(predicate: static resource => resource.Dimensions == ShaderPipelineDimensions.Absolute(height: 4096, width: 4096)));
+
+            var single = SdfWorldPackage.WithShadows(distantTexels: 0, fragment: fragment, second: false, texels: 512);
             var surface = single.Passes.Single(predicate: static pass => (pass.Name == SdfWorldPackage.Parts.Surface));
             var depths = single.Resources.Where(predicate: static resource => resource.Name.StartsWith(value: "shadow", comparisonType: StringComparison.Ordinal)).ToArray();
 
-            Assert.DoesNotContain(collection: single.Passes, filter: static pass => (pass.Name == SdfWorldPackage.Parts.ShadowSecond));
+            Assert.DoesNotContain(collection: single.Passes, filter: static pass => (pass.Name is SdfWorldPackage.Parts.ShadowSecond or SdfWorldPackage.Parts.ShadowDistant));
             Assert.Equal(actual: depths.Select(selector: static resource => resource.Name), expected: [SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit]);
             Assert.All(collection: depths, action: static resource => {
                 Assert.Equal(expected: ShaderPipelineResourceKind.Depth, actual: resource.Kind);
@@ -139,13 +144,14 @@ public sealed partial class SdfPassPlanLawTests {
             });
             Assert.Equal(actual: surface.Inputs.Select(selector: static input => input.Name), expected: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit]);
             Assert.Equal(
-                actual: SdfWorldPackage.WithShadows(fragment: fragment, second: true, texels: 1024).Resources.Count(predicate: static resource => resource.Dimensions == ShaderPipelineDimensions.Absolute(height: 1024, width: 1024)),
+                actual: SdfWorldPackage.WithShadows(distantTexels: 0, fragment: fragment, second: true, texels: 1024).Resources.Count(predicate: static resource => resource.Dimensions == ShaderPipelineDimensions.Absolute(height: 1024, width: 1024)),
                 expected: 6
             );
         }
 
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdfWorldPackage.WithShadows(fragment: SdfWorldPackage.NativeFragment, second: true, texels: 0));
-        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdfWorldPackage.WithShadows(fragment: SdfWorldPackage.NativeFragment, second: true, texels: (SdfWorldPackage.MeshShadowResolution + 1)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdfWorldPackage.WithShadows(distantTexels: 0, fragment: SdfWorldPackage.NativeFragment, second: true, texels: 0));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdfWorldPackage.WithShadows(distantTexels: 0, fragment: SdfWorldPackage.NativeFragment, second: true, texels: (SdfWorldPackage.MeshShadowResolution + 1)));
+        _ = Assert.Throws<ArgumentOutOfRangeException>(testCode: static () => SdfWorldPackage.WithShadows(distantTexels: (SdfWorldPackage.MeshDistantShadowMaxResolution + 1), fragment: SdfWorldPackage.NativeFragment, second: true, texels: 512));
     }
     [Fact]
     public void EachStageDeclaresExactlyItsReadsAndWrites() {
@@ -162,8 +168,9 @@ public sealed partial class SdfPassPlanLawTests {
                 (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
                 (SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.MeshTarget, $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
                 (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
+                (SdfWorldPackage.Parts.ShadowDistant, "", $"{SdfWorldPackage.Parts.ShadowDistantDepth},{SdfWorldPackage.Parts.ShadowDistantExit}"),
                 (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
-                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit]), SdfWorldPackage.Parts.Visibility),
+                (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit, SdfWorldPackage.Parts.ShadowDistantDepth, SdfWorldPackage.Parts.ShadowDistantExit]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Probes),
                 (SdfWorldPackage.Parts.Views, $"{SdfWorldPackage.Parts.Visibility},{SdfWorldPackage.Parts.Probes}", SdfWorldPackage.Parts.Lit),
                 (SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Lit, string.Join(separator: ",", values: runs)),
@@ -248,6 +255,8 @@ public sealed partial class SdfPassPlanLawTests {
                 SdfWorldPackage.Parts.MeshDepth,
                 SdfWorldPackage.Parts.MeshPyramid,
                 SdfWorldPackage.Parts.MeshTarget,
+                SdfWorldPackage.Parts.ShadowDistantDepth,
+                SdfWorldPackage.Parts.ShadowDistantExit,
                 SdfWorldPackage.Parts.ShadowFarDepth,
                 SdfWorldPackage.Parts.ShadowFarExit,
                 SdfWorldPackage.Parts.ShadowNearDepth,

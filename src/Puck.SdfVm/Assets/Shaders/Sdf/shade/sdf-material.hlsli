@@ -44,11 +44,8 @@ struct SdfMaterialData {
     float contactReach;
     float contactCoverage;
     float shadowDensity;
-    // The material's own cel style (SdfToon, rows 22 to 25), laid out as the pass block's toon members: bands (mode,
-    // threshold, softness, specular size), shadow (tint, exposure gain), outline (width, distance, normal, shoulder),
-    // ink (tint). A zero mode inherits the world's default style (sdfToonStyle).
-    float4 toonBands;
-    float4 toonShadow;
+    // The material's own cel style (SdfToon, rows 22 and 25), laid out as the pass block's toon members: outline (mode,
+    // width, distance, crease cosine) and ink (tint). A zero mode inherits the world's default style (sdfToonStyle).
     float4 toonOutline;
     float3 toonInk;
     // The flow layer (SdfFlow, rows 27 to 30; sdfApplyFlow): the velocity and the pattern's frequency (a zero frequency
@@ -164,9 +161,7 @@ SdfMaterialData sdfMaterialLoad(int material) {
     data.contactReach = f16tof32(sdfWords[materialBase + 20u].w & 0xFFFFu);
     data.contactCoverage = f16tof32(sdfWords[materialBase + 20u].w >> 16u);
     data.shadowDensity = sdfMaterialShadowDensity(material);
-    data.toonBands = asfloat(sdfWords[materialBase + 22u]);
-    data.toonShadow = asfloat(sdfWords[materialBase + 23u]);
-    data.toonOutline = asfloat(sdfWords[materialBase + 24u]);
+    data.toonOutline = asfloat(sdfWords[materialBase + 22u]);
     data.toonInk = asfloat(sdfWords[materialBase + 25u]).rgb;
     data.flowVelocity = asfloat(sdfWords[materialBase + 27u]);
     data.flowShape = asfloat(sdfWords[materialBase + 28u]);

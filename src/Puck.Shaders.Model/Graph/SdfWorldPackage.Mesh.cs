@@ -3,7 +3,8 @@ namespace Puck.Shaders;
 public static partial class SdfWorldPackage {
     /// <summary>The pass-block value holding the cascade set's orthographic light cameras (<c>SdfMeshShadowCascades</c>),
     /// four rows each: position and half height, right and aspect, up and near distance, forward and far distance
-    /// (<c>float4[16]</c>): each entry's, then the camera the far entry's exit layer was drawn from.</summary>
+    /// (<c>float4</c>, <see cref="MeshShadowCascadeRows"/> a camera of <see cref="MeshShadowCascadeCount"/>): each entry's,
+    /// then the camera the far entry's exit layer was drawn from.</summary>
     public const string MeshShadowCascades = "meshShadowCascades";
     /// <summary>The pass-block value holding the cascade set's entries the frame rendered, a prefix of the set; zero when
     /// no slotted light emits or the view skips shadows (<c>uint</c>).</summary>
@@ -17,8 +18,9 @@ public static partial class SdfWorldPackage {
     /// <summary>The pass-block value holding the shadow role each cascade entry serves (<c>SdfShadowSlots.Primary</c> or
     /// <c>Secondary</c>), and <c>0xFFFFFFFF</c> past the rendered entries (<c>uint4</c>).</summary>
     public const string MeshShadowRoles = "meshShadowRoles";
-    /// <summary>The pass-block value holding the texels along each side of the view's cascades (<c>uint</c>), which the
-    /// view's shadow quality selects (<see cref="WithShadows"/>).</summary>
+    /// <summary>The pass-block value holding the texels along each side of each cascade entry's depth, zero past the
+    /// rendered entries (<c>uint4</c>): the view's shadow quality selects the cascades' and the authored distant map the
+    /// distant entry's (<see cref="WithShadows"/>).</summary>
     public const string MeshShadowTexels = "meshShadowTexels";
     /// <summary>The pass-block value holding the lattices one bake dispatch samples, <see cref="MeshBakeLatticeRows"/> rows
     /// each: the first sample's world position and, as bits, the lattice's first sample in the dispatch; the spacing along
@@ -46,6 +48,16 @@ public static partial class SdfWorldPackage {
     public const string MeshShadowFarExit = "meshShadowFarExit";
     /// <summary>The second shadow slot's cascade exit layer, sampled by the surface pass.</summary>
     public const string MeshShadowSecondExit = "meshShadowSecondExit";
+    /// <summary>The distant shadow map's depth, sampled by the surface pass.</summary>
+    public const string MeshShadowDistant = "meshShadowDistant";
+    /// <summary>The distant shadow map's exit layer, sampled by the surface pass.</summary>
+    public const string MeshShadowDistantExit = "meshShadowDistantExit";
+    /// <summary>The most texels along each side of the distant shadow map's depth an author may ask for; the document
+    /// validator's bound (<c>WorldDistantShadows.MaxTexels</c>) is the same.</summary>
+    public const int MeshDistantShadowMaxResolution = 4096;
+    /// <summary>The fewest texels along each side of the distant shadow map's depth: a view's shadow quality halves the
+    /// authored size down to this and no further (<c>WorldDistantShadows.MinTexels</c> is the same).</summary>
+    public const int MeshDistantShadowMinResolution = 256;
     /// <summary>The bake samples the bake pass writes: per lattice sample its field value and material, and, when the bake
     /// asks for it, its gradient (<see cref="MeshBakeSampleWords"/> words).</summary>
     public const string MeshBakeSamplesWritten = "meshBakeSamplesRW";
@@ -75,8 +87,8 @@ public static partial class SdfWorldPackage {
     /// <summary>The secondary shadow role's cascade depth, sampled by the surface pass.</summary>
     public const string MeshShadowSecond = "meshShadowSecond";
     /// <summary>The entries of a view's cascade set (<c>SdfMeshShadowCascades</c>), each with its own depth targets and
-    /// pass: the primary role's near and far, then the secondary role's.</summary>
-    public const int MeshShadowEntries = 3;
+    /// pass: the primary role's near and far, then the secondary role's, then the primary role's distant map.</summary>
+    public const int MeshShadowEntries = 4;
     /// <summary>The light cameras the pass block carries: each cascade entry's, then the camera the far entry's exit layer
     /// was drawn from, which trails the far camera by a frame while a refresh draws the far entry's two layers on
     /// consecutive frames.</summary>
@@ -118,7 +130,9 @@ public static partial class SdfWorldPackage {
         };
     }
 
+    // The cascades that carry glass extinction, in the order of their optical storages.
     private static readonly string[] ShadowParts = [Parts.ShadowNear, Parts.ShadowFar, Parts.ShadowSecond];
+    private static readonly string[] DistantStorages = [Parts.ShadowDistantDepth, Parts.ShadowDistantExit];
     private static readonly string[] ShadowStorages = [
         Parts.ShadowNearDepth, Parts.ShadowFarDepth, Parts.ShadowSecondDepth,
         Parts.ShadowNearExit, Parts.ShadowFarExit, Parts.ShadowSecondExit,
@@ -134,32 +148,40 @@ public static partial class SdfWorldPackage {
     public static RenderGraphPackageFragment WithoutShadows(RenderGraphPackageFragment fragment) {
         ArgumentNullException.ThrowIfNull(argument: fragment);
 
-        return Without(fragment: fragment, parts: ShadowParts, storages: ShadowStorages);
+        return Without(fragment: fragment, parts: [.. ShadowParts, Parts.ShadowDistant], storages: [.. ShadowStorages, .. DistantStorages]);
     }
     /// <summary>Returns a fragment whose cascades are <paramref name="texels"/> a side, with the second shadow slot's
-    /// cascade only when <paramref name="second"/>: a view allocates the cascades its shadow quality and its world's shadow
-    /// slots draw, and no more. A fragment already so is returned as it is.</summary>
+    /// cascade only when <paramref name="second"/> and the distant map only when <paramref name="distantTexels"/> is
+    /// positive, at that size: a view allocates the cascades its shadow quality, its world's shadow slots and its
+    /// world's distant map draw, and no more.</summary>
     /// <param name="fragment">The fragment, any of the package's that holds the cascades.</param>
     /// <param name="texels">The texels along each side of every cascade, from 1 through <see cref="MeshShadowResolution"/>.</param>
     /// <param name="second">Whether the fragment keeps the second shadow slot's cascade.</param>
+    /// <param name="distantTexels">The texels along each side of the distant map, from 1 through
+    /// <see cref="MeshDistantShadowMaxResolution"/>, or zero for a fragment without it.</param>
     /// <returns>The fragment with the cascades sized and chosen.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="texels"/> lies outside 1 through
-    /// <see cref="MeshShadowResolution"/>.</exception>
-    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second) {
+    /// <see cref="MeshShadowResolution"/>, or <paramref name="distantTexels"/> is negative or past
+    /// <see cref="MeshDistantShadowMaxResolution"/>.</exception>
+    public static RenderGraphPackageFragment WithShadows(RenderGraphPackageFragment fragment, int texels, bool second, int distantTexels) {
         ArgumentNullException.ThrowIfNull(argument: fragment);
         ArgumentOutOfRangeException.ThrowIfLessThan(value: texels, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: texels, other: MeshShadowResolution);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: distantTexels);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: distantTexels, other: MeshDistantShadowMaxResolution);
 
         var shaped = (second ? fragment : Without(fragment: fragment, parts: [Parts.ShadowSecond], storages: [Parts.ShadowSecondDepth, Parts.ShadowSecondExit, Parts.ShadowSecondOptical]));
 
-        return ((texels == MeshShadowResolution)
-            ? shaped
-            : (shaped with {
-                Resources = [.. shaped.Resources.Select(selector: resource => (ShadowStorages.Contains(value: resource.Name)
+        shaped = ((distantTexels > 0) ? shaped : Without(fragment: shaped, parts: [Parts.ShadowDistant], storages: DistantStorages));
+
+        return (shaped with {
+            Resources = [.. shaped.Resources.Select(selector: resource => (DistantStorages.Contains(value: resource.Name)
+                ? ShadowDepth(name: resource.Name, texels: distantTexels)
+                : ((ShadowStorages.Contains(value: resource.Name) && (texels != MeshShadowResolution))
                     ? (ShadowOpticalStorages.Contains(resource.Name) ? ShadowOptical(resource.Name, texels) : ShadowDepth(name: resource.Name, texels: texels))
-                    : resource))],
-            }));
+                    : resource)))],
+        });
     }
     // The fragment without some of its passes and storages, its other passes reading none of the storages.
     private static RenderGraphPackageFragment Without(RenderGraphPackageFragment fragment, string[] parts, string[] storages) => fragment with {

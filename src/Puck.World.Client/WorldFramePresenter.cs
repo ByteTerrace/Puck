@@ -84,8 +84,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // The instance each view FilmViews appended renders as, and the display pixels each of the frame's views is shown over.
     private readonly List<string?> m_filmedViewNames = [];
     private readonly List<float> m_rateViewPixels = [];
-    // The shadow cascades' caster culls of the frame's views, each with its view's index, which the bodies lever reads.
-    private readonly List<(int View, SdfMeshCull Cull)> m_rateShadows = [];
 
     // The display extent this frame's cameras and placements share.
     private uint m_displayHeight;
@@ -1394,9 +1392,13 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         AdvanceDynamicResolution(context: in context);
         m_presentationRate = PresentationRate.Of(context: in context);
         m_settings.RateIntervals.Advance(frameSeconds: context.FrameDeltaSeconds, rate: m_presentationRate);
-        // The stamp pool packs during the capture that follows, so it rates its bodies by this frame's step flags and
-        // levers, none while the frame is held for a settled capture.
-        m_animator.PresentAt(rate: m_presentationRate, rates: RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture));
+        // The stamp pools pack during the captures that follow, so they rate their bodies by this frame's step flags and
+        // levers, none while the frame is held for a settled capture: the boot world's and every routed scene's, whose
+        // frames take this frame's levers (WorldRoutedScene.Dress).
+        var rates = RatesOf(rates: m_settings.UpdateRates, settles: SettlesCapture);
+
+        m_animator.PresentAt(rate: m_presentationRate, rates: rates);
+        foreach (var scene in m_routedScenes.Values) { scene.BodyStamps.PresentAt(rate: m_presentationRate, rates: rates); }
 
         if (m_graphs is not { } graphs) {
             return;
@@ -1594,30 +1596,6 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         return m_rateViewPixels;
-    }
-    // The caster cull of each shadow cascade the dressed frame's views render, with that frame's own lights and far
-    // distance: the bodies lever holds no body one of them may draw. Every view counts, shown on the display or not.
-    private List<(int View, SdfMeshCull Cull)> RateShadows(SdfFrame frame, uint width, uint height) {
-        m_rateShadows.Clear();
-
-        for (var view = 0; (view < m_frameViews.Count); view++) {
-            var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);
-
-            if (cascades.Count == 0) {
-                continue;
-            }
-
-            var snapshot = m_frameViews[view];
-            var viewWidth = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Width * width)));
-            var viewHeight = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Height * height)));
-            var count = cascades.Count;
-
-            for (var cascade = 0; (cascade < count); cascade++) {
-                m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
-            }
-        }
-
-        return m_rateShadows;
     }
     // The dressed frame owns this array. Placement fills it after the current cameras have decided screen demand,
     // before the runtime schedules or uploads the frame.
@@ -2185,6 +2163,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // lands on the next frame, like the lighting below), or the engine's pinned default when unauthored.
             FarDistance = WorldRenderFarDistance.Resolve(defaults: m_client.Definition.Render),
             ShadowCoverage = WorldRenderFarDistance.ResolveShadowCoverage(defaults: m_client.Definition.Render),
+            // The distant shadow map: render.distantShadows at boot, then the device table's row a quality preset applies.
+            DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
             // The lights and the sky: render.lighting, render.sky and render.environment with every keyed value at its
             // clock's presented phase (a world.row.set render lands on the next frame).
             Lights = lighting.Lights,
@@ -2205,7 +2185,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
 
         FitSkyViews?.Invoke(m_frameViews, lighting.Sky, width, height);
         // The next pack holds no body a shadow of this frame's views and lights may show.
-        m_animator.ShadowBy(shadows: RateShadows(frame: m_dressedFrame, height: height, width: width));
+        m_animator.ShadowBy(frame: m_dressedFrame, height: height, width: width);
         m_dressedBeforeField = (m_staticFieldBuild is not null);
 
         return m_dressedFrame;

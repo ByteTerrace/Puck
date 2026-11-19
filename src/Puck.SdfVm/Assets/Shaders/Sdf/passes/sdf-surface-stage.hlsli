@@ -162,11 +162,13 @@ SdfMeshCascade sdfMeshCascadeAt(uint cascade) {
 // orthographic depth, linear from one at its near plane to zero at its far plane (sdf-mesh-shadow.vert.hlsl), so a texel
 // the cascade drew nothing into, left at its clear of zero, reads as the far plane.
 float sdfMeshShadowDepth(uint cascade, SdfMeshCascade c, int2 texel, bool exit) {
-    int last = (int(passGroup.meshShadowTexels) - 1);
+    int last = (int(sdfComponent(passGroup.meshShadowTexels, cascade)) - 1);
     int3 at = int3(clamp(texel, int2(0, 0), int2(last, last)), 0);
-    float depth = (exit
-        ? ((cascade == 0u) ? meshShadowNearExit.Load(at).x : ((cascade == 1u) ? meshShadowFarExit.Load(at).x : meshShadowSecondExit.Load(at).x))
-        : ((cascade == 0u) ? meshShadowNear.Load(at).x : ((cascade == 1u) ? meshShadowFar.Load(at).x : meshShadowSecond.Load(at).x)));
+    float depth;
+    if (cascade == 0u) { depth = (exit ? meshShadowNearExit.Load(at).x : meshShadowNear.Load(at).x); }
+    else if (cascade == 1u) { depth = (exit ? meshShadowFarExit.Load(at).x : meshShadowFar.Load(at).x); }
+    else if (cascade == 2u) { depth = (exit ? meshShadowSecondExit.Load(at).x : meshShadowSecond.Load(at).x); }
+    else { depth = (exit ? meshShadowDistantExit.Load(at).x : meshShadowDistant.Load(at).x); }
     return (c.far - (depth * (c.far - c.near)));
 }
 // A cascade's caster at the texel `offset` texels from the receiver's, measured two ways, each positive for an occluder.
@@ -190,9 +192,10 @@ float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, flo
     // Opaque blockers keep their original estimate. At an unblocked receiver the same cascade contributes the
     // extinction accumulated to its first opaque depth; the nearest glass entry supplies the penumbra's distance.
     if (!opticalPresent || gap.x > 0.0) { return float3(gap, 1.0); }
-    int last = int(passGroup.meshShadowTexels) - 1;
+    uint side = sdfComponent(passGroup.meshShadowTexels, cascade);
+    int last = int(side) - 1;
     uint2 cell = uint2(clamp(int2(at), int2(0, 0), int2(last, last)));
-    uint word = 3u * (cell.y * passGroup.meshShadowTexels + cell.x);
+    uint word = 3u * (cell.y * side + cell.x);
     uint low = cascade == 0u ? meshShadowNearOptical[word] : (cascade == 1u ? meshShadowFarOptical[word] : meshShadowSecondOptical[word]);
     uint high = cascade == 0u ? meshShadowNearOptical[word + 1u] : (cascade == 1u ? meshShadowFarOptical[word + 1u] : meshShadowSecondOptical[word + 1u]);
     uint entry = cascade == 0u ? meshShadowNearOptical[word + 2u] : (cascade == 1u ? meshShadowFarOptical[word + 2u] : meshShadowSecondOptical[word + 2u]);
@@ -227,7 +230,6 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
     float2 pattern = sdfMeshPattern(p.pixel);
     float rotation = (pattern.x * 6.2831853);
     float4 parameters = passGroup.meshShadowParameters;
-    float texels = float(passGroup.meshShadowTexels);
     float coverage = 0.0;
     float visibility = 1.0;
     bool answered = false;
@@ -240,6 +242,9 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         float slope = sdfComponent(passGroup.meshShadowSlopes, cascade);
         // A point source's cone has no width; its inverse stays finite so a caster beside the ray reads outside it.
         float cone = (1.0 / max(slope, 1.0e-4));
+        // Each entry has its own texels: the distant map's are authored apart from the cascades'.
+        uint side = sdfComponent(passGroup.meshShadowTexels, cascade);
+        float texels = float(side);
         SdfMeshCascade c = sdfMeshCascadeAt(cascade);
         bool exit = (dot(face, c.forward) > 0.0);
         bool heldExit = false;
@@ -274,11 +279,12 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         }
         answered = true;
 
-        uint opticalWords, opticalStride;
+        // The distant map draws opaque static casters alone and carries no glass extinction.
+        uint opticalWords = 0u, opticalStride;
         if (cascade == 0u) { meshShadowNearOptical.GetDimensions(opticalWords, opticalStride); }
         else if (cascade == 1u) { meshShadowFarOptical.GetDimensions(opticalWords, opticalStride); }
-        else { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
-        bool opticalPresent = (!heldExit && (opticalWords >= 3u * passGroup.meshShadowTexels * passGroup.meshShadowTexels));
+        else if (cascade == 2u) { meshShadowSecondOptical.GetDimensions(opticalWords, opticalStride); }
+        bool opticalPresent = (!heldExit && (opticalWords >= 3u * side * side));
 
         float2 texel = (float2(((plane.x * 0.5) + 0.5), (0.5 - (plane.y * 0.5))) * texels);
         float receiver = (depth - parameters.x);

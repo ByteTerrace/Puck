@@ -696,7 +696,11 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   short windowed boot on Direct3D 12 (with `--debug-layers`) and on Vulkan before
   the lead pushes it. In one wave a barrier fault and a probe-scene publication
   that threw on every device both passed every headless boot and every review
-  that read them, and broke the first windowed boot. The mesh bake
+  that read them, and broke the first windowed boot. A clean stderr is not a
+clean boot: that boot also waits for bakes, searches the bake log for `empty=`
+groups, and takes one still at the valley rim and one in the gallery. A batch
+boot that read only exceptions and memory passed while the GPU bake drew every
+valley wall sector empty. The mesh bake
   is reproducible run to run at a fixed code version (three cold bakes per
   backend match); a store-by-hash comparison across two builds is evidence only
   for a change meant to change nothing. A brief never makes "output identical

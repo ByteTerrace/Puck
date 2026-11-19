@@ -24,19 +24,17 @@ public sealed class ShapingRowLawTests {
         "0000000000000000 0000000000000000 fffffffffffffff6 0000000000000000 fffffffffffff7f5",
         "0000000000000000 0000000000000000 ffffffffffffffe3 0000000000000000 ffffffffffffeeaa",
     ];
-    // Per tick: position x/y/z, planar velocity x/z, vertical velocity — the raw FixedQ4816 storage in hex. A
-    // collider-less kit starts (and stays) Grounded — WorldBody's own default, never revised by contact resolution
-    // absent a collider — so "recently Grounded" holds continuously and, authored ABOVE "now Rising", would shadow
-    // it outright; this fixture proves the corrected order (now Rising authored first) actually governs the rise.
+    // Per tick: position x/y/z, planar velocity x/z, vertical velocity in raw FixedQ4816 hex. The colliderless
+    // body starts airborne. The recent Airborne row governs the jump tick, and Rising takes precedence next tick.
     private static readonly string[] ResponseTrace240 = [
-        "0000000000000000 0000000000000975 fffffffffffffff7 0000000000000000 fffffffffffff778 000000000008ddde",
-        "0000000000000000 00000000000012c5 ffffffffffffffc1 0000000000000000 ffffffffffffcccd 000000000008bbbc",
-        "0000000000000000 0000000000001bf2 ffffffffffffff5d 0000000000000000 ffffffffffffa223 000000000008999a",
-        "0000000000000000 00000000000024fa fffffffffffffecb 0000000000000000 ffffffffffff7778 0000000000087778",
-        "0000000000000000 0000000000002ddd fffffffffffffe0c 0000000000000000 ffffffffffff4ccd 0000000000085556",
-        "0000000000000000 000000000000369d fffffffffffffd1f 0000000000000000 ffffffffffff2223 0000000000083334",
-        "0000000000000000 0000000000003f37 fffffffffffffc05 0000000000000000 fffffffffffef778 0000000000081112",
-        "0000000000000000 00000000000047ae fffffffffffffabd 0000000000000000 fffffffffffecccd 000000000007eeef",
+        "0000000000000000 0000000000000975 fffffffffffffff3 0000000000000000 fffffffffffff334 000000000008ddde",
+        "0000000000000000 00000000000012c5 ffffffffffffffb8 0000000000000000 ffffffffffffc889 000000000008bbbc",
+        "0000000000000000 0000000000001bf2 ffffffffffffff4f 0000000000000000 ffffffffffff9dde 000000000008999a",
+        "0000000000000000 00000000000024fa fffffffffffffeb9 0000000000000000 ffffffffffff7334 0000000000087778",
+        "0000000000000000 0000000000002ddd fffffffffffffdf5 0000000000000000 ffffffffffff4889 0000000000085556",
+        "0000000000000000 000000000000369d fffffffffffffd04 0000000000000000 ffffffffffff1dde 0000000000083334",
+        "0000000000000000 0000000000003f37 fffffffffffffbe5 0000000000000000 fffffffffffef334 0000000000081112",
+        "0000000000000000 00000000000047ae fffffffffffffa99 0000000000000000 fffffffffffec889 000000000007eeef",
     ];
 
     private static WorldDefinition BuildDynamicsDocument(float frequency = 2.5f) {
@@ -118,7 +116,7 @@ public sealed class ShapingRowLawTests {
             DefaultSeatKitRaw = "glider-test",
         };
     }
-    private static WorldDefinition BuildResponseDocument(float risingEngage = 40f) {
+    private static WorldDefinition BuildResponseDocument(float risingEngage = 40f, bool risingFirst = true) {
         var channels = new WorldChannel[] {
             new(
             Name: "forward",
@@ -163,6 +161,14 @@ public sealed class ShapingRowLawTests {
             Kind: BodyProgramKind.Producer,
             Operations: [BodyMotionOp.ProduceSteeringIntent]
         );
+        var rising = new WorldShaping(
+            When: new WorldPredicate.Now(Fact: ActionFact.Rising),
+            Along: new WorldShapingAlong(Engage: risingEngage, Release: 46f)
+        );
+        var airborne = new WorldShaping(
+            When: new WorldPredicate.Recently(Fact: ActionFact.Airborne, WindowSeconds: 0.09f),
+            Along: new WorldShapingAlong(Engage: 12f, Release: 12f)
+        );
         var kit = new WorldKit(
             Name: "walker-test",
             BodyMotionProgram: "walker",
@@ -181,34 +187,7 @@ public sealed class ShapingRowLawTests {
                         Name: "air"
                     ),
                 ],
-                // Order matters (documents.md's "author air rows first"): a recently-Grounded row authored ABOVE a
-                // now-Rising one shadows it for the whole recency window. This kit's own body never leaves Grounded
-                // (no collider, so contact resolution never revises WorldBody's Grounded-by-default state), so
-                // "recently Grounded" holds every tick too — proving the row order, not the fact's own truth, is
-                // what governs here.
-                Shaping: [
-                    new WorldShaping(
-                        When: new WorldPredicate.Now(Fact: ActionFact.Rising),
-                        Along: new WorldShapingAlong(
-                            Engage: risingEngage,
-                            Release: 46f
-                        )
-                    ),
-                    new WorldShaping(
-                        When: new WorldPredicate.Recently(
-                            Fact: ActionFact.Grounded,
-                            WindowSeconds: 0.09f
-                        ),
-                        Along: new WorldShapingAlong(
-                            Engage: 8f,
-                            Release: 8f
-                        )
-                    ),
-                    new WorldShaping(Along: new WorldShapingAlong(
-                        Engage: 12f,
-                        Release: 12f
-                    )),
-                ]
+                Shaping: (risingFirst ? [rising, airborne] : [airborne, rising])
             ),
             ActionsRaw: new Dictionary<string, ActionSpec> {
                 ["jump"] = new ActionSpec(OnPress: new ActionTrigger(Effects: [new WorldEffect.SetVerticalVelocity(Velocity: 9m)])),
@@ -662,16 +641,21 @@ public sealed class ShapingRowLawTests {
         )
     );
     [Fact]
-    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() => AssertReproducesWherePerturbationDiverges(
-        because: "changing the now-Rising row's own release rate must move the trace, or the row order pins nothing",
-        perturbed: static ticks => ResponseTrace(
-            definition: BuildResponseDocument(risingEngage: 60f),
-            ticks: ticks
-        ),
-        recorded: ResponseTrace240,
-        trace: static ticks => ResponseTrace(
-            definition: BuildResponseDocument(),
-            ticks: ticks
-        )
-    );
+    public void TheResponseTableGovernsByRowOrder_ReproducesTheRecordedTrace_WhereChangingTheRisingRowDiverges() {
+        var reordered = ResponseTrace(definition: BuildResponseDocument(risingFirst: false), ticks: 2);
+        Assert.Equal(expected: ResponseTrace240[0], actual: reordered[0]);
+        Assert.NotEqual(expected: ResponseTrace240[1], actual: reordered[1]);
+        AssertReproducesWherePerturbationDiverges(
+            because: "changing the now-Rising row's engage rate must move the trace",
+            perturbed: static ticks => ResponseTrace(
+                definition: BuildResponseDocument(risingEngage: 60f),
+                ticks: ticks
+            ),
+            recorded: ResponseTrace240,
+            trace: static ticks => ResponseTrace(
+                definition: BuildResponseDocument(),
+                ticks: ticks
+            )
+        );
+    }
 }

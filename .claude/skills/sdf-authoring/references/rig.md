@@ -165,7 +165,12 @@ to that owner alone; the guess ends when that tick is fully presented, at a new
 input epoch, or at `leadSeconds`. A guess is one of the rig's reads
 (`CreationRigReadKind.Lead`): its start, level and end move the wake revision, and
 a registration with a guess in force is never held by a rate tier. `body.rig`
-prints `source=lead` or `source=cell` for a led driver. Refused by name: `lead`
+prints `source=lead` or `source=cell` for a led driver, and, for a seat's body and in a headless World too, a
+`guess:<creation>.<driver>[<channel>]=` reading of the seat side
+(`WorldClient.DescribeGuess`, over `WorldSeatInput.ReadGuess`): `off(<why>)` when this client offers the seat no guess,
+else `lead` or `cell` with the state, the seat's outstanding event sequence, the authority's answer
+(epoch/sequence@tick), the presented tick and fraction, and the edge's age. A headless World presents every tick whole,
+so it never reads a guess in force. Refused by name: `lead`
 on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
 validator) a channel that is not declared, or is relative or text.
 

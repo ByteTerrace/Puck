@@ -50,6 +50,9 @@ public static partial class WorldSessionLevers {
     public const string Shadows = "shadows";
     /// <summary>The complete shadow policy: stable slots, fade slots, fade ticks and overflow in lanes A through D.</summary>
     public const string ShadowSlots = "shadow-slots";
+    /// <summary>The distant shadow map: its reach in metres in lane A (zero for none), its texels a side in lane B and the
+    /// light turn a held map tolerates, in degrees, in lane C.</summary>
+    public const string DistantShadows = "distant-shadows";
     /// <summary>The sky's quality tier ordinal (<c>world.sky-quality</c>), a <see cref="WorldSkyTier"/>.</summary>
     public const string SkyQuality = "sky-quality";
     /// <summary>The independent sky field grid fraction (<c>world.sky-field-scale</c>), one or one half.</summary>
@@ -87,6 +90,14 @@ public static partial class WorldSessionLevers {
         Section: WorldSection.Render, Name: ShadowSlots,
         A: preset.ShadowLights, B: preset.ShadowFadeSlots,
         C: preset.ShadowFadeTicks, D: ((int)preset.ShadowOverflow));
+    /// <summary>Creates the one lever that installs a preset's distant shadow map, or removes it for a preset that authors
+    /// none.</summary>
+    /// <param name="preset">The authored quality row.</param>
+    /// <returns>The map's reach, texels and tolerance in one accepted settings write.</returns>
+    public static WorldSessionLever DistantShadowPolicy(WorldQualityPreset preset) => new(
+        Section: WorldSection.Render, Name: DistantShadows,
+        A: (preset.DistantShadows?.Reach ?? 0f), B: (preset.DistantShadows?.Texels ?? 0),
+        C: (preset.DistantShadows?.TurnDegrees ?? 0f));
     /// <summary>Composes the applier every shipped knob is registered on.</summary>
     /// <param name="settings">The live render-lever settings the frame source reads.</param>
     /// <param name="pacing">The live present-rate control the window pump reads.</param>
@@ -217,6 +228,20 @@ public static partial class WorldSessionLevers {
 
         sink.Register(name: ShadowSlots, setter: lever => settings.ShadowSlots = new WorldShadowSettings(
             Slots: ((int)lever.A), FadeSlots: ((int)lever.B), FadeTicks: ((uint)lever.C), Overflow: ((WorldShadowOverflow)((int)lever.D))));
+        sink.Register(name: DistantShadows, setter: lever => {
+            if (lever.A <= 0d) {
+                settings.DistantShadows = null;
+                return;
+            }
+            // The values arrive off the wire, so they are judged here as the document validator judges an authored map.
+            var map = new WorldDistantShadows(Reach: ((float)lever.A), Texels: ((int)lever.B), TurnDegrees: ((float)lever.C));
+
+            if (map.Refusal(path: "distant-shadows") is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.DistantShadows = map;
+        });
         return sink;
     }
 }

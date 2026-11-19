@@ -28,7 +28,9 @@ bool sdfSelectionKeeps(float3 center, float3 x, float3 y, float3 z) {
     float far = eye.w;
     float3 sweep = 0.0;
     float reach = 0.0;
-    if (kind == 2.0) {
+    // Kind 2 is a cascade conditioned on the view's receivers, kind 3 one that keeps every caster in its light box
+    // whichever way the view faces (SdfMeshCull.OfLightBox).
+    if (kind >= 2.0) {
         float4 origin = asfloat(sdfMeshOcclusionCandidates[10]);
         float4 lightRight = asfloat(sdfMeshOcclusionCandidates[11]);
         float4 lightUp = asfloat(sdfMeshOcclusionCandidates[12]);
@@ -37,6 +39,7 @@ bool sdfSelectionKeeps(float3 center, float3 x, float3 y, float3 z) {
         if (!sdfSelectionWithin(lightRight.xyz, -origin.w, origin.w, relative, x, y, z) ||
             !sdfSelectionWithin(lightUp.xyz, -origin.w, origin.w, relative, x, y, z) ||
             !sdfSelectionWithin(lightForward, lightRight.w, lightUp.w, relative, x, y, z)) { return false; }
+        if (kind == 3.0) { return true; }
         float3 sphere = origin.xyz + lightForward * (lightUp.w - origin.w);
         float deepest = dot(sphere - eye.xyz, forward.xyz) + origin.w;
         reach = lens.w;

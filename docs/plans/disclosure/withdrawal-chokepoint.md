@@ -1046,8 +1046,11 @@ Searched before proposing a generation or a key.
   start of the delivered images a cut is computed from.
 - `WorldDocumentVersion` names an install by activation and ordinal. Its
   activation bounds what an equivalence proof may be compared within.
-- `WorldSessionMirror.DefinitionRevision` and `WorldSessionMirror.SnapshotRevision`
-  are the viewer-side counters the binder's guard reads now.
+- `WorldSessionMirror.DeliveryWork` counts the definitions, snapshots and state
+  deliveries a mirror applied: the viewer-side delivery mark the binder's guard
+  reads. `WorldSessionMirror.SnapshotRevision` is the stream's declared-set
+  revision, which moves only when the delivered roster does, so it marks no
+  delivery.
 - `WorldDisclosureImages.Audience` is a cache key for one policy table. The
   first draft reused it as an access key on the wire; the design review showed
   that it leaks the table's size and does not survive a table change, so it is
