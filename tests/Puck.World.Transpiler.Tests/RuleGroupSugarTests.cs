@@ -29,13 +29,13 @@ public class RuleGroupSugarTests {
     }
     [Fact]
     public void DuplicateUndoModifierRefuses() {
-        var result = WorldCompiler.Compile(source: "stabilize turn undo({ rows [\"board\"] depth: 1 }) undo({ rows [\"board\"] depth: 2 }) { rule move { board.x = 1 } }", cancellationToken: TestContext.Current.CancellationToken);
+        var result = WorldCompileSession.Shared.Compile(source: "stabilize turn undo({ rows [\"board\"] depth: 1 }) undo({ rows [\"board\"] depth: 2 }) { rule move { board.x = 1 } }", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: result.Diagnostics.HasErrors);
     }
 
     private static JsonObject Compile(string source) {
-        var lowered = WorldCompiler.Compile(
+        var lowered = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );

@@ -28,7 +28,7 @@ public sealed class WorldAppliedCodeUpdateLawTests {
 
         var root = files.WriteText(name: "root.puck", text: "import \"counter\"\nuse counter as root()");
         var directory = files.PathOf(name: "cache");
-        var cache = new WorldCompileCache(directory: directory);
+        var cache = new WorldCompileSession(directory: directory);
         byte[]? document = null;
         void Compile() {
             Assert.True(condition: cache.TryCompile(compiled: out var compiled, failure: out var failure, path: root), userMessage: failure?.Diagnostics.FormatReport(filePath: root));
@@ -47,11 +47,11 @@ public sealed class WorldAppliedCodeUpdateLawTests {
         // beside the build's.
         var built = document;
 
-        AppliedCodeUpdate.Apply(typeof(WorldCompiler));
+        AppliedCodeUpdate.Apply(typeof(WorldCompileSession));
         Assert.Equal(expected: 1L, actual: Compiles(action: Compile));
         Assert.Equal(expected: built, actual: document);
         Assert.Equal(expected: 2, actual: Directory.GetFiles(path: directory, searchPattern: "*.compiled").Length);
-        Assert.Equal(expected: 0L, actual: Compiles(action: () => Assert.True(condition: new WorldCompileCache(directory: directory).TryCompile(compiled: out _, failure: out _, path: root))));
+        Assert.Equal(expected: 0L, actual: Compiles(action: () => Assert.True(condition: new WorldCompileSession(directory: directory).TryCompile(compiled: out _, failure: out _, path: root))));
     }
     [Fact]
     public void AnUpdateToTheParserPersistsItsDeclarationsUnderItsOwnKey() {
@@ -64,7 +64,7 @@ public sealed class WorldAppliedCodeUpdateLawTests {
         Assert.NotNull(@object: WorldSourceIndex.Declaration(compilations: compilations, content: content));
         _ = Assert.Single(collection: Declarations());
 
-        AppliedCodeUpdate.Apply(typeof(WorldCompiler));
+        AppliedCodeUpdate.Apply(typeof(WorldCompileSession));
         Assert.NotNull(@object: WorldSourceIndex.Declaration(compilations: compilations, content: content));
         Assert.Equal(expected: 2, actual: Declarations().Length);
     }

@@ -33,7 +33,7 @@ public class SugarFallbackTests {
     }
     private static JsonObject Recompile(string puck) {
         var loweringDiagnostics = new DiagnosticBag();
-        var lowered = WorldCompiler.Compile(
+        var lowered = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: loweringDiagnostics,
             source: puck
@@ -102,7 +102,7 @@ public class SugarFallbackTests {
     public void AStatementASectionCannotCarryIsReportedRatherThanDropped(string section, string statement, string spelling) {
         var source = $"schema: \"puck.world.definition.v1\"\n{section} {{\n    {statement}\n}}\n";
 
-        var diagnostics = WorldCompiler.Compile(
+        var diagnostics = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         ).Diagnostics;

@@ -21,7 +21,7 @@ public sealed class EmittedNameLawTests {
 
     // Composes a root beside the tree whose basis is the document `foo`, returning the composed documentId.
     private static (bool Composed, string? DocumentId, string Reason) ComposeFoo(string tree) {
-        var composed = PuckDocumentComposer.TryComposeWorldDocument(
+        var composed = WorldCompileSession.Shared.TryCompose(
             chainBytes: out _,
             composed: out var document,
             reason: out var reason,
@@ -150,7 +150,7 @@ public sealed class EmittedNameLawTests {
 
         directory.WriteText(name: "worlds/foo.puck", text: (Module + "world north = room(1)\nworld south = room(2)\n"));
 
-        var composed = PuckDocumentComposer.TryComposeWorldDocument(
+        var composed = WorldCompileSession.Shared.TryCompose(
             chainBytes: out _,
             composed: out var document,
             reason: out var reason,
@@ -175,7 +175,7 @@ public sealed class EmittedNameLawTests {
     [MemberData(memberName: nameof(TrackedSources))]
     public void TheIndexReadsExactlyTheNamesEveryTrackedSourceEmits(string relative) {
         var path = RepositoryPaths.Resolve(relativePath: relative);
-        var compilation = WorldCompiler.CompileFile(
+        var compilation = WorldCompileSession.Shared.CompileFile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             path: path

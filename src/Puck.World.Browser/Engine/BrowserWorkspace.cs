@@ -3,7 +3,6 @@ using System.Text;
 using Puck.Abstractions.Documents;
 using Puck.Transpiler.Diagnostics;
 using Puck.World.Transpiler;
-using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Validation;
 
 namespace Puck.World.Browser.Engine;
@@ -54,7 +53,7 @@ public sealed record BrowserSourceComposeResult(bool Ok, string? Composed, IRead
 /// <remarks>Paths crossing this type are workspace-relative, forward-slashed, and may not climb out of the workspace
 /// (<c>games/klondike.puck</c>). A <c>basis</c> or import name resolves to a mounted source through the document
 /// source every Puck host installs (<see cref="WorldDefinitionFileSource.UseLocalDocuments"/> with
-/// <see cref="PuckDocumentComposer"/>), which this assembly installs when it loads.</remarks>
+/// <see cref="WorldCompileSession"/>), which this assembly installs when it loads.</remarks>
 public sealed class BrowserWorkspace {
     /// <summary>The directory the AppBundle mounts its workspace at.</summary>
     public const string MountRoot = "/worlds";
@@ -62,7 +61,7 @@ public sealed class BrowserWorkspace {
     /// <summary>Installs the transpiler's document composer as the local document source, as the game, the CLI and the
     /// test hosts do, so a document name resolves to its <c>.puck</c> source when one is mounted.</summary>
     [ModuleInitializer]
-    internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
+    internal static void InstallDocumentSource() => WorldDefinitionFileSource.UseLocalDocuments(source: WorldCompileSession.Shared);
 
     private static string Normalize(string path) => Puck.Abstractions.PuckPaths.Slashed(path: Path.GetFullPath(path: path));
 
@@ -343,7 +342,7 @@ public sealed class BrowserWorkspace {
             return Refused(message: $"'{path}' is neither a .puck source nor a {WorldDocumentName.DocumentSuffix} document.", path: path);
         }
 
-        var composed = (PuckDocumentComposer.TryComposeWorldDocument(
+        var composed = (WorldCompileSession.Shared.TryCompose(
             chainBytes: out _,
             composed: out var tree,
             reason: out _,

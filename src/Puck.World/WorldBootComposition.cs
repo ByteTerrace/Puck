@@ -28,7 +28,7 @@ using Puck.World.Client;
 using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -700,7 +700,7 @@ public static class WorldBootComposition {
             documents: sp.GetRequiredService<IWorldDocumentSource>()
         ));
         // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
-        services.AddSingleton<IWorldDocumentSource>(implementationInstance: PuckDocumentComposer.Instance);
+        services.AddSingleton<IWorldDocumentSource>(implementationInstance: WorldCompileSession.Shared);
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
         // The in-session history (world.history): keyframes plus the tape capture's per-tick input, for deterministic
         // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.

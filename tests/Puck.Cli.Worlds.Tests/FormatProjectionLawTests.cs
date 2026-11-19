@@ -28,7 +28,7 @@ public sealed class FormatProjectionLawTests {
             b: CartridgeDocument.SchemaId,
             comparisonType: StringComparison.Ordinal
         ))) {
-            var compilation = WorldCompiler.Compile(
+            var compilation = WorldCompileSession.Shared.Compile(
                 allowMultiple: true,
                 diagnostics: diagnostics,
                 imports: ImportHandling.Validate,

@@ -6,8 +6,8 @@ using Puck.Launcher.Release;
 using Puck.Cli.Automation;
 using Puck.World;
 using Puck.World.Transpiler.Assets;
-using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Embeddings;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Official;
 
@@ -34,7 +34,7 @@ public static class OfficialWorldDocumentScanner {
     private readonly record struct AuthoredDocument(string Name, string Source, byte[] Bytes);
 
     // The authoring workspace a compile reads, keyed by worlds-relative name and sorted ordinally: the file carrying
-    // each document anywhere under the worlds directory, as the composer resolves a name (PuckDocumentComposer.TryCarriers
+    // each document anywhere under the worlds directory, as the composer resolves a name (WorldCompileSession.TryCarriers
     // — the .puck source that emits it where one does, whatever its stem, its .world.json document otherwise; a document beside the source
     // of its name emitting that name is never read, so it is no part of the workspace), every module library, which carries no document name
     // but is read by the sources importing it, and each lock a source's compile reads beside it (EmbeddingLock and
@@ -42,7 +42,7 @@ public static class OfficialWorldDocumentScanner {
     private static bool TrySourcesIn(string full, out SortedDictionary<string, string> sources, out string reason) {
         sources = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
-        if (!PuckDocumentComposer.TryCarriers(
+        if (!WorldCompileSession.TryCarriers(
             carriers: out var carriers,
             directory: full,
             libraries: out var libraries,
@@ -103,7 +103,7 @@ public static class OfficialWorldDocumentScanner {
 
         // The workspace enumeration only parsed this source to learn the names it emits (WorldSourceIndex); its compile
         // reads the same declaration from the same tree, so it authors a document under exactly those names.
-        if (!WorldCompileCache.Shared.TryCompile(
+        if (!WorldCompileSession.Shared.TryCompile(
             compiled: out var compiled,
             failure: out var failure,
             path: path
@@ -315,7 +315,7 @@ public static class OfficialWorldDocumentScanner {
             path2: root.Source
         );
 
-        if (!PuckDocumentComposer.TryComposeWorldDocument(
+        if (!WorldCompileSession.Shared.TryCompose(
             catalog: machines,
             catalogFingerprint: catalogFingerprint,
             chainBytes: out _,

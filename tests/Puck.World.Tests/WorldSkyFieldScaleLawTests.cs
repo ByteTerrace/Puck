@@ -45,7 +45,7 @@ public sealed class WorldSkyFieldScaleLawTests {
               low { shadows: Off ambientOcclusion: false renderScale: 1 skyFieldScale: 0.5 }
             }
             """, path: source);
-        var compilation = WorldCompiler.CompileFile(path: source, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(path: source, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compilation.Success, userMessage: compilation.Diagnostics.FormatReport(sourceText: File.ReadAllText(path: source), filePath: source));
         Assert.Equal(.5m, compilation.RequireJson()["render"]!["skyFieldScale"]!.GetValue<decimal>());

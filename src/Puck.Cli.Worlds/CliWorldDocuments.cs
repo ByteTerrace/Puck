@@ -1,6 +1,6 @@
 using Puck.Abstractions.Gpu;
 using Puck.World;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli;
 
@@ -45,7 +45,7 @@ public static class CliWorldDocuments {
             fullPath = entry;
         }
 
-        if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: PuckDocumentComposer.Instance, path: fullPath, proveNeighbours: false, reason: out var failure)) {
+        if (!WorldDefinitionLoader.TryLoadFileForAdmission(admission: out var admission, contentHash: out _, documents: WorldCompileSession.Shared, path: fullPath, proveNeighbours: false, reason: out var failure)) {
             reason = $"failed to load: {failure}";
 
             return false;

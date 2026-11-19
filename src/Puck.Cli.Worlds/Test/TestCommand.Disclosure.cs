@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
 using Puck.World.Server;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Test;
 
@@ -104,7 +104,7 @@ public static partial class TestCommand {
     private static int RunDisclosureIn(string world, WorldDisclosureFixture fixture, WorldDisclosureFuzz fuzz, string repositoryRoot, string runDirectory, string? worldArtifact, string? cacheDirectory) {
         var name = Path.GetFileNameWithoutExtension(path: world);
 
-        _ = WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out var failure, includeTests: false, path: world);
+        _ = WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out var failure, includeTests: false, path: world);
         if ((failure is not null) || (compiled?.Document is not { } bytes) || (JsonNode.Parse(utf8Json: bytes) is not JsonObject document)) {
             Console.Error.WriteLine(value: $"ERROR: {world} does not compile to a world document{((failure is null) ? "." : $":{Environment.NewLine}{failure.Diagnostics.FormatReport(File.ReadAllText(path: world))}")}");
             return 2;

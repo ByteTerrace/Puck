@@ -4,7 +4,7 @@ using Puck.Abstractions.Machines;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.Assets;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -96,11 +96,11 @@ public sealed class WorldSourceWatch {
         using (CompileInputs.Record(log: reads)) {
             try {
                 var document = (m_path.EndsWith(comparisonType: StringComparison.OrdinalIgnoreCase, value: ".puck")
-                    ? (WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out _, path: m_path) ? compiled!.Document : null)
+                    ? (WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: m_path) ? compiled!.Document : null)
                     : CompileInputs.ReadAllBytes(path: m_path));
 
                 if (document is not null) {
-                    _ = PuckDocumentComposer.TryComposeWorldDocument(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, chainBytes: out _, composed: out _, reason: out _, rootBytes: document, rootResolvedPath: m_path);
+                    _ = WorldCompileSession.Shared.TryCompose(catalog: m_catalog, catalogFingerprint: m_catalogFingerprint, chainBytes: out _, composed: out _, reason: out _, rootBytes: document, rootResolvedPath: m_path);
                 }
             } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                 // Keep the failed read's absent fact. A later file recovery takes the ordinary reload path.

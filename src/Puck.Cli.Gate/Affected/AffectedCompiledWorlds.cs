@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Affected;
 
@@ -10,7 +11,7 @@ namespace Puck.Cli.Affected;
 /// <para>
 /// A changed <c>.puck</c> or <c>.world.json</c> under the shipped tree names the document its stem carries. That
 /// document is read at the head from the working tree and at the base from the packages the base recorded
-/// (exported once, <see cref="RevisionExport"/>), each through <see cref="PuckDocumentComposer"/>, which compiles a source
+/// (exported once, <see cref="RevisionExport"/>), each through <see cref="WorldCompileSession"/>, which compiles a source
 /// or reads a document exactly as a load does. The two are compared as values (<see cref="ValueEqual"/>). A file whose
 /// source is a module library or a composition is not judged here and keeps the ordinary selection.
 /// </para>
@@ -42,7 +43,7 @@ public static class AffectedCompiledWorlds {
         // A name resolves beside its referrer, so any file in the shipped tree's own directory refers to it.
         var referrer = Path.Combine(path1: root, path2: AffectedCommand.ShippedTree, path3: "referrer.world.json");
 
-        if (!PuckDocumentComposer.Instance.TryRead(content: out var content, name: name, reason: out _, referrerName: referrer, resolvedName: out _) || (content is null)) {
+        if (!WorldCompileSession.Shared.TryRead(content: out var content, name: name, reason: out _, referrerName: referrer, resolvedName: out _) || (content is null)) {
             return null;
         }
 

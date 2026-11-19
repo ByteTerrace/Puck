@@ -126,7 +126,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
         void Compile() {
             if (path.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 try {
-                    _ = Puck.World.Transpiler.Composition.WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: path);
+                    _ = Puck.World.Transpiler.WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out _, path: path);
                 } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                     // The load reports what it cannot read.
                 }

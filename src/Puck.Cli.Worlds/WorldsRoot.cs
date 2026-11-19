@@ -47,6 +47,6 @@ public static class WorldsRoot {
         // A world source the CLI compiles for a document (a basis or an import `puck test` stages, a composition a verb
         // reads) is compiled once across processes, sharing the game's persisted compile cache. The per-user directory is
         // named at this entry point, as the game names it at its own.
-        Puck.World.Transpiler.Composition.WorldCompileCache.Shared.Persist(directory: Puck.Abstractions.PuckUserDirectory.Resolve(name: "compilations"));
+        Puck.World.Transpiler.WorldCompileSession.Shared.Persist(directory: Puck.Abstractions.PuckUserDirectory.Resolve(name: "compilations"));
     }
 }

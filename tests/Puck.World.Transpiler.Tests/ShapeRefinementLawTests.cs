@@ -17,7 +17,7 @@ public sealed class ShapeRefinementLawTests {
         _ = files.WriteText(name: "base.puck", text: (WorldSources.Header + basis));
 
         var path = files.WriteText(name: "child.puck", text: child);
-        var compiled = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: child, sourcePath: path);
+        var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: child, sourcePath: path);
 
         Assert.False(condition: compiled.Diagnostics.HasErrors, userMessage: compiled.Diagnostics.FormatReport(child));
 

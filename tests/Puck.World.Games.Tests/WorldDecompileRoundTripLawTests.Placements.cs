@@ -20,7 +20,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
             """)!.AsObject();
         // The explicit null keeps the placement in the generic row form used by a serialized live world.
         var printed = WorldDecompiler.Decompile(root: original);
-        var compiled = WorldCompiler.Compile(source: printed, cancellationToken: TestContext.Current.CancellationToken);
+        var compiled = WorldCompileSession.Shared.Compile(source: printed, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compiled.Diagnostics.HasErrors, userMessage: string.Join(separator: "\n", values: compiled.Diagnostics));
         var restored = compiled.RequireJson();

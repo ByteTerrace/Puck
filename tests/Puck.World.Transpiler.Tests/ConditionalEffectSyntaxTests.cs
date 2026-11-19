@@ -243,7 +243,7 @@ public class ConditionalEffectSyntaxTests {
         );
 
         var recompileDiagnostics = new DiagnosticBag();
-        var recompiled = WorldCompiler.Compile(
+        var recompiled = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: recompileDiagnostics,
             source: decompiled

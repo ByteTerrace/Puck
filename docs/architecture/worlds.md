@@ -258,7 +258,7 @@ the same document can take it instead of deriving it again. It is a cache with a
 strong key, never a source of truth: the document stays the durable input, and a
 boot that finds no compiled world derives everything and runs the same world.
 
-Before that lookup, `WorldCompileCache` can answer the composed document itself.
+Before that lookup, `WorldCompileSession` can answer the composed document itself.
 Its composition entry holds the merged JSON, the original chain bytes used for
 the source hash, and every file, absence and directory listing read through
 `CompileInputs` in `Puck.Assets`. The resolved path, catalog fingerprint, source

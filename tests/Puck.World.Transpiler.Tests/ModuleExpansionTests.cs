@@ -11,7 +11,7 @@ namespace Puck.World.Transpiler.Tests;
 public sealed class ModuleExpansionTests {
     [Fact]
     public void AliasedUsesCopyRowsAndRewriteTheirNames() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module counter(value: Angle) {
               state { world { slot score = value } }
               export read score
@@ -28,7 +28,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void ModuleArgumentsRequireTheirDeclaredExportsAndNestedUsesPrefixRecursively() {
-        var good = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var good = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module counter() {
               state { world { slot score = 0 } }
               export read score
@@ -45,7 +45,7 @@ public sealed class ModuleExpansionTests {
 
         Assert.Equal("box$child$score", Assert.Single(collection: rows)!["name"]!.ToString());
 
-        var bad = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var bad = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module hidden() { state { world { slot secret = 0 } } }
             module wrapper(part: Module exporting score) { use part() }
             use wrapper(part: hidden)
@@ -57,7 +57,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void RequiredExportContractsFollowThreeLevelReExportsAndRefuseCycles() {
-        var accepted = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var accepted = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module leaf() {
               state { world { slot score = 0 } }
               export read score
@@ -76,7 +76,7 @@ public sealed class ModuleExpansionTests {
 
         Assert.False(condition: accepted.Diagnostics.HasErrors, userMessage: accepted.Diagnostics.FormatReport(""));
 
-        var cyclic = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var cyclic = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module first() {
               use second as child()
               export child.score
@@ -101,13 +101,13 @@ public sealed class ModuleExpansionTests {
         }
         source.Append(value: "module consumer(part: Module exporting score) { state { world { slot accepted = 1 } } }\nuse consumer(part: m70)");
 
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source.ToString());
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: source.ToString());
 
         Assert.Contains(collection: compilation.Diagnostics, filter: static diagnostic => (diagnostic.Code == PuckDiagnosticCodes.EvaluationLimit));
     }
     [Fact]
     public void DuplicateAliasesAndRecursiveExpansionAreRefusedAtTheUse() {
-        var duplicate = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var duplicate = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module counter() { state { world { slot score = 0 } } }
             use counter as same()
             use counter as same()
@@ -115,7 +115,7 @@ public sealed class ModuleExpansionTests {
 
         Assert.Contains(collection: duplicate.Diagnostics, filter: static diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "alias 'same'"));
 
-        var recursive = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var recursive = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module forever() { use forever() }
             use forever()
             """);
@@ -141,7 +141,7 @@ public sealed class ModuleExpansionTests {
     [InlineData("Gate", "1")]
     [Theory]
     public void TypedParametersRejectValuesOutsideTheirDeclaredKind(string kind, string argument) {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: $$"""
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: $$"""
             module typed(value: {{kind}}) { state { world { slot score = 0 } } }
             use typed(value: {{argument}})
             """);
@@ -166,7 +166,7 @@ public sealed class ModuleExpansionTests {
             use second.counter as right()
             """, path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         Assert.Null(@object: compilation.RequireJson()["imports"]);
@@ -184,14 +184,14 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "state { world { slot composed = 9 } }\nmodule wanted() { state { world { slot deliberate = 3 } } }", path: modulePath);
         File.WriteAllText(contents: "import \"library\"", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         Assert.Equal("library", Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: compilation.RequireJson()["imports"])))["document"]!.ToString());
 
         File.WriteAllText(contents: "import \"library\"\nuse wanted()", path: rootPath);
 
-        var refused = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var refused = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: refused.Diagnostics, filter: static diagnostic => diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "'wanted'"));
     }
@@ -206,19 +206,19 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "import \"document\"\nlet unused = 1", path: Path.Combine(path1: directory.RootPath, path2: "library.puck"));
         File.WriteAllText(contents: "import \"fragment\"", path: rootPath);
 
-        var fragment = WorldCompiler.CompileFile(Path.Combine(path1: directory.RootPath, path2: "fragment.puck"), cancellationToken: TestContext.Current.CancellationToken);
+        var fragment = WorldCompileSession.Shared.CompileFile(Path.Combine(path1: directory.RootPath, path2: "fragment.puck"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: fragment.Diagnostics.HasErrors, userMessage: fragment.Diagnostics.FormatReport(""));
         Assert.True(condition: fragment.EmitsDocument);
 
-        var composed = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var composed = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: composed.Diagnostics.HasErrors, userMessage: composed.Diagnostics.FormatReport(""));
         Assert.Equal("fragment", Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: composed.RequireJson()["imports"])))["document"]!.ToString());
 
         File.WriteAllText(contents: "import \"library\"", path: rootPath);
 
-        var refused = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var refused = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: refused.Diagnostics, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportGraph) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "imports the document 'document'")));
     }
@@ -233,20 +233,20 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "import \"document.puck\"\nlet unused = 1", path: Path.Combine(path1: directory.RootPath, path2: "spelled.puck"));
         File.WriteAllText(contents: "import \"document.world.json\"", path: rootPath);
 
-        var spelled = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var spelled = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: spelled.Diagnostics, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportNamesFile) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "use 'import \"document\"'")));
 
         File.WriteAllText(contents: "import \"library\"", path: rootPath);
 
-        var nested = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var nested = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: nested.Diagnostics, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportGraph) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "imports the document 'document'")));
 
         // A source that does not parse cleanly says neither library nor document, so its importer is refused.
         File.WriteAllText(contents: "import \"spelled\"", path: rootPath);
 
-        var unparsed = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var unparsed = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains(collection: unparsed.Diagnostics, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportTargetMissing) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "does not parse")));
 
@@ -258,7 +258,8 @@ public sealed class ModuleExpansionTests {
             cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: bag,
             rootDoc: PuckParser.ParseDocument(source: "import \"spelled\"\nimport \"absent\""),
-            rootPath: rootPath
+            rootPath: rootPath,
+            sources: new Puck.Transpiler.Modules.PuckSourceTable()
         ));
         Assert.Contains(collection: bag, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportGraph) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "'import \"document.puck\"' spells a file")));
         Assert.Contains(collection: bag, filter: static diagnostic => ((diagnostic.Code == PuckDiagnosticCodes.ImportTargetMissing) && diagnostic.Message.Contains(comparisonType: StringComparison.Ordinal, value: "'absent'")));
@@ -273,7 +274,7 @@ public sealed class ModuleExpansionTests {
 
         File.WriteAllText(contents: "import \"wrapper\" as first\nimport \"wrapper\" as second\nuse first.wrapper as left()\nuse second.wrapper as right()", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
@@ -291,7 +292,7 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "module broken() { missingTemplate() }", path: modulePath);
         File.WriteAllText(contents: "import \"broken\"\nuse broken()", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
         var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
         Assert.Equal(modulePath, error.SourcePath);
@@ -306,9 +307,9 @@ public sealed class ModuleExpansionTests {
             }
             use counter as left(value: 3)
             """;
-        var first = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
+        var first = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: Source);
         var printed = PuckPrinter.Print(document: PuckParser.ParseDocument(Source));
-        var second = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: printed);
+        var second = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: printed);
 
         Assert.False(condition: first.Diagnostics.HasErrors, userMessage: first.Diagnostics.FormatReport(""));
         Assert.False(condition: second.Diagnostics.HasErrors, userMessage: second.Diagnostics.FormatReport(""));
@@ -317,7 +318,7 @@ public sealed class ModuleExpansionTests {
     [Fact]
     public void EachExpandedInstanceKeepsTheDefiningRowSpan() {
         var sourceMap = new SourceMap();
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, sourceMap: sourceMap, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, sourceMap: sourceMap, source: """
             module first() {
               state { world { slot one = 1 } }
             }
@@ -353,7 +354,7 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "import \"counter\"\nuse counter as first()\nuse counter as second()", path: rootPath);
         var sourceMap = new SourceMap();
 
-        var compilation = WorldCompiler.CompileFile(rootPath, sourceMap: sourceMap, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, sourceMap: sourceMap, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         Assert.True(condition: sourceMap.TryGetOrigin(jsonPointer: "/state/world/0", origin: out var firstRow));
@@ -368,7 +369,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void GateParameterCanDriveAnAuthoredRuleFromAHostRow() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             state { world { slot enabled = true } }
             module guarded(condition: Gate) {
               state { world { slot fired = false } }
@@ -388,7 +389,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void ExternalRowArgumentIsNotCapturedByAnEqualModuleLocalName() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             state { world { slot score = true } }
             module copy(source: Gate) {
               state { world { slot score = false } }
@@ -411,7 +412,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void TypedDefaultsResolveEarlierBoundParameters() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module pair(a: Angle, b: Angle = a) { state { world { slot score = b } } }
             use pair(a: 3)
             """);
@@ -423,7 +424,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void RowsInsideUnusedModulesDoNotSatisfyTypedArguments() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module unused() { state { world { slot hidden = true } } }
             module consumer(value: Gate) { state { world { slot result = value } } }
             use consumer(value: hidden)
@@ -435,7 +436,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void APreviousModuleInstancesEmittedGateSatisfiesTheNextTypedUse() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             module source() { state { world { slot enabled = true } } }
             module consumer(condition: Gate) {
               state { world { slot fired = false } }
@@ -455,7 +456,7 @@ public sealed class ModuleExpansionTests {
     }
     [Fact]
     public void TypedReferenceDefaultsPreserveTheEarlierExternalBinding() {
-        var compilation = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
+        var compilation = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: """
             state { world { slot enabled = true } }
             module consumer(a: Gate, b: Gate = a) {
               state { world { slot fired = false } }
@@ -484,7 +485,7 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "let initial = 5\ntemplate rows() { state { world { slot score = initial } } }\nmodule counter() { rows() }", path: modulePath);
         File.WriteAllText(contents: "import \"counter\" as first\nimport \"counter\" as second\nuse first.counter as left()\nuse second.counter as right()", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);
@@ -502,7 +503,7 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "let value = 1\nlet value = 2\nmodule sample() { state { world { slot score = value } } }", path: modulePath);
         File.WriteAllText(contents: "import \"library\" as library", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         var error = Assert.Single(collection: compilation.Diagnostics, predicate: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error));
 
@@ -522,7 +523,7 @@ public sealed class ModuleExpansionTests {
             File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
 
-        var compilation = WorldCompiler.CompileFile(
+        var compilation = WorldCompileSession.Shared.CompileFile(
             path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
             cancellationToken: TestContext.Current.CancellationToken
         );
@@ -543,7 +544,7 @@ public sealed class ModuleExpansionTests {
             File.WriteAllText(path: Path.Combine(path1: directory.RootPath, path2: $"level-{index}.puck"), contents: source);
         }
 
-        var compilation = WorldCompiler.CompileFile(
+        var compilation = WorldCompileSession.Shared.CompileFile(
             path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
             cancellationToken: TestContext.Current.CancellationToken
         );
@@ -567,7 +568,7 @@ public sealed class ModuleExpansionTests {
             );
         }
 
-        var compilation = WorldCompiler.CompileFile(
+        var compilation = WorldCompileSession.Shared.CompileFile(
             path: Path.Combine(path1: directory.RootPath, path2: "level-0.puck"),
             cancellationToken: TestContext.Current.CancellationToken
         );
@@ -589,7 +590,7 @@ public sealed class ModuleExpansionTests {
             """, path: libraryPath);
         File.WriteAllText(contents: "import \"library\" as library\nuse library.sample(value: 3)", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var row = Assert.IsType<JsonObject>(@object: Assert.Single(collection: Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"])));
@@ -606,7 +607,7 @@ public sealed class ModuleExpansionTests {
         File.WriteAllText(contents: "module sample() { state { world { slot score = 0 } } }", path: libraryPath);
         File.WriteAllText(contents: "import \"library\" as a\nimport \"library\" as A\nuse a.sample as lower()\nuse A.sample as upper()", path: rootPath);
 
-        var compilation = WorldCompiler.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.CompileFile(path: rootPath, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(""));
         var rows = Assert.IsType<JsonArray>(@object: Assert.IsType<JsonObject>(@object: compilation.RequireJson()["state"])["world"]);

@@ -263,7 +263,7 @@ public sealed class AssetLockTests {
             ]
             """;
 
-        var refresh = WorldCompiler.Compile(
+        var refresh = WorldCompileSession.Shared.Compile(
             source: Source,
             sourcePath: sourcePath,
             updateAssets: true,
@@ -276,7 +276,7 @@ public sealed class AssetLockTests {
         Assert.True(condition: refresh.Assets!.SaveUpdatedLock(diagnostics: refresh.Diagnostics));
 
         File.WriteAllBytes(path: assetPath, bytes: "second"u8.ToArray());
-        var stale = WorldCompiler.Compile(
+        var stale = WorldCompileSession.Shared.Compile(
             source: Source,
             sourcePath: sourcePath,
             cancellationToken: TestContext.Current.CancellationToken
@@ -313,7 +313,7 @@ public sealed class AssetLockTests {
             use cabinet()
             """;
 
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             source: Source,
             sourcePath: sourcePath,
             updateAssets: true,
@@ -351,7 +351,7 @@ public sealed class AssetLockTests {
             use missing()
             """;
 
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             source: Source,
             sourcePath: sourcePath,
             updateAssets: true,
@@ -373,7 +373,7 @@ public sealed class AssetLockTests {
             let invalid = asset 42
             """;
 
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             source: Source,
             sourcePath: sourcePath,
             updateAssets: true,

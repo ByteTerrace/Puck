@@ -6,7 +6,7 @@ namespace Puck.World.Transpiler.Tests;
 
 public class MemberSpellingRegressionTests {
     private static JsonObject Compile(string source) {
-        var result = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
+        var result = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: result.Diagnostics.HasErrors, userMessage: string.Join(separator: "\n", values: result.Diagnostics));
         return result.Json!;

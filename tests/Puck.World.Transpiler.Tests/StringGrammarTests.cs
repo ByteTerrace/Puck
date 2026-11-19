@@ -51,7 +51,7 @@ public class StringGrammarTests {
         return result.Value!;
     }
     private static string ValueOf(string source, string property) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );

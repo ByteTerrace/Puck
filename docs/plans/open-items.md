@@ -3001,7 +3001,7 @@ Boot:
   first crossing's JIT, loader and pipeline-state hitch in a fresh process.
 - Prepare machine content once per input: every boot compiles the debug
   world's `.puck` cartridges again (`CartridgeSource.Prepare`). Key a cache by
-  the inputs the compile read, as `WorldCompileCache` keys a world compile; it
+  the inputs the compile read, as `WorldCompileSession` keys a world compile; it
   needs `ModuleResolver.ImportModules` to report the files it read.
 - Two boot reads still resolve by reflection: `WorldSubmissionCodec` reaches
   its protocol union records through a `DefaultJsonTypeInfoResolver`, and
@@ -3135,8 +3135,7 @@ CLI maturity remainders, each a [low]:
 - The test batch watchdog writes its cause only to the batch's `.stderr.log`;
   `sweep` regex-scrapes `puck test`'s output for verdict counts.
 - `puck counters` has no `--world-artifact`, so it cannot compare counters
-  across builds; `puck compile --watch` watches only the source's own
-  directory though its help promises the imports; `puck affected` and
+  across builds; `puck affected` and
   `puck gate` cannot be narrowed to one suite or step.
 - `puck world release checkpoint` prints a JSON document and then a plain
   line on the same output.

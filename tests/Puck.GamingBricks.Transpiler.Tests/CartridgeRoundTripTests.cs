@@ -287,6 +287,7 @@ public class CartridgeRoundTripTests {
             diagnostics: diagnostics
         ).Value!;
         var lowered = CartridgeDocumentEmitter.LowerSource(
+            sources: new Puck.Transpiler.Modules.PuckSourceTable(),
             cancellationToken: TestContext.Current.CancellationToken,
             diagnostics: diagnostics,
             document: parsed,

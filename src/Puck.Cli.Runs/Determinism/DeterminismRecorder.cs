@@ -6,6 +6,7 @@ using Puck.World.Authoring;
 using Puck.World.Protocol;
 using Puck.World.Server;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Determinism;
 
@@ -30,7 +31,7 @@ public static class DeterminismRecorder {
 
             return true;
         }
-        if (!WorldCompileCache.Shared.TryCompile(
+        if (!WorldCompileSession.Shared.TryCompile(
             compiled: out var compiled,
             failure: out var failure,
             path: path
@@ -184,7 +185,7 @@ public static class DeterminismRecorder {
 
         if (
             !TryReadDocument(document: out var document, error: out error, path: path, sourceCompilation: out var sourceCompilation) ||
-            !WorldSourceLoader.TryReadAuthored(
+            !WorldCompileSession.Shared.TryReadAuthored(
                 authored: out authored,
                 catalog: catalog,
                 catalogFingerprint: catalog.CompositionFingerprint,
@@ -193,7 +194,7 @@ public static class DeterminismRecorder {
                 path: path,
                 reason: out error
             ) ||
-            !WorldSourceLoader.TryLoadForAdmission(
+            !WorldCompileSession.Shared.TryLoadForAdmission(
                 admission: out var admission,
                 catalog: catalog,
                 catalogFingerprint: catalog.CompositionFingerprint,
