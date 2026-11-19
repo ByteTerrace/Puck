@@ -80,6 +80,16 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <summary>Gets the handles of the program the batch samples (<see cref="SdfProgram.SampledFields"/>), which its sampled
     /// table's directory holds a word for.</summary>
     public int SampledHandles { get; init; }
+    /// <summary>Gets the field evaluations the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the
+    /// bake's GPU time is measured in.</summary>
+    public long Taps {
+        get {
+            var taps = 0L;
+
+            foreach (var lattice in Lattices) { taps += lattice.Taps; }
+            return taps;
+        }
+    }
     /// <summary>Gets the words of the batch's sampled table (<see cref="WriteSampled"/>), at least one.</summary>
     public int SampledWords {
         get {

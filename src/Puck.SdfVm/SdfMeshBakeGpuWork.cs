@@ -117,16 +117,8 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
             return false;
         }
         job = batch;
-        estimatedSeconds = m_rate.SecondsOf(units: TapsOf(batch: batch));
+        estimatedSeconds = m_rate.SecondsOf(units: batch.Taps);
         return true;
-    }
-
-    // A batch's field evaluations: the unit its rate counts.
-    private static long TapsOf(SdfMeshBakeBatch batch) {
-        var taps = 0L;
-
-        foreach (var lattice in batch.Lattices) { taps += lattice.Taps; }
-        return taps;
     }
     /// <inheritdoc/>
     /// <remarks>Writes the slot's pass block and point table, binds them with the tables' current World set, and records
@@ -204,7 +196,7 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     public void Complete(object job, SdfGpuWorkReadback readback) {
         var batch = ((SdfMeshBakeBatch)job);
 
-        if (readback.GpuSeconds is { } seconds) { m_rate.Observe(seconds: seconds, units: TapsOf(batch: batch)); }
+        if (readback.GpuSeconds is { } seconds) { m_rate.Observe(seconds: seconds, units: batch.Taps); }
         SdfMeshPathBake.RunFirst(work: () => {
             var length = readback.Length;
             // The copy belongs to this answer alone: native storage from the bake's allocator, charged while it lasts
