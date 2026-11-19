@@ -162,11 +162,11 @@ All paths are under `src/` unless stated.
   from what landed at most every `PendingSceneInterval = 4 s` (:270, `ScenePendingDue` :1267-1269) **[opened]**.
 - **Bound:** retained geometry up to `RetainedTriangles = 8_000_000L` (SdfMeshIrradianceScene.cs:116) **[opened]**;
   arrays rented from `ArrayPool<T>.Shared` (`RentedArrays.Rent`, Puck.Abstractions/Memory/RentedArrays.cs:17-21;
-  `Content.Release`, Scene.cs:82-95) **[opened]**; not charged to `MemoryAccount` (no account call in the scene files,
+  `Content.Release`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:82-95) **[opened]**; not charged to `MemoryAccount` (no account call in the scene files,
   grep **[opened]**). GPU side: `GpuArena` over a `GpuRangeAllocator` that throws "The probe scene exceeds its packed
   node address space." (src/Puck.SdfVm/SdfMeshIrradianceScene.Gpu.cs:187-201) **[opened]**, in a region from `CreateProbeSceneRegion`
   (MeshRegion.cs:35-38) **[opened]**.
-- The scene holds mesh claims (`m_meshClaims`, Scene.cs:22), which keep the static meshes' CPU payloads alive
+- The scene holds mesh claims (`m_meshClaims`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:22), which keep the static meshes' CPU payloads alive
   **[opened]**.
 
 ### 1.12 `WorldViewGraphHost.ReserveArrivals` and the arrival share (Puck.World.Client/WorldViewGraphHost.cs)
@@ -277,7 +277,7 @@ the same physical RAM `MemoryAccount.DefaultBudget` takes 3/4 of **[inference]**
    allocations by role), the library's own LRU weight over `StorageBytes` (SdfMeshLibrary.cs:50-54, 315), and the
    region's named bytes copied into the bake (`m_regionNamedBytes`, src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:352).
 4. **Five retention policies in five currencies:** library LRU in bytes (SdfMeshLibrary.cs:324), arena slack in words
-   (`RetainedSlackWords`, src/Puck.SdfVm/SdfMeshRegionArena.cs:42), trace-scene retention in triangles (`RetainedTriangles`, Scene.cs:116),
+   (`RetainedSlackWords`, src/Puck.SdfVm/SdfMeshRegionArena.cs:42), trace-scene retention in triangles (`RetainedTriangles`, src/Puck.SdfVm/SdfMeshIrradianceScene.cs:116),
    probe retention in window cells (`ProbeCache.Retain`, :2890-2895), store retention in disk bytes
    (SdfMeshStore.cs:34). The selector's "eviction by priority" needs one currency.
 5. **Several schedulers for residency work:** the bake's static pool (`Task.Run`, src/Puck.SdfVm/SdfMeshPathBake.Residency.cs:223), `JobPool`
@@ -394,7 +394,7 @@ and R1a/R1b do not.
 4. **"Cut duplicate copies: release the CPU copy once the GPU copy is resident" (step 4).** *Against:* the region
    holds a cached claim on every placed mesh (src/Puck.SdfVm/SdfMeshRegionArena.cs:351) and re-reads its words from the CPU mesh for moved meshes,
    relocations, coarsened runs and other residencies (MeshRegion.cs:448-468, 752-780); relocation re-lands from the host
-   (open item); the trace scene claims static meshes (Scene.cs:22); restore exists only for normals and coarser
+   (open item); the trace scene claims static meshes (src/Puck.SdfVm/SdfMeshIrradianceScene.cs:22); restore exists only for normals and coarser
    indices of store-published meshes. Releasing positions/level-0 needs GPU-side compaction and GPU probe placement
    first. *For:* the restore door (`SdfMesh.Hold`, need counting) is a proven pattern to extend.
 5. **"Each residency budgets alone is fine while nested worlds are small."** *Against:* every routed or non-disclosing

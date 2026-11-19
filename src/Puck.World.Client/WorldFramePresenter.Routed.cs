@@ -96,18 +96,7 @@ public sealed partial class WorldFramePresenter {
         ArgumentNullException.ThrowIfNull(argument: mirror);
 
         if (!m_routedScenes.TryGetValue(key: mirror, value: out var scene)) {
-            scene = new WorldRoutedScene(
-                authority: authority,
-                bodyColor: mirror.BodyColor,
-                buildsInBackground: true,
-                domains: m_domains,
-                hostFrame: () => m_dressedFrame,
-                mirror: mirror,
-                name: name,
-                session: m_settings,
-                shadowSettings: () => m_settings.ShadowSlots,
-                skyLayers: m_settings.SkyLayers
-            );
+            scene = NewScene(authority: authority, bodyColor: mirror.BodyColor, endpoint: null, key: mirror, mirror: mirror, name: name);
             m_routedScenes.Add(key: mirror, value: scene);
         }
 
@@ -203,17 +192,31 @@ public sealed partial class WorldFramePresenter {
 
         return scene;
     }
-    private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => new(
-        buildsInBackground: true,
+    private WorldRoutedScene CreateRoutedScene(WorldAuthorityEndpoint endpoint) => NewScene(
+        authority: endpoint.Identity,
         bodyColor: index => RoutedBodyColor(
             endpoint: endpoint,
             index: index
         ),
+        endpoint: endpoint,
+        key: endpoint,
+        mirror: endpoint.Mirror,
+        name: endpoint.Identity
+    );
+    // A scene under this presentation's levers: its programs build in the background, it takes the dressed frame's
+    // clock, and it follows the presentation's shadow slots, sky audition and render levers.
+    private WorldRoutedScene NewScene(object key, WorldAuthorityEndpoint? endpoint, WorldSessionMirror mirror, string authority, string name, Func<int, Vector3> bodyColor) => new(
+        authority: authority,
+        bodyColor: bodyColor,
+        buildsInBackground: true,
         domains: m_domains,
         endpoint: endpoint,
         hostFrame: () => m_dressedFrame,
-        skyLayers: m_settings.SkyLayers,
+        key: key,
+        mirror: mirror,
+        name: name,
         session: m_settings,
-        shadowSettings: () => m_settings.ShadowSlots
+        shadowSettings: () => m_settings.ShadowSlots,
+        skyLayers: m_settings.SkyLayers
     );
 }

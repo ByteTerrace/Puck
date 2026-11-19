@@ -958,7 +958,7 @@ for the display. The second and third kinds are GPU legs the lead schedules.
    and a capture of the back buffer agree.
 6. **Sharing by proof.** The authority issues proofs; a shared view is
    constructed from one; the frame bound and each install check it. Deletes
-   `WorldSessionObservation.DisclosesEverything` and step 1's tightened test.
+   the whole-replica test with step 1's tightening of it.
    *Built, the checks below not yet run:* the session sink issues a
    `WorldSceneProof` at each `Replica` delivery from
    `WorldRecipientView.SceneIdentity`, compared with an operator's
@@ -1002,8 +1002,8 @@ Steps 1 and 2 are independent. Step 3 needs step 2, step 4 needs steps 1 and
 
 Each item is deleted in the step named for it above, never before.
 
-- On the authority's side: `WorldSessionObservation.DisclosesEverything` and
-  the second policy copy it stands for.
+- On the authority's side: the whole-replica test and the second policy copy
+  it stood for (deleted in step 6).
 - On the viewer's side: `WorldViewerAccess` and `WorldSessionAccess`,
   `WorldViewAccess` with its join and its retired value, the generated-name
   grammar in `WorldScreenBinder.AccessOf`, the binder's `ContentAccess` and

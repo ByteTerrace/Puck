@@ -14,13 +14,14 @@ public sealed partial class WorldDisclosureImages {
         public ContentPin Frame;
         public ContentPin Identity;
         public int[] Rows = [];
+        public object? RowsOf;
     }
     private readonly Dictionary<string, SceneEntry> m_scenes = new(comparer: StringComparer.Ordinal);
     // The rows a source document's scene reads by name (SceneInputRows), resolved once per source.
     private WorldDefinition? m_sceneRowsSource;
     private StateArena? m_sceneRowsArena;
     private int[] m_sceneRows = [];
-    private static readonly byte[] WholeMarker = [1];
+    private const byte WholeMarker = 1;
 
     // The content identity of everything a scene drawn from this view's stream reads: the disclosed document less its
     // state rows (FrameIdentity: placements as this audience is dealt them, every other section, the field lattices),
@@ -41,20 +42,27 @@ public sealed partial class WorldDisclosureImages {
         }
         var entry = held ?? (m_scenes[audience] = new SceneEntry());
         var definition = m_definitions[audience];
-        entry.Rows = SceneRows(view, definition);
-        var parts = new byte[(SHA256.HashSizeInBytes * (1 + entry.Rows.Length)) + entry.Rows.Length];
+        // The rows follow the source and the placements' reads, which only a recomposed definition changes.
+        if (!ReferenceEquals(entry.RowsOf, definition) || !ReferenceEquals(entry.Source, source)) { entry.Rows = SceneRows(view, definition); entry.RowsOf = definition; }
+        // Each row takes a marker byte and a digest slot, left zero for a row read whole.
+        var length = (SHA256.HashSizeInBytes * (1 + entry.Rows.Length)) + entry.Rows.Length;
+        if (m_sceneParts.Length < length) { m_sceneParts = new byte[System.Numerics.BitOperations.RoundUpToPowerOf2((uint)length)]; }
+        var parts = m_sceneParts.AsSpan(0, length);
+        parts.Clear();
         var at = 0;
-        definition.Digests.AsSpan(0, SHA256.HashSizeInBytes).CopyTo(parts.AsSpan(at)); at += SHA256.HashSizeInBytes;
+        definition.Digests.AsSpan(0, SHA256.HashSizeInBytes).CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
         foreach (var row in entry.Rows) {
-            if (view.ReadsWhole(row)) { WholeMarker.CopyTo(parts.AsSpan(at)); at += 1 + SHA256.HashSizeInBytes; continue; }
+            if (view.ReadsWhole(row)) { parts[at] = WholeMarker; at += 1 + SHA256.HashSizeInBytes; continue; }
             at += 1;
-            Image(view, row, audience).Digest.CopyTo(parts.AsSpan(at)); at += SHA256.HashSizeInBytes;
+            Image(view, row, audience).Digest.CopyTo(parts[at..]); at += SHA256.HashSizeInBytes;
         }
         entry.Source = source; entry.Arena = arena; entry.Revision = arena.DisclosureRevision; entry.Moves = arena.MoveSequence;
         entry.Frame = frame;
         entry.Identity = ContentPin.Compute(parts);
         return entry.Identity;
     }
+    // SceneIdentity's scratch, reused across audiences and ticks.
+    private byte[] m_sceneParts = [];
     // The first row the scene reads that this view does not read whole, by name, or null when it reads every one whole;
     // for an operator's read-back of why a view's scene differs from a whole reader's.
     internal string? FirstSceneRowWithheld(WorldRecipientView view) {
