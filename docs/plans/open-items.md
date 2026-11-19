@@ -1598,8 +1598,9 @@ Artefacts still to isolate:
   remain around the NOISE and ERODE plinths.
 - Settlement is configured sweeps, not history-independent convergence. Open:
   a general refusal of lighting captures before every bake and the irradiance
-  have settled; grazing marks at the teal vertical corner, the Moth backdrop
-  and the boardroom jamb feet; bright bands in the painting wing and
+  have settled; grazing marks at the Moth backdrop and the boardroom jamb feet
+  (re-read them after the finest probes' blocker-evidence rule, which closed the
+  teal room's wall foot and vertical corner); bright bands in the painting wing and
   camera-bay roof; curved bands on the level-3 stairwell wall; the garden
   portal's dark horizontal strip; the REVOLVED floor's diagonal patches and
   black rectangle; the wing's north-east corner remnants.
