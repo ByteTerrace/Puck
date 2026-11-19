@@ -432,7 +432,9 @@ narrows the mask once more for each 8×8 tile (`sdfViewsTileLights` in
 `passes/sdf-views-lights.hlsli`): it bounds the tile's hit points by two boxes,
 the hits nearer than the middle of the tile's depth range and the rest, and keeps
 a light whose sphere of range meets a box and, for a spot, whose cone meets the
-sphere about it. A pixel then walks only the lights that can reach its tile.
+sphere about it. A bound screen is kept where a box reaches in front of its
+face and its mean luminance is above zero. A pixel then walks only the lights
+and screens that can reach its tile.
 
 ## Photometric units and exposure
 

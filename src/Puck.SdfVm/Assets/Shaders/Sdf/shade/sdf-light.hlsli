@@ -196,32 +196,67 @@ struct SdfLightResponse {
     float attenuation;
 };
 
-// The lights a shading walk visits, in order: the lights table's, by the set bits of the mask the walk starts with, then
-// while screen lights are on each screen slot up to the highest bound one. The mask is the view's (the pass block's
-// lightMask, SdfLightSelection) or a subset of it no wider than a workgroup (views narrows it to each tile's lights,
-// sdfViewsTileLights), so every lane of a wave takes the same steps, and a light the mask leaves out costs nothing: the
-// walk never visits it. A mask may leave out only a light that adds nothing where the walk's lanes shade.
+#ifdef SDF_SCREEN_SOURCES
+// How many screen slots can light a surface this frame: one past the highest bound screen, within what every screen table
+// holds; zero while screen lights are off.
+uint sdfScreenLightCount() {
+    if (worldScreenLightsDisabled()) {
+        return 0u;
+    }
+
+    uint surfaceRows;
+    uint mappingRows;
+    uint emissionRows;
+    uint stride;
+    screenSurfaces.GetDimensions(surfaceRows, stride);
+    screenMappings.GetDimensions(mappingRows, stride);
+    sdfScreenLights.GetDimensions(emissionRows, stride);
+
+    return min(min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES),
+        min((surfaceRows / WorldScreenSurfaceRows), min((mappingRows / WorldScreenMappingRows), emissionRows)));
+}
+#endif
+
+// The lights a shading walk visits, in order: the lights table's, by the set bits of the light mask the walk starts with,
+// then each bound screen slot by the set bits of its screen mask (one bit a slot, below sdfScreenLightCount). The masks
+// are the view's (the pass block's lightMask, SdfLightSelection, and every screen) or subsets of them no wider than a
+// workgroup (views narrows them to each tile's lights, sdfViewsTileLights), so every lane of a wave takes the same steps,
+// and a light a mask leaves out costs nothing: the walk never visits it. A mask may leave out only a light that adds
+// nothing where the walk's lanes shade.
+struct SdfLightMasks {
+    uint4 lights;
+    uint screens;
+};
+// The view's masks: every light the view shades and every bound screen.
+SdfLightMasks sdfViewLightMasks() {
+    SdfLightMasks masks;
+
+    masks.lights = passGroup.lightMask;
+    masks.screens = 0xFFFFFFFFu;
+
+    return masks;
+}
 struct SdfLightWalk {
     uint4 mask;
     // The mask word the walk is reading and its bits still to visit; past the last word, the table is done.
     uint word;
     uint bits;
-    // The next screen slot.
-    uint screen;
+    // The screen slots still to visit.
+    uint screens;
 };
-SdfLightWalk sdfLightWalkStart(uint4 mask) {
+SdfLightWalk sdfLightWalkStart(SdfLightMasks masks) {
     SdfLightWalk walk;
 
-    walk.mask = mask;
+    walk.mask = masks.lights;
     walk.word = 0u;
-    walk.bits = sdfComponent(mask, 0u);
-    walk.screen = 0u;
+    walk.bits = sdfComponent(masks.lights, 0u);
+    walk.screens = masks.screens;
 
     return walk;
 }
-// A walk over every light the view shades.
+// A walk over the view's masks.
 SdfLightWalk sdfLightWalkStart() {
-    return sdfLightWalkStart(passGroup.lightMask);
+    return sdfLightWalkStart(sdfViewLightMasks());
 }
 // The walk's next light in `light`, or false once every light is visited.
 bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
@@ -263,25 +298,17 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
     }
 
 #ifdef SDF_SCREEN_SOURCES
-    if (worldScreenLightsDisabled()) {
-        return false;
-    }
-
-    uint surfaceRows;
-    uint mappingRows;
-    uint emissionRows;
-    uint stride;
-    screenSurfaces.GetDimensions(surfaceRows, stride);
-    screenMappings.GetDimensions(mappingRows, stride);
-    sdfScreenLights.GetDimensions(emissionRows, stride);
-    uint screens = min(min(screenLightLoopBound(), SDF_MAX_SCREEN_SURFACES),
-        min((surfaceRows / WorldScreenSurfaceRows), min((mappingRows / WorldScreenMappingRows), emissionRows)));
+    uint screens = sdfScreenLightCount();
 
     [loop]
-    while (walk.screen < screens) {
-        uint screenIndex = walk.screen;
+    while (walk.screens != 0u) {
+        uint screenIndex = firstbitlow(walk.screens);
 
-        walk.screen++;
+        walk.screens &= (walk.screens - 1u);
+        if (screenIndex >= screens) {
+            walk.screens = 0u;
+            break;
+        }
         if (!screenSourceBound(screenIndex)) {
             continue;
         }

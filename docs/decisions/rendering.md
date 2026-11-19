@@ -503,7 +503,9 @@ Skipping one changes no pixel, since a point or spot light's falloff is exactly
 zero at its range (below). The views pass narrows that mask again for each 8×8
 tile it shades (`sdfViewsTileLights`): a light is kept where its sphere of range
 meets a box about the tile's hit points, and a spot where its cone also meets
-them, so a pixel walks only the lights that reach near it. The boxes hold the
+them, and a bound screen where some of those points lie in front of its face
+and its picture is not black, so a pixel walks only the lights that reach near
+it. The boxes hold the
 very points the light stage shades, so a tile's mask changes no pixel either,
 and no light can pop at a tile edge.
 

@@ -47,7 +47,7 @@ float3 sdfViewsStage(SdfPixel p, out float coverage, out float reactivity) {
     precise float3 surfacePoint = p.rayOrigin + rayTravel;
     int material = s.material;
     // The view's mode is uniform across the group, so every lane reaches the tile's barriers or none does.
-    uint4 lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);
+    SdfLightMasks lights = sdfViewsTileLights(p, useFinalShading, s.hit, surfacePoint, s.t);
 
     if (!p.active) {
         return float3(0.0, 0.0, 0.0);

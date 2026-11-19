@@ -51,9 +51,9 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
 }
 
 // The stage shades with what the views stage resolved before it (sdfViewsStage): the hit the mesh hit door resolved,
-// the hit's surface point, whether the view shades finally, the material the pixel shades with, and the mask of the
+// the hit's surface point, whether the view shades finally, the material the pixel shades with, and the masks of the
 // lights its walk visits (sdfViewsTileLights).
-float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, uint4 lights, out float coverage, out float reactivity) {
+float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 surfacePoint, bool useFinalShading, bool curvatureShading, int material, SdfLightMasks lights, out float coverage, out float reactivity) {
     float3 color = float3(0.0, 0.0, 0.0);
 
     coverage = 0.0;

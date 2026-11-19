@@ -1,26 +1,30 @@
 // The views pass's light tiles: each workgroup, one 8x8 tile of the render extent in every views kernel (the entry point's
-// raster jobs and the binned jobs alike), narrows the view's light mask (the pass block's lightMask, SdfLightSelection)
-// to the lights that can reach a surface point the tile shades, and its light walks visit only those
-// (sdfLightWalkStart). The tile's hit points are bounded by two boxes, the hits nearer than the middle of the tile's
-// depth range and the rest, so a tile across a silhouette bounds the object and what lies behind it apart rather than the
-// whole span between them.
+// raster jobs and the binned jobs alike), narrows the view's light masks (sdfViewLightMasks: the pass block's lightMask,
+// SdfLightSelection, and every bound screen) to the lights and screens that can reach a surface point the tile shades, and
+// its light walks visit only those (sdfLightWalkStart). The tile's hit points are bounded by two boxes, the hits nearer
+// than the middle of the tile's depth range and the rest, so a tile across a silhouette bounds the object and what lies
+// behind it apart rather than the whole span between them.
 //
-// The invariant: a light the tile leaves out adds nothing at any point either box holds. A point or spot light's falloff
-// is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the cone's angle; an occluder
-// is taken as reaching SDF_LIGHT_OCCLUDER_REACH of its radii, the reach the view's selection already takes. Every other
-// kind (a directional, a rim) reaches everything and is kept. The boxes hold every hit point of the tile exactly, the
-// same point the light stage shades (the views stage passes the one it forms), so the only difference from walking the
-// view's whole mask is the rounding of a light's response within SdfViewsLightReachMargin of where it falls to zero.
+// The invariant: a light or screen the tile leaves out adds nothing at any point either box holds. A point or spot light's
+// falloff is exactly zero at and past its range (sdfPointReach), and its cone exactly zero outside the cone's angle; an
+// occluder is taken as reaching SDF_LIGHT_OCCLUDER_REACH of its radii, the reach the view's selection already takes; a
+// screen lights only what lies in front of its face's plane, and nothing while its mean luminance is zero
+// (sdfLightResponse). Every other kind (a directional, a rim) reaches everything and is kept. The boxes hold every hit
+// point of the tile exactly, the same point the light stage shades (the views stage passes the one it forms), so the only
+// difference from walking the view's whole masks is the rounding of a response within SdfViewsLightReachMargin of where
+// it falls to zero.
 #ifndef PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #define PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #include "Shared/ordered-float.hlsli"
 #include "../frame/sdf-lights.hlsli"
+#include "../shade/sdf-light.hlsli"
 
 // The tile's nearest and farthest hit distance, each the bits of a non-negative float, whose unsigned order is its own.
 groupshared uint sdfViewsLightDepths[2];
 // The two boxes in ordered bits (puckOrderedFromFloat): the near hits' low corner and high corner, then the far hits'.
 groupshared uint sdfViewsLightBoxes[12];
-groupshared uint sdfViewsLightTile[4];
+// The tile's light mask words, then its screen mask.
+groupshared uint sdfViewsLightTile[5];
 
 // The share a reach is widened by before a box is tested against it, past the rounding between this test and the
 // response's own: a light is left out only where its response is zero by a margin.
@@ -60,20 +64,30 @@ bool sdfViewsLightReachesBox(SdfLight light, float3 position, float3 low, float3
 
     return (((cosine * across) - (sine * along)) <= ((radius * (1.0 + SdfViewsLightReachMargin)) + (SdfViewsLightReachMargin * length(offset))));
 }
+// Whether a screen's face, at `origin` facing `facing`, has any point of the box `low`..`high` in front of its plane:
+// the box's farthest reach along the facing, its centre's offset plus its half extent projected on the facing's
+// magnitudes.
+bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float3 low, float3 high) {
+    float3 center = ((low + high) * 0.5);
+    float3 extent = ((high - low) * 0.5);
+    float3 offset = (center - origin);
 
-// The mask of the lights the tile's walks visit: the view's lights that can reach a hit point of the tile. `shades` says
-// whether the view walks lights at all (its mode shades finally), uniform over the group; a view that does not keeps the
-// view's mask unread. `lit` says whether this lane's pixel is a hit the light stage may shade, at `surfacePoint`, `t`
-// along its ray. Every lane of the group calls it, a lane past the render extent included, since it holds the group's
-// barriers.
-uint4 sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint, float t) {
-    uint4 viewLights = passGroup.lightMask;
+    return ((dot(facing, offset) + dot(abs(facing), extent)) > (-SdfViewsLightReachMargin * (length(offset) + length(extent))));
+}
+
+// The masks of the lights and screens the tile's walks visit: the view's that can reach a hit point of the tile.
+// `shades` says whether the view walks lights at all (its mode shades finally), uniform over the group; a view that does
+// not keeps the view's masks unread. `lit` says whether this lane's pixel is a hit the light stage may shade, at
+// `surfacePoint`, `t` along its ray. Every lane of the group calls it, a lane past the render extent included, since it
+// holds the group's barriers.
+SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint, float t) {
+    SdfLightMasks viewMasks = sdfViewLightMasks();
 
 #if defined(SDF_VIEWS_OMIT_LIGHTS) || defined(SDF_VIEWS_OMIT_LIGHT_TILES)
-    return viewLights;
+    return viewMasks;
 #endif
     if (!shades) {
-        return viewLights;
+        return viewMasks;
     }
 
     uint2 corner = (p.pixel % SDF_VISIBILITY_GROUP_EDGE);
@@ -82,7 +96,7 @@ uint4 sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint,
     if (lane < 12u) {
         sdfViewsLightBoxes[lane] = (((lane % 6u) < 3u) ? PuckOrderedHighest : PuckOrderedLowest);
     }
-    if (lane < 4u) {
+    if (lane < 5u) {
         sdfViewsLightTile[lane] = 0u;
     }
     if (lane < 2u) {
@@ -127,7 +141,7 @@ uint4 sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint,
             uint word = (index / 32u);
             uint bit = (1u << (index % 32u));
 
-            if ((sdfComponent(viewLights, word) & bit) == 0u) {
+            if ((sdfComponent(viewMasks.lights, word) & bit) == 0u) {
                 continue;
             }
 
@@ -144,10 +158,29 @@ uint4 sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint,
                 InterlockedOr(sdfViewsLightTile[word], bit);
             }
         }
+
+        // A screen a lane: the walk's own bound, its binding, its luminance and its face (sdfLightNext's screen half).
+        if (lane < sdfScreenLightCount()) {
+            if (screenSourceBound(lane) && any(sdfScreenLights[lane].rgb > 0.0)) {
+                ScreenSurfaceData surface = worldScreenSurface(lane);
+                float3 origin = surface.origin.xyz;
+                float3 facing = normalize(cross(surface.right.xyz, surface.up.xyz));
+
+                if ((nearHeld && sdfViewsScreenFacesBox(origin, facing, nearLow, nearHigh))
+                    || (farHeld && sdfViewsScreenFacesBox(origin, facing, farLow, farHigh))) {
+                    InterlockedOr(sdfViewsLightTile[4], (1u << lane));
+                }
+            }
+        }
     }
     GroupMemoryBarrierWithGroupSync();
 
-    return uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]);
+    SdfLightMasks masks;
+
+    masks.lights = uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]);
+    masks.screens = sdfViewsLightTile[4];
+
+    return masks;
 }
 
 #endif
