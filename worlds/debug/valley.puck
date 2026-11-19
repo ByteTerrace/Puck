@@ -20,6 +20,18 @@ import "glacier-site"
 let valleyRock = 0
 let valleyDeck = 1
 
+// The walls' rock (valley.md): Study B's warm stratified canyon, terracotta faces with dark strata every few storeys,
+// pale sunlit ridges, dark gullies and turf on every ledge and top flat enough to hold it, from the standard's terrain
+// program. The strata and the ledges' edges wander with the breakup so no line runs ruler-straight round the ring.
+let valleyRockBase = { color: "#B0603E", roughness: 0.95, specular: 0.02 }
+let valleyRockBands = [
+  terrainBand("#7A3D2B", amount: 0.55, period: 17, altitude: [0, 4.5], altitudeWidth: 1.5)
+  terrainBand("#69352A", amount: 0.6, curvature: [0 - terrainOpen, -0.03], curvatureWidth: 0.03)
+  terrainBand("#DE9F6A", amount: 0.55, curvature: [0.04, terrainOpen], curvatureWidth: 0.04)
+  terrainBand("#6E8A36", amount: 0.95, roughness: 0.98, specular: 0.015, slope: [0 - terrainOpen, 31], slopeWidth: 8)
+]
+let valleyRockBreakup = { scale: 0.04, jitter [10, 4, 0.03], variation: 0.15, seed: 6151 }
+
 // The overlook: a deck at deckHeight on the south-west sector's inner face, standing out over the floor. The face's
 // distance from the centre at that height follows the main mass's ellipse (terrainMass, exponent 2).
 let overlookSector = { compass: 225, foot: 215, peak: 360, radial: 280 }
@@ -129,7 +141,7 @@ prototypes {
         name: $"valley-{sector.name}"
         schema: "puck.creation.v1"
         palette: concat(
-          [{ color: "#7D7366", roughness: 0.95, specular: 0.02 }],
+          [terrainMaterial(valleyRockBase, valleyRockBands, valleyRockBreakup)],
           sector.name == "north-west" ? wallPalette : []
         )
         // The relief stays out of the bowls the sector carves (water-site.puck's valleyBasins), so the lake's water,

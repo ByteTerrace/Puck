@@ -25,16 +25,23 @@ internal sealed class WorldShadeLowering {
     private readonly Dictionary<(string Name, SdfShadeType Type), string> m_typedParameters = [];
     private readonly Dictionary<(SdfShadePhase, string), SdfShadeExpression> m_outputs = [];
     private readonly HashSet<ExpressionNode> m_resolving = new(ReferenceEqualityComparer.Instance);
+    private readonly List<string> m_names = [];
 
     private int m_nextParameter;
+    // A composed program (`shade: [a, b]`) lowers its elements in order into one program. While a later element lowers,
+    // this holds the surface outputs every earlier element wrote, which its surface phase reads as its material
+    // (ReadComposed); null for the first element and for a program that composes nothing.
+    private Dictionary<string, SdfShadeExpression>? m_inherited;
+    // The phase whose block is lowering, or null outside a phase block (a template's top-level let).
+    private SdfShadePhase? m_phase;
 
     public static JsonNode? Lower(ExpressionNode expression, DocumentScope scope) {
         try {
             var lowering = new WorldShadeLowering();
-            var name = ((expression is CallExpressionNode call) ? call.Name : "inline");
 
             lowering.Program(expression: expression, scope: scope);
             if (scope.Diagnostics.HasErrors) { return null; }
+            var name = ((lowering.m_names.Count > 0) ? string.Join(separator: '+', values: lowering.m_names) : "inline");
             var definition = new SdfShadeDefinition(name, lowering.m_parameters,
                 lowering.m_outputs.OrderBy(keySelector: p => p.Key.Item1).ThenBy(p => p.Key.Item2, StringComparer.Ordinal)
                     .Select(selector: p => new SdfShadeOutput(p.Key.Item1, p.Key.Item2, p.Value)).ToArray());
@@ -53,8 +60,26 @@ internal sealed class WorldShadeLowering {
         }
     }
 
-    private void Program(ExpressionNode expression, DocumentScope scope) {
+    // A program is a shade template call, a block of phases, a binding of either, an admitted program held as a value (a
+    // palette row's `shade`, read as `base.shade`), or a list of programs composed in order. In a composition each
+    // element's outputs replace the same outputs of the elements before it, and its surface phase reads what they wrote
+    // as its material (`material.albedo`, `surface.normal`), so a surface treatment layers over another and a light
+    // response (cel) joins a surface treatment (terrain) as one program. An absent element (a row with no `shade`) adds
+    // nothing.
+    private void Program(ExpressionNode expression, DocumentScope scope, bool optional = false) {
+        if (expression is ArrayExpressionNode composed) {
+            var enclosing = m_inherited;
+
+            foreach (var element in composed.Elements) {
+                m_inherited = m_outputs.Where(predicate: o => (o.Key.Item1 == SdfShadePhase.Surface))
+                    .ToDictionary(keySelector: o => o.Key.Item2, elementSelector: o => o.Value, comparer: StringComparer.Ordinal);
+                Program(expression: element, scope: scope, optional: true);
+            }
+            m_inherited = enclosing;
+            return;
+        }
         if ((expression is CallExpressionNode call) && scope.Templates.TryGetValue(key: call.Name, value: out var template) && template.IsShade) {
+            m_names.Add(item: call.Name);
             DocumentLowering.ExpandFunction(call.Name, call.Span, scope, () => {
                 DocumentLowering.ExpandTemplate(call, new JsonObject(), scope, (statement, _, invocation) => Phase(scope: invocation, statement: statement),
                     bindArgument: BindParameter);
@@ -63,6 +88,7 @@ internal sealed class WorldShadeLowering {
             return;
         }
         if (expression is ObjectExpressionNode obj) {
+            m_names.Add(item: "inline");
             foreach (var property in obj.Properties) {
                 if (property.Value is not ObjectExpressionNode body) { throw new SdfShadeException(code: "PUCK126", message: "A shade phase is a block."); }
                 Phase(new BlockNode(property.Name, null, null, body.Properties), scope);
@@ -70,9 +96,59 @@ internal sealed class WorldShadeLowering {
             return;
         }
         if ((expression is IdentifierExpressionNode id) && scope.TryGetExpression(id.Name, out var bound, out var lexical)) {
-            Program(expression: bound!, scope: lexical); return;
+            Program(expression: bound!, scope: lexical, optional: optional); return;
         }
-        throw new SdfShadeException(code: "PUCK126", message: "shade needs a shade template call or a block of surface, light and compose phases.");
+        if (expression is IdentifierExpressionNode or MemberAccessExpressionNode or IndexExpressionNode) {
+            switch (DocumentLowering.EvaluateValue(expression, scope)) {
+                case JsonObject admitted:
+                    Import(definition: (admitted.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)
+                        ?? throw new SdfShadeException(code: "PUCK126", message: "A shade value is an admitted program.")));
+                    return;
+                case null when optional:
+                    return;
+            }
+        }
+        throw new SdfShadeException(code: "PUCK126",
+            message: "shade needs a shade template call, a block of surface, light and compose phases, an admitted program or a list of them.");
+    }
+    // Lowers an admitted program's canonical definition into this one: each named value expands into the expression it
+    // names (shared, so the compiler still lowers it once), its parameters take fresh slots, and its surface reads see
+    // what earlier elements of a composition wrote, as a template's do.
+    private void Import(SdfShadeDefinition definition) {
+        var renamed = new Dictionary<string, string>(comparer: StringComparer.Ordinal);
+        var values = new Dictionary<(SdfShadePhase, string), SdfShadeExpression>();
+
+        m_names.Add(item: definition.Name);
+        foreach (var parameter in definition.Parameters) {
+            var name = $"p{m_parameters.Count}";
+
+            renamed.Add(key: parameter.Name, value: name);
+            m_parameters.Add(item: parameter with { Name = name });
+        }
+        foreach (var value in (definition.Values ?? [])) { values[(value.Phase, value.Name)] = Expand(expression: value.Value, phase: value.Phase); }
+        foreach (var output in definition.Outputs) { m_outputs[(output.Phase, output.Name)] = Expand(expression: output.Value, phase: output.Phase); }
+
+        SdfShadeExpression Expand(SdfShadeExpression expression, SdfShadePhase phase) => expression.Op switch {
+            "value" => (values.GetValueOrDefault(key: (phase, (expression.Name ?? "")))
+                ?? throw new SdfShadeException(code: "PUCK128", message: $"Shade value '{expression.Name}' is undefined in {phase}.")),
+            "parameter" => expression with {
+                Name = (renamed.GetValueOrDefault(key: (expression.Name ?? ""))
+                    ?? throw new SdfShadeException(code: "PUCK128", message: $"Undefined shade parameter '{expression.Name}'.")),
+            },
+            "input" => (ReadComposed(name: (expression.Name ?? ""), phase: phase) ?? expression),
+            _ => ((expression.Arguments is { Count: > 0 } arguments)
+                ? expression with { Arguments = arguments.Select(selector: a => Expand(expression: a, phase: phase)).ToArray() } : expression),
+        };
+    }
+    // What a composed element's surface phase reads for a material member or the surface normal: the output an earlier
+    // element wrote, or null where none did (the material's own value). Only the surface phase layers this way; the light
+    // and compose phases read the composed surface through `surface.albedo` and its siblings.
+    private SdfShadeExpression? ReadComposed(string name, SdfShadePhase? phase) {
+        if ((m_inherited is not { } prior) || (phase != SdfShadePhase.Surface)) { return null; }
+        var member = (name.StartsWith(value: "material.", comparisonType: StringComparison.Ordinal) ? name["material.".Length..]
+            : ((name == "surface.normal") ? "normal" : null));
+
+        return ((member is not null) && prior.TryGetValue(key: member, value: out var written)) ? written : null;
     }
     private ExpressionNode BindParameter(TemplateParameterNode parameter, ExpressionNode value, DocumentScope caller) {
         value = RequireStructural(expression: value, scope: caller);
@@ -92,7 +168,10 @@ internal sealed class WorldShadeLowering {
         var constants = new Dictionary<string, ExpressionNode>(scope.Constants, StringComparer.Ordinal);
         var local = scope.WithConstants(constants);
 
-        foreach (var item in block.Statements) { Statement(phase: phase, scope: local, statement: item); }
+        m_phase = phase;
+        try {
+            foreach (var item in block.Statements) { Statement(phase: phase, scope: local, statement: item); }
+        } finally { m_phase = null; }
     }
     private void Statement(StatementNode statement, DocumentScope scope, SdfShadePhase phase) {
         switch (statement) {
@@ -214,7 +293,8 @@ internal sealed class WorldShadeLowering {
         MemberAccessExpressionNode member when (Qualified(node: member.Target) is { } head) => $"{head}.{member.Member}",
         _ => null,
     };
-    private static SdfShadeExpression Read(string name) {
+    private SdfShadeExpression Read(string name) {
+        if (ReadComposed(name: name, phase: m_phase) is { } written) { return written; }
         if (!SdfShadeOps.Inputs.Any(predicate: i => (i.Name == name))) {
             throw new SdfShadeException(code: (name.Contains(comparisonType: StringComparison.Ordinal, value: '.') ? "PUCK126" : "PUCK128"),
                 message: $"Unknown shade input or undefined register '{name}'{DocumentNearestNames.Suggestion(name, SdfShadeOps.Inputs.Select(selector: i => i.Name))}.");

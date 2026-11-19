@@ -37,8 +37,15 @@ A document's `schema:` field selects its vocabulary, never the filename.
   expansion and recursion guard. It emits the canonical graph admitted by
   `SdfShadeProgram`, with typed stamp reads, live-read flags and checked cost.
   `lanes.slot[index]` and `lanes.world[index]` lower to the same reads as the
-  named lanes. Refusals are `PUCK126`–`PUCK130`; ordinary recursion and invalid
-  compile-time ranges retain the core's codes. See
+  named lanes. A list (`shade [base.shade, terrain(...)]`) composes programs in
+  order into one: an element is a template call, a block, or an admitted program
+  read as a value (a row's `shade`; an absent one adds nothing), a later
+  element's output replaces an earlier one's, and its surface phase reads what
+  the earlier ones wrote as `material.*` and `surface.normal`. A list field is
+  spelled without the colon, as every list is. A structural argument reaches the
+  template as its expression: a function's scalar parameter works, a member of a
+  record parameter does not. Refusals are `PUCK126`–`PUCK130`; ordinary
+  recursion and invalid compile-time ranges retain the core's codes. See
   [the rendering contract](../rendering/references/authored-shading.md).
 
 - A keyed row layered over a basis may carry `$before: "target-name"` to lead a
