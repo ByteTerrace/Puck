@@ -156,7 +156,6 @@ public static class WorldRenderRoot {
             factory: new PlacePackage(placements: host),
             package: RenderGraphPackageCatalog.Place
         );
-        packages.Register(factory: new PlacePackage(placements: host), package: RenderGraphPackageCatalog.PlaceBloom);
 
         // Every post-process package the catalog offers, not only the ones the booted views.post rows run: a live views.post
         // edit may name any of them, and a factory reads its stages only when a pass builds.
@@ -245,20 +244,14 @@ public static class WorldRenderRoot {
             compareCapture.RecordPreparedFrame();
         };
 
-        // The host composes the root again whenever the document's panes, views, views.post or render.tonemap move, or a
-        // temporally resolved view starts or stops sharpening, from the post passes and tonemap the document names then,
-        // so a live views.post, render.tonemap or lever edit reaches the running root.
-        // Raw-term views show their own colors; diagnostic overlays retain the beauty tonemap and sharpening.
-        host.ShowsDebugView = () => !DebugViewModes.PreservesScene(mode: residency.DebugMode);
+        // The host composes the root again whenever the document's panes, views or views.post move, from the post passes
+        // the document names then, so a live views.post edit reaches the running root.
         host.Attach(
-            compose: (panes, views, post, tonemap, sharpens) => WorldRootGraph.Compose(
-                blooms: host.OpticalPlacement,
+            compose: (panes, views, post) => WorldRootGraph.Compose(
                 overlay: overlaid,
                 packages: RenderGraphPackageCatalog.Engine,
                 post: post,
                 panes: panes,
-                sharpens: sharpens,
-                tonemap: tonemap,
                 views: views
             ),
             runtime: runtime,

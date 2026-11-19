@@ -198,8 +198,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         Hold(residency: view.Residency);
 
         try {
-            if (context.Part?.StartsWith(comparisonType: StringComparison.Ordinal, value: "bloom-") == true) {
-                return new SdfBloomRecorder(context: context, groups: groups, owner: this, view: view);
+            if ((context.Part == SdfWorldPackage.Display) || (context.Part?.StartsWith(comparisonType: StringComparison.Ordinal, value: "bloom-") == true)) {
+                return new SdfOpticsRecorder(context: context, groups: groups, owner: this, view: view);
             }
             if (context.Part == SdfWorldPackage.Resolve) {
                 return new SdfResolveRecorder(context: context, groups: groups, owner: this, view: view);

@@ -77,7 +77,7 @@ public static class WorldColor {
 
         if (StateBinding.Parse(token: value) is not (var row, var key, _)) {
             return HexColor.TryParse(
-                rgb: out _,
+                color: out _,
                 value: value
             );
         }
@@ -95,7 +95,7 @@ public static class WorldColor {
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParse(
-            rgb: out _,
+            color: out _,
             value: text
         )
         );

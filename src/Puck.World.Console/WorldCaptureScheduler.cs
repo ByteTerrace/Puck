@@ -576,9 +576,10 @@ public sealed class WorldCaptureScheduler {
 
         for (var index = 0; (index < palette.Count); index++) {
             _ = HexColor.TryParseRgba(
-                rgba: out var rgba,
+                color: out var color,
                 value: palette[index].Color
             );
+            var rgba = color.Rgba;
 
             swatchMaterial[index] = palette[index].Material;
             swatchR[index] = ((byte)MathF.Round(x: (rgba.X * 255f)));

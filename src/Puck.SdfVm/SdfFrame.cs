@@ -17,8 +17,6 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     public CameraBloom? Bloom { get; init; }
     /// <summary>The resolved cost gate. Off allocates no pyramid.</summary>
     public BloomQuality BloomQuality { get; init; }
-    /// <summary>A filmed camera without root placement combines its lens scatter into its own output.</summary>
-    public bool BloomStandalone { get; init; }
     /// <summary>A screen-door fade of one stamp's transform-slot range in this view only. Default draws every stamp.</summary>
     public SdfStampFade StampFade { get; init; }
 
@@ -85,8 +83,8 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// glass, or a sky layer's view of another world, whose consumer shows it in its own scene. Such a view applies the
     /// window share of its exposure (<see cref="SdfPhotometry.WindowAdaptation"/>) and the consumer the rest of its own,
     /// so the window shows the world beyond at an exposure between the two. The default, <see langword="false"/>,
-    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, so its output is display-referred before
-    /// the tonemap.</summary>
+    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, and its display pass converts it for the
+    /// display.</summary>
     public bool Unexposed { get; init; }
     /// <summary>Whether another residency renders the view: a seat presented in another world keeps its view's place
     /// among its own world's views while that world's scene renders it, its camera in that world's coordinates. The
@@ -333,6 +331,9 @@ public sealed record SdfFrame(
     /// <summary>The camera exposure every exposed view of the frame maps the luminance it shades to the display by
     /// (<c>render.exposure</c>). The default is the manual exposure an unauthored world renders at.</summary>
     public SdfExposure Exposure { get; init; } = SdfExposure.Default;
+    /// <summary>The display transform every view of the frame that converts for the display puts its exposed light
+    /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
+    public SdfToneCurve Tone { get; init; }
 
     /// <summary>The world's default cel style, which every material without a style of its own shades with, applied
     /// before temporal reconstruction; the default is off.</summary>

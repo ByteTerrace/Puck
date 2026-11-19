@@ -292,7 +292,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             if (!HoldsAvatar(index)) { continue; }
             WorldMirroredAvatarBand.EmitPalette(
                 accentMaterials: accentMaterials,
-                bodyColor: m_bodyColor(arg: index),
+                bodyColor: new DisplayColor(rgb: m_bodyColor(arg: index)),
                 bodyMaterials: bodyMaterials,
                 builder: builder,
                 catalogRig: m_mirror.CatalogRig(index: index),
@@ -535,6 +535,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             Lights = environment.Lights,
             Exposure = WorldRenderSettings.Pinned(exposure: environment.Exposure, pin: Session?.ExposurePin),
             Toon = ToonStyleDocument.ResolveDefault(toon: m_mirror.Definition.Render.Toon, enabled: Session?.ToonOverride),
+            Tone = WorldRenderSettings.ToneOf(render: m_mirror.Definition.Render),
             ShadePrograms = Session?.ShadePrograms ?? false,
             ShadeDefault = WorldRenderSettings.CompileShade(Session?.ShadeOverride ?? m_mirror.Definition.Render.Shade),
             ShadeDeclared = WorldRenderSettings.DeclaredShades(definition: m_mirror.Definition),

@@ -6,8 +6,10 @@ using Puck.Hosting;
 
 namespace Puck.SdfVm;
 
-// The planner owns all images, barriers and timings; each recorder is one counted pyramid dispatch.
-internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
+// Records one pass of a view's optical tail (SdfWorldPackage.WithDisplay): a bloom pyramid level, or the display pass that
+// converts the view's scene light into the working image. The planner owns all images, barriers and timings; each
+// recorder is one counted dispatch.
+internal sealed class SdfOpticsRecorder : IRenderGraphPackageRecorder {
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly SdfWorldPasses m_owner;
     private readonly RenderGraphPackageSets m_sets;
@@ -19,12 +21,12 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
     private SdfWorldView m_view;
     private bool m_disposed;
 
-    public SdfBloomRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
+    public SdfOpticsRecorder(RenderGraphPackageRecorderContext context, RenderGraphPackageGroups groups, SdfWorldPasses owner, SdfWorldView view) {
         m_context = context;
         m_owner = owner;
         m_view = view;
-        m_kernel = ((context.Part == "bloom-apply") ? SdfKernel.BloomApply : (context.Part!.StartsWith(comparisonType: StringComparison.Ordinal, value: "bloom-down-") ? SdfKernel.BloomDown : SdfKernel.BloomUp));
-        m_level = ((m_kernel == SdfKernel.BloomApply) ? 0 : int.Parse(context.Part.AsSpan(start: (context.Part.LastIndexOf(value: '-') + 1)), CultureInfo.InvariantCulture));
+        m_kernel = ((context.Part == SdfWorldPackage.Display) ? SdfKernel.Display : (context.Part!.StartsWith(comparisonType: StringComparison.Ordinal, value: "bloom-down-") ? SdfKernel.BloomDown : SdfKernel.BloomUp));
+        m_level = ((m_kernel == SdfKernel.Display) ? 0 : int.Parse(context.Part.AsSpan(start: (context.Part.LastIndexOf(value: '-') + 1)), CultureInfo.InvariantCulture));
         m_sets = new RenderGraphPackageSets(context, groups, view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
         m_sampler = context.Services.Bindings.CreateSampler(filter: GpuSamplerFilter.Linear);
@@ -49,6 +51,12 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         var bloom = (snapshot.Bloom ?? new CameraBloom());
         var set = m_sets.PassSet(slot: recording.Slot);
         var output = recording.Outputs[0].Image;
+        var display = (m_kernel == SdfKernel.Display);
+        // A display pass reads the scene light first and the scatter second; without a pyramid it reads the scene light
+        // alone, which it binds at both and adds no scatter from.
+        var scattered = (!display || (recording.Inputs.Length > 1));
+        var fidelity = Math.Clamp(max: 1f, min: 0f, value: snapshot.ScreenFidelity);
+        var mode = m_view.Residency.DebugMode;
         // The coarse mix tapers smoothly when the requested radius crosses an octave. The output grid,
         // rather than the internal scene grid, determines support under dynamic resolution.
         var support = (bloom.Radius * Math.Min(val1: output.Width, val2: output.Height));
@@ -57,18 +65,33 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         // as octave weights, so support keeps growing with output size instead of saturating at six levels.
         Write(block: recording.PassBlock, name: "bloomRadius", value: Math.Max(val1: 0.5f,
             val2: ((bloom.Radius * Math.Min(val1: recording.FrameWidth, val2: recording.FrameHeight)) / 64f)));
-
-        Write(block: recording.PassBlock, name: "bloomMix", value: (((m_kernel == SdfKernel.BloomApply) && (m_view.Residency.DebugMode == DebugViewModes.Bloom))
+        Write(block: recording.PassBlock, name: "bloomMix", value: ((display && scattered && (mode == DebugViewModes.Bloom))
             ? -1f : (0.65f * Math.Clamp(max: 1f, min: 0f, value: (support / 2f)))));
-        Write(block: recording.PassBlock, name: "bloomCutoff", value: ((((m_kernel == SdfKernel.BloomDown) && (m_level == 0)) || (m_kernel == SdfKernel.BloomApply)) ? bloom.Cutoff : 0f));
-        Write(block: recording.PassBlock, name: "bloomScatter", value: (bloom.Scatter * (1f - Math.Clamp(snapshot.ScreenFidelity, 0f, 1f))));
+        Write(block: recording.PassBlock, name: "bloomCutoff", value: ((((m_kernel == SdfKernel.BloomDown) && (m_level == 0)) || display) ? bloom.Cutoff : 0f));
+        Write(block: recording.PassBlock, name: "bloomScatter", value: (scattered ? (bloom.Scatter * (1f - fidelity)) : 0f));
+        if (display) {
+            var tone = frame.Tone;
+
+            Write(block: recording.PassBlock, name: SdfWorldPackage.DisplaySharpness, value: (snapshot.Quality.Temporal ? snapshot.UpscaleSharpness : 0f));
+            Write(block: recording.PassBlock, name: SdfWorldPackage.DisplayFidelity, value: fidelity);
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[Offset(name: SdfWorldPackage.DisplayEncode)..],
+                value: (DebugViewModes.ComposesFinal(mode: mode) ? 1u : 0u));
+            Write(block: recording.PassBlock, name: SdfWorldPackage.ToneToe, value: tone.Toe);
+            var shape = recording.PassBlock[Offset(name: SdfWorldPackage.ToneShape)..];
+
+            BinaryPrimitives.WriteSingleLittleEndian(destination: shape, value: tone.Peak);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: shape[4..], value: tone.Contrast);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: shape[8..], value: tone.LinearStart);
+            BinaryPrimitives.WriteSingleLittleEndian(destination: shape[12..], value: tone.LinearLength);
+        }
         m_work.Write(passSet: set, recording: recording);
         var bindings = m_context.Services.Bindings;
+        var scene = recording.Inputs[0].Image.ImageViewHandle;
 
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomSource"), descriptorSetHandle: set,
-            imageViewHandle: recording.Inputs[0].Image.ImageViewHandle);
+            imageViewHandle: ((display && scattered) ? recording.Inputs[1].Image.ImageViewHandle : scene));
         bindings.WriteSampledImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomFine"), descriptorSetHandle: set,
-            imageViewHandle: recording.Inputs[((m_kernel == SdfKernel.BloomDown) ? 0 : 1)].Image.ImageViewHandle);
+            imageViewHandle: ((m_kernel == SdfKernel.BloomUp) ? recording.Inputs[1].Image.ImageViewHandle : scene));
         bindings.WriteStorageImage(arrayElement: 0, binding: m_sets.BindingOf(member: "bloomOutput"), descriptorSetHandle: set,
             imageViewHandle: output.ImageViewHandle);
         var pipeline = tables.Pipeline(kernel: m_kernel);
@@ -79,6 +102,7 @@ internal sealed class SdfBloomRecorder : IRenderGraphPackageRecorder {
         return RenderGraphPackageOutcome.Drew;
     }
 
+    private int Offset(string name) => ((int)m_context.Parameters.BlockOffsetOf(member: name));
     private void Write(Span<byte> block, string name, float value) =>
-        BinaryPrimitives.WriteSingleLittleEndian(destination: block[((int)m_context.Parameters.BlockOffsetOf(member: name))..], value: value);
+        BinaryPrimitives.WriteSingleLittleEndian(destination: block[Offset(name: name)..], value: value);
 }

@@ -116,7 +116,7 @@ registered `IWorkCounterSource`, plus the render nodes' GPU work and an
 allocation reading, with `node`, `pass`, `counter` and `summary` narrowing the
 GPU section; `WorldCountersServiceRegistration` registers it and the
 server's own counters), `world.lighting` (`WorldLightingCommandModule`, the
-`render` section's lights, sky, grounding and tonemap), `world.timeline`
+`render` section's lights, sky, grounding and tone curve), `world.timeline`
 (`WorldTimelineCommandModule`, the named clocks), `world.extensions`
 (`WorldExtensionsCommandModule`, the host-approved extension runtime), and
 `machine.state`/`machine.operation`/`machine.content`/`machine.swap`/`machine.default` (`WorldMachineCommandModule`).

@@ -136,10 +136,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
     /// instance by <see cref="RenderGraphInstance.Handle"/> and showing its whole image at the extent the runtime's
     /// latest schedule renders it at. A placement whose instance has not rendered yet, or that covers no area, publishes
     /// nothing; neither does a view the root stands for, which no <c>place</c> pass draws, nor a lone whole-display view whose
-    /// pass draws it only to tonemap it, so the panes and every pick through them are the same with a tonemap or without. A frame whose placements,
+    /// pass draws it only to apply its matte, so the panes and every pick through them are the same with a matte or without. A frame whose placements,
     /// extents and instances hold publishes the mappings it published before, allocating nothing. Publishing clears the
     /// hovered pane until <see cref="Hover"/> asks again, so no hover outlives the panes it was picked from. A lone view
-    /// covering the whole display, tonemapped or not, publishes its whole-display mapping as <see cref="DisplayView"/>
+    /// covering the whole display, matted or not, publishes its whole-display mapping as <see cref="DisplayView"/>
     /// instead.</summary>
     /// <param name="displayWidth">The display's width, in pixels.</param>
     /// <param name="displayHeight">The display's height, in pixels.</param>
@@ -175,7 +175,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphHitScene {
                 m_displayMapping = (m_display ?? m_displayMapping);
             }
 
-            // A lone whole-display view shown only for its tonemap or sharpen publishes no pane, as the view the root stands
+            // A lone whole-display view shown only for its matte publishes no pane, as the view the root stands
             // for does: the display shows the world itself either way.
             for (var view = (m_loneThroughItsPass ? 1 : 0); (view < views); view++) {
                 PublishPane(

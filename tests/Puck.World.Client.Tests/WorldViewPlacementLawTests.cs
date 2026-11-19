@@ -91,32 +91,6 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         m_instances.Dispose();
         m_directory.Dispose();
     }
-    [InlineData(0f, .2f, true, true)]
-    [InlineData(.2f, 0f, true, false)]
-    [InlineData(.2f, 0f, false, true)]
-    [Theory]
-    public void TheComposedEndpointsActiveLensSelectsPlacementWithoutTonemapOrSharpen(float seatScatter, float cameraScatter, bool cameraMode, bool placed) {
-        var endpoint = Fixtures.BuildDocument() with {
-            RenderRaw = new WorldRenderDefaults(Bloom: new CameraBloom(.8f)),
-            ViewsRaw = Views with {
-                SeatRigRaw = Views.SeatRig with { Bloom = new CameraBloom(seatScatter) },
-                CameraRig = Views.SeatRig with { Bloom = new CameraBloom(cameraScatter) },
-            },
-        };
-        var settings = new WorldRenderSettings(defaults: new WorldRenderDefaults(Bloom: new CameraBloom(.9f)));
-        var lens = settings.ResolveBloom(endpoint.Render, WorldSeatViewState.ProgramOf(endpoint.Views, cameraMode).Bloom);
-
-        m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
-        var declared = m_instances.Instances;
-
-        m_host.PlaceViews(views: [View(new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)) with {
-            Bloom = lens, BloomQuality = BloomQuality.High,
-        }], sharpness: 0f, rendered: static _ => true, panesCover: false);
-        Assert.Equal(placed, m_host.OpticalPlacement);
-        Assert.Same(declared, m_instances.Instances);
-        m_host.BeginFrame(views: endpoint.Views, tonemap: WorldTonemap.None, sharpens: false);
-        Assert.Equal(placed, m_host.Synthesized!.Blooms);
-    }
     [Fact]
     public void EveryPlacedViewsFootprintIsAddedWhetherOrNotItIsShown() {
         var left = new NormalizedRect(Height: 1f, Width: 0.5f, X: 0f, Y: 0f);
@@ -204,46 +178,6 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
         );
         Assert.True(condition: PlacementOf(view: 0).Shown);
     }
-    // A filmic tonemap is the view's place pass, so a lone whole-display view is shown once rendered rather than stood in
-    // for, or the world would reach the display untonemapped. Until shown it owes the letterbox, so a source that
-    // completes later in the frame cannot reach the display through the untonemapped base.
-    [Fact]
-    public void ATonemappedLoneWholeDisplayViewIsShownSoItsPlacePassTonemapsIt() {
-        m_host.BeginFrame(
-            tonemap: WorldTonemap.Filmic,
-            views: Views
-        );
-        m_host.PlaceViews(
-            panesCover: false,
-            rendered: static _ => false,
-            sharpness: 0f,
-            views: [View(region: Whole)]
-        );
-
-        Assert.Equal(
-            actual: (PlacementOf(view: 0).Shown, PlacementOf(view: 0).Uncovered),
-            expected: (false, true)
-        );
-
-        m_host.BeginFrame(
-            tonemap: WorldTonemap.Filmic,
-            views: Views
-        );
-        m_host.PlaceViews(
-            panesCover: false,
-            rendered: static _ => true,
-            sharpness: 0f,
-            views: [View(region: Whole)]
-        );
-
-        Assert.Equal(
-            actual: PlacementOf(view: 0),
-            expected: new RenderGraphPlacement(Height: 1f, Left: 0f, Sharpness: 0f, Shown: true, Top: 0f, Uncovered: false, Width: 1f)
-        );
-    }
-    // A seat framing the screen it engaged shows only its matte of its view: the lone whole-display view is placed
-    // rather than stood in for, its rect is the matte and its crop the matte's part of its own output, which it still
-    // reads whole, and the rest of the display is the letterbox in the screen's fill at the view's fidelity.
     [Fact]
     public void AMattedViewShowsOnlyItsMatteOfItsOutputOverTheFill() {
         var matte = new NormalizedRect(Height: 0.8f, Width: 0.75f, X: 0.125f, Y: 0.1f);
@@ -260,7 +194,7 @@ public sealed class WorldViewPlacementLawTests : IDisposable {
 
         Assert.Equal(
             actual: PlacementOf(view: 0),
-            expected: new RenderGraphPlacement(Crop: new Vector4(w: 0.8f, x: 0.125f, y: 0.1f, z: 0.75f), Fidelity: 1f, Height: matte.Height, Left: matte.X, LetterboxColor: fill, Sharpness: 0f, Shown: true, Top: matte.Y, Uncovered: true, Width: matte.Width)
+            expected: new RenderGraphPlacement(Crop: new Vector4(w: 0.8f, x: 0.125f, y: 0.1f, z: 0.75f), Height: matte.Height, Left: matte.X, LetterboxColor: fill, Sharpness: 0f, Shown: true, Top: matte.Y, Uncovered: true, Width: matte.Width)
         );
         Assert.Equal(
             actual: WorldFootprints()[WorldRootGraph.ProducerOf(view: 0)],

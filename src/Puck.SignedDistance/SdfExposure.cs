@@ -14,7 +14,7 @@ public enum SdfExposureMode {
 }
 /// <summary>
 /// A world's camera exposure (<c>render.exposure</c>): how each view maps the luminance it shades, in nits, to the
-/// display before the tonemap (<see cref="SdfPhotometry.ExposureOf"/>). An automatic exposure meters the view's own
+/// display before its tone curve and encode (<see cref="SdfPhotometry.ExposureOf"/>). An automatic exposure meters the view's own
 /// image: its composite bins each pixel's luminance, at the exposure the view rendered with, into a log histogram of
 /// <see cref="MeterBins"/> bins over <see cref="MeterStops"/> stops from <see cref="MeterLowestStop"/> below display
 /// white, each pixel weighted toward the image's centre by <see cref="Center"/>, and <see cref="Meter"/> averages the
@@ -56,13 +56,13 @@ public readonly record struct SdfExposure(SdfExposureMode Mode, float Ev100, flo
     /// illuminance over π a surface of this albedo would show the reading at, which each surface's own illumination is
     /// measured against.</summary>
     public const float LocalReflectance = 0.4f;
-    /// <summary>The display value, before the tonemap, of a white surface under the illumination an automatic
+    /// <summary>The exposed linear value, before the tone curve and encode, of a white surface under the illumination an automatic
     /// exposure's meter aims for: the meter's calibration over the saturation headroom at ISO 100 and over
     /// <see cref="LocalReflectance"/>, about a quarter. The stylized curvature terms take their full strength on a
     /// surface lit this brightly and fade with its light below it, so a dim room's edges stay as dim as its
     /// walls.</summary>
     public const float ReferenceWhite = (SdfPhotometry.MeterCalibration / ((100f * SdfPhotometry.SaturationHeadroom) * LocalReflectance));
-    /// <summary>The display value, before the tonemap, the local adaptation scales a view's sky share down to where its
+    /// <summary>The exposed linear value, before the tone curve and encode, the local adaptation scales a view's sky share down to where its
     /// brightest texel would exceed it, so a window from a dim room shows the sky's gradient rather than white.</summary>
     public const float SkyPeakTarget = 1f;
     /// <summary>The bins of the image meter's log histogram (<see cref="Meter"/>).</summary>

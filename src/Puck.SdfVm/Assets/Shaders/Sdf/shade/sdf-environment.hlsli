@@ -3,6 +3,7 @@
 #ifndef SHADE_SDF_ENVIRONMENT_HLSLI
 #define SHADE_SDF_ENVIRONMENT_HLSLI
 #include "../frame/sdf-environment.hlsli"
+#include "Shared/transfer.hlsli"
 
 #ifdef SDF_SCREEN_SOURCES
 // A display's treatment is its screen material's (ScreenMappingData.treatment and .treatmentShape, the authored
@@ -259,7 +260,12 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
     sampled = (letterbox ? float3(0.0, 0.0, 0.0) : sampled);
 
     // An opening (a portal's window) is no display: it shows its image as the world beyond it, with no grille,
-    // scanlines, bloom, bezel or glint.
+    // scanlines, bloom, bezel or glint. Its image is the light beyond the glass under the window share of that world's
+    // exposure, linear as it is. A display's picture is a working image, encoded for a display, which the face decodes
+    // to the linear light it emits (SdfScreenFace).
+    if (mapping.state.w != 0.0) {
+        sampled = puckSrgbToLinearExtended(sampled);
+    }
     if (mapping.state.w == 0.0) {
         outColor = (sampled + (rippleGlow * RippleGlowColor));
 

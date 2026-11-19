@@ -1,4 +1,3 @@
-using Puck.Abstractions.Sources;
 using Puck.Maths;
 using Xunit;
 
@@ -46,7 +45,7 @@ public sealed class KeyedDependencyGateLawTests {
             mirror.Apply(fraction: fraction);
             Assert.Equal(expected: (0.05f * fraction), actual: environment.Resolve(definition: definition, mirror: mirror, revision: 0).Sky.Atmosphere.FogDensity, precision: 6);
             Assert.Equal(
-                expected: ((float)ImageSourceConversion.LinearToSrgb(value: (fraction / 2d))),
+                expected: ((float)SrgbTransfer.ToEncoded(linear: (fraction / 2d))),
                 actual: theme.Resolve(definition: definition, mirror: mirror, revision: 0).Color.SurfaceBase.R,
                 precision: 6
             );

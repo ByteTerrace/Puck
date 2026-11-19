@@ -62,10 +62,12 @@ each judges as the `RenderLane` value field (finite). `world.lighting` echoes
 them. Their meaning and consumers:
 [sdf-authoring surface](../../sdf-authoring/references/surface.md#render-lanes).
 
-`environment` (`WorldRenderEnvironment`, optional) and `tonemap`
-(`WorldTonemap` {`none`, `filmic`}, optional) are also read off the LIVE
-definition every frame, alongside `lighting`/`sky`; a `tonemap` change
-recomposes the synthesized root graph. `environment`
+`environment` (`WorldRenderEnvironment`, optional) and `tone`
+(`WorldToneCurve`, optional: `peak`, `contrast`, `linearStart`, `linearLength`,
+`toe`, all required when present; `worlds/standard/tones.puck` names
+`filmicTone`) are also read off the LIVE definition every frame, alongside
+`lighting`/`sky`; a `tone` change reaches each view's display pass on the next
+frame with no graph rebuild. `environment`
 carries nonnegative bindable `ambient` and `reflection` gains, each defaulting
 to one. Zero skips the corresponding shading work. Ambient is the sky's
 second-order harmonic irradiance, multiplied by the existing AO; reflections
@@ -73,14 +75,15 @@ read the shared map with analytic `panel` highlights. A panel is a repeatable
 sky layer with `direction`, `size` (angular half-width and half-height in
 radians), `color`, `intensity` and `blur`; its defaults are lighting
 visibility and add blending. Its colour, intensity and blur can be keyed;
-direction and size are structure. `tonemap` absent is `none` — the stylized shaded color,
-unchanged; `filmic` puts each view through a filmic curve, the Gran Turismo fit (no gamma
-encode — the shading is already display-referred) as the root graph's place pass
-reconstructs it, so the letterbox color, a pane (display-referred, its shader's
-own tonemap included) and the HUD are never tonemapped, and nothing is
-tonemapped while a debug view is on.
+direction and size are structure. `tone` absent applies no curve: exposed light
+of one is SDR white and brighter light clips on an SDR display. Present, it is
+Uchimura's toe, linear section and shoulder, which each view's display pass applies
+to its exposed scene light before the sRGB encode, so the letterbox color, a pane
+and the HUD are never toned, and a debug view whose picture is not scene light
+passes unencoded. Authored hex colours are display colours, decoded to linear
+light where they enter shading (surface, light, sky, fog and medium colours).
 Read back with `world.lighting`.
-Renderer contract: `rendering` skill sync pairs, the sky block and layer table; the tonemap is the root graph's view place passes, not a sky
+Renderer contract: `rendering` skill sync pairs, the sky block and layer table; the tone curve is the view's display pass, not a sky
 record.
 
 `lighting` (`WorldRenderLighting`, optional) carries `lights[]` (at most

@@ -1,0 +1,20 @@
+// The standard's display transforms, a library. A tone is one `render.tone` value: the curve every view of a world puts
+// its exposed scene light through before the view's display pass encodes it for the display, where one is SDR white:
+//
+//   import "../standard/tones"
+//   render { tone: filmicTone }
+//
+// A world with no `tone` shows its exposed light as it is: one reaches white and brighter light clips on an SDR display.
+// Every field is the engine's `render.tone` field (Uchimura's toe, linear section and shoulder), and a world writes its own
+// tone beside these to change one.
+//
+// `filmicTone` keeps a toe near linear (its power 1.1) so shadows stay open, a linear section of slope 0.9 from about a
+// fifth of white so midtones stay soft, and a shoulder that rolls highlights into white from about three times middle
+// grey, so a sunlit white wall and a lamp keep their gradient rather than clipping flat.
+let filmicTone = {
+  peak: 1
+  contrast: 0.9
+  linearStart: 0.22
+  linearLength: 0.4
+  toe: 1.1
+}

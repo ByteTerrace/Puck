@@ -223,7 +223,10 @@ internal sealed class WorldShadeLowering {
     }
     private static SdfShadeExpression Literal(JsonNode? node, SdfShadeType? expected = null) {
         if ((node is JsonValue boolean) && boolean.TryGetValue<bool>(value: out var flag)) { node = JsonValue.Create((flag ? 1 : 0)); }
-        if ((node is JsonValue text) && text.TryGetValue<string>(value: out var color) && HexColor.TryParse(rgb: out var rgb, value: color)) {
+        // A colour literal in a shading program is light or reflectance: the display colour it spells, decoded.
+        if ((node is JsonValue text) && text.TryGetValue<string>(value: out var color) && HexColor.TryParse(color: out var display, value: color)) {
+            var rgb = display.ToScene().Linear;
+
             return new("constant", Type: SdfShadeType.Float3,
                 Bits: [BitConverter.SingleToUInt32Bits(value: rgb.X), BitConverter.SingleToUInt32Bits(value: rgb.Y), BitConverter.SingleToUInt32Bits(value: rgb.Z)]);
         }

@@ -261,7 +261,7 @@ public static class WorldImageProducerVocabulary {
 
         protected override void Check(WorldColorSettings settings, WorldDefinition definition, string path, List<string> errors) {
             if (!HexColor.TryParse(
-                rgb: out _,
+                color: out _,
                 value: settings.Color
             )) {
                 errors.Add(item: $"{path}.color '{settings.Color}' must be #RRGGBB.");

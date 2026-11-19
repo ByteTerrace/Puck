@@ -3706,7 +3706,7 @@ Looks and rules of play held in engine code:
   that leans on it, and look at the places on both backends before and after.
 - [medium] Three looks the rendering research found in engine code, each with
   the authored home [its looks table](rendering-research/step-designs.md#where-each-look-is-authored)
-  names: the filmic curve's constants in `place.comp.hlsl`; the share of its
+  names: the share of its
   own exposure a window's world applies (`SdfPhotometry.WindowAdaptation`);
   and the shares of the display at which a nested view's update rate steps
   down (`SdfUpdateRateTiers.ViewHertz`).

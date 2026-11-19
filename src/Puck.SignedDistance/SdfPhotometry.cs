@@ -9,12 +9,15 @@ namespace Puck.SignedDistance;
 /// surface's and a screen's luminance in nits, and the sky's radiance in nits. A Lambertian surface of albedo ρ under an
 /// illuminance E has the luminance ρE/π, so a light record carries its illuminance (or intensity) over π and the shader
 /// multiplies by the albedo alone. Each view's exposure (<see cref="ExposureOf"/>) maps the luminance it shades to the
-/// display, before the tonemap. Presentation only: nothing here reaches simulation state.
+/// display, before the tone curve and the encode. Presentation only: nothing here reaches simulation state.
 /// </summary>
 public static class SdfPhotometry {
     /// <summary>The share of full brightness below which a point or spot light's contribution ends: a light's range is
-    /// the distance at which a white surface it lights faces it head on and reaches this share of display white at the
-    /// darkest exposure the world adapts to (<see cref="RangeOf"/>).</summary>
+    /// the distance at which a white surface it lights faces it head on and reaches this share of display white, in
+    /// linear exposed light, at the darkest exposure the world adapts to (<see cref="RangeOf"/>). The display pass encodes
+    /// that share to about a twentieth of the code range, where the falloff's window (<see cref="Falloff"/>) has already
+    /// eased the light smoothly to zero, so no edge shows; the share is kept in linear light so that a range costs the
+    /// relight what it always has.</summary>
     public const float RangeThreshold = (1f / 256f);
     /// <summary>The nearest a point light's distance is taken as, in world units: the radius of a bulb, inside which its
     /// inverse square would grow without bound.</summary>

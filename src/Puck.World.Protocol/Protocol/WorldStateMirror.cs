@@ -1212,15 +1212,18 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             (sample.Motion is WorldStateMotion.Easing or WorldStateMotion.Advancing) ||
             (previousMotion is WorldStateMotion.Easing or WorldStateMotion.Advancing)
         );
+        var color = default(DisplayColor);
+
         entry.HasColor = (
             (entry.Conversion == WorldStateConversion.Color) &&
             sample.Value.HasValue &&
             (sample.Value.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
-            rgba: out entry.Color,
+            color: out color,
             value: sample.Value.AsText
         )
         );
+        entry.Color = color.Rgba;
         entry.Presented = entry.Current;
 
         if (

@@ -29,8 +29,8 @@ public static class SdfWorldInterfaces {
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Value"/>.</summary>
     public static string Stamp => Recorded.Stamp;
-    /// <summary>The optical scatter filters' layout.</summary>
-    public static ShaderPipelineParameterLayout BloomParameters => Recorded.BloomParameters;
+    /// <summary>The camera's optical tail's layout: the bloom filters and the display pass.</summary>
+    public static ShaderPipelineParameterLayout OpticsParameters => Recorded.OpticsParameters;
     /// <summary>Gets the stamp the mesh bake's interface carries for this build's field instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Field"/>.</summary>
     public static string FieldStamp => Recorded.FieldStamp;

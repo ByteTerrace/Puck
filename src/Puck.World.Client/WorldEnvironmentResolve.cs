@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SdfVm;
 
@@ -425,8 +426,10 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             vector: in value
         );
     }
-    // The render path is opaque: alpha plays no part in any environment colour, so every bound colour drops it here,
-    // the one seam between BindableColor's Vector4 grammar and the lane table's three colour lanes.
+    // The one seam between BindableColor's grammar and the lane table's three colour lanes. An authored colour is a
+    // display colour (its keys already blended in linear light and encoded again); every environment colour is light, so
+    // it is decoded here to the scene colour it means, and alpha, which plays no part in an opaque environment colour, is
+    // dropped. A fallback is the engine's own linear value, returned as it is.
     private Vector3 Rgb(WorldStateMirror mirror, BindableColor? color, Vector3 fallback) {
         if (color is not { } value) {
             return fallback;
@@ -442,19 +445,13 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             mirror: mirror
         );
 
+        // A negative alpha cannot come from the grammar, so it marks a colour the mirror could not resolve.
         var resolved = mirror.Color(
             color: in value,
-            fallback: new Vector4(
-                value: fallback,
-                w: 1f
-            )
+            fallback: new Vector4(w: -1f, x: 0f, y: 0f, z: 0f)
         );
 
-        return new Vector3(
-            x: resolved.X,
-            y: resolved.Y,
-            z: resolved.Z
-        );
+        return ((resolved.W < 0f) ? fallback : new DisplayColor(Rgba: resolved).ToScene().Linear);
     }
     // A rate integrated to the presented tick: a literal rate's offset moves with the tick as surely as a keyed one's.
     private double Integrate(WorldStateMirror mirror, BindableScalar? rate, double modulus) {

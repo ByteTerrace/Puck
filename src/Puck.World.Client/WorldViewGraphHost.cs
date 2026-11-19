@@ -44,8 +44,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <summary>Gets the synthesized root graph the runtime runs, which a live <c>views.post</c> or pane change recomposes,
     /// or <see langword="null"/> when the document names its own root or no runtime is attached.</summary>
     public WorldRootGraph? Synthesized => m_synthesized;
-    /// <summary>Whether the current cameras require optical endpoint placement.</summary>
-    public bool OpticalPlacement { get; set; }
     /// <summary>A non-destructive pointer read; an offscreen host reports no hardware position or press.</summary>
     public Func<WorldPipelinePointerSample>? ReadPointer { get; set; }
     /// <summary>Completed compilation reports, delivered only from the presentation thread.</summary>
@@ -271,13 +269,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly Dictionary<string, long> m_accessEpochs = new(comparer: StringComparer.Ordinal);
     private RenderGraphInstanceSet? m_accessSet;
 
-    // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap or the sharpen: the
+    // Whether this frame's lone whole-display view is shown only so its place pass applies its matte: the
     // display shows the world itself, as it does when the root stands for the view, so no pane is published for it.
     private bool m_loneThroughItsPass;
     // Whether this frame's one view covers the whole display, shown or not: the display then is that view, which a
     // display walk starts from beneath every pane (WorldViewGraphHost.Panes.cs).
     private bool m_lone;
-    private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, bool, WorldRootGraph>? m_compose;
+    private Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph>? m_compose;
     private bool m_disposed;
     // The source and view instances the running set was composed with, the footprints its screen-rendering instance shows
     // them through, and the views the display shows directly.
@@ -296,9 +294,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly Dictionary<string, (double Width, double Height)> m_portalExtents = new(comparer: StringComparer.Ordinal);
 
     private WorldViewDefaults? m_lastViews;
-    // The render.tonemap the running set was composed with, and whether a temporally resolved view sharpened then.
-    private WorldTonemap m_lastTonemap;
-    private bool m_lastSharpens;
     // The last refusal Reconcile reported, so a section it keeps retrying reports each refusal once.
     private string? m_refusal;
     private IRenderGraphInstances? m_runtime;
@@ -540,24 +535,18 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return footprints;
     }
 
-    /// <summary>Gets or sets whether the world shows a debug view, whose colors the synthesized root shows as they are:
-    /// while it answers <see langword="true"/>, the root runs no tonemap, and it composes the tonemap again once it
-    /// answers <see langword="false"/>. <see langword="null"/> shows no debug view.</summary>
-    public Func<bool>? ShowsDebugView { get; set; }
-
     /// <summary>Drives a runtime from here on: the next <see cref="Reconcile"/> composes the document's instance set
     /// onto it.</summary>
     /// <param name="runtime">The runtime, built from the set <see cref="TryCompose"/> composed for the booted
     /// document.</param>
     /// <param name="compose">Synthesizes the default graph over the panes a document's layouts place, the views they
-    /// compose (<see cref="WorldRootGraph.ViewsOf"/>), the document's current <c>views.post</c> passes, its current
-    /// <c>render.tonemap</c>, and whether a temporally resolved view sharpens (<see cref="WorldRootGraph.Sharpens"/>).</param>
+    /// compose (<see cref="WorldRootGraph.ViewsOf"/>) and the document's current <c>views.post</c> passes.</param>
     /// <param name="synthesized">The default graph the runtime was built with, or <see langword="null"/> when the booted
     /// document names its own root.</param>
     /// <param name="scene">The instance holding the scene in the set the runtime was built with (<see cref="TryCompose"/>).</param>
     /// <exception cref="ArgumentNullException"><paramref name="runtime"/>, <paramref name="compose"/> or
     /// <paramref name="scene"/> is <see langword="null"/>.</exception>
-    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldTonemap, bool, WorldRootGraph> compose, WorldRootGraph? synthesized, string scene) {
+    public void Attach(IRenderGraphInstances runtime, Func<IReadOnlyList<string>, int, IReadOnlyList<WorldViewPostPass>?, WorldRootGraph> compose, WorldRootGraph? synthesized, string scene) {
         ArgumentNullException.ThrowIfNull(argument: runtime);
         ArgumentNullException.ThrowIfNull(argument: compose);
         ArgumentNullException.ThrowIfNull(argument: scene);
@@ -627,23 +616,17 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             }
         }
     }
-    /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section and
-    /// <c>render.tonemap</c>, installs complete candidates and polls dependency watches, and clears the previous frame's
-    /// placements and cameras, leaving the footprints the synthesized root always shows. The panes published last stay
-    /// published until <see cref="PublishPanes"/> replaces them.</summary>
+    /// <summary>Starts a frame before the runtime schedules it: reconciles the accepted <c>views</c> section, installs
+    /// complete candidates and polls dependency watches, and clears the previous frame's placements and cameras, leaving
+    /// the footprints the synthesized root always shows. The panes published last stay published until
+    /// <see cref="PublishPanes"/> replaces them.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
-    /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none.</param>
-    /// <param name="sharpens">Whether a temporally resolved view sharpens at its rect's own extent.</param>
     /// <param name="rate">The frame's presentation rate; the <c>world.rates</c> levers rate footprints only on a host paced
     /// to a display.</param>
-    public void BeginFrame(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false, PresentationRate rate = default) {
+    public void BeginFrame(WorldViewDefaults views, PresentationRate rate = default) {
         m_presentationRate = rate;
         MeasureRatedRenders();
-        Reconcile(
-            sharpens: sharpens,
-            tonemap: tonemap,
-            views: views
-        );
+        Reconcile(views: views);
         if (m_runtime is { } runtime) {
             BindAccess(runtime: runtime);
         }
@@ -743,19 +726,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// <param name="uncovered">Whether part of the display lies outside everything the root shows this frame, so the
     /// first view's place pass, when the view is not shown, writes the letterbox color everywhere rather than standing
     /// for its base (<see cref="RenderGraphPlacement.Uncovered"/>).</param>
-    /// <param name="sharpen">Whether the view resolves temporally, so its place pass sharpens it at its rect's own extent
-    /// (<see cref="RenderGraphPlacement.Sharpen"/>).</param>
     /// <param name="outputRegion">The stable allocation envelope, independent of the current placement.</param>
-    /// <param name="letterboxColor">The linear RGBA color the first view's pass writes where nothing is shown
+    /// <param name="letterboxColor">The working-image RGBA color the first view's pass writes where nothing is shown
     /// (<see cref="RenderGraphPlacement.LetterboxColor"/>), or <see langword="null"/> for the default.</param>
-    /// <param name="fidelity">The share of the view's output the pass writes as it is, past its sharpen and tonemap
-    /// (<see cref="RenderGraphPlacement.Fidelity"/>): the view's screen fidelity.</param>
     /// <param name="crop">The part of the view's output the rect shows, as fractions of the output: left, top, width and
     /// height (<see cref="RenderGraphPlacement.Crop"/>); zero shows the whole output.</param>
     /// <returns><see langword="true"/> when the root places the view this frame.</returns>
-    /// <param name="bloom">The resolved camera scatter.</param>
-    /// <param name="bloomQuality">The optical cost gate.</param>
-    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, bool sharpen = false, Vector4? letterboxColor = null, float fidelity = 0f, Vector4 crop = default, CameraBloom? bloom = null, BloomQuality bloomQuality = BloomQuality.Off) {
+    public bool PlaceView(int view, NormalizedRect region, float sharpness, bool shown, bool uncovered, NormalizedRect outputRegion, Vector4? letterboxColor = null, Vector4 crop = default) {
         if (
             (m_synthesized is not { Plan: not null } synthesized) ||
             (((uint)view) >= ((uint)synthesized.ViewPasses.Count))
@@ -763,20 +740,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             return false;
         }
 
-        var mode = (Pickers?.ViewOf(instance: synthesized.Producers[view].Name)?.Residency.DebugMode ?? 0);
-        var scatter = ((((mode != 0) && (mode != DebugViewModes.Bloom)) || (bloomQuality == BloomQuality.Off)) ? 0f : ((bloom?.Scatter ?? 0f) * (1f - Math.Clamp(max: 1f, min: 0f, value: fidelity))));
-
         m_placements[synthesized.ViewPasses[view]] = new RenderGraphPlacement(
-            BloomScatter: scatter,
-            BloomCutoff: (bloom?.Cutoff ?? 0f),
-            BloomOnly: (mode == DebugViewModes.Bloom),
             Crop: crop,
-            Fidelity: fidelity,
             Uncovered: uncovered,
             Height: region.Height,
             Left: region.X,
             LetterboxColor: letterboxColor,
-            Sharpen: sharpen,
             Sharpness: sharpness,
             Shown: shown,
             Top: region.Y,
@@ -793,9 +762,8 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         return true;
     }
     /// <summary>Places every view a composed frame of the world rendered (<see cref="PlaceView"/>), each in its output rect, and records each view's camera for its producer (<see cref="SetCamera"/>). A view is shown once the world has rendered it, except a lone view covering the whole display at
-    /// any render scale with no tonemap and no sharpen, which is never shown, so the root stands for the world itself; a
-    /// tonemapped or sharpened lone view is shown, since its place pass applies the tonemap or the sharpen, which a view
-    /// resolving temporally asks of its pass (<see cref="Puck.SdfVm.SdfViewQuality.Temporal"/>). Before the world has composed a frame
+    /// any render scale with no matte, which is never shown, so the root stands for the world itself: its own graph
+    /// already converted it for the display. Before the world has composed a frame
     /// there are no views, but the world must still be scheduled, since it composes inside its own frame, so the first
     /// view is placed, not shown, over the whole display at native scale, which it renders at until its first frame names
     /// its views. The display counts as covered only when one rect covers it whole: a lone view standing for the world, a shown
@@ -819,20 +787,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     public void PlaceViews(IReadOnlyList<SdfViewSnapshot> views, float sharpness, Func<int, bool>? rendered, bool panesCover, IReadOnlyList<NormalizedRect>? envelopes = null, Vector4? letterboxColor = null, Func<int, NormalizedRect?>? mattes = null) {
         ArgumentNullException.ThrowIfNull(argument: views);
 
-        // These are the cameras actually composed for this frame, with the active program and routed endpoint's
-        // resolved lens. An unused boot-world camera must neither enable nor suppress their placement.
-        var blooms = false;
-
-        for (var index = 0; (index < views.Count); index++) {
-            var snapshot = views[index];
-
-            blooms |= ((snapshot.Bloom is { Scatter: > 0f }) && (snapshot.BloomQuality != Puck.Hosting.BloomQuality.Off) &&
-                !snapshot.Unexposed && !snapshot.Quality.GeometryOnly && (snapshot.ScreenFidelity < 1f));
-        }
-        // BeginFrame reconciles this demand before the next frame forms any source/environment footprints.
-        // Reconfiguring here would mix the new declarations with this frame's already-published footprints.
-        OpticalPlacement = blooms;
-
         var whole = new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f);
 
         m_loneThroughItsPass = false;
@@ -855,12 +809,10 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             (views.Count == 1) &&
             (views[0].Region == whole)
         );
-        // The lone view stands for the world itself, unshown, only when its place pass has nothing to do; a tonemap, a
-        // sharpen and a matte are applied by the view's place pass, so a tonemapped, sharpened or matted lone view is
-        // shown like any other.
+        // The lone view stands for the world itself, unshown, unless its place pass has a matte to apply, so a matted lone
+        // view is shown like any other.
         var standsFor = (
             lone &&
-            (m_synthesized is not { Tonemap: WorldTonemap.Filmic } and not { Sharpens: true } and not { Blooms: true }) &&
             (mattes?.Invoke(arg: 0) is null)
         );
         var covered = (panesCover || standsFor);
@@ -897,16 +849,12 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
                 crop: ((matte is { } shownPart)
                     ? CropOf(part: shownPart, whole: snapshot.Region)
                     : default),
-                bloom: snapshot.Bloom,
-                bloomQuality: snapshot.BloomQuality,
-                fidelity: snapshot.ScreenFidelity,
                 letterboxColor: letterboxColor,
                 uncovered: !covered,
                 outputRegion: (((envelopes is not null) && (view < envelopes.Count))
                     ? envelopes[view]
                     : snapshot.Region),
                 region: (matte ?? snapshot.Region),
-                sharpen: snapshot.Quality.Temporal,
                 sharpness: sharpness,
                 shown: Shows(
                     rendered: rendered,
@@ -1222,28 +1170,13 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     /// the runtime refuses leaves the running one in place, reported by name once, and is tried again on the next call.
     /// Does nothing before a runtime is attached.</summary>
     /// <param name="views">The accepted document's <c>views</c> section.</param>
-    /// <param name="tonemap">The accepted document's <c>render.tonemap</c>, or <see langword="null"/> for none, which the
-    /// synthesized root runs as a pass before the overlay unless <see cref="ShowsDebugView"/> says a debug view is
-    /// on.</param>
-    /// <param name="sharpens">Whether a temporally resolved view sharpens, which the synthesized root applies in the
-    /// view's place pass unless a debug view is on.</param>
-    public void Reconcile(WorldViewDefaults views, WorldTonemap? tonemap = null, bool sharpens = false) {
+    public void Reconcile(WorldViewDefaults views) {
         ArgumentNullException.ThrowIfNull(argument: views);
-
-        var debug = (ShowsDebugView?.Invoke() ?? false);
-        var curve = (debug
-            ? WorldTonemap.None
-            : (tonemap ?? WorldTonemap.None));
-
-        sharpens &= !debug;
 
         if (
             m_disposed ||
             (m_runtime is not { } runtime) ||
             (
-                (m_lastTonemap == curve) &&
-                (m_lastSharpens == sharpens) &&
-                (m_synthesized?.Blooms == OpticalPlacement) &&
                 !EnvironmentChanged() &&
                 (m_lastComparisonRevision == (Comparison?.Revision ?? 0UL)) &&
                 ReferenceEquals(
@@ -1265,8 +1198,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
         ReconcileChanged(
             runtime: runtime,
-            sharpens: sharpens,
-            tonemap: curve,
             views: views
         );
     }
@@ -1278,7 +1209,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     // Reconciles a views section that differs from the one last accepted. Apart from Reconcile, so the closures its
     // rebinding captures are allocated only when the section moved, never on a steady frame.
-    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views, WorldTonemap tonemap, bool sharpens) {
+    private void ReconcileChanged(IRenderGraphInstances runtime, WorldViewDefaults views) {
         var synthesized = m_synthesized;
         var sources = Screens?.Sources;
         var rendered = (Screens?.Views ?? WorldViewInstances.Empty);
@@ -1290,14 +1221,11 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
             if (
                 (synthesized is null) ||
                 (synthesized.Views != composedViews) ||
-                (synthesized.Tonemap != tonemap) ||
-                (synthesized.Sharpens != sharpens) ||
-                (synthesized.Blooms != OpticalPlacement) ||
                 !synthesized.Panes.SequenceEqual(second: panes, comparer: StringComparer.Ordinal) ||
                 !synthesized.Post.SequenceEqual(second: (views.Post ?? []))
             ) {
                 try {
-                    synthesized = m_compose!(arg1: panes, arg2: composedViews, arg3: views.Post, arg4: tonemap, arg5: sharpens);
+                    synthesized = m_compose!(arg1: panes, arg2: composedViews, arg3: views.Post);
                 } catch (WorldRootGraphRefusedException exception) {
                     ReportRefusal(reason: exception.Message);
 
@@ -1380,8 +1308,6 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
         m_lastSources = sources;
         m_lastRendered = Screens?.Views;
         m_lastViews = views;
-        m_lastTonemap = tonemap;
-        m_lastSharpens = sharpens;
         m_comparisonLiveRoot = scene;
         m_lastComparisonRevision = (Comparison?.Revision ?? 0UL);
         m_refusal = null;

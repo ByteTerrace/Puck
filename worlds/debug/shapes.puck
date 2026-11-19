@@ -85,7 +85,7 @@ let surfaceRow = [
   "shape-volume-cloud", "shape-state-color"
 ]
 let glassRow = ["shape-glass"]
-let styleRow = ["shape-cel", "shape-cel-hard"]
+let styleRow = ["shape-cel", "shape-cel-hard", "shape-grey-card"]
 let motionRow = [
   "motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend",
   "motion-carve", "motion-mirror", "motion-polar", "motion-nod", "motion-three"
@@ -160,7 +160,7 @@ let galleryRows = [
     level: surfaceLevel
     z: styleZ
     names: styleRow
-    what: "a cel style per material, beside continuous ones"
+    what: "a cel style per material, beside continuous ones, and the grey card"
   }
   {
     title: "GLASS"
@@ -1554,6 +1554,81 @@ template surfacePrototypes() {
           { color: "#C9A27E", roughness: 0.6, specular: 0.04, wrap: 0.35 }
         ],
         note: "left: the band over light and shadow together; right: continuous"
+      )
+    }
+  }
+  // The grey card the display transform is read against: a matte wedge of reflectances (3, 9, 18, 36, 59 and 90%) over
+  // the three primaries, on a near-black board, facing the spawn point. Each patch's hex is the sRGB code of its
+  // reflectance, so at an exposure that maps a white surface's light to display white, each patch reads back as its own
+  // code; the 18% patch reads 118 (the presented burst's `level` over a region of it). The primaries catch a display
+  // transform that converts its primaries wrongly, which a grey alone passes.
+  prototype "shape-grey-card" {
+    document {
+      shape Box "board" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.5, 0.26, 0.01]
+      }
+      shape Box "grey-03" {
+        material: 4
+        position [-0.375, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "grey-09" {
+        material: 5
+        position [-0.225, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "grey-18" {
+        material: 6
+        position [-0.075, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "grey-36" {
+        material: 7
+        position [0.075, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "grey-59" {
+        material: 8
+        position [0.225, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "grey-90" {
+        material: 9
+        position [0.375, 1.32, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "red" {
+        material: 10
+        position [-0.15, 1.08, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "green" {
+        material: 11
+        position [0, 1.08, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      shape Box "blue" {
+        material: 12
+        position [0.15, 1.08, -0.015]
+        scale [0.065, 0.065, 0.01]
+      }
+      exhibit(
+        label: "GREY CARD",
+        extra: [
+          { color: "#1C1C1C", roughness: 1, specular: 0 }
+          { color: "#303030", roughness: 1, specular: 0 }
+          { color: "#555555", roughness: 1, specular: 0 }
+          { color: "#767676", roughness: 1, specular: 0 }
+          { color: "#A2A2A2", roughness: 1, specular: 0 }
+          { color: "#CACACA", roughness: 1, specular: 0 }
+          { color: "#F3F3F3", roughness: 1, specular: 0 }
+          { color: "#FF0000", roughness: 1, specular: 0 }
+          { color: "#00FF00", roughness: 1, specular: 0 }
+          { color: "#0000FF", roughness: 1, specular: 0 }
+        ],
+        note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly"
       )
     }
   }

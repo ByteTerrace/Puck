@@ -141,8 +141,8 @@ public sealed class WorldScreenFraming {
             y: ((float)(y / height))
         );
     }
-    /// <summary>Returns the matte colour a screen's display authors, linear RGBA as the letterbox writes it:
-    /// <c>#RRGGBB</c> straight through <c>/255</c>, opaque, as every authored colour reaches the display.</summary>
+    /// <summary>Returns the matte colour a screen's display authors, as the letterbox writes it into the working image:
+    /// the display colour <c>#RRGGBB</c> spells, opaque.</summary>
     /// <param name="screen">The engaged screen.</param>
     /// <returns>The colour; black for an unauthored or malformed fill, which the validator refuses.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="screen"/> is <see langword="null"/>.</exception>
@@ -150,10 +150,10 @@ public sealed class WorldScreenFraming {
         ArgumentNullException.ThrowIfNull(argument: screen);
 
         return (HexColor.TryParse(
-            rgb: out var rgb,
+            color: out var color,
             value: (screen.Route.Display?.Fill ?? WorldScreenDisplay.DefaultFill)
         )
-            ? new Vector4(value: rgb, w: 1f)
+            ? color.Rgba
             : new Vector4(w: 1f, x: 0f, y: 0f, z: 0f));
     }
     /// <summary>Frames a screen's picture square-on: the eye stands on the face's normal, far enough that the picture's

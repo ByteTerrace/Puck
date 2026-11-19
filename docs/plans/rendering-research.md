@@ -2885,7 +2885,7 @@ the bar as ruled.**
   display's format.
 - *Owns.* `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`,
   `src/Puck.Shaders/Assets/Shaders/Runtime/display-encode.frag.hlsl`,
-  `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Bloom.cs` and the view's
+  `src/Puck.Shaders.Model/Graph/SdfWorldPackage.Display.cs` and the view's
   last stage, the image kinds in `RenderGraphPackages.cs`,
   `src/Puck.Maths/HexColor.cs` with the two colour types and their parse
   sites, and the exposure, light and tone values of `worlds/standard` and

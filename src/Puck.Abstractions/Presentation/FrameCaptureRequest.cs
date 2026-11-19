@@ -204,6 +204,7 @@ public sealed class FrameCaptureRequest {
                     Delta: delta,
                     Height: height,
                     Index: index,
+                    Level: PresentedFrameLevel.Of(height: height, region: region, rgba: rgba, width: width),
                     Path: path,
                     Presentation: presentation,
                     Rendered: rendered,

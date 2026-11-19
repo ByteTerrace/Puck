@@ -114,10 +114,10 @@ public readonly record struct BindableColor {
         this.Raw = Raw;
         Keys = null;
         Literal = (HexColor.TryParseRgba(
-            rgba: out var literal,
+            color: out var literal,
             value: Raw
         )
-            ? literal
+            ? literal.Rgba
             : null
         );
         State = StateBinding.Parse(token: Raw);
@@ -180,7 +180,7 @@ public readonly record struct BindableColor {
         ) &&
             (stateRow.Kind == CellKind.Text) &&
             HexColor.TryParseRgba(
-            rgba: out _,
+            color: out _,
             value: text
         )
         );

@@ -50,8 +50,6 @@ public static class ImageSourceConversion {
     private const double PqM1 = (2610.0 / 16384.0);
     private const double PqM2 = ((2523.0 / 4096.0) * 128.0);
     private const double PqPeakNits = 10_000.0;
-    // The sRGB curve's linear segment ends at this linear value, where 12.92 x meets 1.055 x^(1 / 2.4) - 0.055.
-    private const double SrgbLinearLimit = 0.0031308;
 
     // BT.2020 primaries to BT.709, for linear light (ITU-R BT.2407), row by row: the inverse of the display encode's BT.709
     // to BT.2020 (ITU-R BT.2087) to within 1e-6.
@@ -160,33 +158,6 @@ public static class ImageSourceConversion {
             y: (1.0 / PqM1)
         ));
     }
-    /// <summary>Returns the linear value of an sRGB-encoded value (IEC 61966-2-1).</summary>
-    /// <param name="value">The encoded value, 0 to 1.</param>
-    /// <returns>The linear value, 0 to 1.</returns>
-    public static double SrgbToLinear(double value) {
-        var clamped = Math.Clamp(
-            max: 1.0,
-            min: 0.0,
-            value: value
-        );
-
-        return ((clamped <= 0.04045)
-            ? (clamped / 12.92)
-            : Math.Pow(
-                x: ((clamped + 0.055) / 1.055),
-                y: 2.4
-            )
-        );
-    }
-    /// <summary>Returns the sRGB-encoded value of a linear value (IEC 61966-2-1), the inverse of
-    /// <see cref="SrgbToLinear"/>.</summary>
-    /// <param name="value">The linear value, 0 to 1; a value outside it is clamped.</param>
-    /// <returns>The encoded value, 0 to 1.</returns>
-    public static double LinearToSrgb(double value) => LinearToWorking(linear: Math.Clamp(
-        max: 1.0,
-        min: 0.0,
-        value: value
-    ));
     /// <summary>The red share of luma under ITU-R BT.601.</summary>
     public const double Bt601Kr = 0.299;
     /// <summary>The blue share of luma under ITU-R BT.601.</summary>
@@ -459,7 +430,7 @@ public static class ImageSourceConversion {
         var paperWhite = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
 
         return transfer switch {
-            ImageTransferFunction.Srgb => SrgbToLinear(value: value),
+            ImageTransferFunction.Srgb => SrgbTransfer.ToLinear(encoded: Math.Clamp(max: 1.0, min: 0.0, value: value)),
             ImageTransferFunction.Linear => ((value * DisplayOutput.SdrWhiteNits) / paperWhite),
             ImageTransferFunction.Pq => (PqToNits(value: value) / paperWhite),
             _ => throw new ArgumentOutOfRangeException(
@@ -474,17 +445,7 @@ public static class ImageSourceConversion {
     /// curve.</summary>
     /// <param name="linear">The linear value; one is the paper-white level.</param>
     /// <returns>The working value, unclamped.</returns>
-    public static double LinearToWorking(double linear) {
-        var magnitude = Math.Abs(value: linear);
-        var encoded = ((magnitude <= SrgbLinearLimit)
-            ? (magnitude * 12.92)
-            : ((1.055 * Math.Pow(
-                x: magnitude,
-                y: (1.0 / 2.4)
-            )) - 0.055));
-
-        return ((linear < 0.0) ? -encoded : encoded);
-    }
+    public static double LinearToWorking(double linear) => SrgbTransfer.ToEncoded(linear: linear);
 
     // One stored pixel of a transfer-pass format, each channel normalized: a 10-bit or 8-bit code over its maximum, or a
     // half float as it is.

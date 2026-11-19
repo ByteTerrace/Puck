@@ -76,21 +76,20 @@ public sealed class WorldBakedColors {
         m_checkedRevision = (m_mirror?.Revision ?? 0);
         m_checkedGeneration = (m_mirror?.Generation ?? 0);
     }
-    /// <summary>Resolves one authored color for the build under way and remembers a bound one.</summary>
+    /// <summary>Resolves one authored color for the build under way, as the scene colour it means, and remembers a bound
+    /// one. The authored colour is a display colour, decoded here (<see cref="DisplayColor.ToScene"/>): every surface
+    /// colour reaches shading as linear reflectance through this one door.</summary>
     /// <param name="value">The authored color: a <c>#RRGGBB</c> literal, a <c>state.&lt;row&gt;[.&lt;key&gt;]</c>
     /// binding naming a Text cell, or <see langword="null"/>.</param>
-    /// <param name="fallback">The color when <paramref name="value"/> is neither, the manifest registers no slot for the
-    /// binding, or the cell holds no color.</param>
-    /// <returns>The color, alpha dropped.</returns>
+    /// <param name="fallback">The linear color when <paramref name="value"/> is neither, the manifest registers no slot for
+    /// the binding, or the cell holds no color.</param>
+    /// <returns>The linear color, alpha dropped.</returns>
     public Vector3 Resolve(string? value, Vector3 fallback) {
         if (!StateBinding.TryParse(
             binding: out _,
             token: value
         )) {
-            return HexColor.Parse(
-                fallback: fallback,
-                value: value
-            );
+            return (HexColor.TryParse(color: out var literal, value: value) ? literal.ToScene().Linear : fallback);
         }
 
         var mirror = Mirror();
@@ -109,11 +108,7 @@ public sealed class WorldBakedColors {
             slot: slot,
             value: out var color
         )
-            ? new Vector3(
-                x: color.X,
-                y: color.Y,
-                z: color.Z
-            )
+            ? new DisplayColor(Rgba: color).ToScene().Linear
             : fallback
         );
     }

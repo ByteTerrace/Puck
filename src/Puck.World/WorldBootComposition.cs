@@ -1500,7 +1500,6 @@ public static class WorldBootComposition {
             packages: RenderGraphPackageCatalog.Engine,
             post: sp.GetRequiredService<WorldDefinition>().Views.Post,
             panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
-            tonemap: sp.GetRequiredService<WorldDefinition>().Render.Tonemap,
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 
@@ -1890,7 +1889,6 @@ public static class WorldBootComposition {
             packages: RenderGraphPackageCatalog.Engine,
             post: sp.GetRequiredService<WorldDefinition>().Views.Post,
             panes: WorldRootGraph.PanesOf(views: sp.GetRequiredService<WorldDefinition>().Views),
-            tonemap: sp.GetRequiredService<WorldDefinition>().Render.Tonemap,
             views: WorldRootGraph.ViewsOf(views: sp.GetRequiredService<WorldDefinition>().Views)
         ));
 

@@ -78,14 +78,55 @@ price what the mesh pipeline costs instead:
   bar](#the-pipeline-foundation) is the worst frame at the highest quality,
   read on a quiet machine with GPU counts beside it.
 
+## Scene light is converted to display values once, at the end of each view's graph
+
+- **What a value means is correctness, not look.** Shading runs in linear scene
+  light: twice the value is twice the light. A display expects values encoded on
+  the sRGB curve. Each view whose consumer is a display (a seat's view, a filmed
+  camera's, a session camera's) ends its own graph with a display pass
+  (`SdfWorldPackage.WithDisplay`) that sharpens the exposed scene light at its own
+  size, adds the camera's scatter, puts it through the world's tone curve, fades
+  those three toward the unconverted light by the view's screen fidelity, and
+  encodes on the extended sRGB curve, so headroom above white survives for an HDR
+  display. The view's published image is then a working image, and no consumer
+  can read it unconverted. The root's `place` pass only places, and the display
+  encode decodes a working image once for an HDR output and writes it as it is for
+  an SDR one.
+- **Three kinds of image.** Scene light is the composite's exposed linear output
+  inside a converting view. A window's light is what a view published for a window
+  or a sky layer carries: scene light under the window share of its own exposure
+  (`SdfViewSnapshot.Unexposed`, or `GeometryOnly` for a sky layer); such a view
+  takes no display stage, and its consumer exposes the rest. A working image is
+  encoded for the display. One predicate on each side decides the kind: a view
+  converts unless it publishes a window's light (`SdfWorldPasses` `Entry.Converts`),
+  and a screen reads its picture by its face (`SdfScreenFace`): an opening shows a
+  window's light as it is, and a display decodes its working image to the linear
+  light it emits, in the screen shading and in the screen emission's reduction
+  alike. No runtime check yet refuses a graph that joins two kinds without the
+  conversion; the open item is in [the rendering plan](../plans/rendering.md#colour-conversion--scene-light-to-display-values-once).
+- **Authored colour has two types.** A hex literal spells a display colour
+  (`DisplayColor`, CSS semantics); shading reads only a scene colour (`SceneColor`),
+  which decoding a display colour makes. Surface colours resolve through
+  `WorldBakedColors.Resolve`, environment colours (lights, sky, fog, media) through
+  `WorldEnvironmentResolve`, a shading program's colour literal through its
+  lowering, and an identity's body colour where it becomes a material; each
+  decodes there. A letterbox, a matte fill, a pane, a HUD colour and a `source.color`
+  stay display colours.
+- **The encode is the engine's and the curve is the author's.** The encode has no
+  parameter. The tone curve (`render.tone`, Uchimura's toe, linear section and
+  shoulder) is authored data whose neutral default is no curve; the standard
+  package names one (`worlds/standard/tones.puck`).
+
 ## Bloom is a camera's scatter, applied once before tonemapping
 
 - **Where it runs.** Bloom is an optional generic camera effect on each optical
   endpoint (a seat's or a direct camera's output), after the view's HDR
   composite and exposure and before tonemapping. Glass, resolve, sky, air and
-  volumes keep their order. Its final read fuses into the root's per-view
-  placement after the direct image is sharpened, so sharpening never acts on
-  scattered light. Intermediate transport images never bloom: portals,
+  volumes keep their order. Its final read fuses into the view's own display
+  pass ([below](#scene-light-is-converted-to-display-values-once-at-the-end-of-each-views-graph))
+  after the direct image is sharpened, so sharpening never acts on scattered
+  light, and every optical endpoint, a filmed camera included, blooms by that
+  one path. Intermediate transport images never bloom: portals,
   windows, mirror continuations, sky layers and raw machine or video textures.
   A camera used both as transport and as a direct output blooms only where it
   is shown directly. Panes, letterboxes and the overlay never bloom, and an
@@ -570,8 +611,10 @@ luminance whose default is a clear day's sky (10,000 nits) beside the default
 100,000-lux sun, so the sky lights the ground about a fifth as brightly as the
 sun does.
 
-**A camera exposure maps the luminance to the display, before the tonemap.**
-`render.exposure` is manual (an `EV100`) or automatic.
+**A camera exposure maps the luminance to the display, before the tone curve and the encode.**
+`render.exposure` is manual (an `EV100`) or automatic. Exposed light of one is SDR
+white, so at an exposure that maps a white surface's light to one, an 18% grey card
+encodes to the sRGB code 118.
 
 **An automatic exposure meters the view's own image.** Each view's composite
 bins every output pixel's luminance, at the view's whole exposure, into a log
@@ -652,7 +695,7 @@ through applies the rest of its own, so the window shows
 room reading as a garden rather than white, and a night field seen from a lit
 room as night rather than black; every level of windows within windows carries
 the same share, so the result is the same whatever the nesting. A display shows
-its picture at its peak luminance; terms that are display-referred by design
+its picture, decoded from its working image, at its peak luminance; terms that are display-referred by design
 (the editor grid, an unbound screen's glass) are divided by the exposure. The
 stylized curvature terms (the ridge light, the cavity and the ink line) apply
 to the exposed colour at the strength of the surface's own exposed

@@ -53,6 +53,12 @@ public static class DebugViewModes {
     /// <param name="mode">The mode value.</param>
     /// <returns><see langword="true"/> for <see cref="Rates"/> and <see cref="RateFlash"/>.</returns>
     public static bool ShowsRates(int mode) => ((mode == Rates) || (mode == RateFlash));
+    /// <summary>Returns whether a mode's picture is scene light: the final image, a view that tints it, or the scatter
+    /// alone. Such a picture is exposed and converted for the display; every other mode's picture is display values
+    /// already. The kernels' twin is <c>sdfDebugComposesFinal</c> (<c>frame/sdf-debug-modes.hlsli</c>).</summary>
+    /// <param name="mode">The mode value.</param>
+    /// <returns><see langword="true"/> when the mode's picture is scene light.</returns>
+    public static bool ComposesFinal(int mode) => (PreservesScene(mode: mode) || ShowsRates(mode: mode));
     /// <summary>Returns the name of a mode, or <c>"off"</c> when out of range.</summary>
     /// <param name="mode">The mode value.</param>
     /// <returns>The mode name.</returns>

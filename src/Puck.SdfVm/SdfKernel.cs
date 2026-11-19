@@ -77,6 +77,6 @@ public enum SdfKernel {
     BloomDown,
     /// <summary>Normalized tent optical upfilter.</summary>
     BloomUp,
-    /// <summary>Optical combine for filmed cameras without root placement.</summary>
-    BloomApply,
+    /// <summary>A view's display pass: its scene light sharpened, bloomed, toned and encoded into the working image.</summary>
+    Display,
 }

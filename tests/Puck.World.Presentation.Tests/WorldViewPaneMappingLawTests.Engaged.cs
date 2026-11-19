@@ -49,7 +49,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
     // One host frame with a lone whole-display view and, when `framed`, the screen framed on the matte.
     private void FramedFrame(bool framed) {
         m_host.BeginFrame(
-            tonemap: m_tonemap,
             views: m_document
         );
         m_host.PlaceViews(

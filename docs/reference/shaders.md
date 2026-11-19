@@ -485,7 +485,7 @@ offers:
 |---|---|---|
 | `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): the bake's mask and sampling passes while the residency's bake is pending, the shadow cascades and the mesh raster, then surface and views over the render grid, then the sky and the composite at the output extent, over retained counted scratch. Surface writes each pixel's visibility record from the mesh target, its occlusion and the cascades' shadows, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; neither queries the field. The sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, and updates the stationary sample window in place (one retained buffer at the output extent, a mutable input), so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
-| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes `letterboxColor` outside the rect instead of the base, 0 by default), `letterboxColor` (linear RGBA, `(0.015, 0.016, 0.02, 1)` by default; the matte around an engaged screen's framed picture writes the screen route's `display.fill` here), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness`, `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default), `crop` (the part of the source the rect shows, left, top, width and height as fractions of the source, each edge rounded to a source pixel, the whole source by default; a crop of the rect's own pixel extent is an exact copy, which is how a seat view framing its engaged screen shows only its matte) and `fidelity` (0 to 1, 0 by default: that share of the rect is the source reconstructed at sharpness 0, past the sharpen and the tone map, so a seat view framing its engaged screen at 1 is an exact copy of its native-scale source). A host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness, the sharpen switch, the letterbox color, the crop and the fidelity, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
+| `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Both are working images, so placing changes no value's meaning: a world's view arrives converted by its own display pass. Its config is `letterbox` (1 writes `letterboxColor` outside the rect instead of the base, 0 by default), `letterboxColor` (a working-image RGBA, `(0.015, 0.016, 0.02, 1)` by default; the matte around an engaged screen's framed picture writes the screen route's `display.fill` here), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpness` and `crop` (the part of the source the rect shows, left, top, width and height as fractions of the source, each edge rounded to a source pixel, the whole source by default; a crop of the rect's own pixel extent is an exact copy, which is how a seat view framing its engaged screen shows only its matte). A host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness, the letterbox color and the crop, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
 | `source-palette`, `source-nv12`, `source-rgba`, `source-transfer` | one raw buffer input read by compute, one image output written by compute | An uploaded source's region (`ImageSourceUploadLayout`) converted by the shipped kernel of that name in `src/Puck.Shaders/Assets/Shaders/Sources` into RGBA8, or half-float working values for `source-transfer`, relative to the paper white the pass block carries. `SourceConversionPackage` records them; the runtime runs one in the graph it makes for each uploaded source instance, its region bound as a host buffer port (`ShaderPipelineRenderNode.BindRegion`). |
 
@@ -494,7 +494,7 @@ config is 0 for ordinary placement, 1 for a wipe, 2 for a split, or 3 for the
 absolute RGB difference. The source contains the held rect; the base contains
 the whole live image. Both sides use the same reconstruction filter, clamped
 to their own crop. `wipe` places the divider from 0 to 1 across the rect and
-defaults to 0.5. Comparison modes ignore sharpness and tonemapping because the
+defaults to 0.5. Comparison modes ignore sharpness because the
 held image already contains display colors. The host can update the mode and
 divider as pass parameters without rebuilding the graph. See
 [World's editing commands](../../src/Puck.World/README.md#the-world-as-data)
@@ -989,8 +989,8 @@ any other:
   residency, when the world's layouts or player roster can compose more than
   one view.
 - `main`: the scene graph reading `world`'s output over the whole display and
-  every pane's output. With more than one view, or with a tonemap, it first
-  runs one `place` pass per view. Then it runs one `place` package pass per
+  every pane's output. With more than one view it first runs one `place` pass
+  per view. Then it runs one `place` package pass per
   `views.graphs` instance any layout slot names, each pass named after its
   instance, then one pass per `views.post` row in document order, named by the
   row and running its [post-process package](#post-process-packages), each
@@ -999,25 +999,30 @@ any other:
   `overlay` pass drawing the console, HUD, toasts and cursor over the scene, or
   over an editor comparison composed on the scene, and the display's root.
 
-When `render.tonemap` is `Filmic`, each view's `place` pass sets the `place`
-config's `tonemap`, which puts the view it reconstructs, and nothing else,
-through the filmic curve. The scene is tonemapped once, where it enters the
-frame. The letterbox color the first view's pass writes beside it is display
-framing, not scene light, so it reaches the display exact under every tonemap.
-A pane is display-referred, a pane shader's own tonemap included, so the root
-never tonemaps it, and the HUD composes over the finished frame at SDR white,
-which the display encode shows at the paper-white level.
+Every view a display shows reaches `main` already converted for the display.
+Its own `sdf.world` graph ends with a `display` pass (`SdfWorldPackage.WithDisplay`)
+that sharpens the exposed scene light at its own size by
+`world.upscale-sharpness` when the view resolves temporally, adds the camera's
+scatter, puts it through the world's `render.tone` curve, fades those three
+toward the unconverted light by the view's screen fidelity, and encodes it on
+the extended sRGB curve into the working image. A view published as light for a
+window or a sky layer takes no display pass, and its consumer exposes it. So
+`place` only places, the letterbox color is a working-image value written as it
+is, a pane is a working image of its own shader's making, and the HUD composes
+over the finished frame at SDR white, which the display encode shows at the
+paper-white level. A debug view whose picture is not scene light (every mode but
+the final image, the tier views, `colliders`, `contacts` and `bloom`) passes the
+display pass unencoded.
 
-`main` holds the scene whenever anything is drawn over the world, panes and
-the tonemap included, and whenever the world has more than one view; otherwise
-`world` does. The display shows the scene or an active editor comparison, with
+`main` holds the scene whenever anything is drawn over the world, panes
+included, and whenever the world has more than one view; otherwise `world`
+does. The display shows the scene or an active editor comparison, with
 `main$overlay` as its root when the overlay is drawn over that image.
-When nothing is drawn, as in an offscreen World with no panes, no `views.post`
-rows and no tonemap, `world` is the root and the display shows the world's first
-view directly. The host composes the root again whenever the document's panes, views,
-`views.post` rows or `render.tonemap` move. Raw-term debug views skip the tonemap;
-the evidence-preserving `colliders` and `contacts` views retain it and sharpening,
-and compose their marks in the overlay. A world that sets `views.root` authors its whole render graph,
+When nothing is drawn, as in an offscreen World with no panes and no
+`views.post` rows, `world` is the root and the display shows the world's first
+view directly. The host composes the root again whenever the document's panes,
+views or `views.post` rows move. The evidence-preserving `colliders` and
+`contacts` views compose their marks in the overlay. A world that sets `views.root` authors its whole render graph,
 the `sdf.world` package row included, and the runtime runs its rows alone; such
 a world authors no `views.post`.
 `RenderGraphRuntimeNode` is the host's render root, the one `IRenderRoot` the
@@ -1025,9 +1030,8 @@ launcher drives: each frame it shows the root over a display of the World's
 configured extent. Nothing wraps it; the screen binder and the world's
 residency, whose GPU holdings must go while the device is alive, are released
 by the root's teardown (`RenderGraphRuntimeNode.Holdings`). A `captures` row reads
-the root, or names `world` to capture the SDF world before its tonemap, panes,
-post passes and overlay: its working image through the SDR display encode,
-untonemapped. `world.counters gpu` counts every graph instance under its
+the root, or names `world` to capture the SDF world before its panes, post
+passes and overlay: its working image through the SDR display encode. `world.counters gpu` counts every graph instance under its
 instance name: `world` is the first view's node, whose passes are
 `sdf.world$mask` through `sdf.world$composite`, `main` the scene's node, whose
 passes are the place and post passes, `main$overlay` the overlay's, and each
@@ -1119,12 +1123,9 @@ within that allocated ceiling. A view whose ceiling is below native appends
 the scheduled extent equals the rect's pixels and otherwise resamples it again.
 A view at a native ceiling renders its output grid directly and does not dip. A
 view that reconstructs over time (`world.temporal`) resolves at any ceiling, and
-its place pass sharpens it by `world.upscale-sharpness` where it copies it
-(`RenderGraphPlacement.Sharpen`). A view is shown only once the
-engine has rendered it, and a single view covering the whole display with no
-tonemap and no sharpen is not placed, so `main` passes
-`world` through unchanged; with a tonemap or a sharpen it is placed like any
-other, since its place pass applies them.
+its own display pass sharpens it by `world.upscale-sharpness`. A view is shown
+only once the engine has rendered it, and a single view covering the whole
+display with no matte is not placed, so `main` passes `world` through unchanged.
 The first view's place pass sets the `place` config's `letterbox`, so outside
 its rect it writes the letterbox color, `(0.015, 0.016, 0.02)` unless the host
 places another (`RenderGraphPlacement.LetterboxColor`: the route's
@@ -1573,7 +1574,7 @@ the World registers) when it renders an uploaded source instance. The
 pipeline on both backends, `source-transfer` over an sRGB region and a
 half-float scRGB one, and holds their output to the CPU reference.
 
-Every kernel writes the working space a frame is drawn in: display-referred
+Every kernel writes the working space a frame is drawn in: sRGB-encoded
 values, 1 at SDR white, which the [display encode](#the-display-encode) shows at
 the host's paper white, with headroom above. An 8-bit sRGB source's codes are
 working values already. `source-transfer` decodes its transfer function to
@@ -1645,8 +1646,9 @@ its slot's `GpuRegion.Buffer`; it records no copy and no barrier.
 The engine's working images are float (`RenderGraphPackageCatalog.WorkingFormat`,
 `R16G16B16A16Float`): every SDF view's color, every version of the scene graph
 that places the views and runs the post passes, and the overlay's output in
-`main$overlay`. A working value is the shading's display-referred value, one at
-SDR white, with headroom above it. Nothing quantizes it until the display encode
+`main$overlay`. A working value is encoded on the sRGB curve extended past one,
+one at SDR white, with headroom above it: a world's view writes it in its own
+graph's display pass, the one place its linear scene light is converted. Nothing quantizes it until the display encode
 (`Assets/Shaders/Runtime/display-encode.frag.hlsl`, drawn over the fullscreen triangle of
 `display.vert.hlsl`), which samples a working image 1:1 by fragment coordinate
 and writes it in the color space its target shows:
@@ -1760,7 +1762,7 @@ each color channel clamped to `[0, 1]` times `tintR`/`tintG`/`tintB` to `Output`
 and its channels are the means of those clamped input values. Bound to a view,
 it measures what a camera in the world sees, on the render adapter's own host.
 
-A view export carries half-float working color: display-referred values with
+A view export carries half-float working color: sRGB-encoded values with
 headroom, as defined by [the display encode](#the-display-encode). Sampling it
 as `float4` preserves those values without a transfer conversion. Camera color
 frames and probe outputs carry 8-bit sRGB values sampled through UNORM views;

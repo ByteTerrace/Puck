@@ -11,17 +11,14 @@ public sealed partial class WorldViewPaneMappingLawTests {
     private const int ScreenSourceHeight = 144;
     private const int ScreenSourceWidth = 160;
 
-    // A lone view covering the whole display is no pane, tonemapped or not, so nothing hovers or outlines it; yet the
+    // A lone view covering the whole display is no pane, so nothing hovers or outlines it; yet the
     // display is that view, so a display point walks from it through its camera, meets the screen standing ahead and
     // ends on the screen's source.
-    [InlineData(null)]
-    [InlineData(WorldTonemap.Filmic)]
-    [Theory]
-    public void AWalkFromALoneWholeDisplayViewContinuesThroughAScreenIntoItsSource(WorldTonemap? tonemap) {
+    [Fact]
+    public void AWalkFromALoneWholeDisplayViewContinuesThroughAScreenIntoItsSource() {
         var (screens, pattern) = ScreenAhead();
 
         m_host.Screens = screens;
-        m_tonemap = tonemap;
         m_views.Add(item: new SdfViewSnapshot(Camera: Camera(x: 0f), Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)));
         Frame(pane: null);
         Frame(pane: null);
@@ -46,7 +43,6 @@ public sealed partial class WorldViewPaneMappingLawTests {
         );
 
         // A pane over the view is topmost where it stands, and the view is beneath it everywhere else.
-        m_tonemap = null;
         Frame(pane: TopLeft);
         Frame(pane: TopLeft);
         Assert.Equal(

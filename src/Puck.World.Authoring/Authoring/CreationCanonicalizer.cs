@@ -1490,7 +1490,7 @@ public static partial class CreationCanonicalizer {
 
             if (
                 !HexColor.TryParse(
-                    rgb: out _,
+                    color: out _,
                     value: entry.Color
                 ) &&
                 !DocumentIdentifier.IsCellReference(value: entry.Color)
@@ -1538,7 +1538,7 @@ public static partial class CreationCanonicalizer {
                 if ((glass.Ior is { } ior) && (!float.IsFinite(f: ior) || (ior < SdfGlass.MinIor) || (ior > SdfGlass.MaxIor))) {
                     errors.Add(item: new(Message: $"glass ior must be finite and in [{SdfGlass.MinIor}, {SdfGlass.MaxIor}].", Path: $"palette[{i}].glass.ior"));
                 }
-                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(rgb: out _, value: scatter) && !DocumentIdentifier.IsCellReference(value: scatter)) {
+                if ((glass.Scatter is { } scatter) && !HexColor.TryParse(color: out _, value: scatter) && !DocumentIdentifier.IsCellReference(value: scatter)) {
                     errors.Add(item: new(Message: "glass scatter requires #RRGGBB or a state binding.", Path: $"palette[{i}].glass.scatter"));
                 }
                 if ((glass.Scattering is { } scattering) && (!float.IsFinite(f: scattering) || (scattering < 0f))) {

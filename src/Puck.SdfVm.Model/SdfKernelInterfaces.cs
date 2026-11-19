@@ -227,8 +227,8 @@ public sealed class SdfKernelInterfaces {
             members: [.. SdfWorldPackage.GlassMembers, .. LightAndSkyTables],
             package: "sdf-glass"
         ).Stamped(stamp: stamp);
-        BloomParameters = ShaderPipelineParameterLayout.ForPackage(config: null,
-            members: SdfWorldPackage.BloomMembers, package: "sdf-bloom").Stamped(stamp: stamp);
+        OpticsParameters = ShaderPipelineParameterLayout.ForPackage(config: null,
+            members: SdfWorldPackage.OpticsMembers, package: "sdf-optics").Stamped(stamp: stamp);
         Mesh = new(
             members: [
                 .. World.Members.Where(predicate: static member => (
@@ -265,7 +265,7 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: ProbeRelight), ProbeRelight),
             (IncludePath(shaderInterface: ProbeTraceRays), ProbeTraceRays),
             (IncludePath(shaderInterface: ProbeRelightRays), ProbeRelightRays),
-            (IncludePath(shaderInterface: BloomParameters.Interface), BloomParameters.Interface),
+            (IncludePath(shaderInterface: OpticsParameters.Interface), OpticsParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
             (IncludePath(shaderInterface: Mesh), Mesh),
@@ -319,8 +319,8 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the ray-query relight's and camera sample's interface: <see cref="ProbeRelight"/>'s members and the
     /// scene's top level (<see cref="ProbeStructure"/>).</summary>
     public ShaderInterface ProbeRelightRays { get; }
-    /// <summary>The optical scatter filters, independent of scene and bake tables.</summary>
-    public ShaderPipelineParameterLayout BloomParameters { get; }
+    /// <summary>The camera's optical tail: the bloom filters and the display pass, independent of scene and bake tables.</summary>
+    public ShaderPipelineParameterLayout OpticsParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of
     /// <see cref="Stamp"/>.</summary>
     public string FieldStamp { get; }

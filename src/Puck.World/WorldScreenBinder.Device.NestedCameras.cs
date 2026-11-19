@@ -245,7 +245,6 @@ public sealed partial class WorldScreenBinder {
             ) {
                 Bloom = Settings?.ResolveBloom(mirror.Definition.Render, camera.Camera.Rig.Bloom),
                 BloomQuality = (Settings?.BloomQualityOf(view: camera.Name) ?? Puck.Hosting.BloomQuality.Off),
-                BloomStandalone = true,
                 Quality = NestedQuality(views: views, name: camera.Name),
             });
             views[^1] = ResolveResolution(views[^1], camera.Name, camera.Camera.RenderWidth, camera.Camera.RenderHeight);

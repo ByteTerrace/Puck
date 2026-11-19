@@ -151,6 +151,25 @@ public sealed partial class SdfWorldTables {
                 if (part == SdfWorldPackage.Parts.Composite) { hash.Add(value: composite.Value); }
                 break;
         }
+        // The optical tail's own values: the lens's scatter for the pyramid, and for the display pass the sharpen, the
+        // fidelity and the world's tone curve as well. Its scene light is an input the graph checks itself.
+        if ((part == SdfWorldPackage.Display) || part.StartsWith(value: "bloom-", comparisonType: StringComparison.Ordinal)) {
+            var snapshot = frame.Views[view];
+            var bloom = (snapshot.Bloom ?? default);
+
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Scatter));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Radius));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: bloom.Cutoff));
+            hash.Add(value: BitConverter.SingleToUInt32Bits(value: snapshot.ScreenFidelity));
+            if (part == SdfWorldPackage.Display) {
+                hash.Add(value: (snapshot.Quality.Temporal ? BitConverter.SingleToUInt32Bits(value: snapshot.UpscaleSharpness) : 0u));
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Peak));
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Contrast));
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.LinearStart));
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.LinearLength));
+                hash.Add(value: BitConverter.SingleToUInt32Bits(value: frame.Tone.Toe));
+            }
+        }
         return hash.Value;
     }
 

@@ -1,6 +1,7 @@
 // The transfer curves the image-source conversion passes and the display encode share: sRGB (IEC 61966-2-1) in its clamped
-// and extended forms, and the SMPTE ST 2084 perceptual quantizer. ImageSourceConversion (SrgbToLinear, LinearToWorking,
-// PqToNits) is the double-precision reference; the display encode's HDR10 branch applies the quantizer's encode.
+// and extended forms, and the SMPTE ST 2084 perceptual quantizer. SrgbTransfer (Puck.Maths) and ImageSourceConversion
+// (LinearToWorking, PqToNits) are the double-precision references; a view's display pass applies the extended sRGB encode
+// and the display encode's HDR branches its decode, and the HDR10 branch applies the quantizer's encode.
 #ifndef PUCK_TRANSFER_HLSLI
 #define PUCK_TRANSFER_HLSLI
 
@@ -32,6 +33,10 @@ float puckLinearToSrgbExtended(float value) {
     float encoded = ((magnitude <= 0.0031308) ? (magnitude * 12.92) : ((1.055 * pow(magnitude, (1.0 / 2.4))) - 0.055));
 
     return ((value < 0.0) ? -encoded : encoded);
+}
+// Linear light to sRGB-encoded values, extended past one and mirrored below zero.
+float3 puckLinearToSrgbExtended(float3 value) {
+    return float3(puckLinearToSrgbExtended(value.x), puckLinearToSrgbExtended(value.y), puckLinearToSrgbExtended(value.z));
 }
 // The perceptual quantizer's decode: an encoded value to cd/m².
 float puckPqToNits(float value) {

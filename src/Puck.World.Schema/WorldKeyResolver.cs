@@ -1,5 +1,4 @@
 using System.Numerics;
-using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Puck.Maths;
 
@@ -583,10 +582,10 @@ public static class WorldKeyResolver {
     // ∫₀ᵗ τ²(3 − 2τ) dτ.
     private static double SmoothArea(double t) => (((t * t) * t) - ((((t * t) * t) * t) / 2d));
     private static float Channel(float from, float to, double t) {
-        var a = ImageSourceConversion.SrgbToLinear(value: from);
-        var b = ImageSourceConversion.SrgbToLinear(value: to);
+        var a = SrgbTransfer.ToLinear(encoded: Math.Clamp(max: 1.0, min: 0.0, value: (double)from));
+        var b = SrgbTransfer.ToLinear(encoded: Math.Clamp(max: 1.0, min: 0.0, value: (double)to));
 
-        return ((float)ImageSourceConversion.LinearToSrgb(value: (a + ((b - a) * t))));
+        return ((float)SrgbTransfer.ToEncoded(linear: Math.Clamp(max: 1.0, min: 0.0, value: (a + ((b - a) * t)))));
     }
     private static Vector3 Unit(Vector3 value) => VectorFunctions.NormalizeOr(fallback: Vector3.UnitY, value: value);
 }

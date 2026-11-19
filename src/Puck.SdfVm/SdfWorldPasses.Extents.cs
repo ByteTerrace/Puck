@@ -20,7 +20,9 @@ public sealed partial class SdfWorldPasses {
     // The shapes a fragment's cascades take: each resolution with and without the second slot's cascade.
     private const int ShadowShapes = 6;
 
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> BloomFragments = new();
+    // Each fragment with its display stage (SdfWorldPackage.WithDisplay), one per bloom quality in BloomQuality's order,
+    // made once for the same reason.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> DisplayFragments = new();
 
     /// <inheritdoc/>
     public IShaderPipelineRenderExtent? RenderExtentOf(string instance) => Refresh(instance: instance);
@@ -39,12 +41,12 @@ public sealed partial class SdfWorldPasses {
             fragment = BoxCasterFragments.GetValue(fragment, SdfWorldPackage.WithoutCasterReceivers);
         }
         fragment = WithEnvironment(fragment: fragment, residency: entry.View?.Residency);
-        var quality = entry.OpticalBloom;
 
-        return ((quality == BloomQuality.Off) ? fragment : BloomFragments.GetValue(fragment, static source => [
-            SdfWorldPackage.WithBloom(source, BloomQuality.Low), SdfWorldPackage.WithBloom(source, BloomQuality.High),
-            SdfWorldPackage.WithBloom(fragment: source, quality: BloomQuality.Low, standalone: true), SdfWorldPackage.WithBloom(fragment: source, quality: BloomQuality.High, standalone: true)
-        ])[((((int)quality) - 1) + (entry.StandaloneBloom ? 2 : 0))]);
+        return (entry.Converts ? DisplayFragments.GetValue(fragment, static source => [
+            SdfWorldPackage.WithDisplay(fragment: source, quality: BloomQuality.Off),
+            SdfWorldPackage.WithDisplay(fragment: source, quality: BloomQuality.Low),
+            SdfWorldPackage.WithDisplay(fragment: source, quality: BloomQuality.High),
+        ])[(int)entry.OpticalBloom] : fragment);
     }
 
     private sealed partial class Entry {
@@ -60,13 +62,23 @@ public sealed partial class SdfWorldPasses {
         // scale moves only the grid inside it (SdfViewSnapshot.RenderGrid).
         private double Ceiling => Snapshot.RenderCeiling;
 
-        public bool StandaloneBloom => Snapshot.BloomStandalone;
+        // Whether the view's graph converts its scene light for the display (SdfWorldPackage.WithDisplay): every view but
+        // one published as light for a window (Unexposed) or for a sky layer (GeometryOnly), whose consumer exposes it.
+        // The screen shading reads the same split by the screen's face: an opening shows a window's light, a display a
+        // working image (SdfScreenFace).
+        public bool Converts {
+            get {
+                var snapshot = Snapshot;
+
+                return !(snapshot.Unexposed || snapshot.Quality.GeometryOnly);
+            }
+        }
         public BloomQuality OpticalBloom {
             get {
                 var snapshot = Snapshot;
                 var mode = (View?.Residency.Tables?.PassValues.DebugMode ?? 0);
 
-                return ((snapshot.Unexposed || snapshot.Quality.GeometryOnly || (snapshot.ScreenFidelity >= 1f) ||
+                return ((!Converts || (snapshot.ScreenFidelity >= 1f) ||
                     (snapshot.Bloom is not { Scatter: > 0f }) || ((mode != 0) && (mode != DebugViewModes.Bloom)))
                     ? BloomQuality.Off : snapshot.BloomQuality);
             }

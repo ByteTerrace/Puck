@@ -271,7 +271,7 @@ public static partial class CreationCanonicalizer {
             if (
                 (value is not null) &&
                 !HexColor.TryParse(
-                rgb: out _,
+                color: out _,
                 value: value
             )
             ) {

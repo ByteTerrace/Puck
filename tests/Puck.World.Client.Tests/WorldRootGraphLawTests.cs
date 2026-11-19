@@ -17,33 +17,6 @@ public sealed class WorldRootGraphLawTests {
     private const string FilmGrain = RenderGraphPackageCatalog.SdfFilmGrain;
 
     private static JsonElement Json(string text) => JsonDocument.Parse(json: text).RootElement.Clone();
-    // The letterbox and tonemap switches a place pass binds, or zero for any other pass.
-    private static (uint Letterbox, uint Tonemap) Fields(ShaderPipelinePlannedPass pass) {
-        if (pass.Package?.Package is not (RenderGraphPackageCatalog.Place or RenderGraphPackageCatalog.PlaceBloom)) {
-            return (0u, 0u);
-        }
-
-        Assert.True(condition: pass.Parameters.TryBind(
-            config: null,
-            reason: out var reason,
-            values: out var values
-        ), userMessage: reason);
-
-        var bytes = values.Bytes.Span;
-
-        return (
-            BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceLetterbox))..]),
-            BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[((int)pass.Parameters.BlockOffsetOf(member: RenderGraphPackageCatalog.PlaceTonemap))..])
-        );
-    }
-    private static string[] PlaceFields(RenderGraphPlan plan) => [.. plan.Steps
-        .Where(predicate: static step => (step.Package?.Id is RenderGraphPackageCatalog.Place or RenderGraphPackageCatalog.PlaceBloom))
-        .Select(selector: static step => {
-            var (letterbox, tonemap) = Fields(pass: step.Planned);
-
-            return $"{step.Name}:letterbox={letterbox},tonemap={tonemap}";
-        })];
-
     [Fact]
     public void WithNothingToDrawOverItTheWorldIsTheRoot() {
         var graph = WorldRootGraph.Compose(
@@ -60,119 +33,6 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Empty(collection: graph.Footprints);
         Assert.Null(@object: Assert.Single(collection: graph.Graphs()));
-    }
-    // A pane is display-referred, its own shader's tonemap included,
-    // so the tonemap is each view's place pass, over the view it reconstructs: no pane, post pass or overlay is tonemapped.
-    [Fact]
-    public void AFilmicTonemapIsEachViewsPlacePassAndNoPanePostPassOrOverlayIsTonemapped() {
-        WorldViewPostPass[] post = [new(Name: "grain", Package: FilmGrain)];
-        var filmic = WorldRootGraph.Compose(
-            overlay: true,
-            packages: RenderGraphPackageCatalog.Engine,
-            panes: ["ink"],
-            post: post,
-            tonemap: WorldTonemap.Filmic,
-            views: 2
-        );
-        var plan = Assert.IsType<RenderGraphPlan>(@object: filmic.Plan);
-
-        Assert.Equal(
-            actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place.bloom", "main$view$2:place.bloom", "ink:place", $"grain:{FilmGrain}"]
-        );
-        Assert.Equal(
-            actual: Assert.IsType<RenderGraphPlan>(@object: filmic.OverlayPlan).Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$overlay:overlay"]
-        );
-        Assert.Equal(
-            actual: PlaceFields(plan: plan),
-            expected: ["main$view$1:letterbox=1,tonemap=1", "main$view$2:letterbox=0,tonemap=1", "ink:letterbox=0,tonemap=0"]
-        );
-        Assert.Equal(
-            actual: filmic.Tonemap,
-            expected: WorldTonemap.Filmic
-        );
-
-        // With one view, a tonemap is the reason the root places it: the view's place pass reads the world's version as its
-        // base and the view's own as its source, and its footprint follows its rect.
-        var single = WorldRootGraph.Compose(
-            overlay: false,
-            packages: RenderGraphPackageCatalog.Engine,
-            post: null,
-            tonemap: WorldTonemap.Filmic
-        );
-        var singlePlan = Assert.IsType<RenderGraphPlan>(@object: single.Plan);
-        var view = Assert.Single(collection: singlePlan.Steps).Planned;
-
-        Assert.Equal(
-            actual: (single.Root, Views: string.Join(separator: ",", values: single.ViewPasses), Base: view.Inputs[0].Name, Source: view.Inputs[1].Name, Footprints: single.Footprints.Count),
-            expected: (WorldViewGraphs.MainInstance, Views: "main$view$1", Base: "main$world", Source: "main$view$1", Footprints: 0)
-        );
-        Assert.Equal(
-            actual: PlaceFields(plan: singlePlan),
-            expected: ["main$view$1:letterbox=1,tonemap=1"]
-        );
-
-        // None tonemaps nothing, so a world with nothing to draw over it stays its own root.
-        var none = WorldRootGraph.Compose(
-            overlay: false,
-            packages: RenderGraphPackageCatalog.Engine,
-            post: null,
-            tonemap: WorldTonemap.None
-        );
-
-        Assert.Equal(
-            actual: (none.Root, none.Plan, none.Tonemap),
-            expected: (WorldViewGraphs.WorldInstance, ((RenderGraphPlan?)null), WorldTonemap.None)
-        );
-    }
-    /// <summary>The letterbox color is display framing, not scene light, so no tonemap reaches it: a pass that tonemaps
-    /// (a place pass with <see cref="RenderGraphPackageCatalog.PlaceTonemap"/> set, which tonemaps the source it
-    /// reconstructs and nothing else) never reconstructs an image the letterbox was written into, so the letterbox code
-    /// reaches the display exact under a filmic tonemap with any number of views.</summary>
-    [Fact]
-    public void NoTonemapReadsTheLetterboxSoAFilmicFrameShowsItsCodeExact() {
-        foreach (var views in ((int[])[2, 4])) {
-            var plan = Assert.IsType<RenderGraphPlan>(@object: WorldRootGraph.Compose(
-                overlay: true,
-                packages: RenderGraphPackageCatalog.Engine,
-                panes: ["pane"],
-                post: [new WorldViewPostPass(Name: "grain", Package: FilmGrain)],
-                tonemap: WorldTonemap.Filmic,
-                views: views
-            ).Plan);
-            // Every version the letterbox color is in: what a letterboxing pass writes, and what any pass reading one of
-            // those writes.
-            var framed = new HashSet<string>(comparer: StringComparer.Ordinal);
-            var letterboxed = 0;
-            var tonemapped = new List<string>();
-
-            foreach (var step in plan.Steps) {
-                var fields = Fields(pass: step.Planned);
-
-                if (fields.Letterbox == 1u) {
-                    letterboxed++;
-                }
-                if (fields.Tonemap == 1u) {
-                    // A tonemapping place pass puts its second input, the source it reconstructs, through the curve.
-                    var source = step.Planned.Inputs[1].Name;
-
-                    Assert.False(
-                        condition: framed.Contains(item: source),
-                        userMessage: $"{views} views: {step.Name} tonemaps {source}, which holds the letterbox color"
-                    );
-                    tonemapped.Add(item: step.Name);
-                }
-                if ((fields.Letterbox == 1u) || step.Planned.Inputs.Any(predicate: input => framed.Contains(item: input.Name))) {
-                    framed.UnionWith(other: step.Planned.Outputs.Select(selector: static output => output.Name));
-                }
-            }
-
-            Assert.Equal(
-                actual: (Letterboxed: letterboxed, Tonemapped: tonemapped.Count),
-                expected: (Letterboxed: 1, Tonemapped: views)
-            );
-        }
     }
     [Fact]
     public void ThePostPassesThenTheOverlayRunInDocumentOrderOverTheWorld() {
@@ -365,7 +225,7 @@ public sealed class WorldRootGraphLawTests {
         );
         Assert.Equal(
             actual: plan.Steps.Select(selector: static step => $"{step.Name}:{step.Package?.Id}"),
-            expected: ["main$view$1:place.bloom", "main$view$2:place.bloom", "main$view$3:place.bloom", "pane:place"]
+            expected: ["main$view$1:place", "main$view$2:place", "main$view$3:place", "pane:place"]
         );
         Assert.Equal(
             actual: graph.ViewPasses,
@@ -374,8 +234,7 @@ public sealed class WorldRootGraphLawTests {
         // The first view's version is a second version of the first producer, so its base and its source differ.
         Assert.Equal(
             actual: graph.Graphs()[3]!.Inputs.Select(selector: static input => $"{input.Version}<-{input.Producer}"),
-            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3",
-                "main$view$1$bloom<-world", "main$view$2$bloom<-world$2", "main$view$3$bloom<-world$3", "pane<-pane"]
+            expected: ["main$world<-world", "main$view$1<-world", "main$view$2<-world$2", "main$view$3<-world$3", "pane<-pane"]
         );
         // Each view's footprint follows its rect frame by frame, so the root states none of its own.
         Assert.Empty(collection: graph.Footprints);

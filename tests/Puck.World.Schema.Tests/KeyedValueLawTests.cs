@@ -1,6 +1,5 @@
 using System.Numerics;
 using System.Text.Json;
-using Puck.Abstractions.Sources;
 using Puck.Hosting;
 using Xunit;
 
@@ -58,7 +57,7 @@ public sealed class KeyedValueLawTests {
             span: 24d,
             track: track
         );
-        var linearHalf = ((float)ImageSourceConversion.LinearToSrgb(value: 0.5d));
+        var linearHalf = ((float)Puck.Maths.SrgbTransfer.ToEncoded(linear: 0.5d));
 
         // Halfway in light is half the light of white, which encodes as sRGB 0.735, not as the code's halfway value.
         Assert.Equal(actual: middle.X, expected: linearHalf, precision: 5);
