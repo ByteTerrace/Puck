@@ -33446,6 +33446,65 @@
                             "null"
                           ],
                           "default": null
+                        },
+                        "region": {
+                          "description": "A sphere in world coordinates within which the velocity varies.",
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "center": {
+                              "description": "Centre in world coordinates.",
+                              "title": "DocumentVector3",
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                }
+                              ]
+                            },
+                            "radius": {
+                              "description": "Radius in world units over which the velocity blends back to the base, finite and positive.",
+                              "type": "number"
+                            },
+                            "velocity": {
+                              "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling.",
+                              "title": "DocumentVector3",
+                              "anyOf": [
+                                {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "number"
+                                  },
+                                  "minItems": 3,
+                                  "maxItems": 3
+                                },
+                                {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "description": "A state.\u003Crow\u003E[.\u003Ckey\u003E] reference the containing document resolves from a cell."
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "center",
+                            "radius",
+                            "velocity"
+                          ],
+                          "additionalProperties": false,
+                          "default": null,
+                          "title": "PaletteFlowRegionDocument"
                         }
                       },
                       "required": [
@@ -33495,6 +33554,11 @@
                   "additionalProperties": false,
                   "default": null,
                   "title": "PaletteEntryDocument"
+                },
+                "simulationOnly": {
+                  "description": "Keep this row in lattice reactions and omit its surface and body coupling.",
+                  "type": "boolean",
+                  "default": false
                 }
               },
               "required": [

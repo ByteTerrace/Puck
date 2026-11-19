@@ -37,7 +37,8 @@ public readonly record struct FieldScalarInput(FixedQ4816 Literal, StateHandle S
 /// over the lattice origin is a free surface bodies sample.</param>
 /// <param name="Color">The authored display color, or the state-row binding token, carried through unread by the
 /// kernel and reported back at <see cref="FieldLattice.Describe"/> only.</param>
-public sealed record FieldDescriptorInput(string Name, FixedQ4816 Initial, FixedQ4816 Minimum, FixedQ4816 Maximum, FixedQ4816 HeightScale, bool IsMedium, string? Color);
+/// <param name="SimulationOnly">Whether the row contributes head to lattice reactions without exposing geometry to bodies.</param>
+public sealed record FieldDescriptorInput(string Name, FixedQ4816 Initial, FixedQ4816 Minimum, FixedQ4816 Maximum, FixedQ4816 HeightScale, bool IsMedium, string? Color, bool SimulationOnly = false);
 /// <summary>One per-cell condition of a <see cref="FieldReactionInput.Transform"/>.</summary>
 /// <param name="Field">The field ordinal read at the cell.</param>
 /// <param name="Comparison">The comparison.</param>

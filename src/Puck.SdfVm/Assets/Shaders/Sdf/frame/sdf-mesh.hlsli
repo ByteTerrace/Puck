@@ -161,9 +161,12 @@ float3 sdfMeshCarryPoint(uint record, float3 p) {
 }
 // A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
 // drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.
-float sdfMeshClipDistance(uint record, float3 world) {
+float4 sdfMeshClipPlane(uint record) {
     uint word = (record + SDF_MESH_CLIP_PLANE_WORD);
-    float4 plane = asfloat(uint4(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u), sdfMeshRecordWord(word + 3u)));
+    return asfloat(uint4(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u), sdfMeshRecordWord(word + 3u)));
+}
+float sdfMeshClipDistance(uint record, float3 world) {
+    float4 plane = sdfMeshClipPlane(record);
 
     return (dot(plane.xyz, world) + plane.w);
 }
