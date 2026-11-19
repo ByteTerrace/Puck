@@ -101,6 +101,10 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, boo
     float curvatures[4];
     float4 weights = 0.0;
     float4 sheets = 0.0;
+    // Every answering tap's bilinear weight, and where its ray stands at its hit, or at the receiver's distance if it runs
+    // that far (SdfMeshProbeDepth.Unresolved reads both).
+    float4 taps = 0.0;
+    float3 reaches[4];
     uint firstCode = 0xffffffffu;
     float3 firstNormal = 0.0;
     bool planar = true;
@@ -111,6 +115,7 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, boo
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
         points[corner] = 0.0;
         normals[corner] = 0.0;
+        reaches[corner] = 0.0;
         int2 high = int2(corner & 1u, corner >> 1);
         float2 axes = lerp(1.0 - fraction, fraction, (float2)high);
         float weight = axes.x * axes.y;
@@ -118,12 +123,15 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, boo
         int2 tap = sdfOctBorderSource(base + high, (int)SDF_MESH_IRRADIANCE_DEPTH_SIZE);
         uint word = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y)];
         float depth = sdfMeshIrradianceHalf(word, 0u);
+        float3 direction = sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
+        taps[corner] = weight;
+        reaches[corner] = direction * min(abs(depth), distance);
         if (depth < 0.0) {
             if (bounded && (distance > -depth)) { return 0.0; }
             continue;
         }
         int2 encoded = int2((int)(word << 8u) >> 24, (int)word >> 24);
-        points[corner] = depth * sdfOctDecode(((float2)tap + 0.5) * (2.0 / SDF_MESH_IRRADIANCE_DEPTH_SIZE) - 1.0);
+        points[corner] = depth * direction;
         uint index = (uint)(tap.x + SDF_MESH_IRRADIANCE_DEPTH_SIZE * tap.y);
         uint packedCurvature = sdfMeshIrradiance[address + SDF_MESH_IRRADIANCE_DEPTH_WORD + SDF_MESH_IRRADIANCE_DEPTH_SIZE * SDF_MESH_IRRADIANCE_DEPTH_SIZE + (index >> 1u)];
         uint curvatureHalf = (((index & 1u) != 0u) ? (packedCurvature >> 16) : (packedCurvature & 0xffffu));
@@ -145,14 +153,24 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, boo
         planeSum += weight * plane;
         planeWeight += weight;
     }
-    if (planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
-        float gap = dot(firstNormal, toward) - planeSum / planeWeight;
-        float closed = saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
-        return sdfMeshProbeCoverageVisibility(planeWeight * closed, dot(weights, sheets) * closed, finest);
-    }
     float blocked = 0.0;
     float blockedSheets = 0.0;
+    float4 closures = 0.0;
+    float3 crossings[4];
+    float3 sides[4];
+    // The exact planar form of the quadratic: one plane every hit tap lies on.
+    bool flat = planar && planeWeight > 0.0 && planeHigh - planeLow <= 0.5 * SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP;
+    float offset = (planeWeight > 0.0) ? (planeSum / planeWeight) : 0.0;
+    float closed = saturate((offset - dot(firstNormal, toward)) / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
     [unroll] for (uint corner = 0u; corner < 4u; corner++) {
+        crossings[corner] = firstNormal * offset;
+        sides[corner] = firstNormal;
+        if (flat) {
+            closures[corner] = (weights[corner] > 0.0) ? closed : 0.0;
+            blocked += weights[corner] * closed;
+            blockedSheets += weights[corner] * closed * sheets[corner];
+            continue;
+        }
         if (weights[corner] <= 0.0) { continue; }
         float quadratic = 0.0;
         float3 coefficient = 0.0;
@@ -184,13 +202,32 @@ float sdfMeshProbeDepthVisibility(uint address, float3 toward, bool bounded, boo
         float along = 2.0 * c / divisor;
         if (along <= 0.0 || along >= 1.0) { continue; }
         float3 hit = toward * along;
-        float3 gradient = coefficient + 2.0 * quadratic * hit;
-        float gap = dot(normalize(gradient), toward - hit);
-        float share = weights[corner] * saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
+        float3 side = normalize(coefficient + 2.0 * quadratic * hit);
+        float gap = dot(side, toward - hit);
+        float closure = saturate(-gap / SDF_MESH_IRRADIANCE_DEPTH_SURFACE_FADE);
+        float share = weights[corner] * closure;
+        closures[corner] = closure;
+        crossings[corner] = hit;
+        sides[corner] = side;
         blocked += share;
         blockedSheets += share * sheets[corner];
     }
-    return sdfMeshProbeCoverageVisibility(blocked, blockedSheets, finest);
+    // At the finest level, the unblocked part of each tap whose ray never got past a blocking tap's surface before the
+    // receiver's depth (it stands on the probe's side of that surface, or on its plane within the join gap) carries no
+    // evidence about the receiver, in the measure that blocker closes it; the coverage is the blocked share of the taps
+    // that do. KEEP IN SYNC with SdfMeshProbeDepth.Unresolved.
+    float unresolved = 0.0;
+    [unroll] for (uint tap = 0u; tap < 4u; tap++) {
+        float before = 0.0;
+        [unroll] for (uint blocker = 0u; blocker < 4u; blocker++) {
+            if (closures[blocker] > 0.0 && dot(sides[blocker], reaches[tap] - crossings[blocker]) > -SDF_MESH_IRRADIANCE_DEPTH_SURFACE_JOIN_GAP) {
+                before = max(before, closures[blocker]);
+            }
+        }
+        unresolved += max(taps[tap] - weights[tap] * closures[tap], 0.0) * before;
+    }
+    float evidence = finest ? (1.0 - unresolved) : 1.0;
+    return sdfMeshProbeCoverageVisibility(blocked / evidence, blockedSheets / evidence, finest);
 }
 // A level's probe spacing along each axis, zero for a level not published, and its window: first cell and probes along
 // each axis.
