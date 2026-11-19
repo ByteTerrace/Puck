@@ -31,8 +31,9 @@ public readonly record struct DirectXTilePlacement(GpuMemoryPlacement<nint> Plac
 public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     /// <summary>The bytes of one tile of a reserved buffer.</summary>
     public const ulong TileBytes = (64UL << 10);
-    /// <summary>The tiles one mapping covers: 16 MiB, a quarter of a tile heap (<see cref="DirectXHeapArena.HeapBytes"/>).</summary>
-    public const uint ChunkTiles = 256U;
+    /// <summary>The tiles one mapping covers: 1 MiB, so a residency whose region holds a few draw records backs a chunk,
+    /// not a heap, and a 4 GiB reservation's page table stays a few thousand chunks.</summary>
+    public const uint ChunkTiles = 16U;
 
     private readonly DirectXDeviceContext m_context;
     // The arena and device the buffer was created on: a lost device's successor has its own, which never takes these tiles.

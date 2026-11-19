@@ -303,7 +303,7 @@ replace a region in the owner. A fixed policy (the always-staged mesh region, un
 constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
 after the submissions that read the old buffers (`SdfWorldTables.Retire`).
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
-destination that reserves `GpuRegion.MaxByteCount` and backs 16 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
+destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
 none and keeps a contiguous destination). It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so

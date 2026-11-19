@@ -1299,7 +1299,7 @@ quiet window), steps 1,
 contiguous fallback, shared retirement timeline, destination page proofs,
 native-pool pressure trim, Vulkan's ordered binding door and Direct3D 12's
 mapped regions (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`: the mesh region
-and the probe scene back 16 MiB chunks of one reserved buffer, grow without a
+and the probe scene back 1 MiB chunks of one reserved buffer, grow without a
 second buffer and give back chunks no placement covers): Vulkan sparse
 resource ownership behind the same interface, page-only reservation credit
 with pool-owned slack, and physical compaction. Vulkan mesh regions still use
@@ -1312,6 +1312,20 @@ and each step's check, on [the residency decision](../decisions/residency.md):
 the residency wait, background GPU work's budget, the region's budget, staging
 and every memory owner are its steps. This packet holds the defects beside it.
 
+- [high] A debug-world boot whose meshes are not stored (any bake-identity
+  change) builds 55 residencies: each `self` and `wonderland` session screen
+  renders a residency of its own of the boot world
+  (`WorldScreenBinder.CreateSessionResidency`'s `[world.view: … renders a
+  residency of its own …]` line), nested sessions add more, and
+  `WorldViewGraphHost.ReserveArrivals` keeps every one rendering while its
+  meshes arrive. On the RTX 4070 the device pool then held 15.5 GB, 14.3 GB of
+  it fixed (each session's cascades: `session/sdf.world$shadowFarOptical` and
+  `$shadowNearOptical` 2.57 GB each, four depth and exit families 0.86 GB
+  each), the 8 GiB profile cap refused 16,467 workspace admissions, and the
+  world residency had baked 30 of 7,544 groups after 211 s. The fix owes the
+  memory bar: a session screen of the same world either shares the boot
+  residency's meshes or holds no cascades of its own until it is visible, and
+  arrival does not keep nested windows of a world that is still arriving.
 - [medium] Before sparse external targets are used, retain the exact host-word
   coverage of disjoint writes across remapping. `GpuRegion.StageOwed`
   (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs`) re-owes the known prefix;

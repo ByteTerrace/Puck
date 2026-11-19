@@ -2354,7 +2354,7 @@ the contiguous fallback, one device retirement timeline and destination page
 generation proofs (pieces 1 and 2 below). Direct3D 12 has a mapped destination
 (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
 `IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
-reserved buffer of `GpuRegion.MaxByteCount` whose 16 MiB chunks map to tile runs
+reserved buffer of `GpuRegion.MaxByteCount` whose 1 MiB chunks map to tile runs
 of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
 admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
 by mapping chunks and shrinks by unmapping them, with no carry and no

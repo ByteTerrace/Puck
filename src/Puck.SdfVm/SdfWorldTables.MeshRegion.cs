@@ -245,7 +245,7 @@ public sealed partial class SdfWorldTables {
     /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of the limit its grant reserves for it
     /// (<see cref="MeshRegionLimitBytes"/>).</summary>
     public const ulong MostMeshRegionBytes = ((ulong)GpuRegion.MaxByteCount);
-    /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB.</summary>
+    /// <summary>The unit a grown mesh region's size is rounded up to: 16 MiB. A mapped region rounds to its chunk instead.</summary>
     public const ulong MeshRegionGranuleBytes = (16UL << 20);
 
     /// <summary>Gets the bytes the mesh region holds, which its buffers are allocated for: one draw record's until a frame
@@ -315,22 +315,25 @@ public sealed partial class SdfWorldTables {
     private long m_meshRefusals;
     private long m_meshForgotten;
 
-    /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: the need plus an
-    /// eighth for a region that grows by replacement, the need alone for a mapped one (<see cref="GpuRegion.Mapped"/>),
-    /// whose growth copies nothing, each rounded up to <see cref="MeshRegionGranuleBytes"/> and capped at
-    /// <paramref name="mostBytes"/>. The size is never below the need and is a whole number of words.</summary>
+    /// <summary>Returns the size a mesh region grows to when its meshes need <paramref name="needBytes"/>: for a region that
+    /// grows by replacement, the need plus an eighth rounded up to <see cref="MeshRegionGranuleBytes"/>; for a mapped one
+    /// (<see cref="GpuRegion.Mapped"/>), whose growth copies nothing, the need alone rounded up to its chunk. Either is
+    /// capped at <paramref name="mostBytes"/>, never below the need and a whole number of words.</summary>
     /// <param name="needBytes">The bytes the planned draws and meshes use; at most <paramref name="mostBytes"/>.</param>
     /// <param name="mostBytes">The most bytes the region may hold, a whole number of words; at most
     /// <see cref="MostMeshRegionBytes"/>.</param>
-    /// <param name="mapped">Whether the region's destination is mapped.</param>
+    /// <param name="mappedChunkBytes">The chunk a mapped region backs (<see cref="GpuRegion.MappedChunkBytes"/>), a whole
+    /// number of words; zero for a region that grows by replacement.</param>
     /// <returns>The region's new size in bytes.</returns>
     /// <exception cref="InvalidOperationException"><paramref name="needBytes"/> is past <paramref name="mostBytes"/>.</exception>
-    public static ulong MeshRegionGrownBytes(ulong needBytes, ulong mostBytes = MostMeshRegionBytes, bool mapped = false) {
+    public static ulong MeshRegionGrownBytes(ulong needBytes, ulong mostBytes = MostMeshRegionBytes, long mappedChunkBytes = 0L) {
         if (needBytes > mostBytes) {
             throw new InvalidOperationException(message: $"The baked meshes need {needBytes} bytes of mesh region, past the {mostBytes} the region may hold.");
         }
 
-        return ((ulong)GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: (mapped ? long.MaxValue : 8L), granule: ((long)MeshRegionGranuleBytes), required: ((long)needBytes)));
+        return ((ulong)((mappedChunkBytes > 0L)
+            ? GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: long.MaxValue, granule: mappedChunkBytes, required: ((long)needBytes))
+            : GpuCapacity.Headroom(ceiling: ((long)mostBytes), divisor: 8L, granule: ((long)MeshRegionGranuleBytes), required: ((long)needBytes))));
     }
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
@@ -846,7 +849,7 @@ public sealed partial class SdfWorldTables {
     // background work.
     private void FitMeshRegion(ulong bytes) {
         var mapped = m_meshRegion.Mapped;
-        var fitted = MeshRegionGrownBytes(mapped: mapped, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
+        var fitted = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
         var held = m_meshRegion.ByteCount;
 
         if (mapped) {
@@ -964,8 +967,7 @@ public sealed partial class SdfWorldTables {
             return;
         }
 
-        var mapped = m_meshRegion.Mapped;
-        var grown = MeshRegionGrownBytes(mapped: mapped, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
+        var grown = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, mostBytes: Math.Max(val1: bytes, val2: MeshRegionLimitBytes), needBytes: bytes);
         IDisposable replaced;
 
         try {
@@ -981,7 +983,7 @@ public sealed partial class SdfWorldTables {
                 return;
             }
 
-            grown = MeshRegionGrownBytes(mapped: mapped, needBytes: floor);
+            grown = MeshRegionGrownBytes(mappedChunkBytes: m_meshRegion.MappedChunkBytes, needBytes: floor);
             m_meshGrant.ReserveFloorGrowth(newBytes: ((long)grown));
             try {
                 replaced = m_meshRegion.Grow(byteCount: ((long)grown));
