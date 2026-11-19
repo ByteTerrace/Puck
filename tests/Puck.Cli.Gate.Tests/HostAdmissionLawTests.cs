@@ -16,9 +16,9 @@ public sealed class HostAdmissionLawTests {
     // A commit reading is a percentage of a 40 GB commit limit; none is a platform that reports no limit. Free memory
     // defaults to plenty, so a law about commit is not also a law about physical memory.
     private static HostSample Sample(double cpu = 0, double ram = 64, double disk = 100, string? gpu = null, string? heavy = null, double? commit = null, double limit = 40, HostRunningStart[]? starts = null) => new(At: DateTimeOffset.UnixEpoch, CpuPercent: cpu, FreeDiskGb: disk, FreeRamGb: ram, GpuHolder: gpu, HeavyTestHolder: heavy, ReuseNodes: 42, CommitChargeGb: ((commit is { } percent) ? (percent * limit / 100.0) : double.NaN), CommitLimitGb: ((commit is null) ? double.NaN : limit), Starts: starts);
-    // A ready headless World that has stopped growing: the start asked beside it is not alone, so its own learned expectation
-    // judges it, while the World itself adds no growth to the need.
-    private static readonly HostRunningStart Company = new(Id: 900, Kind: HostStartKind.HeadlessWorld, PrivateGb: 0.1, Ready: true, StartTicks: 900);
+    // A ready heavy suite holding 20 GB of commit and 1 GB resident, in a kind no law here observes: it adds no growth, and
+    // headroom would be larger without it, so a start asked beside it is one a wait for it to exit could admit.
+    private static readonly HostRunningStart Company = new(Id: 900, Kind: HostStartKind.HeavySuite, PrivateGb: 20, PrivateResidentGb: 1, Ready: true, StartTicks: 900);
     private static bool Admits(HostStartKind kind, HostSample reading, HostStartTracker tracker, GateClock clock, int boundSeconds = 25, HostLoadThresholds? on = null) {
         using var error = new StringWriter();
 
@@ -240,9 +240,10 @@ public sealed class HostAdmissionLawTests {
     }
     // One pathological session (33 GB of commit) is the only observation of its kind. On an idle 32 GB desk with 26 GB of
     // commit headroom and 19.7 GB free, the estimate alone could refuse every later windowed start, and a refused kind runs
-    // nothing that could teach the window a lower figure. A start with nothing admitted beside it is judged by the lesser of
-    // the estimate and the unmeasured fallback, so it goes ahead and its observation brings the estimate down; a start beside
-    // another, or one asked while the first still holds its reservation, is still judged by the whole estimate.
+    // nothing that could teach the window a lower figure. An estimate the machine could not hold even with every admitted
+    // start gone is judged as the lesser of itself and the unmeasured fallback, so the start goes ahead and its observation
+    // brings the estimate down. Beside a running 20 GB suite the same machine could hold it once that exits, so the whole
+    // estimate still judges, and so it does for a second start asked while the first holds its reservation.
     [Fact]
     public void AnInflatedEstimateNeverLocksALoneStartOutSoItsObservationsCanLowerIt() {
         using var directory = new Puck.Testing.TemporaryDirectory();

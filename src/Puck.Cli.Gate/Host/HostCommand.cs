@@ -126,10 +126,10 @@ public static class HostCommand {
               private bytes, private working set, working set, the figure judged and readiness follow.
               A kind's expected peak is the high percentile of its last ten observed starts, kept per machine in the
               lease root, so one unusual session moves it only briefly; unused growth tapers away over
-              HostStartTracker.Plateau and returns on renewed allocation. A start with no admitted start running
-              or reserved beside it is judged by the lesser of that expectation and the figure an unmeasured kind
-              gets (peak= shows the figure judged), so an inflated expectation can never refuse a lone start and
-              lock out the observations that would lower it.
+              HostStartTracker.Plateau and returns on renewed allocation. An expectation the machine could not
+              hold even with every admitted start gone is judged as the lesser of itself and the figure an
+              unmeasured kind gets (peak= shows the figure judged), so an inflated expectation cannot refuse every
+              start and lock out the observations that would lower it.
               PRESSURE wins over CAPACITY within one reading. Defaults scale with the machine: CAPACITY needs three
               logical processors idle, but never fewer than 40% of them nor more than half; PRESSURE is free RAM
               below 1/8 of the installed memory (rounded up to whole gigabytes) or free disk below
