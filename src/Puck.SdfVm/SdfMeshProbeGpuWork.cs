@@ -19,7 +19,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly Lock m_gate = new();
     private readonly Queue<Job> m_pending = new();
     // The measured GPU cost of each kind's unit (UnitsOf), indexed by JobKind: what TryTake charges a job and what sizes
-    // trace, relight and selection jobs to background work's share of a frame. Complete measures them on the recording
+    // trace, relight and selection jobs to the live frame allowance. Complete measures them on the recording
     // thread; the coordinator reads them as it cuts jobs.
     private readonly SdfGpuWorkRate[] m_rates = [
         new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
@@ -120,7 +120,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
     // One coordinator submits a call's jobs and sleeps on their answers; it never holds the device thread. A job owns a
     // scene claim until completion or abandonment. The service owns every slot's fence and readback token.
-    // Each call is cut into jobs whose measured cost fits background work's share of a frame, sized as each is submitted
+    // Each call is cut into jobs whose measured cost fits the live frame allowance, sized as each is submitted
     // from the kind's rate as it then stands (Run). Its jobs are independent: each answers its own rows and writes only
     // its own cache slots or batch output rows.
     // A trace also copies each origin's hits into the device hit cache at its slot, so a relight reads them there and the
@@ -131,16 +131,18 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
             return new Job(scene.Acquire(), origins.Slice(start: start, length: count)) { CacheSlots = cacheSlots.Slice(start: start, length: count), HitCapacity = hitCapacity };
         });
-    // The origins one trace job holds at most: those whose measured cost fits background work's share of a frame.
-    private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
-    // The predicted rays one relight job holds at most: those whose measured cost fits background work's share of a frame,
+    // The GPU time one job is cut to: the presentation budget's live frame allowance, read again for every job.
+    private double FrameAllowanceSeconds => m_tables.GpuWork.FrameAllowanceSeconds;
+    // The origins one trace job holds at most: those whose measured cost fits the frame allowance.
+    private int TraceOriginsPerJob => (int)m_rates[(int)JobKind.Trace].UnitsWithin(most: int.MaxValue, seconds: FrameAllowanceSeconds);
+    // The predicted rays one relight job holds at most: those whose measured cost fits the frame allowance,
     // within SdfMeshIrradiance.RelightRaysCeiling, and within SdfMeshIrradiance.RelightRaysPerJob until a relight's
     // timestamps have measured the rate (on a queue without timestamps, always). A probe predicted past it goes alone.
     private long RelightRaysWithinShare {
         get {
             var rate = m_rates[(int)JobKind.Relight];
 
-            return rate.UnitsWithin(most: (rate.Measured ? SdfMeshIrradiance.RelightRaysCeiling : SdfMeshIrradiance.RelightRaysPerJob), seconds: SdfGpuWork.FrameShareSeconds);
+            return rate.UnitsWithin(most: (rate.Measured ? SdfMeshIrradiance.RelightRaysCeiling : SdfMeshIrradiance.RelightRaysPerJob), seconds: FrameAllowanceSeconds);
         }
     }
     // Relights a batch's probes and commits each probe's published record into the feedback volume at its destination
@@ -175,7 +177,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     internal IGpuBuffer FeedbackBuffer => m_feedback!.Buffer(0);
 
     // A selection answers each probe from its own row alone (sdf-probe-select), so it is cut like a trace: jobs of at
-    // most the probes whose tests (SelectTestsOf) fit background work's share of a frame at the measured rate. A
+    // most the probes whose tests (SelectTestsOf) fit the live frame allowance at the measured rate. A
     // selection over a settled scene is one job of a test a probe; one after the scene changed becomes several, never one
     // job a frame waits on. The rate is read again for every job, so a job measured costlier than its estimate shortens
     // the ones submitted after it, and the tests left are shared evenly among the jobs left, since a short last job would
@@ -192,7 +194,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             left += SelectTestsOf(row: metadata.Span.Slice(start: (probe * SdfMeshProbeRelight.SelectionInputWords), length: SdfMeshProbeRelight.SelectionInputWords), changes: changes);
         }
         return Run(count: centers.Length, rowWords: 1, reuse: reuse, next: start => {
-            var most = m_rates[(int)JobKind.Select].UnitsWithin(most: long.MaxValue, seconds: SdfGpuWork.FrameShareSeconds);
+            var most = m_rates[(int)JobKind.Select].UnitsWithin(most: long.MaxValue, seconds: FrameAllowanceSeconds);
             var share = left.CeilingDivide(divisor: Math.Max(val1: 1L, val2: left.CeilingDivide(divisor: most)));
             var rows = metadata.Span;
             var count = 0;
@@ -311,8 +313,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
 
     // A scene chunk is cut at SdfGpuWork.UploadChunkBytes before any take, the least any allowance is. Queries are taken
     // in the order they were submitted, several at a time across the service's slots (m_inFlight), but a scene upload
-    // starts only when none is in flight and no query is taken while it runs, and an exclusive query runs alone.
-    public bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
+    // starts only when none is in flight and no query is taken while it runs, and an exclusive query runs alone. Every
+    // job is cut to the live frame allowance, a held frame's too: the coordinator cuts queries before any take knows
+    // whose frame it serves, and a structure build held to the same span keeps a held frame's submissions as short.
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? job, out double estimatedSeconds) {
         job = null;
         estimatedSeconds = 0;
         lock (m_gate) {
@@ -328,7 +332,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 upload.Dispose();
                 m_sceneUpload = null;
             }
-            if (TryTakeStructures(tables: tables, job: out job, estimatedSeconds: out estimatedSeconds)) { return true; }
+            if (TryTakeStructures(allowanceSeconds: Math.Min(val1: allowanceSeconds, val2: FrameAllowanceSeconds), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
             if (!m_pending.TryPeek(out var pending)) { return false; }
             if (!((pending.Commits || pending.CameraSample) ? m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window) : m_volume.KeepsGpuScene(pending.Scene)) ||
                 (pending.CameraSample && (m_feedback is null || m_feedbackWords != pending.VolumeWords)) ||

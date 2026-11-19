@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Numerics;
 using System.Text;
 using Puck.Commands;
-using Puck.World.Authoring;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -120,6 +119,14 @@ internal sealed partial class PlayerCommandModule {
                 : $" shape:{shape.Name} parent={(shape.Parent ?? "root")} delta={Point(value: shape.Delta)} turn={Scalar(value: shape.TurnRadians)}"));
         }
 
+        // The seat's guess layer, the pose its own view alone draws; the drivers above are the shared pose every other
+        // reader sees. The read-back above already passed the seat's own input disclosure.
+        if (pool.TryGuessRig(bodyIndex: bodyIndex, slot: out _, state: out var guessed) && (guessed is not null)) {
+            foreach (var driver in guessed.Drivers) {
+                if (driver.Source is { } source) { _ = line.Append(value: $" layer:{driver.Name} phase={Scalar(value: driver.Phase)} source={source}"); }
+            }
+        }
+
         _ = line.Append(value: ']');
 
         return new CommandResult(Output: line.ToString());
@@ -134,7 +141,7 @@ internal sealed partial class PlayerCommandModule {
             foreach (var driver in (creation.Document.Drivers ?? [])) {
                 if (driver.Lead is not { } channel) { continue; }
 
-                _ = readings.Append(value: $" guess:{creation.Id}.{driver.Name}[{channel}]={m_client.DescribeGuess(slot: slot, channel: channel, leadSeconds: (driver.LeadSeconds ?? CreationDriverDocument.DefaultLeadSeconds))}");
+                _ = readings.Append(value: $" guess:{creation.Id}.{driver.Name}[{channel}]={m_client.DescribeGuess(slot: slot, channel: channel)}");
             }
         }
 

@@ -140,7 +140,9 @@ public sealed partial class SdfWorldPassesLawTests {
         _ = passes.CounterOf(instance: "world");
 
         for (var produced = 1; (produced <= 2); produced++) {
+            // The frame reads the camera, whose film captures its host first.
             passes.BeginFrame(context: in context);
+            passes.PrepareRead(context: in context, instance: "camera");
 
             Assert.Equal(actual: captures, expected: produced);
             Assert.Same(expected: host.Frame, actual: filmed);

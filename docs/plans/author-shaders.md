@@ -8,7 +8,14 @@ the implemented contract (admission, the canonical form, the two tiers, the
 publication door, binning, the planner and its checks) is in
 [the authored-shading reference](../../.claude/skills/rendering/references/authored-shading.md).
 The language, the lowering, the interpreter, specialization by program set,
-binning and the work planner are built. This plan holds what remains: the bar
+binning, the work planner and the shared program identity are built. A world
+holds each program once in its `shades` table under the program's content
+identity, and every use (a palette row, a look case, `render.shade`) names it by
+key, so a style on many creations costs one program in the compilation, the
+world definition and its projection
+([one program, one row](../../.claude/skills/rendering/references/authored-shading.md#one-program-one-row)).
+A phase the shading gains later, such as the ink phase
+[the ink plan](ink.md) adds, joins the definition the table already holds. This plan holds what remains: the bar
 devices' readings, the work bound's calibration and the device-loss quarantine,
 the migration of the engine's fixed-function layers into standard programs,
 and the two deferred hooks.

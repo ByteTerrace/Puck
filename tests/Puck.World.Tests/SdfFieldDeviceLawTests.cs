@@ -92,6 +92,7 @@ public sealed partial class SdfFieldDeviceLawTests {
             var leg = legs[index];
             var worst = 0f;
             var worstPoint = 0;
+            var worstDevice = 0f;
             var materialMisses = 0;
 
             for (var point = 0; (point < Points.Length); point++) {
@@ -101,6 +102,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                 if (!(miss <= worst)) {
                     worst = miss;
                     worstPoint = point;
+                    worstDevice = (result.X / result.Z);
                 }
                 if (BitConverter.SingleToInt32Bits(value: result.Y) != leg.Materials[point]) {
                     materialMisses++;
@@ -112,7 +114,7 @@ public sealed partial class SdfFieldDeviceLawTests {
                     failures.Add(item: $"{leg.Name}: the words with two lanes exchanged stayed within {Tolerance} of the reference everywhere (worst {worst})");
                 }
             } else if (!(worst <= Tolerance) || (materialMisses != 0)) {
-                failures.Add(item: $"{leg.Name}: worst distance miss {worst} at {Points[worstPoint]} (reference {leg.Distances[worstPoint]}), {materialMisses} material miss(es)");
+                failures.Add(item: $"{leg.Name}: worst distance miss {worst} at {Points[worstPoint]} (device {worstDevice}, reference {leg.Distances[worstPoint]}), {materialMisses} material miss(es)");
             }
         }
 

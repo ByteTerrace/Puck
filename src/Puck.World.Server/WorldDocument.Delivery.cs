@@ -95,7 +95,7 @@ public sealed partial class WorldDocument {
                     sink.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
                 } else {
                     var scratch = Array.Empty<EntitySnapshot>();
-                    var redacted = WorldOutputHub.Redact(
+                    var redacted = WorldOutputHub.Observed(
                         disclosure: in disclosure,
                         scratch: ref scratch,
                         snapshot: in primer

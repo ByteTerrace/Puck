@@ -5,9 +5,11 @@ using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
 
-/// <summary>Presentation-only timestamp demand: the operator's (<c>world.gpu-timing</c>) or dynamic resolution's, which
-/// reads the world's views' frame time from it. The demand is applied to the graph's nodes on the frame thread, and off
-/// never walks the graph during a steady frame.</summary>
+/// <summary>Presentation-only timestamp demand: the operator's (<c>world.gpu-timing</c>), a report recorder's, dynamic
+/// resolution's, which reads the world's views' frame time from it, or the background allowance's, which reads every
+/// node's (<see cref="WorldBackgroundAllowance"/>) and stands whenever a display period is known, so a windowed World
+/// keeps a timestamp pool and readback a frame slot on every node. The demand is applied to the graph's nodes on the
+/// frame thread, and off never walks the graph during a steady frame.</summary>
 /// <param name="probe">The optional live render root.</param>
 public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
     // Every on or off is a new demand, applied whole on the next frame even when the two cancel out between frames, so
@@ -17,11 +19,12 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
     private bool m_operator;
     private bool m_dynamicResolution;
     private bool m_recording;
+    private bool m_allowance;
 
     /// <summary>Whether a render root exists.</summary>
     public bool Available => (probe?.Root is not null);
     /// <summary>Whether any consumer requires timestamps.</summary>
-    public bool Enabled => (m_operator || m_dynamicResolution || m_recording);
+    public bool Enabled => (m_operator || m_dynamicResolution || m_recording || m_allowance);
     // Whether the operator asked for the readout, which dynamic resolution's demand alone never shows.
     public bool ReadoutEnabled => m_operator;
 
@@ -76,6 +79,9 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
     public void Require(bool required) {
         SetDemand(ref m_dynamicResolution, required, renew: false);
     }
+    /// <summary>Sets the background allowance's timestamp demand.</summary>
+    /// <param name="required">Whether timestamps are wanted.</param>
+    public void RequireAllowance(bool required) => SetDemand(ref m_allowance, required, renew: false);
     /// <summary>Applies current timestamp demand on the frame thread.</summary>
     public void Tick() {
         var renewed = (m_demand != m_applied);
@@ -170,5 +176,5 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         return text.Append(value: ']').ToString();
     }
 
-    private string DemandState => m_operator ? "on" : m_recording ? "on (recording)" : m_dynamicResolution ? "off (recording for dynamic resolution)" : "off";
+    private string DemandState => m_operator ? "on" : m_recording ? "on (recording)" : m_dynamicResolution ? "off (recording for dynamic resolution)" : m_allowance ? "off (recording for the background allowance)" : "off";
 }

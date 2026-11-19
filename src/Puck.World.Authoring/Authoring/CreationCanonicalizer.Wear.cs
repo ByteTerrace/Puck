@@ -171,9 +171,10 @@ public static partial class CreationCanonicalizer {
                 errors.Add(item: new(Message: $"{name} must be #RRGGBB or a state.<row>[.<key>] binding.", Path: $"palette[{index}].{name}"));
             }
         }
-        void Shade(SdfShadeDefinition? shade, string path) {
-            if (shade is null) { return; }
-            try { _ = SdfShadeProgram.Compile(definition: shade); } catch (SdfShadeException error) { errors.Add(item: new(Message: $"{error.Code}: {error.Message}", Path: path)); }
+        // A program named only by its key is the world's shades table's to admit, where the key resolves.
+        void Shade(ShadeReference? shade, string path) {
+            if (shade is not { IsResolved: true }) { return; }
+            try { _ = SdfShadeProgram.Compile(definition: shade.Definition); } catch (SdfShadeException error) { errors.Add(item: new(Message: $"{error.Code}: {error.Message}", Path: path)); }
         }
     }
     // Per-shape lane-driven erosion: a defined lane, a finite from/to pair that differ (SdfProgramBuilder.LaneErode

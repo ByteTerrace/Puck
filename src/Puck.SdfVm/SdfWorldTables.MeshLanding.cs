@@ -321,7 +321,9 @@ public sealed partial class SdfWorldTables {
         public GpuQueueCategory Category => GpuQueueCategory.Upload;
         public GpuMemoryBytes OwnedBytes => default;
 
-        public bool TryTake(SdfWorldTables current, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+        // A landing is cut by its bytes: the most an upload job stages copies in under the least frame allowance at
+        // SdfGpuWork.UploadCopyBytesPerSecond, so the allowance never binds it.
+        public bool TryTake(SdfWorldTables current, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
             if (current.TryTakeLanding(job: out var landing, uploadBytes: uploadBytes)) {
                 job = landing;
                 estimatedSeconds = SdfGpuWork.UploadSecondsOf(bytes: (((long)landing.Words) * sizeof(uint)));

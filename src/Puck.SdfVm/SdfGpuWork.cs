@@ -21,12 +21,17 @@ public interface ISdfGpuWorkClient : IDisposable {
     /// <param name="uploadBytes">The most host payload bytes the job may stage (<see cref="UploadBytes"/>), from
     /// <see cref="SdfGpuWork.UploadChunkBytes"/> to <see cref="SdfGpuWork.MostUploadJobBytes"/>: what the service's upload
     /// budget holds now.</param>
+    /// <param name="allowanceSeconds">The GPU time, in seconds, the job is to fit: one frame's allowance
+    /// (<see cref="SdfGpuWorkBudget.FrameAllowanceSeconds"/>) for background work, since the queue runs the job whole
+    /// before the frame submitted after it, or <see cref="double.PositiveInfinity"/> for a held frame's own work, which
+    /// queues no frame behind it. A client sizes the job to it at its kind's measured rate
+    /// (<see cref="SdfGpuWorkRate.UnitsWithin"/>), within its own most.</param>
     /// <param name="job">The job, handed back to <see cref="Record"/> and then to <see cref="Complete"/> or
     /// <see cref="Abandon"/>.</param>
     /// <param name="estimatedSeconds">The GPU time the job is estimated to take, in seconds, which the service charges
     /// its budget until the job's timestamps measure it.</param>
     /// <returns><see langword="true"/> when the client hands over a job.</returns>
-    bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
+    bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds);
     /// <summary>The host payload bytes staged by a taken job, at most the <c>uploadBytes</c> its take allowed; zero for
     /// jobs without uploads.</summary>
     /// <param name="job">The taken job.</param>
@@ -274,21 +279,30 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// <see cref="IdleSeconds"/> used it, so buffers sized for a cold bake's largest batch go once the bake settles rather
 /// than living as long as the tables.</para>
 /// <para>Budget: the service draws on its presentation's one budget (<see cref="SdfGpuWorkBudget"/>), which every
-/// residency's service shares: together they take at most <see cref="GpuShare"/> of the GPU's time, by each job's
-/// measured GPU time (its timestamps, or its client's estimate on a queue without them), and stage at most
+/// residency's service shares: together they take the share of the GPU's time the frame's own work leaves free
+/// (<see cref="SdfGpuWorkBudget.Share"/>, at most <see cref="GpuShare"/>), by each job's measured GPU time (its
+/// timestamps, or its client's estimate on a queue without them), and stage at most
 /// <see cref="UploadBytesPerSecond"/> of host payload. Each service also records for at most <see cref="HostShare"/> of
 /// the wall time between its steps and keeps at most <see cref="SlotCount"/> jobs in flight. Every budget is a rate of
 /// wall time, never a count a pump, so work such as landing a mesh region takes as many seconds whatever the frame
-/// rate. A client cuts its jobs to <see cref="FrameShareSeconds"/> at its kind's measured rate
-/// (<see cref="SdfGpuWorkRate"/>): the queue runs a job whole before the frame submitted after it, so a job longer than
-/// the share delays that frame by its length whatever the average share.</para>
+/// rate.</para>
+/// <para>Invariant: a budgeted job is cut to one frame's allowance. The service's one take hands every client the
+/// allowance it is to fit (<see cref="ISdfGpuWorkClient.TryTake"/>'s <c>allowanceSeconds</c>): the budget's live
+/// <see cref="SdfGpuWorkBudget.FrameAllowanceSeconds"/> for background work, since the queue runs a job whole before
+/// the frame submitted after it and a job longer than the allowance delays that frame by its length whatever the
+/// average share, and no bound for a held frame's own work. A client that cuts jobs ahead of its take (the probe
+/// coordinator) reads the same live figure (<see cref="FrameAllowanceSeconds"/>); no fixed share remains to read. It
+/// stops at a client's sizing: a job whose cost its rate has not measured yet, or one unit costlier than the allowance
+/// (a bake lattice is never split), runs long, and the service counts it (<see cref="Describe"/>'s
+/// <c>over-allowance</c>).</para>
 /// </summary>
 public sealed class SdfGpuWork : IDisposable {
     internal IGpuQueueSubmitter Queue => m_gpu.QueueSubmitter;
 
     /// <summary>The jobs in flight at most.</summary>
     public const int SlotCount = 4;
-    /// <summary>The share of the GPU's time background work takes at most, measured over each job's GPU time.</summary>
+    /// <summary>The share of the GPU's time background work takes at most, measured over each job's GPU time: the cap
+    /// the budget's live share (<see cref="SdfGpuWorkBudget.Share"/>) follows the frame's free time up to.</summary>
     public const double GpuShare = 0.25;
     /// <summary>The seconds a free slot keeps a buffer no job in that span used.</summary>
     public const double IdleSeconds = 2.0;
@@ -313,11 +327,6 @@ public sealed class SdfGpuWork : IDisposable {
     /// line: a twentieth of a second, a fortieth of the two seconds after which Windows resets a device whose submission
     /// has not finished (TDR).</summary>
     public const double SlowJobSeconds = 0.05;
-    /// <summary>Background work's share of one frame's GPU time at the 60 Hz frame bar, in seconds: a job measured
-    /// longer delays the frame queued behind it by more than the share <see cref="GpuShare"/> grants, whatever the
-    /// budget's average says.</summary>
-    public const double FrameShareSeconds = (GpuShare / 60.0);
-
     /// <summary>The wall time one <see cref="Drive"/> takes at most: one frame at the 60 Hz frame bar, so the host's
     /// loop comes round to its console and window as often for each residency a held frame drives. On the host's pump
     /// thread the iteration's wait allowance bounds it too (<see cref="HostWaits"/>).</summary>
@@ -396,8 +405,9 @@ public sealed class SdfGpuWork : IDisposable {
     private long m_budgetHolds;
     private long m_deferrals;
     private long m_leaseWaits;
-    // Since the first job: the jobs measured past FrameShareSeconds, and the longest measured job with what it was.
-    private long m_overFrameShare;
+    // Since the first job: the budgeted jobs measured past the allowance they were taken to fit, and the longest measured
+    // job with what it was.
+    private long m_overAllowance;
     private double m_mostJobSeconds;
 
     private string m_mostJob = "none";
@@ -440,6 +450,10 @@ public sealed class SdfGpuWork : IDisposable {
 
     /// <summary>Gets the jobs in flight now.</summary>
     public int InFlight => m_inFlight;
+    /// <summary>Gets the GPU time, in seconds, one budgeted job may take now: the presentation budget's live frame
+    /// allowance (<see cref="SdfGpuWorkBudget.FrameAllowanceSeconds"/>), which a client that cuts its jobs ahead of their
+    /// take sizes them to. Safe to read from any thread.</summary>
+    public double FrameAllowanceSeconds => m_budget.FrameAllowanceSeconds;
 
     /// <summary>Adds a job source the service takes jobs from in turn and disposes with itself.</summary>
     /// <param name="client">The source, called only on the recording thread.</param>
@@ -610,12 +624,13 @@ public sealed class SdfGpuWork : IDisposable {
     /// pumps, a drive's and the host wait's among them), the steps taken inside the host's wait and the jobs they
     /// submitted, the drives and the wall time they spent waiting with a job in flight, waiting for a client and
     /// stepping, the steps the World set could not be bound in, those the budget held, the jobs handed back for want of
-    /// device room and the waits a lease made the tables take.</summary>
+    /// device room, the waits a lease made the tables take, and the budgeted jobs measured past the allowance they were
+    /// taken to fit.</summary>
     /// <returns>One space-led field.</returns>
     public string Describe() {
         var busy = ((m_busyTicks + ((m_inFlight > 0) ? (Stopwatch.GetTimestamp() - m_busySince) : 0L)) / ((double)Stopwatch.Frequency));
 
-        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},services:{m_services},service-jobs:{m_serviceJobs},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},deferred:{m_deferrals},lease-waits:{m_leaseWaits},over-frame-share:{m_overFrameShare},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
+        return string.Create(provider: CultureInfo.InvariantCulture, handler: $" gpu-work=[jobs:{m_submitted},answered:{m_answered},gpu:{(m_gpuSeconds * 1000.0):0}ms,busy:{busy:0.0}s,occupancy:{((busy > 0.0) ? (m_gpuSeconds / busy) : 0.0):0.00},most-in-flight:{m_mostInFlight},pumps:{m_pumps},services:{m_services},service-jobs:{m_serviceJobs},drives:{m_drives},drive-fence:{Seconds(ticks: m_driveFenceTicks):0.0}s,drive-idle:{Seconds(ticks: m_driveIdleTicks):0.0}s,drive-step:{Seconds(ticks: m_driveStepTicks):0.0}s,unbound:{m_unbound},budget-holds:{m_budgetHolds},deferred:{m_deferrals},lease-waits:{m_leaseWaits},over-allowance:{m_overAllowance},timestamps:{((m_timestamps is not null) ? "measured" : "estimated")}] most-job=[{(m_mostJobSeconds * 1000.0):0.00}ms {m_mostJob}]");
     }
 
     private static double Seconds(long ticks) => (ticks / ((double)Stopwatch.Frequency));
@@ -690,7 +705,7 @@ public sealed class SdfGpuWork : IDisposable {
             var seconds = Settle(slot: slot);
 
             if (m_timestamps is not null) {
-                if (seconds > FrameShareSeconds) { m_overFrameShare++; }
+                if (slot.Charged && (seconds > slot.Allowance)) { m_overAllowance++; }
                 if (seconds > m_mostJobSeconds) {
                     m_mostJobSeconds = seconds;
                     m_mostJob = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{client.Category} {client.Describe(job: job)} estimate={(slot.Estimate * 1000.0):0.00}ms");
@@ -804,18 +819,20 @@ public sealed class SdfGpuWork : IDisposable {
             }
 
             var allowance = (budgeted ? m_budget.UploadAllowance : MostUploadJobBytes);
+            // A held frame queues no frame behind its own work, so its jobs are cut to nothing but their clients' most.
+            var fit = (budgeted ? m_budget.FrameAllowanceSeconds : double.PositiveInfinity);
 
-            if (!TryTake(client: out var client, estimate: out var estimate, job: out var job, tables: tables, uploadBytes: allowance)) { return Stop.None; }
+            if (!TryTake(allowanceSeconds: fit, client: out var client, estimate: out var estimate, job: out var job, tables: tables, uploadBytes: allowance)) { return Stop.None; }
 
             var uploadBytes = (budgeted ? client.UploadBytes(job: job) : 0);
 
             // A job handed back for want of room leaves its slot to the other clients.
-            if (!Submit(charged: budgeted, client: client, estimate: estimate, index: index, job: job, slot: slot, tables: tables)) { index--; continue; }
+            if (!Submit(allowance: fit, charged: budgeted, client: client, estimate: estimate, index: index, job: job, slot: slot, tables: tables)) { index--; continue; }
             if (budgeted) { m_budget.ChargeUpload(bytes: uploadBytes); }
         }
         return Stop.None;
     }
-    private bool TryTake(SdfWorldTables tables, int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
+    private bool TryTake(SdfWorldTables tables, int uploadBytes, double allowanceSeconds, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job) {
         for (var turn = 0; (turn < m_clients.Count); turn++) {
             var candidate = m_clients[((m_nextClient + turn) % m_clients.Count)];
 
@@ -823,7 +840,7 @@ public sealed class SdfGpuWork : IDisposable {
             // buffers its job may then take, or after a while, since room can come from another holder. The others'
             // jobs go on meanwhile.
             if ((WaitingOf(client: candidate) is { } waiting) && (BusySlots() >= waiting.Busy) && (Stopwatch.GetElapsedTime(startingTimestamp: waiting.At) < DeferralRetry)) { continue; }
-            if (candidate.TryTake(estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
+            if (candidate.TryTake(allowanceSeconds: allowanceSeconds, estimatedSeconds: out estimate, job: out job, tables: tables, uploadBytes: uploadBytes)) {
                 m_nextClient = (((m_nextClient + turn) + 1) % m_clients.Count);
                 client = candidate;
                 return true;
@@ -838,7 +855,7 @@ public sealed class SdfGpuWork : IDisposable {
     // wake the host's wait when the job completes. The one door a job reaches the queue through: it stamps the job's
     // ring slot before the job binds anything. False when the device had no room for what the job holds: the job is handed
     // back to its client, and nothing reached the queue.
-    private bool Submit(ISdfGpuWorkClient client, object job, double estimate, int index, Slot slot, bool charged, SdfWorldTables tables) {
+    private bool Submit(ISdfGpuWorkClient client, object job, double estimate, double allowance, int index, Slot slot, bool charged, SdfWorldTables tables) {
         var recorder = m_gpu.Recorder;
         var commandBuffer = slot.Commands.CommandBufferHandle;
         var first = ((uint)(2 * index));
@@ -894,6 +911,7 @@ public sealed class SdfGpuWork : IDisposable {
         if (WaitingOf(client: client) is { } submitted) { _ = m_waiting.Remove(item: submitted); }
         slot.SubmittedAt = Stopwatch.GetTimestamp();
         slot.Estimate = estimate;
+        slot.Allowance = allowance;
         slot.Charged = charged;
         slot.Debited = (charged ? m_budget.ChargeGpu(seconds: estimate) : 0.0);
         m_submitted++;
@@ -1084,6 +1102,8 @@ public sealed class SdfGpuWork : IDisposable {
         // Whether the job being recorded consumed state (SdfGpuWork.Consume), so no buffer may be created for it.
         public bool Consumed { get; set; }
         public double Estimate { get; set; }
+        // The GPU time the job was taken to fit (ISdfGpuWorkClient.TryTake's allowance).
+        public double Allowance { get; set; }
         public object? Job { get; set; }
         public long SubmittedAt { get; set; }
         public int RingSlot { get; set; }

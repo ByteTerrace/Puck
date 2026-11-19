@@ -315,12 +315,18 @@ only in a path a presented host runs: a headless host must receive every boundar
 including boundaries which do not change its authority route.
 
 Each owner's snapshot also carries its `WorldInputAnswer` (`WorldInputRuntime.Answers`,
-filtered by `WorldOwnedRecords.ForOwner` like the publication): the epoch, the
-highest event sequence of the last batch the authority took or refused, and the tick
-it answered in, read through `WorldSessionMirror.TryInputAnswer`. It is delivery
-only, never hashed or checkpointed. `WorldSeatInput` records the last edge it sent
-on each channel, and `WorldSeatInput.TryLead` answers a rig driver's `lead` from
-those two facts ([rig](../../sdf-authoring/references/rig.md#drivers)).
+filtered by `WorldOwnedRecords.ForOwner` like the publication; a body-disclosure
+observer is handed none, `WorldOutputHub.Observed`): the epoch, the highest event
+sequence of the last batch of the owner's current epoch, for its own route, that the
+authority took or refused, and the tick it answered in. The submission door writes it
+through `WorldInputRuntime.Answer` before any check (a drive gate, a Drive denial, a
+reach, the admission) can refuse the batch. It is delivery only, never hashed or
+checkpointed. A client reads its publication and answer under its own principal, else
+under whichever owner the route's authority publishes the routed body's input as
+(`WorldSessionMirror.TryInputOf`: a forwarded authority stamps a traveler as its peer).
+`WorldSeatInput` records the last edge it sent on each channel and clears it once the
+edge's answer is presented, and `WorldSeatInput.TryLead` answers whether an edge is
+outstanding from those facts ([rig](../../sdf-authoring/references/rig.md#drivers)).
 
 Every rendered slot's `Pressed` state reflects the physical source in
 `InputRouter.IsSourcePressed`, independently of a destination's toggle latch.

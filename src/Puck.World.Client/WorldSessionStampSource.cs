@@ -23,6 +23,12 @@ public sealed class WorldSessionStampSource : IWorldStampSource {
         m_mirror = mirror;
     }
 
+    /// <summary>Gets or sets what answers <see cref="SeatGuess"/>: the presenting client's guess for the world this source
+    /// presents (<see cref="WorldClient.SeatGuessAt"/>), set only for the scene a seat may be presented in; a session
+    /// screen's source leaves it <see langword="null"/> and offers none.</summary>
+    public Func<IWorldSeatGuess?>? Guess { get; set; }
+    /// <inheritdoc/>
+    public IWorldSeatGuess? SeatGuess => Guess?.Invoke();
     /// <inheritdoc/>
     public WorldDefinition Definition => m_mirror.Definition;
     /// <inheritdoc/>

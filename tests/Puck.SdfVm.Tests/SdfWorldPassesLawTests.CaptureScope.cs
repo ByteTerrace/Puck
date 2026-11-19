@@ -35,7 +35,11 @@ public sealed partial class SdfWorldPassesLawTests {
         var unrelatedBefore = unrelatedCaptures;
         var laterBefore = laterCaptures;
 
-        for (var frame = 0; (frame < 3); frame++) { views.BeginFrame(context: context); }
+        // Each frame reads all three views; only the converging one holds its frame.
+        for (var frame = 0; (frame < 3); frame++) {
+            views.BeginFrame(context: context);
+            foreach (var instance in (string[])["own", "unrelated", "later"]) { views.PrepareRead(context: context, instance: instance); }
+        }
         Assert.Equal(actual: ownCaptures, expected: ownBefore);
         Assert.Equal(actual: unrelatedCaptures, expected: (unrelatedBefore + 3));
         Assert.Equal(actual: laterCaptures, expected: (laterBefore + 3));
