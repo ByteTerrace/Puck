@@ -1469,6 +1469,11 @@ The volume's cost and convergence:
   light (`sdfMeshIndirectSeen`) until then. The streaming plan's
   step 9 decides which tier the lighting traces; the tour's drains per still
   on the `[sdf.mesh-gi] done` lines measure whichever lands.
+  [The settle-time record](illumination/research-settle-time.md) accounts for
+  the boot's minutes (a scene that rebuilds 40 times before the first `done`,
+  a change past 64 draws that retraces the whole window, batches dropped at
+  each rebuild, and a second full volume for the shared session residency) and
+  ranks the fixes.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
   lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
   instance that reads it is only marked stale and still records its passes,
