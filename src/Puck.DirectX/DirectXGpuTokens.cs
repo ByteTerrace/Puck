@@ -15,9 +15,9 @@ public sealed class DirectXCommandBufferState {
     /// <summary>The enhanced barrier interface retained by its command pool.</summary>
     public nint EnhancedCommandList;
 
-    /// <summary>Gets the barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one <c>ResourceBarrier</c>
-    /// call.</summary>
-    internal List<D3D12_RESOURCE_BARRIER> PendingBarriers { get; } = [];
+    /// <summary>Gets the texture barriers an open run (<c>IGpuRecorder.BeginBarriers</c>) holds for one barrier
+    /// group.</summary>
+    internal List<D3D12_TEXTURE_BARRIER> PendingBarriers { get; } = [];
 
     /// <summary>Gets or sets how many runs of barriers are open on the command list.</summary>
     internal int BarrierDepth { get; set; }
