@@ -1,0 +1,47 @@
+using System.Collections;
+
+namespace Puck.SdfVm;
+
+public sealed partial class SdfMeshPathBake {
+    // The bake's group list, which is also the one record of whether a group stands in it: a group is listed exactly
+    // while it stands at one of the list's indices. Every gated stage asks that before it publishes its group's next step
+    // (a group a restart or a promotion took out of the list publishes nothing), and the answer is a flag on the group
+    // rather than a search of the list. Only Set and Clear change the list, and each moves the flags with it; Plan adds
+    // groups unlisted, which Restart then sets into their places. Read and written under the bake's gate.
+    private sealed class GroupList : IReadOnlyList<Group> {
+        private readonly List<Group> m_items = [];
+
+        public int Count => m_items.Count;
+
+        public Group this[int index] => m_items[index];
+
+        // Whether the group stands at an index of the list.
+        public static bool Holds(Group group) => group.Listed;
+
+        // Puts a group at an index, taking the group it displaces out of the list.
+        public void Set(int index, Group group) {
+            var displaced = m_items[index];
+
+            if (!ReferenceEquals(objA: displaced, objB: group)) { displaced.Listed = false; }
+            group.Listed = true;
+            m_items[index] = group;
+        }
+        // Takes every group out of the list.
+        public void Clear() {
+            foreach (var group in m_items) { group.Listed = false; }
+            m_items.Clear();
+        }
+        // Appends planned groups, unlisted until Set puts each into its place.
+        public void Plan(IEnumerable<Group> groups) {
+            var first = m_items.Count;
+
+            m_items.AddRange(collection: groups);
+            for (var index = first; (index < m_items.Count); index++) { m_items[index].Listed = false; }
+        }
+
+        public List<Group>.Enumerator GetEnumerator() => m_items.GetEnumerator();
+
+        IEnumerator<Group> IEnumerable<Group>.GetEnumerator() => GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+}

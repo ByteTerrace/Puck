@@ -50,8 +50,11 @@ public sealed partial class SdfMeshPathBake {
 
     // The work waiting off the frame's thread (a store load, a contour stage, a landing) for every bake in the process,
     // each for its group; the lattice answers, which every later stage of their groups waits on, taken first in the
-    // order they arrived; and the workers taking them, at most Workers at once. One pool serves every residency's bake,
-    // so residencies baking together share the processors rather than each taking all of them.
+    // order they arrived; and the workers taking them. One pool serves every residency's bake, so residencies baking
+    // together share the processors rather than each taking all of them. The workers are threads of the pool's own, one
+    // a processor at normal priority, started with the first work queued: a bake's stages run for seconds, and held as
+    // shared thread-pool items they kept the process's other pool work waiting while the runtime injected threads. An
+    // idle worker blocks on an operating-system semaphore, so nothing spins.
     private static readonly Lock WorkGate = new();
     // Every change a bake's groups see happens inside a pool work item (a stage, a contour or an answer), so the pool's
     // completions are the producer signal an offline caller waits on (WaitForProgress). A System.Threading.Lock has no
@@ -66,17 +69,15 @@ public sealed partial class SdfMeshPathBake {
     // queued stage times its lead from admission.
     private static readonly SdfMeshBakeBacklog PoolBacklog = new();
 
-    private static int RunningWorkers;
-
-    // The workers that run at once: one a processor.
-    private static int Workers => Math.Max(val1: 1, val2: Environment.ProcessorCount);
-
-    // A slot is handed to exactly one running task under WorkGate; workspaces belong to the groups they serve.
-    private sealed class WorkerSlot {
-        public bool Running;
-    }
-
-    private static readonly WorkerSlot[] WorkerSlots = [.. Enumerable.Range(0, Workers).Select(selector: static _ => new WorkerSlot())];
+    // The workers: one a processor.
+    private static readonly int Workers = Math.Max(val1: 1, val2: Environment.ProcessorCount);
+    // The workers' threads, started with the first work queued, and the semaphore an idle worker waits on. Under
+    // WorkGate: the workers waiting for work, and the wakes released that no worker has taken yet, never more than the
+    // queued work an idle worker could take.
+    private static Thread[]? WorkerThreads;
+    private static readonly Semaphore WorkWake = new(initialCount: 0, maximumCount: int.MaxValue);
+    private static int IdleWorkers;
+    private static int PendingWakes;
     // What the bake counts for its done line, and what that line says (SdfMeshBakeReport, outside the bake's code identity):
     // the stage ticks, the samples of each kind, the takes made while a group still owed a lattice and what ended each
     // take's batch, the groups waiting on a dispatch, in flight and on the workers, and the frame thread's waits on the
@@ -160,28 +161,38 @@ public sealed partial class SdfMeshPathBake {
             if ((group.Share is { HasWaiters: true } share)) { group.Priority = MathF.Max(x: group.Priority, y: Library.MostWanted(share: share)); }
         }
     }
+    // The leaders done since Follow last ran that groups follow (Group.Done enqueues them), under the gate.
+    private readonly List<Group> m_followable = [];
+
     // Finishes every group waiting on a group that has finished baking the same geometry (Group.Leader): it takes the
     // mesh the library now holds, renumbered for its own materials, or the leader's empty outcome; one whose mesh the
-    // library no longer holds bakes it itself. Runs under the gate.
+    // library no longer holds bakes it itself. It visits only the followers of the leaders done since it last ran, which
+    // each leader lists as its followers name it. Runs under the gate.
     private void Follow() {
-        foreach (var group in m_groups) {
-            if (group.Done || (group.Leader is not { Done: true } leader)) { continue; }
-            group.Leader = null;
-            if (leader.Mesh is null) {
-                group.Outcome = leader.Outcome;
-                group.Done = true;
-                // A follower rebaking keeps drawing its previous mesh until the result lands; an empty one lands too.
-                Draw(group: group, mesh: null);
-                continue;
-            }
-            // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
-            // workers, outside the gate the frame takes.
-            group.Contouring = true;
-            ScheduleFollowed(group: group);
+        for (var at = 0; (at < m_followable.Count); at++) {
+            var leader = m_followable[at];
+
+            foreach (var group in leader.TakeFollowers()) { FollowDone(group: group, leader: leader); }
         }
+        m_followable.Clear();
     }
-    // The closure lives here so that Follow's scan of every group allocates none: a lambda capturing the loop variable
-    // allocates its closure on entering each iteration, before the skip checks.
+    // Finishes one follower of a leader that is done, unless it no longer waits on that leader.
+    private void FollowDone(Group group, Group leader) {
+        if (group.Done || !ReferenceEquals(objA: group.Leader, objB: leader)) { return; }
+        group.Leader = null;
+        if (leader.Mesh is null) {
+            group.Outcome = leader.Outcome;
+            group.Done = true;
+            // A follower rebaking keeps drawing its previous mesh until the result lands; an empty one lands too.
+            Draw(group: group, mesh: null);
+            return;
+        }
+        // Renumbering the mesh for the follower's materials copies arrays as large as the mesh, so it runs on the
+        // workers, outside the gate the frame takes.
+        group.Contouring = true;
+        ScheduleFollowed(group: group);
+    }
+    // The closure lives here so that Follow's visit of a follower allocates none unless it schedules.
     private void ScheduleFollowed(Group group) => Schedule(group: group, work: () => TakeLanded(group: group, share: null));
     // Queues the take of a waiter whose share resolved, on the pool, off the leader's gate; false for a waiter retired since.
     private bool ScheduleJoined(Group group, SdfMeshBakeShare share) => Schedule(group: group, work: () => TakeLanded(group: group, share: share));
@@ -194,7 +205,7 @@ public sealed partial class SdfMeshPathBake {
 
         using (EnterGate(site: BakeGate.Taken)) {
             // A waiter that already took, deserted or retired is no longer this share's to finish.
-            if (!m_groups.Contains(item: group) || ((share is not null) && (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired))) { mesh?.Release(); return; }
+            if (!GroupList.Holds(group: group) || ((share is not null) && (!ReferenceEquals(objA: group.Joined, objB: share) || group.Done || group.Retired))) { mesh?.Release(); return; }
             group.Contouring = false;
             group.Joined = null;
             group.Waiter = null;
@@ -362,7 +373,7 @@ public sealed partial class SdfMeshPathBake {
         using (EnterGate(site: BakeGate.Fail)) {
             group.Contouring = false;
             group.InFlight = false;
-            if (group.Done || !m_groups.Contains(item: group)) { return; }
+            if (group.Done || !GroupList.Holds(group: group)) { return; }
             group.Failed = true;
             group.Outcome = $"failed: {exception.GetType().Name}";
             group.Next = null;
@@ -378,16 +389,26 @@ public sealed partial class SdfMeshPathBake {
     // worker busy for the lead a newly admitted group takes before its first stage (SdfMeshBakeBacklog): a group
     // admitted beyond that would only hold its lattice in the queue. Both sides are wall time, so the answer is the
     // same whenever the take asks, on a fast frame or a slow one.
-    private static bool Backlogged(int queued, int awaiting) => PoolBacklog.Holds(stages: (queued + awaiting), workers: WorkerSlots.Length);
-    // Called only with WorkGate held. The task's finally returns ownership of the slot after its last borrower ends.
+    private static bool Backlogged(int queued, int awaiting) => PoolBacklog.Holds(stages: (queued + awaiting), workers: Workers);
+    // Wakes idle workers for the queued work no woken worker will take, starting the workers on the first call. Called
+    // only with WorkGate held, after work is queued.
     private static void StartWorkers() {
-        foreach (var slot in WorkerSlots) {
-            if (RunningWorkers >= (WorkQueue.Count + AnswerQueue.Count)) { break; }
-            if (slot.Running) { continue; }
-            slot.Running = true;
-            RunningWorkers++;
-            _ = Task.Run(action: () => Work(slot: slot));
+        if (WorkerThreads is null) {
+            WorkerThreads = new Thread[Workers];
+            for (var index = 0; (index < WorkerThreads.Length); index++) {
+                WorkerThreads[index] = new Thread(start: Work) {
+                    IsBackground = true,
+                    Name = $"Puck mesh bake worker {index}",
+                };
+                WorkerThreads[index].Start();
+            }
         }
+
+        var wakes = (Math.Min(val1: IdleWorkers, val2: (WorkQueue.Count + AnswerQueue.Count)) - PendingWakes);
+
+        if (wakes <= 0) { return; }
+        PendingWakes += wakes;
+        _ = WorkWake.Release(releaseCount: wakes);
     }
 
     /// <summary>Gets a count that advances each time a pool worker finishes a work item of any bake. Read it before
@@ -425,32 +446,39 @@ public sealed partial class SdfMeshPathBake {
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
     }
 
-    // A worker: runs the queued work, answers first, then the highest priority, until none is queued.
-    private static void Work(WorkerSlot slot) {
-        try {
-            while (TakeWork(stage: out var stage) is { } work) {
-                var began = Stopwatch.GetTimestamp();
-
-                // A work item that throws has already settled what it owns (a group's stage fails its group; an answer
-                // returns its batch's unanswered lattices), so the line names the fault, out of memory included, and the
-                // worker carries on rather than ending silently.
-                try {
-                    work();
-                } catch (Exception exception) {
-                    SdfMeshBakeReport.WorkFailed(exception: exception);
-                } finally {
-                    if (stage) { PoolBacklog.ObserveStage(seconds: Stopwatch.GetElapsedTime(startingTimestamp: began).TotalSeconds); }
-                    lock (ProgressGate) {
-                        ProgressCount++;
-                        Monitor.PulseAll(obj: ProgressGate);
-                    }
+    // A worker: runs the queued work, answers first, then the highest priority, and waits for more once none is queued.
+    private static void Work() {
+        while (true) {
+            if (TakeWork(stage: out var stage) is not { } work) {
+                // Idle only with nothing queued, under the gate the queuing side wakes idle workers under, so no work
+                // queued meanwhile goes unwoken.
+                lock (WorkGate) {
+                    if ((WorkQueue.Count + AnswerQueue.Count) > 0) { continue; }
+                    IdleWorkers++;
                 }
+                _ = WorkWake.WaitOne();
+                lock (WorkGate) {
+                    IdleWorkers--;
+                    PendingWakes--;
+                }
+                continue;
             }
-        } finally {
-            lock (WorkGate) {
-                RunningWorkers--;
-                slot.Running = false;
-                StartWorkers();
+
+            var began = Stopwatch.GetTimestamp();
+
+            // A work item that throws has already settled what it owns (a group's stage fails its group; an answer
+            // returns its batch's unanswered lattices), so the line names the fault, out of memory included, and the
+            // worker carries on rather than ending silently.
+            try {
+                work();
+            } catch (Exception exception) {
+                SdfMeshBakeReport.WorkFailed(exception: exception);
+            } finally {
+                if (stage) { PoolBacklog.ObserveStage(seconds: Stopwatch.GetElapsedTime(startingTimestamp: began).TotalSeconds); }
+                lock (ProgressGate) {
+                    ProgressCount++;
+                    Monitor.PulseAll(obj: ProgressGate);
+                }
             }
         }
     }
