@@ -146,7 +146,8 @@ let fallsFlowLayer = {
 // A falls sheet is thin and stands off its wall, so the rock shows through its turquoise core; foam gathers where it meets
 // the basin.
 let fallsGlass = waterGlass with { scattering: 0.8 }
-// A lake's breeze: world-space ripples, a slow drift and no foam of its own; its contact's foam takes the breeze's
+// A lake's breeze: world-space ripples, a slow drift and no foam of its own. A site can add a faster outlet region.
+// The contact's foam takes the breeze's
 // pattern along the bank.
 let lakeFlowLayer = {
   velocity [0.3, 0, 0.2]
@@ -430,6 +431,9 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = { f
   }
 }
 
+// Use the shared material flow when the lake has a localized current.
+function lakeMaterial(surface, flow, outlet) = outlet.radius <= 0 ? flowed(surface, flow, glass: 1) : (surface with { flow: flow with { region: outlet } })
+
 // A lake's water: the body of water the bowl holds. A cylinder of the bowl's `depth` and `radius` whose top is the surface,
 // intersected with the bowl itself (`bowl`, { y, radii }: the ellipsoid, in the lake's frame, that the terrain cut for it,
 // grown by `reach` metres so the water meets the rock rather than stopping short of it). The water therefore ends where the
@@ -437,12 +441,12 @@ template lakeStones(id, stones, palette, beds = [], exponent = 2.6, relief = { f
 // shows through it by its depth and the shore is where the rock meets the level. The surface rises and falls with the gauge
 // `state.<gauge>` by `rise` metres a unit above `rest`, the gauge's value at the outlet; the bowl rides it, so no seam
 // stretches.
-template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass) {
+template lakeSurface(id, radius, depth, bowl, reach = 0.15, gauge = "lakeLevel", rest = 0.4, rise = 4, palette = waterPalette, flow = lakeFlowLayer, glass = lakeGlass, outlet = { radius: 0 }) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: id
-      palette [flowed(palette[0] with { glass: glass }, flow, glass: 1)]
+      palette [lakeMaterial(palette[0] with { glass: glass }, flow, outlet)]
       drivers [
         { name: "level", signal: $"state.{gauge}", cadence: 1, blendInSeconds: 0 }
       ]

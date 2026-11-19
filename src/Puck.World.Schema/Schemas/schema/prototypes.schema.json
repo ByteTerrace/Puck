@@ -698,6 +698,34 @@
                       ],
                       "default": null,
                       "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant."
+                    },
+                    "region": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "center": {
+                          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                          "description": "Centre in world coordinates."
+                        },
+                        "radius": {
+                          "type": "number",
+                          "description": "Radius in world units over which the velocity blends back to the base, finite and positive."
+                        },
+                        "velocity": {
+                          "$comment": "Converter-defined value. This schema supplies documentation but leaves value validation to the creation document loader.",
+                          "description": "Velocity at the centre in the flow\u0027s velocity frame, before placement scaling."
+                        }
+                      },
+                      "required": [
+                        "center",
+                        "radius",
+                        "velocity"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "description": "A sphere in world coordinates within which the velocity varies."
                     }
                   },
                   "required": [
