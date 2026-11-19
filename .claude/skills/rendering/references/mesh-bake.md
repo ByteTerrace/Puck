@@ -341,6 +341,15 @@ laws exercise that boundary.
 - **Groups are planned in one place.** `SdfMeshBakeGroup.Plan` forms a
   program's groups, geometry and pose rows; the bake and the mesh audit both
   call it, so a change to grouping changes both.
+- **A group's bound stops at the frame's far distance.** The plan clamps each
+  instance's bound to a cube of the far distance about the instance's centre
+  (`SdfMeshBakeGroup.Clamped`), and a world that authors no `render.farDistance`
+  takes `SdfFrame.DefaultFarDistance`, 40 m. A creation placed at the origin
+  whose shapes stand hundreds of metres out (a valley wall sector) then bakes
+  empty on every backend and in `puck mesh audit --cpu` alike, and its entry in
+  the done line's `empty=[...]` says `bound clamped to the far distance`. A
+  scratch world cut from the debug world keeps the debug world's
+  `render.farDistance`, or its far terrain is no evidence about the bake.
 - **A static copy is one group.** Its shapes bake as their union
   (`SdfInstanceRange.BakesWithPrevious`) on a cubic lattice past the per-axis
   cap with per-shape refinement regions (`SdfMeshPathBake.UnionFinal`); its
