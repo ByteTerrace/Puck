@@ -1935,11 +1935,15 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
             condition: m_disposed,
             instance: this
         );
+        Unpublish();
+        m_publicationLost = true;
+    }
+    // Publishes no image and no buffer, the state a reset and a withdrawal both leave the publication in.
+    private void Unpublish() {
         ClearBufferPublications();
         Publish(surface: default);
         m_publishedStateTick = null;
         m_publishedFrame = null;
-        m_publicationLost = true;
     }
     /// <summary>Clears all history state and resets the presentation counter. Submissions in flight complete first; the
     /// completed work sample is then withdrawn, and <see cref="ResetSubmission"/> marks where counting since this reset
@@ -1955,10 +1959,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_frame = 0;
         m_steps = 0;
         m_outputRefreshRequested = false;
-        ClearBufferPublications();
-        Publish(surface: default);
-        m_publishedStateTick = null;
-        m_publishedFrame = null;
+        Unpublish();
         SeedPassRegions();
         ResetWork();
     }
