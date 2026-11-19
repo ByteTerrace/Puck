@@ -5,4 +5,4 @@ match: contains
 flags: i
 ---
 
-\bmerg(e|es|ing)\b[^\n]{0,60}lead/fundamentals
+\bmerg(e|es|ing)\b[^\n]{0,60}(lead/fundamentals|\btip\b|integration branch|lead's [^\n]{0,20}(batch|commits))

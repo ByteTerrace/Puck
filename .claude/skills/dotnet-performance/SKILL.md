@@ -1,6 +1,6 @@
 ---
 name: dotnet-performance
-description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, data layout, false sharing, stackalloc, LINQ, Vector<T>, async, tiering, AllocationWindow, puck bench, AOT (IL2026). Numerics: maths-usage."
+description: "Tunes Puck .NET 11 performance: allocation, gen0 pauses, layout, false sharing, LINQ, SIMD, Vector<T>, async, JIT tiering, first-call latency, AllocationWindow, puck bench, AOT. Numerics: maths-usage."
 ---
 
 # .NET 11 performance

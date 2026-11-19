@@ -262,6 +262,13 @@ brief:
   one-line reason: a batch the lead briefs entirely to one family is a
   lapse to correct, not a default;
 - the base commit, verified by the lead before the brief goes out;
+- a finish line, a stopping condition and whether the lane has a GPU grant,
+  each stated outright ([lane work](references/lane-work.md#delegated-work)
+  owns what each holds): the finish line is the code written, a build of what
+  the lane touched and one headless boot of the debug world; the stopping
+  condition is a product call or an owner-only action; a lane has no GPU grant
+  unless its brief makes a windowed leg its finish line, and a brief that
+  grants none says so;
 - the task's premise, checked in the code by the lead before the brief goes
   out (rule 7). A packet's claim of what is missing or what causes a cost is
   a lead to verify, not a fact. One lane was sent to add a source-generated
@@ -1499,7 +1506,11 @@ play. When no written contract settles it, rule by the long-term principle in
 [AGENTS.md](../../../AGENTS.md#core-rules), write the ruling into the contract's
 owning document in the same change, and let the owner review it with the
 delivered batch; take it to the owner first only when it is a product
-trade-off. Change a test only to match the ruled behavior.
+trade-off. Change a test only to match the ruled behavior. Each lane passing
+its gates alone says nothing about the pair: the fix lands only once it is
+shown working on the merged code, built and run with the evidence the collision
+touches (`--reproduce` for a determinism contract, the allocation counters for
+an allocation law).
 
 ## Message partners
 
