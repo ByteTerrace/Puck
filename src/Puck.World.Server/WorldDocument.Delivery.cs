@@ -84,13 +84,13 @@ public sealed partial class WorldDocument {
         var detachable = (sink as IWorldDetachableSink);
 
         try {
-            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion);
+            sink.DeliverDefinition(definition: m_definition, version: Host.DocumentVersion, stream: WorldStreamStamp.Unspanned);
 
             if (detachable?.DetachReason is null) {
                 var primer = BuildPrimerSnapshot();
 
                 if (disclosure.IsFull) {
-                    sink.DeliverSnapshot(snapshot: in primer);
+                    sink.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
                 } else {
                     var scratch = Array.Empty<EntitySnapshot>();
                     var redacted = WorldOutputHub.Redact(
@@ -99,7 +99,7 @@ public sealed partial class WorldDocument {
                         snapshot: in primer
                     );
 
-                    sink.DeliverSnapshot(snapshot: in redacted);
+                    sink.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
                 }
             }
 

@@ -315,6 +315,16 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_arrivalCount;
 
     private readonly bool m_unread;
+    // What the mirror holds before any delivery, and again once a span it was showing closes.
+    private readonly WorldDefinition m_placeholder;
+    private readonly WorldStreamIngress m_ingress = new();
+
+    /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
+    /// from.</summary>
+    public WorldStreamSpan Span => m_ingress.Span;
+    /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
+    /// generation, or not ahead of the last record it took.</summary>
+    public long IngressRefusals => m_ingress.Refusals;
 
     /// <summary>Initializes the mirror with an empty placeholder definition — <c>Server.WorldServer.AttachSink</c>
     /// always delivers the live definition synchronously before returning its lease, so no caller ever observes this
@@ -327,6 +337,7 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
+        m_placeholder = placeholder;
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
             Lifetime: 0,
@@ -660,9 +671,13 @@ public sealed class WorldSessionMirror : IClientSink {
         // No window composer observes a destination through this seam.
     }
     /// <inheritdoc/>
-    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version) {
+    public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        if (!m_ingress.Admit(stream: in stream)) { return; }
+        ApplyDefinition(definition: definition, version: version);
+    }
+    private void ApplyDefinition(WorldDefinition definition, WorldDocumentVersion version) {
         var started = Stopwatch.GetTimestamp();
 
         lock (m_stampGate) {
@@ -696,6 +711,36 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverSessionLever(WorldSessionLever lever) {
         // No presentation service of the OBSERVING world is reachable from inside a destination's own delivery.
     }
+    /// <inheritdoc/>
+    /// <remarks>A cut of the bound stream moves the span the mirror holds, and the whole document and primer the
+    /// stream owes follow it. A terminal record closes the span: the mirror drops what it held, holding its
+    /// placeholder definition and no body until a stream it was never bound to delivers again, so nothing of the ended
+    /// stream stays showable. A record of any other stream changes nothing.</remarks>
+    public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
+        if (!m_ingress.Cut(stream: in stream, terminal: terminal) || !terminal) { return; }
+        Withdraw();
+    }
+    /// <summary>Closes the span the mirror holds because its stream can no longer tell it of a cut (its connection was
+    /// lost, past whatever lease its admission granted): the mirror drops what it held, exactly as for a terminal
+    /// record, and takes records again only from a stream it was never bound to.</summary>
+    public void CloseSpan() {
+        if (m_ingress.Close()) { Withdraw(); }
+    }
+    // Drops everything a closed span delivered: the placeholder document in place of the delivered one, and an empty
+    // table in place of its bodies, applied through the ordinary delivery paths so every reader follows it.
+    private void Withdraw() {
+        ApplyDefinition(definition: m_placeholder, version: default);
+        if (m_unread) { return; }
+        ApplySnapshot(snapshot: new WorldSnapshot(
+            Authority: Authority,
+            EngineTick: EngineTick,
+            Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
+            FieldsFull: true,
+            Revision: SnapshotRevision,
+            StepTicks: StepTicks,
+            Tick: Tick
+        ));
+    }
 
     /// <inheritdoc/>
     /// <remarks>Copies every kept field out of the borrowed snapshot before returning (see this
@@ -707,8 +752,8 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>The authority-sampled root size of a destination solid.</summary>
     public float? SolidScale(string placementId) { lock (m_snapshotWriteGate) { return m_solidScales.Read(placementId, InterpolationAlpha); } }
     /// <inheritdoc/>
-    public void DeliverSnapshot(in WorldSnapshot snapshot) {
-        if (m_unread) { return; }
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
+        if (!m_ingress.Admit(stream: in stream) || m_unread) { return; }
 
         var started = Stopwatch.GetTimestamp();
 
@@ -865,8 +910,10 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <inheritdoc/>
     /// <remarks>The stamp's moved rows are kept until <see cref="FollowState"/> takes them, so the presentation reads
     /// only the bound slots of rows that moved.</remarks>
-    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp) {
+    public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (!m_ingress.Admit(stream: in stream)) { return; }
 
         var started = Stopwatch.GetTimestamp();
 
@@ -1083,7 +1130,7 @@ public sealed class WorldSessionMirror : IClientSink {
         }
 
         lock (m_snapshotWriteGate) {
-            DeliverDefinition(
+            ApplyDefinition(
                 definition: route.Definition,
                 version: route.Version
             );

@@ -69,13 +69,13 @@ public sealed class WorldSessionObservation : IDisposable {
 
     internal void Attach(WorldSessionSink sink) => m_sink = sink;
     internal bool AllowsQuery(WorldQuery query) => (!m_ended && (m_sink?.AllowsQuery(query: query) == true));
-    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it. The first
-    // end names the cause its observer is told.
+    // An ended observation is delivered nothing further, so its sink's feed lets go of what it held for it and its
+    // observer is told the stream ended. The first end names the cause its observer is told.
     internal void MarkEnded(string reason) {
         var first = !m_ended;
 
         m_ended = true;
-        m_sink?.Release();
+        m_sink?.End();
         if (first) { EndedBecause?.Invoke(obj: reason); }
     }
 

@@ -229,7 +229,7 @@ public sealed partial class WorldOutputHub {
             callSite: nameof(DeliverDefinition),
             deliver: static (sink, payload) => sink.DeliverDefinition(
                 definition: payload.Definition,
-                version: payload.Version
+                version: payload.Version, stream: WorldStreamStamp.Unspanned
             ),
             payload: (Definition: definition, Version: version)
         );
@@ -250,7 +250,7 @@ public sealed partial class WorldOutputHub {
             deliver: static (sink, payload) => sink.DeliverState(
                 definition: payload.Definition,
                 stamp: payload.Stamp,
-                version: payload.Version
+                version: payload.Version, stream: WorldStreamStamp.Unspanned
             ),
             payload: (Definition: definition, Stamp: stamp, Version: version)
         );
@@ -331,14 +331,14 @@ public sealed partial class WorldOutputHub {
 
                 try {
                     if (subscription.Disclosure.IsFull) {
-                        subscription.Sink.DeliverSnapshot(snapshot: in snapshot);
+                        subscription.Sink.DeliverSnapshot(snapshot: in snapshot, stream: WorldStreamStamp.Unspanned);
                     } else {
                         var redacted = Redact(
                             snapshot: in snapshot,
                             subscription: subscription
                         );
 
-                        subscription.Sink.DeliverSnapshot(snapshot: in redacted);
+                        subscription.Sink.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
                     }
                 } catch (Exception exception) {
                     Detach(
