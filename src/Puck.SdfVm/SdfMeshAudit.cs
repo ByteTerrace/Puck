@@ -971,7 +971,7 @@ public static class SdfMeshAudit {
         var clusters = new SdfDisjointSet(count: flagged.Count);
         var buckets = new Dictionary<(int, int, int), List<int>>();
 
-        (int, int, int) Bucket(Vector3 point) => (((int)MathF.Floor(x: (point.X / reach))), ((int)MathF.Floor(x: (point.Y / reach))), ((int)MathF.Floor(x: (point.Z / reach))));
+        (int, int, int) Bucket(Vector3 point) => SdfMeshLattice.CellOf(cell: new Vector3(value: reach), point: point);
         int Root(int sample) => clusters.Find(element: sample);
 
         for (var sample = 0; (sample < flagged.Count); sample++) {

@@ -96,5 +96,5 @@ internal sealed class SdfMeshTriangleGrid {
         return nearest;
     }
 
-    private (int X, int Y, int Z) Cell(Vector3 point) => (((int)MathF.Floor(x: (point.X / m_cellSize))), ((int)MathF.Floor(x: (point.Y / m_cellSize))), ((int)MathF.Floor(x: (point.Z / m_cellSize))));
+    private (int X, int Y, int Z) Cell(Vector3 point) => SdfMeshLattice.CellOf(cell: new Vector3(value: m_cellSize), point: point);
 }

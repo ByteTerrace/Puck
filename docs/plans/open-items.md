@@ -1454,11 +1454,13 @@ The volume's cost and convergence:
   change as a box hierarchy and paces every rebuild by trace progress, which
   the [settle-time record](illumination/research-settle-time.md) ranked as
   fixes 2, 4 to 6 and 8. Still open: (a) a group whose floor the trace judge
-  declines (`SdfMeshTraceJudge`) traces what it draws and moves with the view;
-  the plan's [stable trace mesh](illumination.md#after-the-gpu-trace) gives it
+  declines (`SdfMeshTraceJudge`), and a group that arrived out of view and so
+  keeps no floor (`SdfMeshPathBake.Tiers`), traces what it draws and moves
+  with the view and the bias; the plan's
+  [stable trace mesh](illumination.md#after-the-gpu-trace) gives such a group
   a trace tier of its own sized by the probe spacing, a third product the bake
-  keeps as it keeps floors, once `world.residency`'s `trace-declined` count
-  says how many groups need one; (b) a window move still drops the batch in
+  keeps as it keeps floors, once `world.residency`'s `trace-drawn` and
+  `trace-declined` counts say how many groups need one; (b) a window move still drops the batch in
   flight (`Stands`, and `KeepsGpuPublication` cancels its commit), though the
   cache keeps cells by world position; (c) the readings the record asks for on
   both backends (no `[sdf.mesh-gi] scene` line after the arrivals while the

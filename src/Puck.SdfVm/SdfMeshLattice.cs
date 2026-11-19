@@ -48,4 +48,11 @@ internal static class SdfMeshLattice {
     /// <returns>The sample's position.</returns>
     public static Vector3 PointOf((int X, int Y, int Z) dims, int index, Vector3 origin, float cell) =>
         (origin + (new Vector3(x: (index % dims.X), y: ((index / dims.X) % dims.Y), z: (index / (dims.X * dims.Y))) * cell));
+    /// <summary>Gets the cell of a lattice anchored at the origin that holds a point: each coordinate over the cell's
+    /// extent along its axis, rounded down.</summary>
+    /// <param name="point">The point, in metres.</param>
+    /// <param name="cell">The cell's extent along each axis, in metres; positive.</param>
+    /// <returns>The cell's integer coordinates.</returns>
+    public static (int X, int Y, int Z) CellOf(Vector3 point, Vector3 cell) =>
+        (((int)MathF.Floor(x: (point.X / cell.X))), ((int)MathF.Floor(x: (point.Y / cell.Y))), ((int)MathF.Floor(x: (point.Z / cell.Z))));
 }

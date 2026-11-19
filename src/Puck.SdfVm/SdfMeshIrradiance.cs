@@ -1147,8 +1147,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private (int X, int Y, int Z) WindowLow(SdfFrame frame, int level, Layout layout, (int X, int Y, int Z) current, bool resizing) {
         var spacing = layout.SpacingOf(level: level);
         var dims = layout.DimsOf(level: level);
-        var anchor = CellOf(position: WindowAnchor(frame: frame, layout: layout, level: level), spacing: spacing);
-        var camera = CellOf(position: m_camera, spacing: spacing);
+        var anchor = SdfMeshLattice.CellOf(cell: spacing, point: WindowAnchor(frame: frame, layout: layout, level: level));
+        var camera = SdfMeshLattice.CellOf(cell: spacing, point: m_camera);
         // The box the window centres on, and the box it keeps in its middle: the same with the first camera.
         var low = anchor;
         var high = anchor;
@@ -1161,7 +1161,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             if (view.Elsewhere || !float.IsFinite(f: position.X) || !float.IsFinite(f: position.Y) || !float.IsFinite(f: position.Z)) { continue; }
 
-            var cell = CellOf(position: position, spacing: spacing);
+            var cell = SdfMeshLattice.CellOf(cell: spacing, point: position);
 
             low = Min(a: low, b: cell);
             high = Max(a: high, b: cell);
@@ -1194,8 +1194,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         (Math.Min(val1: a.X, val2: b.X), Math.Min(val1: a.Y, val2: b.Y), Math.Min(val1: a.Z, val2: b.Z));
     private static (int X, int Y, int Z) Max((int X, int Y, int Z) a, (int X, int Y, int Z) b) =>
         (Math.Max(val1: a.X, val2: b.X), Math.Max(val1: a.Y, val2: b.Y), Math.Max(val1: a.Z, val2: b.Z));
-    private static (int X, int Y, int Z) CellOf(Vector3 position, Vector3 spacing) =>
-        (((int)MathF.Floor(x: (position.X / spacing.X))), ((int)MathF.Floor(x: (position.Y / spacing.Y))), ((int)MathF.Floor(x: (position.Z / spacing.Z))));
     // Whether cells from low to high fit in a window's middle along one axis.
     private static bool Fits(int low, int high, int dims) => ((high - low) < (dims - (2 * MarginOf(dims: dims))));
 
@@ -1315,7 +1313,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // from them when the lighting changes or the volume settles, whose bounce they read. A cell can straddle a partition:
     // a sample belongs to its actual origin, never an assumed open cell centre, and is never written into the volume.
     private CameraSample CameraRadiance(Vector3 position, SdfMeshIrradianceScene scene, Lighting lighting, bool fresh) {
-        var cell = CellOf(position: position, spacing: m_layout.Spacing);
+        var cell = SdfMeshLattice.CellOf(cell: m_layout.Spacing, point: position);
         var lows = Lows();
 
         foreach (var sample in m_cameraSamples) {

@@ -564,7 +564,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector3 Reciprocal(Vector3 direction) => (Vector3.One / direction);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool Slab(Vector3 low, Vector3 high, Vector3 origin, Vector3 inverse, float maximum, out float entry) {
+    internal static bool Slab(Vector3 low, Vector3 high, Vector3 origin, Vector3 inverse, float maximum, out float entry) {
         var t0 = ((low - origin) * inverse);
         var t1 = ((high - origin) * inverse);
         var near = Vector3.Min(value1: t0, value2: t1);

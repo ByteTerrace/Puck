@@ -140,21 +140,9 @@ public sealed partial class SdfMeshIrradiance {
 
             var reach = MathF.Min(x: MathF.Abs(x: BitConverter.UInt32BitsToSingle(value: hits[(2 * texel)])), y: limit);
 
-            if (Meets(direction: direction, high: high, low: low, origin: origin, reach: Extended(reach: reach))) { return true; }
+            if (SdfMeshIrradianceScene.Slab(entry: out _, high: high, inverse: (Vector3.One / direction), low: low, maximum: Extended(reach: reach), origin: origin)) { return true; }
         }
         return false;
-    }
-    // Whether a ray from an origin meets a box within a reach (slab test).
-    private static bool Meets(Vector3 origin, Vector3 direction, Vector3 low, Vector3 high, float reach) {
-        var inverse = (Vector3.One / direction);
-        var near = ((low - origin) * inverse);
-        var far = ((high - origin) * inverse);
-        var enter = Vector3.Min(value1: near, value2: far);
-        var leave = Vector3.Max(value1: near, value2: far);
-        var start = MathF.Max(x: MathF.Max(x: enter.X, y: enter.Y), y: MathF.Max(x: enter.Z, y: 0f));
-        var end = MathF.Min(x: MathF.Min(x: leave.X, y: leave.Y), y: MathF.Min(x: leave.Z, y: reach));
-
-        return (start <= end);
     }
     private static bool Overlaps(Vector3 low, Vector3 high, Vector3 otherLow, Vector3 otherHigh) {
         var from = Vector3.Max(value1: low, value2: otherLow);
