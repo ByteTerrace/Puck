@@ -668,8 +668,10 @@ public static class CartridgeDocumentEmitter {
 
         diagnostics ??= new DiagnosticBag();
 
+        // One budget for the whole compile: the import walk charges it first and the lowering goes on charging it.
+        var budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken };
         var withModules = ModuleResolver.ImportModules(
-            cancellationToken: cancellationToken,
+            budget: budget,
             diagnostics: diagnostics,
             rootDoc: document,
             rootPath: sourcePath,
@@ -681,8 +683,8 @@ public static class CartridgeDocumentEmitter {
                 null,
                 diagnostics
             )
-            : LowerWithDiagnostics(
-                cancellationToken: cancellationToken,
+            : Lower(
+                budget: budget,
                 diagnostics: diagnostics,
                 document: withModules,
                 sourceMap: sourceMap
@@ -697,15 +699,22 @@ public static class CartridgeDocumentEmitter {
     public static CompilationResult<JsonObject> LowerWithDiagnostics(DocumentNode document, DiagnosticBag? diagnostics = null, SourceMap? sourceMap = null, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(document);
 
-        diagnostics ??= new DiagnosticBag();
-
+        return Lower(
+            budget: new DocumentEvaluationBudget { CancellationToken = cancellationToken },
+            diagnostics: (diagnostics ?? new DiagnosticBag()),
+            document: document,
+            sourceMap: sourceMap
+        );
+    }
+    // Lowers under `budget`, which the compile's import walk may already have charged.
+    private static CompilationResult<JsonObject> Lower(DocumentNode document, DiagnosticBag diagnostics, SourceMap? sourceMap, DocumentEvaluationBudget budget) {
         var root = new JsonObject();
         var scope = new DocumentScope(
             vocabulary: CartridgeVocabulary.Instance,
             sourceMap: sourceMap,
             diagnostics: diagnostics,
             schema: (document.Schema ?? CartridgeDocument.SchemaId)
-        ) { Budget = new DocumentEvaluationBudget { CancellationToken = cancellationToken } };
+        ) { Budget = budget };
 
         if (document.Schema is not null) {
             root["schema"] = document.Schema;

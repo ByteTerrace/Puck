@@ -2882,17 +2882,13 @@ The edit loop:
   no replaceable types. Profile per-project, analyzer, restore and copy costs
   before naming a cause; the artifact builder's separate output directory is
   a lead, not proof of lost incremental reuse.
-- [high] A whole-world `.puck` compile of the debug world takes tens of
-  seconds and over 2 GB before every reload, every `puck compile --validate`
-  and every root `puck lint`. The profile is taken:
-  [the authoring loop](iteration/authoring-loop.md#what-was-measured) finds
-  the compiler itself is about 4% of a warm compile and the rest is
-  whole-world composition, reading and validation, half of it bookkeeping
-  (`WorldSourceIndex.Claims` re-reading the directory for each import,
-  `CompileInput.StillHolds` re-hashing every input, `WorldDocumentOrigins`
-  built whether or not anything reads it). Its
-  [build order](iteration/authoring-loop.md#build-order) is the work, and its
-  first step removes those three costs.
+- [high] A whole-world `.puck` compile of the debug world still reads,
+  validates and installs the whole world before every reload, every
+  `puck compile --validate` and every root `puck lint`, whatever the edit.
+  [The authoring loop](iteration/authoring-loop.md#what-was-measured) took the
+  profile, and its [build order](iteration/authoring-loop.md#build-order) is
+  the work. Step 1 has landed (the name index, the stamp-trusted digests and
+  origins composed only for a finding); step 2, one compile session, is next.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and
@@ -2901,10 +2897,6 @@ The edit loop:
   `WorldDecompiler`, so a whole-row rewrite of a palette fails its proof.
   Print the program as the phase block the grammar accepts
   ([the authoring loop](iteration/authoring-loop.md#saving-an-edit-to-source)).
-- [low] The import walk checks its cost against an evaluation budget of its
-  own and discards it (`ModuleResolver.ImportModules`), so
-  `DocumentEvaluationBudget.WorkLimit` is two allowances in one compile and
-  `puck compile --measure` leaves the walk out of the work it reports.
 - [high] A debug-world `world.reload` prepares off the tick and shares its
   unchanged rows, but its install still costs hundreds of milliseconds on the
   tick that adopts it, and its preparation's garbage pauses the frame thread

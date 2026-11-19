@@ -542,8 +542,8 @@ session stamped by the enabling local console or seat ingress. Never reload
 by mutating the server directly. A new accepted origin schedules one reload
 after adoption, so an edit between the load's read and adoption is not lost.
 Failed reads retain their missing-input facts for recovery. A poll stats every
-input and re-reads contents only where the stamp moved or is within
-`WorldSourceWatch.RacyStampWindow` of the poll (`StampReads`, `ContentReads`
+input through `CompileInputs`, which re-reads contents only where the stamp moved or was within
+`CompileInputs.RacyStampWindow` of its last read (`StampReads`, `ContentReads`
 count both); never hash every input per poll. `WorldSourceWatch`
 keeps the last reload diagnostic for the inspector; the normal command path
 and the editor report fan-out cover the terminal and toast. An accepted rebuild
