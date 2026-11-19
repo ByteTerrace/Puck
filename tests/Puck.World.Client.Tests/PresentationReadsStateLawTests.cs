@@ -1,5 +1,3 @@
-using System.Numerics;
-
 using Puck.Commands;
 using Puck.SignedDistance;
 
