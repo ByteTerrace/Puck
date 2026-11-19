@@ -40,11 +40,14 @@ public sealed class RenderGraphWorkDetailLawTests {
         Assert.True(condition: node.TryReadCompleted(sample: sample));
         Assert.Equal(expected: new[] { "plain", "stars" }, actual: sample.Details.ToArray().Select(selector: static detail => detail.Detail));
     }
+    // A full pool never aborts the frame: it records and presents on the rows the slot has, with the pass's named rows
+    // off (detail row zero, so no kernel writes past the buffer), counts the refusal by name, and grows once there is room.
     [Fact]
-    public void DetailGrowthRefusesItsPeakAndRetriesWithoutLosingTheOldBuffers() {
+    public void DetailGrowthRefusedByItsPeakStillRecordsTheFrameAndGrowsOnceThereIsRoom() {
         var gpu = new FakePipelineGpu();
         var factory = new DetailsFactory();
         using var node = Node(factory: factory, gpu: gpu);
+        var source = (Puck.Abstractions.Counting.IWorkCounterSource)node;
 
         node.ProduceUntilInstalled();
         var bytes = node.OwnedBytes;
@@ -57,14 +60,20 @@ public sealed class RenderGraphWorkDetailLawTests {
         var frame = node.FrameCounter;
 
         node.ProduceFrame(context: default);
-        Assert.Equal(expected: frame, actual: node.FrameCounter);
-        Assert.Contains(expectedSubstring: "kernel work details", actualString: node.LastRecordError);
+        Assert.Equal(expected: (frame + 1UL), actual: node.FrameCounter);
+        Assert.Null(node.LastRecordError);
+        Assert.Equal(expected: 0u, actual: factory.FirstRow);
+        Assert.True(condition: source.TryRead(kind: GpuWork.WorkDetailsRefused, value: out var refused));
+        Assert.Equal(expected: 1L, actual: refused);
         Assert.Equal(expected: creations, actual: gpu.CreationCount);
         Assert.Equal(expected: bytes, actual: node.OwnedBytes);
         node.BudgetCapBytes = (bytes + replacement);
         node.ProduceFrame(context: default);
+        Assert.Equal(expected: 2u, actual: factory.FirstRow);
         Assert.Equal(expected: (bytes + GpuKernelCounters.SlotBytesOf(rows: 6)), actual: node.OwnedBytes);
         Assert.Equal(expected: node.OwnedBytes, actual: node.InstalledAccount.SteadyBytes);
+        Assert.True(condition: source.TryRead(kind: GpuWork.WorkDetailsRefused, value: out refused));
+        Assert.Equal(expected: 1L, actual: refused);
     }
 
     private static ShaderPipelineRenderNode Node(FakePipelineGpu gpu, DetailsFactory factory) {

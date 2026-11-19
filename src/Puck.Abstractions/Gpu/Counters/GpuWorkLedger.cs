@@ -385,6 +385,10 @@ public sealed partial class GpuWorkLedger : IGpuWorkSource, IWorkCounterSource {
     }
     internal void CountCreated(int lifetimeIndex) =>
         m_lifetime[lifetimeIndex].IncrementShared();
+    /// <summary>Counts one frame whose kernel counters could not grow to its passes' named detail rows
+    /// (<see cref="GpuWork.WorkDetailsRefused"/>).</summary>
+    public void CountDetailsRefused() =>
+        m_lifetime[GpuWork.WorkDetailsRefusedIndex].IncrementShared();
     internal void Detach(GpuWorkCountingFence fence) {
         foreach (var record in m_records) {
             if (ReferenceEquals(

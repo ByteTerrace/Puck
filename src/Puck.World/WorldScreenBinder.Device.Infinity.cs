@@ -210,7 +210,8 @@ public sealed partial class WorldScreenBinder {
     }
     private SdfWorldResidency? InfinityResidencyOf(InfinityEntry entry) {
         if (entry.Residency is { } held) { return held; }
-        if ((m_viewPipelines is null) || (entry.Source is not { } source)) { return null; }
+        if ((m_viewPipelines is null) || (entry.Source is not { } source) || !entry.Content.MayMake(access: entry.Access.Level)) { return null; }
+        entry.Content.Made();
         var residency = new SdfWorldResidency(
             dynamicTransformCapacity: source.DynamicTransformCapacity,
             frameSource: new WorldSessionFrameSource(source, CaptureHostFirst),
@@ -304,6 +305,10 @@ public sealed partial class WorldScreenBinder {
 
         public IDisposable? Envelope { get; set; }
         public SdfWorldResidency? Residency { get; set; }
+        // The layer's access to its destination and what its residency may render (ContentAccess), both settled once a
+        // frame (SettleSessionRoutes) and first as the entry is made.
+        public WorldViewerAccess Access { get; } = SettledAccess(hosted: hosted);
+        public ContentAccess Content { get; } = new(level: LayerAccessOf(hosted: hosted), mirror: mirror);
         public WorldNestedScreens<SessionFeed>? Screens { get; set; }
         public SdfCompositionFrameSource? Source { get; set; }
 

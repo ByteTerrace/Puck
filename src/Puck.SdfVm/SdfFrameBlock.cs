@@ -75,6 +75,7 @@ public static partial class SdfFrameBlock {
     private static readonly int StampFade = Offset(member: SdfWorldPackage.StampFade);
     private static readonly int ShadowSlots = Offset(member: SdfWorldPackage.ShadowSlots);
     private static readonly int ShadowSlotCount = Offset(member: SdfWorldPackage.ShadowSlotCount);
+    private static readonly int ShadowRoles = Offset(member: SdfWorldPackage.ShadowRoles);
     private static readonly int ShadowFadeCount = Offset(member: SdfWorldPackage.ShadowFadeCount);
     private static readonly int TanHalfFieldOfView = Offset(member: SdfWorldPackage.TanHalfFieldOfView);
     private static readonly int ViewBase = Offset(member: SdfWorldPackage.ViewBase);
@@ -248,6 +249,9 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (ShadowSlots + (slot * sizeof(int))), value: unchecked((uint)lights.ShadowSlots[slot]));
         }
         WriteUInt32(block: block, offset: ShadowSlotCount, value: ((uint)lights.ShadowSlots.SlotCount));
+        for (var role = 0; (role < 4); role++) {
+            WriteUInt32(block: block, offset: (ShadowRoles + (role * sizeof(int))), value: unchecked((uint)((role < SdfShadowSlots.Roles) ? lights.RoleSlot(role: role) : -1)));
+        }
         WriteUInt32(block: block, offset: ShadowFadeCount, value: ((uint)lights.ShadowSlots.FadeCount));
         WriteSingle(block: block, offset: CurvatureCavity, value: curvature.Cavity);
         WriteSingle(block: block, offset: CurvatureRim, value: curvature.Rim);

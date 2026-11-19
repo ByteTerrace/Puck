@@ -391,7 +391,12 @@ public sealed partial class SdfMeshPathBake {
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
             ServeAhead(tables: tables);
-            if (m_allResident) { return; }
+            if (m_regionRefused > 0) { CollectEvictions(tables: tables); }
+            if (m_allResident) {
+                m_holes = 0;
+                return;
+            }
+            CountHoles(tables: tables);
 
             var now = Stopwatch.GetTimestamp();
             var all = true;
@@ -428,8 +433,13 @@ public sealed partial class SdfMeshPathBake {
     // words between the two. A piece the region had no room for beside the mesh it replaces (RefusesAhead) cannot
     // land until that mesh gives its words up, so its product takes the draws once its other pieces stand and the
     // piece waits out of the frame as a first mesh does. Under the gate, on the frame's thread.
+    // The floors each group keeps while a finer tier draws (Group.KeptFloor) are named ahead with them, so their words
+    // stay where a fallen-back draw reads them; the set is named again when a kept floor or the group list changes
+    // (m_floorRevision).
     private void ServeAhead(SdfWorldTables tables) {
-        if ((m_ahead.Count == 0) && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
+        var floorsMoved = (m_floorsNamed != m_floorRevision);
+
+        if ((m_ahead.Count == 0) && !floorsMoved && (m_aheadNamed == m_aheadRevision) && ReferenceEquals(objA: tables, objB: m_aheadTables)) { return; }
         for (var at = (m_ahead.Count - 1); (at >= 0); at--) {
             var group = m_ahead[at];
 
@@ -439,15 +449,20 @@ public sealed partial class SdfMeshPathBake {
                 m_aheadRevision++;
             }
         }
-        if ((m_aheadNamed != m_aheadRevision) || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
+        if ((m_aheadNamed != m_aheadRevision) || floorsMoved || !ReferenceEquals(objA: tables, objB: m_aheadTables)) {
             m_aheadMeshes.Clear();
             foreach (var group in m_ahead) {
                 var mesh = group.Mesh!;
 
                 for (var piece = 0; (piece < mesh.PieceCount); piece++) { m_aheadMeshes.Add(item: mesh.Piece(index: piece)); }
             }
+            foreach (var group in m_groups) {
+                if (group.Retired || (group.KeptFloor is not { } floor)) { continue; }
+                for (var piece = 0; (piece < floor.PieceCount); piece++) { m_aheadMeshes.Add(item: floor.Piece(index: piece)); }
+            }
             tables.NameMeshesAhead(meshes: m_aheadMeshes);
             m_aheadNamed = m_aheadRevision;
+            m_floorsNamed = m_floorRevision;
             m_aheadTables = tables;
         }
         var landing = false;

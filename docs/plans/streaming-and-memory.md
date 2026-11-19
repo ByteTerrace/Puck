@@ -1220,7 +1220,7 @@ line is the build and a headless run. Evidence goes in the landing commit.
 | [2. Every gigabyte has an owner](#step-2-every-gigabyte-has-an-owner) | The physical rows, their owners and their residuals | Beside 1 |
 | [7. Backing prototype and design](#step-7-the-backing) | Sparse design after the prototype's first reading; contiguous fallback retained | Step 3's admission stands; qualification readings need a GPU grant |
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
-| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The floor is an engine gap, first among the rows that remain | 3; 7 before it claims relief |
+| [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor are built; the coverage check, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | Nothing; shares its budget once 3 lands |
 | [7. The backing](#step-7-the-backing) | Memory given back without a replacement | The prototype, 3 |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
@@ -2560,6 +2560,26 @@ surface, the gallery's plaques and glass among them, and a skinned body at the
 ends of its motion holds together at its floor. A cold arrival's burst shows
 the place whole before it is sharp, and counts every frame a group in view
 had no floor.
+
+**As built, and what remains.** The rendering plan's decision 8 counters come
+first: every eighth stage of a raster pass marks the draws it selects with the
+level each draws, read back with the portal sight verdicts
+(`SdfWorldTables.ObserveSelectionMarks`), and `world.residency`'s selection
+line prints the triangles each pass draws by level and by tier and the placed
+mesh bytes no pass selected. The floor is the coarsest rung: a group arriving
+with nothing to draw plans it first, starts its demanded tier once it lands,
+keeps it while detail draws (named ahead so its words stay), and falls back to
+it at once when the region refuses its detail (`SdfMeshPathBake.Floor.cs`).
+The floor line prints floors shown, pending, empty and kept, groups with none,
+evictions and their bytes, holes in reach and the frames that had any, and
+floor bytes by class, in logical words. Still to build, in order: a coverage
+check and a finer rung for a floor that meshes nothing or misses what its
+detail covers; a floor for a group taken whole from the library or replanned
+while it drew; placing floors in the arena before detail, so pressure refuses
+detail first; eviction by the selector's priority under a lowered budget, with
+the rungs of what gives way counted; a residency's tables built on demand; and
+relocation by a copy within the device. The readings above are owed to a GPU
+leg.
 
 ### Step 6: CPU copies
 

@@ -483,7 +483,7 @@ offers:
 
 | Package | Ports | Renders |
 |---|---|---|
-| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): the bake's mask and sampling passes while the residency's bake is pending, the shadow cascades and the mesh raster, then surface and views over the render grid, then the sky and the composite at the output extent, over retained counted scratch. Surface writes each pixel's visibility record from the mesh target, its occlusion and the cascades' shadows, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; neither queries the field. The sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
+| `sdf.world` | no input, one image output written by compute | The SDF world as the instance's camera sees it, run as a native fragment (`SdfWorldPackage.NativeFragment`): the bake's mask and sampling passes while the residency's bake is pending, the shadow cascades and the mesh raster, then surface and views over the render grid, then the sky and the composite at the output extent, over retained counted scratch. Surface writes each pixel's visibility record from the mesh target, its occlusion and the cascades' shadows, and views shades its hits into the lit image, premultiplied by coverage and each hit's fog transmittance, every light answering through one interface and the stage adding each light's summed rim and specular totals once; neither queries the field. The sky evaluates its field runs only where the lit image leaves a pixel or a neighbour uncovered, and the composite adds the fog's in-scatter to the lit image (toward the gradient it reads from the residency's environment map), puts it over the sky's runs by its coverage, then integrates the bounded media over the surface and sky shares, each clipped at its own end, into the output. A view below a native render ceiling puts `resolve` between views and the sky (`SdfWorldPackage.Fragment`): it reconstructs the lit image and each output pixel's surface transport (the fog's in-scatter weight and the coverage over the ray distance, read from each sample's own record with the color's weights) from the render grid. A view whose quality asks for temporal reconstruction runs `SdfWorldPackage.TemporalFragment` at any ceiling: views also writes a render-extent reactivity buffer, and `resolve` reads it and the previous frame's history color and surface (each a history version at the output extent) and writes this frame's history beside the lit image, and updates the stationary sample window in place (one retained buffer at the output extent, a mutable input), so the history never holds the sky. The screens it shows are the instance's reads, not ports. |
 | `overlay` | one fragment-sampled image input, one color-attachment image output | The console, HUD, toasts and cursor drawn over the input. |
 | `place` | two image inputs, a base and a source, read by compute, one image output written by compute | The base with the source reconstructed into a destination rect over it: an exact copy where the rect has the source's extent, or, with `sharpen` set, a contrast-adaptive sharpen of the source by `sharpness` there (exact at sharpness 0), otherwise bilinear at sharpness 0 blending to clamped Catmull-Rom at sharpness 1. Its config is `letterbox` (1 writes `letterboxColor` outside the rect instead of the base, 0 by default), `letterboxColor` (linear RGBA, `(0.015, 0.016, 0.02, 1)` by default; the matte around an engaged screen's framed picture writes the screen route's `display.fill` here), `rect` (left, top, width and height as fractions of the output, the whole output by default, which resamples the whole source), `sharpen` (0 by default), `sharpness`, `tonemap` (1 puts the reconstructed source through the filmic curve inside the rect, never the base or the letterbox color, 0 by default), `crop` (the part of the source the rect shows, left, top, width and height as fractions of the source, each edge rounded to a source pixel, the whole source by default; a crop of the rect's own pixel extent is an exact copy, which is how a seat view framing its engaged screen shows only its matte) and `fidelity` (0 to 1, 0 by default: that share of the rect is the source reconstructed at sharpness 0, past the sharpen and the tone map, so a seat view framing its engaged screen at 1 is an exact copy of its native-scale source). A host that places panes per frame (`IRenderGraphPlacements`) overrides the rect, the sharpness, the sharpen switch, the letterbox color, the crop and the fidelity, and a source it shows nowhere draws nothing, so the base stands for the output, or, when the pass may not stand in, copies the base everywhere, letterbox or not. Its kernel, `src/Puck.Shaders/Assets/Shaders/Graph/place.comp.hlsl`, compiles at build, and `PlacePackage` records it. |
 | `sdf.film-grain` | one fragment-sampled image input, one color-attachment image output | Film grain over the input: the engine's [post-process package](#post-process-packages), a per-pixel integer-hashed offset keyed on the engine tick. Its stages, `fullscreen.vert` and `sdf-film-grain.frag` in `Assets/Shaders/Sdf/passes`, compile at build, and `PostProcessPackage` records it. |
@@ -503,7 +503,12 @@ for the editor commands that hold and compare a frame.
 A mutable input preserves and updates the producer's current buffer in place,
 without introducing an output version or transferring allocation ownership.
 Only packages declare it; images, previous-frame reads, owned versions and
-host-upload ports refuse it. Across instances, its edge must reach a package
+host-upload ports refuse it. The one owned buffer it may name is a fragment's
+own retained package buffer, zero-initialized, that no pass writes as a version
+and nothing forwards (`ShaderPipelineCompiler.UpdatesInPlace`): the planner
+clears it once when it is new, and each frame's first access orders it after
+the previous frame's update on the queue, so it carries a value from frame to
+frame in one allocation, as the temporal resolve's stationary window does. Across instances, its edge must reach a package
 whose writing part supplies one shared buffer through `OwnsBuffer(part)` and
 `BorrowedBuffer`. Other parts of that package may keep graph-owned scratch.
 The consumer plans read/write barriers, and the producer reacquires all
@@ -670,7 +675,12 @@ its readers bind the stand-in. An output of another instance that stands for
 the released instance's output (a pass that drew nothing, below) goes with it:
 that frame is scheduled again with the standing output's instance named in
 `RenderGraphFrame.Rerender`, so a shown reader renders over the stand-in in the
-same frame and the display is never handed a released image. An instance that is named but not shown this
+same frame and the display is never handed a released image. A host withdraws
+an instance whose pictures its viewer may no longer see
+(`IRenderGraphInstances.Withdraw`): before the next frame schedules, that
+instance and every instance that read it lose their completed outputs, their
+published images and their packages' history, readers bind the stand-in, and
+each renders again before anything shows it. An instance that is named but not shown this
 frame, such as a screen out of view, is unread and keeps everything, so it shows
 its last image the moment it is shown again; so does one a frame only skips,
 because its refresh is not due, the budget defers it or every consumer that
@@ -2186,7 +2196,11 @@ carries the functions its shaders count through, and keeps a counter buffer and
 a readback buffer per frame slot, rows for passes and named work details (`GpuKernelCounters`).
 Detail labels grow in recorder order (`IRenderGraphPackageRecorder.WorkDetails`);
 the node grows only a completed slot's buffers, under its peak memory budget,
-before it records again. A detailed pass has a `plain` remainder row, and its
+before it records again. Growth the budget or the device pool refuses never
+aborts the frame: it records and presents on the rows the slot has, a pass whose
+named rows lie past them gets detail row zero and counts none of its named work
+that frame, `gpu.refused.work-details` counts the frame, and the next frame asks
+again (`ShaderPipelineRenderNode.TryGrowWorkDetails`). A detailed pass has a `plain` remainder row, and its
 detail rows sum to the pass totals after readback. A
 compute kernel counts through `puckCountWork`, one wave sum added by the wave's
 first active lane, and a fragment stage through `puckCountFragmentWork`, the

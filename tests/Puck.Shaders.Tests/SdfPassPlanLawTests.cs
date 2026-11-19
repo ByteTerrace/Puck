@@ -20,10 +20,10 @@ public sealed partial class SdfPassPlanLawTests {
 
     // The fragment's passes in dispatch order.
     private static readonly string[] Order = [
+        SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.ShadowNear,
         SdfWorldPackage.Parts.ShadowFar,
         SdfWorldPackage.Parts.ShadowSecond,
-        SdfWorldPackage.Parts.Mesh,
         SdfWorldPackage.Parts.Pyramid,
         SdfWorldPackage.Parts.Surface,
         SdfWorldPackage.Parts.Views,
@@ -151,10 +151,10 @@ public sealed partial class SdfPassPlanLawTests {
                 string.Join(separator: ",", values: pass.Outputs.Select(selector: static output => output.Name))
             )),
             expected: [
-                (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
-                (SdfWorldPackage.Parts.ShadowFar, "", $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
-                (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
                 (SdfWorldPackage.Parts.Mesh, "", $"{SdfWorldPackage.Parts.MeshTarget},{SdfWorldPackage.Parts.MeshDepth}"),
+                (SdfWorldPackage.Parts.ShadowNear, "", $"{SdfWorldPackage.Parts.ShadowNearDepth},{SdfWorldPackage.Parts.ShadowNearExit}"),
+                (SdfWorldPackage.Parts.ShadowFar, SdfWorldPackage.Parts.MeshTarget, $"{SdfWorldPackage.Parts.ShadowFarDepth},{SdfWorldPackage.Parts.ShadowFarExit}"),
+                (SdfWorldPackage.Parts.ShadowSecond, "", $"{SdfWorldPackage.Parts.ShadowSecondDepth},{SdfWorldPackage.Parts.ShadowSecondExit}"),
                 (SdfWorldPackage.Parts.Pyramid, SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid),
                 (SdfWorldPackage.Parts.Surface, string.Join(separator: ",", values: [SdfWorldPackage.Parts.MeshTarget, SdfWorldPackage.Parts.MeshPyramid, SdfWorldPackage.Parts.ShadowNearDepth, SdfWorldPackage.Parts.ShadowFarDepth, SdfWorldPackage.Parts.ShadowSecondDepth, SdfWorldPackage.Parts.ShadowNearExit, SdfWorldPackage.Parts.ShadowFarExit, SdfWorldPackage.Parts.ShadowSecondExit]), SdfWorldPackage.Parts.Visibility),
                 (SdfWorldPackage.Parts.Views, SdfWorldPackage.Parts.Visibility, SdfWorldPackage.Parts.Lit),
