@@ -52,7 +52,10 @@ public static class McpCommand {
         WorldLaunch launch;
 
         try {
+            // A start waits its turn for the GPU lease and the host's headroom until its own timeout: the deadline token
+            // ends the wait, and the bound only keeps a wait from ending before it.
             launch = await WorldLaunch.AdmitAsync(cancellationToken: cancellationToken, request: new WorldLaunchRequest(Artifact: build.Path, Step: "puck_world_start") {
+                AdmissionWait = world.Wait,
                 Arguments = [
                     "--control",
                     .. (world.Paused ? ["--paused"] : Array.Empty<string>()),
@@ -76,10 +79,12 @@ public static class McpCommand {
             build.Dispose();
 
             return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: the GPU lease was not granted, so no windowed World was started ({exception.Message}). Retry the start, or start headless.");
-        } catch (HostAdmissionRefusedException) {
+        } catch (HostAdmissionRefusedException exception) {
             build.Dispose();
 
-            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: $"Refused: the host had no memory, commit or disk headroom{(world.Windowed ? " (or its GPU stayed busy)" : string.Empty)} within the admission's bound, so no World was started. Retry the start when `puck host load` reports CAPACITY.");
+            return new OperatorWorldStart(Build: null, Lease: null, Process: null, Refusal: ((exception.Reason is { } never)
+                ? $"Refused: {never}, so no World was started; no wait would admit it."
+                : $"Refused: the host had no memory, commit or disk headroom{(world.Windowed ? " (or its GPU stayed busy)" : string.Empty)} for the whole of the start's {world.Wait.TotalSeconds:0}-second timeout, so no World was started. Retry the start when `puck host load` reports CAPACITY."));
         } catch {
             build.Dispose();
 

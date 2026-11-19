@@ -3,9 +3,9 @@ using System.Security.Cryptography;
 using System.Text;
 using Puck.Assets;
 
-namespace Puck.World.Transpiler.Composition;
+namespace Puck.World.Transpiler;
 
-public sealed partial class WorldCompileCache {
+public sealed partial class WorldCompileSession {
     private T? ReadPersisted<T>(string key, Func<BinaryReader, T> read) where T : class {
         if (EntryPath(key: key) is not { } path) { return null; }
         try {

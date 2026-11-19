@@ -77,12 +77,24 @@ public static class WorldModuleExports {
             return false;
         }
     }
-    // One layer's walk: what it declares, and every name it spells at a non-declaring site with the site's node,
-    // whose JSON path is only rendered for a refusal.
-    private sealed class Layer(string name) {
+    /// <summary>One layer's walk: what it declares, and every name it spells at a non-declaring site with the site's
+    /// node, whose JSON path is only rendered for a refusal. A walk held past its tree (<see cref="Detached"/>) keeps
+    /// the names and drops the sites, so it holds no node of the tree alive.</summary>
+    internal sealed class Layer(string name) {
+        /// <summary>Gets how a refusal names the layer.</summary>
         public string Name { get; } = name;
-        public HashSet<string> Declared { get; } = new(comparer: StringComparer.Ordinal);
-        public List<(string Name, WorldExportFacet Facet, JsonNode Site)> References { get; } = [];
+        /// <summary>Gets the names the layer declares.</summary>
+        public HashSet<string> Declared { get; private init; } = new(comparer: StringComparer.Ordinal);
+        /// <summary>Gets each name the layer spells at a non-declaring site, with the site's facet and node; the node is
+        /// <see langword="null"/> on a detached walk.</summary>
+        public List<(string Name, WorldExportFacet Facet, JsonNode? Site)> References { get; private init; } = [];
+
+        /// <summary>Returns this walk without its sites.</summary>
+        /// <returns>The detached walk.</returns>
+        public Layer Detached() => new(name: Name) {
+            Declared = Declared,
+            References = [.. References.Select(selector: static reference => (reference.Name, reference.Facet, (JsonNode?)null))],
+        };
     }
 
     private static void Collect(NameProbe probe, string text, WorldNameField field, JsonNode site, Layer layer) {
@@ -125,6 +137,17 @@ public static class WorldModuleExports {
                 return null;
             }
         );
+    /// <summary>Walks one layer of a composition for what it declares and every name it references.</summary>
+    /// <param name="tree">The layer's tree, as it composes (an import's with its exports stripped and alias applied).</param>
+    /// <param name="name">How a refusal names the layer.</param>
+    /// <param name="catalog">The selected machine catalog used to walk provider metadata fields.</param>
+    /// <returns>The walk, whose sites are nodes of <paramref name="tree"/>.</returns>
+    internal static Layer Walk(JsonObject tree, string name, IMachineValidationCatalog? catalog) => Walk(
+        catalog: catalog,
+        name: name,
+        probe: new NameProbe(),
+        tree: tree
+    );
     private static Layer Walk(JsonObject tree, string name, NameProbe probe, IMachineValidationCatalog? catalog) {
         var layer = new Layer(name: name);
 
@@ -256,17 +279,33 @@ public static class WorldModuleExports {
         ArgumentNullException.ThrowIfNull(argument: imports);
 
         var probe = new NameProbe();
+
+        return TryCheckWalks(
+            basis: ((basis.Count > 0) ? Walk(catalog: catalog, name: $"the basis of {hostPath}", probe: probe, tree: basis) : null),
+            hostPath: hostPath,
+            imports: [.. imports.Select(selector: import => (import.Name, Walk(catalog: catalog, name: import.Name, probe: probe, tree: import.Tree), import.Exports))],
+            own: Walk(catalog: catalog, name: hostPath, probe: probe, tree: ownBody),
+            reason: out reason,
+            surfaces: out surfaces
+        );
+    }
+    /// <summary>Checks one file's composition from its layers' walks (<see cref="Walk(JsonObject, string, IMachineValidationCatalog?)"/>)
+    /// exactly as <see cref="TryCheckLayers"/> checks it from their trees. A refusal names its site's path only when the
+    /// refused walk still holds its sites.</summary>
+    /// <param name="hostPath">The composing file, for the refusal.</param>
+    /// <param name="imports">Each import's description, walk and exports record, in list order.</param>
+    /// <param name="own">The walk of the file's own body.</param>
+    /// <param name="basis">The walk of the file's composed basis; <see langword="null"/> when it names none or the
+    /// basis composes empty.</param>
+    /// <param name="surfaces">Each distinct module's surface on success.</param>
+    /// <param name="reason">The one-line refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when every export names a declaration and every layer binds only what its
+    /// modules export.</returns>
+    internal static bool TryCheckWalks(string hostPath, IReadOnlyList<(string Name, Layer Walk, WorldExports Exports)> imports, Layer own, Layer? basis, out IReadOnlyList<WorldModuleSurface> surfaces, out string reason) {
         var byName = new Dictionary<string, WorldModuleSurface>(comparer: StringComparer.Ordinal);
         var layers = new List<(Layer Layer, WorldModuleSurface? Own)>(capacity: (imports.Count + 2));
 
-        foreach (var (name, tree, exports) in imports) {
-            var layer = Walk(
-                catalog: catalog,
-                name: name,
-                probe: probe,
-                tree: tree
-            );
-
+        foreach (var (name, layer, exports) in imports) {
             if (!exports.TryValidate(
                 declared: layer.Declared,
                 reason: out var exportsReason
@@ -292,25 +331,15 @@ public static class WorldModuleExports {
             layers.Add(item: (layer, surface));
         }
 
-        layers.Add(item: (Walk(
-            catalog: catalog,
-            name: hostPath,
-            probe: probe,
-            tree: ownBody
-        ), null));
+        layers.Add(item: (own, null));
 
-        if (basis.Count > 0) {
-            layers.Add(item: (Walk(
-                catalog: catalog,
-                name: $"the basis of {hostPath}",
-                probe: probe,
-                tree: basis
-            ), null));
+        if (basis is not null) {
+            layers.Add(item: (basis, null));
         }
 
         var modules = byName.Values.ToArray();
 
-        foreach (var (layer, own) in layers) {
+        foreach (var (layer, ownSurface) in layers) {
             foreach (var (name, facet, site) in layer.References) {
                 if (layer.Declared.Contains(item: name)) {
                     continue;
@@ -320,7 +349,7 @@ public static class WorldModuleExports {
                     if (
                         ReferenceEquals(
                         objA: module,
-                        objB: own
+                        objB: ownSurface
                     ) ||
                         module.Admits(
                         facet: facet,
@@ -331,7 +360,7 @@ public static class WorldModuleExports {
                     }
 
                     surfaces = [];
-                    reason = $"{layer.Name} names '{name}' at {site.GetPath()}, which {module.Name} declares and does not export under {WorldExports.MemberOf(facet: facet)}; a host binds only what its module exports.";
+                    reason = $"{layer.Name} names '{name}' at {site?.GetPath() ?? "a site its held walk no longer names"}, which {module.Name} declares and does not export under {WorldExports.MemberOf(facet: facet)}; a host binds only what its module exports.";
 
                     return false;
                 }

@@ -1,7 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
 
 namespace Puck.World.Transpiler.Tests;
@@ -53,9 +52,9 @@ public sealed class SourceTreeSaveLawTests {
 
     // The tree rooted at `root` as a live world composes it, changed by `edit`.
     private static WorldDefinition Live(string root, Action<JsonObject> edit) {
-        var compiled = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: File.ReadAllText(path: root), sourcePath: root);
+        var compiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: File.ReadAllText(path: root), sourcePath: root);
 
-        Assert.True(condition: WorldSourceLoader.TryReadAuthored(authored: out var authored, document: Encoding.UTF8.GetBytes(s: compiled.RequireJson().ToJsonString()), path: root, reason: out var reason), userMessage: reason);
+        Assert.True(condition: WorldCompileSession.Shared.TryReadAuthored(authored: out var authored, document: Encoding.UTF8.GetBytes(s: compiled.RequireJson().ToJsonString()), path: root, reason: out var reason), userMessage: reason);
         var document = JsonNode.Parse(utf8Json: WorldDefinitionSerialization.SerializeBeside(definition: authored!, path: root))!.AsObject();
 
         edit(obj: document);
@@ -116,8 +115,8 @@ public sealed class SourceTreeSaveLawTests {
         var fresh = files.PathOf("fresh.puck");
         Assert.True(WorldSourceSave.TrySave(Deal(false), fresh, out _, out reason), reason);
         Assert.True(WorldSourceSave.TrySave(Deal(true), fresh, out _, out reason), reason);
-        var compiled = WorldCompiler.Compile(source: File.ReadAllText(fresh), sourcePath: fresh, cancellationToken: TestContext.Current.CancellationToken);
-        Assert.True(WorldSourceLoader.TryLoadForAdmission(fresh, Encoding.UTF8.GetBytes(compiled.RequireJson().ToJsonString()),
+        var compiled = WorldCompileSession.Shared.Compile(source: File.ReadAllText(fresh), sourcePath: fresh, cancellationToken: TestContext.Current.CancellationToken);
+        Assert.True(WorldCompileSession.Shared.TryLoadForAdmission(fresh, Encoding.UTF8.GetBytes(compiled.RequireJson().ToJsonString()),
             out var resumed, out reason, keys: WorldDrawSampler.Preview), reason);
         Assert.Equal(60, resumed!.Definition.SimulationRateHz);
         Assert.Equal(2, resumed.Definition.AuthoredState.Single(r => r.Name.Value == "hand").Cells!.Count);

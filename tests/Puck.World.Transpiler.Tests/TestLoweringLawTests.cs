@@ -12,7 +12,7 @@ public class TestLoweringLawTests {
     private static string Canonical(JsonNode node) =>
         Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
     private static WorldCompilation Green(string source, string? sourcePath = null, bool allowMultiple = false) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: allowMultiple,
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
@@ -70,7 +70,7 @@ public class TestLoweringLawTests {
     }
     [Fact]
     public void ATextComparisonsNumericKindAnnotationIsRefused() {
-        var compilation = WorldCompiler.Compile("""
+        var compilation = WorldCompileSession.Shared.Compile("""
             schema: "puck.world.definition.v1"
             documentId: "text-kind"
             state { world { slot title = "a" } }
@@ -561,7 +561,7 @@ public class TestLoweringLawTests {
     // arguments and names the generated world after itself.
     [Fact]
     public void AWorldDeclarationRunsItsModulesOwnTest() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             source: $"""
@@ -585,7 +585,7 @@ public class TestLoweringLawTests {
     // each line is about — even when it declares only one.
     [Fact]
     public void ASubjectlessTestAtACompositionRootNamesTheWorldEachLineIsAbout() {
-        var refused = WorldCompiler.Compile(
+        var refused = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             source: $"{TestWorldFixtures.InlineArmoury}\n\nentry world west = armoury(plating: 2)\n\ntest \"a claim naming no world\" {{\n    expect {{\n        armour == 2\n    }}\n}}\n"

@@ -403,7 +403,7 @@ public sealed class GeneratedNameReversalLawTests {
     // ---- the checks -----------------------------------------------------------------------------------------------
 
     private static WorldCompilation Compile(string source, List<string> violations, string label, bool allowMultiple = false) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: allowMultiple,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",

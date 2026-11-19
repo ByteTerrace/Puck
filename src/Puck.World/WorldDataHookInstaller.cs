@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -16,6 +16,6 @@ internal static class WorldDataHookInstaller {
         // The World validates every document again against its own registry once it is built, so before then a verb
         // the catalog lacks is the registry's to judge rather than a refusal.
         WorldAffordances.DeferUnknownVerbsToRegistry = true;
-        WorldDefinitionFileSource.UseLocalDocuments(source: PuckDocumentComposer.Instance);
+        WorldDefinitionFileSource.UseLocalDocuments(source: WorldCompileSession.Shared);
     }
 }

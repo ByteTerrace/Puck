@@ -11,7 +11,7 @@ public sealed class WorldCompositionLinksTests {
     [InlineData("prototypes [{ id: 7 }]\nground floor { size [8m, 8m] }")]
     [Theory]
     public void EndpointSugarRefusesMalformedExistingIdsWithoutThrowing(string source) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
             imports: ImportHandling.Ignore,
@@ -26,7 +26,7 @@ public sealed class WorldCompositionLinksTests {
     [InlineData("spawn arrival { at [3m, 0m, 4m] }", true)]
     [Theory]
     public void ASpawnWritesItsPositionOnlyAsAt(string source, bool admitted) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
             imports: ImportHandling.Ignore,
@@ -45,7 +45,7 @@ public sealed class WorldCompositionLinksTests {
     }
     [Fact]
     public void GroundWithoutCenterEmitsAValidWorldAtTheOrigin() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
             imports: ImportHandling.Ignore,
@@ -64,7 +64,7 @@ public sealed class WorldCompositionLinksTests {
     // 'ground$floor' and the document refuses the duplicates.
     [Fact]
     public void TwoAliasedUsesOfOneModuleStandTwoGrounds() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
             imports: ImportHandling.Ignore,
@@ -82,7 +82,7 @@ public sealed class WorldCompositionLinksTests {
     }
     [Fact]
     public void CompositionEndpointUnitsLowerToWorldUnitsAndDegrees() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",
@@ -270,7 +270,7 @@ public sealed class WorldCompositionLinksTests {
     }
     [Fact]
     public void AuthoredDoorCompilesThroughModulesAndCreatesItsReturnArch() {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             allowMultiple: true,
             cancellationToken: TestContext.Current.CancellationToken,
             defaultSchema: "puck.world.definition.v1",

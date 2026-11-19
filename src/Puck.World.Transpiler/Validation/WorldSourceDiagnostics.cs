@@ -46,6 +46,8 @@ public static class WorldSourceDiagnostics {
     /// <param name="catalogFingerprint">The stable metadata fingerprint for composition under
     /// <paramref name="machines"/>.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
+    /// <param name="session">The compile session the source compiles through; <see cref="WorldCompileSession.Shared"/>
+    /// when omitted.</param>
     /// <returns>Every diagnostic, in the order the stages ran.</returns>
     public static DiagnosticBag Diagnose(
         string source,
@@ -54,11 +56,13 @@ public static class WorldSourceDiagnostics {
         Func<DocumentNode, string?, DiagnosticBag, bool>? foreign = null,
         IMachineValidationCatalog? machines = null,
         string catalogFingerprint = "",
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        WorldCompileSession? session = null
     ) {
         var diagnosis = DiagnoseSource(
             cancellationToken: cancellationToken,
             foreign: foreign,
+            session: session,
             source: source,
             sourcePath: sourcePath,
             vocabularies: vocabularies
@@ -81,22 +85,26 @@ public static class WorldSourceDiagnostics {
     /// <param name="vocabularies">Resolves the source's vocabulary; the world vocabulary alone when omitted.</param>
     /// <param name="foreign">Diagnoses a document written in another vocabulary.</param>
     /// <param name="cancellationToken">Cancels evaluation and expansion.</param>
+    /// <param name="session">The compile session the source compiles through (<see cref="WorldCompileSession.CompileBuffer"/>,
+    /// so an unchanged buffer diagnosed again compiles once); <see cref="WorldCompileSession.Shared"/> when
+    /// omitted.</param>
     /// <returns>The source tier's diagnosis, carrying the compilation the semantic tier reads.</returns>
     public static WorldSourceDiagnosis DiagnoseSource(
         string source,
         string? sourcePath = null,
         DocumentVocabularyResolver? vocabularies = null,
         Func<DocumentNode, string?, DiagnosticBag, bool>? foreign = null,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        WorldCompileSession? session = null
     ) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
-        var diagnostics = new DiagnosticBag();
         var vocabulary = (vocabularies?.Resolve(source: source) ?? WorldDocumentVocabulary.Instance);
 
         if (vocabulary is not WorldDocumentVocabulary worldVocabulary) {
+            var foreignDiagnostics = new DiagnosticBag();
             var parsed = PuckParser.ParseDocumentWithDiagnostics(
-                diagnostics: diagnostics,
+                diagnostics: foreignDiagnostics,
                 source: source,
                 vocabulary: vocabulary
             ).Value;
@@ -105,31 +113,29 @@ public static class WorldSourceDiagnostics {
                 _ = foreign?.Invoke(
                     arg1: parsed,
                     arg2: sourcePath,
-                    arg3: diagnostics
+                    arg3: foreignDiagnostics
                 );
-                SourceAcknowledgements.Of(document: parsed, sourcePath: sourcePath).Acknowledge(diagnostics: diagnostics);
+                SourceAcknowledgements.Of(document: parsed, sourcePath: sourcePath).Acknowledge(diagnostics: foreignDiagnostics);
             }
 
             return new WorldSourceDiagnosis(
                 Compilation: null,
-                Diagnostics: diagnostics,
+                Diagnostics: foreignDiagnostics,
                 Document: parsed,
                 SourcePath: sourcePath
             );
         }
 
         // Source modules must be present before world instances are expanded. Reference lint also composes
-        // runtime basis/import documents, which are distinct from these compile-time module declarations.
-        var compilation = WorldCompiler.Compile(
+        // runtime basis/import documents, which are distinct from these compile-time module declarations. The
+        // compilation's diagnostics are this diagnosis's own, so the lint reports into them.
+        var compilation = (session ?? WorldCompileSession.Shared).CompileBuffer(
             cancellationToken: cancellationToken,
-            diagnostics: diagnostics,
-            imports: ImportHandling.Validate,
             source: source,
-            sourceMap: new SourceMap(),
             sourcePath: sourcePath,
-            vocabulary: worldVocabulary,
-            allowMultiple: true
+            vocabulary: worldVocabulary
         );
+        var diagnostics = compilation.Diagnostics;
 
         if (compilation.Document is not null) {
             PuckLinter.Lint(

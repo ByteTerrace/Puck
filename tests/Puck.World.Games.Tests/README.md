@@ -1,7 +1,7 @@
 # Puck.World.Games.Tests
 
 These laws check authored worlds: shipped games and fixture worlds compiled from
-`.puck` source through the same `PuckDocumentComposer` path as the executable
+`.puck` source through the same `WorldCompileSession` path as the executable
 host, then run on the authoritative server. They cover each game's state program
 and rules, module imports and aliases, document round trips through the
 decompiler, compiled worlds and the boot's counted work, navigation over the

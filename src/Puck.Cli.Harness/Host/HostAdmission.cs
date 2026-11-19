@@ -24,6 +24,9 @@ namespace Puck.Cli.Host;
 public static class HostAdmission {
     /// <summary>How long a step waits before it is refused.</summary>
     public static readonly TimeSpan Timeout = TimeSpan.FromMinutes(minutes: 30);
+    /// <summary>The prefix of the stage text a wait reports when it refuses a start that no wait could admit; what follows
+    /// it names why. A bound that passes first reports no such stage.</summary>
+    public const string RefusedStage = "refused: ";
     /// <summary>How often a wait samples the machine.</summary>
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(seconds: 10);
     /// <summary>How long a wait goes without printing before it prints that it is still waiting.</summary>
@@ -128,8 +131,11 @@ public static class HostAdmission {
 
             // A start the idle machine could not hold is refused by name at once: no wait changes it.
             if (thresholds.NeverFits(reading: reading, ownGb: demand.LoneOwnGb, residentOwnGb: demand.LoneResidentOwnGb) is { } never) {
-                error.WriteLine(value: $"gate: refused {step}: a {KindName(kind: peak)} can never be admitted on this machine, {never}.");
+                var refusal = $"a {KindName(kind: peak)} can never be admitted on this machine, {never}";
+
+                error.WriteLine(value: $"gate: refused {step}: {refusal}.");
                 error.Flush();
+                stage?.Invoke(obj: (RefusedStage + refusal));
 
                 return false;
             }
@@ -187,10 +193,8 @@ public static class HostAdmission {
     /// <param name="reserve">Whether an admitted start reserves its expected peak.</param>
     /// <returns><see langword="true"/> once the host can take the step; <see langword="false"/> when the bound passed
     /// first.</returns>
-    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, bool reserve = true) {
-        if (probe.LeaseRoot is { } root && CliLease.HoldsExecution(root)) { bound = TimeSpan.Zero; }
-        return Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session, reserve);
-    }
+    public static bool Wait(string step, bool device, bool heavySuite, HostProbe probe, TimeProvider clock, TextWriter error, CancellationToken cancellationToken, TimeSpan? bound = null, Action<string>? stage = null, HostStartKind? kind = null, bool reserve = true) =>
+        Wait(step, device, heavySuite, () => probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1)), clock, delay => Task.Delay(cancellationToken: cancellationToken, delay: delay, timeProvider: clock).GetAwaiter().GetResult(), error, cancellationToken, HostLoadThresholds.ThisMachine, bound, stage, kind, HostStartTracker.Session, reserve);
     /// <summary>Gets the admission the root hands to the verbs that cannot reference this assembly: each call samples with a
     /// <see cref="HostProbe"/> over the caller's checkout and waits on a thread-pool thread.</summary>
     /// <param name="clock">The clock the bound and the sleeps are measured on.</param>

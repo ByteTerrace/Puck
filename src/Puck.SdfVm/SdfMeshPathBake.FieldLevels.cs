@@ -201,7 +201,7 @@ public sealed partial class SdfMeshPathBake {
             return null;
         }
 
-        return ((mesh is null) ? null : SdfMeshChunks.Merge(levels: false, mesh: SdfMeshPlanarMerge.Flatten(degrees: SdfMeshCollapse.NormalDegrees[0], distance: (preserveFeatures ? 0f : flatten), mesh: (mesh with { BakeCell = lattice.ContourCell })), preserveFeatures: preserveFeatures));
+        return ((mesh is null) ? null : SdfMeshPlanarMerge.Merge(mesh: SdfMeshPlanarMerge.Flatten(degrees: SdfMeshCollapse.NormalDegrees[0], distance: (preserveFeatures ? 0f : flatten), mesh: (mesh with { BakeCell = lattice.ContourCell }))));
     }
 
     // How far a sample's local slope may stray from the lattice's median before it is clamped: a field that is no true

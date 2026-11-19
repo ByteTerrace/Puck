@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
-using Puck.Transpiler.Ast;
+using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Editing;
 using Puck.World.Transpiler.Validation;
@@ -31,15 +31,16 @@ public enum PuckDiagnosticDepth {
 //
 // A document marked again while a unit runs is superseded: the host cancels it (`IsCurrent`), its result is dropped,
 // any semantic tier it left pending is forgotten, and the newer mark is taken on the next quiet turn. Marking a document
-// also marks every open document that reads it through a basis or an import, directly or through another open document,
-// ahead of it in age, so the edited document is diagnosed first.
+// also marks every open document whose last diagnosis read it, directly or through another open document, ahead of it in
+// age, so the edited document is diagnosed first. What a diagnosis read is the compile session's own record of it
+// (CompileInputs): every library its import walk read, every document its composition read, at any depth.
 public sealed partial class PuckLanguageServer {
     private readonly Dictionary<string, int?> m_versions = new(comparer: StringComparer.OrdinalIgnoreCase);
     // The mark each open document last received; a snapshot is current while the mark it carries is.
     private readonly Dictionary<string, long> m_generations = new(comparer: StringComparer.OrdinalIgnoreCase);
     // The documents awaiting diagnosis, each with its mark; the highest mark is taken first.
     private readonly Dictionary<string, long> m_pending = new(comparer: StringComparer.OrdinalIgnoreCase);
-    // The files each open document read through a basis or an import at its last diagnosis that parsed.
+    // The files each open document's last diagnosis read: its source tier's, joined by its semantic tier's.
     private readonly Dictionary<string, IReadOnlySet<string>> m_dependencies = new(comparer: StringComparer.OrdinalIgnoreCase);
     // The semantic tier each document's current source tier left pending, under that source tier's mark.
     private readonly Dictionary<string, (long Mark, WorldSourceDiagnosis Tier)> m_semanticPending = new(comparer: StringComparer.OrdinalIgnoreCase);
@@ -53,34 +54,21 @@ public sealed partial class PuckLanguageServer {
         ? version
         : null
     );
-    // The files a document names through its basis and its imports: a name resolves beside the document to both its
-    // source, which is a module library's file too, and its document file.
-    private static HashSet<string> ReadDependencies(DocumentNode document, string sourcePath) {
-        var names = new List<string>();
-        var dependencies = new HashSet<string>(comparer: PuckPaths.Comparer);
+    // The files a unit of diagnosis read, as the session recorded them: every file it read, found present or found
+    // absent (an import or a basis that appears later is a read too). A listing names a directory, which no document
+    // is, and a sibling the name index only asked what it declares is not a file the document composes, so both are
+    // left out: an edit to that sibling reaches the document only when it saves and moves the names, which the
+    // session's own facts see.
+    private static HashSet<string> ReadFiles(CompileInputLog reads) {
+        var files = new HashSet<string>(comparer: PuckPaths.Comparer);
 
-        if (document.Basis is { Length: > 0 } basis) {
-            names.Add(item: basis);
-        }
-        foreach (var statement in document.Statements) {
-            if (statement is ImportNode { Path.Length: > 0 } import) {
-                names.Add(item: import.Path);
-            }
-        }
-        foreach (var name in names) {
-            if (WorldDefinitionFileSource.TryResolveDocumentBeside(
-                documentPath: out var documentPath,
-                name: name,
-                reason: out _,
-                referrerName: sourcePath,
-                sourcePath: out var resolvedSource
-            )) {
-                _ = dependencies.Add(item: PuckPaths.Normalize(path: documentPath));
-                _ = dependencies.Add(item: PuckPaths.Normalize(path: resolvedSource));
+        foreach (var input in reads.Inputs) {
+            if (input.Kind is not (CompileInputKind.Listing or CompileInputKind.Declaration)) {
+                _ = files.Add(item: PuckPaths.Normalize(path: input.Path));
             }
         }
 
-        return dependencies;
+        return files;
     }
     // An edit: the new text and version stand, and the document and every open document reading it are marked.
     private void Edited(string uri, string text, int? version) {
@@ -118,9 +106,19 @@ public sealed partial class PuckLanguageServer {
             }
         }
 
-        // Farthest dependent first, so the nearest ones and then the edited document itself carry the newest marks.
-        for (var index = (dependents.Count - 1); (index >= 0); --index) {
-            Mark(uri: dependents[index]);
+        // A read set holds what a document read at every depth, so a dependent's distance from the edit is how many of
+        // the other dependents it reads: a document reading none of them is nearest. Farthest dependent first, so the
+        // nearest ones and then the edited document itself carry the newest marks.
+        var paths = dependents.ToDictionary(
+            elementSelector: dependent => (TryGetLocalPath(path: out var path, uri: dependent) ? PuckPaths.Normalize(path: path) : null),
+            keySelector: static dependent => dependent,
+            comparer: StringComparer.OrdinalIgnoreCase
+        );
+
+        // Among dependents equally far, the one reached first is marked last, as a breadth-first walk would mark it.
+        foreach (var dependent in Enumerable.Reverse(source: dependents).OrderByDescending(keySelector: dependent => dependents.Count(predicate: other =>
+            !ReferenceEquals(objA: other, objB: dependent) && (paths[other] is { } otherPath) && m_dependencies[dependent].Contains(item: otherPath)))) {
+            Mark(uri: dependent);
         }
         Mark(uri: uri);
     }
@@ -149,8 +147,8 @@ public sealed partial class PuckLanguageServer {
     /// <param name="Request">What was diagnosed.</param>
     /// <param name="Diagnostics">Everything the document is diagnosed with so far: the source tier's diagnostics, and
     /// the semantic tier's after them once that tier has run.</param>
-    /// <param name="Dependencies">The files the document read through its basis and imports, or
-    /// <see langword="null"/> when it did not parse or this is a semantic-tier unit.</param>
+    /// <param name="Dependencies">The files the unit read (a semantic-tier unit's join its source tier's), or
+    /// <see langword="null"/> when the unit has no path to read beside.</param>
     public sealed record Diagnosis(DiagnosisRequest Request, DiagnosticBag Diagnostics, IReadOnlySet<string>? Dependencies) {
         /// <summary>Gets the source tier this unit ran, which a semantic-tier unit completes; <see langword="null"/>
         /// for a semantic-tier unit.</summary>
@@ -236,15 +234,21 @@ public sealed partial class PuckLanguageServer {
     public Diagnosis Diagnose(DiagnosisRequest request, CancellationToken cancellationToken = default) {
         ArgumentNullException.ThrowIfNull(argument: request);
 
+        var reads = new CompileInputLog();
+
         if (request.SourceTier is { } sourceTier) {
             _ = Interlocked.Increment(location: ref m_semanticDiagnoses);
 
-            var semantic = WorldSourceDiagnostics.DiagnoseSemantic(
-                cancellationToken: cancellationToken,
-                catalogFingerprint: m_catalogFingerprint,
-                diagnosis: sourceTier,
-                machines: m_machines
-            );
+            DiagnosticBag semantic;
+
+            using (CompileInputs.Record(log: reads)) {
+                semantic = WorldSourceDiagnostics.DiagnoseSemantic(
+                    cancellationToken: cancellationToken,
+                    catalogFingerprint: m_catalogFingerprint,
+                    diagnosis: sourceTier,
+                    machines: m_machines
+                );
+            }
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -254,7 +258,7 @@ public sealed partial class PuckLanguageServer {
             union.AddRange(diagnostics: semantic);
 
             return new Diagnosis(
-                Dependencies: null,
+                Dependencies: ((request.SourcePath is null) ? null : ReadFiles(reads: reads)),
                 Diagnostics: union,
                 Request: request
             );
@@ -262,24 +266,23 @@ public sealed partial class PuckLanguageServer {
 
         _ = Interlocked.Increment(location: ref m_sourceDiagnoses);
 
-        var tier = WorldSourceDiagnostics.DiagnoseSource(
-            cancellationToken: cancellationToken,
-            foreign: m_diagnoseDocument,
-            source: request.Text,
-            sourcePath: request.SourcePath,
-            vocabularies: m_vocabularyResolver
-        );
+        WorldSourceDiagnosis tier;
+
+        using (CompileInputs.Record(log: reads)) {
+            tier = WorldSourceDiagnostics.DiagnoseSource(
+                cancellationToken: cancellationToken,
+                foreign: m_diagnoseDocument,
+                session: m_session,
+                source: request.Text,
+                sourcePath: request.SourcePath,
+                vocabularies: m_vocabularyResolver
+            );
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         return new Diagnosis(
-            Dependencies: (((request.SourcePath is { } sourcePath) && (tier.Document is { } document))
-                ? ReadDependencies(
-                    document: document,
-                    sourcePath: sourcePath
-                )
-                : null
-            ),
+            Dependencies: ((request.SourcePath is null) ? null : ReadFiles(reads: reads)),
             Diagnostics: tier.Diagnostics,
             Request: request
         ) { SourceTier = tier };
@@ -303,7 +306,11 @@ public sealed partial class PuckLanguageServer {
             throw new InvalidOperationException(message: "The language server handles one message at a time.");
         }
         if (diagnosis.Dependencies is { } dependencies) {
-            m_dependencies[diagnosis.Request.Uri] = dependencies;
+            // A source tier replaces what the document read; the semantic tier that completes it adds what the
+            // composition read.
+            m_dependencies[diagnosis.Request.Uri] = (((diagnosis.SourceTier is null) && m_dependencies.TryGetValue(key: diagnosis.Request.Uri, value: out var sourceReads))
+                ? new HashSet<string>(collection: sourceReads.Concat(second: dependencies), comparer: PuckPaths.Comparer)
+                : dependencies);
         }
         if (
             (diagnosis.SourceTier is { HasSemanticTier: true } tier) &&

@@ -15,7 +15,7 @@ public class ConstructSugarGuardLawTests {
 
     private static string Decompile(JsonObject document) => WorldDecompiler.Decompile(root: document);
     private static JsonObject Compile(string source) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );

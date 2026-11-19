@@ -111,16 +111,29 @@ internal sealed class SdfMeshBakeGpuWork : ISdfGpuWorkClient {
     /// at the bake's measured rate (<see cref="SdfMeshPathBake.BatchTaps"/> for a held frame), and estimated at that rate.
     /// With nothing queued the first lattice is taken whatever its evaluations, since a lattice is never split; while
     /// work is queued a first lattice past what is left waits, priced so the service holds room for it.</remarks>
-    public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
-        var mostTaps = allowance.UnitsWithin(most: SdfMeshPathBake.BatchTaps, rate: m_rate);
+    public bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) =>
+        Take(allowance: allowance, estimatedSeconds: out estimatedSeconds, job: out job, owed: false, tables: tables);
+    /// <inheritdoc/>
+    /// <remarks>Takes a batch of the lattices of groups that owe the frame alone
+    /// (<see cref="SdfMeshPathBake.TryTakeOwed"/>), cut and priced as <see cref="TryTake"/> cuts and prices one.</remarks>
+    public bool TryTakeOwed(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) =>
+        Take(allowance: allowance, estimatedSeconds: out estimatedSeconds, job: out job, owed: true, tables: tables);
 
-        if (!m_bake.TryTake(batch: out var batch, field: tables.BackgroundProgram, firstFits: allowance.Queued, heldTaps: out var heldTaps, mostTaps: mostTaps)) {
+    private bool Take(SdfWorldTables tables, SdfGpuWorkAllowance allowance, bool owed, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out double estimatedSeconds) {
+        var mostTaps = allowance.UnitsWithin(most: SdfMeshPathBake.BatchTaps, rate: m_rate);
+        SdfMeshBakeBatch? batch;
+        long heldTaps;
+        var taken = (owed
+            ? m_bake.TryTakeOwed(batch: out batch, field: tables.BackgroundProgram, firstFits: allowance.Queued, heldTaps: out heldTaps, mostTaps: mostTaps)
+            : m_bake.TryTake(batch: out batch, field: tables.BackgroundProgram, firstFits: allowance.Queued, heldTaps: out heldTaps, mostTaps: mostTaps));
+
+        if (!taken) {
             job = null;
             estimatedSeconds = m_rate.SecondsOf(units: heldTaps);
             return false;
         }
-        job = batch;
-        estimatedSeconds = m_rate.SecondsOf(units: batch.Taps);
+        job = batch!;
+        estimatedSeconds = m_rate.SecondsOf(units: batch!.Taps);
         return true;
     }
     /// <inheritdoc/>

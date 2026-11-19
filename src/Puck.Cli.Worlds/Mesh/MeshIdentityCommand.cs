@@ -58,6 +58,9 @@ public static class MeshIdentityCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh identity {identity.Value:x32} ({backend}, build {buildDirectory}, entry version {identity.EntryVersion})\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  code {identity.Code:x32}: {identity.Members.Count} members ({string.Join(separator: ", ", values: assemblies)})\n");
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"  mask kernel {identity.MaskKernel:x32}, bake kernel {identity.BakeKernel:x32}\n");
+        foreach (var (stage, hash) in identity.Stages) {
+            output.Append(provider: CultureInfo.InvariantCulture, handler: $"  {stage} {hash:x32}\n");
+        }
         if (members) {
             foreach (var (member, hash) in identity.Members) {
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"    {hash:x32} {member}\n");
@@ -82,6 +85,9 @@ public static class MeshIdentityCommand {
 
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  against {other.Value:x32} (build {againstDirectory}): {((other.Value == identity.Value) ? "the same identity" : "another identity")}\n");
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"    entry version {((other.EntryVersion == identity.EntryVersion) ? "same" : $"{other.EntryVersion} -> {identity.EntryVersion}")}, mask kernel {((other.MaskKernel == identity.MaskKernel) ? "same" : "differs")}, bake kernel {((other.BakeKernel == identity.BakeKernel) ? "same" : "differs")}, code {changed.Count} member(s) differ\n");
+            foreach (var (stage, hash) in identity.Stages) {
+                output.Append(provider: CultureInfo.InvariantCulture, handler: $"    {stage} {((other.Stages[stage] == hash) ? "reusable" : "invalidated")}\n");
+            }
             foreach (var member in changed) {
                 output.Append(provider: CultureInfo.InvariantCulture, handler: $"      {(identity.Members.ContainsKey(key: member) ? (other.Members.ContainsKey(key: member) ? "changed" : "added") : "removed")} {member}\n");
             }

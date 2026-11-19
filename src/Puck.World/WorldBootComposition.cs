@@ -28,7 +28,7 @@ using Puck.World.Client;
 using Puck.World.Machines;
 using Puck.World.Protocol;
 using Puck.World.Server;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -700,7 +700,7 @@ public static class WorldBootComposition {
             documents: sp.GetRequiredService<IWorldDocumentSource>()
         ));
         // The one source every live document swap and replay re-read goes through: a .puck origin lowers here.
-        services.AddSingleton<IWorldDocumentSource>(implementationInstance: PuckDocumentComposer.Instance);
+        services.AddSingleton<IWorldDocumentSource>(implementationInstance: WorldCompileSession.Shared);
         services.AddSingleton<ICommandModule, WorldReplayCommandModule>();
         // The in-session history (world.history): keyframes plus the tape capture's per-tick input, for deterministic
         // seek, branch, diff, and replay-edit over the boot world. Off until world.history on.
@@ -798,6 +798,9 @@ public static class WorldBootComposition {
                 catalogFingerprint: MachineCatalogFingerprint(machineCatalog: catalog),
                 catalog: catalog);
         });
+        // The edit loops' clock: the reload verbs begin loops on it, and a composed renderer attaches and advances it.
+        services.AddSingleton<WorldIterationClock>();
+        services.AddSingleton<ICommandModule, WorldIterationCommandModule>();
         services.AddSingleton<WorldReload>();
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWatchCommandModule(
             watch: sp.GetRequiredService<WorldSourceWatch>(),
@@ -1467,6 +1470,7 @@ public static class WorldBootComposition {
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
+        services.AddSingleton<IWorldIterationReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldIterationClock>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshInputs);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSkin);
@@ -1840,6 +1844,7 @@ public static class WorldBootComposition {
         // The engine readiness world.wait ready waits on and a scheduled capture's hold reads.
         services.AddSingleton<IWorldEngineReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>());
         services.AddSingleton<IWorldBakeReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldScreenBinder>());
+        services.AddSingleton<IWorldIterationReadiness>(implementationFactory: static sp => sp.GetRequiredService<WorldIterationClock>());
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().Transforms);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshInputs);
         services.AddSingleton<Puck.Abstractions.Counting.IWorkCounterSource>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderProbe>().MeshSkin);

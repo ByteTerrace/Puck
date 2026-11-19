@@ -349,6 +349,9 @@ public static class WorldRenderRoot {
         probe.MeshIrradiance.Retarget(target: residency.MeshIrradiance.Counters);
         probe.Root = root;
         probe.Settings = sp.GetService<WorldRenderSettings>();
+        var iterations = sp.GetRequiredService<WorldIterationClock>();
+
+        iterations.Attach(bakes: binder, probe: probe);
         // Dynamic resolution reads the views' GPU frame time, the presenter's present timing, resolved on the first frame
         // it reads it, and the views' counted march steps.
         frameSource.FrameLoad = new WorldFrameLoadSource(
@@ -367,12 +370,13 @@ public static class WorldRenderRoot {
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
-        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation);
+        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation, iterations);
     }
 
     // All graph consumers see the clock of the snapshot the client actually received, including after replay
-    // restoration or a paused boot. Host pump elapsed time is only a scheduling coordinate.
-    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned) : IRenderRoot, ICaptureRequestTarget {
+    // restoration or a paused boot. Host pump elapsed time is only a scheduling coordinate. Each produced frame advances
+    // the edit loops the World times, just before the host presents it.
+    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned, WorldIterationClock iterations) : IRenderRoot, ICaptureRequestTarget {
         public string? PendingCapturePath => root.PendingCapturePath;
 
         public void RequestCapture(FrameCaptureRequest request) => root.RequestCapture(request: request);
@@ -388,7 +392,10 @@ public static class WorldRenderRoot {
                 AccumulatorTicks = ((ulong)(fraction * stepTicks)),
             };
 
-            return root.ProduceFrame(context: in delivered);
+            var produced = root.ProduceFrame(context: in delivered);
+
+            iterations.ObserveFrame();
+            return produced;
         }
     }
 }

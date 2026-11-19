@@ -14,7 +14,7 @@ namespace Puck.State.Rebuild.Corpus;
 /// emits no world of its own and is held through the sources that import it. It runs entirely on the transpiler, so it
 /// needs no booted world.</remarks>
 public partial class AuthorExpressionTests {
-    private static WorldCompilation Compile(string relativePath, string sourceText) => WorldCompiler.Compile(
+    private static WorldCompilation Compile(string relativePath, string sourceText) => WorldCompileSession.Shared.Compile(
         allowMultiple: true,
         cancellationToken: TestContext.Current.CancellationToken,
         source: sourceText,

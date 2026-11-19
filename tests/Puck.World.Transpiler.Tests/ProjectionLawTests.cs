@@ -16,7 +16,7 @@ public class ProjectionLawTests {
     private static string Canonical(JsonNode node) =>
         Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
     private static JsonObject Compile(string source, string label, string? sourcePath = null) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             sourcePath: sourcePath

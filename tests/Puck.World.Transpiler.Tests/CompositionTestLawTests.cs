@@ -67,7 +67,7 @@ public class CompositionTestLawTests {
         """;
 
     private static string Canonical(JsonNode node) => Encoding.UTF8.GetString(bytes: CanonicalJsonDocument.Serialize(node: node));
-    private static WorldCompilation Compile(string source) => WorldCompiler.Compile(
+    private static WorldCompilation Compile(string source) => WorldCompileSession.Shared.Compile(
         allowMultiple: true,
         cancellationToken: TestContext.Current.CancellationToken,
         source: source

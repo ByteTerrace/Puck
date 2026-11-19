@@ -38,8 +38,8 @@ public sealed class BrowserWorkspaceTests : IDisposable {
         const string Saved = "schema: \"puck.world.definition.v1\"\nhost { width: 320 }";
         const string Unsaved = "schema: \"puck.world.definition.v1\"\nhost { width: 640 }";
         var path = m_directory.WriteText(name: "root.puck", text: Saved);
-        var compiled = WorldCompiledSource.From(compilation: WorldCompiler.Compile(source: Unsaved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken));
-        var source = new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: compiled);
+        var compiled = WorldCompiledSource.From(compilation: WorldCompileSession.Shared.Compile(source: Unsaved, sourcePath: path, cancellationToken: TestContext.Current.CancellationToken));
+        var source = new WorldCompileSession().WithRoot(sourceCompilation: compiled);
         var work = new WorldBootWork();
 
         using (WorldBootWork.Attribute(work: work)) {
@@ -48,16 +48,16 @@ public sealed class BrowserWorkspaceTests : IDisposable {
         Assert.Equal(expected: 0L, actual: work.Read(kind: WorldBootWork.Compiles));
 
         File.WriteAllText(contents: Unsaved, path: path);
-        var saved = WorldCompiledSource.From(compilation: WorldCompiler.CompileFile(path: path, cancellationToken: TestContext.Current.CancellationToken));
+        var saved = WorldCompiledSource.From(compilation: WorldCompileSession.Shared.CompileFile(path: path, cancellationToken: TestContext.Current.CancellationToken));
 
-        Assert.True(condition: new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: saved)
+        Assert.True(condition: new WorldCompileSession().WithRoot(sourceCompilation: saved)
             .RecordInputs(resolvedName: path, content: saved.Document!));
     }
     [Fact]
     public void SuppliedRootProvenanceMustMatchTheEmittedDocumentBytes() {
         var path = m_directory.WriteText(name: "root.puck", text: "schema: \"puck.world.definition.v1\"\nhost { width: 320 }");
-        var compiled = WorldCompiledSource.From(compilation: WorldCompiler.CompileFile(path: path, cancellationToken: TestContext.Current.CancellationToken));
-        var source = new PuckDocumentComposer(cache: new WorldCompileCache(), sourceCompilation: compiled);
+        var compiled = WorldCompiledSource.From(compilation: WorldCompileSession.Shared.CompileFile(path: path, cancellationToken: TestContext.Current.CancellationToken));
+        var source = new WorldCompileSession().WithRoot(sourceCompilation: compiled);
         var different = JsonNode.Parse(utf8Json: compiled.Document!)!.AsObject();
 
         different["host"]!["width"] = 640;

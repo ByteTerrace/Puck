@@ -146,23 +146,42 @@ public sealed partial class SdfMeshPathBake {
     // they were and the plan's order decides. It runs on the frame's thread with the gate open: the frame's thread alone
     // replaces the group list and the copy index (Restart, Revisit, IndexCopies), and a priority only orders work, never
     // changes a mesh, so a worker reading one mid-measure, or finishing a group this measures, orders no mesh differently.
+    // Also marks each group in view (Group.InView: SdfMeshDemand.Sees, which takes every box with no demand point) and
+    // counts the groups that owe the frame (OwesFrame), which the bake's owed takes read (OwedGroups).
     private void Prioritize() {
-        if (Demand.Count == 0) { return; }
         // With every group done there is nothing to order: the done cursor makes this check constant once the bake ends.
         using (EnterGate(site: BakeGate.Frame)) {
             while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
-            if (m_doneThrough >= m_groups.Count) { return; }
+            if (m_doneThrough >= m_groups.Count) {
+                Volatile.Write(location: ref m_owedGroups, value: 0);
+                return;
+            }
         }
+
+        var measured = (Demand.Count > 0);
+
         foreach (var group in m_groups) {
             if (group.Done || !group.HasDemandBox) { continue; }
-
-            group.Priority = MeasureDemand(group, priority: true);
+            group.InView = MeasureSees(group: group);
+            if (measured) { group.Priority = MeasureDemand(group, priority: true); }
         }
-        // A group baking geometry other groups wait on ranks as the most wanted of them: this bake's followers, then the
-        // waiters of any bake holding the library, each of which publishes its own priority for its leader to read.
+        // A group baking geometry other groups wait on ranks as the most wanted of them, and is in view where any of them
+        // is: this bake's followers, then the waiters of any bake holding the library, each of which publishes its own
+        // priority for its leader to read.
         foreach (var group in m_groups) {
-            if (!group.Done && (group.Leader is { } leader)) { leader.Priority = MathF.Max(x: leader.Priority, y: group.Priority); }
+            if (!group.Done && (group.Leader is { } leader)) {
+                leader.Priority = MathF.Max(x: leader.Priority, y: group.Priority);
+                leader.InView |= group.InView;
+            }
         }
+
+        var holes = 0;
+
+        foreach (var group in m_groups) {
+            if (OwesFrame(group: group)) { holes++; }
+        }
+        Volatile.Write(location: ref m_owedGroups, value: holes);
+        if (!measured) { return; }
         foreach (var group in m_groups) {
             if (group.Done) { continue; }
             if (group.Waiter is { } waiter) { waiter.Priority = group.Priority; }
@@ -490,9 +509,9 @@ public sealed partial class SdfMeshPathBake {
             }
         }
     }
-    // Takes the earliest queued answer, else the queued work whose group has the highest priority, the earliest queued
-    // among equals, or null when none is queued; it says whether the work is a queued stage, which the backlog times.
-    // A group's priority is read as the frame thread last left it.
+    // Takes the earliest queued answer, else the queued work whose group ranks highest (RankOf: in view first, then by
+    // priority), the earliest queued among equals, or null when none is queued; it says whether the work is a queued
+    // stage, which the backlog times. A group's rank is read as the frame thread last left it.
     private static Action? TakeWork(out bool stage) {
         stage = false;
         lock (WorkGate) {
@@ -507,7 +526,7 @@ public sealed partial class SdfMeshPathBake {
             // before it runs.
             _ = WorkQueue.RemoveAll(match: static item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; });
             for (var index = 0; (index < WorkQueue.Count); index++) {
-                if ((best < 0) || (WorkQueue[index].Group.Priority > WorkQueue[best].Group.Priority)) { best = index; }
+                if ((best < 0) || (RankOf(group: WorkQueue[index].Group) > RankOf(group: WorkQueue[best].Group))) { best = index; }
             }
             if (best < 0) { return null; }
 
@@ -536,6 +555,14 @@ public sealed partial class SdfMeshPathBake {
     }
     // A shared geometry is wanted where its actual occurrences stand. Never union distant occurrence boxes:
     // the empty space between them is neither visible demand nor a nearby surface.
+    // Whether some view may see a group: one of a shared geometry's occurrences, or its box (SdfMeshDemand.Sees).
+    private bool MeasureSees(Group group) {
+        if (CopiesOf(group: group) is { } copies) { return CopiesSeen(center: group.DemandCenter, copies: copies, half: group.DemandHalf); }
+
+        var (center, half) = WorldBox(group: group);
+
+        return Demand.Sees(center: center, half: half);
+    }
     private float MeasureDemand(Group group, bool priority) {
         if (CopiesOf(group: group) is not { } copies) {
             var (center, half) = WorldBox(group: group);

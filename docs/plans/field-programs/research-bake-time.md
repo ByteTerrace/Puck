@@ -423,16 +423,15 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
 268-second free-running bake is what a player's first boot pays today.
 
 1. **Let the bake out of the frame budget while it owes the frame meshes.**
-   Groups that draw nothing yet (holes and missing floors, which
-   `SdfMeshPathBake.Owes` already names) are frame work, not optional
-   background work, but they share one millisecond a frame once the frame's
-   own GPU time passes its period. Give owed work its own allowance, or let the
-   share's floor rise while the bake owes holes. *Saving:* up to about 190 of
-   run C's 268 seconds. *Evidence:* run C's `budget-holds:4508,
-   deadline-holds:10773, stop=[taps:15411]` and `gpu-share:0.060`, 92 % of its
-   waiting spent waiting for a take, against zero holds in lockstep. *Check:*
-   a free-running cold boot's done line approaches run D's seconds with
-   `budget-holds` near zero while groups owe floors.
+   Built: an arrival's lattices (a group that draws nothing yet, or the first
+   detail over the floor it landed first) are taken under their own allowance (`SdfGpuWorkBudget.OwedAllowance`), the GPU the frames
+   leave idle between them, from a quarter of the period up to one period,
+   outside the credit. *Saving:* up to about 190 of run C's 268 seconds.
+   *Evidence:* run C's `budget-holds:4508, deadline-holds:10773,
+   stop=[taps:15411]` and `gpu-share:0.060`, 92 % of its waiting spent waiting
+   for a take, against zero holds in lockstep. *Check:* a free-running cold
+   boot's done line approaches run D's seconds, with `owed-jobs` carrying the
+   holes' batches and `budget-holds` near zero while groups owe floors.
 2. **Stop allocating the CPU stages' scratch afresh.** The contour, crossing
    search, weld and crease split now rent their workspace (`RentedList`,
    `RentedArrays`), which took a cold debug-world bake's collections from
@@ -442,9 +441,10 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
    ([refactoring packet](../open-items.md#refactoring-campaign)). *Check:* the
    done line's `managed=[allocated,gc-pause,collections]` falls by an order of
    magnitude from the first figures, its gen2 count toward none.
-3. **Start the bake on its own two kernels.** Build the mask and bake kernels
-   first and create the bake's GPU client when they exist, rather than after
-   all 39 pipelines. *Saving:* up to 16 seconds on Direct3D 12 and 36 on
+3. **Start the bake on its own two kernels.** Built: the mask and bake kernels
+   and the region copy build first, and the tables and the bake's GPU client
+   exist once they do (`SdfWorldPipelines.PollRequired`); the frame waits for
+   the rest (`SdfWorldTables.FrameWaiting`). *Saving:* up to 16 seconds on Direct3D 12 and 36 on
    Vulkan on a cold driver cache (a first boot, or the loop after a shader
    edit), less the two kernels' own compile, which was not measured. *Check:*
    the instrumentation's tables and first-take times, or the bake's first
@@ -453,30 +453,33 @@ Savings are against run D's 77-second lockstep bake unless stated; run C's
 4. **Break up the serial tail.** Group −133's crossing search and contour and
    group −7623's contour and landings hold one worker for 25 seconds or more.
    A large refined lattice now reads its fine samples' signs in parallel before
-   its crossing scan (`SdfSampledLattice.PrimeSigns`), which halved −133's first
-   crossing stage offline; the scan itself, the contour
+   its crossing scan (`SdfSampledLattice.PrimeSigns`): a thread-time trace of
+   −133's first crossing stage put more than half its samples in those reads
+   (`FineValue`, `StrideCorners`). The scan itself, the contour
    (`SdfDualContouring.ExtractRefined`, `Merge`) and the landing still run on
    one worker. Splitting such groups' lattices into slabs contoured in
    parallel, or starting the longest chains first, would let the tail overlap
    the busy span. *Saving:* up to about 10 seconds. *Check:* the done line's
    `tail=` shrinks, and no `slow` stage line exceeds a few seconds.
 5. **Shorten the gate's holds.** The done line's `gate=` now times every entry
-   by site: the workers' own holds total milliseconds (membership is a flag
+   by site: the workers' own holds are short (membership is a flag
    since `GroupList`, and `Follow` visits only a finished leader's followers),
-   and their waits are the frame thread's holds, seconds in all over a cold
+   and their waits are the frame thread's holds, which are far longer over a cold
    bake: the dress (`SdfMeshDresser.Dress` reads the groups and publishes its
-   rows inside `FrameAccess`, about 5 ms a frame while meshes land), each take's
+   rows inside `FrameAccess`, the longest of them while meshes land), each take's
    walk of every group not yet done (`TryTake`), and the residency's
    observation (`ObserveResidency`). Shortening those is the remaining work:
    the dress holding the gate only while it reads the groups and takes its
    claims, and the take reading a list of groups with a lattice ready rather
    than walking every group. *Check:* `gate=`'s `dress`, `take` and `observe`
    holds, and the workers' summed waits.
-6. **Weigh floors on a cold bake.** Floors are 24 % of the pool's work. Baking
-   detail first for groups the demand reaches soon, or floors only for groups
-   in view, trades how soon a place is whole for how soon it is done. *Saving:*
-   up to about 15 seconds to the last mesh. This is a product question about
-   first coverage, recorded here with its price.
+6. **Weigh floors on a cold bake.** Floors are 24 % of the pool's work. Built:
+   only a group arriving in view plans its floor first; one out of view bakes
+   its detail directly, and takes and worker stages order every group in view
+   ahead of those out of it (`SdfMeshPathBake.RankOf`). *Saving:* up to about 15
+   seconds to the last mesh, by how much of the world a boot's views leave out.
+   *Check:* `floors-raised` in `world.residency` falls below 1,449 on a cold
+   boot.
 7. **Narrow what an edit invalidates.** Today an edit to landing code rebakes
    every group from the GPU up. Keying the sampled and contoured result apart
    from the landing and level code would let such an edit re-land from a

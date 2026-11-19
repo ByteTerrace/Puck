@@ -1,7 +1,7 @@
 using Puck.Abstractions.Counting;
 using Puck.Testing;
-using Puck.World.Transpiler.Composition;
 using Xunit;
+using Puck.World.Transpiler;
 
 namespace Puck.World.Games.Tests;
 
@@ -14,7 +14,7 @@ public sealed class WorldCompileBootWorkLawTests {
         files.WriteBytes(name: "base.world.json", bytes: WorldDefinitionSerialization.Serialize(definition: Fixtures.BuildDocument()));
         files.WriteText(name: "middle.world.json", text: """{"basis":"base"}""");
         var path = files.WriteText(name: "subject.puck", text: "basis: \"middle\"\ndocumentId: \"compile-counts\"");
-        var cache = new WorldCompileCache(directory: files.PathOf(name: "s71-counters-compile-cache"));
+        var cache = new WorldCompileSession(directory: files.PathOf(name: "s71-counters-compile-cache"));
         var catalog = TestMachines.Catalog();
 
         WorldBootWork Boot() {
@@ -24,7 +24,7 @@ public sealed class WorldCompileBootWorkLawTests {
 
             Assert.True(condition: cache.TryCompile(compiled: out var compiled, failure: out var failure, path: path),
                 userMessage: failure?.Diagnostics.FormatReport(filePath: path));
-            Assert.True(condition: WorldSourceLoader.TryLoadForAdmission(admission: out _, catalog: catalog,
+            Assert.True(condition: WorldCompileSession.Shared.TryLoadForAdmission(admission: out _, catalog: catalog,
                 catalogFingerprint: catalog.CompositionFingerprint, document: compiled!.Document!, path: path, reason: out var reason, sourceCompilation: compiled),
                 userMessage: reason);
             return work;

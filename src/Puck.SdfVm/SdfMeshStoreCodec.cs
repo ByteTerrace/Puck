@@ -10,9 +10,7 @@ namespace Puck.SdfVm;
 // Mesh streams use independent attribute planes, delta predicted within each plane, then zlib.
 // The envelope checks compressed bytes before allocation; decoded counts are bounded by remaining bytes.
 internal static unsafe class SdfMeshStoreCodec {
-    // The entry format's version, which the bake identity folds (SdfMeshStore.BuildIdentityOf) and TryDecode checks. The
-    // bake closure roots Encode alone, so an edit to the decode moves no identity: change this tag in any edit after which
-    // a stored entry's bytes would decode to another mesh, or the store serves entries read under the new meaning.
+    // The envelope version, checked before decoding. The stage keys also include the reachable codec code.
     internal const ulong Magic = 0x4148534D4B435550ul; // PUCKMSHA
     internal const int HeaderBytes = 28;
 
@@ -72,22 +70,35 @@ internal static unsafe class SdfMeshStoreCodec {
 
     internal static byte[] Encode(UInt128 key, SdfMesh? mesh, int[] materials) {
         var pieces = PiecesOf(mesh: mesh);
-        var (low, high, width) = GridOf(pieces: pieces);
         var canonical = SdfMeshMaterials.Canonical(materials: materials, pieces: pieces);
+        return EncodePlanes(key, pieces, mesh is { Chunks.Count: > 0 }, GridOf(pieces), materials, canonical, exact: false);
+    }
+
+    // A checkpoint feeds later geometry operations. Quantizing it here would make a warm derivation differ from a cold one.
+    internal static byte[] EncodeExact(UInt128 key, SdfMesh? mesh) => EncodePlanes(
+        key, PiecesOf(mesh), mesh is { Chunks.Count: > 0 }, new PositionGrid(default, default, 4), [], [], exact: true);
+
+    private static byte[] EncodePlanes(UInt128 key, IReadOnlyList<SdfMesh> pieces, bool chunked, PositionGrid grid,
+        int[] materials, int[] canonical, bool exact) {
+        var (low, high, width) = grid;
         using var payload = new MemoryStream();
 
         using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true)) {
             writer.Write(value: canonical.Length);
             foreach (var material in canonical) { writer.Write(value: material); }
-            writer.Write(value: (mesh is { Chunks.Count: > 0 }));
+            writer.Write(value: chunked);
             writer.Write(value: pieces.Count);
-            foreach (var piece in pieces) { WriteMesh(from: materials, high: high, low: low, mesh: piece, to: canonical, width: width, writer: writer); }
+            foreach (var piece in pieces) { WriteMesh(from: materials, high: high, low: low, mesh: piece, to: canonical, width: width, writer: writer, exact: exact); }
         }
+        return EncodePayload(key, payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
+    }
+
+    internal static byte[] EncodePayload(UInt128 key, ReadOnlySpan<byte> payload) {
         using var output = new MemoryStream();
 
         output.Write(buffer: new byte[HeaderBytes]);
         using (var compressor = new ZLibStream(output, CompressionLevel.Fastest, leaveOpen: true)) {
-            compressor.Write(buffer: payload.GetBuffer().AsSpan(0, checked((int)payload.Length)));
+            compressor.Write(buffer: payload);
         }
         var length = checked((int)output.Length);
 
@@ -96,19 +107,14 @@ internal static unsafe class SdfMeshStoreCodec {
 
         BinaryPrimitives.WriteUInt64LittleEndian(destination: bytes, value: Magic);
         BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes.AsSpan(start: 8), value: key);
-        BinaryPrimitives.WriteInt32LittleEndian(destination: bytes.AsSpan(start: 24), value: checked((int)payload.Length));
+        BinaryPrimitives.WriteInt32LittleEndian(destination: bytes.AsSpan(start: 24), value: payload.Length);
         BinaryPrimitives.WriteUInt128LittleEndian(destination: bytes.AsSpan(start: length), value: XxHash128.HashToUInt128(bytes.AsSpan(length: length, start: 0)));
         return bytes;
     }
-    // Decodes an entry into a storage, which keeps each plane where the mesh will live. `taking` is the taking group's
-    // material ids: the triangle ids are written renumbered to them when the mesh can be held in them and renumbered back
-    // by place (SdfMeshMaterials.Remap), and as the entry stores them otherwise; `materials` answers the ids the written
-    // mesh carries. `declined` marks an entry that is sound but whose shape the storage did not take.
-    internal static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh,
-        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, in SdfMeshStoreWorkspace workspace, Puck.Hosting.Jobs.MemoryAccount.Owner owner, IAllocator? allocator = null) {
-        mesh = null;
-        materials = [];
-        declined = false;
+    internal static bool TryPayload(ReadOnlySpan<byte> bytes, UInt128 key, out ReadOnlySpan<byte> compressed,
+        out int length, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) {
+        compressed = default;
+        length = 0;
         refusal = "is truncated";
         if (bytes.Length < (HeaderBytes + ChecksumBytes)) { return false; }
         var body = bytes[..(bytes.Length - ChecksumBytes)];
@@ -120,10 +126,35 @@ internal static unsafe class SdfMeshStoreCodec {
         refusal = "holds another geometry's mesh";
         if (BinaryPrimitives.ReadUInt128LittleEndian(source: body[8..]) != key) { return false; }
         refusal = "holds invalid compressed mesh data";
-        var length = BinaryPrimitives.ReadInt32LittleEndian(source: body[24..]);
-        var compressed = body[HeaderBytes..];
+        length = BinaryPrimitives.ReadInt32LittleEndian(source: body[24..]);
+        compressed = body[HeaderBytes..];
+        return (length > 0) && (length <= 1_073_741_824) && !compressed.IsEmpty;
+    }
 
-        if ((length <= 0) || (length > 1_073_741_824) || compressed.IsEmpty) { return false; }
+    internal static bool TryInflate(ReadOnlySpan<byte> compressed, Span<byte> destination) {
+        try {
+            fixed (byte* start = compressed) {
+                using var input = new UnmanagedMemoryStream(pointer: start, length: compressed.Length);
+                using var decoder = new ZLibStream(mode: CompressionMode.Decompress, stream: input);
+                decoder.ReadExactly(destination);
+                return decoder.ReadByte() == -1;
+            }
+        } catch (Exception exception) when (exception is IOException or InvalidDataException) {
+            return false;
+        }
+    }
+
+    // Decodes an entry into a storage, which keeps each plane where the mesh will live. `taking` is the taking group's
+    // material ids: the triangle ids are written renumbered to them when the mesh can be held in them and renumbered back
+    // by place (SdfMeshMaterials.Remap), and as the entry stores them otherwise; `materials` answers the ids the written
+    // mesh carries. `declined` marks an entry that is sound but whose shape the storage did not take.
+    internal static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh,
+        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, in SdfMeshStoreWorkspace workspace, Puck.Hosting.Jobs.MemoryAccount.Owner owner, IAllocator? allocator = null) {
+        mesh = null;
+        materials = [];
+        declined = false;
+        if (!TryPayload(bytes, key, out var compressed, out var length, out refusal)) { return false; }
+        refusal = "holds invalid compressed mesh data";
 
         var finished = false;
 
@@ -143,15 +174,7 @@ internal static unsafe class SdfMeshStoreCodec {
                 return false;
             }
             decoded.Resize(clear: false, length: length, preserve: false);
-            try {
-                fixed (byte* start = compressed) {
-                    using var input = new UnmanagedMemoryStream(pointer: start, length: compressed.Length);
-                    using var decoder = new ZLibStream(mode: CompressionMode.Decompress, stream: input);
-
-                    decoder.ReadExactly(buffer: decoded.GetSpan());
-                    if (decoder.ReadByte() != -1) { return false; }
-                }
-            } catch (Exception exception) when ((exception is IOException or InvalidDataException)) { return false; }
+            if (!TryInflate(compressed, decoded.GetSpan())) { return false; }
 
             var cursor = new Cursor(data: decoded.GetSpan());
             var palette = new int[cursor.Count(itemBytes: 4)];
@@ -197,7 +220,7 @@ internal static unsafe class SdfMeshStoreCodec {
         }
     }
 
-    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, int[] from, int[] to) {
+    private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, int[] from, int[] to, bool exact) {
         WriteVector(writer, mesh.BakeCell);
         var positions = mesh.Positions.Span;
 
@@ -212,7 +235,7 @@ internal static unsafe class SdfMeshStoreCodec {
             }
             WritePlane(width: width, words: words, writer: writer);
         }
-        var oct = IsOctahedral(normals: mesh.Normals.Span);
+        var oct = !exact && IsOctahedral(normals: mesh.Normals.Span);
 
         writer.Write(value: oct);
         if (oct) {

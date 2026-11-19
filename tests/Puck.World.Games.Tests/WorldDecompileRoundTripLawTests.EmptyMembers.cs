@@ -239,7 +239,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
                 continue;
             }
 
-            var compilation = WorldCompiler.Compile(
+            var compilation = WorldCompileSession.Shared.Compile(
                 cancellationToken: TestContext.Current.CancellationToken,
                 source: source
             );
@@ -294,7 +294,7 @@ public sealed partial class WorldDecompileRoundTripLawTests {
                 continue;
             }
 
-            var compilation = WorldCompiler.Compile(
+            var compilation = WorldCompileSession.Shared.Compile(
                 cancellationToken: TestContext.Current.CancellationToken,
                 source: source
             );

@@ -1,5 +1,4 @@
 using Puck.Confinement;
-using System.Collections.Concurrent;
 using System.Text;
 using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
@@ -23,37 +22,39 @@ public sealed record WorldDocumentClaims(string Path, IReadOnlyList<string> Name
 /// (<see cref="WorldSourceDeclaration"/>). A name resolves to the source that emits it whatever that file's stem, so
 /// resolving one name means knowing what every source beside it emits; reading that from a parse rather than a compile
 /// is what lets a compile resolve its own basis through the index without compiling its siblings, whose compiles would
-/// read their bases in turn. The document composer (<see cref="PuckDocumentComposer"/>), and through it a tree compile
+/// read their bases in turn. The compile session's composition (<see cref="WorldCompileSession"/>), and through it a tree compile
 /// and the official build, read names through here and nowhere else.
 /// <para>
 /// Every read goes through <see cref="CompileInputs"/>: the directory's listing
-/// (<see cref="CompileInputKind.Listing"/>) and each source's digest. A compile that resolves a name here therefore
-/// rests on both, and the compile cache serves it again only while both hold: a file added beside it, removed, or
-/// renamed in any letter case moves the listing, and an edit to any source there, the edits that change what it
-/// declares among them, moves that source's digest. What a source declares, and whether it is a world source at all,
-/// is held by the digest of its bytes, so an unchanged source is parsed once per process however often the index is
-/// read; and a directory's claims are held while its listing and every source's digest are the ones they were built
-/// from. The door answers a listing and a digest from each path's stamp while the stamp holds, so reading an unchanged
-/// directory's claims again reads no file's contents.
+/// (<see cref="CompileInputKind.Listing"/>) and what each source declares (<see cref="CompileInputKind.Declaration"/>,
+/// which the index answers as the declarer it registers when its assembly loads). A compile that resolves a name here
+/// therefore rests on both, and the compile cache serves it again only while both hold: a file added beside it,
+/// removed, or renamed in any letter case moves the listing, and an edit that changes whether a source there is a
+/// world source, whether it parses, or which names it emits moves that source's declaration. An edit to anything else
+/// in a sibling (a value, a row) leaves every compile that only resolved a name beside it standing. What a source
+/// declares, and whether it is a world source at all, is held by the digest of its bytes, so an unchanged source is
+/// parsed once per process however often the index is read; and a directory's claims are held while its listing and
+/// every source's digest are the ones they were built from. The door answers a listing and a digest from each path's
+/// stamp while the stamp holds, so reading an unchanged directory's claims again reads no file's contents.
 /// </para>
 /// </summary>
 public static class WorldSourceIndex {
-    /// <summary>The most parsed declarations the index holds; reading one more past it starts the hold afresh.</summary>
+    /// <summary>The most parsed declarations the index holds; reading one more past it forgets the least recently used.</summary>
     public const int MaxHeldDeclarations = 4096;
-    /// <summary>The most directories whose claims the index holds; reading one more past it starts the hold afresh.</summary>
+    /// <summary>The most directories whose claims the index holds; reading one more past it forgets the least recently used.</summary>
     public const int MaxHeldDirectories = 1024;
 
     private const string DeclarationExtension = ".declaration";
     private const string DeclarationsDirectory = "declarations";
     private static readonly Puck.Abstractions.CacheBound DeclarationRetention = new(MaxBytes: (4L << 20), MaxEntries: 4096);
 
-    // A source's declaration by the digest of its bytes; null for bytes that do not parse.
-    private static readonly ConcurrentDictionary<string, WorldSourceDeclaration?> Held = new(comparer: StringComparer.Ordinal);
+    // A source's declaration by the digest of its bytes; null for bytes that do not parse. Every table is a product of
+    // the parser, so a hot-reload edit to it forgets them all (CodeDerivedCache).
+    private static readonly CodeDerivedCache<string, WorldSourceDeclaration?> Held = new(capacity: MaxHeldDeclarations);
     // Whether a source is a world source (IsWorldSource), by the digest of its bytes.
-    private static readonly ConcurrentDictionary<string, bool> HeldVocabulary = new(comparer: StringComparer.Ordinal);
+    private static readonly CodeDerivedCache<string, bool> HeldVocabulary = new(capacity: MaxHeldDeclarations);
     // A directory's claims, by the directory exactly as spelled, with the listing and digests they were built from.
-    private static readonly ConcurrentDictionary<string, HeldClaims> HeldDirectories = new(comparer: StringComparer.Ordinal);
-    private static int HeldRevision;
+    private static readonly CodeDerivedCache<string, HeldClaims> HeldDirectories = new(capacity: MaxHeldDirectories);
 
     // The claims a directory's files made: the files listed, each source's digest in listing order (null for one that
     // could not be read), and the claims built from them.
@@ -70,15 +71,13 @@ public static class WorldSourceIndex {
     public static IReadOnlyList<WorldDocumentClaims> Claims(string directory) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
 
-        ForgetOnCodeUpdate();
-
         var files = CompileInputs.List(directory: directory);
         var digests = new string?[files.Count];
-        var contents = new byte[]?[files.Count];
+        var known = new Known?[files.Count];
 
         for (var index = 0; (index < files.Count); index++) {
             if (WorldDocumentName.IsSourceFile(path: files[index])) {
-                digests[index] = TryDigest(content: out contents[index], path: files[index]);
+                known[index] = TryKnow(digest: out digests[index], path: files[index]);
             }
         }
 
@@ -98,9 +97,9 @@ public static class WorldSourceIndex {
                     Names: [WorldDocumentName.OfDocumentFile(path: System.IO.Path.GetFileName(path: path))],
                     Path: path
                 ));
-            } else if (WorldDocumentName.IsSourceFile(path: path) && HeldIsWorldSource(content: contents[index], digest: digests[index], path: path)) {
+            } else if (WorldDocumentName.IsSourceFile(path: path) && (known[index]?.IsWorld ?? true)) {
                 claims.Add(item: new WorldDocumentClaims(
-                    Names: (HeldDeclaration(content: contents[index], digest: digests[index], path: path)?.Names(sourcePath: path) ?? WorldCompilation.EmittedNames(
+                    Names: (known[index]?.Declaration?.Names(sourcePath: path) ?? WorldCompilation.EmittedNames(
                         declaredWorlds: [],
                         emitsDocument: true,
                         sourcePath: path
@@ -110,79 +109,84 @@ public static class WorldSourceIndex {
             }
         }
 
-        if (HeldDirectories.Count >= MaxHeldDirectories) {
-            HeldDirectories.Clear();
-        }
-        HeldDirectories[directory] = new HeldClaims(Claims: claims, Digests: digests, Files: files);
+        HeldDirectories.Set(key: directory, value: new HeldClaims(Claims: claims, Digests: digests, Files: files));
 
         return claims;
     }
-    // A source's digest through the door, recording it; null for a source that is absent or cannot be read, which
-    // claims its stem. `content` is its bytes when the door had to read them.
-    private static string? TryDigest(string path, out byte[]? content) {
+    // What one source's bytes declare: whether it is a world source, and the names it emits when it is (null for one
+    // that does not parse).
+    private readonly record struct Known(bool IsWorld, WorldSourceDeclaration? Declaration);
+
+    // The name the index's declaration facts carry (CompileInputs.RegisterDeclarer).
+    private const string DeclarerName = "world-source";
+
+    // Registers the index as the declarer of its facts the moment the assembly loads, so any process holding a session
+    // can prove a persisted compile's declaration facts before it compiles anything.
+    [System.Runtime.CompilerServices.ModuleInitializer]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        category: "Usage",
+        checkId: "CA2255",
+        Justification = "A persisted compile's declaration facts are checked through CompileInputs, which this assembly does not own, before any type here need run; registering when the module loads is the one point every such check follows."
+    )]
+    internal static void RegisterDeclarer() => CompileInputs.RegisterDeclarer(
+        declare: static (digest, read) => Canonical(known: Know(digest: digest, read: read)),
+        name: DeclarerName
+    );
+
+    // A source's declaration through the door, recorded as a declaration fact: the compile rests on what the source
+    // declares, not on its bytes, so a value edit there leaves it standing. Null for a source that is absent or cannot
+    // be read, which claims its stem; `digest` is the digest of its bytes, null alike.
+    private static Known? TryKnow(string path, out string? digest) {
         try {
-            return CompileInputs.Digest(content: out content, path: path);
+            var known = CompileInputs.Declare<Known?>(
+                declare: static (digest, read) => {
+                    var known = Know(digest: digest, read: read);
+
+                    return (known, Canonical(known: known));
+                },
+                declarer: DeclarerName,
+                digest: out digest,
+                path: path
+            );
+
+            return ((digest is null) ? null : known);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            content = null;
+            digest = null;
 
             return null;
         }
     }
-    // The source's bytes when the digest's holds do not answer: those the door just read, else read again.
-    private static byte[]? BytesOf(string path, byte[]? content) {
-        if (content is not null) {
-            return content;
-        }
-        try {
-            return CompileInputs.ReadAllBytes(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return null;
-        }
-    }
-    // Whether the source whose digest is `digest` is a world source; one that cannot be read is held to be.
-    private static bool HeldIsWorldSource(string path, string? digest, byte[]? content) {
-        if (digest is null) {
-            return true;
-        }
-        if (HeldVocabulary.TryGetValue(key: digest, value: out var held)) {
-            return held;
-        }
-        if (BytesOf(content: content, path: path) is not { } bytes) {
-            return true;
-        }
+    // What the source whose bytes digest to `digest` declares, from the tables held by digest, reading the bytes only
+    // for a digest they do not hold. What the bytes read declare is held under their own digest, which differs from
+    // `digest` only when the file moved since.
+    private static Known Know(string digest, Func<byte[]> read) {
+        byte[]? bytes = null;
 
-        var isWorld = IsWorldSource(source: FileContent.Text(content: bytes));
-
-        if (HeldVocabulary.Count >= MaxHeldDeclarations) {
-            HeldVocabulary.Clear();
+        if (!HeldVocabulary.TryGetValue(key: digest, value: out var isWorld)) {
+            bytes = read();
+            isWorld = IsWorldSource(source: FileContent.Text(content: bytes));
+            HeldVocabulary.Set(key: ContentPin.Compute(content: bytes).Hex, value: isWorld);
         }
-        // Held under the digest of the bytes actually read, which differ from `digest` only when the file moved since.
-        HeldVocabulary[ContentPin.Compute(content: bytes).Hex] = isWorld;
-
-        return isWorld;
-    }
-    // What the source whose digest is `digest` declares; null when it cannot be read or does not parse.
-    private static WorldSourceDeclaration? HeldDeclaration(string path, string? digest, byte[]? content) {
-        if (digest is null) {
-            return null;
+        if (!isWorld) {
+            return new Known(Declaration: null, IsWorld: false);
         }
         if (Held.TryGetValue(key: digest, value: out var held)) {
-            return held;
+            return new Known(Declaration: held, IsWorld: true);
         }
 
-        return ((BytesOf(content: content, path: path) is { } bytes) ? Declaration(content: bytes) : null);
+        return new Known(Declaration: Declaration(content: (bytes ?? read())), IsWorld: true);
     }
-    // A hot-reload edit to the parser makes every held declaration a product of code that no longer runs.
-    private static void ForgetOnCodeUpdate() {
-        var revision = Puck.Abstractions.CodeRevision.Current;
-
-        if (Volatile.Read(location: ref HeldRevision) != revision) {
-            Held.Clear();
-            HeldVocabulary.Clear();
-            HeldDirectories.Clear();
-            Volatile.Write(location: ref HeldRevision, value: revision);
-        }
-    }
+    // The canonical text of a declaration fact: whether the source is a world source, whether it parses, whether it
+    // emits a document, and each world it declares, length-prefixed. Two sources declare the same exactly when their
+    // texts are equal.
+    private static string Canonical(Known known) => (!known.IsWorld
+        ? "other"
+        : ((known.Declaration is not { } declaration)
+            ? "world unparsed"
+            : string.Concat(
+                str0: (declaration.EmitsDocument ? "world emits\n" : "world library\n"),
+                str1: string.Concat(values: declaration.Worlds.Select(selector: static world => $"{world.Length}:{world}\n"))
+            )));
     /// <summary>Returns whether source text is a world source: its <c>schema:</c> names the world vocabulary
     /// (<see cref="WorldDefinition.SchemaVersion"/>), or it names none, as a module library and an imported fragment
     /// do. A source naming another vocabulary's schema (a cartridge's) is not, whatever its folder or file
@@ -202,11 +206,7 @@ public static class WorldSourceIndex {
     public static bool IsWorldSourceFile(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        ForgetOnCodeUpdate();
-
-        var digest = TryDigest(content: out var content, path: path);
-
-        return HeldIsWorldSource(content: content, digest: digest, path: path);
+        return (TryKnow(digest: out _, path: path)?.IsWorld ?? true);
     }
     /// <summary>Reads what the source at <paramref name="path"/> declares, through <see cref="CompileInputs"/>.</summary>
     /// <param name="path">The <c>.puck</c> source.</param>
@@ -214,19 +214,15 @@ public static class WorldSourceIndex {
     public static WorldSourceDeclaration? Declaration(string path) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
 
-        ForgetOnCodeUpdate();
-
-        var digest = TryDigest(content: out var content, path: path);
-
-        return HeldDeclaration(content: content, digest: digest, path: path);
+        return TryKnow(digest: out _, path: path)?.Declaration;
     }
     /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
-    /// those bytes and persisted beside the process's compiles (<see cref="WorldCompileCache.Shared"/>) when it
+    /// those bytes and persisted beside the process's compiles (<see cref="WorldCompileSession.Shared"/>) when it
     /// persists them.</summary>
     /// <param name="content">The <c>.puck</c> source's bytes.</param>
     /// <returns>The declaration, or <see langword="null"/> when the bytes do not parse.</returns>
     public static WorldSourceDeclaration? Declaration(byte[] content) =>
-        Declaration(content: content, compilations: WorldCompileCache.Shared.Directory);
+        Declaration(content: content, compilations: WorldCompileSession.Shared.Directory);
     /// <summary>Reads what the source whose bytes are <paramref name="content"/> declares, held by the digest of
     /// those bytes. A declaration is a pure function of the bytes and the parser, so it is also kept in a
     /// <c>declarations</c> directory under <paramref name="compilations"/>, named by the compiler's identity and the
@@ -239,25 +235,10 @@ public static class WorldSourceIndex {
     public static WorldSourceDeclaration? Declaration(byte[] content, string? compilations) {
         ArgumentNullException.ThrowIfNull(argument: content);
 
-        ForgetOnCodeUpdate();
-
-        var key = ContentPin.Compute(content: content).Hex;
-
-        if (Held.TryGetValue(
-            key: key,
-            value: out var held
-        )) {
-            return held;
-        }
-
-        if (Held.Count >= MaxHeldDeclarations) {
-            Held.Clear();
-        }
-
+        // The persisted declaration is named by the compiler identity, which folds in an update applied to the parser.
         return Held.GetOrAdd(
-            key: key,
-            // The persisted declaration is named by the compiler identity, which folds in an update applied to the parser.
-            value: ((compilations is null) ? Parse(content: content) : ReadPersisted(content: content, key: key, root: compilations))
+            derive: key => ((compilations is null) ? Parse(content: content) : ReadPersisted(content: content, key: key, root: compilations)),
+            key: ContentPin.Compute(content: content).Hex
         );
     }
     /// <summary>Forgets every declaration held in memory, so the next read of each source reads its persisted
@@ -270,7 +251,7 @@ public static class WorldSourceIndex {
 
     private static WorldSourceDeclaration? ReadPersisted(byte[] content, string key, string root) {
         var directory = System.IO.Path.Combine(path1: root, path2: DeclarationsDirectory);
-        var path = System.IO.Path.Combine(path1: directory, path2: $"{WorldCompileCache.CompilerIdentity[..16]}-{key}{DeclarationExtension}");
+        var path = System.IO.Path.Combine(path1: directory, path2: $"{WorldCompileSession.CompilerIdentity[..16]}-{key}{DeclarationExtension}");
 
         try {
             if (File.Exists(path: path) && TryDecode(declaration: out var stored, text: File.ReadAllText(path: path))) {

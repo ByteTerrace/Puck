@@ -13,7 +13,7 @@ namespace Puck.World.Transpiler.Tests;
 /// form.</remarks>
 public class ArgumentSpellingLawTests {
     private static (JsonObject? Document, DiagnosticBag Diagnostics) Compile(string effect) {
-        var result = WorldCompiler.Compile(
+        var result = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: Source(effect: effect)
         );
@@ -119,7 +119,7 @@ public class ArgumentSpellingLawTests {
         Assert.False(condition: diagnostics.HasErrors);
 
         var printed = WorldDecompiler.Decompile(root: document!);
-        var recompiled = WorldCompiler.Compile(cancellationToken: TestContext.Current.CancellationToken, source: printed);
+        var recompiled = WorldCompileSession.Shared.Compile(cancellationToken: TestContext.Current.CancellationToken, source: printed);
 
         Assert.False(condition: recompiled.Diagnostics.HasErrors, userMessage: printed);
         Assert.True(condition: JsonNode.DeepEquals(node1: document, node2: recompiled.Json), userMessage: printed);

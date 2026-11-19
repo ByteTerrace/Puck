@@ -183,7 +183,7 @@ internal static class PuckWorldLoader {
         WorldCompilation? compileFailure;
 
         try {
-            _ = WorldCompileCache.Shared.TryCompile(
+            _ = WorldCompileSession.Shared.TryCompile(
                 compiled: out compiled,
                 failure: out compileFailure,
                 path: path
@@ -238,7 +238,7 @@ internal static class PuckWorldLoader {
         );
 
         var keys = preview ? WorldPrivateDrawKeys.ForScenario() : WorldPrivateDrawKeys.Create();
-        if (!WorldSourceLoader.TryLoadForAdmission(
+        if (!WorldCompileSession.Shared.TryLoadForAdmission(
             keys: keys,
             admission: out var loaded,
             catalog: catalog,

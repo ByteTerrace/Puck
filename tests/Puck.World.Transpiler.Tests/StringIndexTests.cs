@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 // authored as rows of characters reads cell by cell at compile time.
 public class StringIndexTests {
     private static WorldCompilation Compile(string body) =>
-        WorldCompiler.Compile(
+        WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: $"schema: \"puck.world.definition.v1\"\n\n{body}"
         );

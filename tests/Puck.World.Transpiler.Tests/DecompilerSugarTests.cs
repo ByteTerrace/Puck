@@ -8,7 +8,7 @@ namespace Puck.World.Transpiler.Tests;
 /// gate/effect/decision inverse, the generalized call-form escape hatch, and shape/placement default elision.</summary>
 public class DecompilerSugarTests {
     private static JsonObject Recompile(string source) {
-        var compilation = WorldCompiler.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
+        var compilation = WorldCompileSession.Shared.Compile(source: source, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: compilation.Diagnostics.HasErrors, userMessage: compilation.Diagnostics.FormatReport(source));
         return Assert.IsType<JsonObject>(@object: compilation.Json);

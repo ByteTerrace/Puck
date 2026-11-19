@@ -6,6 +6,7 @@ using Puck.Confinement;
 using Puck.World.Transpiler.Composition;
 using Puck.World.Transpiler.Lowering;
 using Puck.World;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Test;
 
@@ -32,11 +33,12 @@ public static partial class TestCommand {
         reason = null;
         skipped = null;
 
-        // Share the persistent compile cache, but retain generated test bytes only while staging this source.
-        // The process-wide cache would keep every generated document alive for the entire sweep.
-        _ = new WorldCompileCache(directory: WorldCompileCache.Shared.Directory).TryCompile(
+        // Generated test bytes live only while this source is staged: held for the session, every generated document
+        // would stay alive for the entire sweep.
+        _ = WorldCompileSession.Shared.TryCompile(
             compiled: out var compiled,
             failure: out var failure,
+            hold: false,
             includeTests: true,
             path: source
         );
@@ -200,7 +202,7 @@ public static partial class TestCommand {
         // emitting that name is never read. A module library carries no document name, and a composition only the
         // worlds it declares, so a document named like either runs, and the library is swept for the tests its modules
         // carry.
-        if (!PuckDocumentComposer.TryCarriers(
+        if (!WorldCompileSession.TryCarriers(
             carriers: out var carriers,
             directory: rooted,
             libraries: out var libraries,
@@ -397,7 +399,7 @@ public static partial class TestCommand {
                 path2: WorldDocumentName.DocumentFile(name: document)
             ));
             var found = (File.Exists(path: source)
-                ? ((WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out _, path: source) && compiled!.EmitsDocument && (compiled.Document is { } bytes))
+                ? ((WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out _, path: source) && compiled!.EmitsDocument && (compiled.Document is { } bytes))
                     ? ParseObject(bytes: bytes)
                     : null)
                 : (File.Exists(path: json)
@@ -412,7 +414,7 @@ public static partial class TestCommand {
 
                 if (matched.Length > 0) {
                     var inheritedState = ((((found["basis"] is not null) || (found["imports"] is not null)) &&
-                        PuckDocumentComposer.TryComposeWorldDocument(
+                        WorldCompileSession.Shared.TryCompose(
                             chainBytes: out _,
                             composed: out var composedFound,
                             reason: out _,

@@ -42,7 +42,7 @@ public class ConstructKindAdmissionLawTests {
         _ => "",
     });
     private static string Report(string source) {
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             embeddings: WorldSources.LoreLock("puck-fixture", "x"),
             source: source

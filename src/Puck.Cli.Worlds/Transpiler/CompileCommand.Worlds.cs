@@ -11,7 +11,7 @@ namespace Puck.Cli.Transpiler;
 
 public static partial class CompileCommand {
     private static int ExecuteWorldCompilation(string source, string sourcePath, string? outputPath, ImportHandling imports, bool strict, bool validate, bool updateAssets, IDictionary<string, string>? written = null) {
-        var compilation = WorldCompiler.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
+        var compilation = WorldCompileSession.Shared.Compile(source, sourcePath: sourcePath, imports: imports, allowMultiple: true, updateAssets: updateAssets);
         var diagnostics = compilation.Diagnostics;
 
         CompilationMeasurement.Note(path: sourcePath, work: compilation.EvaluationWork);

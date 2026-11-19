@@ -9,7 +9,7 @@ using Puck.Commands;
 using Puck.Launcher;
 using Puck.World.Protocol;
 using Puck.World.Server;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.World;
 
@@ -249,7 +249,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             return CommandResult.Error(output: $"[world.benchmark: '{reference}' names no route of the running world ({string.Join(separator: ", ", values: (server?.Definition.Routes.Select(selector: static candidate => candidate.Name) ?? []))}) and no .puck source beside the working directory or the world's document]");
         }
 
-        _ = WorldCompileCache.Shared.TryCompile(compiled: out var compiled, failure: out var failure, includeTests: true, path: path);
+        _ = WorldCompileSession.Shared.TryCompile(compiled: out var compiled, failure: out var failure, includeTests: true, path: path);
         if ((failure is not null) || (compiled is null)) {
             return CommandResult.Error(output: $"[world.benchmark: the route source '{reference}' does not compile: {string.Join(separator: "; ", values: (failure?.Diagnostics ?? []).Select(selector: static diagnostic => diagnostic.Message).Take(count: 3))}]");
         }

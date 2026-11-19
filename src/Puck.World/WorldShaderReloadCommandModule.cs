@@ -13,7 +13,8 @@ namespace Puck.World;
 /// </summary>
 /// <param name="renderProbe">The render probe whose residency the verbs reload and report.</param>
 /// <param name="compiler">The World's shader compiler, whose toolchain a carried kernel source compiles with.</param>
-internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProbe, ShaderCompiler compiler) : ICommandModule {
+/// <param name="iterations">The edit-loop clock each reload begins a loop on.</param>
+internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProbe, ShaderCompiler compiler, WorldIterationClock iterations) : ICommandModule {
     private static readonly CommandForms WorldShadersReloadForms = CommandForms.Of(verb: "world.shaders.reload", "[tree]");
 
     /// <inheritdoc/>
@@ -62,6 +63,8 @@ internal sealed class WorldShaderReloadCommandModule(WorldRenderProbe renderProb
                     }
                     var status = node.ShaderReloadStatus;
                     var request = status.RequestId;
+
+                    _ = iterations.Begin(name: "world.shaders.reload", named: false, shaderRequest: request);
 
                     // The issuing text session's later lines wait for the outcome, so a script reads what the reload did
                     // rather than racing the compile and pipeline build; the reload always settles, failing on a device

@@ -347,7 +347,7 @@ echo results, and the on-screen console is only a mirror of that pipe.
 A world is authored in `.puck` source. `Puck.World.Transpiler` (the world
 vocabulary, a peer of the cartridge vocabulary over the `Puck.Transpiler` core)
 lowers it to the same JSON. `PuckWorldLoader.TryResolveWorld` compiles a
-`--world <x>.puck` path in memory through `WorldCompileCache` before composing
+`--world <x>.puck` path in memory through `WorldCompileSession` before composing
 and validating it exactly like a JSON boot, and `world.reload` recompiles it
 from disk. A world source has no committed JSON beside it; the build compiles it
 into its output. Every construct of the world vocabulary is described once in
@@ -407,7 +407,7 @@ rule. Grammar, units and the compile/lint verbs belong to `puck-dsl`.
 | `src/Puck.World.Machines` | The engine-neutral screen-machine host (`WorldMachineHost`, `WorldMachineCatalog`) |
 | `src/Puck.World.Client` | The presentation seam: `WorldClient`, `SeatController`, `WorldSeatBindings` (over `Puck.World.Vocabulary`'s `WorldAffordances`), `WorldCameraRigCompiler`, `WorldFramePresenter`, the stamp pool. References Protocol, never Server |
 | `src/Puck.World.Vocabulary` | The input vocabulary a world document is validated against (`WorldAffordances`), below Client |
-| `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompiler`, `WorldCompileCache`, `Vocabulary/` |
+| `src/Puck.World.Transpiler` | The world `.puck` vocabulary: `WorldCompileSession` (the one door into `WorldCompiler`), `Vocabulary/` |
 | `src/Puck.World.Authoring` | The embedded content families (`puck.creation.v1` `CreationDocument`/`CreationCanonicalizer`) and the sculpting library |
 | `src/Puck.World` | The sole composition root: `Program.cs` (every host flag), `PuckWorldLoader`, audio, the screen binder; it ships no world (the debug world is the package `worlds/debug/`) |
 | `src/Puck.World.Silo` | The hosted multi-world silo (Orleans activation lifecycle only; game traffic rides the World's own wire) |
@@ -744,6 +744,18 @@ check the flag: the owner may be holding the pad.
   bare `world.wait ready` is refused as not a tick count, and the script then
   runs on without waiting. End a script with `quit`. Blank lines and `#`
   comments are skipped.
+- **Time the edit loop.** `world.iteration` reads every edit loop the World
+  has timed (`WorldIterationClock`): the boot from process start, each
+  `world.reload` and `world.shaders.reload`, and a loop a script begins with
+  `world.iteration begin <name>` before its own edit. Each line gives the
+  seconds to the first frame from the edited content (`frame`), every mesh
+  drawing its own geometry (`shown`), the bakes settled and resident
+  (`meshes`) and the lighting converged (`lit`), then the compiles,
+  compositions, root members merged, documents read and validations the edit
+  cost; a settled loop also prints
+  `[world.iteration] …` on stderr. `world.wait iteration <seconds>` waits for
+  the latest loop. A change that slows a loop says so with these lines
+  ([the iteration plan](../../../docs/plans/iteration.md)).
 - **Encoding.** Pin `[Console]::OutputEncoding` and `$OutputEncoding` to UTF-8
   without a BOM (`[System.Text.UTF8Encoding]::new($false)`): a BOM written into
   piped stdin corrupts the first command.

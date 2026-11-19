@@ -31,8 +31,14 @@ public sealed partial class WorldScreenBinder : IWorldBakeReadiness {
         if (IsSettledSince(mark: mark)) {
             return null;
         }
-        if (!(m_renderProbe?.IsReady ?? false) || (ViewHost is not { } world) || (Presenter is not { } presenter)) {
+        if ((ViewHost is not { } world) || (Presenter is not { } presenter)) {
             return "the engine is not ready, so the world has drawn no program to bake";
+        }
+        // The bake starts on its own kernels while the frame's pipelines still build (SdfWorldPipelines.PollRequired).
+        if (!(m_renderProbe?.IsReady ?? false)) {
+            return ((world.MeshPathBake.Program is null)
+                ? "the engine is not ready, so the world has drawn no program to bake"
+                : $"the engine is not ready, its pipelines still building, while the world's bake runs: {world.MeshPathBake.Describe()}");
         }
         if ((presenter.Composed.Frames <= mark) || presenter.Composed.Building) {
             return "the world's program is still being built from the content the wait armed on";

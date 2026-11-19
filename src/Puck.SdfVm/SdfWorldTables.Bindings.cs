@@ -27,8 +27,17 @@ public sealed partial class SdfWorldTables {
     internal IGpuBindings Bindings => m_bindings;
 
     // Returns the World set every pass of every view binds for the ring slot the latest upload took, written first when
-    // the binding revision moved since it was last written.
+    // the binding revision moved since it was last written. Each is allocated from the tables' pool at its first bind,
+    // against the surface kernel's group layouts, which every per-view pass shares: a view binds only once its frame
+    // waits on no pipeline (FrameWaiting), while the tables are built before those kernels are.
     internal nint WorldSet(int slot) {
+        if (m_worldSets[slot] == 0) {
+            m_worldSets[slot] = m_bindings.AllocateSet(
+                name: NameOf(detail: "world group", index: slot, part: "tables"),
+                descriptorSetLayoutHandle: m_pipelines.Pipeline(kernel: SdfKernel.Surface).GroupLayoutHandles[((int)WorldGroup)],
+                poolHandle: m_pool
+            );
+        }
         if (m_worldSetRevisions[slot] != m_bindingRevision) {
             WriteWorldSet(
                 set: m_worldSets[slot],

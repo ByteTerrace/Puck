@@ -104,7 +104,7 @@ public class ConstructVocabularySeamLawTests {
     [Fact]
     public void ALoweringThatAdmitsFromTheDescriptionRefusesADescribedModifierItDoesNotWrite() {
         var source = Source(modifier: $"{Added}(1)");
-        var shipped = WorldCompiler.Compile(
+        var shipped = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source
         );
@@ -117,7 +117,7 @@ public class ConstructVocabularySeamLawTests {
             expectedSubstring: $"'{Added}' is not a modifier 'hp' admits"
         );
 
-        var described = WorldCompiler.Compile(
+        var described = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: source,
             vocabulary: Describing(member: new(

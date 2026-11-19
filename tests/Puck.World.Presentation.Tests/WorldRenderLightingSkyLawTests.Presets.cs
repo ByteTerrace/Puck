@@ -24,7 +24,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             path: source
         );
 
-        var compilation = WorldCompiler.CompileFile(path: source);
+        var compilation = WorldCompileSession.Shared.CompileFile(path: source);
 
         Assert.True(condition: compilation.Success, userMessage: $"{call} does not compile against {SkiesSource}.");
         Assert.True(

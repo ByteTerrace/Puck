@@ -3,7 +3,6 @@ using Puck.Abstractions.Machines;
 using System.Text;
 using System.Text.Json.Nodes;
 using Puck.State;
-using Puck.World.Transpiler.Composition;
 using Puck.Transpiler.Ast;
 using Puck.Transpiler.Diagnostics;
 
@@ -22,7 +21,7 @@ namespace Puck.World.Transpiler.Validation;
 // `comparandState` or `fromState` field the registry excludes sits at body scope and names a per-body slot; the
 // generic walk resolves those against the same catalog, which holds every lane's names.
 //
-// A document naming a `basis` or `imports` composes its whole graph through PuckDocumentComposer — the same
+// A document naming a `basis` or `imports` composes its whole graph through WorldCompileSession — the same
 // composition the game boot path and `compile --validate` run — so a name only a basis or import supplies resolves
 // correctly instead of reading as unresolved. That composed tree is used ONLY to build the name catalog: every
 // candidate reference site is still found by walking THIS document's own tree (never the composed one, whose
@@ -50,7 +49,7 @@ public static partial class PuckLinter {
 
     /// <summary>Lints a canonical lowered <c>puck.world.definition.v1</c> document for unresolved symbolic references.
     /// A document naming a <c>basis</c> or <c>imports</c> composes that whole graph (through
-    /// <see cref="PuckDocumentComposer"/>, rooted beside <paramref name="sourcePath"/> exactly like
+    /// <see cref="WorldCompileSession"/>, rooted beside <paramref name="sourcePath"/> exactly like
     /// <see cref="WorldSemanticValidator.ValidateComposedWorld"/>) to build the name catalog references resolve
     /// against, but always walks <paramref name="document"/>'s own tree — never the composed one — to find
     /// candidate reference sites, so every reported finding's JSON pointer already belongs to this document's own

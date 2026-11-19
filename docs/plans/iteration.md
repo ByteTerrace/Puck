@@ -15,12 +15,100 @@ makes each slow today, and the order of the work that makes them fast.
 | Engine code | A C# or HLSL edit | Shaders reload live; a restart reuses every baked mesh and settled light the edit did not invalidate |
 | A cold machine | An empty store | About a minute per backend to bake the debug world's meshes, lighting settled soon after |
 
+A reload keeps the live value of every state row the edited source did not
+change, and re-seeds the rows it did, so an author keeps their place on a save
+(following from the rapid-iteration ruling); `world.reset` and `world.load`
+restart state from the file.
+
 ## How each is measured
 
-Every loop is timed from the edit to the first presented frame that shows it
-and to the settled frame (meshes landed, lighting converged), by the World
-itself, so a lane reads the loop it changed and the batch reads every loop.
-Building that instrument is the first step.
+The World times every loop itself (`WorldIterationClock`, read with
+`world.iteration`; [the reference](../reference/commands.md#edit-loops)). Each
+loop is timed from the edit to the first produced frame that finds each of
+four stages true:
+
+- `frame`: the frame renders the edited document, or a reloaded kernel, with
+  the program its content calls for. A look value shows here.
+- `shown`: every mesh group draws its own geometry at some tier, with no
+  stand-in left from before the edit and no hole. A changed form shows whole
+  here.
+- `meshes`: the bakes have settled at their demanded detail and stand in the
+  mesh region.
+- `lit`: the irradiance volume has converged
+  (`SdfMeshIrradiance.Converged`): nothing is left to trace or relight, or,
+  under a lighting that changes every frame such as a day clock, its geometry
+  is settled and its relight keeps every probe within its age bound. This is
+  the settled frame.
+
+The boot is a loop timed from process start; `world.reload` (by hand or from
+`world.watch`) and `world.shaders.reload` begin loops themselves, and a script
+names any other edit with `world.iteration begin <name>` on the line before
+it. A settled loop prints `[world.iteration] …` on stderr, so a lane reads the
+loop it changed and the batch reads every loop from the World's log.
+`world.wait iteration <seconds>` holds a script until the latest loop
+settles.
+
+A watched save starts its loop when the watch submits the reload, after its
+quiet period (`WorldViewGraphHost.WatchDebounceMilliseconds`), so the time from
+the save itself is that much longer. A restart after an engine edit adds the
+World's build before its boot loop starts; `puck_world_start` reports the
+build's seconds beside it.
+
+### The baseline
+
+The debug world on Direct3D 12, windowed, `--devices none`, each loop run once
+with a scripted edit on the RTX 4070 lead machine. Seconds from the edit
+(from process start for a boot) to each stage; the commit that adds this table
+carries the commands and the World's own lines. The readings predate the
+live edit path's reload install, the faster whole-world compile and the shared
+in-flight bake, which landed beside them, so the saved-edit and boot rows are
+the first to re-read. Later lanes improve on these figures and replace the
+table with their own readings.
+
+| Loop | The edit | frame | shown | meshes | lit |
+|---|---|---|---|---|---|
+| Look: palette colour, live | `world.row.set creations cube-1m document.palette[0].color …` | 1.4 | 20.9 | 20.9 | not reached |
+| Look: palette colour, saved | the same colour in `debug.puck`, then `world.reload` | 8.8 | 8.8 | 11.4 | not reached |
+| Look: exposure | `world.row.set render exposure.maximum 12` | 1.1 | 1.1 | 1.6 | not reached |
+| Look: light | `world.row.set render lighting.lights[name=key].color …` | 1.2 | 1.2 | 1.7 | not reached |
+| One creation's form | `cube-1m`'s box scale in `debug.puck`, then `world.reload` | 9.7 | 12.6 | 12.6 | not reached |
+| A placement's layout | `cube-1m`'s placement moved 2 m, then `world.reload` | 14.5 | 14.5 | 17.1 | not reached |
+| Shader reload | a constant in `sdf-composite.comp.hlsl`, then `world.shaders.reload` of the source tree | 3.2 | 3.2 | 48.6 | not reached |
+| Restart, store reused | World restarted after an SdfVm edit the bake identity does not read | 47.0 | 55.0 | 55.2 | not reached |
+| Boot, every mesh missed | first boot after an edit to `SdfMeshPathBake`, which the bake identity reads | 53.2 | 322.0 | 322.3 | not reached |
+| Cold boot, empty cache | fresh `--cache-dir`, on the merged tip | 51.0 | 314.3 | 314.5 | not reached |
+
+What the baseline shows:
+
+- **`lit` is never reached on the debug world.** Its day clock moves the sun
+  every frame, and the irradiance volume's relight falls behind it: it relit
+  about 1,500 to 1,900 probes a second where its age bound needs about 2,500
+  (`[sdf.mesh-gi] behind level=0 … needed-per-second=2496`), over ten minutes
+  of watching. Lighting from a stable proxy, relit incrementally (step 4), is
+  the fix this figure waits on.
+- **Every look value costs a program build and about a second.** An exposure
+  or light edit, read live off the definition each frame, still rebuilt the
+  composition's program (`builds=1`) before a frame showed it.
+- **A palette colour rebakes meshes.** The live colour edit restarted the bake
+  with 15 groups baking and one loading
+  (`[sdf.mesh-bake] start … baking=15 loading=1 … cause=program`), so the
+  colour took 21 seconds to show whole: colour is in the bake's input, not an
+  appearance upload (step 3).
+- **A saved edit spends most of its time before the first frame.** Each
+  `world.reload` took 9 to 15 seconds to reach a frame, though the rebake after
+  it took 0 to 3: compiling, admitting, diffing and installing the document is
+  the live edit path's first cost (step 3).
+- **A kernel reload shows in 3 seconds and finishes in 49.** The first changed
+  pipeline installs quickly; the request stays pending until every carried
+  source in the tree has compiled.
+- **A cold boot shows the whole world after five minutes.** With an empty
+  cache the bake ran 268 seconds (`[sdf.mesh-bake] done … loaded=0 …
+  seconds=268.045`, GPU busy 241 s at an occupancy of 0.03), on top of the
+  51 seconds to the first frame.
+- **A restart spends 47 seconds before its first frame** even with every mesh
+  in the store (`loaded=2`, no dispatches), and the World's own build after
+  the engine edit ran for more than two minutes before that (the store build
+  was still running at 124 seconds).
 
 ## What makes the loops slow today
 
@@ -47,16 +135,21 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 
 ## Order of work
 
-1. The instrument: every loop timed in the World and readable by a verb.
-2. Keys by stage: each bake stage keyed on what it reads, so an engine edit
-   outside the field and its kernel reuses every stored mesh.
+Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measured).
+
+2. Bake keys by stage, built. `puck mesh identity --against` reports whether
+   sampling, contouring, simplification and landing can reuse their previous
+   products, so an engine edit outside the field and its kernel reuses every
+   stored mesh.
 3. The live edit path: a saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
    edits as a progressive rebake of only the creations touched.
 4. Lighting from a stable proxy, relit incrementally, settled at boot with the
    whole GPU.
-5. The cold bake fed: in-flight work shared, groups in flight bounded by the
-   GPU rather than round trips, a load mode that gives boot the whole GPU.
+5. The cold bake fed: groups in flight bounded by the GPU rather than round
+   trips. An arrival's bake work already takes the GPU the frame
+   leaves idle ([the bake-time research](field-programs/research-bake-time.md#ranked-fixes),
+   fix 1).
 
 The missing look tools, authored large terrain form and a stylized surface
 detail layer, are built alongside, each judged through these loops.

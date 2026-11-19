@@ -111,7 +111,7 @@ public class ConstructRootArmLawTests {
             userMessage: $"'{keyword}' is a described root construct with no probe, so nothing would fail if its arm stopped being taken"
         );
 
-        var compilation = WorldCompiler.Compile(
+        var compilation = WorldCompileSession.Shared.Compile(
             cancellationToken: TestContext.Current.CancellationToken,
             source: probes![0].Source
         );

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Puck.Abstractions;
 using Puck.Assets;
 using System.Text.Json.Nodes;
@@ -47,13 +46,14 @@ public static partial class WorldDefinitionFileSource {
 
         return true;
     }
-    // The one writer of s_composedDocuments: both of TryComposeLayers' success exits hold what they are about to
+    // The one writer of ComposedDocuments: both of TryComposeBody's success exits hold what they are about to
     // return, so the next reader of the same path meets an image recorded together with the chain it was composed
     // from. A composition over a source whose names are not files beside their referrers is never held: nothing
-    // could prove its image still stands.
-    private static void HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, JsonObject composed, List<byte[]> touched, List<string> touchedPaths, int reach, IReadOnlyList<CompileInput>? inputs, WorldDocumentOrigins? origins) {
+    // could prove its image still stands. `composedJson` is the composed tree's compact JSON; `composed` is the tree,
+    // when the caller holds one, for its origins. Returns the held image, or null when nothing was held.
+    private static WorldComposedDocument? HoldComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] composedJson, JsonObject? composed, List<byte[]> touched, List<string> touchedPaths, int reach, IReadOnlyList<CompileInput>? inputs, WorldDocumentOrigins? origins, ComposedLayers? layers) {
         if (!source.ResolvesFiles) {
-            return;
+            return null;
         }
 
         var chain = new List<WorldComposedLink>(capacity: touched.Count);
@@ -72,13 +72,15 @@ public static partial class WorldDefinitionFileSource {
         );
         var image = new WorldComposedDocument(
             Chain: chain,
-            ComposedJson: Encoding.UTF8.GetBytes(s: composed.ToJsonString()),
+            ComposedJson: composedJson,
             Reach: reach,
             Inputs: inputs
-        ) { Origins = origins?.Snapshot(node: composed) };
+        ) { Layers = layers, Origins = ((composed is null) ? null : origins?.Snapshot(node: composed)) };
 
         ComposedDocuments[key] = image;
         if (inputs is not null) { source.Compositions?.WriteComposition(image: image, key: key); }
+
+        return image;
     }
     // Whether a held image still answers for a reader whose own bytes are `ownBytes`: every document the image read
     // must still read the same through its source (a .puck link recompiles). The image's own document is the chain's

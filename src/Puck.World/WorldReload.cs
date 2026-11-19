@@ -22,7 +22,8 @@ namespace Puck.World;
 /// <param name="definitionSource">The source the running world was loaded from.</param>
 /// <param name="machineCatalog">The machine catalog admission validates against.</param>
 /// <param name="sourceWatch">The source watch that follows the reload's compiler inputs.</param>
-internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch) {
+/// <param name="iterations">The edit-loop clock each reload begins a loop on.</param>
+internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDeferredVerbEchoes echoes, WorldDefinitionSource definitionSource, WorldMachineCatalog machineCatalog, WorldSourceWatch sourceWatch, WorldIterationClock iterations) {
     private const string Verb = "world.reload";
 
     // The preparations' text catalog: its font cache is not thread-safe, so preparations take turns on it.
@@ -81,6 +82,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
     /// <param name="context">The issuing line's context.</param>
     /// <returns>A result settling with the authority's verdict, or with the refusal preparation reached.</returns>
     public CommandResult Run(CommandContext context) {
+        var loop = iterations.Begin(name: Verb, named: false);
         var path = definitionSource.SourcePath;
         var reads = sourceWatch.RecordReads(path: path);
         var pending = new Pending(owner: this, context: context, path: path, reads: reads);
@@ -92,6 +94,9 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
 
         pending.Start(prepare: () => Prepare(basis: basis, documents: documents, instanceIdentity: instanceIdentity, neighbours: neighbours, path: path, reads: reads, version: version));
         m_preparing.Add(item: pending);
+        pending.Verdict.OnSettled(continuation: verdict => {
+            if (verdict.IsError) { iterations.Refuse(number: loop, refusal: verdict.Output); }
+        });
         // The session's hold and the host step (Poll) both take the preparation, so it submits even once a caller's
         // answer deadline has ended the hold.
         context.TextSession?.HoldWhile(
@@ -126,7 +131,7 @@ internal sealed class WorldReload(WorldServer server, IServerLink link, WorldDef
         void Compile() {
             if (path.EndsWith(value: ".puck", comparisonType: StringComparison.OrdinalIgnoreCase)) {
                 try {
-                    _ = Puck.World.Transpiler.Composition.WorldCompileCache.Shared.TryCompile(compiled: out _, failure: out _, path: path);
+                    _ = Puck.World.Transpiler.WorldCompileSession.Shared.TryCompile(compiled: out _, failure: out _, path: path);
                 } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
                     // The load reports what it cannot read.
                 }

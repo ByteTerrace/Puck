@@ -1,5 +1,5 @@
 using Puck.Abstractions.Counting;
-using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 using Xunit;
 
 namespace Puck.World.Games.Tests;
@@ -10,7 +10,7 @@ namespace Puck.World.Games.Tests;
 /// basis) and the shipped island from its source tree (a JSON root that imports its <c>.puck</c> games and
 /// modules and proves four neighbours) each load, parse, validate and compile within the counts below, parse each neighbour once however
 /// many times its border is proved, and compile nothing on a second boot. The laws load exactly what the game's boot
-/// loads — the compile cache, then <see cref="WorldSourceLoader"/> for a source, and
+/// loads — the compile cache, then <see cref="WorldCompileSession"/> for a source, and
 /// <see cref="WorldDefinitionLoader.TryResolve"/> for a document — and share the serialized composition collection
 /// because held composed images belong to the process.
 /// </summary>

@@ -27,7 +27,7 @@ public static class WorldSourceEdits {
         ArgumentNullException.ThrowIfNull(argument: target);
 
         rewritten = source;
-        var original = WorldCompiler.Compile(source: source, sourcePath: sourcePath);
+        var original = WorldCompileSession.Shared.Compile(source: source, sourcePath: sourcePath);
 
         if (!original.Success || (original.Json is null) || (original.Document is null)) {
             reason = ("the source does not compile to one document: " + original.Diagnostics.FormatReport());
@@ -51,7 +51,7 @@ public static class WorldSourceEdits {
                 return false;
             }
 
-            var check = WorldCompiler.Compile(source: candidate, sourcePath: sourcePath);
+            var check = WorldCompileSession.Shared.Compile(source: candidate, sourcePath: sourcePath);
 
             if (check.Success && JsonNode.DeepEquals(node1: check.Json, node2: target)) {
                 rewritten = candidate;
@@ -404,7 +404,7 @@ public static class WorldSourceEdits {
             var decompiled = WorldDecompiler.Decompile(root: ((JsonObject)fragment!));
             // Printed in the source's own layout, so the node reads as its neighbours do.
             var printed = (PuckPrinter.Format(source: decompiled, vocabulary: Lowering.WorldDocumentVocabulary.Instance).Value ?? decompiled);
-            var compiled = WorldCompiler.Compile(source: printed);
+            var compiled = WorldCompileSession.Shared.Compile(source: printed);
             var mappedPointer = mapped.Aggregate(func: static (walked, name) => Child(name: name, pointer: walked), seed: string.Empty);
 
             if (!compiled.Success || !compiled.SourceMap.Snapshot().TryGetValue(key: mappedPointer, value: out var origin)) {

@@ -178,7 +178,7 @@ internal static class WorldSources {
     /// <param name="source">The whole source.</param>
     /// <param name="embeddings">The embedding lock authored text resolves against; none when omitted.</param>
     /// <returns>The compilation.</returns>
-    public static WorldCompilation Compile(string source, EmbeddingLock? embeddings = null) => WorldCompiler.Compile(
+    public static WorldCompilation Compile(string source, EmbeddingLock? embeddings = null) => WorldCompileSession.Shared.Compile(
         cancellationToken: TestContext.Current.CancellationToken,
         embeddings: embeddings,
         source: source

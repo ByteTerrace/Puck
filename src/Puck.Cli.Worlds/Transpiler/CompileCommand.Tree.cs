@@ -6,6 +6,7 @@ using Puck.Confinement;
 using Puck.Shaders;
 using Puck.World;
 using Puck.World.Transpiler.Composition;
+using Puck.World.Transpiler;
 
 namespace Puck.Cli.Transpiler;
 
@@ -54,10 +55,10 @@ public static partial class CompileCommand {
         }
 
         // Every name the tree carries resolves before anything is written, by the one rule the composer resolves a name
-        // by (PuckDocumentComposer.TryCarriers over the name index): the source that emits it, whatever its stem, and
+        // by (WorldCompileSession.TryCarriers over the name index): the source that emits it, whatever its stem, and
         // its document otherwise. Two files carrying one name are refused here, the one refusal this run gives them,
         // except a source beside the document of its own exact name, which wins.
-        if (!PuckDocumentComposer.TryCarriers(
+        if (!WorldCompileSession.TryCarriers(
             carriers: out var carriers,
             directory: root,
             libraries: out _,
@@ -110,7 +111,6 @@ public static partial class CompileCommand {
                     path: source,
                     strict: strict,
                     validate: validate,
-                    watch: false,
                     written: written
                 ));
 
