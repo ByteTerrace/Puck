@@ -72,6 +72,58 @@ public sealed partial class WorldDocument {
         return new WorldStateEdit(Candidate: candidate.WithStateSection(state: state), Carried: carried, Named: named);
     }
 
+    /// <summary>Names what a reload's candidate changes of the state section: every row that is not the installed
+    /// document's own instance is born from the candidate, and every other row carries its live values.</summary>
+    /// <remarks>The candidate holds the installed declarations' own instance of every row its source left unchanged
+    /// (<see cref="Puck.World.Protocol.WorldReloadDelta.Share"/>, decided from the content diff), so a row's instance
+    /// names whether the source changed it, on a live run and on its replay alike. A host-owned row is carried by its
+    /// host, never by the arena's export.</remarks>
+    /// <param name="candidate">The reload's candidate, shared with the installed declarations.</param>
+    /// <returns>The edit, or <see langword="null"/> when the candidate's state installs whole: a section is absent,
+    /// either declares pools, or the candidate changes a part of the section other than its rows.</returns>
+    private WorldStateEdit? NameReloadEdit(WorldDefinition candidate) {
+        var installed = m_definition.StateRaw;
+        var composed = candidate.StateRaw;
+
+        if ((installed is null) || (composed is null) ||
+            (installed.Pools is { Count: > 0 }) || (installed.PairPools is { Count: > 0 }) ||
+            (composed.Pools is { Count: > 0 }) || (composed.PairPools is { Count: > 0 }) ||
+            !SameStateParts(left: composed, right: installed)) {
+            return null;
+        }
+
+        var named = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var carried = new List<StateRow>();
+
+        // The install keeps the live arena, so nothing is exported to carry.
+        if (Host.KeepsArena(candidate: candidate)) {
+            return new WorldStateEdit(Candidate: candidate, Carried: carried, Named: named);
+        }
+
+        var declared = new Dictionary<string, WorldStateRow>(capacity: (installed.World?.Count ?? 0), comparer: StringComparer.Ordinal);
+
+        foreach (var row in (installed.World ?? [])) { declared[row.Name.Value] = row; }
+
+        var kept = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var row in (composed.World ?? [])) {
+            var name = row.Name.Value;
+
+            if (declared.TryGetValue(key: name, value: out var declaration) && ReferenceEquals(objA: row, objB: declaration)) {
+                if (!declaration.HostOwned) { kept.Add(item: name); }
+            } else {
+                named.Add(item: name);
+            }
+        }
+        if (kept.Count > 0) {
+            foreach (var row in (Host.MaterializeArena().StateRaw?.World ?? [])) {
+                if (kept.Contains(item: row.Name.Value)) { carried.Add(item: row); }
+            }
+        }
+
+        return new WorldStateEdit(Candidate: candidate, Carried: carried, Named: named);
+    }
+
     // Every part of a state section beside its rows and pools, by instance: an export and a row edit share them.
     private static bool SameStateParts(WorldStateSection left, WorldStateSection right) => (
         ReferenceEquals(objA: left.Body, objB: right.Body) && ReferenceEquals(objA: left.Identity, objB: right.Identity) &&

@@ -387,11 +387,20 @@ public sealed partial class WorldDocument {
     // basis, whose content preparation compared with the base pin) is a complete target, which an install since does not
     // change, as a reload replaces the document whatever stands; only a delta whose basis is unknown (a pending op a
     // checkpoint restored) is checked against the live document here.
-    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldDefinition? basis = null) {
+    internal bool ApplyRebuild(WorldRebuildRequest request, Principal principal, int connectionId, long correlationId, string? expectedContentHash = null, string? preparationFailure = null, WorldDefinitionAdmission? admission = null, WorldDefinition? basis = null,
+        double reconstructMilliseconds = 0, double admitMilliseconds = 0) {
         var reads = Host.DrawKeys.Reads;
         var accepted = false;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+
         try {
             accepted = ApplyRebuildCore(request, principal, connectionId, correlationId, expectedContentHash, preparationFailure, admission, basis);
+            // Where an installed rebuild's time went off the tick (the delta's reconstruction, the candidate's
+            // admission) and on it (the install), beside the console's own line for the source's compile.
+            if (accepted && Host.Output.HasNarrationSink) {
+                Host.Output.Narrate(channel: "world.rebuild", text: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
+                    handler: $"[world.rebuild] {RebuildVerb(kind: request.Kind)} reconstruct={reconstructMilliseconds:0} ms admit={admitMilliseconds:0} ms install={System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started).TotalMilliseconds:0} ms"));
+            }
             return accepted;
         } finally {
             if (!accepted && reads != Host.DrawKeys.Reads) { Host.DrawKeys.AdvanceGeneration(); }
@@ -473,6 +482,19 @@ public sealed partial class WorldDocument {
             );
 
             throw ReplayRefusal.RebuildContentMismatch.Raise(message: $"{verb}: content hash mismatch on {pinned} — found {contentHash}, expected {expected} (recorded). The pinned content has changed since this recording was made; re-record it.");
+        }
+
+        // A reload installs the change it is. Its candidate holds the installed declarations' own instance of every
+        // member and keyed row their content diff leaves unchanged, which a delta prepared against exactly these
+        // declarations reconstructed; any other holder of the whole target (a replay drive's re-read, a delta an
+        // install overtook) is shared here by the same diff, so the state rows the install re-seeds and the products it
+        // keeps by instance are the same on a live run and on its replay.
+        if ((request.Kind == WorldRebuildKind.Reload) && !((request.Delta is not null) && ReferenceEquals(objA: basis, objB: priorDefinition))) {
+            try {
+                candidate = WorldReloadDelta.Share(current: priorDefinition, target: candidate);
+            } catch (InvalidDataException) {
+                // A target the diff cannot reproduce shares nothing, and installs whole.
+            }
         }
 
         var keepAuthority = ((request.Kind == WorldRebuildKind.Reload) && priorDefinition.Grants.SequenceEqual(second: candidate.Grants) &&
@@ -691,6 +713,7 @@ public sealed partial class WorldDocument {
 
         IWorldMachinePreparedPlan? rebuildMachinePlan = null;
         var rebuildMachinePlanCommitted = false;
+        var stateKept = string.Empty;
 
         // The whole sequence from here through Commit runs under ONE try/finally — see TryApplyMutation's identical
         // shape for why: rebuildAddonPlan starts null, so a return before TryPrepare ever succeeds leaves the
@@ -758,8 +781,37 @@ public sealed partial class WorldDocument {
             // else crosses from the old layout but its key ledger: the candidate's declared rows settle at this tick.
             StateArena? rebuildArena = null;
             var installed = candidate;
+            // A reload re-seeds the state rows its source changed and keeps every other row's live values, as a
+            // mutation's install does: the live arena itself when no row changed, otherwise a replacement born with
+            // the changed rows that loads the rest. A load or a reset, and a reload that changes the section beside
+            // its rows, installs the document's state whole.
+            var reloadEdit = ((request.Kind == WorldRebuildKind.Reload) ? NameReloadEdit(candidate: candidate) : null);
 
-            if (!Host.ReloadsArenaInPlace(definition: candidate)) {
+            if (reloadEdit is { } stateEdit) {
+                if (Host.KeepsArena(candidate: candidate)) {
+                    rebuildArena = Host.Arena;
+                    stateKept = ", state kept";
+                } else if (!Host.TryPrepareArenaReplacement(
+                    definition: candidate,
+                    edit: stateEdit,
+                    prepared: out var editArena,
+                    reason: out var editReason,
+                    settled: out var settledEdit
+                )) {
+                    RejectRebuild(
+                        connectionId: connectionId,
+                        correlationId: correlationId,
+                        reason: $"the state section does not load into an arena: {editReason}",
+                        verb: verb
+                    );
+
+                    return false;
+                } else {
+                    rebuildArena = editArena;
+                    installed = settledEdit;
+                    stateKept = $", state rows re-seeded {stateEdit.Named!.Count} kept {stateEdit.Carried!.Count}";
+                }
+            } else if (!Host.ReloadsArenaInPlace(definition: candidate)) {
                 if (!Host.TryPrepareArenaReplacement(
                     definition: candidate,
                     prepared: out var preparedArena,
@@ -802,11 +854,18 @@ public sealed partial class WorldDocument {
                 authority: authority!,
                 arena: rebuildArena,
                 compilation: compilation,
+                continuity: ((reloadEdit is null) ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit),
                 definition: installed,
                 rebuildPopulation: true,
                 rebuildKind: request.Kind
             );
-            Host.ReseedLatticeFields(definition: installed);
+            // A lattice keeps its cells through an install whose state it kept; only a row whose draw pass the source
+            // changed repaints. An install of the document's state whole restarts every lattice with it.
+            if (reloadEdit is null) {
+                Host.ReseedLatticeFields(definition: installed);
+            } else {
+                Host.RepaintChangedLatticeDraws(current: installed, previous: priorDefinition);
+            }
 
             if (rebuildAddonPlan is not null) {
                 Host.Addons!.Commit(plan: rebuildAddonPlan);
@@ -893,7 +952,7 @@ public sealed partial class WorldDocument {
             Host.PipelineSources = rebuildPipelineSources;
         }
 
-        var message = $"{verb} applied — base is {origin}, journal cleared";
+        var message = $"{verb} applied — base is {origin}, journal cleared{stateKept}";
 
         if ((request.Delta is { } appliedDelta) &&
             WorldSubmissionCodec.TryEncodeRebuild(request with { Definition = null }, out var payload, out _)) {
@@ -1159,7 +1218,7 @@ public sealed partial class WorldDocument {
     // scene/screens rebuild on the client through the delivered definition, and cameras/render/population defaults are
     // document-only.
     internal void Install(WorldDefinition definition, bool rebuildPopulation, WorldGrants.PreparedAuthorityTransition authority, WorldRuleCompilation? compilation = null, StateArena? arena = null,
-        WorldRebuildKind? rebuildKind = null) {
+        WorldRebuildKind? rebuildKind = null, WorldArenaContinuity? continuity = null) {
         Host.Input.PrepareCameraReconfigure(definition);
         authority.Install();
         var previousActionState = (rebuildKind.HasValue ? Host.Population.ActionStateLane.Definitions : null);
@@ -1169,7 +1228,7 @@ public sealed partial class WorldDocument {
         AdoptDefinition(definition: definition);
         Host.InputHold.Reconfigure(settings: definition.CompiledInputHold);
         definition = Host.RecompileRules(arena: arena, compilation: compilation, definition: definition,
-            continuity: (rebuildKind.HasValue ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit));
+            continuity: (continuity ?? (rebuildKind.HasValue ? WorldArenaContinuity.Load : WorldArenaContinuity.Edit)));
         // Unconditional, like RecompileRules above: a group/member count is capacity-bounded, so a full resync costs
         // nothing on the ticks that never touch the groups section, and unconditional is what keeps membership
         // expansion CHECK-TIME correct without a bespoke "did this mutation touch Groups" classification to maintain.
