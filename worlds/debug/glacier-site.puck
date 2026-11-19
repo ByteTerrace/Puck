@@ -144,7 +144,7 @@ let seracRows = [
 // snowfield; the last meets the headwall.
 let neveRows = [
   { s: 65, hz: 7.6, top: 11.6, tilt: 22, bow: 1.2, cuts [-21, -2.5, 21] }
-  { s: 84, hz: 10, top: 12.2, tilt: 25, bow: 0.8, cuts [-21, 6, 21] }
+  { s: 85, hz: 10.5, top: 12.2, tilt: 25, bow: 0.8, cuts [-21, 6, 21] }
 ]
 let iceRows = concat(seracRows, neveRows)
 // One block of row `i`, column `j`: its depth, place along the flow, top's height and tilt jittered so no two blocks
@@ -158,7 +158,7 @@ function seracBlock(row, i, j) = seracPlaced(
   row.top + 2.4 * (siteScatter(i * 7 + j, 0.618034) - 0.5),
   row.s + 1.6 * (siteScatter(i * 7 + j, 0.145898) - 0.5) -
     row.bow * (1 - ((row.cuts[j] + row.cuts[j + 1]) / 42) * ((row.cuts[j] + row.cuts[j + 1]) / 42)),
-  0 - 5.5 * row.bow * (row.cuts[j] + row.cuts[j + 1]) / 42 + 14 * (siteScatter(i * 7 + j, 0.754878) - 0.5)
+  0 - 5.5 * row.bow * (row.cuts[j] + row.cuts[j + 1]) / 42 + 50 / row.hz * (siteScatter(i * 7 + j, 0.754878) - 0.5)
 )
 // A block's up axis leans (rampAngle - tilt) back from the ramp's normal, so in the ramp's (s, n) it is
 // (sine, cosine) of that lean; `seracHalfHeight` reaches from the top to `iceBed` under the block's front lower corner.
@@ -192,11 +192,14 @@ function iceCap(b) = {
   rounding: 0.55
   material: 1
 }
-// The bed ice the rows stand on: a slab filling the trough's floor between the toe's row and the headwall, its top the
-// floor of every crevasse.
+// The bed ice the rows stand on: a slab filling the trough's floor from behind the toe's row to under the last névé
+// slab, its top `iceBedTop` the floor of every crevasse.
+let iceBedTop = 3.5
+let iceBedFoot = 4
+let iceBedHead = glacierHeadS - 4
 let iceBedSlab = {
-  position: rampPoint((4 + glacierHeadS) / 2, 0, (iceBed + 3.5) / 2)
-  half [troughHalf - 0.5, (3.5 - iceBed) / 2, (glacierHeadS - 4) / 2]
+  position: rampPoint((iceBedFoot + iceBedHead) / 2, 0, (iceBed + iceBedTop) / 2)
+  half [troughHalf - 0.5, (iceBedTop - iceBed) / 2, (iceBedHead - iceBedFoot) / 2]
   rotation: onSlope(rampCos, 0)
   rounding: 0.5
   material: 2
@@ -210,7 +213,8 @@ function capTopAt(b, s, x) = (x - b.x) * (x - b.x) < b.hx * b.hx and (s - b.s) *
 function iceTop(s, x) = reduce(iceBlocks, -100, (top, b) => maximum(top, capTopAt(b, s, x)))
 // Lens-shaped crevasses across the névé where it bends over into the icefall: each a tube from [s, x] to [s, x] centred
 // `d` under the snow's top, bowed down-glacier by `bow`, that swells by `bulge` at its middle and closes at its ends, so it
-// opens as a lens with the ice's blue under the snow's lip. Each lies within one slab, so its ends follow one top.
+// opens as a slit many times longer than wide, its walls the ice's blue under the snow's lip. They open in parallel sets
+// of uneven widths, more where the névé bends; each lies within one slab, so its ends follow one top.
 function crevasseBetween(p0, p1, d, bow, bulge) = {
   position: rampPoint(p0[0], p0[1], iceTop(p0[0], p0[1]) - d)
   b [
@@ -222,13 +226,14 @@ function crevasseBetween(p0, p1, d, bow, bulge) = {
   rotation: onSlope(rampCos, 0)
   radius: 0.25
   bulge: bulge
-  material: 2
+  material: 0
 }
 let glacierCrevasses = [
-  crevasseBetween([66, -16.5], [67, -6], 0.4, 1.0, 1.7)
-  crevasseBetween([60.5, -13], [61, -7], 0.3, 0.6, 1.0)
-  crevasseBetween([67, 1.5], [66, 13.5], 0.4, 1.2, 2.1)
-  crevasseBetween([61, 5.5], [62, 15.5], 0.3, 0.8, 1.3)
-  crevasseBetween([78, -12], [79, 1.5], 0.4, 1.0, 1.6)
-  crevasseBetween([86, -15], [87, -3], 0.3, 0.7, 1.1)
+  crevasseBetween([59.5, -17.5], [60.5, -5], 0.2, 0.8, 0.75)
+  crevasseBetween([63, -15], [63.5, -6.5], 0.2, 0.6, 0.45)
+  crevasseBetween([66.5, -18], [67.5, -8], 0.2, 0.9, 0.6)
+  crevasseBetween([61.5, 1.5], [60.5, 14.5], 0.2, 1.0, 0.8)
+  crevasseBetween([65.5, 5], [64.5, 17], 0.2, 0.8, 0.5)
+  crevasseBetween([79, -14], [80, 1], 0.2, 0.9, 0.55)
+  crevasseBetween([88, 9], [87.5, 18], 0.2, 0.5, 0.4)
 ]
