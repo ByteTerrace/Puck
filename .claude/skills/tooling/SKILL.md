@@ -35,10 +35,14 @@ reference to the runtime CLI would create a bootstrap dependency and target the
 wrong runtime. Shared source is intentional. Add a new shared build source to
 the task's compiler inputs and its assembly-cache identity together.
 
-An admission beneath an executing lease (this process or an ancestor) is
-nonwaiting: a failed reading refuses the new start without disturbing live
-work. `WorldWorkHold` admits each joining start this way; one share cannot
-release another live start's hold. Cross-process growth
+Only the reservation under a lease's own guard is a single reading. Every other
+admission waits for its bound, whatever this process or an ancestor already
+holds: a lane's second start (`WorldWorkHold`'s joining share) and another
+lane's start in the same adapter judge headroom on their own readings, and one
+share cannot release another live start's hold. `WorldLaunchRequest.AdmissionWait`
+is that bound (`puck_world_start` passes its `timeoutSeconds`); a start that can
+never fit (`NeverFits`) is refused at once and `HostAdmissionRefusedException.Reason`
+names why. Cross-process growth
 reservations also remain process-local; machine leases serialize device and
 heavy starts. Do not describe those reservations as machine-wide exclusion.
 

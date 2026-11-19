@@ -3024,13 +3024,6 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
-- [medium] A World start under a held execution lease gets an admission bound
-  of zero (`HostAdmission.Wait`, `CliLease.HoldsExecution`), so inside the
-  lead's quiet window a seam-walk stop started right after the previous one
-  was refused at 15.3 GB free against 15.5 GB, before the exited World's
-  memory had come back. A holder that owns the machine (quiet) loses nothing
-  by waiting: give it the step's bound, or wait while a just-exited start's
-  memory returns, instead of refusing.
 - [low] `puck bench frames --window` still names "each physical row's owners
   and residual" absent, "supplied by step 2", though step 2 has landed; wire
   `host.memory`'s owner rows into the window or correct the text.

@@ -15,5 +15,15 @@ public static class LeasedAdmission {
             });
 }
 
-/// <summary>A host start was refused before its process could run.</summary>
-public sealed class HostAdmissionRefusedException(string step) : InvalidOperationException(message: $"the machine had no memory, commit or disk headroom (or its GPU stayed busy) within the admission bound, so {step} did not start.");
+/// <summary>A host start was refused before its process could run: the machine had no headroom within the start's wait,
+/// or the start can never fit on it.</summary>
+/// <param name="step">The step that did not start.</param>
+/// <param name="reason">Why no wait could have admitted the start, or <see langword="null"/> when the start's wait passed
+/// first.</param>
+public sealed class HostAdmissionRefusedException(string step, string? reason = null) : InvalidOperationException(message: ((reason is null)
+    ? $"the machine had no memory, commit or disk headroom (or its GPU stayed busy) within the admission bound, so {step} did not start."
+    : $"{step} did not start: {reason}.")) {
+    /// <summary>Gets why no wait could have admitted the start, or <see langword="null"/> when the start's wait passed
+    /// first.</summary>
+    public string? Reason { get; } = reason;
+}
