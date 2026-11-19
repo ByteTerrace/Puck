@@ -156,7 +156,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(whole)), tier: tier, version: Version));
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: whole), tier: tier, version: Version));
         }
     }
     private void Write(WorldFederationResponse kind, byte[] body) {
@@ -212,7 +212,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
             _ = AnnounceCut();
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
-                payload: WorldDefinitionSerialization.SerializeCompact(definition: WorldAssetRowLoader.EmbedAudio(delivered)), tier: tier, version: Version));
+                payload: WorldDefinitionSerialization.SerializeCompact(definition: delivered), tier: tier, version: Version));
         } else if (AnnounceCut()) {
             PrimeAfterCut();
         }

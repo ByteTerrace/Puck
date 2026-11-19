@@ -4195,6 +4195,23 @@ Owner: media lane · ordinary · Next: let an unread capture feed idle.
   downscale on the GPU ahead of the readback.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
+- [low] The authority's score and a listener's score can diverge. `WorldTick`
+  steps its `MusicDirector` (`StepCore`, beside `MusicClock.Advance`) on every
+  authority edge before the rules run, and never on `MusicSenseFamily.RuleCue`,
+  while each listener's director (`WorldAudioDirector.PresentDeliveredCues`)
+  steps on its disclosed senses and its delivered cues. A rhythm rule judging
+  `$clock:` against the authority's segment can therefore judge a segment the
+  player is not hearing, and a segment moved by an edge the player cannot see
+  reaches input owners through the captured segment id. The fix decides which
+  score the authority judges against (a per-owner director, or a score whose
+  conditions read only what every listener is told) and steps rule cues on the
+  same tick the listener does.
+- [low] A delivered cue, beat or bar boundary defeats a projection's
+  `UpdateSeconds` throttle: `WorldProjectionSampler.TryProject` delivers any
+  snapshot that carries one, so a score's beat forces a full snapshot on a
+  throttled presentation stream. Carry one-shot events across throttled ticks
+  (cues queued, boundaries folded with their beat count) and deliver them at
+  the stream's cadence, or on a lane of their own.
 
 ### Debug world content
 

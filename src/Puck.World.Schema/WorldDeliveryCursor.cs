@@ -64,7 +64,11 @@ public sealed class WorldDeliveryCursor {
     /// <returns><see langword="true"/> when the stream owes a document for a value-only change.</returns>
     public bool FrameMoved(WorldRecipientView view) => view.Observes && (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) &&
         (m_operator != view.IsAuthority || m_frame != view.Images.FrameIdentity(view));
-    /// <summary>Delivers a definition only when its observable content differs, and seeds all its row images.</summary>
+    /// <summary>Delivers a definition only when its observable content differs, and seeds all its row images. The
+    /// delivered document carries its audio rows' content inline (<see cref="WorldAssetRowLoader.EmbedAudio"/>), so a
+    /// recipient in another process, or a routed view in this one, plays them without the authority's files.</summary>
+    /// <param name="view">The stream's view.</param>
+    /// <returns>The document owed, or <see langword="null"/> when the recipient already holds it.</returns>
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
         if (!view.Observes) { return null; }
         var replica = (view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica);
@@ -75,7 +79,7 @@ public sealed class WorldDeliveryCursor {
         m_definition = identity;
         Seed(view);
         Delivered();
-        return presented ?? view.Images.Definition(view);
+        return presented ?? WorldAssetRowLoader.EmbedAudio(definition: view.Images.Definition(view));
     }
     /// <summary>Records the images a presentation delivery actually carried.</summary>
     public void Delivered(WorldRecipientView view) { Seed(view); Delivered(); }
