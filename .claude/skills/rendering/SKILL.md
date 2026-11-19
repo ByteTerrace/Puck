@@ -629,7 +629,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   invocation's own id, and a pixel keeps its window only while its history comes
   from its own pixel (`historyPixel == pixelIndex` in `stationary`). Reading a
   window at a reprojected position would read words another invocation of the
-  same dispatch is writing; a moved pixel restarts its window instead.
+  same dispatch is writing; a moved pixel restarts its window instead. The graph
+  admits such a buffer only when the updater's one mutable input is the only
+  reference any pass makes to it (`ShaderPipelineCompiler.UpdatesInPlace`), so a
+  second reader of the window is refused; a graph replacement keeps the window
+  and the two history rings together or restarts all three
+  (`ShaderPipelineRenderNode.PreserveCarriedStorages`).
   Replacing one phase and summing in fixed order removes periodic newest-phase
   bias and keeps samples the current neighborhood misses. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window

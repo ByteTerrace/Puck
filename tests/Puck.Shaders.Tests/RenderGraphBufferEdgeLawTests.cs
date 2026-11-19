@@ -76,7 +76,7 @@ public sealed class RenderGraphBufferEdgeLawTests {
         Assert.Equal(expected: ShaderPipelineBarrierKind.Buffer, actual: access.Barrier.Kind);
         Assert.Equal(expected: GpuAccess.ShaderRead, actual: access.Use.Access);
         Assert.Equal(expected: GpuAccess.ShaderRead, actual: access.Barrier.DestinationAccess);
-        Assert.Equal(expected: GpuStage.ComputeShader, actual: access.Barrier.DestinationStage);
+        Assert.Equal(expected: (GpuStage.ComputeShader | GpuStage.FragmentShader), actual: access.Barrier.DestinationStage);
         Assert.Equal(expected: GpuImageLayout.Undefined, actual: access.Use.Layout);
     }
 
