@@ -2702,10 +2702,12 @@ allocation lane, and [the hand-off](open-items.md#hand-off) lists it.
 
 ### The first wave
 
-Fifteen lanes start now and run at once. None waits for another to begin.
+Sixteen lanes start now and run at once. None waits for another to begin.
 Twelve came from the research round on the renderer, and three from
 [the round on GPU capabilities](#gpu-capabilities-puck-does-not-use-yet):
-`direct3d`, `signal` and `rays`, whose files none of the twelve owns.
+`direct3d`, `signal` and `rays`, whose files none of the twelve owns. The
+sixteenth, `hostmem`, was added when the wave started: the lead machine
+could not admit a windowed debug World even while idle.
 Each owns the files its entry names. Where two lanes meet in a file, the
 merge order is given after the entries. It says who resolves the conflict,
 never who waits: whichever lane is ready lands first, and the other merges
@@ -2744,6 +2746,7 @@ point. The lead may give a Codex slot a `specialist` brief when one is free.
 | `direct3d` | Direct3D 12 draws without a constant in each command, and one barrier model | The shadow maps' 2.4 ms between the backends | Sonnet |
 | `signal` | A background job is known finished when it finishes | Decision 4 | Opus |
 | `rays` | A kernel that can depend on a device's capability, and probe rays on the GPU's ray hardware | The lighting's rays, and shadows where no map reaches | Opus |
+| `hostmem` | A windowed debug World whose host memory is attributed and cut at its largest causes | The Steam Deck's memory bar, and windowed work on the lead machine | Opus |
 
 **`views`: the shading pass at its share.**
 
@@ -3096,6 +3099,27 @@ rays on the GPU's ray hardware.**
   the painting wing and the garden. If ray queries do not beat the
   software walk for probe rays, the probes keep the software walk, and the
   structures stay for the second wave's shadows by ray.
+
+**`hostmem`: the windowed World's host memory, attributed and cut.**
+
+- *Outcome.* The admission check (`puck host load`) expects a windowed
+  debug World to peak at about 20 GB of private bytes and 15 GB of working
+  set, against about 2 GB for a headless one. The lead machine has 32 GB,
+  so a windowed World is refused even while the machine is idle, and the
+  Steam Deck's bar is 10 GB for the process and the GPU together. The lane
+  first attributes the windowed World's host memory by owner: the managed
+  heap, mimalloc's native storage, the graphics driver's heaps and upload
+  buffers, mapped files and the mesh store. It then cuts the largest
+  parts at their cause.
+- *Owns.* What its attribution names. Where that falls in another lane's
+  files (`floor`'s mesh regions, `rays`' irradiance scene, `history`'s
+  image history), the meeting rule above applies.
+- *Needs.* A GPU grant: reading the windowed World is the work.
+- *Model.* Opus `specialist`, because the cause is unknown.
+- *Finish line.* The attribution is in the hand-back with the commands
+  that read it. `puck host load`'s expected peak for a windowed World
+  falls once the tracker observes the new build, and `host.memory` on the
+  windowed World reads the cut by owner.
 
 Where lanes meet, and who merges first:
 
