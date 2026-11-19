@@ -69,12 +69,13 @@ public static class SdfDerivedLanes {
     public static float AxialProfileCorrection(float amount, float bulge, float startScale) =>
         (1f / SdfProgram.FlareExtrema(amount: amount, bulge: bulge, startScale: startScale).MaxS);
     /// <summary>Returns the nearest value to <paramref name="value"/> that Q48.16 and single-precision float both hold
-    /// exactly: a multiple of 2⁻¹⁶, ties to even. Scaling by a power of two is exact in float, and every float of
-    /// magnitude 256 or more is already such a multiple, so the result is exact in both carriers. A lane both readers
-    /// must read alike (a superellipsoid's radii and exponent) packs through this.</summary>
-    /// <param name="value">The finite value.</param>
+    /// exactly: the value Q48.16 rounds it to (<see cref="Puck.Maths.FixedQ4816.FromDouble"/>, ties to even), read back as
+    /// a float, which holds it exactly (a float of magnitude 256 or more is already a multiple of 2⁻¹⁶, and a multiple
+    /// below that has at most 24 significant bits). A lane both readers must read alike (a superellipsoid's radii and
+    /// exponent) packs through this.</summary>
+    /// <param name="value">The finite value, of magnitude below the Q48.16 limit.</param>
     /// <returns>The snapped value.</returns>
-    public static float FixedGrid(float value) => ((MathF.Abs(x: value) >= 256f) ? value : (MathF.Round(x: (value * 65536f)) / 65536f));
+    public static float FixedGrid(float value) => ((float)Puck.Maths.FixedQ4816.FromDouble(value: value));
     /// <summary>Returns the slope pair a round cone packs: the radius difference over the height (floored), and the
     /// cosine that pairs with it.</summary>
     /// <param name="lowerRadius">The lower radius.</param>

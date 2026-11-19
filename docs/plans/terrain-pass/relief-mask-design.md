@@ -68,8 +68,8 @@ two differ, the step back is the current recommendation.
 ## What is built, and why patching it does not converge
 
 A relieved creation emits its shapes inside one field scope, then its relief.
-Each mask adds a scope between them (`SdfProgramBuilder.BeginReliefMask`,
-`SdfProgramBuilder.EndReliefMask`):
+Each mask adds a scope between them (BeginReliefMask,
+EndReliefMask):
 
 ```text
 PushField                          the creation's scope
@@ -86,11 +86,11 @@ PopField
 The region's shapes are ordinary `SdfOp.ShapeBlend` instructions under
 ordinary point operations. The scope is an ordinary `SdfOp.PushField` whose
 Shape lane carries a seed. The weight is a per-sample register in both
-interpreters, multiplied by `SdfOp.ReliefWeight` and consumed by the next
+interpreters, multiplied by the ReliefWeight op (since deleted) and consumed by the next
 `SdfOp.NoiseDisplace`.
 
 The first review found eleven defects in that form and the second found ten
-more after `SdfProgram.RequireReliefMasks` was added as one admission door.
+more after RequireReliefMasks was added as one admission door.
 Sorted by cause rather than by symptom, the 21 findings are five things:
 
 | Cause | What goes wrong | Findings |
@@ -106,7 +106,7 @@ causes, because each cause is a property of the form. A check that walks the
 stream can refuse a `Repeat` inside a mask and still miss the same `Repeat`
 one instruction before it, which is the second review's inherited-fold
 finding. A table of which instructions are mask instructions
-(`SdfProgram.ReliefMaskInstructions`) helps a reader that consults it, and the
+(ReliefMaskInstructions) helps a reader that consults it, and the
 influence walk did not: `SdfFieldEvaluator.WalkPoints` takes a skin owner for
 every shape. A third round of the same kind would add checks for the ten new
 findings and leave the next reader, the next opcode and the next numeric edge
@@ -487,7 +487,7 @@ anything from the document.
 | The relief is the one its bound was computed from: its noise is at most one in magnitude, so a masked relief reaches no farther than its amplitude | The typed relief value decoded at the program door, which derives the normalization and validates the octave count, gain and lacunarity; the analysis and both compiles read that value | The kernel reads the packed lane, which the door has compared with the derived one |
 | The weight is continuous, with slope at most the band's in the relief's frame | The types: a region shape is lowered by its own constructor from an author's specification, so no caller supplies a packed lane; it has no field that could hold a fold, a warp, a blend or a scope; its packed type comes from a closed list; and its relief's chain passes the point-factor rule or the program is refused | Each listed shape's own 1-Lipschitz property is that shape's, held by `SdfPrimitiveLipschitzLawTests`. The exact skip is arithmetic at an edge and stays review-only |
 | The relief's step bound includes the band's slope in the right units | One formula (`SdfProgram.NoiseDisplaceStepFactor`), fed one point factor per instruction, added at the relief's own instruction. Noise and bands are in one frame, so no caller converts units | The point-factor rule's own list of bounded operations |
-| A mask composes nothing into the field | Structure: a mask is not an instruction. There is no accumulator write, push or pop to get wrong, and `SdfOp.ReliefWeight` is deleted | Nowhere |
+| A mask composes nothing into the field | Structure: a mask is not an instruction. There is no accumulator write, push or pop to get wrong, and the ReliefWeight op is deleted | Nowhere |
 | CPU and GPU read the same field | One operand with two readers; a band whose start, width and end both carriers hold exactly; one shape order fixed by the type; one vocabulary list; `SdfEncodingProbe` passing every packed field | The two readers agree by convention, as every instruction's do. This stays review-only, with the kernel-agreement leg as its check |
 | Bake and contact see the band | The compiled mask's width and box, which the two consumers read | Nothing forces a future consumer to read them. The bake's sample budget and the collider's gradient floor still bound how narrow a band either resolves |
 | A mask is part of its relief's identity: every key, excerpt and rewrite that carries the relief carries its masks | An instruction and its operand are one immutable value, and no interface takes one without the other | A reader that hashes a program's packed words rather than its pairs still sees the operand, since it is in the words |
@@ -798,10 +798,10 @@ window as step 6.
 
 ## What it deletes
 
-- `SdfOp.ReliefWeight`, its generated define, its rows in `SdfOpRoles` and the
+- the ReliefWeight op, its generated define, its rows in `SdfOpRoles` and the
   evaluator's supported set, and its arms in `mapCore`, the point walk, the
   box walk, the cull and the cell analysis.
-- The seeded push: `SdfProgram.IsReliefMaskPush`, the seed read in `mapCore`,
+- The seeded push: IsReliefMaskPush, the seed read in `mapCore`,
   and the seed branches of the evaluator's compile and both walks.
 - The whole of `SdfProgram.ReliefMasks.cs`: `RequireReliefMasks` and its band
   check, `ReliefMaskInstructions`, both `IsSurfaceShape` overloads and their
@@ -811,9 +811,9 @@ window as step 6.
   and the push's words, the push table kept for it, the mask-slope plumbing
   through the chain pass, and the shape-free branch the noise and sine reliefs
   share.
-- `SdfProgramBuilder.BeginReliefMask`, `SdfProgramBuilder.EndReliefMask` and
+- BeginReliefMask, EndReliefMask and
   the builder's open-mask state.
-- `SdfFieldEvaluator.ReliefMaskWeight` as an instruction arm, the relief
+- ReliefMaskWeight as an instruction arm, the relief
   register in both walks and in `mapCore`, and the cull's step over a mask
   scope (`SdfFieldEvaluator.TryCertifyInstance`).
 - The mask tables in `SdfMeshAudit.ShapeFields`, `SdfMeshAudit.SlotWalk` and
@@ -1028,7 +1028,7 @@ PushField                         the creation's scope
 PopField
 ```
 
-`ReliefRow` is one new op, in place of `SdfOp.ReliefWeight`. In every walker
+`ReliefRow` is one new op, in place of the ReliefWeight op. In every walker
 of the stream its arm does nothing: it moves no point, writes no field and
 takes no owner. The relief's arm reads the rows, computes the weight and
 multiplies its displacement by it. No value passes from one instruction to
@@ -1184,7 +1184,7 @@ One change, since no half of it stands alone:
 
 - the band, the region shape and the mask as typed values, with the door that
   decodes a run into them;
-- the row op in place of `SdfOp.ReliefWeight`, its packing, its lane contract
+- the row op in place of the ReliefWeight op, its packing, its lane contract
   and the encoding probe's call for every row kind and listed type;
 - the relief's arm in `mapCore` and in the evaluator's point and box walks,
   and a do-nothing arm for the row in every other walker;
