@@ -260,8 +260,8 @@ the volume supplies; it never invents light the sun did not deliver.
 sets. Puck gives them one surface, in the world document and in the live
 verbs:
 
-- `render.indirect.budget` holds the probes relit per frame, the hits traced
-  per frame, and the target lighting age in seconds; the authored day length
+- `render.indirect.budget` holds the probes relit a second, the hits traced
+  a second, and the target lighting age in seconds; the authored day length
   sizes the relight rate (a 24-minute day moves the sun 0.25° a second). The
   defaults live in the standard package as data, not in C#.
 - `world.budget` prints the volume's cost sheet beside the program's: probes
@@ -446,26 +446,23 @@ waits on round trips.
   count. With step 3's built parts in, a switch moved the version on the first
   read in every run of the
   [lighting-switch convergence checks](../../.claude/skills/rendering/references/mesh-gi.md#lighting-switch-convergence-checks),
-  so that delay did not recur. The relight's allowance is still credited per
-  rendered frame and capped at two frames' worth (`SdfMeshIrradiance.Grant`),
-  so a world presenting 30 frames a second gets half the lighting of one
-  presenting 60.
+  so that delay did not recur. The relight's and the trace's allowances are
+  granted for each second of wall time (step 3 below), so a world presenting
+  20 frames a second is granted the same lighting a second as one presenting
+  60.
 - *The bake.* A group samples up to five lattices that narrow in on the
   surface, then its final slabs, then up to eleven rounds that search for the
   exact edge crossings, then gradients and materials, each read back to the
   CPU: about twenty round trips. A quiet cold bake has medians of 60.6 s on
   Direct3D 12 and 64.7 s on Vulkan with about 4 s of GPU work in a busy span
   of 68 s.
-- *Fixed constants on every device.* The service's contract says a client cuts
-  each job to the frame's allowance at its measured rate, because a job runs
-  whole before the next frame's work starts. Only the probe client does. Bake
-  batches are cut by a sample count (`SdfMeshPathBake.BatchTaps`) and charged
-  at a fixed cost per sample (`SdfMeshPathBake.NanosecondsPerTap`): a full
-  batch is 8 million samples, about 32 ms at that constant against an allowance
-  of 4.2 ms, so a bake during play already submits jobs several frames long on
-  the RTX 4070. Mesh uploads run at one byte rate
-  (`SdfGpuWork.UploadBytesPerSecond`), and both the job allowance and that rate
-  assume a 60 Hz display (`SdfGpuWork.FrameShareSeconds`).
+- *Constants that remain fixed.* Every client now cuts its budgeted jobs to
+  the live frame allowance (steps 1 and 2 below). Mesh uploads still run at
+  one byte rate (`SdfGpuWork.UploadBytesPerSecond`) that assumes a 60 Hz
+  display, and a bake lattice, at most `SdfMeshPathBake.LatticeTaps`
+  evaluations (about 4 ms at the bake's prior rate), is never split, so a
+  batch whose first lattice is costlier than a small allowance still runs
+  long; `world.residency`'s `over-allowance` counts those jobs.
 
 **Why the headroom rule comes first.** Raising the share or the slot count does
 nothing while the work waits on round trips. Shipped systems hold update cost
@@ -481,64 +478,81 @@ a measurement: this is a scenario, and it is the one the next fix creates.
 
 Six steps run in order:
 
-1. **Make the budget follow the GPU time the frame leaves free.** Extend the
-   existing frame-load source (`IWorldFrameLoadSource`, `WorldDynamicResolution`)
-   from root views to include nested views and background work, using the
-   display's real period (`FrameContext.DisplayHertz`) rather than a fixed
-   60 Hz. Feed it per-frame GPU spans (replacing 32-frame means for this
-   decision). Move the background share between a non-starving lower bound and
-   `SdfGpuWork.GpuShare` in bounded steps inside dynamic resolution's dead band,
-   requiring a hold period before reversing a nested-view rate change.
-   - *One-frame job admission.* Every client cuts each job to one frame's live
-     allowance and admits it against the frame deadline (priced length + queued
-     jobs + banked credit + margin). A job already in the GPU's queue cannot be
-     recalled, so lowering the next grant does not protect the frame behind it;
-     that is why admission reads the deadline. The budget can bank 25 ms of GPU
-     credit today (`SdfGpuWorkBudget.MostBankSeconds` times the share), more
-     than a frame, so banked credit is spent only in jobs that each fit one
-     frame's allowance.
-   - *Controller and overload order.* Dynamic resolution is off in every
-     quality preset today, and then only the background share moves. With it
-     on, both respond to one reading, so their order is stated, because two
-     controllers on one reading can fight. Optional background work gives way first;
-     dynamic resolution scales the render grid only when the frame's own passes
-     exceed the period alone. Under sustained overload, optional background
-     work yields first, then nested-view rates (never below the author's floor),
-     then lighting service. Consumer minimums
+1. **Make the budget follow the GPU time the frame leaves free.** Built: each
+   frame `WorldBackgroundAllowance` hands the one budget (`SdfGpuWorkBudget`)
+   the display's real period (`FrameContext.DisplayHertz`) and the GPU time
+   every node of the render graph took, nested views among them, read from the
+   frame-load source over every node (`WorldFrameLoadSource` with no view, each
+   node's latest submission rather than a 32-frame mean). Background jobs are
+   timed apart and never in the reading. Every `SdfGpuWorkBudget.FollowFrames`
+   frames the share moves to what the mean leaves of the period short of
+   `SdfGpuWorkBudget.HeadroomShare`, between `SdfGpuWorkBudget.LeastFrameSeconds`
+   a period and `SdfGpuWork.GpuShare`: down at once, up by at most
+   `SdfGpuWorkBudget.RiseShare` a step and not on the step after a fall. The
+   timestamp demand stands whenever a display period is known (a pool and a
+   readback a frame slot on every node); a World with no display period or no
+   timed submission keeps the fixed share and names why (`follows:` on
+   `world.residency`'s `work-budget` line, beside the share, one frame's
+   allowance, the frame's GPU time and the GPU time granted against the time
+   charged). Lockstep and held frames never meter their work, so a drain's
+   result stays a function of its inputs.
+   - *One-frame job admission.* Built: the service's one take hands every
+     client the live frame allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`;
+     no bound for a held frame), and the probe coordinator reads the same live
+     figure as it cuts queries. Still to build: admitting a job against the
+     frame deadline (priced length + queued jobs + banked credit + margin). A
+     job already in the GPU's queue cannot be recalled, and the service keeps
+     up to `SdfGpuWork.SlotCount` jobs in flight, so several allowance-sized
+     jobs can still queue ahead of one frame; the budget can bank
+     `SdfGpuWorkBudget.MostBankSeconds` times the share of GPU credit, more
+     than a frame.
+   - *Controller and overload order.* Dynamic resolution reads the root views'
+     passes, which background work never inflates, and scales the render grid
+     only when they alone overrun the period, while the background share falls
+     as soon as they leave less than its share: optional background work gives
+     way first, by construction. Still to build: under sustained overload,
+     nested-view rates yield next (never below the author's floor), then
+     lighting service. Consumer minimums
      ([streaming and memory](streaming-and-memory.md#decision-4-a-residency-is-staged-by-its-demand-not-by-a-render))
      stay served in one-frame jobs.
    - *Promise and reporting.* Lighting's authored work-per-second promise holds
      only while the frame's own passes leave its share free; past that limit
-     the frame holds its bar, lighting age grows past its bound, and frames
-     missed behind a background job are counted apart from overdue lighting.
-     Cutting jobs to one frame's allowance bounds what one job can cost a
-     frame; it does not make the promise hold when the frame is over for long.
-     Standing GPU timestamps become permanent on devices that support them
-     (they cost a query pool and a readback for each frame in flight, and that
-     cost is reported); devices without timestamps keep the fixed share and say
-     so. Lockstep drains ignore the measured share, so a drain's result stays a
-     function of its inputs.
-2. **Cut bake jobs to the live frame allowance**
+     the frame holds its bar and lighting age grows past its bound. Still to
+     build: counting frames missed behind a background job apart from overdue
+     lighting. Cutting jobs to one frame's allowance bounds what one job can
+     cost a frame; it does not make the promise hold when the frame is over for
+     long.
+2. **Cut bake jobs to the live frame allowance.** Built: a budgeted batch's
+   evaluations past its first lattice are cut to the allowance at the bake's
+   measured rate (`SdfMeshBakeGpuWork`), which follows the mean
+   (`SdfGpuWorkRate`'s `rise`), since a batch mixes groups whose evaluations
+   differ in cost and a rate that rose to the costliest batch at once shrank
+   every batch after it. A held frame's batch takes up to
+   `SdfMeshPathBake.BatchTaps`. Still open: a lattice is never split, and the
+   cold bake in play needs measuring against the bar
    ([bake proportional to change](open-items.md#bake-proportional-to-change)).
-3. **Finish multi-job probe pipelining and per-second grants.** Multiple probe
-   jobs in flight with one commit per batch (`SdfMeshProbeGpuWork.Run`,
-   `SdfMeshProbeGpuWork.RecordCommit`) and stale relights sharing the worker
-   with owed traces (`SdfMeshIrradiance.Work`) are built. Next, delete the
-   per-frame relight credit (`SdfMeshIrradiance.Grant`) so relights draw on the
-   one wall-clock budget using authored work-per-second converted to GPU time
-   via a measured `SdfGpuWorkRate` (with mesh upload time also measured per
-   device while keeping the separate bytes-per-second staging cap). The
-   authored allowance stays in work per second, so it means the same on every
-   device, and a per-second grant needs a bounded catch-up so a lockstep drain
-   gives the same result whatever the play rate. Measure root frame time,
-   lighting age and lighting-version delay together on both backends; the
-   version delay is reported on its own because the age cannot see it. Several
-   jobs in flight change the order in which bounces are computed inside a
-   batch, so every probe of a batch reads the bounce from before the batch and
-   a drain publishes at stated points: batch size cannot change what a drain
-   converges to. What is built today: one point of admission makes a query that
-   replaces shared probe state run alone (`SdfMeshProbeGpuWork.TryTake`), and a
-   batch's last job commits only the rows its batch wrote.
+3. **Finish multi-job probe pipelining and per-second grants.** Built: multiple
+   probe jobs in flight with one commit per batch (`SdfMeshProbeGpuWork.Run`,
+   `SdfMeshProbeGpuWork.RecordCommit`), stale relights sharing the worker with
+   owed traces (`SdfMeshIrradiance.Work`), and grants for each second of wall
+   time: `render.indirect.budget`'s `relightPerSecond` and `tracePerSecond`
+   accrue by the wall time since the previous frame's grant, held to
+   `SdfMeshIrradiance.MostGrantSeconds` (the bounded catch-up), so the lighting
+   a second does not fall with the frame rate. The GPU time those probes cost
+   is charged by their jobs' timestamps to the one wall-clock budget, so the
+   authored rate means the same on every device and a higher one lowers the
+   lighting's age only while the frame leaves time free. A drain ignores the
+   grant, so its result does not depend on the play rate. Still to do: mesh
+   upload time measured per device beside the bytes-per-second staging cap, and
+   measuring root frame time, lighting age and lighting-version delay together
+   on both backends at a fixed and a low frame rate; the version delay is
+   reported on its own because the age cannot see it. Several jobs in flight
+   change the order in which bounces are computed inside a batch, so every
+   probe of a batch reads the bounce from before the batch and a drain
+   publishes at stated points: batch size cannot change what a drain converges
+   to. One point of admission makes a query that replaces shared probe state
+   run alone (`SdfMeshProbeGpuWork.TryTake`), and a batch's last job commits
+   only the rows its batch wrote.
 4. **Move the probe work list onto the GPU** (lands before moving lighting's
    CPU loops onto the job pool, since both rewrite `SdfMeshIrradiance`). Keep
    probe state on device, pick next work deterministically, and read only

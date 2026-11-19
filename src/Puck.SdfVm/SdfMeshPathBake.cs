@@ -240,9 +240,9 @@ public sealed partial class SdfMeshPathBake {
     /// many evaluations (a gradient sample counts five), a few milliseconds of a current desktop GPU
     /// (<see cref="NanosecondsPerTap"/>). No lattice's spacing or extent reads it, so the meshes do not depend on it.</summary>
     public const int LatticeTaps = 1_000_000;
-    /// <summary>The field evaluations one batch (<see cref="TryTake"/>) makes at most, past its first lattice. The
-    /// background GPU work (<see cref="SdfGpuWork"/>) paces batches by their measured GPU time; this bounds one
-    /// submission's.</summary>
+    /// <summary>The field evaluations one batch (<see cref="TryTake"/>) makes at most, past its first lattice, whatever
+    /// its allowance: what a held frame's own batch takes, which queues no frame behind it. A budgeted batch is cut to
+    /// the frame allowance at the bake's measured rate (<see cref="SdfMeshBakeGpuWork"/>), within this.</summary>
     public const int BatchTaps = (8 * LatticeTaps);
     /// <summary>The GPU time one field evaluation is estimated to take, in nanoseconds, on a current desktop GPU (the
     /// debug world's cold bake measures about four on an RTX 4070): what the background GPU work charges a batch before
@@ -639,9 +639,9 @@ public sealed partial class SdfMeshPathBake {
     /// <summary>Takes the lattices of one dispatch: the next lattice of each group that owes one and has none in flight,
     /// the groups the demand points see largest first (<see cref="SdfMeshDemand"/>) and the plan's order among equals, up
     /// to <see cref="SdfWorldPackage.MeshBakeBatch"/> lattices, <see cref="SdfWorldPackage.MeshBakeMaxSamples"/> samples
-    /// and <see cref="BatchTaps"/> evaluations. Each call takes a batch of its own, so several batches dispatch at once,
-    /// each lattice in one of them, and a taken batch counts as the bake's work. Taking by priority rather than round robin
-    /// finishes the groups about the views first, each landing in the mesh library as it finishes, so a residency the
+    /// and <paramref name="mostTaps"/> evaluations. Each call takes a batch of its own, so several batches dispatch at
+    /// once, each lattice in one of them, and a taken batch counts as the bake's work. Taking by priority rather than round
+    /// robin finishes the groups about the views first, each landing in the mesh library as it finishes, so a residency the
     /// program leaves mid-bake (a body crossing into another world) leaves the groups it finished there for the residency
     /// it reaches.</summary>
     /// <param name="field">The program whose field the dispatch samples: the tables' uploaded program. The bake takes
@@ -649,9 +649,13 @@ public sealed partial class SdfMeshPathBake {
     /// program's field.</param>
     /// <param name="batch">The lattices to dispatch and the group each answers, handed back to
     /// <see cref="Complete(SdfMeshBakeBatch, ReadOnlySpan{byte})"/> or <see cref="Abandon"/>.</param>
+    /// <param name="mostTaps">The field evaluations the batch makes at most past its first lattice, which is always taken
+    /// and holds at most <see cref="LatticeTaps"/>; held to <see cref="BatchTaps"/>. No lattice reads it, so the meshes do
+    /// not depend on it.</param>
     /// <returns><see langword="true"/> when the bake takes a lattice.</returns>
-    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch) {
+    public bool TryTake(SdfProgram? field, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMeshBakeBatch? batch, long mostTaps = BatchTaps) {
         batch = null;
+        mostTaps = Math.Clamp(value: mostTaps, min: 1L, max: BatchTaps);
         using (EnterFrameGate()) {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
             // Work that finishes from here on offers the next take.
@@ -669,7 +673,7 @@ public sealed partial class SdfMeshPathBake {
             // A slice's lattices come first, within the same batch, so a long bake never holds a diagnostic back.
             while ((m_slice is { } slice) && (lattices.Count < SdfWorldPackage.MeshBakeBatch)) {
                 if (slice.Take(instances: (m_program?.Instances.Count ?? 0), ticket: out var lattice, worldSelector: SdfMeshBakeGroup.WorldSelector) is not { } next) { break; }
-                if ((lattices.Count > 0) && (((taps + next.Taps) > BatchTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
+                if ((lattices.Count > 0) && (((taps + next.Taps) > mostTaps) || ((samples + next.Samples) > SdfWorldPackage.MeshBakeMaxSamples))) {
                     slice.Return(ticket: lattice);
                     break;
                 }
@@ -733,7 +737,7 @@ public sealed partial class SdfMeshPathBake {
                 // Only sampled values consume the fixed readback budget. Saved poses follow the sample points
                 // in a growable input table; charging them here strands a full 65-cubed lattice forever.
                 // A batch's first lattice is always taken, and no lattice holds more than LatticeTaps.
-                if ((lattices.Count > 0) && ((taps + next.Taps) > BatchTaps)) { stop = 1; break; }
+                if ((lattices.Count > 0) && ((taps + next.Taps) > mostTaps)) { stop = 1; break; }
                 // A group starting its final lattice holds that lattice and everything meshed from it until it lands,
                 // so the process account admits its simultaneous peak; the rest keep their small refining lattices.
                 // A first slab returned unanswered keeps the admission it took.
