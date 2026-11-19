@@ -584,7 +584,7 @@ public static partial class WorldDefinitionValidator {
                 // Cell, ordinal, raw value, document row, and two length-prefixed UTF-8 identities.
                 snapshotBytes += (cells * ((25L + System.Text.Encoding.UTF8.GetByteCount(s: region.Name)) +
                     System.Text.Encoding.UTF8.GetByteCount(s: field.Name)));
-                if (field.HeightScale > 0) {
+                if (field.DrawsSurface) {
                     var (x, y, z) = WorldFieldCapacity.SurfaceVoxels(region: region);
 
                     surfaceBytes += ((((((long)x) * y) * z) + (((long)region.Lattice.Width) * region.Lattice.Depth)) * sizeof(float));
@@ -725,8 +725,12 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.medium requires a heightScale greater than 0 — a surface-less medium is meaningless.");
             }
 
+            if (row.Medium && row.SimulationOnly) {
+                errors.Add(item: $"{path}.medium requires body coupling, which simulationOnly disables.");
+            }
+
             if (row.HeightScale > 0f) {
-                hasHeightField = true;
+                hasHeightField |= row.DrawsSurface;
 
                 if (
                     (row.Material is null) && (row.Color is not null) &&

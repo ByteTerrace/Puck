@@ -1368,7 +1368,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     /// every pane the root draws (<see cref="WorldViewGraphHost.PublishPanes"/>), which the
     /// pane pointer, the picker and the hit walk read. The tick is the state mirror's delivered engine tick and the time
     /// the mirror's presented engine tick at this frame's interpolation fraction (one for an offscreen presentation), in
-    /// seconds, so a pass reads no wall clock. A lone view covering the whole display with no tonemap is not shown at any
+    /// seconds, so a pass reads no wall clock. A lone view covering the whole display with no matte is not shown at any
     /// render scale, since the view reconstructs its own output: the root then stands for the world itself and publishes
     /// it as no pane. Whether a pane covers the whole display decides whether pixels no view
     /// covers owe the letterbox color (<see cref="WorldViewGraphHost.PlaceViews"/>). The package captures the world

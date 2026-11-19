@@ -1,11 +1,13 @@
 using System.Runtime.Versioning;
 using Windows.Win32.Graphics.Direct3D12;
+using Windows.Win32.System.Com;
 
 namespace Puck.DirectX;
 
 /// <summary>
-/// Builds the backend's resource barriers. Every transition the backend records goes through
-/// <see cref="Transition"/>, so every one covers the whole resource and carries no split-barrier flag.
+/// Builds the backend's enhanced barriers. Every texture transition the backend records is a
+/// <see cref="Texture"/> barrier over every subresource; layouts persist across command lists, so the backend never
+/// relies on the decay and promotion rules of the older resource states.
 /// </summary>
 [SupportedOSPlatform("windows10.0.10240")]
 public static unsafe class DirectXBarriers {
@@ -43,25 +45,189 @@ public static unsafe class DirectXBarriers {
         }
         return result;
     }
-    /// <summary>Builds a transition of every subresource of <paramref name="resource"/> from
-    /// <paramref name="before"/> to <paramref name="after"/>, recorded whole (<c>D3D12_RESOURCE_BARRIER_FLAG_NONE</c>).</summary>
-    /// <param name="resource">The resource.</param>
-    /// <param name="before">The state the resource is in.</param>
-    /// <param name="after">The state the resource moves to.</param>
-    /// <returns>The barrier, for <c>ResourceBarrier</c>.</returns>
-    public static D3D12_RESOURCE_BARRIER Transition(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
-        var barrier = new D3D12_RESOURCE_BARRIER {
-            Flags = D3D12_RESOURCE_BARRIER_FLAGS.D3D12_RESOURCE_BARRIER_FLAG_NONE,
-            Type = D3D12_RESOURCE_BARRIER_TYPE.D3D12_RESOURCE_BARRIER_TYPE_TRANSITION,
-        };
+    /// <summary>Returns the enhanced layout a neutral image layout stands for. <see cref="GpuImageLayout.Undefined"/> is
+    /// the layout whose contents a barrier from it discards.</summary>
+    /// <param name="layout">The neutral layout.</param>
+    /// <returns>The layout.</returns>
+    internal static D3D12_BARRIER_LAYOUT Layout(GpuImageLayout layout) => layout switch {
+        GpuImageLayout.General => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNORDERED_ACCESS,
+        GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_SHADER_RESOURCE,
+        GpuImageLayout.External => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON,
+        GpuImageLayout.RenderTarget => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_RENDER_TARGET,
+        GpuImageLayout.DepthAttachment => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_DEPTH_STENCIL_WRITE,
+        GpuImageLayout.TransferSource => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COPY_SOURCE,
+        GpuImageLayout.TransferDestination => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COPY_DEST,
+        _ => D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_UNDEFINED,
+    };
+    /// <summary>Returns every access a texture in a layout permits: the specification's layout access compatibility,
+    /// which a barrier's accesses must stay inside. A barrier states the accesses its layout permits rather than the
+    /// caller's masks, which also serve Vulkan's finer image layouts.</summary>
+    /// <param name="layout">The neutral layout.</param>
+    /// <returns>The accesses; none for an undefined layout.</returns>
+    internal static D3D12_BARRIER_ACCESS LayoutAccess(GpuImageLayout layout) => layout switch {
+        GpuImageLayout.General => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS,
+        GpuImageLayout.ShaderReadOnly => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE,
+        GpuImageLayout.External => (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_SOURCE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST),
+        GpuImageLayout.RenderTarget => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET,
+        GpuImageLayout.DepthAttachment => (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE),
+        GpuImageLayout.TransferSource => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_SOURCE,
+        GpuImageLayout.TransferDestination => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST,
+        _ => D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS,
+    };
+    /// <summary>Builds the barrier that moves every subresource of a texture between two layouts. Its accesses are the
+    /// layouts' (<see cref="LayoutAccess"/>) and its synchronization is the caller's stages, widened to every stage
+    /// wherever the stages are empty (a first use has prior work this list cannot see) or none of them can perform an
+    /// access the layout permits. A transition out of an undefined layout makes no access on its before side.</summary>
+    /// <param name="resource">The texture.</param>
+    /// <param name="oldLayout">The layout the texture is in.</param>
+    /// <param name="newLayout">The layout the texture moves to.</param>
+    /// <param name="sourceStages">The stages whose accesses to the old layout the barrier waits for.</param>
+    /// <param name="destinationStages">The stages that wait for the barrier.</param>
+    /// <returns>The barrier, for <see cref="Record(ID3D12GraphicsCommandList7*, ReadOnlySpan{D3D12_TEXTURE_BARRIER})"/>.</returns>
+    internal static D3D12_TEXTURE_BARRIER Texture(ID3D12Resource* resource, GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuStage sourceStages, GpuStage destinationStages) {
+        newLayout = Entered(layout: newLayout);
 
-        barrier.Anonymous.Transition = new D3D12_RESOURCE_TRANSITION_BARRIER {
-            StateAfter = after,
-            StateBefore = before,
-            Subresource = DirectXConstants.AllSubresources,
+        var (syncBefore, accessBefore) = Side(layout: oldLayout, stages: sourceStages);
+        var (syncAfter, accessAfter) = Side(layout: newLayout, stages: destinationStages);
+
+        return new D3D12_TEXTURE_BARRIER {
+            AccessAfter = accessAfter,
+            AccessBefore = accessBefore,
+            LayoutAfter = Layout(layout: newLayout),
+            LayoutBefore = Layout(layout: oldLayout),
+            Subresources = new D3D12_BARRIER_SUBRESOURCE_RANGE {
+                IndexOrFirstMipLevel = DirectXConstants.AllSubresources,
+                NumMipLevels = 0U,
+            },
+            SyncAfter = syncAfter,
+            SyncBefore = syncBefore,
             pResource = resource,
         };
+    }
+    /// <summary>Builds the global barrier that stands for a layout transition of a texture whose layout cannot change: a
+    /// simultaneous-access texture is in the common layout for life, so a transition of one orders its accesses alone.</summary>
+    /// <param name="oldLayout">The layout the caller leaves.</param>
+    /// <param name="newLayout">The layout the caller enters.</param>
+    /// <param name="sourceStages">The stages whose accesses the barrier waits for.</param>
+    /// <param name="destinationStages">The stages that wait for the barrier.</param>
+    /// <returns>The barrier.</returns>
+    internal static D3D12_GLOBAL_BARRIER Fixed(GpuImageLayout oldLayout, GpuImageLayout newLayout, GpuStage sourceStages, GpuStage destinationStages) {
+        newLayout = Entered(layout: newLayout);
 
-        return barrier;
+        var (syncBefore, accessBefore) = Side(layout: oldLayout, stages: sourceStages);
+        var (syncAfter, accessAfter) = Side(layout: newLayout, stages: destinationStages);
+
+        return new D3D12_GLOBAL_BARRIER {
+            AccessAfter = accessAfter,
+            AccessBefore = accessBefore,
+            SyncAfter = syncAfter,
+            SyncBefore = syncBefore,
+        };
+    }
+    /// <summary>Builds the barrier that hands a swap chain's back buffer to rendering, or back to presentation. A back
+    /// buffer is created in the common layout, which presentation also names, and nothing in the command list waits on
+    /// or after it beyond the rendering itself.</summary>
+    /// <param name="backBuffer">The back buffer.</param>
+    /// <param name="toPresent"><see langword="true"/> to move it from rendering to presentation, <see langword="false"/>
+    /// for the reverse.</param>
+    /// <returns>The barrier.</returns>
+    public static D3D12_TEXTURE_BARRIER Present(ID3D12Resource* backBuffer, bool toPresent) =>
+        new() {
+            AccessAfter = (toPresent ? D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS : D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET),
+            AccessBefore = (toPresent ? D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET : D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS),
+            LayoutAfter = (toPresent ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON : D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_RENDER_TARGET),
+            LayoutBefore = (toPresent ? D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_RENDER_TARGET : D3D12_BARRIER_LAYOUT.D3D12_BARRIER_LAYOUT_COMMON),
+            Subresources = new D3D12_BARRIER_SUBRESOURCE_RANGE {
+                IndexOrFirstMipLevel = DirectXConstants.AllSubresources,
+                NumMipLevels = 0U,
+            },
+            SyncAfter = (toPresent ? D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE : D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET),
+            SyncBefore = (toPresent ? D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET : D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE),
+            pResource = backBuffer,
+        };
+    /// <summary>Records texture barriers, as one barrier group, on a command list.</summary>
+    /// <param name="commandList">The list; its enhanced-barrier interface is borrowed for the call.</param>
+    /// <param name="barriers">The barriers.</param>
+    /// <exception cref="InvalidOperationException">The list has no enhanced-barrier interface.</exception>
+    public static void Record(ID3D12GraphicsCommandList* commandList, ReadOnlySpan<D3D12_TEXTURE_BARRIER> barriers) {
+        var result = ((IUnknown*)commandList)->QueryInterface(ppvObject: out ID3D12GraphicsCommandList7* enhanced);
+
+        if (result.Failed) {
+            throw new InvalidOperationException(message: "Direct3D 12 texture transitions require enhanced barriers (ID3D12GraphicsCommandList7).");
+        }
+
+        try {
+            Record(
+                barriers: barriers,
+                commandList: enhanced
+            );
+        } finally {
+            _ = ((IUnknown*)enhanced)->Release();
+        }
+    }
+    /// <summary>Records texture barriers, as one barrier group, on a list's enhanced-barrier interface.</summary>
+    /// <param name="commandList">The enhanced-barrier interface.</param>
+    /// <param name="barriers">The barriers.</param>
+    internal static void Record(ID3D12GraphicsCommandList7* commandList, ReadOnlySpan<D3D12_TEXTURE_BARRIER> barriers) {
+        if (barriers.IsEmpty) {
+            return;
+        }
+
+        fixed (D3D12_TEXTURE_BARRIER* pointer = barriers) {
+            var group = new D3D12_BARRIER_GROUP {
+                NumBarriers = ((uint)barriers.Length),
+                Type = D3D12_BARRIER_TYPE.D3D12_BARRIER_TYPE_TEXTURE,
+            };
+
+            group.Anonymous.pTextureBarriers = pointer;
+            commandList->Barrier(
+                NumBarrierGroups: 1,
+                pBarrierGroups: &group
+            );
+        }
+    }
+
+    // An undefined layout can only be left, never entered: a caller that moves an image to it hands it over in the common
+    // layout.
+    private static GpuImageLayout Entered(GpuImageLayout layout) => ((layout == GpuImageLayout.Undefined) ? GpuImageLayout.External : layout);
+    // One side of a texture barrier: the synchronization and the accesses before or after it. An undefined layout
+    // makes no access; stages that name no pipeline stage, or none that can perform what the layout permits, widen to every
+    // stage, which the specification accepts beside any access.
+    private static (D3D12_BARRIER_SYNC Sync, D3D12_BARRIER_ACCESS Access) Side(GpuImageLayout layout, GpuStage stages) {
+        var access = LayoutAccess(layout: layout);
+        var sync = Sync(
+            access: (GpuAccess.TransferRead | GpuAccess.TransferWrite),
+            buffer: false,
+            stages: stages
+        );
+
+        if (access == D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_NO_ACCESS) {
+            return ((sync == D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE)
+                ? D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL
+                : sync, access);
+        }
+
+        return ((sync == D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE) || !Serves(access: access, sync: sync))
+            ? (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL, access)
+            : (sync, access);
+    }
+    // Whether the synchronization holds, for every access, one of the stages the specification lets perform it.
+    private static bool Serves(D3D12_BARRIER_ACCESS access, D3D12_BARRIER_SYNC sync) {
+        const D3D12_BARRIER_SYNC Shading = (
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL |
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL_SHADING |
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING |
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW |
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_PIXEL_SHADING |
+            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_VERTEX_SHADING
+        );
+
+        if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE) != 0) && ((sync & Shading) == 0)) { return false; }
+        if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0) && ((sync & (Shading | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW)) == 0)) { return false; }
+        if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET) != 0) && ((sync & (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET)) == 0)) { return false; }
+        if (((access & (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE)) != 0) && ((sync & (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DEPTH_STENCIL)) == 0)) { return false; }
+        if (((access & (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_SOURCE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST)) != 0) && ((sync & (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY)) == 0)) { return false; }
+
+        return true;
     }
 }

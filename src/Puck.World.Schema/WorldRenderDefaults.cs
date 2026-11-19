@@ -149,7 +149,7 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Indirect">The world's diffuse indirect-light tier, sources and application.</param>
 /// <param name="SkyFieldScale">The boot sky field grid fraction, one or one half, independent of view render scale.</param>
 /// <param name="Exposure">The camera exposure each view maps the luminance it shades to the display by, before the
-/// tonemap. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
+/// tone curve. Absent is a manual exposure at <c>SdfExposure.DefaultEv100</c>, a sunlit day's.</param>
 /// <param name="Toon">The world's default cel style, which every material that authors no style of its own shades with
 /// (<see cref="ToonStyleDocument"/>), on unless it says <c>enabled: false</c>, and which the live <c>world.toon</c> lever
 /// turns on or off. Absent is off.</param>
@@ -157,6 +157,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="ShadowCoverage">How far the key light's shadow cascades reach (<see cref="WorldRenderShadowCoverage"/>).
 /// Absent keeps the engine's 16 m near, 120 m far and 200 m caster reach; <c>world.budget</c> prints the coverage with
 /// each cascade's texel.</param>
+/// <param name="Devices">The world's device profiles (<see cref="WorldDeviceProfile"/>): for each graphics device, the
+/// quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name
+/// (<c>world.device-profile</c>). Absent authors none, and no cap applies.</param>
 /// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
 /// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
 /// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
@@ -189,7 +192,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;
@@ -222,7 +226,7 @@ public sealed record WorldRenderDefaults(
         });
     }
 }
-/// <summary>How a camera exposes: the luminance <c>1.2 · 2^EV100</c> displays as white (before the tonemap), so each stop
+/// <summary>How a camera exposes: the luminance <c>1.2 · 2^EV100</c> displays as white (before the tone curve), so each stop
 /// up halves the image's brightness. A manual exposure holds <paramref name="Ev100"/>; an automatic one meters each
 /// view's own rendered image (a log histogram between the <paramref name="Low"/> and <paramref name="High"/>
 /// percentiles, weighted toward the centre by <paramref name="Center"/>), aims for that reading less

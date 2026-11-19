@@ -266,7 +266,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
     private readonly List<string> m_named = [];
     private readonly Dictionary<string, RenderGraphPlacement> m_placements = new(comparer: StringComparer.Ordinal);
 
-    // Whether this frame's lone whole-display view is shown only so its place pass applies the tonemap or the sharpen: the
+    // Whether this frame's lone whole-display view is shown only so its place pass applies its matte: the
     // display shows the world itself, as it does when the root stands for the view, so no pane is published for it.
     private bool m_loneThroughItsPass;
     // Whether this frame's one view covers the whole display, shown or not: the display then is that view, which a

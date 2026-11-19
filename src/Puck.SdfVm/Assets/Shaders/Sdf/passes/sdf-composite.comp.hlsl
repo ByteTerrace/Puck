@@ -157,7 +157,7 @@ bool sdfCompositePixel(uint3 id, out float exposed, out float covered) {
         }
     }
 
-    // The view's exposure maps the luminance it shaded, in nits, to the display before the root's tonemap; a view a
+    // The view's exposure maps the luminance it shaded, in nits, to the display before its display pass; a view a
     // window shows applies the window share of it (exposeShare), and the view looking through the window applies the
     // rest of its own; a debug view leaves it as it is, but for a tier view, which is the final image tinted.
     if (sdfDebugComposesFinal(passGroup.debugMode)) {

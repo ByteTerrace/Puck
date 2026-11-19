@@ -1011,6 +1011,15 @@ public static class WorldBootComposition {
             timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
             view: WorldPatrolCommandModule.ViewOf(graphs: sp.GetService<WorldViewGraphHost>(), viewports: sp.GetService<WorldSeatViewports>())
         ));
+        // world.device-profile: the device profile selected for the process (core, so a headless boot reads and caps by
+        // name); the render probe and the quality presets exist only where a renderer is composed.
+        services.AddSingleton<WorldDeviceProfileState>();
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldDeviceProfileCommandModule(
+            presets: sp.GetService<IWorldQualityPresets>(),
+            renderProbe: sp.GetService<WorldRenderProbe>(),
+            server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
+            state: sp.GetRequiredService<WorldDeviceProfileState>()
+        ));
         // world.benchmark: plays a route's chapters through the seat's own ingress in real time and records every host
         // iteration. Core, so a headless boot plays a route and reports its arrivals; the timeline, the pacing control
         // and the state root are each optional.
@@ -1026,7 +1035,8 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
             instances: sp.GetRequiredService<WorldInstanceHost>(),
             seatRouter: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>(),
-            client: sp.GetRequiredService<Puck.World.Client.WorldClient>()
+            client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
+            deviceProfile: sp.GetRequiredService<WorldDeviceProfileState>()
         ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();
@@ -1303,6 +1313,12 @@ public static class WorldBootComposition {
     /// change starts a fresh file instead of loading one that could never hit. Every World sharing the root shares the
     /// files.</summary>
     /// <param name="services">The service collection a presentation shape composes.</param>
+    // The render levers module, also as the quality preset path a device profile's table applies through.
+    private static void AddRenderLevers(IServiceCollection services) {
+        services.AddSingleton<WorldRenderLeverCommandModule>();
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderLeverCommandModule>());
+        services.AddSingleton<IWorldQualityPresets>(implementationFactory: static sp => sp.GetRequiredService<WorldRenderLeverCommandModule>());
+    }
     private static void AddWorldPipelineCache(IServiceCollection services) {
         services.TryAddSingleton<GpuPassPipelineCache>();
         services.TryAddSingleton(implementationFactory: static sp => new GpuRegionCopyPass(
@@ -1365,7 +1381,7 @@ public static class WorldBootComposition {
         // The render levers need only the render settings, the session-lever submit and the render probe registered
         // below, so an offscreen boot honors the same engine-wide options and debug views a windowed one does (the
         // presentation-only console modules stay unregistered).
-        services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
+        AddRenderLevers(services: services);
         services.AddSingleton<ICommandModule, WorldRowsCommandModule>();
         services.AddSingleton<ICommandModule, WorldSliceCommandModule>();
         // world.resize: an offscreen display has no window to follow, so a script resizes it here.
@@ -1559,7 +1575,7 @@ public static class WorldBootComposition {
         // over headless stdin because this whole method never runs there.
         services.AddSingleton<ICommandModule, WorldCommandModule>();
         services.AddSingleton<ICommandModule, WorldShaderReloadCommandModule>();
-        services.AddSingleton<ICommandModule, WorldRenderLeverCommandModule>();
+        AddRenderLevers(services: services);
         services.AddSingleton<ICommandModule, WorldRowsCommandModule>();
         services.AddSingleton<ICommandModule, WorldSliceCommandModule>();
         // The host-section READ-BACK — world.host, the DOCUMENT/RESOLVED/LIVE three-way read; the section is

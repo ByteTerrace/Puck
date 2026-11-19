@@ -77,7 +77,7 @@ public static partial class SdfWorldPackage {
     /// <c>SdfLightSelection</c> chooses by whether each light can reach what the view shows (<c>uint4</c>).</summary>
     public const string LightMask = "lightMask";
     /// <summary>The pass-group value holding the view's exposure: the multiplier, per nit, its composite maps the
-    /// luminance it shades to the display by before the tonemap, and the display-referred terms (an ink line, the editor
+    /// luminance it shades to the display by before its display pass, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
     /// <summary>The world's default cel style (<c>SdfToon.WriteRows</c>, a material's rows 22 to 25 alike): mode (zero

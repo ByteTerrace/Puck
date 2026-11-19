@@ -83,8 +83,8 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// glass, or a sky layer's view of another world, whose consumer shows it in its own scene. Such a view applies the
     /// window share of its exposure (<see cref="SdfPhotometry.WindowAdaptation"/>) and the consumer the rest of its own,
     /// so the window shows the world beyond at an exposure between the two. The default, <see langword="false"/>,
-    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, so its output is display-referred before
-    /// the tonemap.</summary>
+    /// exposes the view by the frame's <see cref="SdfFrame.Exposure"/> whole, and its display pass converts it for the
+    /// display.</summary>
     public bool Unexposed { get; init; }
     /// <summary>Whether another residency renders the view: a seat presented in another world keeps its view's place
     /// among its own world's views while that world's scene renders it, its camera in that world's coordinates. The

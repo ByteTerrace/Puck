@@ -9,7 +9,7 @@ namespace Puck.SignedDistance;
 /// surface's and a screen's luminance in nits, and the sky's radiance in nits. A Lambertian surface of albedo ρ under an
 /// illuminance E has the luminance ρE/π, so a light record carries its illuminance (or intensity) over π and the shader
 /// multiplies by the albedo alone. Each view's exposure (<see cref="ExposureOf"/>) maps the luminance it shades to the
-/// display, before the tonemap. Presentation only: nothing here reaches simulation state.
+/// display, before the tone curve and the encode. Presentation only: nothing here reaches simulation state.
 /// </summary>
 public static class SdfPhotometry {
     /// <summary>The share of full brightness below which a point or spot light's contribution ends: a light's range is
