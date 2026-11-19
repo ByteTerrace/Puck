@@ -425,12 +425,13 @@ hands in general". This round shows what that has to mean, in three places:
    limited to named shapes ([gap A](instrument-play.md#the-rig)) should let an
    author name a set of shapes once, as a body part, and use it for a clip's
    mask and for a tool's reach. Then a second tool on the hands costs no new
-   mechanism.
+   mechanism. [Designed](instrument-play/pose-clips.md#1-a-body-part-is-a-named-set-of-shapes).
 2. **The effector target should take a body from state.** The design adds a
    target on the creation's own shape
    ([gap B](instrument-play.md#the-rig)). Every other concept in this round
    needs a hand on a body that a rule chose, and that is the same record with
    one more kind of target. Designing both together avoids a second pass.
+   [Designed](instrument-play/pose-clips.md#5-an-effector-reaches-its-own-creation-or-a-body-a-rule-chose).
 3. **The delivered cue should carry a call.** A rule's cue that reaches every
    client ([gap I](instrument-play.md#sound)) is also how a client learns that
    a call opened near it. The design should treat a cue's payload as general.
