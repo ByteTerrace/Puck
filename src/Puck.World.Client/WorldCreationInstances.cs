@@ -11,7 +11,7 @@ namespace Puck.World.Client;
 
 /// <summary>Live creation presentation: articulated instances retain animation state and actual motion-owner transforms; rigid bodies share local geometry assets and own only a root pose. Animated, attached and inhabited placements use the same pose and anchor machinery.</summary>
 /// <remarks>Articulated instances allocate their actual root and motion-owner slots. Rigid bodies share local geometry through <see cref="WorldRigidAssets"/>.</remarks>
-public sealed partial class WorldCreationInstances {
+public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     private int[] m_catalogSlots = [];
 
     private int m_catalogBase;
@@ -28,14 +28,11 @@ public sealed partial class WorldCreationInstances {
 
     private Registration?[] m_pool = [];
 
-    // The pose serial of a body's registration (Registration.PoseSerial), zero for a body with none: what a rig that reads
-    // another body hashes (WorldRigReads.Revision). One delegate, made once.
-    private readonly Func<int, int> m_poseSerialOf;
-
-    /// <summary>Initializes a new instance of the <see cref="WorldCreationInstances"/> class.</summary>
-    public WorldCreationInstances() => m_poseSerialOf = PoseSerialOf;
-
-    private int PoseSerialOf(int body) => (FindBody(bodyIndex: body)?.PoseSerial ?? 0);
+    /// <summary>Returns the pose serial of a body's registration (moved each time a full pack changes one of its slots),
+    /// which a rig that reads the body hashes (<see cref="WorldRigReads.Revision"/>).</summary>
+    /// <param name="body">The body's population index.</param>
+    /// <returns>The serial; zero for a body with no registration.</returns>
+    public int PoseSerial(int body) => (FindBody(bodyIndex: body)?.PoseSerial ?? 0);
 
     public WorldRigidAssets Rigid { get; } = new();
 
@@ -318,6 +315,16 @@ public sealed partial class WorldCreationInstances {
         public readonly Vector3[] EffectorStepTo = new Vector3[rig.Effectors.Count];
         public readonly Vector3[] EffectorStepToNormal = new Vector3[rig.Effectors.Count];
         public readonly float[] EffectorStepProgress = new float[rig.Effectors.Count];
+        // Who each effector's target was when it last acted (WorldCreationInstances.TargetIdentity); a change releases its
+        // latch. The last goal each drew and its normal, in the creation's own frame, which a frame with no target
+        // solves toward while the weight eases out, and whether one was drawn. The weight each last applied (eased
+        // level times authored weight times layer share), and its error on the final pose (NaN with no target).
+        public readonly EffectorTargetIdentity[] EffectorIdentity = new EffectorTargetIdentity[rig.Effectors.Count];
+        public readonly Vector3[] EffectorGoal = new Vector3[rig.Effectors.Count];
+        public readonly Vector3[] EffectorGoalNormal = new Vector3[rig.Effectors.Count];
+        public readonly bool[] EffectorHasGoal = new bool[rig.Effectors.Count];
+        public readonly float[] EffectorApplied = new float[rig.Effectors.Count];
+        public readonly float[] EffectorError = Enumerable.Repeat(count: rig.Effectors.Count, element: float.NaN).ToArray();
 
         public readonly SecondOrderResponse[] PartResponse = new SecondOrderResponse[rig.ShapeCount];
         public readonly SecondOrderFollower3[] PartFollower = new SecondOrderFollower3[rig.ShapeCount];
@@ -927,6 +934,7 @@ public sealed partial class WorldCreationInstances {
     private void IndexBodySlots() {
         Array.Fill(array: m_bodySlots, value: -1);
         m_bodyReaders.Clear();
+        m_selectedBodyReaders.Clear();
         for (var index = 0; (index < m_pool.Length); index++) {
             if ((m_pool[index] is { BodyIndex: { } body }) && (((uint)body) < ((uint)m_bodySlots.Length)) && (m_bodySlots[body] < 0)) {
                 m_bodySlots[body] = index;
@@ -936,6 +944,11 @@ public sealed partial class WorldCreationInstances {
             }
             foreach (var read in live.Rig.Reads) {
                 if (read.Kind != CreationRigReadKind.Body) {
+                    continue;
+                }
+                if (read.Reference is not null) {
+                    m_selectedBodyReaders.Add(item: (live, read));
+
                     continue;
                 }
                 if (!m_bodyReaders.TryGetValue(key: read.Body, value: out var readers)) {
@@ -952,6 +965,9 @@ public sealed partial class WorldCreationInstances {
     // The registrations whose rig reads each body (CreationRigReadKind.Body), by the body read, valid while no reconcile
     // is running: the rate decision rates a read body no slower than its readers.
     private readonly Dictionary<int, List<Registration>> m_bodyReaders = [];
+    // The registrations whose rig reads a body a state cell selects, with that read: which body it names is resolved
+    // when a rate is decided, through the reader's own view.
+    private readonly List<(Registration Reader, CreationRigRead Read)> m_selectedBodyReaders = [];
 
     // The pool slot of each body's registration, or -1, valid while no reconcile is running.
     private readonly int[] m_bodySlots = NewBodySlots();

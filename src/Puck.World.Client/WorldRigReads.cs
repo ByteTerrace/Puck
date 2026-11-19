@@ -1,5 +1,7 @@
 using System.Numerics;
 using Puck.Physics.Motion;
+using Puck.SdfVm;
+using Puck.SignedDistance.Queries;
 using Puck.World.Authoring;
 using Puck.World.Protocol;
 
@@ -20,7 +22,7 @@ public sealed class WorldRigReads {
     private readonly CreationRigRead[] m_bodies;
     private IWorldStampSource? m_client;
     private int m_body = -1;
-    private Func<int, int>? m_poseSerial;
+    private IWorldBodyPoses? m_poses;
 
     /// <summary>Initializes a new instance of the <see cref="WorldRigReads"/> class over a rig's reads.</summary>
     /// <param name="rig">The rig whose reads the view answers.</param>
@@ -43,24 +45,25 @@ public sealed class WorldRigReads {
     /// with no body or before the first <see cref="Bind"/>.</summary>
     public BodyFacts Facts => (((m_client is { } client) && (m_body >= 0)) ? client.Facts(index: m_body) : BodyFacts.None);
     /// <summary>Gets a revision of everything the view answers that can change between frames: the latest change of a
-    /// state cell the lease holds, and for each other body the rig reads, its identity, its root pose and the serial its
-    /// own registration moves each time its pose changes. Equal revisions mean the reads answer what they answered.</summary>
+    /// state cell the lease holds (a cell that selects a body among them), and for each other body the rig reads, its
+    /// identity, its root pose and the serial its own registration moves each time its pose changes. Equal revisions mean
+    /// the reads answer what they answered.</summary>
     public int Revision {
         get {
             var hash = new HashCode();
 
             hash.Add(value: m_lease.Changed);
             foreach (var read in m_bodies) {
-                if ((m_client is not { } client) || (((uint)read.Body) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: read.Body)) {
+                if ((m_client is not { } client) || !TryBodyIndex(index: out var body, read: read)) {
                     hash.Add(value: -1);
 
                     continue;
                 }
 
-                hash.Add(value: client.EntityAddress(index: read.Body));
-                hash.Add(value: client.Position(index: read.Body));
-                hash.Add(value: client.Orientation(index: read.Body));
-                hash.Add(value: (m_poseSerial?.Invoke(arg: read.Body) ?? 0));
+                hash.Add(value: client.EntityAddress(index: body));
+                hash.Add(value: client.Position(index: body));
+                hash.Add(value: client.Orientation(index: body));
+                hash.Add(value: (m_poses?.PoseSerial(body: body) ?? 0));
             }
 
             return hash.ToHashCode();
@@ -70,12 +73,50 @@ public sealed class WorldRigReads {
     /// <summary>Points the view at this frame's client and wearing body.</summary>
     /// <param name="client">The client whose bodies, facts and query field the view reads.</param>
     /// <param name="body">The wearing body's population index, or -1 for a registration with none.</param>
-    /// <param name="poseSerial">Returns the pose serial of a body's registration, zero for a body with none; or
-    /// <see langword="null"/>, which reads zero for every body.</param>
-    public void Bind(IWorldStampSource? client, int body, Func<int, int>? poseSerial = null) {
+    /// <param name="poses">The registrations' drawn poses another body's part and pose serial are read from; or
+    /// <see langword="null"/>, which reads every body's serial as zero and every part as its body's root.</param>
+    public void Bind(IWorldStampSource? client, int body, IWorldBodyPoses? poses = null) {
         m_client = client;
         m_body = body;
-        m_poseSerial = poseSerial;
+        m_poses = poses;
+    }
+    /// <summary>Resolves which body a body read names this frame: its fixed index, or the index its selecting cell holds
+    /// as stored truth. A cell selects a body only when it holds a whole number naming an active body.</summary>
+    /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Body"/> reads.</param>
+    /// <param name="index">The body's population index; -1 when the read names no active body.</param>
+    /// <returns><see langword="true"/> when the read names an active body.</returns>
+    /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's body reads.</exception>
+    public bool TryBodyIndex(CreationRigRead read, out int index) {
+        Require(kind: CreationRigReadKind.Body, read: read);
+
+        index = read.Body;
+        if (read.Reference is { } selector) {
+            index = -1;
+            if (!m_lease.TryNumber(reference: selector, truth: true, value: out var held) || (held != MathF.Floor(x: held)) || (held < 0f) || (held >= WorldClient.EntityCapacity)) {
+                return false;
+            }
+            index = ((int)held);
+        }
+        if ((m_client is not { } client) || (((uint)index) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: index)) {
+            index = -1;
+
+            return false;
+        }
+
+        return true;
+    }
+    /// <summary>Reads the identity of the body a body read names this frame: its slot and the generation of its
+    /// occupant, so a slot reused by another occupant reads as another target.</summary>
+    /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Body"/> reads.</param>
+    /// <param name="address">The body's address; default when the read names no active body.</param>
+    /// <returns><see langword="true"/> when the read names an active body.</returns>
+    /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's body reads.</exception>
+    public bool TryBodyAddress(CreationRigRead read, out WorldEntityAddress address) {
+        address = default;
+        if (!TryBodyIndex(index: out var body, read: read)) { return false; }
+        address = m_client!.EntityAddress(index: body);
+
+        return true;
     }
     /// <summary>Reads a state read's presented number.</summary>
     /// <param name="read">One of the rig's <see cref="CreationRigReadKind.State"/> reads.</param>
@@ -106,22 +147,30 @@ public sealed class WorldRigReads {
 
         return WorldGaitDrivers.TryReadStateVector(reads: m_lease, reference: read.Reference!, value: out value);
     }
-    /// <summary>Reads another body's root pose as the client presents it this frame.</summary>
+    /// <summary>Reads the pose a body read names this frame: the named part's anchor as its registration last drew it,
+    /// or the body's root as the client presents it when the read names no part or the body's look publishes no such
+    /// part.</summary>
     /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Body"/> reads.</param>
-    /// <param name="position">The body's position; zero when it is not active.</param>
-    /// <param name="orientation">The body's attitude; identity when it is not active.</param>
-    /// <returns><see langword="true"/> when the body is active.</returns>
+    /// <param name="position">The pose's position; zero when the read names no active body.</param>
+    /// <param name="orientation">The pose's attitude; identity when the read names no active body.</param>
+    /// <returns><see langword="true"/> when the read names an active body.</returns>
     /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's body reads.</exception>
     public bool TryBody(CreationRigRead read, out Vector3 position, out Quaternion orientation) {
-        Require(kind: CreationRigReadKind.Body, read: read);
-
-        if ((m_client is not { } client) || (((uint)read.Body) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: read.Body)) {
+        if (!TryBodyIndex(index: out var body, read: read)) {
             (position, orientation) = (Vector3.Zero, Quaternion.Identity);
 
             return false;
         }
 
-        (position, orientation) = (client.Position(index: read.Body), client.Orientation(index: read.Body));
+        var client = m_client!;
+
+        if ((read.Part is { } part) && (m_poses is { } poses) && poses.TryBodyPartAuthoredPose(bodyIndex: body, client: client, partId: part, pose: out var anchor)) {
+            (position, orientation) = (anchor.Position, anchor.Orientation);
+
+            return true;
+        }
+
+        (position, orientation) = (client.Position(index: body), client.Orientation(index: body));
 
         return true;
     }
@@ -153,6 +202,17 @@ public sealed class WorldRigReads {
         );
     }
 
+    /// <summary>Returns the field a probe read asks this frame, which stays the same field through a frame in which one
+    /// probe misses.</summary>
+    /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Probe"/> reads.</param>
+    /// <returns>The presentation query field, or <see langword="null"/> when the client has none.</returns>
+    /// <exception cref="ArgumentException"><paramref name="read"/> is not one of the rig's probe reads.</exception>
+    public SdfFieldEvaluator? ProbeField(CreationRigRead read) {
+        Require(kind: CreationRigReadKind.Probe, read: read);
+
+        return m_client?.StaticField;
+    }
+
     private void Require(CreationRigRead read, CreationRigReadKind kind) {
         ArgumentNullException.ThrowIfNull(argument: read);
 
@@ -160,4 +220,19 @@ public sealed class WorldRigReads {
             throw new ArgumentException(message: $"The read '{read}' is not one of this rig's {kind.ToString().ToLowerInvariant()} reads.", paramName: nameof(read));
         }
     }
+}
+/// <summary>The drawn poses of the bodies a rig may read (<see cref="WorldRigReads.Bind"/>): another body's part and the
+/// serial its registration moves each time its pose changes.</summary>
+public interface IWorldBodyPoses {
+    /// <summary>Returns the pose serial of a body's registration.</summary>
+    /// <param name="body">The body's population index.</param>
+    /// <returns>The serial; zero for a body with no registration.</returns>
+    int PoseSerial(int body);
+    /// <summary>Resolves a body's part as its registration last drew it, and records that something read it.</summary>
+    /// <param name="bodyIndex">The body's population index.</param>
+    /// <param name="partId">The ordinal, case-sensitive part id.</param>
+    /// <param name="client">The client supplying the body's root pose.</param>
+    /// <param name="pose">The part's world pose; default when unresolved.</param>
+    /// <returns><see langword="true"/> when the body's look publishes the part.</returns>
+    bool TryBodyPartAuthoredPose(int bodyIndex, string partId, IWorldStampSource client, out SdfAnchor pose);
 }

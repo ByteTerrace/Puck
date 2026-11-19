@@ -165,31 +165,17 @@ public static class WorldGaitDrivers {
                 reads: reads
             );
             var level = (holds
-                ? ((compiled.WeightCurve is { } weightCurve)
-                    ? Math.Clamp(
-                        max: 1f,
-                        min: 0f,
-                        value: CurveOf(
-                            curve: weightCurve,
-                            definition: definition,
-                            phase: PhaseOf(driver: compiled.WeightBy, phases: phases)
-                        )
-                    )
-                    : 1f)
+                ? CurveLevel(curve: compiled.WeightCurve, definition: definition, driver: compiled.WeightBy, phases: phases)
                 : 0f
             );
-            var seconds = ((level > weights[index])
-                ? driver.BlendInSeconds
-                : driver.BlendOutSeconds
+            var weight = EaseWeight(
+                blend: out var driverBlend,
+                blendInSeconds: driver.BlendInSeconds,
+                blendOutSeconds: driver.BlendOutSeconds,
+                deltaSeconds: deltaSeconds,
+                level: level,
+                weight: weights[index]
             );
-            var driverBlend = ((seconds is { } authoredSeconds)
-                ? WeightBlend(
-                    deltaSeconds: deltaSeconds,
-                    seconds: authoredSeconds
-                )
-                : blend
-            );
-            var weight = (weights[index] + ((level - weights[index]) * driverBlend));
 
             weights[index] = (((level < RestWeight) && (weight < RestWeight))
                 ? 0f
@@ -466,6 +452,31 @@ public static class WorldGaitDrivers {
 
     // A driver's curve modulator: the height of the rig's curve read at an earlier driver's phase this frame; a row the
     // definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
+    /// <summary>Returns the level a weight eases toward while its gate holds: the height of a <c>weightBy</c> curve row at
+    /// its driver's phase, clamped to [0, 1], or one with no curve. A driver's weight and an effector's both take it.</summary>
+    /// <param name="curve">The curve read, or <see langword="null"/> for none.</param>
+    /// <param name="driver">The index of the driver whose phase is the curve's X, or -1.</param>
+    /// <param name="phases">The per-driver phases this frame.</param>
+    /// <param name="definition">The live definition whose curve rows are read, or <see langword="null"/>, which reads one.</param>
+    /// <returns>The level in [0, 1].</returns>
+    public static float CurveLevel(CreationRigRead? curve, int driver, ReadOnlySpan<float> phases, WorldDefinition? definition) => ((curve is null)
+        ? 1f
+        : Math.Clamp(max: 1f, min: 0f, value: CurveOf(curve: curve, definition: definition, phase: PhaseOf(driver: driver, phases: phases))));
+    /// <summary>Returns a weight eased one frame toward its level: an exponential approach over the rise's time constant
+    /// while the level is above the weight and the fall's while below, each <see cref="CreationDriverDocument.WeightSeconds"/>
+    /// when not authored. A driver's weight and an effector's both ease through it; each snaps its own ends.</summary>
+    /// <param name="weight">The weight before the frame.</param>
+    /// <param name="level">The level it eases toward.</param>
+    /// <param name="deltaSeconds">The frame's length, seconds.</param>
+    /// <param name="blendInSeconds">The rise's time constant, seconds, or <see langword="null"/> for the default.</param>
+    /// <param name="blendOutSeconds">The fall's time constant, seconds, or <see langword="null"/> for the default.</param>
+    /// <param name="blend">The fraction of the gap the frame closed, in [0, 1].</param>
+    /// <returns>The eased weight.</returns>
+    public static float EaseWeight(float weight, float level, float deltaSeconds, float? blendInSeconds, float? blendOutSeconds, out float blend) {
+        blend = WeightBlend(deltaSeconds: deltaSeconds, seconds: (((level > weight) ? blendInSeconds : blendOutSeconds) ?? CreationDriverDocument.WeightSeconds));
+
+        return (weight + ((level - weight) * blend));
+    }
     private static float CurveOf(CreationRigRead curve, float phase, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
         curves: definition.Curves,
         name: curve.Reference!

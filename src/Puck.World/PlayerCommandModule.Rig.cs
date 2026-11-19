@@ -105,7 +105,7 @@ internal sealed partial class PlayerCommandModule {
                 ? Point(value: target)
                 : "none")}{((effector.Align is { } align)
                 ? $" align={Scalar(value: align)} normal={Point(value: effector.Normal)}"
-                : string.Empty)}");
+                : string.Empty)} applied={Scalar(value: effector.Applied)} error={((effector.Error is { } error) ? Scalar(value: error) : "none")}");
 
             if (effector.Bones < Puck.World.Authoring.CreationEffectorDocument.MinChainBones) {
                 _ = line.Append(value: $" bones={effector.Bones}");

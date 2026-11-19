@@ -499,6 +499,10 @@ public static partial class WorldDefinitionValidator {
 
             var target = effectors[index].Target;
 
+            RequireFunctionCurveRow(definition: definition, errors: errors, path: $"{path}.effectors[{index}].weightBy.curve", curve: effectors[index].WeightBy?.Curve);
+            if ((target?.Kind is Puck.World.Authoring.CreationEffectorTargetDocument.KindBody) && (target.Reference is { } selector)) {
+                RequireNumericStateReference(definition: definition, errors: errors, path: $"{path}.effectors[{index}].target.reference", reference: selector, subject: "a body target");
+            }
             if (
                 (target is null) ||
                 !string.Equals(

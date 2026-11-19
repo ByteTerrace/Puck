@@ -476,7 +476,7 @@ public sealed partial class WorldCreationInstances {
         live.View.Bind(
             body: (live.BodyIndex ?? -1),
             client: client,
-            poseSerial: m_poseSerialOf
+            poses: this
         );
         live.WakeRevision = live.View.Revision;
 
@@ -577,8 +577,7 @@ public sealed partial class WorldCreationInstances {
                     live.PartFollower[shapeSlot].Reseed();
                 }
 
-                Array.Clear(array: live.EffectorPlanted);
-                Array.Clear(array: live.EffectorStepping);
+                for (var effector = 0; (effector < live.EffectorPlanted.Length); effector++) { ReleaseLatch(index: effector, live: live); }
                 // The drivers measure travel from the pose they last saw, which a teleport of the same occupant has
                 // left behind: they hold their phases and weights through the jump's frame and relatch there, and
                 // their eased motion and followers restart, so the next frame reads the body's own motion and seeds
@@ -706,6 +705,7 @@ public sealed partial class WorldCreationInstances {
         // The effectors correct the driver-posed chain, then everything downstream of a corrected bone re-chains off
         // the corrected own delta — so a hand parented to a solved forearm rides the solve with no effector of its own.
         if (ApplyEffectors(
+            definition: client.Definition,
             deltaSeconds: deltaSeconds,
             live: live,
             placementScale: placementScale,
@@ -790,6 +790,7 @@ public sealed partial class WorldCreationInstances {
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),
                 Orientation: turn, Lanes: lanes) { Scale = placementScale });
         }
+        MeasureEffectorErrors(live: live);
 
         return slotsMoved;
     }

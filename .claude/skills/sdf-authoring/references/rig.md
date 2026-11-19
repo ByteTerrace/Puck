@@ -228,16 +228,55 @@ resolves to `limb` when there are exactly three shapes, and a `limb` with any
 other count demotes to `spine`. A chain naming a missing shape id is dropped.
 
 `effectors` is any number of CCD solvers, `{ name, chain, tip, target, when, weight,
-plant, align }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
-over 64 iterations.
+plant, align, weightBy, blendInSeconds, blendOutSeconds }`, where `chain` and `tip`
+name shapes **by name**, 2 to 8 bones, solved over 64 iterations. Effectors solve
+after every driver, in declaration order, each on the pose the one before it left:
+a constraint on the final pose, so motion a later layer adds to a constrained chain
+shows above the tip and not at it. An effector writes every bone of its chain and,
+when it aligns, its tip (`CreationRigEffector.Writes`).
 
-A `target` is `{ kind }` of `surface`, `body`, or `state`:
+A `target` is `{ kind }` of `surface`, `body`, `state`, or `shape`:
 
 | Kind | Fields |
 |---|---|
 | `surface` | `direction` (author frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
-| `body` | `index`, `offset` ≤ 16 |
+| `body` | exactly one of `index` (fixed) and `reference` (a numeric `state.<row>[.<key>]` holding the body's index, read as stored truth: a whole number naming an active body selects it, anything else selects none, so zero is body zero and -1 clears it); `part` (optional, a part id the body's look publishes, read as last drawn, the root when it publishes none); `offset` ≤ 16 riding the target's attitude |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
+| `shape` | `shape`, a shape of the same creation; `offset` ≤ 16, a rest point in the author frame that rides the shape (omitted, the shape's origin); `direction` (optional), the approach the shape carries, whose reverse is the normal `align` turns the tip onto |
+
+A `shape` target is read on the pose of the same frame, after every driver and
+every earlier effector. Refused by name: a target shape that is, or hangs from, a
+bone or the tip of the effector's own chain; a later effector that writes the
+target shape or a shape it hangs from; and a `plant` on a `shape` target. A later
+effector that writes a shape an earlier effector's tip hangs from is warned about
+(PUCK133, `CreationRig.Contests`): the later one solves last and holds its own
+target.
+
+Each frame an effector first resolves who its target is: the shape, the body's
+`WorldEntityAddress` (slot and occupant generation), the cell holding a point, or
+the field a probe reads. When that differs from the target it last acted on, or
+there is none, it releases its plant latch and its step through one function
+(`ReleaseLatch`), so a reused slot or a cleared cell never keeps the old latch. A
+frame that resolves no target (a lost target, a probe that misses with no latch)
+reports `target=none`, and the solve keeps running toward the last goal it drew,
+held in the creation's own frame, while the weight eases out: nothing about a lost
+target is read again.
+
+The weight the solve and `align` use is three numbers multiplied. The eased level
+eases toward the gate times the contact weight times `weightBy`'s curve height at
+its driver's phase (`{ driver, curve }`, as a driver's), over `blendInSeconds` and
+`blendOutSeconds` (default 0.15), snapping onto its level within a thousandth. The
+authored `weight` is the second. The layer share is the third, read fresh every
+frame and never eased (`CreationRig.EffectorShare`): for each shape the effector
+writes, the owner's share there (the `weightBy` driver's weight times `1 - w` of
+each later replacing driver covering the shape; with no owner, every replacing
+driver counts), the smallest across its writes. A layer that takes any written
+shape at full weight removes the effector in that frame and releases its latch, so
+a foot plants afresh where the body stands when the layer leaves. A driver with no
+`parts` covers what its effectors write; one whose `parts` leave out a shape its
+effector writes is refused, naming the shape. `body.rig` prints each effector's
+`applied` weight and its `error`, the distance from its tip to its target on the
+final pose after every effector and follower.
 
 `reach`, `standoff` and a replant's `distance` and `height` are creation
 lengths: at a look or `bodies.scale` scale other than one they scale with the
