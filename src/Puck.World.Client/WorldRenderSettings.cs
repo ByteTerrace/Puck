@@ -29,11 +29,10 @@ public sealed partial class WorldRenderSettings {
     private ShadowTier m_shadows;
     private Client.WorldShadowSettings m_shadowSlots;
     private bool m_temporal;
-    private bool m_toonDefault;
-    private bool m_toonStyled;
     private bool? m_toonOverride;
-    private bool m_shadePrograms;
-    /// <summary>The temporary programs-versus-layers measurement lever.</summary>
+    private bool m_shadePrograms = true;
+    /// <summary>Gets or sets whether authored shading programs run (<c>world.shade programs</c>, the default) rather than
+    /// the material layers alone (<c>world.shade layers</c>), the measurement lever until the layers migrate.</summary>
     public bool ShadePrograms { get => m_shadePrograms; set { m_shadePrograms = value; m_revision++; } }
     private float m_upscaleSharpness;
     private WorldSkyTier m_skyQuality;
@@ -52,8 +51,6 @@ public sealed partial class WorldRenderSettings {
         RenderScale = defaults.RenderScale;
         UpscaleSharpness = defaults.UpscaleSharpness;
         Temporal = defaults.Temporal;
-        m_toonDefault = defaults.Toon?.IsOn ?? false;
-        m_toonStyled = defaults.Toon?.IsComplete ?? false;
         SkyQuality = defaults.SkyQuality;
         SkyFieldScale = defaults.SkyFieldScale;
         IndirectTier = (defaults.Indirect?.Tier ?? SdfIndirectTier.Medium);
@@ -184,22 +181,20 @@ public sealed partial class WorldRenderSettings {
     /// one. The world's own views include every layout slot that names a camera; the camera views screens film and session
     /// views never ask for it.</summary>
     public bool Temporal { get => m_temporal; set { m_temporal = value; m_revision++; } }
-    /// <summary>The live choice of the world's default cel style; until written it follows the document on reload. A
-    /// material with a style of its own keeps it either way.</summary>
-    public bool Toon { get => m_toonOverride ?? m_toonDefault; set { m_toonOverride = value; m_revision++; } }
-    /// <summary>Whether the world authors a complete default style (<c>render.toon</c> with every value), which
-    /// <see cref="Toon"/> switches; without one the world's default stays continuous whatever the lever says.</summary>
-    public bool ToonStyled => m_toonStyled;
-    /// <summary>The session's override for nested worlds; null lets each world use its document default.</summary>
+    /// <summary>Gets or sets whether every cel style shows as authored (<c>world.toon</c>): false suppresses every style,
+    /// a material's own and the world's default alike, so every styled material shades continuously and uninked and one
+    /// view compares continuous against cel. True until written.</summary>
+    public bool Toon { get => m_toonOverride ?? true; set { m_toonOverride = value; m_revision++; } }
+    /// <summary>Gets the session's lever for nested worlds; <see langword="null"/> shows each world's styles as
+    /// authored.</summary>
     public bool? ToonOverride => m_toonOverride;
-    /// <summary>Reads the reloadable default cel style and updates the default echoed by the live lever.</summary>
+    /// <summary>Resolves a world's default cel style under the live lever.</summary>
     /// <param name="render">The current world render settings.</param>
-    /// <returns>The world's default style.</returns>
+    /// <returns>The world's default style, suppressed while <see cref="Toon"/> is false.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="render"/> is <see langword="null"/>.</exception>
     public SdfToon ResolveToon(WorldRenderDefaults render) {
         ArgumentNullException.ThrowIfNull(render);
-        m_toonDefault = render.Toon?.IsOn ?? false;
-        m_toonStyled = render.Toon?.IsComplete ?? false;
-        return ToonStyleDocument.ResolveDefault(toon: render.Toon, enabled: m_toonOverride);
+        return ToonStyleDocument.ResolveDefault(toon: render.Toon, shown: m_toonOverride);
     }
     /// <summary>Returns a world's display transform (<c>render.tone</c>), or the neutral one when it authors none.</summary>
     /// <param name="render">The world's render settings.</param>

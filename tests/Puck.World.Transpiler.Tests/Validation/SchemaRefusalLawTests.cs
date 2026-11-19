@@ -55,16 +55,16 @@ public sealed class SchemaRefusalLawTests {
         Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "could not be mapped");
         Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "WorldPlacement");
     }
-    [InlineData("""{ "render": { "toon": { "band": "nonsense" } } }""", "'nonsense'")]
-    [InlineData("""{ "render": { "toon": { "band": 3 } } }""", "a number")]
+    [InlineData("""{ "render": { "indirect": { "tier": "nonsense" } } }""", "'nonsense'")]
+    [InlineData("""{ "render": { "indirect": { "tier": 3 } } }""", "a number")]
     [Theory]
     public void AnEnumMemberNamesTheSpellingsItReadsAgainstWhatTheDocumentHolds(string json, string found) {
         var refusal = Refuse(json: json);
 
-        Assert.Equal(expected: "/render/toon/band", actual: refusal.Pointer);
-        Assert.StartsWith(actualString: refusal.Authored, expectedStartString: "render.toon.band: expected one of '");
+        Assert.Equal(expected: "/render/indirect/tier", actual: refusal.Pointer);
+        Assert.StartsWith(actualString: refusal.Authored, expectedStartString: "render.indirect.tier: expected one of '");
         Assert.EndsWith(actualString: refusal.Authored, expectedEndString: $", found {found}");
-        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "SdfToonBand");
+        Assert.DoesNotContain(actualString: refusal.Authored, expectedSubstring: "SdfIndirectTier");
     }
     [Fact]
     public void AnAbsentPayloadIsRefusedWholeWithNothingToPlace() {

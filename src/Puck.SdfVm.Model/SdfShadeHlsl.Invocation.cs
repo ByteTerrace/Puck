@@ -4,13 +4,17 @@ public static partial class SdfShadeHlsl {
     // Generated once with the interpreter. Both opaque and glass callers supply this same stamp and use these
     // phase doors; neither can omit sanitization or invent a second register/stamp convention.
     // A plain kernel (SDF_SHADE_EMPTY) runs only for a frame with no active program, so its binding is none by
-    // construction and folds to a constant.
+    // construction and folds to a constant. While the live world.toon off suppresses every cel style, a styled
+    // material's binding is unstyled (sdfToonAuthored, shade/sdf-toon.hlsli, which every includer reaches first): its
+    // program's surface phase still runs, so a terrain or weathered surface under cel keeps its surface, and its light and
+    // compose phases read as omitted (sdfShadeHas), so the engine's continuous response lights it.
     private const string Invocation = """
 SdfShadeBinding sdfShadeBinding(int material) {
     SdfShadeBinding binding = (SdfShadeBinding)0;
 #ifndef SDF_SHADE_EMPTY
     uint address;
     if (passGroup.shadePrograms == 0u || !sdfMaterialBase(material, address)) return binding;
+    binding.unstyled = sdfToonSuppressed() && sdfToonAuthored(asfloat(sdfWords[address + 22u]).x);
     uint4 own = asuint(sdfWords[address + 32u]);
     binding.range = own.y != 0u ? own : passGroup.shadeDefault;
     if (binding.range.y != 0u) binding.arm = sdfShadeArm(binding.range.xy);

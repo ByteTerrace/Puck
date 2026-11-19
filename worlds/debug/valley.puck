@@ -148,7 +148,7 @@ prototypes {
         name: $"valley-{sector.name}"
         schema: "puck.creation.v1"
         palette: concat(
-          [terrainMaterial(valleyRockBase, valleyRockBands, valleyRockBreakup)],
+          [celRock(terrainMaterial(valleyRockBase, valleyRockBands, valleyRockBreakup))],
           sector.name == "north-west" ? wallPalette : []
         )
         // The relief stays out of the bowls and cuts the sector carves (water-site.puck's valleyBasins, glacier-site.puck's
@@ -223,16 +223,8 @@ prototypes {
       name: "valley-overlook"
       schema: "puck.creation.v1"
       palette [
-        {
-          color: "#7D7366"
-          roughness: 0.95
-          specular: 0.02
-        }
-        {
-          color: "#9A958B"
-          roughness: 0.85
-          specular: 0.03
-        }
+        celRock({ color: "#7D7366", roughness: 0.95, specular: 0.02 })
+        celRock({ color: "#9A958B", roughness: 0.85, specular: 0.03 })
       ]
       shape Box "deck" {
         material: valleyDeck

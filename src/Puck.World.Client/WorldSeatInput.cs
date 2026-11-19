@@ -264,24 +264,68 @@ public sealed class WorldSeatInput {
     /// <remarks>The caller decides the audience: it asks only on a client that presents for exactly this one seat,
     /// for the body the seat controls.</remarks>
     public bool TryLead(string channel, float leadSeconds, WorldInputAnswer? answer, ulong presentedTick, float presentedFraction, out float level) {
-        level = 0f;
-        if (!m_admitted || m_producer.CaptureLost || !m_catalog.TryGetLogicalId(id: out var logical, name: channel) ||
-            (m_catalog.Channels[logical].Shape is not (ChannelShape.Binary or ChannelShape.Bipolar or ChannelShape.Unipolar)) ||
-            !m_producer.Mapping.IsLive(logicalId: logical)) {
-            return false;
+        var reading = ReadGuess(answer: answer, channel: channel, leadSeconds: leadSeconds, presentedFraction: presentedFraction, presentedTick: presentedTick);
+
+        level = reading.Level;
+
+        return (reading.State == WorldGuessState.InForce);
+    }
+    /// <summary>Reads why a guess on a channel is or is not in force, with the figures it was decided from: the one
+    /// decision <see cref="TryLead"/> answers from. It writes nothing.</summary>
+    /// <param name="channel">The input channel's name.</param>
+    /// <param name="leadSeconds">How long, in seconds, an unanswered guess may show.</param>
+    /// <param name="answer">The last input the authority answered for this seat's owner, or <see langword="null"/>.</param>
+    /// <param name="presentedTick">The simulation tick the presented state was last delivered at.</param>
+    /// <param name="presentedFraction">How far the frame has presented toward <paramref name="presentedTick"/>, in [0, 1].</param>
+    /// <returns>The reading; its level is zero unless the state is <see cref="WorldGuessState.InForce"/>.</returns>
+    public WorldGuessReading ReadGuess(string channel, float leadSeconds, WorldInputAnswer? answer, ulong presentedTick, float presentedFraction) {
+        if (!m_admitted) { return new(WorldGuessState.NotAdmitted, 0U, 0d, 0f, m_producer.Epoch); }
+        if (m_producer.CaptureLost) { return new(WorldGuessState.CaptureLost, 0U, 0d, 0f, m_producer.Epoch); }
+        if (!m_catalog.TryGetLogicalId(id: out var logical, name: channel) ||
+            (m_catalog.Channels[logical].Shape is not (ChannelShape.Binary or ChannelShape.Bipolar or ChannelShape.Unipolar))) {
+            return new(WorldGuessState.NotALevelChannel, 0U, 0d, 0f, m_producer.Epoch);
         }
+        if (!m_producer.Mapping.IsLive(logicalId: logical)) { return new(WorldGuessState.NotLive, 0U, 0d, 0f, m_producer.Epoch); }
 
         var sequence = m_edgeSequence[logical];
 
-        if (sequence == 0U) { return false; }
+        if (sequence == 0U) { return new(WorldGuessState.NoEdge, 0U, 0d, 0f, m_producer.Epoch); }
+
+        var age = m_time.GetElapsedTime(startingTimestamp: m_edgeStamp[logical]).TotalSeconds;
+
         // Answered once the authority's answer covers the edge in this epoch and the tick it answered in is presented.
         if ((answer is { } answered) && (answered.Epoch == m_producer.Epoch) && (answered.Sequence >= sequence) &&
             ((presentedTick > answered.Tick) || ((presentedTick == answered.Tick) && (presentedFraction >= 1f)))) {
-            return false;
+            return new(WorldGuessState.Answered, sequence, age, 0f, m_producer.Epoch);
         }
-        if (m_time.GetElapsedTime(startingTimestamp: m_edgeStamp[logical]).TotalSeconds > leadSeconds) { return false; }
-        level = ((float)m_producer.Level(channel: logical));
+        if (age > leadSeconds) { return new(WorldGuessState.Expired, sequence, age, 0f, m_producer.Epoch); }
 
-        return true;
+        return new(WorldGuessState.InForce, sequence, age, ((float)m_producer.Level(channel: logical)), m_producer.Epoch);
     }
 }
+/// <summary>Why a seat's guess on a channel is or is not in force (<see cref="WorldSeatInput.ReadGuess"/>).</summary>
+public enum WorldGuessState {
+    /// <summary>The seat's input is not admitted by its authority.</summary>
+    NotAdmitted,
+    /// <summary>The producer lost a capture.</summary>
+    CaptureLost,
+    /// <summary>The channel is not a button or an axis the world declares.</summary>
+    NotALevelChannel,
+    /// <summary>The channel is not live in the mapping the authority last published.</summary>
+    NotLive,
+    /// <summary>The seat has sent no edge on the channel in the current epoch.</summary>
+    NoEdge,
+    /// <summary>The authority's answer to the seat's last edge has been presented.</summary>
+    Answered,
+    /// <summary>The seat's last edge is older than the guess may show.</summary>
+    Expired,
+    /// <summary>A guess is in force.</summary>
+    InForce,
+}
+/// <summary>A guess's decision and the figures it rests on.</summary>
+/// <param name="State">Why the guess is or is not in force.</param>
+/// <param name="Outstanding">The event sequence of the seat's last edge on the channel in the epoch; zero for none.</param>
+/// <param name="AgeSeconds">The age of that edge in seconds; zero for none.</param>
+/// <param name="Level">The seat's folded level while in force; otherwise zero.</param>
+/// <param name="Epoch">The producer's input epoch.</param>
+public readonly record struct WorldGuessReading(WorldGuessState State, uint Outstanding, double AgeSeconds, float Level, ulong Epoch);

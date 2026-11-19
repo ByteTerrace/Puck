@@ -1,0 +1,20 @@
+// The run of `lead-tests.puck`'s sixty-tick hold on the world with no `lead` authored. Its authority hashes, read from
+// `puck test worlds/debug/lead-plain-tests.puck --reproduce`, are those of the same-named scenario there.
+schema: "puck.world.definition.v1"
+basis: "lead-plain-fixture"
+documentId: "lead-tests"
+simulation {
+  rateHz: 30
+}
+
+test "a press held for sixty ticks is taken while the rule allows it" {
+  when {
+    ticks 3
+    seat1: player.signal keyboard.u press
+    ticks 60
+  }
+  expect {
+    pressPose[0] == 1
+    channel(1, press) == 1
+  }
+}

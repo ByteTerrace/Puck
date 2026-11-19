@@ -55,7 +55,7 @@ public static partial class SdfShadeHlsl {
         for (var i = 0; (i < SdfShadeProgram.OutputCapacity); i++) { text.Append(value: "uint4 o").Append(value: i).Append(value: "; "); }
         // A material's program as the stage holds it: its slice and parameter ranges, and the straight-line arm a
         // specialized kernel selected for it once a pixel (zero for the interpreter, and for none).
-        text.Append(value: "};\nstruct SdfShadeBinding { uint4 range; uint arm; };\n");
+        text.Append(value: "};\nstruct SdfShadeBinding { uint4 range; uint arm; bool unstyled; };\n");
         text.Append(value: "uint4 sdfShadeInput(SdfShadeStamp stamp, uint index) { switch(index) {\n");
         for (var i = 0; (i < SdfShadeOps.Inputs.Count); i++) { text.Append(value: "case ").Append(value: i).Append(value: "u: return stamp.i").Append(value: i).Append(value: ";\n"); }
         text.Append(value: "default: return 0u; } }\nuint4 sdfShadeRegister(SdfShadeRegisters regs, uint index) { switch(index & (SDF_SHADE_MAX_REGISTERS - 1u)) {\n");
@@ -142,7 +142,7 @@ void sdfShadeInterpret(uint2 slice, uint2 parameters, uint phase, SdfShadeStamp 
         text.Append(value: "        }\n        sdfShadeWriteRegister(regs, op.y, value);\n        sdfShadeWriteOutputs(outputs, op.z >> 8u, value);\n        sdfWorkSteps++;\n    }\n}\n");
         text.Append(value: """
 uint sdfShadeArm(uint2 slice) { return 0u; }
-bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return binding.range.y != 0u && sdfShadeRead(binding.range.xy, phase).y != 0u; }
+bool sdfShadeHas(SdfShadeBinding binding, uint phase) { return binding.range.y != 0u && (phase == 0u || !binding.unstyled) && sdfShadeRead(binding.range.xy, phase).y != 0u; }
 uint sdfShadeReadsOf(SdfShadeBinding binding) { return binding.range.y != 0u ? sdfShadeRead(binding.range.xy, 0u).w : 0u; }
 void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {
     sdfShadeInterpret(binding.range.xy, binding.range.zw, phase, stamp, outputs);
@@ -189,7 +189,7 @@ void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, o
         for (var arm = 1; (arm <= programs.Length); arm++) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u: return {((uint)programs[arm - 1].Reads)}u;\n");
         }
-        text.Append(value: "default: return 0u;\n}\n}\nbool sdfShadeHas(SdfShadeBinding binding, uint phase) { return ((sdfShadeArmPhases(binding.arm) >> phase) & 1u) != 0u; }\n");
+        text.Append(value: "default: return 0u;\n}\n}\nbool sdfShadeHas(SdfShadeBinding binding, uint phase) { return (phase == 0u || !binding.unstyled) && ((sdfShadeArmPhases(binding.arm) >> phase) & 1u) != 0u; }\n");
         text.Append(value: "void sdfShadeExecute(SdfShadeBinding binding, uint phase, SdfShadeStamp stamp, out SdfShadeOutputs outputs) {\noutputs = (SdfShadeOutputs)0;\nswitch (binding.arm) {\n");
         for (var arm = 1; (arm <= programs.Length); arm++) {
             text.Append(System.Globalization.CultureInfo.InvariantCulture, $"case {arm}u:\n");

@@ -1908,9 +1908,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         m_outputRefreshRequested = false;
         m_installedUnrendered = false;
         m_publishedFrame = m_frame;
-        foreach (var pass in m_passes) {
-            if (pass.Recorded) { pass.Package?.Submitted(); }
-        }
+        OwePackageCommits();
         SubmitPackageReadbacks(slot: slotIndex);
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {

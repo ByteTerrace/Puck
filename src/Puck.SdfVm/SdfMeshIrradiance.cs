@@ -440,7 +440,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var row = 0; (row < draws.Count); row++) {
                 var draw = draws[row];
 
-                if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+                if (!draw.IsStatic) { continue; }
                 var key = (draw.Mesh, draw.ObjectToWorld, draw.Material);
 
                 if (!counts.TryGetValue(key: key, value: out var left)) { return null; }
@@ -1507,7 +1507,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             for (var row = m_keyRuns.Start(index: run); (row < (m_keyRuns.Start(index: run) + m_keyRuns.Length(index: run))); row++) {
                 if (m_drawStatic[row]) { m_keyValue = unchecked((m_keyValue - m_drawKeys[row])); m_keyStatic--; }
                 var draw = draws[row];
-                var isStatic = ((draw.Mesh is not null) && SdfMeshIrradianceScene.IsStatic(draw: in draw));
+                var isStatic = draw.IsStatic;
 
                 m_drawStatic[row] = isStatic;
                 if (isStatic) { m_staticRows.Add(item: row); } else { m_staticRows.Remove(item: row); }
@@ -1539,7 +1539,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         foreach (var index in m_staticRows) {
             var draw = meshDraws[index];
 
-            if ((draw.Mesh is null) || !SdfMeshIrradianceScene.IsStatic(draw: in draw)) { continue; }
+            if (!draw.IsStatic) { continue; }
             if (count == snapshot.Length) { snapshot = RentedArrays.Grow(array: snapshot, keep: count, minimumLength: Math.Max(val1: 16, val2: (2 * count))); }
             snapshot[count++] = draw;
         }
