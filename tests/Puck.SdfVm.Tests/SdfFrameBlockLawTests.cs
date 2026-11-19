@@ -67,7 +67,9 @@ public sealed class SdfFrameBlockLawTests {
         // The bins pass alone reads the widths, and its recorder writes them from the frame's plan just before it dispatches
         // (SdfFrameBlock.WriteShadeBins).
         SdfWorldPackage.ShadeBinWidths,
+        // The cascade set is the recorder's, written after the view's values (SdfFrameBlock.WriteMeshShadows).
         SdfWorldPackage.MeshShadowCascades, SdfWorldPackage.MeshShadowCount, SdfWorldPackage.MeshShadowParameters, SdfWorldPackage.MeshShadowTexels,
+        SdfWorldPackage.MeshShadowSlopes, SdfWorldPackage.MeshShadowRoles,
         SdfWorldPackage.MeshIrradianceLevels, SdfWorldPackage.MeshIrradianceSpacings,
         // No exposures are staged here, so the meter has no reading, and a manual exposure adapts nothing locally.
         SdfWorldPackage.MeterLuminance, SdfWorldPackage.MeterLight, SdfWorldPackage.LocalAdaptation, SdfWorldPackage.SkyPeakLuminance];
@@ -151,10 +153,15 @@ public sealed class SdfFrameBlockLawTests {
             lights.Set(index: index, light: lights[0]);
         }
         lights.Count = SdfLights.MaxLights;
-        lights.Set(index: 1, light: (lights[0] with { Shadows = 1u }));
-        lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 1);
-        lights.ShadowSlots.SetSlot(light: 1, slot: 0);
-        lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 0, Outgoing: 1, Slot: 0, Weight: 0.5f)]);
+        // The primary role is the brightest directional's and the secondary the next's (SdfLights.RoleSlot), so with a point
+        // light in slot 0 neither role's slot, nor any stable slot's light, is zero.
+        lights.Set(index: 1, light: (lights[0] with { Shadows = 1u, Weight = (lights[0].Weight * 2f) }));
+        lights.Set(index: 3, light: (lights[0] with { Kind = SdfLightKind.Point }));
+        lights.ShadowSlots.Configure(fadeCapacity: 1, slots: 3);
+        lights.ShadowSlots.SetSlot(light: 3, slot: 0);
+        lights.ShadowSlots.SetSlot(light: 1, slot: 1);
+        lights.ShadowSlots.SetSlot(light: 2, slot: 2);
+        lights.ShadowSlots.SetHandoffs(handoffs: [new SdfShadowHandoff(Incoming: 0, Outgoing: 1, Slot: 1, Weight: 0.5f)]);
         lights.Curvature = new SdfCurvature(
             Cavity: 0.25f,
             Ink: 0.5f,
@@ -261,7 +268,7 @@ public sealed class SdfFrameBlockLawTests {
         );
         Assert.Equal(
             actual: (BitConverter.ToUInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.LightCount))), BitConverter.ToInt32(value: block, startIndex: ((int)parameters.BlockOffsetOf(member: SdfWorldPackage.ShadowSlots)))),
-            expected: (((uint)SdfLights.MaxLights), 1)
+            expected: (((uint)SdfLights.MaxLights), 3)
         );
     }
     // Each shading lever, on the frame or in a view's quality, lands in its own pass-block member and nowhere else: from

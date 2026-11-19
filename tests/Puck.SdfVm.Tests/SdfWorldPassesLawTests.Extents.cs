@@ -48,22 +48,17 @@ public sealed partial class SdfWorldPassesLawTests {
 
         foreach (var (scale, pixels) in new[] { (0.5f, 16u), (0.625f, 20u), (0.75f, 24u), (0.5f, 16u) }) {
             current = current with { Views = [current.Views[0] with { ResolvedRenderScale = scale }], Time = (current.Time + 1f) };
-            gpu.SetBinds = [];
             _ = view.Produce(context: in context);
             var row = view.Runtime.Latest!.Instances[0];
 
-            // The mesh, depth pyramid, surface, views and sky at the active grid, the key light's two shadow
-            // cascades at their own resolution (the frame's one stable shadow slot draws no second), and the resolve and
-            // the composite at the output.
+            // The mesh, depth pyramid, surface, probe lookup, views and sky at the active grid, the key light's two shadow
+            // cascades at their own resolution (the frame's one stable shadow slot draws no second), and the resolve, the
+            // composite and the display at the output.
             const long Cascade = SdfWorldPackage.MeshShadowResolution;
 
-            Assert.Equal(expected: 9, actual: row.Passes);
-            Assert.Equal(expected: ((((5L * pixels) * pixels) + (2 * (Cascade * Cascade))) + (2 * (Extent * Extent))), actual: row.PassPixels);
-            // The resolve's pass set, the third from the frame's last: the sky and the composite follow it.
-            var set = gpu.SetBinds.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray()[^3];
-
-            gpu.SetBinds = null;
-            var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: set));
+            Assert.Equal(expected: ReconstructingPasses, actual: row.Passes);
+            Assert.Equal(expected: ((((6L * pixels) * pixels) + (2 * (Cascade * Cascade))) + (3 * (Extent * Extent))), actual: row.PassPixels);
+            var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Resolve)));
             var parameters = SdfWorldInterfaces.ResolveParameters;
 
             Assert.Equal(expected: Extent, actual: BitConverter.ToUInt32(startIndex: 0, value: block));
@@ -85,22 +80,22 @@ public sealed partial class SdfWorldPassesLawTests {
         // Changing the ceiling rebuilds allocation while preserving the published output. Switching off the separate
         // grid removes the resolve and its scratch; switching back selects the same declared resolve topology.
         foreach (var (ceiling, active, passes, renderPixels) in new[] {
-            (0.5f, 0.25f, 9, 8u), (1f, 0f, 8, 32u), (0.75f, 0.5f, 9, 16u),
+            (0.5f, 0.25f, ReconstructingPasses, 8u), (1f, 0f, NativePasses, 32u), (0.75f, 0.5f, ReconstructingPasses, 16u),
         }) {
             current = current with { Views = [current.Views[0] with { RenderScale = ceiling, ResolvedRenderScale = active }], Time = (current.Time + 1f) };
             TestLiveness.Until(step: () => {
                 if (!view.Produce(context: in context) || (node.Plan!.Passes.Count != passes)) {
                     return false;
                 }
-                var passSet = gpu.BoundSet(group: ((uint)ShaderInterfaceGroup.Pass));
+                var passSet = gpu.BoundSetOf(group: ((uint)ShaderInterfaceGroup.Pass), part: SdfWorldPackage.Parts.Composite);
                 var passBlock = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: passSet));
-                // The frame's last pass, the composite, binds the sky interface in either graph.
+                // The composite binds the sky interface in either graph.
                 var layout = SdfWorldInterfaces.SkyParameters;
 
                 return (BitConverter.ToUInt32(value: passBlock, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent))) == renderPixels);
             }, reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
             Assert.Equal(expected: (Extent, Extent), actual: node.Extent);
-            Assert.Equal(expected: (passes == 9), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
+            Assert.Equal(expected: (passes == ReconstructingPasses), actual: node.Plan!.Storages.Any(predicate: static item => item.Versions.Any(predicate: static version => version.EndsWith(comparisonType: StringComparison.Ordinal, value: $"${SdfWorldPackage.CurrentColor}"))));
         }
         current = current with { EnableCadenceGate = true };
         _ = view.Produce(context: in context);

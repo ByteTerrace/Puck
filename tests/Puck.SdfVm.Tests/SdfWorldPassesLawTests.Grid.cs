@@ -33,7 +33,7 @@ public sealed partial class SdfWorldPassesLawTests {
             wait: view.Residency.WaitPipelineBuilds);
         var node = view.Runtime.Node(instance: 0);
         // A frame of the default lights holds one stable shadow slot, so the view runs no second slot's cascade.
-        var passes = ((ceiling < 1f) ? 9 : 8);
+        var passes = ((ceiling < 1f) ? ReconstructingPasses : NativePasses);
 
         TestLiveness.Until(step: () => (view.Produce(context: in context) && (node.Plan!.Passes.Count == passes) && !node.IsBuildingCandidate),
             reason: () => node.LastSwapError?.ToString(), wait: view.Residency.WaitPipelineBuilds);
@@ -62,7 +62,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 // Every pass of the frame records the one grid of the graph that renders it: the native graph its
                 // output, the reconstructing graph the dipped grid.
                 Assert.Equal(expected: passes, actual: node.Plan!.Passes.Count);
-                Assert.Equal(expected: [((passes == 9) ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu, passes: passes));
+                Assert.Equal(expected: [((passes == ReconstructingPasses) ? ((uint)((Extent * ceiling) * dip)) : Extent)], actual: Grids(gpu: gpu));
                 Assert.Equal(expected: (buffers, pools, owned, revision, created), actual: (gpu.BufferBytes, gpu.PoolsCreated.Count, node.OwnedBytes, node.WorkRevision, CreatedPipelines(pipelines: pipelines)));
             }
             Assert.False(condition: node.IsBuildingCandidate);
@@ -84,12 +84,18 @@ public sealed partial class SdfWorldPassesLawTests {
             kernels: SdfTestPipelines.Kernels().With(bytecode: container, kernel: SdfKernel.Resolve));
         var context = GridContext(gpu: gpu);
 
-        TestLiveness.Until(step: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == 9) &&
+        TestLiveness.Until(step: () => (view.Produce(context: in context) && (view.Runtime.Node(instance: 0).Plan!.Passes.Count == ReconstructingPasses) &&
             !view.Runtime.Node(instance: 0).IsBuildingCandidate), reason: () => (view.Runtime.Node(instance: 0).LastSwapError?.ToString() ?? view.NotReadyReason),
             wait: view.Residency.WaitPipelineBuilds);
         Assert.Null(@object: view.Runtime.Node(instance: 0).LastSwapError);
         Assert.Contains(collection: view.Runtime.Node(instance: 0).Plan!.Passes, filter: static pass => pass.Name.EndsWith(comparisonType: StringComparison.Ordinal, value: "$resolve"));
     }
+
+    // The passes of a view of the default frame, whose lights hold one stable shadow slot (no second slot's cascade) and
+    // which draws no distant map: the mesh, pyramid, two cascades, surface, probe lookup, views, sky, composite and display,
+    // and the resolve when the view renders below its output.
+    private const int NativePasses = 10;
+    private const int ReconstructingPasses = (NativePasses + 1);
 
     private static SdfTestView GridView(UploadModelGpu gpu, SdfWorldPipelineCatalog pipelines, Func<SdfFrame> capture, SdfKernelSet? kernels = null) =>
         new(device: gpu, extent: Extent, hostsOnDirectX: false, pipelines: pipelines,
@@ -98,21 +104,21 @@ public sealed partial class SdfWorldPassesLawTests {
     private static FrameContext GridContext(UploadModelGpu gpu) => new(AccumulatorTicks: 0, DeltaTicks: 0, ElapsedTicks: 0, FrameDeltaTicks: 0,
         Host: new HostContext(capabilities: new Dictionary<Type, object> { [typeof(IGpuDeviceContext)] = gpu }),
         StepTicks: 0, TargetHeight: Extent, TargetWidth: Extent);
-    // The distinct render grids the frame's passes recorded: each pass block's imageExtent, the world interface's for every
-    // SDF pass and the resolve interface's for the reconstructing graph's last pass.
-    private static uint[] Grids(UploadModelGpu gpu, int passes) {
-        var sets = gpu.SetBinds!.Where(predicate: static bind => (bind.Group == ((uint)ShaderInterfaceGroup.Pass))).Select(selector: static bind => bind.Set).Distinct().ToArray();
+    // The distinct render grids the frame's SDF passes recorded: each pass block's imageExtent, read through the interface
+    // its pass binds (the sky's for the sky and the composite, the resolve's for the resolve, the world's for the rest). The
+    // display pass's optical interface is the output's, not a render grid.
+    private static uint[] Grids(UploadModelGpu gpu) => [.. gpu.SetBinds!
+        .Where(predicate: static bind => ((bind.Group == ((uint)ShaderInterfaceGroup.Pass)) && (bind.Part is not (null or SdfWorldPackage.Display))))
+        .DistinctBy(keySelector: static bind => bind.Set)
+        .Select(selector: bind => {
+            var layout = bind.Part switch {
+                SdfWorldPackage.Parts.Sky or SdfWorldPackage.Parts.Composite => SdfWorldInterfaces.SkyParameters,
+                SdfWorldPackage.Resolve => SdfWorldInterfaces.ResolveParameters,
+                _ => SdfWorldInterfaces.WorldParameters,
+            };
 
-        return [.. sets.Select(selector: (set, index) => {
-            var block = gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: set));
-            // The frame ends with the sky and the composite, which bind the sky interface, after the resolve in a
-            // reconstructing graph; every pass before them binds the world interface.
-            var fromEnd = (sets.Length - index);
-            var layout = ((fromEnd <= 2) ? SdfWorldInterfaces.SkyParameters : (((passes == 9) && (fromEnd == 3)) ? SdfWorldInterfaces.ResolveParameters : SdfWorldInterfaces.WorldParameters));
-
-            return BitConverter.ToUInt32(value: block, startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent)));
+            return BitConverter.ToUInt32(value: gpu.Memory(bufferHandle: gpu.BufferAt(binding: 0, set: bind.Set)), startIndex: ((int)layout.BlockOffsetOf(member: SdfWorldPackage.ImageExtent)));
         }).Distinct()];
-    }
     private static long CreatedPipelines(SdfWorldPipelineCatalog pipelines) =>
         (pipelines.Pipelines.Work.TryRead(kind: GpuWork.PipelinesCreated, value: out var created) ? created : 0L);
 }

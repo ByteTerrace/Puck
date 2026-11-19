@@ -16,22 +16,27 @@ public sealed partial class RenderGraphCadenceLawTests {
         node.Swap(pipeline: new CompiledShaderPipeline(plan: new RenderGraphCompiler(Catalog()).Compile(definition: Graph()).Pipeline,
             shaders: new Dictionary<string, CompiledShader>()));
         node.ProduceUntilInstalled();
-        Assert.Equal(["completed 0", "record 0", "submitted 0"], factory.Events);
+        // A slot nothing was submitted to has no completion to hear.
+        Assert.Equal(["record 0", "submitted 0"], factory.Events);
 
         factory.Events.Clear();
         factory.Skip = true;
         for (var frame = 0; (frame < 3); frame++) { _ = node.ProduceFrame(context: default); }
-        // The armed slot is proven complete as soon as its fence reads signaled, before its reuse; a skipped pass is then
-        // told each slot it would reuse has completed, and is never armed.
-        Assert.Equal(4, factory.Events.Count);
-        Assert.Equal("completed 0", factory.Events[0]);
-        Assert.All(factory.Events, static entry => Assert.StartsWith("completed ", entry));
-        var next = $"{((int.Parse(factory.Events[^1]["completed ".Length..], provider: System.Globalization.CultureInfo.InvariantCulture) + 1) % 3)}";
+        // The armed slot is proven complete as soon as its fence reads signaled, before its reuse. A skipped pass is never
+        // armed, and still hears each submission of a slot complete, once: an early proof and the wait at the slot's reuse
+        // prove the same submission. Each slot is submitted at most once in these three frames.
+        var skipped = factory.Events.ToArray();
+
+        Assert.Equal("completed 0", skipped[0]);
+        Assert.All(skipped, static entry => Assert.StartsWith("completed ", entry));
+        Assert.Equal(skipped.Length, skipped.Distinct().Count());
 
         factory.Events.Clear();
         factory.Skip = false;
         _ = node.ProduceFrame(context: default);
-        Assert.Equal([$"completed {next}", $"record {next}", $"submitted {next}"], factory.Events);
+        var slot = ((int)((node.FrameCounter - 1) % 3));
+
+        Assert.Equal([$"record {slot}", $"submitted {slot}"], factory.Events.Where(static entry => !entry.StartsWith("completed ", StringComparison.Ordinal)));
     }
 
     // A submission whose batch never reached the queue proves nothing: its readback pass hears the slot abandoned, never

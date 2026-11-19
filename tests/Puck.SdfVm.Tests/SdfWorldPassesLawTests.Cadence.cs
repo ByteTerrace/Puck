@@ -23,8 +23,8 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.True(condition: rig.Stood());
         rig.Lights.ShadowSlots.SetOwner(owner: "replacement", slot: 0);
         rig.Produce();
-        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views,
-            .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite]),
+        Assert.Equal(expected: ((string[])[SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views,
+            .. (temporal ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display]),
             actual: Executed(work: CadenceWork(rig: rig)));
         for (var frame = 0; (frame < 12); frame++) { rig.Produce(); }
         Assert.True(condition: rig.Stood());
@@ -58,7 +58,7 @@ public sealed partial class SdfWorldPassesLawTests {
     public void CadenceRunsExactlyTheChangedClass(string change, bool reduced) {
         using var rig = new TemporalRig(sky: Layered, views: 1, cadence: true, renderScale: (reduced ? 0.25f : 1f));
         var frame = rig.SourceFrame;
-        string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
+        string[] executed = [SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display];
 
         switch (change) {
             case "sky-field-scale":
@@ -66,7 +66,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 break;
             case "geometry-only":
                 frame = frame with { Views = [frame.Views[0] with { Quality = frame.Views[0].Quality with { GeometryOnly = true } }] };
-                executed = [SdfWorldPackage.Parts.Composite];
+                executed = [SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display];
                 break;
             case "drift": frame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.125f, y: 0.25f); break;
             case "twinkle": frame.Sky.First<SdfSkyStars>().TwinklePhase = 0.37f; break;
@@ -93,21 +93,21 @@ public sealed partial class SdfWorldPassesLawTests {
             case "indirect-sources":
                 frame = frame with { IndirectSources = SdfIndirectSources.Direct | SdfIndirectSources.Emission };
                 goto case "lighting";
-            case "lighting": executed = [SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
+            case "lighting": executed = [SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed]; break;
             case "shadow-direction":
                 frame.Lights.Set(index: 0, light: frame.Lights[0] with { Direction = new Vector3(x: 0.8f, y: 0.2f, z: 0.1f) });
-                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
                 break;
             case "camera":
                 frame = frame with { Views = [frame.Views[0] with { Camera = CameraSnapshot.LookAt(position: new Vector3(x: 1f, y: 0f, z: -5f), target: Vector3.Zero, fieldOfViewRadians: 1f, viewportWidth: Extent, viewportHeight: Extent) }] };
-                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
+                executed = [SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, .. (reduced ? new[] { SdfWorldPackage.Resolve } : []), .. executed];
                 break;
         }
         rig.SourceFrame = frame with { };
         rig.Produce();
         var work = CadenceWork(rig: rig);
 
-        Assert.Equal(expected: executed, actual: Executed(work: work));
+        Assert.Equal(expected: string.Join(' ', executed), actual: string.Join(' ', Executed(work: work)));
         var dispatches = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.Dispatches);
         var indirect = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.IndirectDispatches);
         var barriers = GpuWork.SubmissionKinds.IndexOf(value: GpuWork.BufferBarriers);
@@ -122,6 +122,7 @@ public sealed partial class SdfWorldPassesLawTests {
                 Assert.False(condition: work.TryGetPassCount(column: dispatches, pass: pass, value: out _));
             }
         }
+        rig.SettleLighting();
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }
@@ -138,7 +139,7 @@ public sealed partial class SdfWorldPassesLawTests {
             rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: (frame + 0.1f), y: 0f);
             rig.SourceFrame = rig.SourceFrame with { };
             rig.Produce();
-            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
             // A sky-only block carries the history's completed sample count, a converged period of samples, and no
             // sky-only frame advances it. The rig's readiness loop renders as many frames as its asynchronous builds
             // take, so the last block before the drift may be a resolve's (the count before its sample completed) or a
@@ -163,6 +164,7 @@ public sealed partial class SdfWorldPassesLawTests {
             Assert.False(condition: rig.Stood(), userMessage: $"lighting sample {sample}");
             Assert.Contains(SdfWorldPackage.Resolve, Executed(work: CadenceWork(rig: rig)));
         }
+        rig.SettleLighting();
         rig.Produce();
         Assert.True(condition: rig.Stood());
     }
@@ -175,11 +177,11 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.1f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
-        Assert.Equal(expected: 2, actual: Executed(work: CadenceWork(rig: rig)).Length);
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
         rig.SourceFrame = rig.SourceFrame with { EnableCadenceGate = false };
         rig.Produce();
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.Views,
-            SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views,
+            SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
     }
     [Fact]
     public void CadenceRunsTheSkyEveryFrameWhileALayerSamplesAScreen() {
@@ -188,7 +190,7 @@ public sealed partial class SdfWorldPassesLawTests {
         for (var frame = 0; (frame < 3); frame++) {
             rig.Produce();
             Assert.False(condition: rig.Stood(), userMessage: $"frame {frame}");
-            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+            Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
         }
     }
     [Fact]
@@ -212,8 +214,8 @@ public sealed partial class SdfWorldPassesLawTests {
             wait: rig.Selected.WaitPipelineBuilds
         );
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Mesh, SdfWorldPackage.Parts.Surface,
-            SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
-            SdfWorldPackage.Parts.Composite }, actual: rendered);
+            SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views, SdfWorldPackage.Resolve, SdfWorldPackage.Parts.Sky,
+            SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: rendered);
         // The view then stands once its temporal window settles. The rebuild compiles on the thread pool, so no count of
         // frames bounds either wait.
         TestLiveness.Until(
@@ -228,7 +230,7 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.SourceFrame.Sky.First<SdfSkyClouds>().DriftOffset = new Vector2(x: 0.15f, y: 0f);
         rig.SourceFrame = rig.SourceFrame with { };
         rig.Produce();
-        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite }, actual: Executed(work: CadenceWork(rig: rig)));
+        Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
     }
     [InlineData("ambient", false)]
     [InlineData("reflection", false)]
@@ -272,8 +274,8 @@ public sealed partial class SdfWorldPassesLawTests {
         rig.Produce();
         Assert.Equal(expected: (renders + ((change == "gradient") ? 1 : 0)), actual: rig.Selected.Tables.SkyEnvironmentRenders);
         var lit = (change is not ("sub-code-gradient" or "camera-panel"));
-        string[] expected = [.. (lit ? new[] { SdfWorldPackage.Parts.Views } : []),
-            .. ((lit && reduced) ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite];
+        string[] expected = [.. (lit ? new[] { SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views } : []),
+            .. ((lit && reduced) ? new[] { SdfWorldPackage.Resolve } : []), SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display];
 
         Assert.Equal(expected: expected, actual: Executed(work: CadenceWork(rig: rig)));
         rig.Produce();

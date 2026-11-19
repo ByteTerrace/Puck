@@ -123,7 +123,7 @@ public sealed partial class RenderGraphRuntime {
 
             throw;
         } catch (Exception exception) when (exception is InvalidOperationException or NotSupportedException) {
-            Console.Error.WriteLine(value: $"[capture] failed -> {request.Path} ({exception.Message})");
+            Narrate(line: $"[capture] failed -> {request.Path} ({exception.Message})");
             RefusePresented(error: exception);
         }
     }
