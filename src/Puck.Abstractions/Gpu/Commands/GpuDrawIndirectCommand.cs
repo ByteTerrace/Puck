@@ -4,9 +4,11 @@ namespace Puck.Abstractions.Gpu;
 /// The layout of one record a counted indirect draw reads (<see cref="IGpuRecorder.DrawIndirectCount"/>): five
 /// consecutive <see langword="uint"/>s, the draw's identity, then Vulkan's <c>VkDrawIndirectCommand</c> (vertex count,
 /// instance count, first vertex, first instance), which is also Direct3D 12's <c>D3D12_DRAW_ARGUMENTS</c>. Direct3D 12
-/// reads the identity as a root-constant argument into the pushed index; Vulkan skips it and reads the four words after
-/// it. Vulkan vertex pulling reads the identity through the pushed record base plus <c>DrawIndex</c>. First instance
-/// stays zero, including on devices without <c>drawIndirectFirstInstance</c>.
+/// below execute-indirect tier 1.1 reads the identity as a root-constant argument into the pushed index. Vulkan, and
+/// Direct3D 12 at tier 1.1, skip it and read the four words after it. Vulkan vertex pulling reads the identity through
+/// the pushed record base plus <c>DrawIndex</c>; Direct3D 12 at tier 1.1 numbers its commands with an incrementing
+/// root constant, and the number names the candidate whose first-phase record holds the identity. First instance stays
+/// zero, including on devices without <c>drawIndirectFirstInstance</c>.
 /// </summary>
 public static class GpuDrawIndirectCommand {
     /// <summary>The 32-bit words one record takes.</summary>

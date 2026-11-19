@@ -571,7 +571,12 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `puckAddWork` carries each addition into the 64-bit accumulator.
   `CountingRecorder.DrawIndirectCount` counts the API call,
   not its unknown draw/vertex totals. An object `world.cull frustum` brings back is the
-  occlusion's. The identity is a root constant on Direct3D 12. Vulkan reads it
+  occlusion's. Direct3D 12 at execute-indirect tier 1.1
+  (`GpuDeviceCapabilities.ExecuteIndirectTier`, printed as `execute-indirect-tier`)
+  numbers a draw's commands with an incrementing root constant and reads the identity from the first
+  phase's record at that number, so every phase must keep writing a candidate's place
+  with the identity first; below the tier a root-constant argument copies the identity
+  (`DirectXPipelineLayout.DrawSignature`). Vulkan reads it
   from the
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
