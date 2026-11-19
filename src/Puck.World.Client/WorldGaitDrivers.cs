@@ -323,8 +323,9 @@ public static class WorldGaitDrivers {
         ) + parentTranslation);
         rotation = (parentRotation * rotation);
     }
-    /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its
-    /// slides, so a slide reads as an offset along its own axis rather than one the swings have turned.</summary>
+    /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its clips'
+    /// turns, then its slides, so a slide reads as an offset along its own axis rather than one the turns have
+    /// turned.</summary>
     /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>).</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
@@ -368,23 +369,39 @@ public static class WorldGaitDrivers {
                 continue;
             }
 
-            var amount = ((term.Amplitude.Value * Wave(
-                argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
-                definition: definition,
-                wave: term.Wave
-            )) * weights[driver]);
+            var share = weights[driver];
+            Quaternion turn;
 
             evaluated++;
-            if (term.Kind == CreationRigTermKind.Slide) {
-                translation += (term.Axis.Value * amount);
+            if (term.Track is { } track) {
+                // A clip's keyed pose: the share scales the interpolated turn's angle about its own axis and the slide's
+                // length.
+                if (term.Kind == CreationRigTermKind.Slide) {
+                    translation += (track.SlideAt(phase: phases[driver]) * share);
 
-                continue;
+                    continue;
+                }
+
+                turn = VectorFunctions.ScaleTurn(fraction: share, turn: track.TurnAt(phase: phases[driver]));
+            } else {
+                var amount = ((term.Amplitude.Value * Wave(
+                    argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
+                    definition: definition,
+                    wave: term.Wave
+                )) * share);
+
+                if (term.Kind == CreationRigTermKind.Slide) {
+                    translation += (term.Axis.Value * amount);
+
+                    continue;
+                }
+
+                turn = Quaternion.CreateFromAxisAngle(
+                    angle: amount,
+                    axis: term.Axis.Value
+                );
             }
 
-            var turn = Quaternion.CreateFromAxisAngle(
-                angle: amount,
-                axis: term.Axis.Value
-            );
             var pivot = term.Pivot!.Value;
 
             Chain(

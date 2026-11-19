@@ -68,12 +68,12 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 Every reader of motion takes the creation's compiled rig (`CreationRig`,
 `WorldPrototype.Rig`), never the document's facets. It lists each shape's
 writers (`CreationRigWriters`): the terms its drivers play (each swing in order,
-then each slide), an effector's solve on every bone of its chain, an effector's
+then each clip's turn in clip order, then each slide and keyed slide), an effector's solve on every bone of its chain, an effector's
 `align` on its tip whether or not the tip is a bone, a timeline frame that poses
 it, and, for a look, a part follower (`CreationRig.Follow`). A shape with any
 writer owns a transform slot (`CreationRig.Owner`), and a creation with none is
 rigid. The document every renderer, collider and anchor reads
-(`WorldPrototype.EngineDocument`) carries no swings or slides, and
+(`WorldPrototype.EngineDocument`) carries no swings, slides or clips, and
 `CreationRig.Compile` refuses it, so no reader can move a shape around the rig.
 
 The rig also lists what the pose reads from outside (`CreationRig.Reads`):
@@ -149,6 +149,42 @@ to a 0.15 second ease. `blendInSeconds`/`blendOutSeconds` are finite
 non-negative exponential time constants; zero is immediate on a positive render
 delta. They control gate weights independently of phase cadence and the shared
 movement-speed filter (`CreationAnimationLawTests`).
+
+## Pose clips
+
+`clips` is any number of `{ name, driver, keys, wrap, period }`: key poses on
+joints that interpolate, played by one driver whose phase is the position in
+the clip and whose weight is the blend. A key is `{ at, ease, poses }`, and a
+pose is `{ shape, turn, slide }`: `turn` is a list of `{ axis, angle }` steps
+composed in the order written (the first turns first; `angle` takes `deg`), and
+`slide` a translation. Both are literal, measured from the shape's rest pose,
+and turn it about its joint (`joint`, else its first swing's pivot, else its
+position; `CreationRig.Joint`), so a keyed forearm carries the hand. A pose
+with neither is the rest pose: write it at the clip's start, or a track begins
+at its only key. A clip's turn crosses the author frame as a swing does.
+
+A shape's track is the keys that pose it. The compiler stores each key's
+composed turn as the one quaternion with a positive scalar
+(`CreationClipCompiler`), and between keys the turn follows the arc between
+them with no change of sign (`VectorFunctions.Arc`): a quarter turn to the
+opposite quarter turn passes through rest, and the turn never exceeds the
+larger of its two keys, which the seam bound relies on. `ease` (on the key the
+stretch arrives at) is `linear` (default), `smooth` or `hold`. A driver's share
+scales the interpolated turn's angle about its own axis and the slide's length.
+On a shape, swings compose first, then clip turns in clip order, then slides and
+keyed slides.
+
+A held clip (the default) holds a track's first key before it and its last key
+after it. A looping clip (`wrap: true`) reads the phase modulo `period` (one
+turn unless authored, every key inside it), and its last key interpolates back
+to its first. A travel or time driver wraps its phase every turn, and one that
+follows it wraps over one turn times its cadence, so such a phase plays only a
+looping clip whose period divides that span; a held clip is played by a level
+(a state cell, a rate signal or a driver following one). Refused by name: a
+held clip on a wrapping phase, a period that does not divide the span, a
+`cadenceBy` or state-bound cadence on the follower of a wrapping driver, a key
+out of order or outside the period, an unknown driver or shape, a shape with
+domain folds, and a composed turn of a half turn or more.
 
 ## Chains and effectors
 
@@ -289,7 +325,7 @@ the motion vocabulary scales a shape over time.
 Converted on the way to the engine: shape `position`, `rotation`, and `joint`;
 `symmetry` fold normals; swing `pivot` and `axis`; slide `axis`; frame transform
 `position` and `rotation`; camera `position`; effector target `direction` and
-`offset`; a root-parented volume's `position` and `rotation`; and an unridden
+`offset`; a clip key's turn axes and slide; a root-parented volume's `position` and `rotation`; and an unridden
 text run's `position` and `rotation`.
 
 Not converted: scalars, camera `yaw` and `pitch`, chain `goal` and `pole`, a

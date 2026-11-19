@@ -192,6 +192,76 @@ internal static class VectorFunctionsClaims {
 
         return null;
     }
+    /// <summary>The rest-side arc and the turn helpers. Over seeded pairs of turns under a half turn (up to 179°, both
+    /// stored with a positive scalar), the arc at 33 positions never turns past the larger end by more than 1e-4 rad, is
+    /// unit within 1e-5, starts and ends exactly on its ends, and reads the same whichever sign each end was written
+    /// with once both pass WithPositiveScalar. A quarter turn to the opposite quarter turn reads within 1e-5 rad of rest
+    /// at the midpoint for both spellings of the second, where Quaternion.Slerp reads a half turn for one. TurnAngle is
+    /// zero for the identity, π for a half turn, the authored angle within 1e-5 for ladder angles on both signs.
+    /// ScaleTurn keeps the axis and scales the angle within 1e-5, is the identity at zero and the turn itself at
+    /// one.</summary>
+    public static string? RestSideArcAndTurns() {
+        var generator = Pcg32XshRr.Create(state: 4711, stream: 17);
+
+        float Unit() => (generator.NextUInt32() / 4294967296f);
+        Vector3 Axis() {
+            while (true) {
+                var axis = new Vector3(x: ((2f * Unit()) - 1f), y: ((2f * Unit()) - 1f), z: ((2f * Unit()) - 1f));
+
+                if (axis.LengthSquared() is > 1e-4f and <= 1f) { return Vector3.Normalize(value: axis); }
+            }
+        }
+        Quaternion Turn() => VectorFunctions.WithPositiveScalar(turn: Quaternion.CreateFromAxisAngle(angle: (((2f * Unit()) - 1f) * (179f * (MathF.PI / 180f))), axis: Axis()));
+
+        for (var pair = 0; (pair < 10000); pair++) {
+            var from = Turn();
+            var to = Turn();
+            var limit = MathF.Max(x: VectorFunctions.TurnAngle(turn: from), y: VectorFunctions.TurnAngle(turn: to));
+
+            if (VectorFunctions.Arc(amount: 0f, from: from, to: to) != from) { return $"Arc({from}, {to}, 0) is not its start"; }
+            if (VectorFunctions.Arc(amount: 1f, from: from, to: to) != to) { return $"Arc({from}, {to}, 1) is not its end"; }
+            for (var step = 0; (step <= 32); step++) {
+                var amount = (step / 32f);
+                var arc = VectorFunctions.Arc(amount: amount, from: from, to: to);
+                var respelled = VectorFunctions.Arc(amount: amount, from: VectorFunctions.WithPositiveScalar(turn: Quaternion.Negate(value: from)), to: VectorFunctions.WithPositiveScalar(turn: Quaternion.Negate(value: to)));
+
+                if (VectorFunctions.TurnAngle(turn: arc) > (limit + 1e-4f)) { return $"Arc({from}, {to}, {amount}) turns {VectorFunctions.TurnAngle(turn: arc)}, past its larger end {limit}"; }
+                if (MathF.Abs(x: (arc.Length() - 1f)) > 1e-5f) { return $"Arc({from}, {to}, {amount}) is not unit"; }
+                if (arc != respelled) { return $"Arc({from}, {to}, {amount}) depends on the sign its ends were written with"; }
+            }
+        }
+
+        var quarter = Quaternion.CreateFromAxisAngle(angle: (MathF.PI / 2f), axis: Vector3.UnitX);
+        var opposite = Quaternion.CreateFromAxisAngle(angle: (-MathF.PI / 2f), axis: Vector3.UnitX);
+        var reversed = Quaternion.CreateFromAxisAngle(angle: (MathF.PI / 2f), axis: -Vector3.UnitX);
+
+        foreach (var second in (ReadOnlySpan<Quaternion>)[opposite, reversed, Quaternion.Negate(value: opposite)]) {
+            var midpoint = VectorFunctions.Arc(amount: 0.5f, from: quarter, to: VectorFunctions.WithPositiveScalar(turn: second));
+
+            if (VectorFunctions.TurnAngle(turn: midpoint) > 1e-5f) { return $"the arc between opposite quarter turns reads {VectorFunctions.TurnAngle(turn: midpoint)} at its midpoint, not rest"; }
+        }
+        if (VectorFunctions.TurnAngle(turn: Quaternion.Slerp(quaternion1: quarter, quaternion2: Quaternion.Negate(value: opposite), amount: 0.5f)) < 3f) { return "Quaternion.Slerp no longer takes the far arc for the negated quarter turn, so this law's contrast is stale"; }
+        if (VectorFunctions.TurnAngle(turn: Quaternion.Identity) != 0f) { return "the identity does not turn zero"; }
+        if (MathF.Abs(x: (VectorFunctions.TurnAngle(turn: new Quaternion(x: 0f, y: 1f, z: 0f, w: 0f)) - MathF.PI)) > 1e-6f) { return "a half turn does not turn π"; }
+        for (var degrees = 0; (degrees <= 180); degrees += 15) {
+            var angle = (degrees * (MathF.PI / 180f));
+            var turn = Quaternion.CreateFromAxisAngle(angle: angle, axis: Vector3.Normalize(value: new Vector3(x: 1f, y: 2f, z: -3f)));
+
+            if (MathF.Abs(x: (VectorFunctions.TurnAngle(turn: turn) - angle)) > 1e-5f) { return $"TurnAngle of {degrees}° reads {VectorFunctions.TurnAngle(turn: turn)}"; }
+            if (MathF.Abs(x: (VectorFunctions.TurnAngle(turn: Quaternion.Negate(value: turn)) - angle)) > 1e-5f) { return $"TurnAngle of the negated {degrees}° reads {VectorFunctions.TurnAngle(turn: Quaternion.Negate(value: turn))}"; }
+            if (VectorFunctions.ScaleTurn(fraction: 1f, turn: turn) != turn) { return $"ScaleTurn of {degrees}° at one is not the turn"; }
+            if (VectorFunctions.ScaleTurn(fraction: 0f, turn: turn) != Quaternion.Identity) { return $"ScaleTurn of {degrees}° at zero is not the identity"; }
+            if (degrees is (0 or 180)) { continue; }
+            foreach (var fraction in (ReadOnlySpan<float>)[0.25f, 0.5f, 0.75f]) {
+                var scaled = VectorFunctions.ScaleTurn(fraction: fraction, turn: turn);
+                var expected = Quaternion.CreateFromAxisAngle(angle: (angle * fraction), axis: Vector3.Normalize(value: new Vector3(x: 1f, y: 2f, z: -3f)));
+
+                if (Vector4.Distance(value1: new Vector4(x: scaled.X, y: scaled.Y, z: scaled.Z, w: scaled.W), value2: new Vector4(x: expected.X, y: expected.Y, z: expected.Z, w: expected.W)) > 1e-5f) { return $"ScaleTurn of {degrees}° by {fraction} is {scaled}, not {expected}"; }
+            }
+        }
+
+        return null;
+    }
     /// <summary>The −Z-forward readbacks: the cardinal facings read as the convention says, Heading inverts YawOf and
     /// PitchOf within 1e-5 over a ladder, YawOf of an attitude is the yaw of its rotated −Z, and EulerOf recovers the
     /// yaw, pitch and roll an Ry·Rx·Rz attitude was built from within 1e-4.</summary>

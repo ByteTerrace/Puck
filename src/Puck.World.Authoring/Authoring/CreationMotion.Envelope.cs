@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -78,7 +79,7 @@ public static partial class CreationMotion {
 
                 separation = MathF.Max(x: separation, y: Vector3.Distance(value1: (Vector3.Transform(rotation: firstTurn, value: p) + firstShift), value2: (Vector3.Transform(rotation: secondTurn, value: p) + secondShift)));
             }
-            theta = MathF.Max(x: theta, y: (2f * MathF.Acos(x: Math.Clamp(MathF.Abs(x: relative.W), 0f, 1f))));
+            theta = MathF.Max(x: theta, y: VectorFunctions.TurnAngle(turn: relative));
             displacement = MathF.Max(x: displacement, y: separation);
         }
         // Slides move the seam by their limits. Each turn turns the seam box, already moved by every motion counted

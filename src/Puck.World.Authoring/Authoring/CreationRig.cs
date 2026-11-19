@@ -24,9 +24,9 @@ public enum CreationRigWriters : byte {
 }
 /// <summary>Which motion a <see cref="CreationRigTerm"/> plays.</summary>
 public enum CreationRigTermKind : byte {
-    /// <summary>A turn about a pivot: an authored swing.</summary>
+    /// <summary>A turn about a pivot: an authored swing, or a clip's turn about the shape's joint.</summary>
     Turn,
-    /// <summary>A translation along an axis: an authored slide.</summary>
+    /// <summary>A translation: an authored slide along an axis, or a clip's keyed slide.</summary>
     Slide,
 }
 /// <summary>What a pose reads from outside its rig (<see cref="CreationRigRead"/>).</summary>
@@ -131,12 +131,13 @@ public sealed class CreationRigDriver {
     public CreationRigRead? WeightCurve { get; }
 }
 /// <summary>
-/// One motion a driver plays on one shape, in the order the shape composes them: its swings as authored, then its
-/// slides. A term names its driver by index and carries the authored values, which may be state bound, so it is read
-/// live where it is played.
+/// One motion a driver plays on one shape, in the order the shape composes them: its swings as authored, then its clips'
+/// turns in the order the clips are listed, then its slides and its clips' keyed slides. A term names its driver by index
+/// and carries the authored values, which may be state bound, so it is read live where it is played; a clip's term
+/// carries its track (<see cref="Track"/>), whose keys are literal.
 /// </summary>
 public sealed class CreationRigTerm {
-    internal CreationRigTerm(CreationRigTermKind kind, int shape, int source, string driver, int driverIndex, DocumentVector3 axis, DocumentVector3? pivot, DocumentScalar amplitude, DocumentScalar? phase, string? wave) {
+    internal CreationRigTerm(CreationRigTermKind kind, int shape, int source, string driver, int driverIndex, DocumentVector3 axis, DocumentVector3? pivot, DocumentScalar amplitude, DocumentScalar? phase, string? wave, CreationRigTrack? track = null) {
         Kind = kind;
         Shape = shape;
         Source = source;
@@ -147,37 +148,46 @@ public sealed class CreationRigTerm {
         Amplitude = amplitude;
         Phase = phase;
         Wave = wave;
+        Track = track;
     }
 
     /// <summary>Gets which motion the term plays.</summary>
     public CreationRigTermKind Kind { get; }
     /// <summary>Gets the shape it moves.</summary>
     public int Shape { get; }
-    /// <summary>Gets its position in the shape's authored swings (a turn) or slides (a slide), for a diagnostic that names
-    /// the authored member.</summary>
+    /// <summary>Gets its position in the shape's authored swings (a turn) or slides (a slide), or the clip's position in
+    /// <see cref="CreationDocument.Clips"/> for a clip's term, for a diagnostic that names the authored member.</summary>
     public int Source { get; }
     /// <summary>Gets the name of the driver that plays it.</summary>
     public string Driver { get; }
     /// <summary>Gets the index of the driver that plays it, or -1 when no driver carries the name.</summary>
     public int DriverIndex { get; }
-    /// <summary>Gets the turn's axis or the slide's direction.</summary>
+    /// <summary>Gets the turn's axis or the slide's direction; zero for a clip's term, whose track carries its own.</summary>
     public DocumentVector3 Axis { get; }
-    /// <summary>Gets the turn's pivot, or <see langword="null"/> for a slide.</summary>
+    /// <summary>Gets the turn's pivot (a clip's turn is about the shape's joint, <see cref="CreationRig.Joint"/>), or
+    /// <see langword="null"/> for a slide.</summary>
     public DocumentVector3? Pivot { get; }
     /// <summary>Gets the peak angle (radians) or offset (creation units).</summary>
     public DocumentScalar Amplitude { get; }
     /// <summary>Gets the phase offset added to the driver's phase, or <see langword="null"/> for none.</summary>
     public DocumentScalar? Phase { get; }
-    /// <summary>Gets the waveform's name (<see cref="CreationWave"/>), or <see langword="null"/> for a sine.</summary>
+    /// <summary>Gets the waveform's name (<see cref="CreationWave"/>), or <see langword="null"/> for a sine and for a
+    /// clip's term.</summary>
     public string? Wave { get; }
+    /// <summary>Gets the clip track a clip's term plays, or <see langword="null"/> for a swing or a slide.</summary>
+    public CreationRigTrack? Track { get; }
     /// <summary>Gets whether the term's largest motion at full share follows from the document alone: literal values
-    /// and a waveform bounded by one.</summary>
-    public bool Bounded => ((Amplitude.Reference is null) && (Axis.Reference is null) && (Pivot?.Reference is null) && BoundedWave(wave: Wave));
+    /// and a waveform bounded by one, or a clip's literal keys about a literal joint.</summary>
+    public bool Bounded => ((Track is not null)
+        ? (Pivot?.Reference is null)
+        : ((Amplitude.Reference is null) && (Axis.Reference is null) && (Pivot?.Reference is null) && BoundedWave(wave: Wave)));
     /// <summary>Gets the largest turn (radians, at most a half turn) or slide (creation units) the term produces at full
-    /// share; infinity when it is not <see cref="Bounded"/>.</summary>
-    public float Limit => (Bounded
-        ? ((Kind == CreationRigTermKind.Turn) ? MathF.Min(x: MathF.Abs(x: Amplitude.Value), y: MathF.PI) : MathF.Abs(x: Amplitude.Value))
-        : float.PositiveInfinity);
+    /// share: a clip's largest key; infinity when it is not <see cref="Bounded"/>.</summary>
+    public float Limit => (!Bounded
+        ? float.PositiveInfinity
+        : (Track is { } track)
+            ? ((Kind == CreationRigTermKind.Turn) ? track.TurnLimit : track.SlideLimit)
+            : ((Kind == CreationRigTermKind.Turn) ? MathF.Min(x: MathF.Abs(x: Amplitude.Value), y: MathF.PI) : MathF.Abs(x: Amplitude.Value)));
 
     // Curve waveforms require the containing world's curve, absent from a creation-only proof; linear is unbounded.
     // Driver weights, including weightBy, are clamped to [0, 1] where they are formed.
@@ -238,8 +248,9 @@ public sealed class CreationRig {
     private string? m_reachRefusal;
     private readonly ConditionalWeakTable<IReadOnlyDictionary<string, string>, CreationRig> m_follows = new();
 
-    private CreationRig(CreationDocument document, CreationRigWriters[] writers, int[] parents, CreationRigTerm[] terms, int[] termStarts, DocumentVector3[] joints, IReadOnlyList<CreationRigDriver> drivers, IReadOnlyList<CreationRigEffector> effectors, IReadOnlyList<CreationRigRead> reads, CreationRigRead? sizeBy, bool animates, IReadOnlyDictionary<string, string>? followed) {
+    private CreationRig(CreationDocument document, CreationRigWriters[] writers, int[] parents, CreationRigTerm[] terms, int[] termStarts, DocumentVector3[] joints, IReadOnlyList<CreationRigDriver> drivers, IReadOnlyList<CreationRigEffector> effectors, IReadOnlyList<CreationRigClip> clips, IReadOnlyList<CreationRigRead> reads, CreationRigRead? sizeBy, bool animates, IReadOnlyDictionary<string, string>? followed) {
         Document = document;
+        Clips = clips;
         m_writers = writers;
         m_parents = parents;
         m_terms = terms;
@@ -254,10 +265,13 @@ public sealed class CreationRig {
     }
 
     /// <summary>Gets the creation as every renderer, collider and anchor reads it: the compiled document with every
-    /// shape's swings and slides removed, because the rig plays them.</summary>
+    /// shape's swings and slides and the creation's clips removed, because the rig plays them.</summary>
     public CreationDocument Document { get; }
     /// <summary>Gets the creation's drivers, in declaration order.</summary>
     public IReadOnlyList<CreationRigDriver> Drivers { get; }
+    /// <summary>Gets the creation's pose clips that compiled, in declaration order, the order a shape composes their
+    /// turns in.</summary>
+    public IReadOnlyList<CreationRigClip> Clips { get; }
     /// <summary>Gets the creation's effectors, in declaration order, the order they solve in.</summary>
     public IReadOnlyList<CreationRigEffector> Effectors { get; }
     /// <summary>Gets everything outside the rig the pose depends on, each read once.</summary>
@@ -304,7 +318,8 @@ public sealed class CreationRig {
     /// <param name="shape">The shape's index.</param>
     /// <returns>The writers; <see cref="CreationRigWriters.None"/> for a shape that only rides its parent.</returns>
     public CreationRigWriters Writers(int shape) => m_writers[shape];
-    /// <summary>Returns the terms a shape composes, in order: its swings as authored, then its slides.</summary>
+    /// <summary>Returns the terms a shape composes, in order: its swings as authored, then its clips' turns, then its
+    /// slides and its clips' keyed slides.</summary>
     /// <param name="shape">The shape's index.</param>
     /// <returns>The terms.</returns>
     public ReadOnlySpan<CreationRigTerm> Terms(int shape) => m_terms.AsSpan(start: m_termStarts[shape], length: (m_termStarts[(shape + 1)] - m_termStarts[shape]));
@@ -346,7 +361,7 @@ public sealed class CreationRig {
                 }
             }
 
-            return (any ? new CreationRig(animates: Animates, document: Document, drivers: Drivers, effectors: Effectors, followed: map, joints: m_joints, parents: m_parents, reads: Reads, sizeBy: SizeBy, termStarts: m_termStarts, terms: m_terms, writers: writers) : this);
+            return (any ? new CreationRig(animates: Animates, clips: Clips, document: Document, drivers: Drivers, effectors: Effectors, followed: map, joints: m_joints, parents: m_parents, reads: Reads, sizeBy: SizeBy, termStarts: m_termStarts, terms: m_terms, writers: writers) : this);
         });
     }
     /// <summary>Returns the rig of a document, compiled once per document instance.</summary>
@@ -417,6 +432,10 @@ public sealed class CreationRig {
             );
         }
 
+        var lookup = new CreationShapeLookup(shapes: shapes);
+        var clips = new List<CreationRigClip>();
+        // A refused clip, key or pose plays nothing; validation reports it through the same compiler.
+        var tracks = CreationClipCompiler.Compile(compiled: clips, document: document, lookup: lookup, refuse: static (_, _) => { });
         var writers = new CreationRigWriters[shapes.Count];
         var terms = new List<CreationRigTerm>();
         var termStarts = new int[(shapes.Count + 1)];
@@ -429,6 +448,10 @@ public sealed class CreationRig {
             var swings = (shape.Swings ?? []);
             var slides = (shape.Slides ?? []);
 
+            var shapeTracks = (tracks?[index] ?? []);
+
+            // The joint comes first: a shape authors one only to say where it turns.
+            joints[index] = (shape.Joint ?? ((swings.Count > 0) ? swings[0].Pivot : shape.Position));
             termStarts[index] = terms.Count;
             for (var source = 0; (source < swings.Count); source++) {
                 var swing = swings[source];
@@ -436,28 +459,31 @@ public sealed class CreationRig {
                 terms.Add(item: new CreationRigTerm(amplitude: swing.Amplitude, axis: swing.Axis, driver: swing.Driver, driverIndex: DriverBefore(name: swing.Driver, before: int.MaxValue), kind: CreationRigTermKind.Turn, phase: swing.Phase, pivot: swing.Pivot, shape: index, source: source, wave: swing.Wave));
                 CurveOfWave(reads: reads, wave: swing.Wave);
             }
+            foreach (var track in shapeTracks) {
+                if (track.Turns) { terms.Add(item: ClipTerm(joint: joints[index], kind: CreationRigTermKind.Turn, shape: index, track: track)); }
+            }
             for (var source = 0; (source < slides.Count); source++) {
                 var slide = slides[source];
 
                 terms.Add(item: new CreationRigTerm(amplitude: slide.Amplitude, axis: slide.Axis, driver: slide.Driver, driverIndex: DriverBefore(name: slide.Driver, before: int.MaxValue), kind: CreationRigTermKind.Slide, phase: slide.Phase, pivot: null, shape: index, source: source, wave: slide.Wave));
                 CurveOfWave(reads: reads, wave: slide.Wave);
             }
+            foreach (var track in shapeTracks) {
+                if (track.Slides) { terms.Add(item: ClipTerm(joint: null, kind: CreationRigTermKind.Slide, shape: index, track: track)); }
+            }
             if ((swings.Count + slides.Count) > 0) {
-                writers[index] |= CreationRigWriters.Term;
                 anyMotion = true;
                 lowered[index] = (shape with { Slides = null, Swings = null });
             } else {
                 lowered[index] = shape;
             }
+            if (terms.Count > termStarts[index]) { writers[index] |= CreationRigWriters.Term; }
             if (FramesMove(document: document, shape: shape)) { writers[index] |= CreationRigWriters.Frame; }
-            // The joint comes first: a shape authors one only to say where it turns.
-            joints[index] = (shape.Joint ?? ((swings.Count > 0) ? swings[0].Pivot : shape.Position));
         }
         termStarts[shapes.Count] = terms.Count;
 
         var effectorRows = (document.Effectors ?? []);
         var effectors = new CreationRigEffector[effectorRows.Count];
-        var lookup = new CreationShapeLookup(shapes: shapes);
 
         for (var index = 0; (index < effectorRows.Count); index++) {
             var row = effectorRows[index];
@@ -495,12 +521,26 @@ public sealed class CreationRig {
         var sizeBy = ((document.SizeBy is { } size) ? reads.State(reference: size, truth: true) : null);
         var animates = ((document.SizeBy is not null) || (driverRows.Count > 0) || (effectorRows.Count > 0) || writers.Any(predicate: static writer => ((writer & CreationRigWriters.Frame) != 0)));
         var lowerDocument = (anyMotion
-            ? (document with { Shapes = lowered, Lowered = true })
-            : (document with { Lowered = true }));
+            ? (document with { Clips = null, Shapes = lowered, Lowered = true })
+            : (document with { Clips = null, Lowered = true }));
 
-        return new CreationRig(animates: animates, document: lowerDocument, drivers: drivers, effectors: effectors, followed: null, joints: joints, parents: parents, reads: reads.Reads, sizeBy: sizeBy, termStarts: termStarts, terms: [.. terms], writers: writers);
+        return new CreationRig(animates: animates, clips: clips, document: lowerDocument, drivers: drivers, effectors: effectors, followed: null, joints: joints, parents: parents, reads: reads.Reads, sizeBy: sizeBy, termStarts: termStarts, terms: [.. terms], writers: writers);
     }
 
+    // A clip's turn about the shape's joint, or its keyed slide, played by the clip's driver.
+    private static CreationRigTerm ClipTerm(DocumentVector3? joint, CreationRigTermKind kind, int shape, CreationRigTrack track) => new(
+        amplitude: ((kind == CreationRigTermKind.Turn) ? track.TurnLimit : track.SlideLimit),
+        axis: Vector3.Zero,
+        driver: track.Clip.Document.Driver,
+        driverIndex: track.Clip.Driver,
+        kind: kind,
+        phase: null,
+        pivot: joint,
+        shape: shape,
+        source: track.Clip.Index,
+        track: track,
+        wave: null
+    );
     // Each shape's owner: the nearest of the shape and its parents with a writer.
     private int[] ResolveOwners() {
         var owners = new int[ShapeCount];

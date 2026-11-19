@@ -191,7 +191,7 @@ public static partial class CreationCommand {
         if (rig.Animates) {
             var owners = Enumerable.Range(start: 0, count: shapes.Count).Where(predicate: index => (rig.Owner(shape: index) == index)).ToArray();
 
-            Console.Out.WriteLine(value: $"  rig: drivers {rig.Drivers.Count}, effectors {rig.Effectors.Count}, terms {rig.AllTerms.Length} (most on one shape {rig.MostTerms}), moving slots {owners.Length}, reach {(float.IsFinite(f: rig.Reach) ? rig.Reach.ToString(format: "G6", provider: System.Globalization.CultureInfo.InvariantCulture) : $"unbounded: {rig.ReachRefusal}")}, reads {string.Join(separator: ", ", values: rig.Reads.Select(selector: static read => read.ToString()))}");
+            Console.Out.WriteLine(value: $"  rig: drivers {rig.Drivers.Count}, clips {rig.Clips.Count}, effectors {rig.Effectors.Count}, terms {rig.AllTerms.Length} (most on one shape {rig.MostTerms}), moving slots {owners.Length}, reach {(float.IsFinite(f: rig.Reach) ? rig.Reach.ToString(format: "G6", provider: System.Globalization.CultureInfo.InvariantCulture) : $"unbounded: {rig.ReachRefusal}")}, reads {string.Join(separator: ", ", values: rig.Reads.Select(selector: static read => read.ToString()))}");
             foreach (var owner in owners) {
                 Console.Out.WriteLine(value: $"    slot: {CreationMotion.NameOf(document: document, index: owner)} ({rig.Writers(shape: owner).ToString().ToLowerInvariant()})");
             }

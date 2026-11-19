@@ -20,7 +20,7 @@ public static partial class CreationCanonicalizer {
 
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "schema", "name", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
-        "noise", "drivers", "effectors",
+        "noise", "drivers", "effectors", "clips",
     };
 
     // The behavior manifest normalizes to a canonical locomotion member name and drops a face/sound naming a missing
@@ -2640,6 +2640,7 @@ public static partial class CreationCanonicalizer {
             document: document,
             errors: errors
         );
+        CreationClipCompiler.Validate(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
         ValidateEffectors(
             document: document,
             errors: errors,

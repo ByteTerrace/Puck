@@ -630,6 +630,8 @@ public sealed record CreationBehaviorDocument(
 /// <param name="SizeBy">Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1],
 /// uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size
 /// contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.</param>
+/// <param name="Clips">The pose clips (null = none), each key poses on joints played by one of <see cref="Drivers"/> —
+/// see <see cref="CreationClipDocument"/>. Presentation-only, like the drivers.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -651,7 +653,8 @@ public sealed record CreationDocument(
     IReadOnlyList<CreationEffectorDocument>? Effectors = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<VolumeDocument>? Volumes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipDocument>? Clips = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
@@ -668,7 +671,7 @@ public sealed record CreationDocument(
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
     /// <summary>Gets whether this is a rig's lowered document (<see cref="CreationRig.Document"/>): its shapes' swings
-    /// and slides are removed because the rig plays them, so <see cref="CreationRig.Compile"/> refuses it. Only a rig
+    /// and slides and its clips are removed because the rig plays them, so <see cref="CreationRig.Compile"/> refuses it. Only a rig
     /// sets it, and it never crosses the wire.</summary>
     [JsonIgnore]
     public bool Lowered { get; internal init; }

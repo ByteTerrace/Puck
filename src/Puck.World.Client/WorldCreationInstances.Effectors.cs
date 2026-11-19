@@ -749,7 +749,7 @@ public sealed partial class WorldCreationInstances {
                 Index: index,
                 Parent: ((parent >= 0) ? shapes[parent].Name?.Value : null),
                 Delta: live.PartDeltaTranslation[index],
-                TurnRadians: (2f * MathF.Acos(x: Math.Clamp(value: MathF.Abs(x: turn.W), min: 0f, max: 1f)))
+                TurnRadians: VectorFunctions.TurnAngle(turn: turn)
             );
         }
 

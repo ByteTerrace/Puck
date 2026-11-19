@@ -1892,6 +1892,66 @@ export type CreationDocument = {
    * Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1], uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.
    */
   sizeBy?: string | null;
+  /**
+   * The pose clips (null = none), each key poses on joints played by one of Drivers — see CreationClipDocument. Presentation-only, like the drivers.
+   */
+  clips?: ({
+    /**
+     * The clip's name, unique within the creation.
+     */
+    name: string;
+    /**
+     * The driver that plays the clip; its phase is in the units of At.
+     */
+    driver: string;
+    /**
+     * The keys, at strictly increasing positions; at least one.
+     */
+    keys: ({
+      /**
+       * The key's position, in the units of its driver's phase.
+       */
+      at: number;
+      /**
+       * The shapes the key poses; a shape the key does not name has no key here, and its track interpolates across this position.
+       */
+      poses: ({
+        /**
+         * The name of the shape posed. A shape carrying domain folds may not be posed.
+         */
+        shape: string;
+        /**
+         * The turn's steps, composed in the order written, the first turning first; the composed turn is under a half turn. Null is no turn.
+         */
+        turn?: ({
+          /**
+           * The axis, non-zero; its length is ignored.
+           */
+          axis: [number, number, number];
+          /**
+           * The angle in radians, right-handed about Axis.
+           */
+          angle: number;
+        } | null)[] | null;
+        /**
+         * The translation, in creation units, added after every turn of the shape. Null is none.
+         */
+        slide?: unknown;
+      } | null)[];
+      /**
+       * How the stretch arriving at this key moves: EaseLinear (null), EaseSmooth or EaseHold.
+       */
+      ease?: string | null;
+    } | null)[];
+    /**
+     * Whether the clip loops: its position is the driver's phase modulo Period, counted so a negative phase wraps like a positive one, and the stretch from a track's last key back to its first interpolates like any other. Null or false holds: the position is the phase, and a track holds its first key before it and its last key after it. A driver whose phase wraps (a travel or time driver, and a driver that follows one) may play only a looping clip whose period divides the span the phase wraps over.
+     */
+    wrap?: boolean | null;
+    /**
+     * A looping clip's period, in phase units (null = one turn, 2π); every key lies in [0, period). Refused on a held clip.
+     */
+    period?: number | null;
+  } | null)[] | null;
 };
 
 export type CreationNoiseDocument = {
