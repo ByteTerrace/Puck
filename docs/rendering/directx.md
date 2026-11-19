@@ -38,8 +38,9 @@ flush before an enhanced dependency, preserving recording order.
 defines this interoperation and the lack of buffer layouts.
 
 The submitter collects a render-graph batch into one ExecuteCommandLists and one
-completion signal. Each deferred fence refers to that completion until its own
-wait drains it. An external wait whose fence has already reached its value is
+completion signal, except that background jobs deferred ahead of the frame's
+work reach the queue in one of their own, with their own signal. Each deferred
+fence refers to its hand-over's completion until its own wait drains it. An external wait whose fence has already reached its value is
 dropped; one still outstanding splits a pending batch before the waiting work.
 Idle waits, exports, uploads, readbacks and presentation flush pending work first.
 The `gpu.queue` source in `world.counters` counts every native execute, list,
