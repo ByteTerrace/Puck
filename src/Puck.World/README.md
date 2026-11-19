@@ -2368,11 +2368,11 @@ client registers `presentation.mirror`, the cells its state mirror read. A
 presented host registers `sdf.transforms`: pacing counts of the dynamic-transform rows packed,
 the bytes compared and the rows owed, summed over the main frame source and the
 frame source each session view composes for itself. A released session view's
-totals stay in the sum. It also registers `sdf.mesh-settle`, the settle rebakes
-of skinned blend groups (`SdfMeshSettle`) over every residency sharing the
-presentation's mesh library: groups queued, done and reused from the library,
-frames a drifted group waited while it moved or for the caps, and rebakes
-refused for meshing no surface; and `sdf.mesh-skin` over the same library
+totals stay in the sum. It also registers `sdf.mesh-inputs` (`SdfMeshInputs`)
+over every residency sharing the presentation's mesh library: the groups planned
+again because a sampled field they read published another snapshot or an operand
+they read moved a step, and the newer plans that replaced a successor still
+waiting on its group's bake; and `sdf.mesh-skin` over the same library
 (`SdfMeshSkin`): each skinned mesh a bake group starts drawing and its vertices
 by vertex-stage path, riding the draw's slot, riding one moving member rigidly,
 or blending two. It registers `sdf.mesh-gi` too, the world

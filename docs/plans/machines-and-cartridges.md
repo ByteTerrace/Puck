@@ -418,6 +418,27 @@ The Humble Gaming Deck's packages are in [its plan](humble-gaming-deck.md#open-i
   restore or rewind, and `HgdMachine`'s reset keeps a latched bus write (read from
   the code in a pre-`main` review, not reproduced; confirm with a failing test
   before fixing).
+- **Show machine video at the machine's rate.** Today `MachineVideoSourceUpload`
+  declares tick cadence (so a 30 Hz world uploads at most once per tick, cutting
+  a 60 Hz scrolling cartridge's rate) and `MachineVideoSourceUpload.Write`
+  checks only whether `IMachineVideoOutput.WriteFrame` returned a positive
+  sequence number while advancing its own stamp, re-uploading unchanged frames.
+  First trace a scrolling test cartridge (frames produced by the machine,
+  uploads requested, uploads accepted, frames shown) to confirm where frames are
+  lost. Then declare the machine's own cadence instead of tick cadence, and put
+  a short queue of complete frames — each stamped with the machine's own
+  sequence number — between the machine and the display so that sequence (plus
+  source replacement or reset) drives every downstream refresh. Check: a
+  scrolling test cartridge at display rates below, equal to and above the
+  machine's rate shows the latest eligible frame at a bounded age against the
+  audio clock, counting repeats and skips, with zero uploads of unchanged
+  frames. No display shows every machine frame exactly once at every rate (a
+  60 Hz machine repeats frames on a 120 Hz display and skips some on a 45 Hz
+  one), which is why the contract is the latest eligible frame, and audio
+  follows the same clock. Which frame is shown is a presentation matter: under
+  the machines decision neither visibility nor presentation rate controls how
+  a machine advances. If the trace shows no frames are dropped at the debug
+  world's tick rate, the work shrinks to not uploading unchanged frames.
 
 ---
 

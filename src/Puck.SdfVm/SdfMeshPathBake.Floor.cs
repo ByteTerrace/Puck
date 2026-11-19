@@ -83,7 +83,6 @@ public sealed partial class SdfMeshPathBake {
                 group.Retired = true;
                 continue;
             }
-            floor.Retiering = true;
             floor.RetierDeltaBytes = -bytes;
             _ = StartReplacement(group: floor, index: index, old: group);
         }
