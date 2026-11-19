@@ -38,9 +38,12 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
     /// <exception cref="InvalidDataException">The document diff cannot reproduce the target, or sharing changed its
     /// canonical fingerprint.</exception>
     public static WorldReloadDelta Create(WorldDefinition current, WorldDocumentVersion version, WorldDefinition target) {
-        var (basis, next, patch) = Diff(current: current, target: target);
-        var baseHash = WorldDefinitionFingerprint.Compute(current);
-        var targetHash = WorldDefinitionFingerprint.Compute(target);
+        // Each side is serialized once: its canonical bytes are both its fingerprint's input and the tree the diff reads.
+        var currentBytes = WorldDefinitionSerialization.Serialize(current);
+        var targetBytes = WorldDefinitionSerialization.Serialize(target);
+        var (basis, next, patch) = Diff(basis: WorldProjectionDelta.Tree(currentBytes), next: WorldProjectionDelta.Tree(targetBytes));
+        var baseHash = WorldDefinitionFingerprint.Of(currentBytes);
+        var targetHash = WorldDefinitionFingerprint.Of(targetBytes);
         var shared = WorldDocumentWalker.Share(basis: current, basisTree: basis, patch: patch, value: target, valueTree: next);
 
         if (!ReferenceEquals(objA: shared, objB: target) && !string.Equals(targetHash, WorldDefinitionFingerprint.Compute(shared), StringComparison.Ordinal)) {
@@ -51,9 +54,12 @@ public sealed record WorldReloadDelta(WorldDocumentVersion BaseVersion, string B
     }
 
     // The canonical trees of two documents and the patch from the first to the second, proved to merge into the second.
-    private static (JsonObject Basis, JsonObject Next, JsonObject Patch) Diff(WorldDefinition current, WorldDefinition target) {
-        var basis = WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(current));
-        var next = WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(target));
+    private static (JsonObject Basis, JsonObject Next, JsonObject Patch) Diff(WorldDefinition current, WorldDefinition target) => Diff(
+        basis: WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(current)),
+        next: WorldProjectionDelta.Tree(WorldDefinitionSerialization.SerializeCompact(target))
+    );
+    // The patch between two canonical trees, proved to merge into the second.
+    private static (JsonObject Basis, JsonObject Next, JsonObject Patch) Diff(JsonObject basis, JsonObject next) {
         var patch = WorldDocumentBasis.Diff(basis, next);
 
         if (!WorldDocumentBasis.TryMerge(basis, patch, out var merged, out var reason)) {

@@ -2884,8 +2884,10 @@ The edit loop:
   `puck compile --validate` and every root `puck lint`, whatever the edit.
   [The authoring loop](iteration/authoring-loop.md#what-was-measured) took the
   profile, and its [build order](iteration/authoring-loop.md#build-order) is
-  the work. Step 1 has landed (the name index, the stamp-trusted digests and
-  origins composed only for a finding); step 2, one compile session, is next.
+  the work. Steps 1 and 2 have landed, and step 3 in part (a value edit
+  recompiles one source and recomposes the root members it writes); step 4,
+  the source watch handing each revision's delta to the mutation door, is
+  next.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and

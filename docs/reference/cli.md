@@ -4091,7 +4091,7 @@ these measurements are observations, not gates. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier
-successful outputs in place. `--output` and `--watch` require exactly one
+successful outputs in place. `--output` requires exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
 world document is written to the same relative place under the `--output`
 directory, every other file of the tree (a package manifest, fonts, tunes,

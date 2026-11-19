@@ -778,14 +778,30 @@ added to that instrument, never to a second one.
    World's watch and the language server go through it;
    `puck compile --watch`, the sweep's second cache and the language server's
    dependency table are deleted. What it did not merge, and where it goes: the
-   held composed images still live in `WorldDefinitionFileSource` (step 3's
-   row composition replaces them), `WorldSourceIndex` stays a static index
+   held composed images still live in `WorldDefinitionFileSource` (step 3
+   holds them by layer; step 6's content keys replace them), `WorldSourceIndex` stays a static index
    the session reads, and the cartridge vocabulary still orders its own stages
    in `CompileCommand.CompileCartridge`, `CartridgeLanguageServices` and
    `CartridgeSource`. The commit that landed it carries the counted readings.
-3. **Deltas from changed sources.** The session keeps row digests and emits
-   the delta between revisions, with unchanged sources stopping early and
-   changed ones lowered in parallel. *Check:* for a one-value edit, the
+3. **Deltas from changed sources.** Partly landed. A compile rests on what a
+   sibling it resolved a name in declares, not on its bytes: a
+   `CompileInputKind.Declaration` fact is answered by the declarer
+   `WorldSourceIndex` registers with `CompileInputs`, so a value edit
+   recompiles only the source it is in. A composite document's held image
+   keeps the layers it composed from (`WorldDefinitionFileSource.ComposedLayers`):
+   a recomposition reuses every layer whose document composed to the same
+   image and merges again only the root members a layer shaped afresh writes
+   differently, counted as `world.boot.composition-members`. The loader takes
+   the composed bytes without parsing and printing them again, and the reload
+   diff serializes each side once. The incremental-equals-clean law is
+   `IncrementalCompositionLawTests`, over an edit corpus and a one-colour
+   debug-world edit. Left: the unit is a root member, not a keyed row, so a
+   changed member merges its whole list again across the layers that write
+   it; changed sources are not lowered in parallel; layers are held in
+   memory only, so a process's first recomposition of a persisted image
+   merges whole; and the session does not yet emit the delta between
+   revisions, so the World still parses, validates and diffs whole
+   documents, which step 4 replaces. *Check:* for a one-value edit, the
    session's counters read one source lowered, a handful of rows merged and
    no whole-document serialization, and the incremental-equals-clean law
    passes over an edit corpus drawn from the debug world.

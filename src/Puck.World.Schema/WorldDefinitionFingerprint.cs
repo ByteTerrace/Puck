@@ -53,8 +53,13 @@ public static class WorldDefinitionFingerprint {
 
             definition = definition with { StateRaw = state with { World = [.. definition.State.Where(predicate: row => selected.Contains(item: row.Name))] } };
         }
-        return ContentPin.Compute(content: WorldDefinitionSerialization.Serialize(definition: definition)).Hex;
+        return Of(canonical: WorldDefinitionSerialization.Serialize(definition: definition));
     }
+    /// <summary>Returns the fingerprint of a definition already serialized to its canonical bytes, for a caller that
+    /// holds those bytes for another use: the same hash <see cref="Compute"/> returns for every row.</summary>
+    /// <param name="canonical">The definition's canonical bytes (<see cref="WorldDefinitionSerialization.Serialize"/>).</param>
+    /// <returns>The <see cref="ContentPin.Hex"/> of the bytes.</returns>
+    public static string Of(ReadOnlySpan<byte> canonical) => ContentPin.Compute(content: canonical).Hex;
     /// <summary>Hashes one <c>views.graphs</c> row: the revision a parameter preview is based on and a commit of it
     /// names. Any change to the row, including another commit, moves it; the row's name is part of it, so a revision
     /// taken from one instance never matches another.</summary>

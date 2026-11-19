@@ -16,20 +16,28 @@ public enum CompileInputKind {
     /// system spells it, so a file added, removed or renamed there, in any letter case, moves the fact. A directory
     /// that does not exist lists no file.</summary>
     Listing = 3,
-    /// <summary>The compile read the file's bytes only to learn what it declares (which document names a source
-    /// emits), not what it lowers to. The fact holds exactly as <see cref="Content"/> does, while the bytes do; it is a
-    /// kind of its own so a reader of a compile's facts can tell the files it composed from the siblings it only asked
-    /// for their names.</summary>
+    /// <summary>The compile read the file only to learn what it declares (which document names a source emits), not
+    /// what it lowers to. The fact is the digest of the declaration, as the declarer the fact names reads it
+    /// (<see cref="CompileInputs.RegisterDeclarer"/>), so it holds while the file declares the same, whatever else in it
+    /// changed: an edit to a value in a sibling a compile only resolved a name in leaves that compile standing.</summary>
     Declaration = 4,
 }
 /// <summary>One fact a compile read from the file system, and what must still hold for its output to stand.</summary>
 /// <param name="Path">The path exactly as the compile spelled it; a relative path is resolved against the current
 /// directory when the fact is checked, as it was when the compile probed it.</param>
 /// <param name="Kind">What the compile learned.</param>
-/// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>
-/// and <see cref="CompileInputKind.Declaration"/>, or of the names listed, for <see cref="CompileInputKind.Listing"/>;
-/// empty otherwise.</param>
+/// <param name="ContentHash">The <see cref="ContentPin.Hex"/> of the bytes read, for <see cref="CompileInputKind.Content"/>,
+/// or of the names listed, for <see cref="CompileInputKind.Listing"/>; for <see cref="CompileInputKind.Declaration"/>, the
+/// declarer's name, a <c>/</c>, and the <see cref="ContentPin.Hex"/> of what the file declares; empty otherwise.</param>
 public readonly record struct CompileInput(string Path, CompileInputKind Kind, string ContentHash) {
+    /// <summary>Gets this fact as a question: its path and kind, and for a declaration the declarer that answers it,
+    /// without the answer the compile read. <see cref="CompileInputs.Current"/> answers it as it answers the fact.</summary>
+    public CompileInput Question => (this with {
+        ContentHash = ((Kind == CompileInputKind.Declaration)
+            ? CompileInputs.DeclarerPrefix(contentHash: ContentHash)
+            : string.Empty),
+    });
+
     /// <summary>Returns the current answer to the same filesystem query, without recording a compiler input. A file's
     /// digest or a directory's listing is read again only when its stamp no longer vouches for the answer last read
     /// (<see cref="CompileInputs.Current"/>).</summary>
@@ -88,6 +96,12 @@ public sealed class CompileInputLog {
 /// again until its stamp is older. A path whose bytes are derived rather than read (a source-backed WebAssembly module,
 /// <see cref="WasmGuestBuild.MayName"/>) is always read.
 /// </para>
+/// <para>
+/// A declaration (<see cref="CompileInputKind.Declaration"/>) is answered by the declarer registered under the name the
+/// fact carries (<see cref="RegisterDeclarer"/>), from the file's digest: a declarer holds what each digest declares, so
+/// asking about an unchanged file again reads nothing, and asking about an edited one reads it once. A declarer this
+/// process has not registered answers nothing a recorded fact can equal, so the fact does not hold.
+/// </para>
 /// </summary>
 public static class CompileInputs {
     /// <summary>How recent a last-write stamp may be, measured when its file or directory was read, before it proves
@@ -102,6 +116,9 @@ public static class CompileInputs {
     // The last answer read for each file ("F" + full path) or directory listing ("D" + full path), under the stamp the
     // path had when it was read.
     private static readonly ConcurrentDictionary<string, Known> Remembered = new(comparer: Puck.Abstractions.PuckPaths.Comparer);
+    // Each declarer by name: from a file's digest, and a reader of its bytes for a digest the declarer does not hold,
+    // the canonical text of what the file declares.
+    private static readonly ConcurrentDictionary<string, Func<string, Func<byte[]>, string>> Declarers = new(comparer: StringComparer.Ordinal);
     private static long StampReadCount;
     private static long ContentReadCount;
 
@@ -212,10 +229,12 @@ public static class CompileInputs {
     private static string ListingHash(string[] names) => ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: string.Join(separator: '\n', value: names))).Hex;
 
     /// <summary>Returns the current answer to <paramref name="query"/>'s filesystem question, without recording it:
-    /// whether a file exists, the digest of its bytes, or the names a directory holds. A digest or a listing is read
+    /// whether a file exists, the digest of its bytes or of what it declares, or the names a directory holds. A digest
+    /// or a listing is read
     /// again only when the path's stamp has moved since the answer last read, or was too recent then to vouch for it;
     /// existence is answered from the stamp alone.</summary>
-    /// <param name="query">The fact whose path and kind name the question; its digest is ignored.</param>
+    /// <param name="query">The fact whose path and kind name the question, and for a declaration the declarer that
+    /// answers it (<see cref="CompileInput.Question"/>); the answer it holds is ignored.</param>
     /// <param name="read">Whether answering read a file's contents or listed a directory.</param>
     /// <returns>The current fact. A missing content file answers <see cref="CompileInputKind.Absent"/>.</returns>
     /// <exception cref="IOException">The file or directory cannot be read.</exception>
@@ -227,7 +246,35 @@ public static class CompileInputs {
             return new CompileInput(ContentHash: hash, Kind: CompileInputKind.Listing, Path: query.Path);
         }
 
-        var digested = (query.Kind is CompileInputKind.Content or CompileInputKind.Declaration);
+        if (query.Kind == CompileInputKind.Declaration) {
+            var prefix = DeclarerPrefix(contentHash: query.ContentHash);
+
+            if ((prefix.Length == 0) || !Declarers.TryGetValue(key: prefix[..^1], value: out var declarer)) {
+                read = false;
+
+                // A recorded declaration is never empty, so an unregistered declarer's fact never holds.
+                return new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Declaration, Path: query.Path);
+            }
+
+            var fileDigest = Answer(path: query.Path, content: out var bytes, read: out read, wantDigest: true);
+
+            if (fileDigest is null) {
+                return new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: query.Path);
+            }
+
+            var wasRead = read;
+            var declared = declarer(fileDigest, () => {
+                wasRead = true;
+
+                return (bytes ??= ReadRemembering(hash: out _, path: query.Path));
+            });
+
+            read = wasRead;
+
+            return new CompileInput(ContentHash: DeclarationHash(declared: declared, prefix: prefix), Kind: CompileInputKind.Declaration, Path: query.Path);
+        }
+
+        var digested = (query.Kind == CompileInputKind.Content);
         var digest = Answer(path: query.Path, content: out _, read: out read, wantDigest: digested);
 
         return ((digest is null)
@@ -235,6 +282,14 @@ public static class CompileInputs {
             : (digested
                 ? new CompileInput(ContentHash: digest, Kind: query.Kind, Path: query.Path)
                 : new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Present, Path: query.Path)));
+    }
+    // A declaration fact's hash: its declarer's name and slash, then the digest of what the file declares.
+    private static string DeclarationHash(string prefix, string declared) => (prefix + ContentPin.Compute(content: Encoding.UTF8.GetBytes(s: declared)).Hex);
+    // The declarer a declaration fact's hash names, with its trailing slash; empty when it names none.
+    internal static string DeclarerPrefix(string contentHash) {
+        var slash = contentHash.IndexOf(value: '/');
+
+        return ((slash < 0) ? string.Empty : contentHash[..(slash + 1)]);
     }
     // A file's digest (empty when only existence was asked), or null when no file is there. `content` is the bytes when
     // answering read them.
@@ -298,26 +353,72 @@ public static class CompileInputs {
     /// <param name="path">The file.</param>
     /// <param name="content">The file's bytes when answering read them; <see langword="null"/> when the remembered
     /// digest answered or no file is there.</param>
-    /// <param name="kind">What the compile reads the file for: <see cref="CompileInputKind.Content"/> (the default), or
-    /// <see cref="CompileInputKind.Declaration"/> for a file read only to learn what it declares.</param>
     /// <returns>The digest, or <see langword="null"/> when no file exists at <paramref name="path"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="kind"/> is neither
-    /// <see cref="CompileInputKind.Content"/> nor <see cref="CompileInputKind.Declaration"/>.</exception>
     /// <exception cref="IOException">The file could not be read.</exception>
     /// <exception cref="UnauthorizedAccessException">The file may not be read.</exception>
-    public static string? Digest(string path, out byte[]? content, CompileInputKind kind = CompileInputKind.Content) {
+    public static string? Digest(string path, out byte[]? content) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
-        if (kind is not (CompileInputKind.Content or CompileInputKind.Declaration)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(kind), message: "A digest is read for a file's content or its declaration.");
-        }
 
         var digest = Answer(content: out content, path: path, read: out _, wantDigest: true);
 
         Add(input: ((digest is null)
             ? new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: path)
-            : new CompileInput(ContentHash: digest, Kind: kind, Path: path)));
+            : new CompileInput(ContentHash: digest, Kind: CompileInputKind.Content, Path: path)));
 
         return digest;
+    }
+    /// <summary>Registers the declarer a declaration fact names (<see cref="CompileInputKind.Declaration"/>), so this
+    /// process can answer whether such a fact still holds. A declarer registers once, before any compile records or
+    /// checks one of its facts; the first registration of a name stands.</summary>
+    /// <param name="name">The declarer's name, which the facts it answers carry; it holds no <c>/</c>.</param>
+    /// <param name="declare">From a file's digest, and a reader of its bytes for a digest the declarer does not hold,
+    /// the canonical text of what the file declares: a function of the bytes alone.</param>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is empty or holds a <c>/</c>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="declare"/> is <see langword="null"/>.</exception>
+    public static void RegisterDeclarer(string name, Func<string, Func<byte[]>, string> declare) {
+        ArgumentException.ThrowIfNullOrEmpty(argument: name);
+        ArgumentNullException.ThrowIfNull(argument: declare);
+        if (name.Contains(value: '/')) {
+            throw new ArgumentException(message: "A declarer's name holds no '/'.", paramName: nameof(name));
+        }
+
+        _ = Declarers.TryAdd(key: name, value: declare);
+    }
+    /// <summary>Reads what the file at <paramref name="path"/> declares through <paramref name="declare"/>, recording
+    /// the declaration (<see cref="CompileInputKind.Declaration"/>) under the registered declarer named
+    /// <paramref name="declarer"/> as what the compile read there, or recording the file's absence. A compile that
+    /// reads a file only through here stands while the file declares the same. The file is read only when its stamp
+    /// does not vouch for the digest last read and <paramref name="declare"/> asks for its bytes.</summary>
+    /// <typeparam name="T">What the caller learns from the declaration.</typeparam>
+    /// <param name="path">The file.</param>
+    /// <param name="declarer">The registered declarer's name (<see cref="RegisterDeclarer"/>).</param>
+    /// <param name="declare">From the file's digest and a reader of its bytes, what the caller learns and the canonical
+    /// text the registered declarer answers for the same bytes.</param>
+    /// <param name="digest">The digest of the file's bytes, or <see langword="null"/> when no file is there.</param>
+    /// <returns>What <paramref name="declare"/> returned, or the default when no file is there.</returns>
+    /// <exception cref="ArgumentException"><paramref name="declarer"/> is not registered.</exception>
+    /// <exception cref="IOException">The file could not be read.</exception>
+    /// <exception cref="UnauthorizedAccessException">The file may not be read.</exception>
+    public static T? Declare<T>(string path, string declarer, Func<string, Func<byte[]>, (T Value, string Declared)> declare, out string? digest) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: path);
+        ArgumentNullException.ThrowIfNull(argument: declare);
+        if (!Declarers.ContainsKey(key: declarer)) {
+            throw new ArgumentException(message: $"No declarer named '{declarer}' is registered.", paramName: nameof(declarer));
+        }
+
+        digest = Answer(content: out var content, path: path, read: out _, wantDigest: true);
+
+        if (digest is null) {
+            Add(input: new CompileInput(ContentHash: string.Empty, Kind: CompileInputKind.Absent, Path: path));
+
+            return default;
+        }
+
+        var (value, declared) = declare(digest, () => (content ??= ReadRemembering(hash: out _, path: path)));
+
+        Add(input: new CompileInput(ContentHash: DeclarationHash(declared: declared, prefix: (declarer + "/")), Kind: CompileInputKind.Declaration, Path: path));
+
+        return value;
     }
     /// <summary>Lists the files directly in <paramref name="directory"/>, hidden ones included, recording the listing
     /// (<see cref="CompileInputKind.Listing"/>), so a compile that chose among a directory's files rests on which files
