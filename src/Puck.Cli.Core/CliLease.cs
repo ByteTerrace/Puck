@@ -222,21 +222,6 @@ public sealed class CliLease : IDisposable {
     public static int RecordedProtocol(string root) =>
         (((ReadLines(path: Path.Combine(path1: root, path2: ProtocolFile)) is [var line, ..]) && int.TryParse(s: line, provider: CultureInfo.InvariantCulture, result: out var recorded)) ? recorded : 0);
 
-    /// <summary>Whether this process or a live ancestor already holds an execution resource in this root. A nested
-    /// start may sample headroom but cannot wait for it while that existing work retains its exclusive resource.</summary>
-    public static bool HoldsExecution(string root) {
-        using var self = Process.GetCurrentProcess();
-        var ownTicks = self.StartTime.ToUniversalTime().Ticks;
-        foreach (var name in new[] { "build", "gpu", "heavy" }) {
-            var directory = Path.Combine(root, name);
-            while (ReadHolder(directory) is { } holder && Identity(holder) is { } identity && GuardHeld(directory, holder, DateTimeOffset.UtcNow)) {
-                if ((identity.Pid == Environment.ProcessId && identity.Ticks == ownTicks) || ProcessInspection.IsAncestor(identity.Pid, identity.Ticks)) { return true; }
-                directory += ChildSuffix;
-            }
-        }
-        return false;
-    }
-
     /// <summary>Refuses a lease root a newer CLI has stamped, and raises an older stamp to this CLI's protocol. Called only under
     /// <see cref="AdmissionGuard"/>, so a raise and every grant under the old protocol are ordered.</summary>
     private static void AgreeOnProtocol(string root) {

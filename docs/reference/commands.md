@@ -853,11 +853,16 @@ produced frame that finds each of five stages true:
 | `meshes` | the bakes settled at their demanded detail and standing in the mesh region, the fact `world.wait residency` waits on |
 | `lit` | the irradiance volume no longer tracing or relighting: the settled frame |
 
-Each line also carries `presented` (frames produced since the edit),
-`builds` (composition programs that derived a field; a look value packs its
-appearance into the held program's field and builds none) and `worst-frame`
-(the longest wait between produced frames from the edit until `shaded`, so a
-frame held up by a compile shows there).
+After the stages, a line counts the frames presented since the edit, the
+composition's `builds` (programs that derived a field) and `appearances`
+(rebuilds that took the held program's field with a new appearance: a colour,
+a material value or a shade parameter packs and builds none; an exposure or a
+light edit is neither), the `worst-frame` (the longest wait between produced
+frames from the edit until `shaded`), and the source work from the edit to the
+settled frame, as the `world.boot` ledger counts it: `compiles`,
+`compositions`, `composition-members` (the root members compositions merged
+from their layers), `documents-read` and `validations`. Work a loop running
+beside it does is counted too.
 
 The boot is a loop timed from process start, so a restart and a cold boot
 read the same way. `world.reload` (by hand, or from `world.watch` once its

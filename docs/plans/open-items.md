@@ -916,24 +916,14 @@ says how one is reproduced and profiled.
    (groups rebaked, kernels recompiled, projects rebuilt) — for three edit
    kinds: `.puck` document (~15 s compile + reload tick stall), shader, and
    C#. This is the wait the owner's ruling puts first.
-2. **Key each bake stage by what it reads.** The bake has three stages: GPU
-   field sampling, contouring, and Land (simplifying and storing; ~34% of bake
-   CPU with collapse at ~28.7%). Today `SdfMeshBakeIdentity` hashes the whole
-   C# closure plus both kernel bytecodes, so one Land or contour edit forces a
-   full cold bake. Build per-stage keys on `SdfMeshBakeClosure` and
-   `SdfMeshStore.ExplainMisses` so a Land edit starts from stored contours
-   without re-sampling on GPU (keeping each stage's key conservative over
-   everything that stage reaches; check stored-contour disk/memory size before
-   splitting a stage; amend
-   [the derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
-   in the same change). A key too narrow is the dangerous direction: an edit
-   that should have invalidated a mesh and did not shows as a stale mesh that
-   nothing reports, so the split changes only which stage a part belongs to.
-   Batch bake-kernel edits until stage keys land. Narrower per-operation keys
-   remain a later question: they depend on whether the interpreter's source can
-   be attributed to each operation, which nobody has looked at.
-   - *Check:* editing Land rebakes with zero GPU sampling dispatches and lowers
-     the C# edit-wait reading.
+2. **Measure staged reuse in the debug world.** Start from an empty store,
+   then boot with that store unchanged, with a simplification edit, and with
+   a field-kernel edit. Compare bake time, checkpoint hit and miss counts,
+   GPU sampling dispatches, and disk bytes. A simplification edit should
+   load stored contours and dispatch no sampling. The field-kernel edit
+   should rebake from sampling. The
+   [derived-product decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)
+   describes where the cache resumes.
 3. **Measure the cold bake under the live frame allowance.** Budgeted batches
    are cut to the allowance at a mean-following rate (`SdfMeshBakeGpuWork`);
    held frames keep `SdfMeshPathBake.BatchTaps`. Re-measure the cold bake held
@@ -1469,6 +1459,13 @@ The volume's cost and convergence:
   light (`sdfMeshIndirectSeen`) until then. The streaming plan's
   step 9 decides which tier the lighting traces; the tour's drains per still
   on the `[sdf.mesh-gi] done` lines measure whichever lands.
+  [The settle-time record](illumination/research-settle-time.md) accounts for
+  the boot's minutes: a boot that sees the lobby's painting stages the shared
+  session residency with its own copy of the world's meshes, the shared
+  detail bias climbs (to 6 on Direct3D 12, 14 on Vulkan), every coarsening
+  wave rebuilds both irradiance scenes past the 64-draw union rule, the
+  batches in flight are dropped, and the session's full volume takes most of
+  a 1 ms-a-frame grant first come. It ranks the fixes.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
   lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
   instance that reads it is only marked stale and still records its passes,
@@ -2887,8 +2884,10 @@ The edit loop:
   `puck compile --validate` and every root `puck lint`, whatever the edit.
   [The authoring loop](iteration/authoring-loop.md#what-was-measured) took the
   profile, and its [build order](iteration/authoring-loop.md#build-order) is
-  the work. Step 1 has landed (the name index, the stamp-trusted digests and
-  origins composed only for a finding); step 2, one compile session, is next.
+  the work. Steps 1 and 2 have landed, and step 3 in part (a value edit
+  recompiles one source and recomposes the root members it writes); step 4,
+  the source watch handing each revision's delta to the mutation door, is
+  next.
 - [medium] `puck decompile` writes a source the compiler refuses when the
   document holds a shading program: a palette's `shade` prints as its table
   key (`shade: "program/<hash>"`), which is PUCK126, and
@@ -3024,13 +3023,6 @@ Owner: tooling lane (specialist, CLI) · ordinary · Next: the `puck integrate`
 verb, then the launch and process lifecycles, each as one change that gives
 its lifecycle an explicit state.
 
-- [medium] A World start under a held execution lease gets an admission bound
-  of zero (`HostAdmission.Wait`, `CliLease.HoldsExecution`), so inside the
-  lead's quiet window a seam-walk stop started right after the previous one
-  was refused at 15.3 GB free against 15.5 GB, before the exited World's
-  memory had come back. A holder that owns the machine (quiet) loses nothing
-  by waiting: give it the step's bound, or wait while a just-exited start's
-  memory returns, instead of refusing.
 - [low] `puck bench frames --window` still names "each physical row's owners
   and residual" absent, "supplied by step 2", though step 2 has landed; wire
   `host.memory`'s owner rows into the window or correct the text.

@@ -80,10 +80,17 @@ the previous kernels, and so does a tree whose kernels do not read the host's
 interface: a kernel compiled against another instruction set (its pass block's
 stamp) or binding anything where the host does not place it. Reflecting a DXIL
 kernel needs the `dxcompiler.dll` beside the `dxc` on the path. Scene buffers, images and world state
-survive; the cadence signature is invalidated. A reload also builds again the
-views kernel if the residency refused it (its creation failed; `NotReadyReason`
-names it), even when the tree leaves its bytecode unchanged: that, or a device
-loss, is the only retry a refused views kernel gets. The last
+survive; the cadence signature is invalidated. A reload also builds again any
+kernel the residency refused (its creation failed; `NotReadyReason` names it),
+even when the tree leaves its bytecode unchanged: that, or a device loss, is
+the only retry a refused kernel gets, and a device loss is a refused pass
+pipeline's only one. A residency builds its tables once the mesh bake's two
+kernels and the region copy are built (`SdfWorldPipelines.PollRequired`,
+`TableKernels`, which start building first), so the bake samples while a cold
+driver compiles the rest; its frame waits for every other pipeline
+(`SdfWorldTables.FrameWaiting`, the pass pipelines as `SdfPassPipelineSlot`s),
+staging its upload from its preparation meanwhile, and the probes' work joins
+once every kernel is built. The last
 successful set survives device-loss recovery. `views.graphs` instances
 (`pipeline.reload`) and `views.post` post-process packages are outside this
 command, and host ABI or

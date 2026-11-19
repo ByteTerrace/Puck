@@ -12,9 +12,10 @@ namespace Puck.SdfVm;
 // the pump that drains the console. The leases outlive the tables built from them (a capacity or
 // export rebuild reuses them) and are released on device loss and disposal. The holder builds its tables here
 // (TryBuild), which refuses a failed build by name instead of throwing it, and tries it again only when an input it was
-// built from changes. The set is ready once every pipeline but the views kernel is built (SdfWorldPipelines.PollRequired),
-// and the region copy and the mesh pass are too: the tables record their
-// upload and mesh region with the first and a view's mesh pass draws with the second.
+// built from changes. The set is ready once the tables' kernels are built (SdfWorldPipelines.PollRequired: the mesh
+// bake's two) and the region copy is too, which the tables record their uploads with; every other pipeline, the pass
+// pipelines among them, the frame waits for itself (SdfWorldTables.FrameWaiting), so a cold driver's compile of them
+// runs beside the bake rather than ahead of it.
 internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private readonly BackgroundBuild<Leases> m_acquire = new();
 
@@ -26,8 +27,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_shadowGlassRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_glassRaster;
     private GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? m_occlusion;
-    // Whether every pipeline the tables need has been seen ready: all of the leased set but the views kernel, which a
-    // frame waits for itself (SdfWorldTables.FrameWaiting).
+    // Whether every pipeline the tables need has been seen ready: the set's tables' kernels and the region copy.
     private bool m_ready;
     // The latest refused engine build and what it was built from, until a build succeeds or the lease is released.
     private Exception? m_refusal;
@@ -41,20 +41,9 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
     public SdfWorldPipelines? Current => (m_ready ? m_lease : null);
     // The device's ready region-copy pipeline, or null before it has built.
     public IGpuComputePipeline? RegionCopy => m_regionCopy?.Current?.Compute;
-    // The device's ready mesh pass pipeline, or null before it has built.
-    public GpuPassPipeline? MeshRaster => m_meshRaster?.Current;
-    // The device's ready shadow cascade pipeline, or null before it has built.
-    public GpuPassPipeline? ShadowRaster => m_shadowRaster?.Current;
-    // The device's ready shadow cascade exit-layer pipeline, or null before it has built.
-    public GpuPassPipeline? ShadowExitRaster => m_shadowExitRaster?.Current;
-    public GpuPassPipeline? ShadowGlassRaster => m_shadowGlassRaster?.Current;
-    // The device's ready glass raster pipeline, or null before it has built.
-    public GpuPassPipeline? GlassRaster => m_glassRaster?.Current;
-    // The device's ready mesh pass occlusion kernel, or null before it has built.
-    public GpuPassPipeline? Occlusion => m_occlusion?.Current;
 
-    // Returns the ready set once the region-copy and mesh pass pipelines are ready too; the first call starts taking the
-    // leases and every call until all have built returns null. A lease or build that failed rethrows its exception here, on the
+    // Returns the ready set once the region-copy pipeline is ready too; the first call starts taking the leases and every
+    // call until those have built returns null. A lease or build that failed rethrows its exception here, on the
     // frame thread, so a device loss reaches the host's recovery; the next call starts again. Leases whose kernels are
     // already loaded are taken on this call: taking one joins the cache's entry or starts its build, and never waits,
     // so a holder whose pipelines another holder already built has its set in the frame that first asks.
@@ -95,12 +84,11 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             Take(leases: leases!);
         }
 
-        m_ready = m_lease!.PollRequired();
+        // The tables need their kernels and the region copy their uploads record with; a frame waits for the rest itself
+        // (SdfWorldTables.FrameWaiting), so the bake starts while the driver compiles them.
+        m_ready = (m_lease!.PollRequired() && (m_regionCopy!.Poll() is not null));
 
-        return ((!m_ready || (m_regionCopy!.Poll() is null) || (m_meshRaster!.Poll() is null) || (m_shadowRaster!.Poll() is null) || (m_shadowExitRaster!.Poll() is null) || (m_shadowGlassRaster!.Poll() is null) || (m_glassRaster!.Poll() is null) || (m_occlusion!.Poll() is null))
-            ? null
-            : m_lease
-        );
+        return (m_ready ? m_lease : null);
     }
     private void Take(Leases leases) {
         m_lease = leases.Set;
@@ -231,13 +219,13 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             var engine = construct(
                 arg1: pipelines,
                 arg2: new SdfWorldPassPipelines(
-                    MeshRaster: MeshRaster!,
+                    MeshRaster: new SdfPassPipelineSlot(lease: m_meshRaster!),
                     RegionCopy: RegionCopy!,
-                    ShadowRaster: ShadowRaster!,
-                    ShadowExitRaster: ShadowExitRaster!,
-                    ShadowGlassRaster: ShadowGlassRaster!,
-                    GlassRaster: GlassRaster!,
-                    Occlusion: Occlusion!
+                    ShadowRaster: new SdfPassPipelineSlot(lease: m_shadowRaster!),
+                    ShadowExitRaster: new SdfPassPipelineSlot(lease: m_shadowExitRaster!),
+                    ShadowGlassRaster: new SdfPassPipelineSlot(lease: m_shadowGlassRaster!),
+                    GlassRaster: new SdfPassPipelineSlot(lease: m_glassRaster!),
+                    Occlusion: new SdfPassPipelineSlot(lease: m_occlusion!)
                 ),
                 arg3: inputs
             );
@@ -276,18 +264,13 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         FaultsRevision: (device.Services.Faults?.Revision ?? 0L),
         HostsOnDirectX: hostsOnDirectX,
         Kernels: kernels,
-        MeshRaster: MeshRaster,
         RegionCopy: RegionCopy,
         Set: Current,
-        ShadowRaster: ShadowRaster,
-        ShadowExitRaster: ShadowExitRaster,
-        ShadowGlassRaster: ShadowGlassRaster,
-        GlassRaster: GlassRaster,
-        Occlusion: Occlusion,
         SetKernels: Current?.Kernels
     );
     // What a build is made from besides the holder's own inputs; a refused build is tried again when any of it changes.
-    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, GpuPassPipeline? MeshRaster, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, GpuPassPipeline? ShadowRaster, GpuPassPipeline? ShadowExitRaster, GpuPassPipeline? ShadowGlassRaster, GpuPassPipeline? GlassRaster, GpuPassPipeline? Occlusion, SdfKernelSet? SetKernels);
+    // The pass pipelines are no input: the tables take them as slots a frame waits for (SdfPassPipelineSlot).
+    private readonly record struct BuildKey(IGpuDeviceContext? Device, long FaultsRevision, SdfKernelSet? Kernels, bool HostsOnDirectX, IGpuComputePipeline? RegionCopy, SdfWorldPipelines? Set, SdfKernelSet? SetKernels);
 
     // Kept apart from Poll so the closure is allocated only when a lease is taken, never on a polled frame. Only loading
     // the deployed kernels reads files, so only a holder with none of its own takes its leases on the thread pool.
@@ -298,14 +281,23 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             kernels: kernels
         ));
     // Takes every lease a holder's engine needs. A pass-pipeline acquire that throws releases the leases taken before it.
+    // The region copy is taken first and the set starts the tables' kernels first (SdfWorldPipelines.BuildOrder), so the
+    // builds the tables wait on queue ahead of those only a frame waits on.
     private Leases TakeLeases(IGpuDeviceContext device, SdfKernelSet? kernels, bool hostsOnDirectX) {
-        var set = SdfWorldPipelines.Acquire(
-            cache: catalog.Pipelines,
-            device: device,
-            kernels: (kernels ?? catalog.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: hostsOnDirectX)))
-        );
+        var regionCopy = catalog.RegionCopy.Acquire(device: device);
+        SdfWorldPipelines set;
 
-        GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? regionCopy = null;
+        try {
+            set = SdfWorldPipelines.Acquire(
+                cache: catalog.Pipelines,
+                device: device,
+                kernels: (kernels ?? catalog.LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: hostsOnDirectX)))
+            );
+        } catch {
+            regionCopy.Release();
+            throw;
+        }
+
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? meshRaster = null;
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? shadowRaster = null;
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? shadowExitRaster = null;
@@ -313,7 +305,6 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline>? occlusion = null;
 
         try {
-            regionCopy = catalog.RegionCopy.Acquire(device: device);
             meshRaster = catalog.MeshRaster.Acquire(device: device);
             shadowRaster = catalog.MeshRaster.AcquireShadow(device: device);
             shadowExitRaster = catalog.MeshRaster.AcquireShadow(device: device, exit: true);
@@ -336,7 +327,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
             shadowGlassRaster?.Release();
             shadowRaster?.Release();
             meshRaster?.Release();
-            regionCopy?.Release();
+            regionCopy.Release();
             set.Dispose();
             throw;
         }
@@ -356,6 +347,7 @@ internal sealed class SdfWorldPipelineSource(SdfWorldPipelineCatalog catalog) {
         }
     }
 }
-// The pass pipelines an engine takes beside its set: the region copy its uploads record with, its mesh pass, the
-// shadow cascades' opaque depth and glass extinction passes, the glass pass and the mesh pass's occlusion kernel.
-internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, GpuPassPipeline MeshRaster, GpuPassPipeline ShadowRaster, GpuPassPipeline ShadowExitRaster, GpuPassPipeline ShadowGlassRaster, GpuPassPipeline GlassRaster, GpuPassPipeline Occlusion);
+// The pass pipelines an engine takes beside its set: the region copy its uploads record with, built, and as slots a frame
+// waits for (SdfPassPipelineSlot), its mesh pass, the shadow cascades' opaque depth, exit layer and glass extinction
+// passes, the glass pass and the mesh pass's occlusion kernel.
+internal readonly record struct SdfWorldPassPipelines(IGpuComputePipeline RegionCopy, SdfPassPipelineSlot MeshRaster, SdfPassPipelineSlot ShadowRaster, SdfPassPipelineSlot ShadowExitRaster, SdfPassPipelineSlot ShadowGlassRaster, SdfPassPipelineSlot GlassRaster, SdfPassPipelineSlot Occlusion);

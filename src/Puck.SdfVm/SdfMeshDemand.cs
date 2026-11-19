@@ -30,9 +30,11 @@ public sealed class SdfMeshDemand {
 
     private Vector3[] m_points = new Vector3[4];
     private float[] m_focal = new float[4];
-    // Each point's camera, read only where the point demands inside its view (m_within).
+    // Each point's camera, begun at its near plane widened for a point that demands inside its view (m_within), and
+    // whether the point has one: a point placed with no frame (Place) sees every box.
     private CameraSnapshot[] m_cameras = new CameraSnapshot[4];
     private bool[] m_within = new bool[4];
+    private bool[] m_framed = new bool[4];
 
     /// <summary>Gets how many demand points the latest frame named.</summary>
     public int Count { get; private set; }
@@ -57,6 +59,7 @@ public sealed class SdfMeshDemand {
             m_focal = new float[views.Count];
             m_cameras = new CameraSnapshot[views.Count];
             m_within = new bool[views.Count];
+            m_framed = new bool[views.Count];
         }
         for (var index = 0; (index < views.Count); index++) {
             var view = views[index];
@@ -67,7 +70,8 @@ public sealed class SdfMeshDemand {
             m_points[count] = camera.Position;
             m_focal[count] = ((((view.DemandHeight > 0f) ? view.DemandHeight : MathF.Max(x: 1f, y: (view.Region.Height * height))) * 0.5f) / tan);
             m_within[count] = view.DemandWithinView;
-            if (view.DemandWithinView) { m_cameras[count] = (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }); }
+            m_framed[count] = true;
+            m_cameras[count] = (view.DemandWithinView ? (camera with { Near = (camera.Near * SdfMeshCull.NearKeeps) }) : camera);
             count++;
         }
         Count = count;
@@ -86,9 +90,11 @@ public sealed class SdfMeshDemand {
             Array.Resize(array: ref m_focal, newSize: (2 * m_focal.Length));
             Array.Resize(array: ref m_cameras, newSize: (2 * m_cameras.Length));
             Array.Resize(array: ref m_within, newSize: (2 * m_within.Length));
+            Array.Resize(array: ref m_framed, newSize: (2 * m_framed.Length));
         }
         m_points[Count] = eye;
         m_within[Count] = false;
+        m_framed[Count] = false;
         m_focal[Count] = ((Math.Max(val1: height, val2: 1u) * 0.5f) / tanHalfFieldOfView);
         Count++;
     }
@@ -135,18 +141,9 @@ public sealed class SdfMeshDemand {
     /// <exception cref="ArgumentNullException"><paramref name="group"/> or <paramref name="transforms"/> is
     /// <see langword="null"/>.</exception>
     public float PixelAt(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
-        ArgumentNullException.ThrowIfNull(argument: group);
-        ArgumentNullException.ThrowIfNull(argument: transforms);
+        var (center, half, units) = WorldBoxOf(group: group, transforms: transforms);
 
-        var center = ((group.Low + group.High) * 0.5f);
-        var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
-
-        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return PixelAt(center: center, half: half); }
-
-        var transform = transforms[group.Slot];
-        var box = SdfMeshBox.Carried(center: center, half: half, transform: transform);
-
-        return (PixelAt(center: box.Center, half: box.AxisHalf) / SdfMeshGeometryBuilder.UnitsOf(transform: transform));
+        return (PixelAt(center: center, half: half) / units);
     }
     /// <summary>Returns a box's priority at the demand point that ranks it highest. A box whose diagonal projects past a
     /// pixel there is demanded, and ranks by the pixels a metre covers at its distance, one plus the point's pixels a
@@ -170,6 +167,49 @@ public sealed class SdfMeshDemand {
         }
 
         return best;
+    }
+    /// <summary>Returns whether a box is in view: some demand point's view may see it, its frustum widened by
+    /// <see cref="WithinViewMargin"/> so the viewer's next steps and turns find it, or a point placed with no frame
+    /// (<see cref="Place"/>) stands, or no demand point does, so nothing ranks the box behind another (a boot or an
+    /// arrival before any view). What the bake orders its work by and what it owes the frame first.</summary>
+    /// <param name="center">The box's center, in world space.</param>
+    /// <param name="half">The box's half extents along the world axes, none negative.</param>
+    /// <returns><see langword="true"/> when the box is in view.</returns>
+    public bool Sees(Vector3 center, Vector3 half) {
+        if (Count == 0) { return true; }
+        for (var index = 0; (index < Count); index++) {
+            if (!m_framed[index] || SeesFrom(index: index, center: center, half: half)) { return true; }
+        }
+        return false;
+    }
+    /// <summary>Returns whether a planned group's box is in view (<see cref="Sees(Vector3, Vector3)"/>): a dynamic
+    /// group's box carried into world space by its slot's transform among <paramref name="transforms"/>.</summary>
+    /// <param name="group">The group, its box set.</param>
+    /// <param name="transforms">The dynamic transforms the plan is made at.</param>
+    /// <returns><see langword="true"/> when the group's box is in view.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="group"/> or <paramref name="transforms"/> is
+    /// <see langword="null"/>.</exception>
+    public bool Sees(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+        var (center, half, _) = WorldBoxOf(group: group, transforms: transforms);
+
+        return Sees(center: center, half: half);
+    }
+    // A planned group's box in world space, and the units its lattice is in: a dynamic group's carried out of its slot's
+    // frame by the slot's transform among the plan's, in the slot's units (SdfMeshGeometryBuilder.UnitsOf); any other
+    // group's as planned, in metres.
+    private static (Vector3 Center, Vector3 Half, float Units) WorldBoxOf(SdfMeshBakeGroup group, IReadOnlyList<DynamicTransform> transforms) {
+        ArgumentNullException.ThrowIfNull(argument: group);
+        ArgumentNullException.ThrowIfNull(argument: transforms);
+
+        var center = ((group.Low + group.High) * 0.5f);
+        var half = Vector3.Abs(value: ((group.High - group.Low) * 0.5f));
+
+        if (!group.Dynamic || (group.Slot >= transforms.Count)) { return (center, half, 1f); }
+
+        var transform = transforms[group.Slot];
+        var box = SdfMeshBox.Carried(center: center, half: half, transform: transform);
+
+        return (box.Center, box.AxisHalf, SdfMeshGeometryBuilder.UnitsOf(transform: transform));
     }
     /// <summary>Returns the distance from the nearest demand point's eye to a box, zero inside it, or infinity with no
     /// demand point.</summary>
@@ -218,13 +258,15 @@ public sealed class SdfMeshDemand {
 
     // Whether a point demands a world-axis box at all: always for a point that demands by distance alone, and only a
     // box its widened frustum may hold for one that demands inside its view.
-    private bool Demands(int index, Vector3 center, Vector3 half) => (!m_within[index] || m_cameras[index].MaySee(
+    private bool Demands(int index, Vector3 center, Vector3 half) => (!m_within[index] || SeesFrom(index: index, center: center, half: half));
+    // Whether a framed point's widened frustum may hold a world-axis box.
+    private bool SeesFrom(int index, Vector3 center, Vector3 half) => m_cameras[index].MaySee(
         center: center,
         halfX: new Vector3(x: half.X, y: 0f, z: 0f),
         halfY: new Vector3(x: 0f, y: half.Y, z: 0f),
         halfZ: new Vector3(x: 0f, y: 0f, z: half.Z),
         margin: WithinViewMargin
-    ));
+    );
     // The distance from a point to a box, zero inside it.
     private static float DistanceTo(Vector3 center, Vector3 half, Vector3 point) =>
         Vector3.Max(value1: (Vector3.Abs(value: (point - center)) - half), value2: Vector3.Zero).Length();

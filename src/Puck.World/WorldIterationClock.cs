@@ -35,6 +35,15 @@ namespace Puck.World;
 public sealed class WorldIterationClock(WorldServer server) : IWorldIterationReadiness {
     // The loops kept for world.iteration besides the boot's.
     private const int Kept = 16;
+    // The source work a loop's line counts, as the world.boot ledger counts it: sources compiled, compositions merged
+    // and the root members they merged, documents read, and whole-document validations.
+    private static readonly Puck.Abstractions.Counting.WorkKind[] Work = [
+        WorldBootWork.Compiles,
+        WorldBootWork.Compositions,
+        WorldBootWork.CompositionMembers,
+        WorldBootWork.DocumentsRead,
+        WorldBootWork.Validations,
+    ];
 
     private readonly List<Loop> m_loops = [];
 
@@ -71,6 +80,11 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         public long Presented { get; set; }
         public long BuildsAtStart { get; set; } = -1;
         public long Builds { get; set; }
+        public long AppearancesAtStart { get; set; } = -1;
+        public long Appearances { get; set; }
+        // The ledger's Work counts when the loop began (zero for the boot), and when it settled.
+        public long[] WorkAtStart { get; init; } = new long[Work.Length];
+        public long[]? WorkAtLit { get; set; }
         // Why the loop stopped before it settled, or null while it runs or once it settled.
         public string? Ended { get; set; }
         public bool Open => ((Lit is null) && (Ended is null));
@@ -121,7 +135,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
             number: ++m_count,
             shaderInstalls: (m_probe?.Residency?.ShaderBatchesInstalled ?? 0L),
             started: Stopwatch.GetTimestamp()
-        ) { ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L) };
+        ) { ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
         m_loops.Add(item: loop);
         if (m_loops.Count > Kept) { m_loops.RemoveAt(index: 0); }
@@ -159,8 +173,10 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         if ((probe.Residency is not { } residency) || (probe.Composition is not { } composition)) { return; }
         if (loop.PresentedAtStart < 0) { loop.PresentedAtStart = (probe.Root?.FramesProduced ?? 0L); }
         if (loop.BuildsAtStart < 0) { loop.BuildsAtStart = composition.ProgramBuilds; }
+        if (loop.AppearancesAtStart < 0) { loop.AppearancesAtStart = composition.AppearanceBuilds; }
         loop.Presented = ((probe.Root?.FramesProduced ?? 0L) - loop.PresentedAtStart);
         loop.Builds = (composition.ProgramBuilds - loop.BuildsAtStart);
+        loop.Appearances = (composition.AppearanceBuilds - loop.AppearancesAtStart);
         if (loop.Shaded is null) { loop.WorstFrame = Math.Max(val1: loop.WorstFrame, val2: (now - Math.Max(val1: previous, val2: loop.Started))); }
 
         if (loop.Frame is null) {
@@ -186,6 +202,7 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         }
         if (!residency.MeshIrradiance.Converged) { return; }
         loop.Lit = now;
+        loop.WorkAtLit = ReadWork();
         Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: loop, probe: probe)}");
     }
 
@@ -204,6 +221,8 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         loop.Ended = $"the kernel reload was {status.State}{((status.Error is { } error) ? $": {error}" : string.Empty)}";
         return true;
     }
+
+    private static long[] ReadWork() => [.. Work.Select(selector: static kind => WorldBootWork.Process.Read(kind: kind))];
 
     private static bool ShaderPending(Loop loop, SdfWorldResidency residency) =>
         ((loop.ShaderRequest > 0L) && (residency.ShaderReloadStatus is { State: "pending" } status) && (status.RequestId == loop.ShaderRequest));
@@ -231,7 +250,8 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
     }
 
     // A loop's line: its number and name, then each stage's seconds from the edit, the first stage still open naming
-    // what it waits on, then the frames presented and programs built since the edit.
+    // what it waits on, then the frames presented and programs built since the edit, and the source work counted from
+    // the edit to the settled frame (to now, while the loop is open), which a loop running beside it also counts.
     private string Line(Loop loop, WorldRenderProbe probe) {
         var culture = CultureInfo.InvariantCulture;
         var text = new StringBuilder();
@@ -243,7 +263,13 @@ public sealed class WorldIterationClock(WorldServer server) : IWorldIterationRea
         Stage(name: "shown", at: loop.Shown, why: static () => "a mesh group still draws the geometry before the edit, or nothing, while it bakes");
         Stage(name: "meshes", at: loop.Meshes, why: () => (m_bakes?.PendingResidencyReasonSince(mark: loop.ContentMark) ?? "the kernel reload is still installing"));
         Stage(name: "lit", at: loop.Lit, why: static () => "the irradiance volume is still tracing, or its relight trails the lighting past its age bound");
-        _ = text.Append(culture, $" presented={loop.Presented} builds={loop.Builds} worst-frame={Stopwatch.GetElapsedTime(startingTimestamp: 0L, endingTimestamp: loop.WorstFrame).TotalMilliseconds:0.0}ms");
+        _ = text.Append(culture, $" presented={loop.Presented} builds={loop.Builds} appearances={loop.Appearances} worst-frame={Stopwatch.GetElapsedTime(startingTimestamp: 0L, endingTimestamp: loop.WorstFrame).TotalMilliseconds:0.0}ms");
+
+        var work = (loop.WorkAtLit ?? ReadWork());
+
+        for (var index = 0; (index < Work.Length); index++) {
+            _ = text.Append(culture, $" {Work[index].Name["world.boot.".Length..]}={work[index] - loop.WorkAtStart[index]}");
+        }
         if (loop.Ended is { } ended) { _ = text.Append(culture, $" ended=({ended})"); }
         return text.ToString();
 

@@ -54,7 +54,28 @@ public static partial class WorldDefinitionFileSource {
     // import layer) — what a derivation-preserving save diffs a target against; `composed` is the final tree.
     // `ancestors` is the resolution path from the top down to (not including) `resolvedPath`: a stack, not a global
     // visited set, so two imports independently reaching the same shared ancestor (a diamond) is never a cycle.
-    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayers(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) => TryComposeLayersHeld(
+        ancestors: ancestors,
+        bytes: bytes,
+        catalog: catalog,
+        catalogFingerprint: catalogFingerprint,
+        composed: out composed,
+        image: out _,
+        origins: origins,
+        parseHeld: true,
+        reach: out reach,
+        reason: out reason,
+        resolvedPath: resolvedPath,
+        retainImage: retainImage,
+        serveHeldImage: serveHeldImage,
+        source: source,
+        stack: out stack,
+        touched: out touched,
+        touchedPaths: out touchedPaths
+    );
+    // The composer as above, also handing back the image the composition was served from or held as (null when none
+    // was held). With `parseHeld` false a served image is not parsed: `composed` is null and the image's bytes answer.
+    private static bool TryComposeLayersHeld(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
         // Typed channel nodes are interpreted by alias/export walks before strict deserialization. Their malformed
         // shapes are document refusals here too, including for in-memory composition callers with no file wrapper.
         try {
@@ -64,7 +85,9 @@ public static partial class WorldDefinitionFileSource {
                 catalog: catalog,
                 catalogFingerprint: catalogFingerprint,
                 composed: out composed,
+                image: out image,
                 origins: origins,
+                parseHeld: parseHeld,
                 reach: out reach,
                 reason: out reason,
                 resolvedPath: resolvedPath,
@@ -78,6 +101,7 @@ public static partial class WorldDefinitionFileSource {
         } catch (JsonException exception) {
             stack = null;
             composed = null;
+            image = null;
             touched = [];
             touchedPaths = [];
             reach = 0;
@@ -86,7 +110,9 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
     }
-    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, out JsonObject? stack, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+    private static bool TryComposeLayersCore(IWorldDocumentSource source, string resolvedPath, byte[] bytes, IReadOnlyList<string> ancestors, bool serveHeldImage, bool parseHeld, out JsonObject? stack, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainImage = true) {
+        image = null;
+
         var reads = new CompileInputLog();
         using var recording = CompileInputs.Record(log: reads);
 
@@ -146,7 +172,9 @@ public static partial class WorldDefinitionFileSource {
             bytes: bytes,
             catalogFingerprint: catalogFingerprint,
             composed: out var held,
+            image: out image,
             origins: origins,
+            parse: parseHeld,
             reach: out var heldReach,
             resolvedPath: resolvedPath,
             source: source,
@@ -163,335 +191,26 @@ public static partial class WorldDefinitionFileSource {
             return true;
         }
 
-        JsonObject? root;
-
-        var recordsInputs = (source.ResolvesFiles && source.RecordInputs(content: bytes, resolvedName: resolvedPath));
-
-        try {
-            root = (JsonNode.Parse(json: DecodeJson(bytes: bytes)) as JsonObject);
-        } catch (JsonException) {
-            root = null;
-        }
-
-        if (root is null) {
-            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} does not hold a JSON object.";
-
-            return false;
-        }
-
-        origins?.Capture(node: root, documentPath: resolvedPath);
-
-        // A flat file (neither member authored) returns its own tree completely unmerged: an ordinary TryMerge pass
-        // over an empty basis would silently drop any of the file's OWN top-level members whose value happens to be
-        // a literal JSON null (an unset nullable field with no per-property WhenWritingNull condition), since a
-        // null-valued overlay member means "remove the inherited member" — there is nothing to remove here, but
-        // nothing to ADD either, so the member would vanish. A flat file has nothing to compose, so it must never
-        // cross that merge at all.
-        if (
-            !root.ContainsKey(propertyName: WorldDocumentBasis.BasisMemberName) &&
-            !root.ContainsKey(propertyName: WorldDocumentBasis.ImportsMemberName)
-        ) {
-            stack = new JsonObject();
-            composed = root;
-            reason = string.Empty;
-            WorldBootWork.Count(kind: WorldBootWork.Compositions);
-            if (retainImage) {
-                HoldComposedImage(
-                    origins: origins,
-                    inputs: (recordsInputs ? reads.Inputs : null),
-                    catalogFingerprint: catalogFingerprint,
-                    composed: composed,
-                    reach: reach,
-                    resolvedPath: resolvedPath,
-                    source: source,
-                    touched: touched,
-                    touchedPaths: touchedPaths
-                );
-            }
-
-            return true;
-        }
-
-        var nextAncestors = ((IReadOnlyList<string>)[.. ancestors, resolvedPath]);
-        var basisComposed = new JsonObject();
-
-        if (root.TryGetPropertyValue(
-            jsonNode: out var basisNode,
-            propertyName: WorldDocumentBasis.BasisMemberName
-        )) {
-            if (
-                (basisNode is not JsonValue basisValue) ||
-                !basisValue.TryGetValue<string>(value: out var basisName) ||
-                (basisName.Length == 0)
-            ) {
-                reason = $"'{WorldDocumentBasis.BasisMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be a non-empty document name.";
-
-                return false;
-            }
-
-            if (!TryReadDocument(
-                content: out var basisContent,
-                name: basisName,
-                reason: out reason,
-                referrerName: resolvedPath,
-                resolvedName: out var basisResolvedName,
-                source: source
-            )) {
-                return false;
-            }
-
-            if (!TryComposeLayers(
-                ancestors: nextAncestors,
-                bytes: basisContent!,
-                catalog: catalog,
-                catalogFingerprint: catalogFingerprint,
-                composed: out var basisResult,
-                origins: origins,
-                reach: out var basisReach,
-                reason: out reason,
-                resolvedPath: basisResolvedName,
-                serveHeldImage: true,
-                source: source,
-                stack: out _,
-                touched: out var basisTouched,
-                touchedPaths: out var basisTouchedPaths
-            )) {
-                return false;
-            }
-
-            basisComposed = basisResult!;
-            WorldDocumentPaths.RelocateDocumentFields(
-                module: basisComposed,
-                origins: origins,
-                sourceDocumentPath: basisResolvedName,
-                targetDocumentPath: resolvedPath
-            );
-            if (
-                (catalog is not null) &&
-                !WorldModuleNamespace.TryRelocateConfigurationAssets(
-                catalog: catalog,
-                module: basisComposed,
-                reason: out var basisMetadataReason,
-                sourceDocumentPath: basisResolvedName,
-                targetDocumentPath: resolvedPath
-            )
-            ) {
-                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} basis {WorldDocumentLabel.Of(path: basisResolvedName)}: {basisMetadataReason}";
-                return false;
-            }
-            reach = Math.Max(
-                val1: reach,
-                val2: (basisReach + 1)
-            );
-            touched.AddRange(collection: basisTouched);
-            touchedPaths.AddRange(collection: basisTouchedPaths);
-        }
-
-        var hasImports = root.TryGetPropertyValue(WorldDocumentBasis.ImportsMemberName, out var importsNode);
-        var ownBody = root;
-
-        ownBody.Remove(propertyName: WorldDocumentBasis.BasisMemberName);
-        ownBody.Remove(propertyName: WorldDocumentBasis.ImportsMemberName);
-
-        var importsLayer = new JsonObject();
-
-        if (hasImports) {
-            if (importsNode is not JsonArray importsArray) {
-                reason = $"'{WorldDocumentBasis.ImportsMemberName}' in {WorldDocumentLabel.Of(path: resolvedPath)} must be an array of import entries.";
-
-                return false;
-            }
-
-            var importTrees = new List<(string Name, JsonObject Tree)>();
-            var modules = new List<(string Name, JsonObject Tree, WorldExports Exports)>();
-            var importDescriptions = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-            foreach (var entry in importsArray) {
-                if (!TryReadImportEntry(
-                    alias: out var importAlias,
-                    document: out var importName,
-                    entry: entry,
-                    reason: out reason,
-                    referrerPath: resolvedPath
-                )) {
-                    return false;
-                }
-
-                if (!TryReadDocument(
-                    content: out var importContent,
-                    name: importName,
-                    reason: out reason,
-                    referrerName: resolvedPath,
-                    resolvedName: out var importResolvedName,
-                    source: source
-                )) {
-                    return false;
-                }
-
-                if (!TryComposeLayers(
-                    ancestors: nextAncestors,
-                    bytes: importContent!,
-                    catalog: catalog,
-                    catalogFingerprint: catalogFingerprint,
-                    composed: out var importResult,
-                    origins: origins,
-                    reach: out var importReach,
-                    reason: out reason,
-                    resolvedPath: importResolvedName,
-                    serveHeldImage: true,
-                    source: source,
-                    stack: out _,
-                    touched: out var importTouched,
-                    touchedPaths: out var importTouchedPaths
-                )) {
-                    return false;
-                }
-
-                reach = Math.Max(
-                    val1: reach,
-                    val2: (importReach + 1)
-                );
-                WorldDocumentPaths.RelocateDocumentFields(
-                    module: importResult!,
-                    origins: origins,
-                    sourceDocumentPath: importResolvedName,
-                    targetDocumentPath: resolvedPath
-                );
-
-                if (
-                    (importAlias is not null) &&
-                    !((catalog is not null)
-                    ? WorldModuleNamespace.TryApply(
-                        alias: importAlias,
-                        catalog: catalog,
-                        module: importResult!,
-                        reason: out var aliasReason,
-                        sourceDocumentPath: importResolvedName,
-                        targetDocumentPath: resolvedPath
-                    )
-                    : WorldModuleNamespace.TryApply(
-                        alias: importAlias,
-                        module: importResult!,
-                        reason: out aliasReason
-                    ))
-                ) {
-                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)} as '{importAlias}': {aliasReason}";
-
-                    return false;
-                }
-
-                if (
-                    (catalog is not null) &&
-                    (importAlias is null) &&
-                    !WorldModuleNamespace.TryRelocateConfigurationAssets(
-                    catalog: catalog,
-                    module: importResult!,
-                    reason: out var importMetadataReason,
-                    sourceDocumentPath: importResolvedName,
-                    targetDocumentPath: resolvedPath
-                )
-                ) {
-                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {WorldDocumentLabel.Of(path: importResolvedName)}: {importMetadataReason}";
-                    return false;
-                }
-
-                var importDescription = DescribeImport(
-                    alias: importAlias,
-                    importName: importName,
-                    resolvedName: importResolvedName,
-                    taken: importDescriptions
-                );
-
-                if (!WorldModuleExports.TryTake(
-                    exports: out var exports,
-                    module: importResult!,
-                    moduleName: importDescription,
-                    reason: out var exportsReason
-                )) {
-                    reason = $"{WorldDocumentLabel.Of(path: resolvedPath)} imports {exportsReason}";
-
-                    return false;
-                }
-
-                modules.Add(item: (importDescription, importResult!, exports));
-                importTrees.Add(item: (importDescription, importResult!));
-                touched.AddRange(collection: importTouched);
-                touchedPaths.AddRange(collection: importTouchedPaths);
-            }
-
-            if (!WorldModuleExports.TryCheckLayers(
-                basis: basisComposed,
-                catalog: catalog,
-                hostPath: resolvedPath,
-                imports: modules,
-                ownBody: ownBody,
-                reason: out var surfaceReason,
-                surfaces: out _
-            )) {
-                reason = surfaceReason;
-
-                return false;
-            }
-
-            if (!WorldDocumentBasis.TryMergeImports(
-                composed: out var mergedImports,
-                imports: importTrees,
-                origins: origins,
-                reason: out var mergeReason,
-                restated: ownBody
-            )) {
-                reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {mergeReason}";
-
-                return false;
-            }
-
-            importsLayer = mergedImports!;
-        }
-
-        if (!WorldDocumentBasis.TryMergeInto(
-            target: basisComposed,
+        return TryComposeBody(
+            ancestors: ancestors,
+            bytes: bytes,
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
+            composed: out composed,
+            image: out image,
             origins: origins,
-            overlay: importsLayer,
-            reason: out var stackReason
-        )) {
-            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {stackReason}";
-
-            return false;
-        }
-
-        // Only the derivation-preserving save requests the pre-own-body stack (serveHeldImage=false).
-        // Every other reader consumes the same owned accumulator, keeping inherited subtrees in place.
-        stack = serveHeldImage ? null : (JsonObject)WorldDocumentOrigins.Clone(basisComposed, origins)!;
-
-        if (!WorldDocumentBasis.TryMergeInto(
-            target: basisComposed,
-            origins: origins,
-            overlay: ownBody,
-            reason: out var finalReason
-        )) {
-            reason = $"{WorldDocumentLabel.Of(path: resolvedPath)}: {finalReason}";
-
-            return false;
-        }
-
-        composed = basisComposed;
-        reason = string.Empty;
-        WorldBootWork.Count(kind: WorldBootWork.Compositions);
-        if (retainImage) {
-            HoldComposedImage(
-                origins: origins,
-                inputs: (recordsInputs ? reads.Inputs : null),
-                catalogFingerprint: catalogFingerprint,
-                composed: composed!,
-                reach: reach,
-                resolvedPath: resolvedPath,
-                source: source,
-                touched: touched,
-                touchedPaths: touchedPaths
-            );
-        }
-
-        return true;
+            parseHeld: parseHeld,
+            reach: ref reach,
+            reads: reads,
+            reason: out reason,
+            resolvedPath: resolvedPath,
+            retainImage: retainImage,
+            serveHeldImage: serveHeldImage,
+            source: source,
+            stack: out stack,
+            touched: touched,
+            touchedPaths: touchedPaths
+        );
     }
     // Shares TryComposeLayers' cycle/depth walk and basis-then-imports-then-own-body recursion order, but collects
     // a (path, own top-level keys) entry per file instead of merging JSON — the read-back `world.imports` prints.
@@ -742,11 +461,11 @@ public static partial class WorldDefinitionFileSource {
             value: $"\"{WorldDocumentBasis.ImportsMemberName}\""
         )
         ) {
-            if (!TryComposeChainWithImports(
+            if (!TryComposeChainJson(
                 source: (documents ?? LocalDocuments),
                 rootResolvedName: PuckPaths.Normalize(path: path),
                 rootBytes: bytes,
-                composed: out var composed,
+                composedJson: out var composed,
                 chainBytes: out var chainBytes,
                 reason: out var composeReason,
                 catalogFingerprint: catalogFingerprint,
@@ -761,7 +480,7 @@ public static partial class WorldDefinitionFileSource {
             // all — the already-decoded `json`/`chain` above are left untouched and the strict parse below owns the
             // wording.
             if (composed is not null) {
-                json = composed.ToJsonString();
+                json = composed;
                 chain = chainBytes;
             }
         }
@@ -902,9 +621,11 @@ public static partial class WorldDefinitionFileSource {
     // it edits it (a merge one level up, the neighbour resolver's reference re-expression), and the image has to
     // stay usable for the next reader. Only a directory composition is answered, matching what HoldComposedImage
     // records: every other source names its documents in a space of its own (an in-memory pair calls them "host"
-    // and "fragment"), and nothing else may resolve one of those names onto a file image.
-    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, out JsonObject? composed, out List<byte[]> touched, out List<string> touchedPaths, out int reach, WorldDocumentOrigins? origins) {
+    // and "fragment"), and nothing else may resolve one of those names onto a file image. With `parse` false the tree is
+    // not parsed (`composed` is null): the caller reads the image's bytes, which are checked to hold one JSON object.
+    private static bool TryServeComposedImage(IWorldDocumentSource source, string resolvedPath, string catalogFingerprint, byte[] bytes, IReadOnlyList<string> ancestors, bool parse, out JsonObject? composed, out WorldComposedDocument? image, out List<byte[]> touched, out List<string> touchedPaths, out int reach, WorldDocumentOrigins? origins) {
         composed = null;
+        image = null;
         touched = [];
         touchedPaths = [];
         reach = 0;
@@ -917,11 +638,13 @@ public static partial class WorldDefinitionFileSource {
                 path: resolvedPath,
                 source: source
             ),
-            image: out var image
+            image: out var found
         )
         ) {
             return false;
         }
+
+        image = found;
 
         if (
             ((origins is not null) && (image.Origins is null)) ||
@@ -932,18 +655,27 @@ public static partial class WorldDefinitionFileSource {
             source: source
         )
         ) {
+            image = null;
+
             return false;
         }
 
-        JsonObject? tree;
+        JsonObject? tree = null;
+        var whole = !parse;
 
-        try {
-            tree = (JsonNode.Parse(utf8Json: new MemoryStream(buffer: image.ComposedJson)) as JsonObject);
-        } catch (JsonException) {
-            tree = null;
+        if (parse) {
+            try {
+                tree = (JsonNode.Parse(utf8Json: new MemoryStream(buffer: image.ComposedJson)) as JsonObject);
+                whole = (tree is not null);
+            } catch (JsonException) {
+                whole = false;
+            }
+        } else {
+            whole = (MembersOf(json: image.ComposedJson) is not null);
         }
 
-        if (tree is null) {
+        if (!whole) {
+            image = null;
             _ = ComposedDocuments.TryRemove(
                 key: CacheKey(
                     fingerprint: catalogFingerprint,
@@ -961,7 +693,7 @@ public static partial class WorldDefinitionFileSource {
             touchedPaths.Add(item: link.Path);
         }
 
-        if ((origins is not null) && (image.Origins is { } snapshot)) {
+        if ((tree is not null) && (origins is not null) && (image.Origins is { } snapshot)) {
             origins.Restore(node: tree, snapshot: snapshot);
         }
         composed = tree;

@@ -90,11 +90,11 @@ public sealed partial class SdfProgram {
     private static UInt128 InstructionsKey(IReadOnlyList<SdfInstruction> instructions) {
         const int Chunk = 256;
         var hasher = new XxHash128();
-        Span<InstructionWords> chunk = stackalloc InstructionWords[Chunk];
+        Span<SdfInstructionWords> chunk = stackalloc SdfInstructionWords[Chunk];
         var filled = 0;
 
         for (var index = 0; (index < instructions.Count); index++) {
-            chunk[filled++] = new InstructionWords(instruction: instructions[index]);
+            chunk[filled++] = new SdfInstructionWords(instruction: instructions[index]);
             if (filled == Chunk) {
                 hasher.Append(source: MemoryMarshal.AsBytes(span: chunk));
                 filled = 0;
@@ -123,16 +123,4 @@ public sealed partial class SdfProgram {
     // Whether an appearance is this program's own in every material and screen surface, so the program packs it already.
     private bool HasAppearance(SdfAppearance appearance) =>
         (m_appearance is { } own) && own.Materials.SequenceEqual(second: appearance.Materials) && own.ScreenSurfaces.SequenceEqual(second: appearance.ScreenSurfaces);
-
-    // An instruction's lanes as the bytes InstructionsKey hashes, with no padding.
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct InstructionWords(in SdfInstruction instruction) {
-        private readonly uint m_op = ((uint)instruction.Op);
-        private readonly uint m_shape = instruction.Shape;
-        private readonly uint m_blend = instruction.Blend;
-        private readonly uint m_material = instruction.Material;
-        private readonly Vector4 m_data0 = instruction.Data0;
-        private readonly Vector4 m_data1 = instruction.Data1;
-        private readonly uint m_detail = (instruction.Detail ? 1u : 0u);
-    }
 }

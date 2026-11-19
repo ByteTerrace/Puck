@@ -96,10 +96,49 @@ public static partial class WorldDefinitionFileSource {
     /// <param name="origins">Optional authored scalar origins. A flat root returns its tracked tree when supplied;
     /// reused images must carry origins so every retained scalar identifies the document and value that authored it.</param>
     /// <param name="retainRoot">Whether to retain the root image after composition. Shared imports and bases are retained either way.</param>
-    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainRoot = true) {
+    public static bool TryComposeChainWithImports(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out JsonObject? composed, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint = "", IMachineValidationCatalog? catalog = null, WorldDocumentOrigins? origins = null, bool retainRoot = true) => TryComposeGraph(
+        catalog: catalog,
+        catalogFingerprint: catalogFingerprint,
+        chainBytes: out chainBytes,
+        composed: out composed,
+        composedJson: out _,
+        origins: origins,
+        parse: true,
+        reason: out reason,
+        retainRoot: retainRoot,
+        rootBytes: rootBytes,
+        rootResolvedName: rootResolvedName,
+        source: source
+    );
+    // The composition above as the loader takes it: the composed document's compact JSON text, never parsed into a tree
+    // when a held image or a composition by layer already holds its bytes. Null exactly where the tree would be.
+    private static bool TryComposeChainJson(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, out string? composedJson, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog) {
+        var composedOk = TryComposeGraph(
+            catalog: catalog,
+            catalogFingerprint: catalogFingerprint,
+            chainBytes: out chainBytes,
+            composed: out var composed,
+            composedJson: out var bytes,
+            origins: null,
+            parse: false,
+            reason: out reason,
+            retainRoot: true,
+            rootBytes: rootBytes,
+            rootResolvedName: rootResolvedName,
+            source: source
+        );
+
+        composedJson = ((bytes is not null) ? DecodeJson(bytes: bytes) : composed?.ToJsonString());
+
+        return composedOk;
+    }
+    // With `parse` false, a composition whose image holds its bytes answers them in `composedJson` and leaves `composed`
+    // null; otherwise `composed` is the tree and `composedJson` is null.
+    private static bool TryComposeGraph(IWorldDocumentSource source, string rootResolvedName, byte[] rootBytes, bool parse, out JsonObject? composed, out byte[]? composedJson, out IReadOnlyList<byte[]> chainBytes, out string reason, string catalogFingerprint, IMachineValidationCatalog? catalog, WorldDocumentOrigins? origins, bool retainRoot) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
         composed = null;
+        composedJson = null;
         chainBytes = [rootBytes];
         reason = string.Empty;
 
@@ -126,13 +165,15 @@ public static partial class WorldDefinitionFileSource {
             return true;
         }
 
-        if (!TryComposeLayers(
+        if (!TryComposeLayersHeld(
             ancestors: [],
             bytes: rootBytes,
             catalog: catalog,
             catalogFingerprint: catalogFingerprint,
             composed: out var result,
+            image: out var image,
             origins: origins,
+            parseHeld: parse,
             reach: out _,
             reason: out reason,
             resolvedPath: rootResolvedName,
@@ -146,7 +187,10 @@ public static partial class WorldDefinitionFileSource {
             return false;
         }
 
-        composed = result;
+        var tree = (parse || (image is null));
+
+        composed = (tree ? result : null);
+        composedJson = (tree ? null : image!.ComposedJson);
         chainBytes = touched;
 
         return true;

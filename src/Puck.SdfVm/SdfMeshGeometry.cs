@@ -403,6 +403,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     /// (<see cref="SdfMeshBakeGroup.Seal"/>).</summary>
     /// <param name="tier">The tier, from zero to <see cref="SdfMeshTier.Last"/>.</param>
     public void AppendTier(int tier) => Hash(fact: Fact.Tier, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<int>(reference: in tier)));
+
+    // The bake kernel undoes the interpreter's program-wide scale. The two floating-point operations can still round.
+    internal void AppendStepScale(float scale) => Hash(fact: Fact.StepScale, source: MemoryMarshal.AsBytes(new ReadOnlySpan<float>(in scale)));
     /// <summary>Appends one instruction of a program as it stands, its material included, with the world-space pose of a
     /// slot it reads.</summary>
     /// <param name="program">The program.</param>
@@ -497,9 +500,9 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
             Hash(fact: Fact.SideTable, source: MemoryMarshal.AsBytes(span: table));
         }
 
-        var words = new InstructionWords(instruction: instruction);
+        var words = new SdfInstructionWords(instruction: instruction);
 
-        Hash(fact: Fact.Instruction, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<InstructionWords>(reference: in words)));
+        Hash(fact: Fact.Instruction, source: MemoryMarshal.AsBytes(span: new ReadOnlySpan<SdfInstructionWords>(reference: in words)));
     }
     // Appends a fact to the geometry and its form.
     private void Hash(Fact fact, ReadOnlySpan<byte> source) {
@@ -598,6 +601,7 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         OperandOffset,
         OperandPose,
         GlyphStroke,
+        StepScale,
     }
     // An operand's key as the bytes the geometry hashes: its slot's offset from the group's own, the steps its pose
     // rounds to, and that pose rounded.
@@ -644,16 +648,5 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private readonly record struct Pose(Rounded4 Position, Rounded4 Orientation) {
         public static Pose Identity => new(Orientation: new Rounded4(steps: OrientationSteps, value: new Vector4(w: 1f, x: 0f, y: 0f, z: 0f)), Position: default);
         public static Pose Missing => new(Orientation: Rounded4.Missing, Position: Rounded4.Missing);
-    }
-    // An instruction's fields as the bytes the geometry hashes.
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly struct InstructionWords(in SdfInstruction instruction) {
-        private readonly uint m_op = ((uint)instruction.Op);
-        private readonly uint m_shape = instruction.Shape;
-        private readonly uint m_blend = instruction.Blend;
-        private readonly uint m_material = instruction.Material;
-        private readonly Vector4 m_data0 = instruction.Data0;
-        private readonly Vector4 m_data1 = instruction.Data1;
-        private readonly uint m_flags = (instruction.Detail ? 1u : 0u);
     }
 }

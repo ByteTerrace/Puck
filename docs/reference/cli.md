@@ -124,7 +124,7 @@ half of these rules on every command, with no exemptions.
 | [`puck lsp`](#the-puck-dsl-verbs) | the `.puck` language server over stdio: completion, hover, document symbols, formatting, semantic tokens, and diagnostics published once the input goes quiet. |
 | [`puck mcp`](../../src/Puck.Mcp/README.md) | Puck Console tools over local stdio (`--profile operator [--attach <attachment file\|latest>]`, attaching to a World that ran `world.control start` or was launched with `--control`, and starting and stopping Worlds of its own with `puck_world_start` and `puck_world_stop`) or OAuth-protected HTTP (`--silo <silo.json> --http <configuration.json>`), the two shapes exclusive; the hosted shape runs the silo with the installed `Puck.Mcp` [extension](extensions.md) as its hosted control, and standalone silo and World have no MCP dependency. Both shapes speak MCP protocol version `2026-07-28`. |
 | [`puck measure`](#puck-measurequeued-measurement-windows) | queue frozen before/after builds and timing questions with `request`, inspect them with `list`, and drain them under one priority quiet lease with `run`, reporting median, IQR and paired differences from the existing bench or sweep reports. |
-| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures the meshes a World's bake stored against the fields they were baked from and reports each group's defects, worst first, located and named by shape; `mesh preview` bakes a creation on the CPU and draws it from many views with no device; `mesh scene` times the irradiance volume's trace scene over them, built whole and updated for one draw's change; `mesh identity` prints the bake identity a build keys them by and what differs from another build's. |
+| [`puck mesh`](#puck-mesh-auditbaked-mesh-audit) | `mesh audit` measures stored meshes against their fields and reports defects by shape. `mesh preview` bakes and draws a creation on the CPU. `mesh scene` times building and updating the irradiance trace scene. `mesh identity` reports which bake stages can reuse their products across builds. |
 | [`puck migrate`](#the-puck-dsl-verbs) | applies one named syntax-tree rewrite to every `.puck` source under a path, proving each rewritten source still compiles to the document it did apart from the members the migration declares. |
 | [`puck motion`](#puck-motiontick-pinned-motion-stills-and-contact-sheets) | judges how the Moth moves: boots the debug world's real `Puck.World`, runs the tick-pinned scenarios of `worlds/debug/motion.scenarios.json` through the `motion` layout's four cameras, and writes per-camera stills, labelled contact sheets and a manifest; `--reproduce` runs everything twice in fresh Worlds and compares pose hashes and pixels. |
 | [`puck nuget`](../development/ci.md#publish) | pack, select, verify, and push shared-version NuGet package batches, and the GitHub side of a release: `gate`, `tag`, `release`, `verify-published`, `smoke`. |
@@ -3928,7 +3928,8 @@ usage error.
 
 `puck mesh identity [--build <dir>] [--backend directx|vulkan] [--against
 <dir>] [--members] [--why <member-text>]` prints the bake identity a build keys its stored meshes by
-(`SdfMeshBakeIdentity`): its value, the store's entry format version
+(`SdfMeshBakeIdentity`): its value, the identities of sampling, contouring,
+simplification and landing, the store's entry format version
 (`SdfMeshStore.EntryVersion`), the code the bake runs
 (`SdfMeshBakeClosure`, its members counted by assembly) and the hashes of the
 mask and bake kernels' bytecode, read from the build's assemblies and kernels
@@ -3939,9 +3940,8 @@ target's inspection API, managed dependencies and complete deployed kernel set;
 missing files are refused, without borrowing the CLI's application assemblies
 or loading native libraries. `--build` names the World build's directory (absent,
 this CLI's own); `--against <dir>` names another build and lists each code member that
-changed, was added or was removed between them, and whether the entry version or
-each kernel differs, so an edit can be checked to keep or move the stored meshes before a
-boot; `--members` prints every member with its hash, and `--why` prints matching
+changed, was added or was removed between them. It also reports which stages
+can reuse their stored products. `--members` prints every member with its hash, and `--why` prints matching
 members' dependency chains under that target's policy. The value is the key a
 saved copy of the store is restored under. Exit codes: 0 printed; 1 a build
 could not be read; 2 a usage error.
@@ -4091,7 +4091,7 @@ these measurements are observations, not gates. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier
-successful outputs in place. `--output` and `--watch` require exactly one
+successful outputs in place. `--output` requires exactly one
 source, except with `--tree <root>`: every source must lie under `<root>`, each
 world document is written to the same relative place under the `--output`
 directory, every other file of the tree (a package manifest, fonts, tunes,
@@ -5057,7 +5057,7 @@ holds its own limits, and a quiet window settles on the same readings.
 
 Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch` (`Puck.Cli.Harness`): `puck test` for each worker process, `canary`, `sweep` (its budget stands still while it waits), `motion`, `counters`, `parity`, `qualify`, `docs citations`, `verbs`, `bench startup` and the MCP adapter's `puck_world_start`. It resolves the build (with Vulkan SPIR-V when a World that opens a device boots on Vulkan or on a backend its document picks), parses `--backend` through the World's own spelling (`WorldBackendTokens`), builds the shared arguments (`--devices none`, the backend, state directory and exit backstop), and admits the start. A headless World takes no GPU lease; heavy workers take `heavy`, and device Worlds take `gpu`, through `LeasedAdmission` and `CliLease`'s single grant door. A ticket waiting for headroom is marked under its queue's `.blocked` sibling directory and skipped by grants. It retains its sequence and its lane's service history. After an unreserved preflight, the grant door takes the resource guard and reserves on a fresh reading with a zero wait. If headroom changed, it releases the guard and parks the same ticket again; only a successful reservation serves the lane. Among eligible tickets, the oldest ticket of the least recently served lane wins. Both the resource guard and `admission.guard` are free during the capacity wait.
 
-`WorldWorkHold` shares an execution hold among live Worlds of the same resource, holder and lane, including parallel test workers. Each joining start gets its own fresh, nonwaiting reservation; it cannot release a live sibling's hold to wait. More generally, a start beneath an already executing lease (in this process or an ancestor, including an outer `puck lease`) samples once and refuses if capacity is unavailable, so an inherited hold never hosts a capacity wait. Run the World verb directly when it needs to queue for headroom. Device admission also needs an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
+`WorldWorkHold` shares an execution hold among live Worlds of the same resource, holder and lane, including parallel test workers. Each joining start waits for headroom on its own readings without giving up a sibling's hold. A start beneath an already executing lease (this process holding it for another lane, or an ancestor, including an outer `puck lease`) waits like any other: only the reservation made under a lease's own guard is a single reading, and a start is refused early only when it can never fit the machine, named in the refusal. A start's own bound (`puck_world_start`'s `timeoutSeconds`) spans the lease queue and the headroom wait. Device admission also needs an idle GPU apart from the waiting process's own Worlds. The admission reserves growth only while a process is still growing: it tapers
 the unused reserve over one minute without a material allocation (64 MB),
 releasing it entirely at the plateau and restoring it if growth resumes. A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).

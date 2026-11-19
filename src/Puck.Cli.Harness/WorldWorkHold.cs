@@ -33,7 +33,7 @@ internal static class WorldWorkHold {
     /// <param name="holder">The holder's name.</param>
     /// <param name="name">The execution resource.</param>
     /// <param name="acquire">The ticket-preserving admitted acquisition for the first start.</param>
-    /// <param name="admitShared">A nonwaiting reservation for each further start under live work's hold.</param>
+    /// <param name="admitShared">The admission each further start under live work's hold waits on; the hold stays with the live work while it waits.</param>
     /// <param name="lane">The lane the holder works for.</param>
     /// <param name="cancellationToken">Stops this caller's wait; a wait another caller shares continues for it.</param>
     /// <returns>The hold, which releases this caller's share when disposed.</returns>

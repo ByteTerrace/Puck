@@ -15,6 +15,11 @@ makes each slow today, and the order of the work that makes them fast.
 | Engine code | A C# or HLSL edit | Shaders reload live; a restart reuses every baked mesh and settled light the edit did not invalidate |
 | A cold machine | An empty store | About a minute per backend to bake the debug world's meshes, lighting settled soon after |
 
+A reload keeps the live value of every state row the edited source did not
+change, and re-seeds the rows it did, so an author keeps their place on a save
+(following from the rapid-iteration ruling); `world.reset` and `world.load`
+restart state from the file.
+
 ## How each is measured
 
 The World times every loop itself (`WorldIterationClock`, read with
@@ -148,15 +153,19 @@ lighting's time, and one fix lane (`bake-share`) removes the duplicate bakes.
 
 Step 1, the instrument, is built: [how each loop is measured](#how-each-is-measured).
 
-2. Keys by stage: each bake stage keyed on what it reads, so an engine edit
-   outside the field and its kernel reuses every stored mesh.
+2. Bake keys by stage, built. `puck mesh identity --against` reports whether
+   sampling, contouring, simplification and landing can reuse their previous
+   products, so an engine edit outside the field and its kernel reuses every
+   stored mesh.
 3. The live edit path: a saved `.puck` reaches the running World as the
    smallest change it is, with look values as appearance uploads and form
    edits as a progressive rebake of only the creations touched.
 4. Lighting from a stable proxy, relit incrementally, settled at boot with the
    whole GPU.
-5. The cold bake fed: in-flight work shared, groups in flight bounded by the
-   GPU rather than round trips, a load mode that gives boot the whole GPU.
+5. The cold bake fed: groups in flight bounded by the GPU rather than round
+   trips. An arrival's bake work already takes the GPU the frame
+   leaves idle ([the bake-time research](field-programs/research-bake-time.md#ranked-fixes),
+   fix 1).
 
 The missing look tools, authored large terrain form and a stylized surface
 detail layer, are built alongside, each judged through these loops.

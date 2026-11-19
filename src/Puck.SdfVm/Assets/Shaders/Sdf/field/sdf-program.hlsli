@@ -28,12 +28,14 @@ uint4 sdfProgramWord(uint index) {
 static uint sdfBakePoseBase = 0u;
 static uint sdfBakePoseFirst = 0u;
 static uint sdfBakePoseCount = 0u;
+static bool sdfBakeLivePoses = false;
 #endif
 float4 sdfDynamicTransformRow(uint index) {
 #ifdef SDF_MESH_BAKE_POSES
     if (((index / 3u) - sdfBakePoseFirst) < sdfBakePoseCount) {
         return sdfMeshBakePoints[sdfBakePoseBase + 1u + (index - (3u * sdfBakePoseFirst))];
     }
+    if (!sdfBakeLivePoses) { return 0.0; }
 #endif
     uint count;
     uint stride;

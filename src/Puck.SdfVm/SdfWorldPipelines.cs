@@ -106,16 +106,18 @@ public sealed partial class SdfWorldPipelines : IDisposable {
     /// <param name="kernel">The kernel.</param>
     /// <returns><see langword="true"/> when the set holds the kernel's slot, built or building.</returns>
     public bool Leases(SdfKernel kernel) => (Volatile.Read(location: ref m_slots[((int)kernel)]) is not null);
-    /// <summary>Orders a kernel set's up-front pipelines by when a set starts building them: longest bytecode first, ties
-    /// in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel, and a set is ready only once its
-    /// slowest pipeline is, so the longest starts while the device's threads are free rather than behind the rest.</summary>
+    /// <summary>Orders a kernel set's up-front pipelines by when a set starts building them: the tables' kernels
+    /// (<see cref="TableKernels"/>) first, since the tables and the bake they serve start once those are built, then
+    /// longest bytecode first, ties in <see cref="SdfKernel"/> order. A cold driver's translation grows with the kernel,
+    /// and a frame renders only once its slowest pipeline is, so the longest starts while the device's threads are free
+    /// rather than behind the rest.</summary>
     /// <param name="kernels">The compiled kernel set for a device's backend.</param>
     /// <returns>Every kernel a set leases up front (resolve builds on demand), in build order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="kernels"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<SdfKernel> BuildOrder(SdfKernelSet kernels) {
         ArgumentNullException.ThrowIfNull(argument: kernels);
 
-        return [.. SdfWorldTables.PipelineLayouts.Leased.OrderByDescending(keySelector: kernel => kernels[kernel].Length)];
+        return [.. SdfWorldTables.PipelineLayouts.Leased.OrderBy(keySelector: static kernel => !IsTableKernel(kernel: kernel)).ThenByDescending(keySelector: kernel => kernels[kernel].Length)];
     }
     /// <summary>Describes how far the set's builds have come as a clause: <c>building (8 of 10 pipelines
     /// created; waiting on sdf-mesh-bake, sdf-world-views)</c>, naming the pipelines not yet built in
@@ -179,14 +181,15 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(slots: m_slots);
     }
-    /// <summary>Returns whether every pipeline the tables are built from is ready: all but the views kernel's, which the
-    /// frame waits for itself (<see cref="IsBuilt"/>). Polls every pipeline, the views kernel's included; a views
-    /// pipeline whose creation failed is refused (<see cref="IsBuilt"/>) rather than thrown, since the tables are built
-    /// without it.</summary>
-    /// <returns><see langword="true"/> once every pipeline but the views kernel's is ready.</returns>
+    /// <summary>Returns whether every pipeline the tables are built from is ready: the mesh bake's two kernels
+    /// (<see cref="TableKernels"/>), which the tables' background work samples with from the moment they exist. Every
+    /// other pipeline the frame waits for itself (<see cref="SdfWorldTables.FrameWaiting"/>), so the bake starts while
+    /// they compile. Polls every pipeline; one outside the tables' kernels whose creation failed is refused
+    /// (<see cref="IsBuilt"/>) rather than thrown, since the tables are built without it.</summary>
+    /// <returns><see langword="true"/> once the tables' kernels are ready.</returns>
     /// <exception cref="ObjectDisposedException">The set has been disposed.</exception>
-    /// <exception cref="AggregateException">A pipeline's creation failed, other than the views kernel's, named as
-    /// <see cref="Poll"/> names it.</exception>
+    /// <exception cref="AggregateException">One of the tables' kernels failed its creation, named as <see cref="Poll"/>
+    /// names it.</exception>
     /// <exception cref="DeviceLostException">The device was lost during a creation; thrown alone.</exception>
     public bool PollRequired() {
         ObjectDisposedException.ThrowIf(
@@ -196,8 +199,22 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return PollAll(
             slots: m_slots,
-            viewsRequired: false
+            framesWait: true
         );
+    }
+    /// <summary>The kernels the tables are built once ready (<see cref="PollRequired"/>): the mesh bake's mask and
+    /// sampling kernels, which its background work records with as soon as the tables exist.</summary>
+    public static IReadOnlyList<SdfKernel> TableKernels => TableKernelSet;
+    /// <summary>Returns the first up-front pipeline of the set, in <see cref="SdfKernel"/> order, that is not built (still
+    /// building, or refused: <see cref="IsBuilt"/>), or <see langword="null"/> once every one is. Takes each build that
+    /// has just finished; allocates nothing.</summary>
+    /// <returns>The kernel, or <see langword="null"/>.</returns>
+    /// <exception cref="DeviceLostException">The device was lost during a creation.</exception>
+    public SdfKernel? FirstUnbuilt() {
+        for (var index = 0; (index < m_slots.Length); index++) {
+            if ((m_slots[index] is { } slot) && !AcquiredOnDemand(kernel: ((SdfKernel)index)) && !slot.PollRefusing()) { return ((SdfKernel)index); }
+        }
+        return null;
     }
     /// <summary>Returns whether one of the set's pipelines is built, taking a build that has just finished. A creation that
     /// failed, other than by a device loss, is refused: it is kept (<see cref="RefusalOf"/>), never thrown, and the
@@ -382,9 +399,10 @@ public sealed partial class SdfWorldPipelines : IDisposable {
         }
     }
     // Polls every lease, so each build that failed is named, in the set's order; a device loss is thrown alone. The
-    // slots are a set's, in kernel order. Without viewsRequired, the views kernel still building or refused leaves the
-    // set ready: the frame waits for it itself (SdfWorldTables.FrameWaiting).
-    internal static bool PollAll(IReadOnlyList<Slot?> slots, bool viewsRequired = true) {
+    // slots are a set's, in kernel order. With framesWait, only the tables' kernels (TableKernels) decide the answer:
+    // every other still building or refused leaves the set ready, since the frame waits for it itself
+    // (SdfWorldTables.FrameWaiting).
+    internal static bool PollAll(IReadOnlyList<Slot?> slots, bool framesWait = false) {
         var ready = true;
         List<(string Name, Exception Failure)>? failures = null;
 
@@ -394,7 +412,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
             }
 
             // A kernel the tables do without is refused as IsBuilt refuses it, never thrown.
-            if (!viewsRequired && (((SdfKernel)index) == SdfKernel.Views)) {
+            if (framesWait && !IsTableKernel(kernel: ((SdfKernel)index))) {
                 _ = slot.PollRefusing();
 
                 continue;
@@ -411,6 +429,8 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return ready;
     }
+    private static readonly SdfKernel[] TableKernelSet = [SdfKernel.MeshBakeMask, SdfKernel.MeshBake];
+    private static bool IsTableKernel(SdfKernel kernel) => (Array.IndexOf(array: TableKernelSet, value: kernel) >= 0);
     internal static async Task WaitAllAsync(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
         List<(string Name, Exception Failure)>? failures = null;
 
@@ -482,14 +502,22 @@ public sealed partial class SdfWorldPipelines : IDisposable {
                 return false;
             }
 
-            try {
-                return (Lease.Poll() is not null);
-            } catch (Exception failure) when ((failure is not DeviceLostException)) {
-                Volatile.Write(location: ref m_refusal, value: failure);
-                Console.Error.WriteLine(value: $"[{Description.Name}] kernel build refused, retried on a kernel reload or a device loss: {failure.Message}");
+            var (built, refusal) = SdfWorldPipelines.PollRefusing(lease: Lease, name: Description.Name);
 
-                return false;
-            }
+            if (refusal is not null) { Volatile.Write(location: ref m_refusal, value: refusal); }
+            return (built is not null);
+        }
+    }
+    // Polls a lease once, taking a build that has just finished: the built pipeline, or the failure of a creation that
+    // failed other than by a device loss, which the caller keeps as its refusal and never polls again (a poll after a
+    // failure starts a fresh build), named once on the error stream. A device loss is thrown.
+    internal static (GpuPassPipeline? Built, Exception? Refusal) PollRefusing(GpuBuildLease<GpuPassPipelineKey, GpuPassPipeline> lease, string name) {
+        try {
+            return (lease.Poll(), null);
+        } catch (Exception failure) when ((failure is not DeviceLostException)) {
+            Console.Error.WriteLine(value: $"[{name}] pipeline build refused, retried on a kernel reload or a device loss: {failure.Message}");
+
+            return (null, failure);
         }
     }
 }

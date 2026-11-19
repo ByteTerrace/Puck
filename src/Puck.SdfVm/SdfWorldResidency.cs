@@ -304,31 +304,32 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// the glass pass draws over the opaque image.</summary>
     public int GlassDrawCount => Volatile.Read(location: ref m_glassDrawCount);
     /// <summary>Gets whether the residency renders its current frame: its tables are built from its pipeline set, its
-    /// first frame captured and packed, and its views kernel built. It is false again after a device loss until the
-    /// rebuilt tables are, and while a captured frame waits for a views kernel that is still building or was refused,
-    /// during which the residency holds the frame it last packed. A refused kernel is built again only on a kernel
-    /// reload (<see cref="RequestShaderReload"/>) or a device loss (<see cref="OnDeviceLost"/>).</summary>
+    /// first frame captured and packed, and every pipeline its views record with built. It is false again after a device
+    /// loss until the rebuilt tables are, and while a captured frame waits for a pipeline that is still building or was
+    /// refused, during which the residency holds the frame it last packed and its bake samples meanwhile. A refused
+    /// kernel is built again only on a kernel reload (<see cref="RequestShaderReload"/>) or a device loss
+    /// (<see cref="OnDeviceLost"/>), a refused pass pipeline on a device loss.</summary>
     public bool IsReady => ((m_tables is not null) && (m_pipelineWaiting is null) && Volatile.Read(location: ref m_ready).Task.IsCompletedSuccessfully);
     /// <summary>Gets whether every hold on the residency has been released (<see cref="Release"/>), after which it renders
     /// nothing.</summary>
     public bool IsReleased => m_disposed;
     /// <summary>Gets why the residency is not <see cref="IsReady"/>, naming its pipeline build and how far it has come,
-    /// the refusal of its tables' latest build, which is retried when its inputs change, or the views kernel its frame
-    /// waits on and, when that kernel was refused, its failure, or <see langword="null"/> once it
+    /// the refusal of its tables' latest build, which is retried when its inputs change, or the pipeline its frame
+    /// waits on and, when that pipeline was refused, its failure, or <see langword="null"/> once it
     /// is ready. It builds a new string on each read, so a caller polls <see cref="IsReady"/> and reads this only to
     /// report.</summary>
     public string? NotReadyReason => (IsReady
         ? null
         : ((m_frame is null)
             ? ((SourceWaiting is { } waiting) ? $"residency '{Name}' has captured no frame: {waiting}" : $"residency '{Name}' has captured no frame")
-            : (((m_tables is { } tables) && (m_pipelineWaiting is { } views))
-                ? ((tables.PipelineRefusal(kernel: views) is { } refusal)
-                    ? $"residency '{Name}' holds its frame: the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
-                    : $"residency '{Name}' holds its frame until the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', is built: {m_pipelines.Describe()}")
+            : (((m_tables is not null) && (m_pipelineWaiting is { } pipeline))
+                ? ((pipeline.Refusal is { } refusal)
+                    ? $"residency '{Name}' holds its frame: the '{pipeline.Name}' pipeline was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+                    : $"residency '{Name}' holds its frame until the '{pipeline.Name}' pipeline is built: {m_pipelines.Describe()}")
                 : m_pipelines.Describe())));
     /// <summary>Gets why the residency cannot become ready until something it is built from changes, or
     /// <see langword="null"/> while it is ready or what it waits on is still building: the refused build of its tables
-    /// (the device, the kernels, its options or a reload retries it) or its refused views kernel (a kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
+    /// (the device, the kernels, its options or a reload retries it) or a refused pipeline its frame waits on (a kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
     /// <see cref="SdfWorldPasses"/> reports it as its instances' refusal (<see cref="SdfWorldPasses.RefusalOf"/>), the one
     /// channel a host reads, while <see cref="NotReadyReason"/> describes the wait.</summary>
     public string? Refusal {
@@ -340,8 +341,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 return $"residency '{Name}': {m_pipelines.Describe()}";
             }
 
-            return (((m_tables is { } tables) && (m_pipelineWaiting is { } views) && (tables.PipelineRefusal(kernel: views) is { } refusal))
-                ? $"residency '{Name}': the views kernel, '{SdfKernelSet.StemOf(kernel: views)}', was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
+            return (((m_tables is not null) && (m_pipelineWaiting is { Refusal: { } refusal } waiting))
+                ? $"residency '{Name}': the '{waiting.Name}' pipeline was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
                 : null);
         }
     }
@@ -404,6 +405,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         MeshIrradiance.Dispose();
         m_tables?.Dispose();
         m_tables = null;
+        m_probeTables = null;
         ResetReady();
         CancelShaderReload(reason: "the residency was released");
         ReleaseShadePipelines(deviceLost: false);
@@ -518,6 +520,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
             // upload a still view renders from is read back even though no later upload follows it.
             m_work.Poll();
             m_renders = PrepareOnce(context: in context);
+            // Tables whose frame waits on a pipeline still serve their background work: the upload is what lets the bake
+            // bind the program the construction uploaded, so it samples while the driver compiles the rest.
+            if (!m_renders && (m_tables is { } tables) && (m_pipelineWaiting is not null)) { SubmitOnce(tables: tables); }
         }
 
         return m_renders;
@@ -593,7 +598,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             objA: frame,
             objB: m_packedFrame
         )) {
-            // A frame whose views kernel still builds waits.
+            // A frame waits while a pipeline its views record with still builds.
             if (tables.FrameWaiting() is { } waiting) {
                 m_pipelineWaiting = waiting;
                 m_pendingFrame = frame;
@@ -602,9 +607,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 return false;
             }
             if (m_programPending) {
-                // A program whose views kernel is still building, or was refused, is not uploaded: the residency holds the
-                // frame it last packed, which the live program's views render, until that kernel is built, as any rebuild
-                // does.
+                // A program whose pipelines are still building, or were refused, is not uploaded: the residency holds the
+                // frame it last packed, which the live program's views render, until they are built, as any rebuild does.
                 m_programPending = false;
                 UploadProgram(
                     delta: frame.ProgramDelta,
@@ -628,6 +632,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         PrepareShade(device: device, frame: m_frame!);
         FollowRunningCode();
         MeshPathBake.ObserveResidency(tables: tables);
+        EnsureProbeWork(tables: tables);
         using (HostFrameWork.Measure(HostFrameWorkPart.Lighting)) {
             MeshIrradianceParameters = MeshIrradiance.Stage(frame: m_frame!, tables: tables, tier: IndirectTier, bakePending: MeshPathBake.IrradiancePending);
         }
@@ -645,7 +650,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         tables.ViewExposures = Exposures;
 
         tables.UpdateTablesSignature();
-        // The views render once the views kernel is built; the residency is ready then.
+        // The views render once every pipeline they record with is built; the residency is ready then.
         m_pipelineWaiting = tables.FrameWaiting();
 
         if (m_pipelineWaiting is not null) {
@@ -687,7 +692,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="FrameWithheld"/>, <see cref="SdfGpuWork.Drive"/>), once a frame, whoever asks first. The render graph's
     /// preparation asks for every scheduled render that reads the residency, inside the frame's open batch and before any
     /// node records (<see cref="SdfWorldPasses.PrepareRender"/>), so no node's recording pays for the frame's shared work.
-    /// This is the one place the frame's upload is submitted.</summary>
+    /// A frame that waits on a pipeline is staged by its preparation instead, which no render may ask for.</summary>
     /// <param name="context">The host's frame context.</param>
     /// <returns><see langword="true"/> when the residency has tables, whose frame is staged; <see langword="false"/> before
     /// they are built.</returns>
@@ -696,15 +701,19 @@ public sealed partial class SdfWorldResidency : IDisposable {
         _ = Prepare(context: in context);
 
         if (m_tables is not { } tables) { return false; }
-        if (!m_submitted) {
-            m_submitted = true;
-            tables.HoldsFrame = HoldsFrame;
-            tables.SubmitUpload();
-            // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
-            if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
-        }
+        SubmitOnce(tables: tables);
 
         return true;
+    }
+    // Submits the frame's upload and pumps the tables' background work against it, once a frame: the one place the
+    // frame's upload is submitted.
+    private void SubmitOnce(SdfWorldTables tables) {
+        if (m_submitted) { return; }
+        m_submitted = true;
+        tables.HoldsFrame = HoldsFrame;
+        tables.SubmitUpload();
+        // A withheld frame presents nothing, so the work it waits on, its meshes or its lighting, runs at the GPU's pace.
+        if (FrameWithheld) { tables.GpuWork.Drive(tables: tables); } else { tables.GpuWork.Pump(tables: tables); }
     }
     /// <summary>Returns the tables the frame's preparation staged (<see cref="Stage"/>), for a pass that records against
     /// them. A recording that reaches a residency the preparation did not stage (a graph that installed during the frame
@@ -844,6 +853,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_frameSource.NotifyDeviceLost();
         m_tables?.Dispose();
         m_tables = null;
+        m_probeTables = null;
         ResetReady();
         // A pipeline build or kernel reload still in flight is waited out and discarded before the host recreates the
         // device; the rebuilt tables build their pipelines anew on the recreated one.
@@ -926,8 +936,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     private bool m_programPending;
-    // The views kernel the residency waits on while it holds its last packed frame (SdfWorldTables.FrameWaiting).
-    private SdfKernel? m_pipelineWaiting;
+    // The pipeline the residency waits on while it holds its last packed frame (SdfWorldTables.FrameWaiting).
+    private SdfPipelineWait? m_pipelineWaiting;
     // Whether the frame's preparation left the tables holding a frame the views can render.
     private bool m_renders;
 
@@ -1008,15 +1018,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables = m_pipelines.TryBuild(
             construct: static (pipelines, passes, inputs) => new SdfWorldTables(
                 device: inputs.Device,
-                shadowRaster: passes.ShadowRaster,
-                shadowExitRaster: passes.ShadowExitRaster,
-                shadowGlassRaster: passes.ShadowGlassRaster,
-                glassRaster: passes.GlassRaster,
-                occlusion: passes.Occlusion,
-                meshRaster: passes.MeshRaster,
                 options: inputs.Options,
-                pipelines: pipelines,
-                regionCopy: passes.RegionCopy
+                passes: passes,
+                pipelines: pipelines
             ),
             device: device,
             hostsOnDirectX: false,
@@ -1035,13 +1039,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
             return false;
         }
 
-        // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime.
+        // The bake samples through the tables' background GPU work, which owns its jobs' slots and the tables' lifetime;
+        // the tables exist once its kernels are built, so it starts while the rest compile. The probes join once every
+        // pipeline is (EnsureProbeWork).
         tables.Grant.Name = MeshPathBake.Residency;
         tables.GpuWork.Add(client: new SdfMeshBakeGpuWork(bake: MeshPathBake, tables: tables));
-        var probeWork = new SdfMeshProbeGpuWork(tables: tables, volume: MeshIrradiance);
-
-        tables.GpuWork.Add(client: probeWork);
-        MeshIrradiance.GpuTrace = probeWork;
         MeshPathBake.DispatchReport = tables.GpuWork.Describe;
         // A lattice a worker readies is taken when it is ready, not at the next frame.
         MeshPathBake.Offered = tables.GpuWork.Wake;
@@ -1053,6 +1055,23 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
         return true;
     }
+    // Adds the irradiance probes' background work to the tables once every kernel of their set is built, the probe
+    // kernels among them, whose layouts its construction reads: the tables are built before them (SdfWorldPipelines
+    // .PollRequired), and lighting has nothing to light before a frame renders. Tables built again (a device loss) are
+    // given work of their own.
+    private void EnsureProbeWork(SdfWorldTables tables) {
+        if (ReferenceEquals(objA: m_probeTables, objB: tables) || (tables.Pipelines.FirstUnbuilt() is not null)) { return; }
+
+        var probeWork = new SdfMeshProbeGpuWork(tables: tables, volume: MeshIrradiance);
+
+        tables.GpuWork.Add(client: probeWork);
+        MeshIrradiance.GpuTrace = probeWork;
+        m_probeTables = tables;
+    }
+
+    // The tables the probes' background work was last added to (EnsureProbeWork).
+    private SdfWorldTables? m_probeTables;
+
     private void ResetReady() {
         var ready = Volatile.Read(location: ref m_ready);
 

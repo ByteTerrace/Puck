@@ -347,12 +347,15 @@ table does not hold, or a row whose key is not its program's identity, is
 refused there. Nothing changes for the renderer: it already compiled programs
 by content and specialized by identity. The bake never reads a program.
 
-**Interpret first, specialize behind.** The interpreter shows an edit on its
-next frame, because a program edit is a table upload, and it renders a program
-the cache has never seen. A specialized kernel replaces it at a frame boundary
-when its background compile arrives. The interpreter renders the correct image,
-so nothing is traded while compiling: a skipped draw or a default material in
-its place is rejected, as the bar forbids. Compiling a views-sized kernel takes
+**Specialize behind, and keep frames smooth while compiling.** A specialized
+kernel replaces the running one at a frame boundary when its background compile
+arrives. Measured on the RTX 4070, the interpreter costs 60 to 420 ms a frame on
+the debug world, which breaks the rapid-iteration ruling more than a few seconds
+of an older look does, so while a compile runs the frame keeps the last
+specialized kernel for the programs it already had and draws plain shading for
+a program no specialization has seen yet; the interpreter runs only when asked
+(`world.shaders.tier interpreted`). Following from the owner's rapid-iteration
+ruling (AGENTS.md). Compiling a views-sized kernel takes
 seconds per target, which is why specialization is never on the edit path. A
 world's programs are declared in its documents, so `world prepare` compiles
 them for a player build and the interpreter covers only edits and misses. Both
@@ -365,9 +368,11 @@ threshold-sensitive corpus holds on both backends.
 kernel holds every program the frame's set names and selects a pixel's arm
 once. An interpreter default arm was set aside: registers are allocated for
 the whole kernel, so it would keep the interpreter's register count in every
-specialized kernel. A frame whose active programs the published set does not
-hold records with the interpreter kernel while the new set compiles. A frame
-with no program records plain kernels that hold no program state.
+specialized kernel. A frame whose active programs the published set holds only
+in part records with that set while the new one compiles: a program with no arm
+binds none and shades as a material with no program, so the default arm is the
+plain shading, which costs no registers. A frame with no program, or with no
+published set yet, records plain kernels that hold no program state.
 
 **Pixels shade in bins by whole tiles.** A frame that runs programs classifies
 8×8 tiles after the tile-coherent filter and shades the tiles with no program

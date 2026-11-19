@@ -587,21 +587,20 @@ public sealed class HostAdmissionLawTests {
     [Theory]
     [InlineData(WorldShape.TestBatch, "heavy")]
     [InlineData(WorldShape.Windowed, "gpu")]
-    public async Task WorldLaunchWaitsWithoutAnExclusiveHoldAndSharedStartsCannotWaitUnderLiveWork(WorldShape shape, string resource) {
+    public async Task WorldLaunchWaitsForHeadroomWithoutAnExclusiveHold(WorldShape shape, string resource) {
         using var checkout = new GitScratchCheckout();
         var token = TestContext.Current.CancellationToken;
         var root = await CliLease.RootAsync(checkout.Root, token);
         var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var headroom = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var refuseShared = false;
         HostAdmit admit = async (place, _, _, _, _, bound, reserve, _, _, cancel) => {
             Assert.Equal(checkout.Root, place);
             if (reserve) {
                 Assert.Equal(TimeSpan.Zero, bound);
-                Assert.True(CliLease.HoldsExecution(root));
-                return !refuseShared;
+                Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
+                return true;
             }
-            Assert.False(CliLease.HoldsExecution(root));
+            Assert.False(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
             waiting.SetResult();
             return await headroom.Task.WaitAsync(cancel);
         };
@@ -615,11 +614,90 @@ public sealed class HostAdmissionLawTests {
             }
             headroom.SetResult(true);
             using var launch = await pending;
-            refuseShared = true;
-            await Assert.ThrowsAsync<HostAdmissionRefusedException>(() => WorldLaunch.AdmitAsync(request, token));
             Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
         } finally {
             headroom.TrySetResult(false);
+            WorldAdmission.Install(null);
+        }
+        Assert.False(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
+    }
+
+    // A start that finds this process already holding the lease (another lane's World started through the same adapter, or its
+    // own lane's earlier World) waits for its turn in the queue and for headroom, however short the machine is, and is refused
+    // only when no wait could admit it. Only the reservation made under the lease's own guard reads once.
+    [Theory]
+    [InlineData(WorldShape.TestBatch, "heavy")]
+    [InlineData(WorldShape.Windowed, "gpu")]
+    public async Task AStartWaitsItsTurnAndItsHeadroomWhileThisProcessHoldsTheLeaseAndOnlyOneThatCanNeverFitIsRefused(WorldShape shape, string resource) {
+        using var checkout = new GitScratchCheckout();
+        var token = TestContext.Current.CancellationToken;
+        var root = await CliLease.RootAsync(checkout.Root, token);
+        var clock = new GateClock();
+        var wait = TimeSpan.FromHours(1);
+        var tight = false;
+        var impossible = false;
+        var shortReadings = new SemaphoreSlim(0);
+        var asked = new System.Collections.Concurrent.ConcurrentQueue<(bool Reserve, TimeSpan? Bound)>();
+        using var error = new StringWriter();
+        HostSample Reading() => (impossible ? Sample(commit: 10, limit: 1) : (tight ? Sample(commit: 98, limit: 128) : Sample(commit: 60, limit: 128)));
+        HostAdmit admit = (_, step, device, heavySuite, kind, bound, reserve, _, stage, cancel) => {
+            asked.Enqueue(item: (reserve, bound));
+
+            // The third delay is the last: the machine has room again.
+            var delays = 0;
+
+            return Task.FromResult(result: HostAdmission.Wait(step, device, heavySuite, Reading, clock, span => {
+                clock.Advance(span);
+                if (tight && (++delays == 3)) {
+                    tight = false;
+                    _ = shortReadings.Release();
+                }
+            }, error, cancel, Thresholds, bound, stage, kind, reserve: reserve));
+        };
+
+        WorldAdmission.Install(admit: admit);
+        try {
+            var lane = new WorldLaunchRequest("launch law", "Puck.World.dll") { AdmissionWait = wait, Checkout = checkout.Root, HeavySuite = (shape == WorldShape.TestBatch), Holder = "a", Lane = "a", Shape = shape };
+
+            using var first = await WorldLaunch.AdmitAsync(lane, token);
+
+            Assert.True(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
+
+            // Another lane's start, short of headroom: it waits the shortage out, then queues behind the lane that holds.
+            tight = true;
+
+            var queued = WorldLaunch.AdmitAsync((lane with { Holder = "b", Lane = "b" }), token);
+
+            await shortReadings.WaitAsync(token);
+            Assert.False(queued.IsCompleted);
+            first.Dispose();
+
+            using var second = await queued;
+
+            Assert.Equal("b", CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holder);
+
+            // A second start of the lane that holds waits for headroom too, then shares the lease.
+            tight = true;
+
+            var shared = WorldLaunch.AdmitAsync((lane with { Holder = "b", Lane = "b" }), token);
+
+            await shortReadings.WaitAsync(token);
+
+            using var third = await shared;
+
+            // Waiting spends the start's own bound; only the reservation under the lease's guard reads once.
+            Assert.All(asked.Where(static call => !call.Reserve), static call => Assert.NotEqual(TimeSpan.Zero, call.Bound));
+            Assert.Equal(1, asked.Count(call => (call.Reserve && (call.Bound == wait))));
+            Assert.Contains(asked, static call => (call.Reserve && (call.Bound == TimeSpan.Zero)));
+
+            // A start that can never fit is refused by name at once, with the lease still held.
+            impossible = true;
+
+            var refused = await Assert.ThrowsAsync<HostAdmissionRefusedException>(() => WorldLaunch.AdmitAsync((lane with { Holder = "c", Lane = "c" }), token));
+
+            Assert.Contains("can never be admitted on this machine", refused.Reason);
+            Assert.Equal("b", CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).Holder);
+        } finally {
             WorldAdmission.Install(null);
         }
         Assert.False(CliLease.Inspect(root, resource, DateTimeOffset.UtcNow).HolderAlive);
