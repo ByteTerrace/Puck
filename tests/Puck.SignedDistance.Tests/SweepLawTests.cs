@@ -677,7 +677,7 @@ public sealed class SweepLawTests {
             instructions.Add(item: original.Instructions[0] with {
                 Op = SdfOp.Scale,
                 Data0 = new Vector4(
-                w: 0f,
+                w: 2f,
                 x: 2f,
                 y: 3f,
                 z: 4f

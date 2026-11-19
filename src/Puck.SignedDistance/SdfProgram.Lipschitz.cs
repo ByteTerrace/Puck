@@ -110,14 +110,12 @@ public sealed partial class SdfProgram {
         return -1;
     }
     private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, out List<float> chainFactors) {
-        // Each relief's masks widen its step bound by their band slopes (ReliefMaskSlope); both passes read the one table.
+        // Each relief's masks widen its step bound by their band slopes (ReliefMaskSlope), already in field units.
         var maskSlopes = ReliefMaskSlopes(instructions: instructions);
 
         chainFactors = AnalyzeChainLipschitz(
-            chainHasShape: out var chainHasShape,
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
-            maskSlopes: maskSlopes,
             sweepCurves: sweepCurves
         );
         // mapCore's seed is the SDF_FAR_DISTANCE CONSTANT — a zero-gradient function, hence L = 0, which is what makes
@@ -129,7 +127,7 @@ public sealed partial class SdfProgram {
         // Each open scope's push, so a relief mask's weight can rescale its seed by the scope's bound.
         Span<int> pushes = stackalloc int[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
-        var cellPointFactors = AnalyzeCellPointFactors(instructions: instructions);
+        var reliefPointFactors = AnalyzeReliefPointFactors(instructions: instructions);
         var chainIndex = 0;
 
         for (var index = 0; (index < instructions.Length); index++) {
@@ -174,23 +172,27 @@ public sealed partial class SdfProgram {
                         accumulator = 0.0f;
                         break;
                     }
-                case SdfOp.Displace:
+                // A relief displaces the accumulator it edits exactly where it executes, whatever its chain holds before
+                // or after it, so its bound joins that accumulator HERE (|∇(f + g)| ≤ L_f + L_g), inside the scope it
+                // acts on: its own slope in the frame it samples, times its chain's point factor, which carries the
+                // chain's scales into field units. A later shape in the chain composes against the edited accumulator
+                // and never carries the relief's charge. A mask's band slope is already per field unit.
+                case SdfOp.Displace: {
+                        accumulator += (DisplaceSlope(instruction: instruction) * reliefPointFactors[index]);
+                        break;
+                    }
                 case SdfOp.NoiseDisplace: {
-                        // A field op in a SHAPE-FREE chain never reaches a ShapeBlend compose (pass 1's chain factor is
-                        // composed only there), yet at runtime it still displaced the accumulated field exactly where it
-                        // executes — fold its own factor in additively HERE (|∇(f + g)| ≤ L_f + L_g), inside the scope
-                        // the op acts on, so a Union pop keeps it instance-local instead of summing across instances.
-                        // A field op in a shape-bearing chain stays on the pass-1 chain-product path, byte-identically.
-                        if (!chainHasShape[chainIndex]) {
-                            accumulator += ((((instruction.Op == SdfOp.Displace)
-                                ? DisplaceWarpLipschitz(instruction: instruction)
-                                : NoiseDisplaceLipschitz(instruction: instruction, maskSlope: (maskSlopes?[index] ?? 0f))) - 1.0f) * chainFactors[chainIndex]);
+                        accumulator += (SdfNoiseDisplacement.Of(instruction: instruction).ReliefSlope * reliefPointFactors[index]);
+
+                        if ((maskSlopes?[index] ?? 0f) is > 0f and var maskSlope) {
+                            accumulator += (MathF.Abs(x: instruction.Data0.Y) * maskSlope);
                         }
 
                         break;
                     }
                 case SdfOp.CellDisplace: {
-                        accumulator += ((CellDisplaceLipschitz(instruction: instruction) - 1f) * cellPointFactors[index]);
+                        accumulator += (new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
+                            ((SdfCellMode)instruction.Blend), instruction.Data0.Z).ReliefSlope * reliefPointFactors[index]);
                         break;
                     }
                 case SdfOp.PopField: {
@@ -201,23 +203,23 @@ public sealed partial class SdfProgram {
                         // The scope's own bound becomes a BAKED per-candidate scale: Data1.y = 1/L_scope, applied by
                         // mapCore/mapGradCore (and the CPU evaluator) to the scope's field at the pop — a positively
                         // scaled distance keeps its zero set, and (1/L)·f of an L-Lipschitz f is exactly 1-Lipschitz,
-                        // so the scope's warps/relief stop taxing the GLOBAL step scale. A factor-1 scope
-                        // stays unpatched (Data1.y = 0 reads as no scale), keeping existing programs byte-identical.
+                        // so the scope's warps/relief stop taxing the GLOBAL step scale. A factor-1 scope writes
+                        // Data1.y = 0, which reads as no scale. The lane is this pass's alone: it is written whatever the
+                        // caller supplied, so neither a hand-packed scale nor one an excerpt carried from a larger scope
+                        // reaches the kernels.
                         var scopeLipschitz = MathF.Max(
                             x: accumulator,
                             y: 1.0f
                         );
 
-                        if (scopeLipschitz > 1.0f) {
-                            instructions[index] = (instruction with {
-                                Data1 = new Vector4(
-                                x: instruction.Data1.X,
-                                y: (1.0f / scopeLipschitz),
-                                z: instruction.Data1.Z,
-                                w: instruction.Data1.W
-                            ),
-                            });
-                        }
+                        instructions[index] = (instruction with {
+                            Data1 = new Vector4(
+                            x: instruction.Data1.X,
+                            y: ((scopeLipschitz > 1.0f) ? (1.0f / scopeLipschitz) : 0.0f),
+                            z: instruction.Data1.Z,
+                            w: instruction.Data1.W
+                        ),
+                        });
 
                         accumulator = ComposeLipschitz(
                             blend: instruction.Blend,
@@ -251,13 +253,7 @@ public sealed partial class SdfProgram {
         ));
     }
     private static float MinAxis(Vector3 scale) => MathF.Max(
-        x: MathF.Min(
-            x: scale.X,
-            y: MathF.Min(
-                x: scale.Y,
-                y: scale.Z
-            )
-        ),
+        x: SdfDerivedLanes.ScaleCorrection(scale: scale),
         y: float.Epsilon
     );
     private static float MaxAxis(Vector3 scale) => MathF.Max(
@@ -282,9 +278,8 @@ public sealed partial class SdfProgram {
     //
     // A blend's own factor is deliberately ABSENT here: composition is not a property of the chain a candidate was
     // built in, and folding chamfer in at this level is precisely the latch AnalyzeLipschitz's remarks retire.
-    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, out List<bool> chainHasShape, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes) {
+    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
         var chainFactors = new List<float>();
-        var hasShapeByChain = new List<bool>();
         var chainHasShapeBlend = false;
         // Every reach on this chain is kept in the chain's OUTERMOST frame (the frame before its first Scale op): a
         // contribution met after k Scale ops is multiplied by the max axis of their product, so shapes and translates
@@ -299,7 +294,7 @@ public sealed partial class SdfProgram {
         var chainShapeReach = 0.0f;       // max local bounding radius among the chain's shapes, outer frame
         var chainTranslateReach = 0.0f;   // sum of |translate offset| accumulated on the chain, outer frame
         var chainLogSphereProduct = 1.0f; // product of the chain's log-spherical shell-fold factors exp(w/2) (1 = none)
-        var chainDisplaceWarpProduct = 1.0f; // product of the chain's Displace/DomainWarp metric-stretch factors (1 + amp*max|freq_i|); reach-independent, like the log-sphere product (1 = none)
+        var chainDisplaceWarpProduct = 1.0f; // product of the chain's DomainWarp/LaneErode/GaussianPush metric-stretch factors; reach-independent, like the log-sphere product (1 = none)
         // Each CellJitter's (min spacing, jitter), the chain translate reach as of the op (its own reach term included),
         // and its min-axis scale — folded at chain-close so only translates AFTER the fold count toward containment.
         var chainCellJitters = new List<(float MinSpacing, float Jitter, float TranslateReachAtOp, float MinScale)>();
@@ -327,7 +322,6 @@ public sealed partial class SdfProgram {
                     shapeReach: chainShapeReach,
                     translateReach: chainTranslateReach
                 )));
-                hasShapeByChain.Add(item: chainHasShapeBlend);
                 chainHasShapeBlend = false;
                 chainWarpRates.Clear();
                 chainShapeReach = 0.0f;
@@ -444,13 +438,6 @@ public sealed partial class SdfProgram {
                         ), instruction.Data0.W, chainTranslateReach, MinAxis(scale: chainScale)));
                         break;
                     }
-                case SdfOp.Displace: {
-                        // The sinusoidal relief's gradient is bounded by amp*max|freq_i| (a global, reach-INDEPENDENT bound on the
-                        // sin-product basis; see DisplaceWarpLipschitz), so the field can overestimate by that. It multiplies the whole
-                        // chain like the log-sphere product. A FIELD op, so it adds no reach (the point is untouched).
-                        chainDisplaceWarpProduct *= DisplaceWarpLipschitz(instruction: instruction);
-                        break;
-                    }
                 case SdfOp.DomainWarp: {
                         // Same reach-independent metric-stretch factor (1 + amp*max|freq_i|) as Displace. As a POINT op it also
                         // moves the point by up to amp*sqrt(3), extending a downstream twist/bend's reach like a Translate.
@@ -464,12 +451,6 @@ public sealed partial class SdfProgram {
 
                         chainDisplaceWarpProduct *= DisplaceWarpLipschitz(instruction: instruction);
                         chainTranslateReach += ((1.7320508f * MathF.Abs(x: instruction.Data0.W)) * maxScale);
-                        break;
-                    }
-                case SdfOp.NoiseDisplace: {
-                        // The fBm value-noise relief's gradient is bounded reach-independently (see NoiseDisplaceLipschitz),
-                        // so it multiplies the whole chain like Displace's factor. A FIELD op, so it adds no reach.
-                        chainDisplaceWarpProduct *= NoiseDisplaceLipschitz(instruction: instruction, maskSlope: (maskSlopes?[index] ?? 0f));
                         break;
                     }
                 case SdfOp.LaneErode: {
@@ -519,7 +500,8 @@ public sealed partial class SdfProgram {
                     }
                 default: {
                         // ResetPoint/Rotate/TransformDynamic/SymmetryPlane/Repeat/RepeatLimited/WallpaperFold/RepeatPolar/
-                        // Elongate/Onion/Dilate/PushField/PopField: factor 1 (isometry, non-expansive
+                        // Elongate/Onion/Dilate/PushField/PopField, and the reliefs (Displace/NoiseDisplace/CellDisplace,
+                        // which AnalyzeLipschitz charges at their own instruction): factor 1 (isometry, non-expansive
                         // projection, field op, or a COMPOSITION AnalyzeLipschitz's pass folds rather than this one) —
                         // nothing accumulates on the chain. (RepeatPolar is a rotation/reflection fold, exactly like Repeat;
                         // CellJitter is handled above: its jitter half-amplitude joins the chain reach, its tumble/fold are
@@ -542,8 +524,6 @@ public sealed partial class SdfProgram {
             shapeReach: chainShapeReach,
             translateReach: chainTranslateReach
         )));
-        hasShapeByChain.Add(item: chainHasShapeBlend);
-        chainHasShape = hasShapeByChain;
 
         return chainFactors;
     }

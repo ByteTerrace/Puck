@@ -27,64 +27,8 @@ public sealed partial class SdfProgram {
     // instruction stream, poisons the program-wide Lipschitz step scale (AnalyzeLipschitz folds every shape dimension
     // and warp rate into one scalar) and the cull bounds derived from the same lanes, and the shader propagates it
     // through every blend. SdfProgramBuilder refuses the same values one layer earlier, naming the caller's argument.
+    // Each operation's own domains are the lane contract's (RequireLaneContract), which runs after this sweep.
     private static void RequireFiniteOperands(SdfInstruction instruction, int index, string paramName) {
-        if (
-            (instruction.Op == SdfOp.ShapeBlend) &&
-            (instruction.Shape == ((uint)SdfShapeType.Glyph)) &&
-            ((instruction.Data1.Y <= 0f) || (instruction.Data1.Z <= 0f) || (instruction.Data0.Z < 0f) || (instruction.Data0.W < 0f) ||
-             (instruction.Data1.W <= 0f) || (instruction.Data1.W > 1f))
-        ) {
-            throw new ArgumentException(
-                message: $"Instruction {index} requires positive glyph extents and a sampling correction in (0, 1].",
-                paramName: paramName
-            );
-        }
-        if (instruction.Op == SdfOp.CellDisplace) {
-            new SdfCellDisplacement(
-                instruction.Data0.X,
-                instruction.Data0.Y,
-                instruction.Shape,
-                ((SdfCellMode)instruction.Blend),
-                instruction.Data0.Z
-            ).Validate();
-        }
-        if (
-            (instruction.Op == SdfOp.GaussianPush) &&
-            (!float.IsFinite(f: BitConverter.UInt32BitsToSingle(value: instruction.Shape)) ||
-             (instruction.Data1.X <= 0f) || (instruction.Data1.Y <= 0f) || (instruction.Data1.Z <= 0f))
-        ) {
-            throw new ArgumentException(
-                message: $"Instruction {index} requires a finite Gaussian push and positive radii.",
-                paramName: paramName
-            );
-        }
-        if (
-            (instruction.Op == SdfOp.RotatePlane) &&
-            (!Enum.IsDefined(value: ((SdfPlane)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)))
-        ) {
-            throw new ArgumentException(
-                message: $"Instruction {index} requires a defined SdfPlane and SdfAxis.",
-                paramName: paramName
-            );
-        }
-        if (
-            (instruction.Op == SdfOp.Shear) &&
-            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || !Enum.IsDefined(value: ((SdfAxis)instruction.Blend)) || (instruction.Shape == instruction.Blend))
-        ) {
-            throw new ArgumentException(
-                message: $"Instruction {index} requires distinct defined shear axes.",
-                paramName: paramName
-            );
-        }
-        if (
-            (instruction.Op == SdfOp.AxialProfile) &&
-            (!Enum.IsDefined(value: ((SdfAxis)instruction.Shape)) || (instruction.Data1.Y <= 0f) || (instruction.Data0.W <= 0f))
-        ) {
-            throw new ArgumentException(
-                message: $"Instruction {index} requires an axis in [0, 2], positive start scale and inverse span.",
-                paramName: paramName
-            );
-        }
         // Most instructions contain only finite float lanes. Check them without constructing or walking
         // a temporary lane span; the scalar path below retains the packed-integer exemptions and exact diagnostic.
         if (
@@ -483,82 +427,11 @@ public sealed partial class SdfProgram {
                 instruction: instruction,
                 paramName: instructionsParamName
             );
-
-            if (instruction.Op == SdfOp.WallpaperFold) {
-                RequireContinuousWallpaper(
-                    index: index,
-                    instruction: instruction,
-                    paramName: instructionsParamName
-                );
-            }
-
-            if (instruction.Op == SdfOp.LaneErode) {
-                RequireLaneErodeLaneIndex(
-                    index: index,
-                    instruction: instruction,
-                    paramName: instructionsParamName
-                );
-            }
-
-            if (instruction.Op == SdfOp.PopField) {
-                RequirePackedBlend(
-                    blend: instruction.Blend,
-                    index: index,
-                    paramName: instructionsParamName
-                );
-
-                if (instruction.Blend == ((uint)SdfBlendOp.Morph)) {
-                    var lane = instruction.Data0.X;
-
-                    if (
-                        !float.IsFinite(f: lane) ||
-                        (lane < 0f) ||
-                        (lane > 3f) ||
-                        (lane != MathF.Floor(x: lane))
-                    ) {
-                        throw new ArgumentException(
-                            message: $"Instruction {index} is a PopField Morph carrying lane index {lane} in Data0.x; it must be an exact integer in [0, 3].",
-                            paramName: instructionsParamName
-                        );
-                    }
-
-                    if (instruction.Data0.Y == instruction.Data0.Z) {
-                        throw new ArgumentException(
-                            message: $"Instruction {index} is a PopField Morph carrying identical from/to thresholds ({instruction.Data0.Y}); from and to must differ to avoid division by zero.",
-                            paramName: instructionsParamName
-                        );
-                    }
-                } else if (instruction.Blend is ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
-                    var steps = instruction.Data1.Z;
-
-                    if (
-                        !float.IsFinite(f: steps) ||
-                        (steps < 1f) ||
-                        (steps != MathF.Floor(x: steps))
-                    ) {
-                        throw new ArgumentException(
-                            message: $"Instruction {index} is a PopField Stairs carrying step count {steps} in Data1.z; it must be an integer >= 1.",
-                            paramName: instructionsParamName
-                        );
-                    }
-
-                    // Both interpreters take their stairs branch only for r > 0; a zero radius would fall through to
-                    // blend tails that disagree on it, and is exactly a plain Union/Subtraction pop anyway.
-                    var radius = instruction.Data1.X;
-
-                    if (
-                        !float.IsFinite(f: radius) ||
-                        (radius <= 0f)
-                    ) {
-                        throw new ArgumentException(
-                            message: $"Instruction {index} is a PopField Stairs carrying radius {radius} in Data1.x; it must be finite and greater than zero (a zero radius is a plain Union or Subtraction pop).",
-                            paramName: instructionsParamName
-                        );
-                    }
-                }
-
-                continue;
-            }
+            _ = RequireLaneContract(
+                index: index,
+                instruction: instruction,
+                paramName: instructionsParamName
+            );
 
             if (instruction.Op != SdfOp.ShapeBlend) {
                 if (instruction.Detail) {
@@ -571,13 +444,6 @@ public sealed partial class SdfProgram {
                 continue;   // Every other op's Shape/Blend/Material lanes carry op-specific data (a fold's axis, a jitter's noise flavor and variant count), not these domains.
             }
 
-            if (!Enum.IsDefined(value: ((SdfShapeType)instruction.Shape))) {
-                throw new ArgumentException(
-                    message: $"The SDF instruction set refuses undeclared shape {instruction.Shape} at instruction {index}.",
-                    paramName: instructionsParamName
-                );
-            }
-
             RequirePackedBlend(
                 blend: instruction.Blend,
                 index: index,
@@ -587,14 +453,6 @@ public sealed partial class SdfProgram {
             if (instruction.Blend is ((uint)SdfBlendOp.Morph) or ((uint)SdfBlendOp.StairsUnion) or ((uint)SdfBlendOp.StairsSubtraction)) {
                 throw new ArgumentException(
                     message: $"Instruction {index} is a ShapeBlend carrying blend {((SdfBlendOp)instruction.Blend)}; Morph, StairsUnion, and StairsSubtraction are valid only on PopField instructions.",
-                    paramName: instructionsParamName
-                );
-            }
-
-            if (instruction.Shape == ((uint)SdfShapeType.Trapezoid)) {
-                RequireTrapezoidProfileSlant(
-                    index: index,
-                    instruction: instruction,
                     paramName: instructionsParamName
                 );
             }

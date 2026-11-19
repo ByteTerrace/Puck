@@ -10,8 +10,9 @@ This memo reads the instruction as built, says why patching it does not
 converge, and designs the form that replaces it. A design review of the
 memo's first draft found six flaws in that design before it was cut short;
 this revision closes each at its cause and
-[answers them one by one](#the-design-reviews-findings-answered). It is a
-design. Nothing here is built.
+[answers them one by one](#the-design-reviews-findings-answered). Steps 1
+and 2, which fix defects that exist without any mask, are built; the construct
+itself (step 3 onward) is a design, parked for a step-back.
 
 A second design review then found seven more flaws in this revision.
 [The step back](#the-step-back), at the end of this memo, returns to what the
@@ -48,8 +49,8 @@ two differ, the step back is the current recommendation.
   in the wrong units under a scaled stamp. A later shape in the same chain can
   take the charge. And the program's raw door trusts lanes the builder
   computes, such as a scale's distance correction and the noise's
-  normalization. All three are in the tree for unmasked reliefs today, and
-  the first two migration steps fix them before the construct changes.
+  normalization. All three hit unmasked reliefs too, and the first two
+  migration steps, now built, fixed them before the construct changes.
 - **One ruling this rests on.** The lead ruled that an unmasked noise relief
   after a fold is refused, as cellular relief already is, because no step
   bound covers the jump at a fold's seam. A `puck.sdf.v1` document can write
@@ -382,8 +383,8 @@ Three rules make the analysis compute this.
   is the stolen step bound. The noise relief and the sine relief move to the
   cellular rule in every chain.
 - **The point factor comes from the chain before the instruction, or the
-  program is refused.** `SdfProgram.AnalyzeCellPointFactors` computes it for
-  cellular relief: one over the smallest axis of each `Scale`, times the
+  program is refused.** `SdfProgram.AnalyzeReliefPointFactors` computes it,
+  first written for cellular relief: one over the smallest axis of each `Scale`, times the
   factor of each warp that has a global bound, and a refusal by name when the
   chain holds an operation with no global continuous derivative bound. The
   noise relief and the sine relief take that rule whole, masked or not. That
@@ -652,63 +653,42 @@ shows it did. Steps 1 to 3 fix defects that exist without any mask.
 
 ### 1. The program door derives every lane the builder computes
 
-The builder computes some lanes of an instruction from others so the kernel
-need not: a `Scale`'s distance correction, a noise relief's normalization, a
-repeat's reciprocal spacing, a superellipsoid's inverse radii, a round cone's
-slope pair. The kernel reads them as packed, and so does the step analysis
-for the ones it trusts. The public door `SdfProgram.Of` accepts any finite
-value in them (`SdfProgram.ValidatePackedContract`). The second review found
-the scale's correction and the design review found the noise's normalization;
-the cause is the same for every such lane.
+Built. Every operation and shape type has one row in the lane contract
+(`SdfProgram.LaneContractOf`, `SdfLaneContract`), written as switches with no
+row that admits by default. A row classes each lane as authored (checked
+against the builder's domain), derived (recomputed by the function the builder
+calls, `SdfDerivedLanes`, and compared bit for bit), unit (within
+`SdfProgram.UnitLengthTolerance`, which admits the fixed-point encoding
+boundary's 2⁻¹⁶ normalization), zero, or written by the program itself (a side
+table's place, a scope's baked scale, which `AnalyzeLipschitz` now writes
+whatever the caller supplied, and a mask's band words). The noise relief is
+decoded at the door into `SdfNoiseDisplacement`, which derives its
+normalization and validates its domains; the analysis reads its slope from
+that value, and the CPU evaluator's compile reads the lane the door compared.
+`SdfLaneContractLawTests` holds the two reviews' streams as laws and nudges
+every derived, zero and unit lane of every instruction `SdfEncodingProbe`
+emits, each refused.
 
-The step gives each operation and each shape type one row in a lane contract,
-written as a `switch` with no default, so an operation added later has no
-row and is refused. A row classes every lane as one of four things:
-
-- **authored**: the caller's value, checked against the domain the builder
-  enforces (a noise relief's octave count, gain and lacunarity among them);
-- **derived**: recomputed from the instruction's other lanes by the function
-  the builder itself calls, and refused unless equal bit for bit;
-- **unit**: a rotation's quaternion or a plane's or mirror's normal, refused
-  unless of unit length within float rounding, since the step analysis counts
-  each as an isometry;
-- **zero**: refused unless zero.
-
-The noise relief also gains its typed value, decoded at the door, which the
-analysis and both compiles read in place of the raw lanes.
-
-*Check:* the second review's stream (a sphere under a scale of two with the
-correction lane set to 32) and the design review's (a one-octave relief with
-its normalization set to 32), each handed to `SdfProgram.Of`, are refused by
-name. `SdfPackedContractLawTests` already replaces one lane at a time with a
-non-finite value; it is extended to change every derived lane of every
-operation and shape `SdfEncodingProbe` emits, and each change is refused. `Puck.SignedDistance` builds
-and the debug world boots headless, so every program the emitters produce
-still passes.
+What the contract cannot derive: a glyph's sampling correction comes from its
+atlas's pixels, which a program names only by hash, so the door checks its
+range alone.
 
 ### 2. A relief is charged at its own instruction, through its chain's point factor
 
-`AnalyzeCellPointFactors` becomes the point factor of every field operation
-that samples the point: cellular, noise and sine relief. `AnalyzeLipschitz`
-adds each one's bound at its own instruction in every chain; the chain-product
-path for `NoiseDisplace` and `Displace` and its shape-free test go. A noise or
-sine relief after an operation the analysis cannot bound is refused by name,
-as cellular relief is. `SdfDocumentDecoder` refuses a `puck.sdf.v1` noise
-relief that follows a cell fold with no reset between them at decode, naming
-the document's operation, as it refuses an unscoped one. The mask slopes the
-noise relief adds are still the built table's until step 4.
-
-*Check:* three cases through the real analysis and the evaluator's render
-reading, each comparing the recorded bound with gradients sampled near the
-surface: the five masked reliefs before a later shape; the sphere stamped at
-1/64; and the design review's plane under a scale of 1/64 with a unit sine
-relief. Each recorded bound exceeds every sample. The last one with a repeat
-added is refused, and so is the `puck.sdf.v1` document, with its operation's
-index in the message. A fourth case stamps one relieved sphere at scales 1, 64
-and 1/64 and reads the scope's recorded bound (`SdfProgram.FieldScopeClamps`):
-it equals `CreationNoiseDocument.StepFactor` for the document at all three,
-where today it does so only at scale one. The debug world boots headless, so
-no emitter writes a refused chain.
+Built. `SdfProgram.AnalyzeReliefPointFactors` gives the point factor of every
+relief (cellular, noise and sine), and `AnalyzeLipschitz` adds each one's slope
+times that factor at its own instruction in every chain; the chain product for
+`NoiseDisplace` and `Displace` and its shape-free test are gone. A relief after
+an operation the analysis cannot bound is refused by name, naming that
+operation. `SdfDocumentDecoder` refuses a `puck.sdf.v1` relief that follows a
+`cellJitter` with no `reset` between them at decode (`SdfRefusal.ReliefAfterFold`),
+naming both ops. The mask slopes the noise relief adds are still the built
+table's, per field unit, until step 4. `SdfLaneContractLawTests` holds the
+three gradient witnesses and the fold refusals, and
+`ReliefStepBoundLawTests` holds the stamped scope's bound equal to
+`CreationNoiseDocument.StepFactor` at scales 1, 64 and 1/64, masked and not.
+A relief after a fold stays open work in
+[the terrain plan](../terrain-pass.md#a-relief-after-a-fold).
 
 ### 3. An instruction and its operand travel as one value
 
@@ -869,7 +849,7 @@ window as step 6.
   match a profile to its polygon): the pattern the operand follows, replaced
   by pairs for every kind, because a lookup by index after a rewrite cannot
   keep ownership.
-- **The cellular relief's point factors** (`SdfProgram.AnalyzeCellPointFactors`)
+- **The cellular relief's point factors** (now `SdfProgram.AnalyzeReliefPointFactors`)
   and its typed value (`SdfCellDisplacement`): reused for the noise and sine
   reliefs. Between them they already hold the scale term, the refusal and the
   decode-once pattern the reviews asked for.
@@ -894,23 +874,9 @@ window as step 6.
 
 ## Found beside the mask
 
-These are in the tree today and are not caused by the mask. Each has an owner.
-
-- **The sine relief shares the stolen-charge path.** `Displace` in a chain
-  that holds a shape multiplies its factor into the chain's candidate, which
-  joins the accumulator by a maximum. When the accumulator's bound already
-  exceeds the candidate's, the relief's term is lost. This is read from the
-  analysis; no witness was run. A creation's sine relief is emitted in a chain
-  of its own with no shape, so authored content takes the sound path today.
-  *Owner:* step 2, which moves `Displace` with the noise relief.
-- **The raw program door trusts every lane the builder computes.** The two
-  reviews each found one such lane. *Owner:* step 1.
-- **The smallest axis of a scale is computed in several places.** The step
-  analysis, the cell point factors and the paint packer each spell it.
-  *Owner:* step 1, whose derived-lane function becomes the one place.
-- **A comment names a gradient walk that does not exist.** The rigid plan's
-  header says it compiles for `mapCore`'s and `mapGradCore`'s walks; no
-  shader declares the second. *Owner:* step 4, in passing.
+Steps 1 and 2 closed the sine relief's stolen charge, the raw door's trust in
+derived lanes and the scale's smallest axis spelled in several places
+(`SdfDerivedLanes.ScaleCorrection` is now the one place).
 
 ## Open questions and their owners
 

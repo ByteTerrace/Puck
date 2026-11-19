@@ -166,6 +166,12 @@ public enum SdfRefusal {
     [Refusal(door: "sdf.decode", condition: "a field op ('noiseDisplace') sits outside a 'push'/'pop' pair", kind: RefusalKind.Verdict)]
     FieldOpNotScoped,
 
+    /// <summary>A relief (<c>noiseDisplace</c> or <c>cellDisplace</c>) samples a point a <c>cellJitter</c> folded, with
+    /// no <c>reset</c> between them. The fold jumps at its cells' seams, and no step bound covers the relief's jump there,
+    /// so the program refuses it; this door names the document's ops instead.</summary>
+    [Refusal(door: "sdf.decode", condition: "a relief ('noiseDisplace' or 'cellDisplace') follows a 'cellJitter' with no 'reset' between them", kind: RefusalKind.Verdict)]
+    ReliefAfterFold,
+
     /// <summary>A <c>cellJitter</c> op's <c>flavor</c> is not one of <c>white</c>, <c>blue</c>, <c>gaussian</c>.</summary>
     [Refusal(door: "sdf.decode", condition: "a 'cellJitter' op's 'flavor' is not one of white, blue, gaussian", kind: RefusalKind.ProtocolFault)]
     UnknownNoiseFlavorName,
