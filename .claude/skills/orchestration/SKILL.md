@@ -690,7 +690,13 @@ direction: concurrent whole-solution builds exhaust a machine's memory.
   boots each batch's merged head headless from its own shell before pushing: a lane's
   environment can hide a dependency (a toolchain on the lane's PATH but not the
   machine's), and lanes merge the local integration branch, so a bad merge is
-  undone before it spreads, and the lane fixes it at the cause. The mesh bake
+  undone before it spreads, and the lane fixes it at the cause. A headless World
+  composes no renderer, so it records no barrier, publishes no probe scene and
+  presents nothing: a batch whose merges touch GPU or rendering code also gets a
+  short windowed boot on Direct3D 12 (with `--debug-layers`) and on Vulkan before
+  the lead pushes it. In one wave a barrier fault and a probe-scene publication
+  that threw on every device both passed every headless boot and every review
+  that read them, and broke the first windowed boot. The mesh bake
   is reproducible run to run at a fixed code version (three cold bakes per
   backend match); a store-by-hash comparison across two builds is evidence only
   for a change meant to change nothing. A brief never makes "output identical

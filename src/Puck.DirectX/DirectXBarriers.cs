@@ -207,21 +207,38 @@ public static unsafe class DirectXBarriers {
                 : sync, access);
         }
 
+        // The runtime checks every synchronization bit against the accesses, so a bit no access of the layout permits
+        // (copy beside unordered access, clear beside a copy layout) is dropped, not merely outvoted by a compatible one.
+        sync &= Permitted(access: access);
+
         return ((sync == D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE) || !Serves(access: access, sync: sync))
             ? (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL, access)
             : (sync, access);
     }
+    private const D3D12_BARRIER_SYNC Shading = (
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL |
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL_SHADING |
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING |
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW |
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_PIXEL_SHADING |
+        D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_VERTEX_SHADING
+    );
+    // Every synchronization bit some access of the set may be paired with; the common access permits every bit.
+    private static D3D12_BARRIER_SYNC Permitted(D3D12_BARRIER_ACCESS access) {
+        if (access == D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COMMON) { return ~D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_NONE; }
+
+        var permitted = D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL;
+
+        if ((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE) != 0) { permitted |= Shading; }
+        if ((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0) { permitted |= (Shading | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW); }
+        if ((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET) != 0) { permitted |= (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET); }
+        if ((access & (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_READ | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_DEPTH_STENCIL_WRITE)) != 0) { permitted |= (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DEPTH_STENCIL); }
+        if ((access & (D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_SOURCE | D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST)) != 0) { permitted |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COPY; }
+
+        return permitted;
+    }
     // Whether the synchronization holds, for every access, one of the stages the specification lets perform it.
     private static bool Serves(D3D12_BARRIER_ACCESS access, D3D12_BARRIER_SYNC sync) {
-        const D3D12_BARRIER_SYNC Shading = (
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL |
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL_SHADING |
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_COMPUTE_SHADING |
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW |
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_PIXEL_SHADING |
-            D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_VERTEX_SHADING
-        );
-
         if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE) != 0) && ((sync & Shading) == 0)) { return false; }
         if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS) != 0) && ((sync & (Shading | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_CLEAR_UNORDERED_ACCESS_VIEW)) == 0)) { return false; }
         if (((access & D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_RENDER_TARGET) != 0) && ((sync & (D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_ALL | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DRAW | D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET)) == 0)) { return false; }
