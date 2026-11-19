@@ -2931,7 +2931,7 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   the chapter before it left held, and its program chooses its view and poses the body, which in first person also lands
   the look on the posed heading. A route chapter's length is known only once it ends, so the World arms each chapter as
   the one before it ends, from its tick hook; its arrival is its seat program's (`arrived`, or `failed` with the kind,
-  the tick and the place: a driven wall contact, a step out of the places its path crosses, a lost path, a pose that did
+  the tick and the place: a stick held while the body goes nowhere, a step out of the places its path crosses, a lost path, a pose that did
   not land, its time limit).
 - **Profile.** `--profile <name|auto|none>` (default `auto`) applies a device profile before the first chapter, by
   sending the World `world.device-profile`: a name of the world's `render.devices` rows, the row whose `match` the

@@ -191,7 +191,7 @@ topologies, and today the route cannot be played in the second. The seat
 program's driver builds what it knows about the seat from the server of
 the world the seat stands in: the body, the places it occupies, the shapes
 of the places it is going to and the navigation mesh
-(`WorldSeatDriver.TryRead`). With the authority in another process the
+(`WorldSeatDriver`). With the authority in another process the
 client holds no such server. Starting the World with `--connect` does not
 help: it enqueues a transfer of the body from the boot world to the remote
 one, and the host step still steps the boot world and every local instance.

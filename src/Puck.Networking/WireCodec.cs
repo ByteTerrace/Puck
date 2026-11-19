@@ -557,8 +557,10 @@ public ref struct WireReader {
 }
 /// <summary>The representation bounds every wire reader and writer shares.</summary>
 public static class WireLimits {
-    /// <summary>The hard cap on a serialized world document carried inside one message.</summary>
-    public const int MaxDocumentBytes = ((16 * 1024) * 1024);
+    /// <summary>The hard cap on a serialized world document carried inside one message: the most a reader allocates
+    /// for one on an untrusted peer's word. A whole definition travels as one message, so a world whose compact
+    /// document passes this cannot be handed to a peer at all.</summary>
+    public const int MaxDocumentBytes = ((64 * 1024) * 1024);
     /// <summary>The default hard cap on one length-prefixed string's encoded bytes. Every wire string in this
     /// repository is a name, an authority spelling, or a refusal sentence.</summary>
     public const int MaxStringBytes = (16 * 1024);

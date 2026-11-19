@@ -1020,6 +1020,14 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
             state: sp.GetRequiredService<WorldDeviceProfileState>()
         ));
+        // What each seat's client was delivered, which a seat driver reads. Its paths come from the navigation the
+        // delivered document describes, compiled in this process from that document alone whichever process runs its
+        // authority.
+        services.AddSingleton(implementationFactory: static sp => new Puck.World.Client.WorldSeatSenses(
+            client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
+            navigation: static (definition, previous) => WorldDocumentNavigation.Compile(definition: definition, previous: (previous as WorldDocumentNavigation)),
+            routes: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>()
+        ));
         // world.benchmark: plays a route's chapters through the seat's own ingress in real time and records every host
         // iteration. Core, so a headless boot plays a route and reports its arrivals; the timeline, the pacing control
         // and the state root are each optional.
@@ -1033,9 +1041,8 @@ public static class WorldBootComposition {
             readings: sp.GetRequiredService<PresentationReadings>(),
             gpuTiming: sp.GetRequiredService<WorldGpuTiming>(),
             server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
-            instances: sp.GetRequiredService<WorldInstanceHost>(),
             seatRouter: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>(),
-            client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
+            senses: sp.GetRequiredService<Puck.World.Client.WorldSeatSenses>(),
             deviceProfile: sp.GetRequiredService<WorldDeviceProfileState>()
         ));
         services.AddSingleton<WorldDiagnostics>();

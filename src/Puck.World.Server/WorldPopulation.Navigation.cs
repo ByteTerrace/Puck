@@ -5,15 +5,6 @@ using Puck.Physics.Navigation;
 
 namespace Puck.World.Server;
 
-/// <summary>A route goal that is a place: every walkable cell whose foot point stands inside the place's region volume.</summary>
-/// <param name="Shape">The region's compiled volume.</param>
-public sealed record WorldNavigationPlaceGoal(FixedSpatialShape Shape) : INavigationRouteGoal {
-    /// <inheritdoc/>
-    public FixedAabb Bounds => Shape.Bounds;
-    /// <inheritdoc/>
-    public bool Accepts(int domain, int cell, in FixedVector3 foot) => Shape.Contains(point: foot);
-}
-
 public sealed partial class WorldPopulation {
     /// <summary>One body's cached route: the domain and goal cell a path was last found for, the path itself, and
     /// the search's last outcome and expansion count.</summary>
@@ -161,34 +152,6 @@ public sealed partial class WorldPopulation {
         return (domain >= 0);
     }
 
-    /// <summary>Finds a cell connected to a steering endpoint by the walking body's live contact field and collider.</summary>
-    /// <param name="body">The body the route steers.</param>
-    /// <param name="point">The body or destination foot point.</param>
-    /// <param name="fromPoint">Whether the connector starts at the point and ends at the cell.</param>
-    /// <param name="domain">The connected domain, or -1.</param>
-    /// <param name="cell">The connected cell, or -1.</param>
-    public bool TrySteeringEndpoint(WorldBody body, FixedVector3 point, bool fromPoint, out int domain, out int cell) {
-        return m_navigation.TryLocateNear(cell: out cell, domain: out domain, position: in point, reach: 2, connects: (candidate, node) => {
-            if ((m_contactField is not { } field) || (candidate.Tuning.Kind != NavigationKind.Surface)) {
-                return true;
-            }
-
-            var foot = candidate.Foot(node: node);
-            var stepHeight = FixedQ4816.Min(x: body.StepHeight, y: candidate.Tuning.MaxStepHeight);
-            if (FixedQ4816.Abs(value: (point.Y - foot.Y)) > stepHeight) {
-                return false;
-            }
-
-            var height = (FixedQ4816.Max(x: foot.Y, y: point.Y) + stepHeight);
-            var start = (fromPoint ? point : foot) with { Y = height };
-            var end = (fromPoint ? foot : point) with { Y = height };
-            var authored = body.ScaledColliderVolumes();
-            Span<FixedBodyColliderVolume> volumes = stackalloc FixedBodyColliderVolume[authored.Length];
-
-            LiftRouteVolumes(source: authored, destination: volumes, lift: stepHeight);
-            return FixedContactProbe.IsClear(field: field, start: start, end: end, orientation: body.FixedOrientation, up: FixedVector3.UnitY, volumes: volumes);
-        });
-    }
     /// <summary>Finds a route between two endpoint cells across the navigation domains and checks it against the
     /// contact field the bodies collide with: a body of the default seat kit sweeps between samples along the route,
     /// 0.1 m apart, proving its volume from a step height and a contact skin over the higher end's ground up to its full
@@ -260,7 +223,9 @@ public sealed partial class WorldPopulation {
         return status;
     }
 
-    private static void LiftRouteVolumes(ReadOnlySpan<FixedBodyColliderVolume> source, Span<FixedBodyColliderVolume> destination, FixedQ4816 lift) {
+    // Lowers each capsule's top by a lift, never below its base: the volume a body raised that far over its ground
+    // sweeps, so its head stays where it stands. WorldDocumentNavigation's endpoint sweep lifts by it too.
+    internal static void LiftRouteVolumes(ReadOnlySpan<FixedBodyColliderVolume> source, Span<FixedBodyColliderVolume> destination, FixedQ4816 lift) {
         for (var index = 0; (index < source.Length); index++) {
             var volume = source[index];
 
@@ -270,46 +235,10 @@ public sealed partial class WorldPopulation {
         }
     }
 
-    /// <summary>Plans the path a seat program steers a body along: the route across the navigation domains from the
-    /// walkable cell the body stands on, or the nearest one to it (<see cref="NavigationRuntime.TryLocateNear"/>), to a
-    /// goal, straightened to the corners a walker turns at (<see cref="NavigationRuntime.Straighten"/>). Bakes the
-    /// domains it reaches.</summary>
-    /// <param name="body">The body whose foot starts the route.</param>
-    /// <param name="goal">The cells the route may end at.</param>
-    /// <param name="margin">The clearance, in metres, a straight segment keeps from the edge of the walkable cells.</param>
-    /// <param name="route">Receives the full route, cleared first.</param>
-    /// <param name="corners">Receives the straightened route, cleared first; its foot points are the steering points.</param>
-    /// <param name="work">The search's work.</param>
-    /// <returns>The search's status; <see cref="NavigationStatus.OutsideDomain"/> when no walkable cell lies near the body.</returns>
-    public NavigationStatus PlanSteering(WorldBody body, INavigationRouteGoal goal, FixedQ4816 margin, List<NavigationRouteNode> route, List<NavigationRouteNode> corners, out NavigationRouteWork work) {
-        ArgumentNullException.ThrowIfNull(argument: corners);
-        corners.Clear();
-        work = default;
-        if (!TrySteeringEndpoint(body: body, cell: out var cell, domain: out var domain, fromPoint: true, point: body.FixedPosition)) {
-            route.Clear();
-            return NavigationStatus.OutsideDomain;
-        }
-
-        var status = m_navigation.FindRoute(
-            fromCell: cell,
-            fromDomain: domain,
-            goal: goal,
-            maxExpanded: checked((int)Math.Min(val1: m_navigation.CellCount, val2: int.MaxValue)),
-            maxNodes: WorldNavigationCapacity.MaxPathNodes * WorldNavigationCapacity.MaxDomains,
-            route: route,
-            work: out work
-        );
-
-        m_navigation.Straighten(corners: corners, margin: margin, route: route);
-        return status;
-    }
-    /// <summary>Gets the domain a route node lies in, for straight-line checks between two of its points.</summary>
-    /// <param name="index">The domain's index.</param>
-    public NavigationRuntime.Domain NavigationDomain(int index) => m_navigation[index];
     // Compiles the authored navigation rows into the kernel's own plain input shape once at resolve time; the
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.
-    private static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition) {
+    internal static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition) {
         var rows = definition.Navigation.Rows;
         var domains = new NavigationDomainInput[rows.Count];
 

@@ -35,15 +35,30 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["hostMemoryLimitBytes"] = host.Limit,
         };
     }
-    // The topology the route played in: which authority the seat's body stood in. A seat standing in a world the host
-    // itself runs is the in-process topology; a seat whose authority is another process's endpoint is the remote one.
+    // The topology the route played in, from the seat's own route as the run ends: the authority the seat's client is
+    // routed to, whether this process advances that authority's clock (in-process) or another does (remote), and the
+    // witness that the seat's body is there, which is the body that authority last delivered at the route's address. A
+    // seat whose route still names a world this process steps is an in-process reading, whatever the run was started
+    // with.
     private JsonNode TopologyReport() {
-        var endpoint = seatRouter?.TryRoute(slot: 0)?.Endpoint.Identity;
-        var local = ((endpoint is not null) && (instances is not null) && instances.TryGet(instance: out _, name: endpoint));
+        var slot = (m_driver?.Seat ?? 0);
+
+        if (seatRouter?.TryRoute(slot: slot) is not { } route) {
+            return new JsonObject { ["endpoint"] = null, ["kind"] = "none" };
+        }
+
+        var endpoint = route.Endpoint;
+        var delivered = endpoint.Mirror.TryReadBody(body: out var body, index: route.EntityIndex);
 
         return new JsonObject {
-            ["endpoint"] = endpoint,
-            ["kind"] = ((endpoint is null) ? "none" : (local ? "in-process" : "remote")),
+            ["endpoint"] = endpoint.Identity,
+            ["kind"] = (endpoint.ClockOwnedHere ? "in-process" : "remote"),
+            ["authority"] = endpoint.Authority,
+            ["seat"] = (slot + 1),
+            ["body"] = route.EntityIndex,
+            ["generation"] = route.Entity.Generation,
+            ["bodyDelivered"] = (delivered && (body.Generation == route.Entity.Generation)),
+            ["deliveredAtTick"] = (delivered ? body.Tick : null),
         };
     }
 
@@ -153,9 +168,9 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["arrival"] = ((chapter.EndIndex < 0) ? "unmeasured" : (chapter.Driven ? (chapter.Arrived ? "arrived" : "failed") : (!read ? "unmeasured" : ((failed.Count > 0) ? "off course" : "arrived")))),
             ["arrivalFailed"] = Strings(values: failed),
             ["arrivalUnjudged"] = Strings(values: unjudged),
-            ["pose"] = chapter.Where?.Answer,
-            ["startPlaces"] = PlacesOf(line: chapter.StartPlace),
-            ["endPlaces"] = PlacesOf(line: chapter.EndPlace),
+            ["pose"] = chapter.EndPose?.Answer,
+            ["startPlaces"] = PlacesOf(read: chapter.Opening),
+            ["endPlaces"] = PlacesOf(read: chapter.EndPlaces),
             ["placesVisited"] = (chapter.Driven ? Strings(values: chapter.Visited.Select(selector: static visit => visit.Place)) : Visited(chapter: chapter)),
             ["stateHash"] = chapter.Hash?.Answer,
             ["disturbed"] = Strings(values: Disturbances(chapter: chapter, statistics: statistics)),
@@ -169,6 +184,7 @@ public sealed partial class WorldBenchmarkCommandModule {
             node["plans"] = chapter.Plans;
             node["controlLines"] = chapter.ControlLines;
             node["visits"] = new JsonArray([.. chapter.Visited.Select(selector: static visit => (JsonNode)new JsonObject { ["tick"] = visit.Tick, ["place"] = visit.Place })]);
+            node["delivery"] = chapter.Delivery;
             node["failure"] = ((chapter.Failure is null) ? null : new JsonObject {
                 ["kind"] = chapter.FailureKind,
                 ["tick"] = chapter.FailureTick,
@@ -178,6 +194,9 @@ public sealed partial class WorldBenchmarkCommandModule {
         }
         if (statistics is not null) {
             node["frames"] = Describe(statistics: statistics);
+            if (recording is not null) {
+                node["phases"] = Phases(from: chapter.BeginIndex, recording: recording, to: chapter.EndIndex);
+            }
             if ((recording is not null) && (statistics.WorstIndex >= 0)) {
                 var worst = recording.Samples[statistics.WorstIndex];
 
@@ -219,8 +238,8 @@ public sealed partial class WorldBenchmarkCommandModule {
             }
         }
 
-        var poses = chapter.Poses.Where(predicate: static line => (line.Outcome == "ran")).ToArray();
-        var places = chapter.Places.Where(predicate: static line => (line.Outcome == "ran")).ToArray();
+        var poses = chapter.PoseSamples.ToArray();
+        var places = chapter.PlaceSamples.ToArray();
         var listed = new JsonArray();
 
         foreach (var (index, _) in over.OrderByDescending(keySelector: static hitch => hitch.Work).ThenBy(keySelector: static hitch => hitch.Index).Take(count: MaxHitchesListed)) {
@@ -254,7 +273,7 @@ public sealed partial class WorldBenchmarkCommandModule {
                 };
             }
             if (places.LastOrDefault(predicate: line => (line.Tick <= sample.Tick)) is { } named) {
-                hitch["places"] = PlacesOf(line: named);
+                hitch["places"] = PlacesOf(read: named);
                 hitch["placesSampledTick"] = named.Tick;
             }
             listed.Add(item: hitch);
@@ -302,17 +321,17 @@ public sealed partial class WorldBenchmarkCommandModule {
     private static JsonArray Visited(Chapter chapter) {
         var visited = new List<string>();
 
-        foreach (var line in chapter.Places.Prepend(element: chapter.StartPlace).Append(element: chapter.EndPlace)) {
-            if ((PlacesOf(line: line) is { } places) && (((places.Count > 0) ? places[0]!.GetValue<string>() : "none") is var at) && ((visited.Count == 0) || (visited[^1] != at))) {
+        foreach (var read in chapter.PlaceSamples.Prepend(element: chapter.Opening!).Append(element: chapter.EndPlaces!)) {
+            if ((PlacesOf(read: read) is { } places) && (((places.Count > 0) ? places[0]!.GetValue<string>() : "none") is var at) && ((visited.Count == 0) || (visited[^1] != at))) {
                 visited.Add(item: at);
             }
         }
 
         return Strings(values: visited);
     }
-    // The places a body.place line answered, innermost first; null when the line never ran or named no place list.
-    private static JsonArray? PlacesOf(WorldTickScript.Line? line) {
-        if ((line is not { Outcome: "ran" }) || (PlaceList().Match(input: line.Answer ?? string.Empty) is not { Success: true } match)) {
+    // The places a reading of the body named, innermost first; null when there was no reading or it named no place list.
+    private static JsonArray? PlacesOf(Read? read) {
+        if ((read is null) || (PlaceList().Match(input: read.Answer) is not { Success: true } match)) {
             return null;
         }
 
@@ -356,6 +375,42 @@ public sealed partial class WorldBenchmarkCommandModule {
         ["allocatedBytesPerIteration"] = statistics.AllocatedPerFrame,
         ["longestStallMs"] = statistics.LongestStall,
     };
+
+    // Where a span's iterations spent the frame thread's time, each phase apart: taking input, running console lines,
+    // stepping the worlds this process simulates, and beginning, producing and presenting a frame. A phase a host has
+    // none of (a headless host's three frame phases) reads zero.
+    private static JsonObject Phases(HostFrameRecording recording, int from, int to) {
+        var samples = recording.Samples;
+        var count = Math.Max(val1: 0, val2: (Math.Min(val1: to, val2: samples.Length) - from));
+        (string Name, Func<HostFrameSample, long> Of)[] phases = [
+            ("inputMs", static sample => sample.Input),
+            ("commandsMs", static sample => sample.Commands),
+            ("simulateMs", static sample => sample.Simulate),
+            ("beginMs", static sample => sample.Begin),
+            ("produceMs", static sample => sample.Produce),
+            ("produceBlockedMs", static sample => sample.ProduceBlocked),
+            ("presentMs", static sample => sample.Present),
+        ];
+        var node = new JsonObject();
+
+        foreach (var (name, of) in phases) {
+            var sum = 0L;
+            var max = 0L;
+
+            for (var index = from; (index < (from + count)); index++) {
+                var ticks = of(arg: samples[index]);
+
+                sum += ticks;
+                max = Math.Max(val1: max, val2: ticks);
+            }
+            node[name] = new JsonObject {
+                ["mean"] = ((count == 0) ? 0.0 : (recording.Milliseconds(ticks: sum) / count)),
+                ["max"] = recording.Milliseconds(ticks: max),
+            };
+        }
+
+        return node;
+    }
 
     private static JsonObject Describe(HostFrameDistribution distribution) => new() {
         ["mean"] = distribution.Mean,

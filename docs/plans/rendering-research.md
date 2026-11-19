@@ -879,8 +879,9 @@ through an authored seat program, and the driver that steers it reads the
 seat's body, the places it stands in, the shapes of the places it is going
 to and the navigation mesh from the server object of the world the seat is
 in (`WorldSeatDriver`). When the authority is another process there is no
-such object on the client, so the driver reads nothing and the route cannot
-run. A run started with `--connect` today still steps the boot world
+such object on the client, so the driver read nothing and the route could
+not run; the driver now reads only the delivery
+([the ruling](benchmark.md#the-route-against-a-remote-authority)). A run started with `--connect` today still steps the boot world
 locally and transfers the body to the remote world, so a reading taken
 that way would describe the wrong topology.
 
@@ -2831,7 +2832,7 @@ the bar as ruled.**
 - *Owns.* `worlds/standard/quality.puck`, the quality rows in
   `src/Puck.World.Schema`, the boot code in `src/Puck.World` that selects a
   profile and sets the device pool's budget,
-  `src/Puck.World/WorldSeatDriver.cs`,
+  `src/Puck.World.Client/WorldSeatDriver.cs`,
   `src/Puck.World/WorldBenchmarkCommandModule*.cs` and
   `src/Puck.Cli.Bench/Benchmark`.
 - *Needs.* Nothing. No device name enters engine code: the names and the
