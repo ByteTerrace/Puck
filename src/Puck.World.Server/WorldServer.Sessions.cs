@@ -177,10 +177,11 @@ public sealed partial class WorldServer {
         }
     }
 
-    /// <summary>Detaches every session's observation.</summary>
-    internal void DetachSessionSinks() {
+    /// <summary>Detaches every session's observation, each told why.</summary>
+    /// <param name="reason">The cause each observation's first end names.</param>
+    internal void DetachSessionSinks(string reason) {
         foreach (var session in m_sessionSinks.Keys.ToList()) {
-            DetachSessionSink(reason: "world.session.rebuilt", session: session);
+            DetachSessionSink(reason: reason, session: session);
         }
     }
 

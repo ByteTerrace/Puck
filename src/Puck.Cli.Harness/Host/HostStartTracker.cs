@@ -26,7 +26,11 @@ namespace Puck.Cli.Host;
 /// <param name="Kind">The start's kind.</param>
 /// <param name="WorkingSetOwnGb">The start's own expected whole working-set peak, in gigabytes, which admission reports and
 /// never judges; NaN before the kind has an observation.</param>
-public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN) {
+/// <param name="LoneOwnGb">The lesser of the start's expected commit peak and the kind's fallback, in gigabytes:
+/// <paramref name="OwnGb"/> is this when the expected peak exceeds what the machine could hold with no admitted start
+/// running, and a start whose lone need the machine could never hold is refused by name.</param>
+/// <param name="LoneResidentOwnGb">The lone need in private working set, in gigabytes.</param>
+public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN) {
     /// <summary>Gets whether the machine can hold the start: both the commit headroom and free physical memory cover it.</summary>
     public bool Covered => (CommitCovered && PhysicalCovered);
 }
@@ -48,7 +52,11 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// estimate is still counted at its own usage, without clipping it. Growth tapers to zero over <see cref="Plateau"/> without
 /// a material allocation and returns when growth resumes. A World that reported ready reserves no growth. The system commit
 /// charge already includes live usage. A kind whose expected need alone exceeds the machine is named by
-/// <see cref="HostLoadThresholds.NeverFits"/>, not waited on.
+/// <see cref="HostLoadThresholds.NeverFits"/>, not waited on. An estimate the machine could not hold even with every admitted
+/// start gone (its commit against the headroom plus the live starts' private bytes, its private working set against free
+/// memory plus theirs) judges the start by the lesser of itself and the kind's fallback instead
+/// (<see cref="HostStartDemand.LoneOwnGb"/>): no wait for an admitted start would admit it, and a refused kind runs nothing
+/// that could lower the estimate, so one outlier session would otherwise lock its kind out for good.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -101,7 +109,18 @@ public sealed class HostStartTracker {
     // reported only and has nothing to stand in for it).
     private HostPeaks Expected(HostStartKind kind) => ((m_windows.TryGetValue(kind, out var window) && (window.Count > 0))
         ? new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb)
-        : new HostPeaks(PrivateGb: HostLoadThresholds.DefaultPeakGb(kind: kind), ResidentGb: (HostLoadThresholds.ResidentFraction * HostLoadThresholds.DefaultPeakGb(kind: kind)), WorkingSetGb: double.NaN));
+        : Fallback(kind: kind));
+    private static HostPeaks Fallback(HostStartKind kind) => new(PrivateGb: HostLoadThresholds.DefaultPeakGb(kind: kind), ResidentGb: (HostLoadThresholds.ResidentFraction * HostLoadThresholds.DefaultPeakGb(kind: kind)), WorkingSetGb: double.NaN);
+    // What a start is judged by when its learned expectation exceeds what the machine could hold with no admitted start
+    // running: the lesser of that expectation and the fallback an unmeasured kind gets. Such an expectation could otherwise
+    // refuse every start of its kind however long it waits, and a refused kind runs nothing that could teach the window a
+    // lower figure.
+    private HostPeaks Lone(HostStartKind kind) {
+        var learned = Expected(kind: kind);
+        var fallback = Fallback(kind: kind);
+
+        return new HostPeaks(PrivateGb: Math.Min(learned.PrivateGb, fallback.PrivateGb), ResidentGb: Math.Min(learned.ResidentGb, fallback.ResidentGb), WorkingSetGb: learned.WorkingSetGb);
+    }
     // A live process's peaks as one reading shows them.
     private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
 
@@ -230,7 +249,19 @@ public sealed class HostStartTracker {
                 growing++;
             }
 
-            var expectedOwn = Expected(kind: kind);
+            // Each quantity is judged by the learned estimate unless the machine with every admitted start gone could not hold
+            // it either: then no wait for an admitted start changes the answer, and the lone figure judges instead.
+            var learned = Expected(kind: kind);
+            var lone = Lone(kind: kind);
+            var idle = reading with {
+                CommitChargeGb = (reading.CommitChargeGb - live.Sum(selector: static start => start.PrivateGb)),
+                FreeRamGb = (reading.FreeRamGb + live.Sum(selector: static start => start.ResidentGb)),
+            };
+            var expectedOwn = new HostPeaks(
+                PrivateGb: (thresholds.CommitCovers(reading: idle, needGb: learned.PrivateGb) ? learned.PrivateGb : lone.PrivateGb),
+                ResidentGb: (thresholds.PhysicalCovers(reading: idle, needGb: learned.ResidentGb) ? learned.ResidentGb : lone.ResidentGb),
+                WorkingSetGb: learned.WorkingSetGb
+            );
             var own = expectedOwn.PrivateGb;
             var residentOwn = expectedOwn.ResidentGb;
             var need = (own + growth);
@@ -249,6 +280,8 @@ public sealed class HostStartTracker {
                 GrowthGb: growth,
                 HeadroomGb: (reading.CommitLimitGb - reading.CommitChargeGb),
                 Kind: kind,
+                LoneOwnGb: lone.PrivateGb,
+                LoneResidentOwnGb: lone.ResidentGb,
                 NeedGb: need,
                 OwnGb: own,
                 PhysicalCovered: physicalCovered,

@@ -9,7 +9,10 @@ public sealed partial class SdfProgram {
     /// appearance section unwritten, so evaluating it reaches no appearance code and it is never uploaded. It keeps the
     /// side-table entry (a convex polygon's vertices, a sweep's curve, a path's edges) of each shape it keeps, which
     /// follows the last instruction its source's rewrite answers; it declares no instance, so nothing culls its
-    /// field.</summary>
+    /// field. A masked relief carries its mask rows (<see cref="SdfOp.ReliefRow"/>): unless the excerpt's last
+    /// instructions are already those rows, in order, they are emitted before it, each through
+    /// <paramref name="rewrite"/>. A row named without the relief that reads it, or a rewrite that drops or repeats a row,
+    /// leaves a run the excerpt's program refuses.</summary>
     /// <param name="indices">The indices in <see cref="Instructions"/> of the instructions the excerpt holds.</param>
     /// <param name="rewrite">The instructions that stand for an instruction, given its index and the instruction; its own
     /// instruction alone when <see langword="null"/>. A shape carrying a side-table entry ends its own answer.</param>
@@ -26,6 +29,20 @@ public sealed partial class SdfProgram {
         var sweeps = new List<SdfSweepCurve>();
         var paths = new List<SdfCompiledPath>();
         var samples = new List<SdfSampledBinding>();
+        // The source of each instruction the excerpt holds, so a relief can tell whether its rows already precede it.
+        var sources = new List<int>(capacity: indices.Count);
+
+        void Emit(int index) {
+            var before = instructions.Count;
+
+            if (rewrite is null) {
+                instructions.Add(item: m_instructions[index]);
+            } else {
+                instructions.AddRange(collection: rewrite(arg1: index, arg2: m_instructions[index]));
+            }
+
+            for (var added = before; (added < instructions.Count); added++) { sources.Add(item: index); }
+        }
 
         foreach (var index in indices) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: index, paramName: nameof(indices));
@@ -33,11 +50,20 @@ public sealed partial class SdfProgram {
 
             var source = m_instructions[index];
 
-            if (rewrite is null) {
-                instructions.Add(item: source);
-            } else {
-                instructions.AddRange(collection: rewrite(arg1: index, arg2: source));
+            if ((source.Op == SdfOp.NoiseDisplace) && (source.Material > 0u)) {
+                var rows = ((int)source.Material);
+                var carried = (sources.Count >= rows);
+
+                for (var row = 0; (carried && (row < rows)); row++) {
+                    carried = (sources[((sources.Count - rows) + row)] == ((index - rows) + row));
+                }
+
+                for (var row = (index - rows); (!carried && (row < index)); row++) {
+                    Emit(index: row);
+                }
             }
+
+            Emit(index: index);
 
             var at = (instructions.Count - 1);
 

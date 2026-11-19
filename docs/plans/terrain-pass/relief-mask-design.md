@@ -68,8 +68,8 @@ two differ, the step back is the current recommendation.
 ## What is built, and why patching it does not converge
 
 A relieved creation emits its shapes inside one field scope, then its relief.
-Each mask adds a scope between them (`SdfProgramBuilder.BeginReliefMask`,
-`SdfProgramBuilder.EndReliefMask`):
+Each mask adds a scope between them (BeginReliefMask,
+EndReliefMask):
 
 ```text
 PushField                          the creation's scope
@@ -86,11 +86,11 @@ PopField
 The region's shapes are ordinary `SdfOp.ShapeBlend` instructions under
 ordinary point operations. The scope is an ordinary `SdfOp.PushField` whose
 Shape lane carries a seed. The weight is a per-sample register in both
-interpreters, multiplied by `SdfOp.ReliefWeight` and consumed by the next
+interpreters, multiplied by the ReliefWeight op (since deleted) and consumed by the next
 `SdfOp.NoiseDisplace`.
 
 The first review found eleven defects in that form and the second found ten
-more after `SdfProgram.RequireReliefMasks` was added as one admission door.
+more after RequireReliefMasks was added as one admission door.
 Sorted by cause rather than by symptom, the 21 findings are five things:
 
 | Cause | What goes wrong | Findings |
@@ -106,7 +106,7 @@ causes, because each cause is a property of the form. A check that walks the
 stream can refuse a `Repeat` inside a mask and still miss the same `Repeat`
 one instruction before it, which is the second review's inherited-fold
 finding. A table of which instructions are mask instructions
-(`SdfProgram.ReliefMaskInstructions`) helps a reader that consults it, and the
+(ReliefMaskInstructions) helps a reader that consults it, and the
 influence walk did not: `SdfFieldEvaluator.WalkPoints` takes a skin owner for
 every shape. A third round of the same kind would add checks for the ten new
 findings and leave the next reader, the next opcode and the next numeric edge
@@ -487,7 +487,7 @@ anything from the document.
 | The relief is the one its bound was computed from: its noise is at most one in magnitude, so a masked relief reaches no farther than its amplitude | The typed relief value decoded at the program door, which derives the normalization and validates the octave count, gain and lacunarity; the analysis and both compiles read that value | The kernel reads the packed lane, which the door has compared with the derived one |
 | The weight is continuous, with slope at most the band's in the relief's frame | The types: a region shape is lowered by its own constructor from an author's specification, so no caller supplies a packed lane; it has no field that could hold a fold, a warp, a blend or a scope; its packed type comes from a closed list; and its relief's chain passes the point-factor rule or the program is refused | Each listed shape's own 1-Lipschitz property is that shape's, held by `SdfPrimitiveLipschitzLawTests`. The exact skip is arithmetic at an edge and stays review-only |
 | The relief's step bound includes the band's slope in the right units | One formula (`SdfProgram.NoiseDisplaceStepFactor`), fed one point factor per instruction, added at the relief's own instruction. Noise and bands are in one frame, so no caller converts units | The point-factor rule's own list of bounded operations |
-| A mask composes nothing into the field | Structure: a mask is not an instruction. There is no accumulator write, push or pop to get wrong, and `SdfOp.ReliefWeight` is deleted | Nowhere |
+| A mask composes nothing into the field | Structure: a mask is not an instruction. There is no accumulator write, push or pop to get wrong, and the ReliefWeight op is deleted | Nowhere |
 | CPU and GPU read the same field | One operand with two readers; a band whose start, width and end both carriers hold exactly; one shape order fixed by the type; one vocabulary list; `SdfEncodingProbe` passing every packed field | The two readers agree by convention, as every instruction's do. This stays review-only, with the kernel-agreement leg as its check |
 | Bake and contact see the band | The compiled mask's width and box, which the two consumers read | Nothing forces a future consumer to read them. The bake's sample budget and the collider's gradient floor still bound how narrow a band either resolves |
 | A mask is part of its relief's identity: every key, excerpt and rewrite that carries the relief carries its masks | An instruction and its operand are one immutable value, and no interface takes one without the other | A reader that hashes a program's packed words rather than its pairs still sees the operand, since it is in the words |
@@ -798,10 +798,10 @@ window as step 6.
 
 ## What it deletes
 
-- `SdfOp.ReliefWeight`, its generated define, its rows in `SdfOpRoles` and the
+- the ReliefWeight op, its generated define, its rows in `SdfOpRoles` and the
   evaluator's supported set, and its arms in `mapCore`, the point walk, the
   box walk, the cull and the cell analysis.
-- The seeded push: `SdfProgram.IsReliefMaskPush`, the seed read in `mapCore`,
+- The seeded push: IsReliefMaskPush, the seed read in `mapCore`,
   and the seed branches of the evaluator's compile and both walks.
 - The whole of `SdfProgram.ReliefMasks.cs`: `RequireReliefMasks` and its band
   check, `ReliefMaskInstructions`, both `IsSurfaceShape` overloads and their
@@ -811,9 +811,9 @@ window as step 6.
   and the push's words, the push table kept for it, the mask-slope plumbing
   through the chain pass, and the shape-free branch the noise and sine reliefs
   share.
-- `SdfProgramBuilder.BeginReliefMask`, `SdfProgramBuilder.EndReliefMask` and
+- BeginReliefMask, EndReliefMask and
   the builder's open-mask state.
-- `SdfFieldEvaluator.ReliefMaskWeight` as an instruction arm, the relief
+- ReliefMaskWeight as an instruction arm, the relief
   register in both walks and in `mapCore`, and the cull's step over a mask
   scope (`SdfFieldEvaluator.TryCertifyInstance`).
 - The mask tables in `SdfMeshAudit.ShapeFields`, `SdfMeshAudit.SlotWalk` and
@@ -900,8 +900,9 @@ scope, then the rounds on this design, the last of which found seven more
 flaws (D1 to D7) in the revision above. This section steps back from the
 construct to the need. It asks what the lake and the gallery want from a mask,
 whether that takes a general construct, and what smaller form would hold its
-invariants by structure. It recommends one, and the lead decides which form is
-built. Nothing here is built, and nothing here was measured on a GPU.
+invariants by structure. It recommends one; the lead chose it, and step A is
+built ([as built](#step-a-as-built-and-the-step-back-reviews-findings)). Nothing
+here was measured on a GPU.
 
 ### The recommendation in brief
 
@@ -943,7 +944,7 @@ built. Nothing here is built, and nothing here was measured on a GPU.
 
 | Place | Region | Band | Is the region a shape of the creation? |
 |---|---|---|---|
-| The lake's bowl (`valley-north-west`) | Two ellipsoids, the basin and its outlet, built from the rows that carve them (`terrainBasinMask` in `worlds/standard/terrain.puck`) | 8 m, no relief inside | Yes: the carve |
+| The lake's bowl (`valley-north-west`) | Two ellipsoids, the basin and its outlet, built from the rows that carve them (`terrainCarveMask` in `worlds/standard/terrain.puck`) | 8 m, no relief inside | Yes: the carve |
 | The gallery's RELIEF MASK exhibit (`shape-noise-mask` in `worlds/debug/shapes.puck`), its bowl | One sphere | 8 cm, no relief inside | Yes: the carve |
 | The same exhibit, its slab | One box a little larger than the slab | 6 cm, relief inside only | No |
 | The glacier's cradle (planned) | One rounded box | Not authored yet | Yes: the carve |
@@ -1027,7 +1028,7 @@ PushField                         the creation's scope
 PopField
 ```
 
-`ReliefRow` is one new op, in place of `SdfOp.ReliefWeight`. In every walker
+`ReliefRow` is one new op, in place of the ReliefWeight op. In every walker
 of the stream its arm does nothing: it moves no point, writes no field and
 takes no owner. The relief's arm reads the rows, computes the weight and
 multiplies its displacement by it. No value passes from one instruction to
@@ -1183,7 +1184,7 @@ One change, since no half of it stands alone:
 
 - the band, the region shape and the mask as typed values, with the door that
   decodes a run into them;
-- the row op in place of `SdfOp.ReliefWeight`, its packing, its lane contract
+- the row op in place of the ReliefWeight op, its packing, its lane contract
   and the encoding probe's call for every row kind and listed type;
 - the relief's arm in `mapCore` and in the evaluator's point and box walks,
   and a do-nothing arm for the row in every other walker;
@@ -1229,6 +1230,62 @@ One change, since no half of it stands alone:
   `puck mesh audit --cpu --world worlds/debug --prototype valley-north-west`
   shows no new open edges or slivers, and `puck creation stats` prints the
   north-west sector's clamp as it does today.
+
+#### Step A as built, and the step-back review's findings
+
+Step A is built as the row form describes, with these choices made while
+building it.
+
+- **The row's lanes.** The Blend lane names the kind (`SdfReliefRowKind`).
+  Every lane of every kind is classed by the lane contract
+  (`SdfProgram.RequireReliefRowLanes`); a relief's Material lane is the count,
+  checked against the run by the door (`SdfProgram.DecodeReliefRuns`).
+- **A sphere region** lowers through the native arm to an exponent-2
+  superellipsoid, so the list has four packed types and a sphere is one of
+  them by lowering.
+- **The superellipsoid and the capsule** each read one formula in both
+  readers, a fix that stands without any mask: a superellipsoid's radii and
+  exponent snap to the grid both carriers hold (`SdfDerivedLanes.FixedGrid`),
+  its smallest radius rises to 2⁻¹³, the kernel carries its gauge ratios in
+  metres as the fixed-point evaluator does, and both clamp the norm for
+  2 < e ≤ 3; a capsule projects by its endpoint's own squared length in both,
+  and its derived reciprocal lane is gone.
+- **The unscoped relief** (D6) binds the step scale and is named by
+  `SdfStepScaleBinder`, which now carries an op and an optional shape.
+
+The step-back review's findings, each answered:
+
+| Finding | What answers it |
+|---|---|
+| F1.1, a capsule's squared length overflows to a zero reciprocal | The lane contract refuses an endpoint whose squared length is not finite in float, and no reciprocal lane remains; a row also caps every magnitude (F1.4) |
+| F1.2, row lanes the contract leaves unconstrained, and the relief's Material lane | Each row kind classes every lane: a band's Shape and Data1 zero, a pose's Shape and Data0.w zero and its quaternion unit, a primitive's Data1.x and Material zero and its lanes through the shape's own row. `SdfNoiseDisplacement.Of` bounds the count by the cap and the door checks it against the run |
+| F1.3, the backward read in `mapCore` | The door requires a contiguous run in the relief's owner, so the run lies in its segment; the kernel returns its error hit for a count past `SDF_MAX_RELIEF_ROWS` or the segment's start, and its row loop has that constant bound |
+| F1.4, Q48.16 saturation on large finite floats | Every row lane is at most `SdfReliefRegion.MaxMagnitude` (2²⁰). The same saturation on an ordinary shape's lanes is left open (see below) |
+| F1.5, bounds and rotation bounds | The box rule answers the unbounded interval when a region's interval is unbounded, a region's turn has its interval constants built once at compile, and a weight of exactly zero evaluates no noise in either walk |
+| F1.6, the unit tolerance on poses | A mask's slope carries the regions' stretch, `1 + 4 · 2⁻¹³` (`SdfReliefRegion.MaxStretch`), which covers a turn and a plane normal at the tolerance's edge |
+| F2.1, the uniform-scale path and chamfered boxes | `SdfSolidGeometry.AppendNativePrimitive` holds the native arms, which `AppendScaledPrimitive` and the region's constructor both call; the constructor requires one listed instruction, so a chamfered box and a capsule scaled unlike in X and Z are refused |
+| F2.2, the superellipsoid's small-radius divergence and its clamp | The grid snap and one formula above |
+| F2.3, the capsule reads different lanes | One formula from the endpoint above |
+| F3.1, `Excerpt` against its callers | `Excerpt` emits a relief's run before it unless the excerpt's last instructions are already those rows in order; a row named alone, or a rewrite that drops or repeats one, leaves a run the excerpt's program refuses |
+| F3.2, the instance cull | `TryCertifyInstance` steps over a row; the seeded-push skip is gone |
+| F3.3, the row's role | `SdfOpRoles` classes a row as a field op, so the audit's member and shape extraction keep or drop it with its relief |
+| F3.4, the mask slope's units | A masked relief is charged its masked slope times its point factor (`SdfNoiseDisplacement.MaskedSlope`) |
+| F3.5, conservative defaults | `AnalyzeSegment`, the distance gain, the shape reaches and the point factors each have a do-nothing arm for a row |
+| F4.1, D6 | The binder above |
+
+The twin check is `SdfReliefMaskLawTests.RemovingTheRowsChangesOnlyTheStepBoundByTheMasksCharge`,
+at scale one and at a quarter. It compares the instructions, the skip segments,
+the global step scale and its binder and the dynamic capacity, and holds the
+scope's bound to the twin's plus the masks' charge. The evaluator's frame is
+not part of it: a region's interval walk can narrow the frame (at a quarter
+scale the masked lake's frame is a quarter of the twin's, 2⁴⁴ raws against
+2⁴⁶), which shrinks no query anyone makes. The instance cull's certificate is
+not observable from outside the evaluator, so its do-nothing arm is reviewed,
+not checked.
+
+Still open after step A: an ordinary shape's lanes saturate Q48.16 past
+about 1.4·10¹⁴ as F1.4 describes for rows; the kernel's agreement, its cost and
+the looks are step C's.
 
 #### B. The band as a wavelength
 
@@ -1313,16 +1370,14 @@ its mask slope, the law's two properties and both authored masks.
 
 ### Open questions of the step back, and their owners
 
-- **Is the narrowing acceptable?** The landed mask admits a torus, a cylinder,
-  a cone, a prism and an elongated shape as a region, and any number of masks.
-  No authored mask uses one. *Owner:* the lead, before step A. A type that an
-  author needs joins the list as one case.
+- **Is the narrowing acceptable?** The lead accepted it, and step A is built
+  with it. A type that an author needs joins the list as one case.
 - **What does a row cost the kernel?** *Owner:* step C.
 - **Does the lattice's budget reach a band of a few millimetres?** *Owner:*
   step B, whose check reports the shortfall.
-- **Does step 1's lane contract cover the four listed types?** Step 1's code
-  was not read for this section. *Owner:* step A, which adds the rows'
-  contract beside it.
+- **Does step 1's lane contract cover the four listed types?** Yes: a
+  primitive row runs its type's shape row, and step A added the rows' own
+  contract beside it, and the capsule's finite squared length.
 - **Should the carrier change and the shared paint reader be done anyway?**
   *Owner:* the lead. They are refactors of four parallel lists and of two
   copies of one kernel reader, with no mask depending on them.

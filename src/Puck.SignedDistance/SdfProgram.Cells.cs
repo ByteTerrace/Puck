@@ -55,7 +55,7 @@ public sealed partial class SdfProgram {
                 case SdfOp.ShapeBlend:
                 case SdfOp.Onion:
                 case SdfOp.Dilate:
-                case SdfOp.ReliefWeight:
+                case SdfOp.ReliefRow:
                 case SdfOp.LaneErode:
                 case SdfOp.PushField:
                 case SdfOp.PopField:

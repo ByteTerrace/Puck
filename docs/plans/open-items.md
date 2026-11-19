@@ -322,7 +322,7 @@ is filed with `puck measure`.
 | Branch | Holds | Waits for |
 |---|---|---|
 | `lane/g5` | G5, the occlusion-aware rate floor; every review finding answered | a merge of the integration tip, then its windowed recipe |
-| `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | the `world.toon off` fix lands alone; the model is parked with cel ([the visual bar](#the-visual-bar)) |
+| `lane/toon-3` | the third cel model; `world.toon off` suppressing every style | the `world.toon off` fix lands alone; the model resumes with cel, the debug world's treatment ([the visual bar](#the-visual-bar)) |
 | `lane/moth-suit` | the suited Moth's rebuild and the shared head | the owner's pair session |
 | `lane/moth-pilot` | the off-suit pilot; `worlds/standard/turns.puck` | the owner's pair session |
 | `lane/swallow-7` | the swallow rebuilt to a cited reference document | the owner's pair session |
@@ -2003,11 +2003,11 @@ intent is in its guide.
   flat cyan with a hard rectangular edge; the river runs in a concrete trough.
   Rebuild each to its panel, building the rendering features the panels need
   where they are missing ([water](#water)).
-- [parked] Cel shading stays off until the owner raises it again
-  ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
-  The one step
-  that lands is `lane/toon-3`'s fix to `world.toon off`, which suppresses
-  every cel style, a material's own included. Waiting with the treatment:
+- [high] Cel is the debug world's treatment
+  ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
+  every place opts in through its materials and is judged under it, with
+  `lane/toon-3`'s fix to `world.toon off` (it suppresses every cel style, a
+  material's own included). Owed with the treatment:
   which of the Moth's slots band (all 31 do today through `toonSelect`), and
   the third model's record, which fixed the washed-out shade and then broke
   shade into blotches, with near-black planes where the direction wants warm
@@ -3578,8 +3578,8 @@ proves itself with `puck compile` lowering to the same document.
   display pass then applies `render.tone`'s shoulder again. The program's
   compose stage predates `render.tone`; it should hand the display pass scene
   light and drop its own exposure and shoulder, with the `toon` row's
-  `exposure` and `shoulder` members going with it. Cel is parked, so this
-  waits for it ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
+  `exposure` and `shoulder` members going with it. Cel is the debug world's
+  treatment, so this is fixed first ([the ruling](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)).
 - [low] File-system primitives `AtomicFile` cannot serve yet:
   `ShaderCompiler.Entries.cs` wants a write that refuses to replace;
   `DirectoryObjectBlobStoreBackend` stages through a confined handle; a lock
@@ -4008,8 +4008,9 @@ reversal brake, then a sitting.
   through an angle or moves it along an eased path over a duration
   (`BodyMotionOp`, `WorldEffect.PlanarImpulse`).
   [Pose clips, body parts and reach](instrument-play/pose-clips.md) designs
-  the first three, and its steps are the build lane's order; steps 1 to 3 (the
-  compiled rig, its reads and the caps) are built, so step 4 is next.
+  the first three, and its steps are the build lane's order; steps 1 to 6 (the
+  compiled rig, its reads, the caps, parts as sets, adding clips, and masks and
+  replacing) are built, so step 7 is next.
 
 - A reversal should brake faster than it accelerates: `ShapeWholeVelocityRow`
   converges at the engage rate whenever the stick is deflected, so a full

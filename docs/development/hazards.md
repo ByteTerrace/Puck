@@ -230,10 +230,16 @@ or one adds a field the other forgets.
   (`src/Puck.SdfVm/SdfMeshPathBake.cs`).
 - The test copies of a `NativeMemory`-backed `IAllocator` named
   `HeapAllocator`, now one `tests/Shared/HeapAllocator.cs`.
-- The Superellipsoid's CPU and GPU formulas disagree at small radii
-  (`SdfFieldEvaluator.SdfSuperellipsoid` against
-  `mapCore`), and the box cull is written in C# and HLSL
-  (`SdfMeshCull.Keeps`, `sdf-mesh-selection.hlsli`).
+- The box cull is written in C# and HLSL (`SdfMeshCull.Keeps`,
+  `sdf-mesh-selection.hlsli`).
+- The Superellipsoid and the Capsule are written in C#
+  (`SdfFieldEvaluator.SdfSuperellipsoid`, `SdfCapsule`) and HLSL
+  (`sdfSuperellipsoid`, `sdfCapsule`). Both readers evaluate one formula from
+  the same lanes: a capsule projects by its endpoint's own squared length, and a
+  superellipsoid's radii and exponent lie on the grid both carriers hold
+  (`SdfDerivedLanes.FixedGrid`), so both scale its gauge by one smallest radius.
+  `SdfFieldDeviceLawTests`' shape-formula leg evaluates both on the same inputs
+  on both backends.
 - The irradiance probe gather is written in C# (`SdfMeshIrradiance.Select` and
   `Gather`, `SdfMeshProbeDepth.Visibility`) and HLSL (`sdfMeshProbesAt`,
   `shade/sdf-mesh-irradiance.hlsli`). `SdfMeshIrradianceGatherDeviceLawTests`

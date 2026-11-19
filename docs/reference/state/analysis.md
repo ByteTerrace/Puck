@@ -259,9 +259,10 @@ Each line carries its place (`RuleWorkContributor.Order`). In Puck.World a tick
 runs the rules no group claims in one pass in document order, then every
 group's passes, then the interactions in theirs
 (`WorldRuleHost.EvaluateWorldRules`), so an ungrouped rule's place is its
-document index, an interaction's comes after every rule, and a grouped rule's
-line may run anywhere while its writes land after every ungrouped rule and
-before every interaction. A search judge run is one pass over its rules in
+position among the ungrouped rules, an interaction's comes after every rule,
+and a grouped rule's line may run anywhere while its writes land after every
+ungrouped rule and before every interaction. The host's pass and the sheet both
+read one `RuleEvaluationOrder`, so they cannot place a rule differently. A search judge run is one pass over its rules in
 order, so each judge rule's place is its index.
 
 In the example, `income` and `bankrupt` pin `phase` to 1 and 2, and nothing

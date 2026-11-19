@@ -104,6 +104,9 @@ public sealed partial class SdfProgram {
                 case SdfOp.PushField:
                     scopes[++depth] = new DistanceBound(Gain: UnconstrainedGain, Sag: 0f);
                     break;
+                case SdfOp.ReliefRow:
+                    // A relief's data row moves no point and writes no field; the relief after it bounds nothing.
+                    break;
                 case SdfOp.ShapeBlend:
                     var shapeGain = ShapeDistanceGain(instruction: instruction, instructionIndex: cursor);
 

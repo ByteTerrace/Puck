@@ -279,10 +279,9 @@ verbs:
 
 ## Cel shading
 
-Cel shading is parked (the owner's ruling,
+Cel is the debug world's treatment (the owner's ruling,
 [recorded in the decision](../decisions/rendering.md#a-light-is-shadowed-wherever-it-lights-and-cel-shading-is-a-style-per-material)):
-it stays off in the debug world, and no step here turns it on or judges a place
-under it until the owner raises it again. The mechanism this plan built stays:
+every place opts in through its materials and is judged under it. The mechanism this plan built carries it:
 a style per material with the world's default, `band(cosine) × visibility` with
 the penumbra kept, and rim light, reflections and ambient occlusion surviving
 the band

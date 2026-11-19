@@ -81,19 +81,14 @@ shapes, that scales the relief's displacement by a weight between 0 and 1. A
 region's shapes are evaluated only to measure distance to the region. They
 add no surface, take no material, and are never part of the composed solid.
 
-The mask is built as a field scope in the instruction stream, which
-[how it lowers](#how-it-lowers) and [what stays exact](#what-stays-exact)
-describe. Two adversarial reviews found that this form does not hold its
-invariants, and a round of fixes did not close them.
-[The relief mask design](terrain-pass/relief-mask-design.md) replaces the
-scope with an operand that travels with its relief instruction, and a second
-review of that design found seven more flaws.
-[Its step back](terrain-pass/relief-mask-design.md#the-step-back) returns to
-what the lake and the gallery need and recommends a smaller form: a mask is a
-short run of data rows before its relief, and a region shape is a box, an
-ellipsoid, a capsule or a plane. The lead decides which form is built. The
-step that builds it rewrites those two sections. The row form keeps an
-author's document and narrows the types a region shape may be.
+The mask is built in the row form of
+[the relief mask design's step back](terrain-pass/relief-mask-design.md#the-row-form):
+a mask is a short run of data rows directly before its relief, and a region
+shape is a box, a sphere, an ellipsoid, a superellipsoid, a capsule or a
+plane. [How it lowers](#how-it-lowers) and [what stays exact](#what-stays-exact)
+describe it as built. It replaced a field scope in the stream that two
+adversarial reviews showed does not hold its invariants. The document is the
+same, and the region types are narrower.
 
 #### What an author writes
 
@@ -182,141 +177,101 @@ own place's lane once the mask lands:
   over the deck's footprint keeps that wall where the deck meets it.
   Unchecked: whether the join shows a defect today.
 
-**What a mask shape may carry.** A mask shape carries geometry only: its type,
-name, pose, scale, and the facets that keep a primitive's distance a bound
-with a known Lipschitz factor (exponent, rounding, chamfer, elongate, a
-prism's profile). A material, blend, group, detail flag, warp, fold, field
-op, panel, trim, cell or paint on a mask shape is refused by name, since none
-of them means anything for a region. The type must be one that contact admits
-(not Revolve and not Sweep: see
-[contact admission](../../.claude/skills/sdf-authoring/references/shapes.md#contact-admission)).
-The contact field reads the same mask, and contact must not quietly drop part
-of it. Shapes in one entry join by hard union only. A subtraction or a smooth
-blend inside a mask is left for a later change, because a smooth blend against
-the seed described below would change the weight near the band's outer edge.
-These refusals turn away nothing that could be written before, because the
-mask itself is new.
+**What a mask shape may carry.** A region is one of the listed primitives at a
+pose: a box (rounded, not chamfered), a sphere, an ellipsoid or a
+superellipsoid at any scale, a capsule scaled alike in X and Z, or a plane.
+The shape's type, name, position, rotation, scale, rounding and exponent are
+read; any other member (a material, blend, group, detail flag, warp, fold,
+field op, panel, trim, cell, paint, elongation, profile or lift) is refused by
+name, and so is a type off the list. A relief takes at most 8 masks and 32
+region shapes in all. The canonicalizer validates a mask through the same door
+the emitter compiles it by (`CreationStampEmitter.ReliefMask`), so the two
+cannot disagree.
 
 **Canonical form.** `CreationCanonicalizer` normalizes each entry: it fills in
-the defaults, canonicalizes each shape through the same shape normalization
-creation shapes use (so the gauge, scale and exponent conventions are the
-same), and keeps the entries in authored order. Entries are not merged or
-sorted. Two entries are not one entry with both shapes, because a product of
-two bands differs from one band over a union.
+the defaults, snaps the band to its grids and stores the snapped values (the
+start and the fade to multiples of 2⁻¹² units, the weights to multiples of
+2⁻¹⁶, so the document states the band the engine evaluates), omits an entry
+whose two weights are equal (it is the identity everywhere), canonicalizes
+each shape through the creation shapes' normalization, and keeps the entries
+in authored order. Entries are not merged or sorted, because a product of two
+bands differs from one band over a union.
 
 #### How it lowers
 
-The relieved creation already emits inside one field scope: its shapes, then
-the relief, then the pop. The mask adds one short scope per entry, between the
-shapes and the relief:
+The relieved creation emits inside one field scope: its shapes, then the
+relief, then the pop. The masks ride the relief as data rows directly before
+it (`SdfOp.ReliefRow`, packed by `SdfProgramBuilder.NoiseDisplace`):
 
 ```text
-PushField                      the creation's scope, as today
+PushField                         the creation's scope
   shapes and text …
-  PushField  seeded at start + fade        one entry
-    the entry's shapes, Union, material 0
-    ReliefWeight(start, fade, inside, outside, 1/L)
-  PopField   Union
-  … one such scope per entry …
-  relief (NoiseDisplace, or TerrainRelief after step 3)
+  ResetPoint, the stamp's prefix  the relief's point chain
+  ReliefRow  band                 one mask: start, width, inside, outside
+  ReliefRow  pose                 one region: its origin and turn in the relief's frame
+  ReliefRow  primitive            that region's type and data, as a shape instruction packs them
+  … the mask's other regions, then the other masks …
+  NoiseDisplace  rows: R          reads the R rows before it (its Material lane)
 PopField
 ```
 
-It needs one new op and one extension of an existing one.
-
-- **ReliefWeight** (a field op): it reads the scope's accumulator as the
-  region's distance `m`, scaled by the scope's own 1/L. The Lipschitz analysis
-  bakes that factor onto the op, as it already bakes a scope's candidate scale
-  onto each pop. It computes the entry's weight and multiplies it into a
-  per-sample relief-weight register, which starts each sample at 1. Then it
-  sets the accumulator to the far distance. The plain Union pop that follows
-  therefore composes nothing: `min(parent, far)` is the parent, and the
-  parent's material wins.
-- **The relief op** multiplies its displacement by the register, then resets
-  the register to 1. This is the same consume-and-clear pattern that LaneErode's
-  pending amount uses before the shape it erodes.
-- **PushField's seed:** a push whose Shape lane holds a nonzero float seeds its
-  accumulator with that value instead of the far distance. GaussianPush already
-  reads a float from the Shape lane the same way. A mask scope is seeded at
-  `start + fade`, where the weight already reaches `outside`. So clamping the
-  region's distance there changes no weight, and the existing per-shape bound
-  test in mapCore's ShapeBlend (a shape whose bound sphere is farther than the
-  running minimum is skipped) skips every mask shape farther than the band.
-  Far from every region, a mask costs one sphere test per mask shape. Near
-  one, it costs the primitive, a smoothstep and a multiply. Unseeded pushes
-  read 0 and behave as today.
+- **A row** is data for the relief after it and nothing else: every other
+  reader of the stream steps over it, since it moves no point, writes no field
+  and takes no owner.
+- **The relief** reads its rows, computes each mask's weight from the least
+  distance of its regions at `turn_back(q − origin)`, multiplies the weights,
+  and multiplies its displacement by the product. Where the product is exactly
+  zero the noise is not evaluated; a mask whose distance is at or below its
+  start skips its remaining regions.
+- **The masks are the document's.** `CreationStampEmitter.ReliefMasks`
+  compiles them once per document (`SdfReliefBand`, `SdfReliefRegion.Lower`),
+  with no scale applied: a region is posed in the creation's frame, which the
+  relief's own point chain reaches, so a mirrored, scaled or slot-carried copy
+  carries its masks.
 
 **One door.** All three relief emitters call `CreationStampEmitter.EmitNoise`:
 the static stamper (`WorldPlacementStamper`), the moving root surface
 (`WorldPlacementStamper.EmitRootSurface`) and contact
-(`CreationStampEmitter.EmitContact`). The mask scopes are emitted inside
-EmitNoise, through the same per-shape emission the creation's shapes use, with
-the same stamp transform. So a mirrored, scaled or slot-carried copy mirrors,
-scales and carries its mask with the shapes it masks. The relief pattern does
-not follow the mirror, as today. Nothing else reads the masks list except the
-canonicalizer and `puck creation stats`.
-
-**Scope depth.** A mask scope sits one level inside the creation's scope, so a
-relieved creation uses two of the VM's four levels
-(`SdfProgramBuilder.MaxFieldScopeDepth`). Entries follow one another and do
-not nest.
+(`CreationStampEmitter.EmitContact`). The program's constructor decodes each
+run once (`SdfProgram.ReliefMasksAt`), and both evaluators and the step bound
+read what it decoded.
 
 #### What stays exact
 
-The design rests on five invariants.
+The invariants, each with what enforces it (the header of
+`SdfProgram.ReliefRows.cs` names the door's facts):
 
 1. **The weight is in [0, 1], so a masked relief's reach is at most its
-   amplitude.** Every existing channel that reads the relief's reach as its
-   amplitude therefore stays sound without change: the cull's relief charge,
-   the interval rule, the instance bound and contact's growth term in
-   `WorldColliderSet`. *Enforced* in `SdfProgram` validation, the one door
-   every program passes, which refuses a ReliefWeight whose inside or outside
-   lies outside [0, 1]. The canonicalizer and the builder refuse it earlier, by
-   name.
-2. **The register reaches only the relief that follows its masks.** A
-   ReliefWeight's scope must be followed, in the same parent scope, only by
-   further mask scopes and then the relief op. The relief consumes the register
-   and resets it. *Enforced* in `SdfProgram` validation, which checks that
-   sequence the way it checks that GaussianPush's tail is adjacent. Both
-   interpreters' reset makes a stray register harmless even if a program got
-   past validation.
-3. **A mask scope adds nothing to the composed field.** After ReliefWeight,
-   the scope's candidate is the far distance, and its pop carries candidate
-   scale 1. Every analysis must treat it that way.
-   - The interval rule must give the scope the far point. Treating it as the
-     union of its shapes would be unsound: a union's upper bound would claim
-     "certainly inside" in empty air where a mask region lies.
-   - The cull, skip spheres and the influence reader must treat it as
-     contributing nothing.
-   - The CPU evaluator must give ReliefWeight its own arm. Its field-edit
-     helper, `SdfFieldEvaluator.EditField`, ends in a default arm that
-     dilates, so an op routed there without an arm would silently become a
-     dilation.
-
-   *Enforced* only in part. `SdfOpRoles.Of` refuses an unclassified op, so the
-   op cannot reach a program unclassified. The remaining arms are the
-   rendering skill's new-instruction checklist, which a reviewer checks. The
-   mechanical check in step A below compares a masked program with its
-   unmasked twin outside the band.
-4. **Contact and drawing read one masked field.** This follows from the one
-   door: contact's program comes from `CreationStampEmitter.EmitContact`, which
-   calls the same EmitNoise.
-5. **The step bound includes the band's slope.** The relief adds to its
-   scope's Lipschitz bound additively, at its own instruction and through its
-   chain's point factor, as every relief does (`SdfProgram.Lipschitz.cs`). With masks, that contribution
-   becomes `|a| · B`, where `a` is the amplitude, `L` is the unmasked relief's
-   gradient bound, and
-
-   `B = L + sum over entries of |outside - inside| · 1.5 / fade`.
-
-   This holds because the masked displacement's gradient is
-   `a · (w ∇n + n ∇w)` with `|n| ≤ 1` and `w ≤ 1`, and smoothstep's slope is
-   at most 1.5 per band width. The 1/L baked onto ReliefWeight makes the
-   region's distance 1-Lipschitz. *Enforced* by computing B in one public
-   formula, `SdfProgram.NoiseDisplaceStepFactor`'s mask slope
-   (`SdfProgram.ReliefMaskSlope`), which `AnalyzeLipschitz` bakes and
-   `CreationNoiseDocument.StepFactor` reports. The canonicalizer has no budget
-   check that reads it.
+   amplitude.** Every channel that reads the relief's reach as its amplitude
+   (the cull's relief charge, the interval rule, the instance bound, contact's
+   growth term) stays sound with no change. *Enforced* by `SdfReliefBand`, whose
+   weights lie in [0, 1], and which the program's door reads every band row
+   through.
+2. **A run belongs to the relief that reads it.** A row stands only in a run
+   closed by its relief, the relief's count is the run's length, and both share
+   one instruction owner, so no ResetPoint, scope edge or instance boundary
+   falls inside a run. *Enforced* by the program's door
+   (`SdfProgram.DecodeReliefRuns`); `SdfProgram.Excerpt` carries a relief's run
+   with the relief, and a rewrite that separates them is refused when the
+   excerpt is built.
+3. **A row adds nothing to the composed field.** *Enforced* by structure: a row
+   is its own op, and no arm for it writes the field, moves the point or takes
+   an owner. Each stream walker has a do-nothing arm; one without would refuse
+   (the point and box walks, `mapCore`, `SdfProgram.AnalyzeReliefPointFactors`)
+   or turn conservative. The twin check below covers the analyses.
+4. **Contact and drawing read one masked field.** The one door above, and the
+   same primitive functions for a region in both readers. A region's band lies
+   on grids both carriers hold exactly, so the kernel and the fixed-point
+   evaluator compare its distance with the same three numbers. Convention, as
+   for every instruction; the kernel agreement leg checks it.
+5. **The step bound includes the bands' slopes.** The relief adds
+   `|a| · (L + Σ slopeₖ)` to its scope's bound, at its own instruction and
+   through its chain's point factor (`SdfNoiseDisplacement.MaskedSlope`), where
+   a mask's slope is `1.5 · |outside − inside| / fade` times the regions'
+   stretch (`SdfReliefMask.Slope`): a pose quaternion and a plane normal are
+   admitted within the unit-length tolerance, which stretches a region's
+   distance by at most `4 · 2⁻¹³`. `CreationNoiseDocument.StepFactor` reports
+   the same formula.
 
 **Where the guarantee stops.** Wherever an entry's `inside` is 0, the relief's
 term is exactly zero on the region's surface and inside it. A carve or pad
@@ -348,9 +303,9 @@ there are ordinary relief behaviour.
 any other op. Three parts of the bake stay as they are:
 
 - **The instance bound** comes from the document's shapes and the relief's
-  amplitude (`CreationStampEmitter.RenderReach`), never from mask shapes. A
+  amplitude (`CreationStampEmitter.RenderReach`), never from mask regions. A
   region that reaches past the creation's solid therefore does not enlarge
-  it. This is sound, because the mask scope adds no surface (invariant 3).
+  it. This is sound, because a row adds no surface (invariant 3).
 - **The declared detail.** The creation keeps the relief's spacing
   (`CreationNoiseDocument.DetailSpacing`), so the masked floor still bakes at
   that spacing. This costs triangles only where the floor curves.
@@ -365,8 +320,8 @@ weight with `FixedQ4816.Smoothstep`, so contact stays deterministic.
 Grounding and the slope test read the masked field's normal. Three parts of
 the collider stay unchanged:
 
-- **The envelope** is built with `applyRelief: false`, so it emits no mask
-  scopes.
+- **The envelope** is built with `applyRelief: false`, so it emits no relief
+  and no rows.
 - **The witnesses** come from `CreationStampEmitter.VisitFixedPrimitiveCopies`
   over the document's shapes, so mask shapes are not witnesses.
 - **The growth term** (the amplitude times the stamp's scale) stays sound by
@@ -392,8 +347,8 @@ not read at all, so nothing is lost meanwhile.
 
 The cost lands in three places:
 
-- **The kernel edit** (the new op, the seeded push, the relief's read of the
-  register) changes the bake kernels' bytecode, and the CPU evaluator's change
+- **The kernel edit** (the row op and the relief's read of its rows) changes
+  the bake kernels' bytecode, and the CPU evaluator's change
   enters `SdfMeshBakeClosure`'s code identity. Every stored mesh misses once,
   which is why this lands in the
   [bake fundamental](open-items.md#bake-proportional-to-change)'s batch of
@@ -401,8 +356,9 @@ The cost lands in three places:
 - **A creation that authors a mask** changes its program words, so its groups'
   geometry key changes (`SdfMeshGeometryBuilder`), and only that creation
   rebakes. A creation with no mask emits the same instructions as before.
-- **Work per sample** rises only near a region. Far from every region, a mask
-  costs one bound-sphere test per mask shape.
+- **Work per sample.** Every sample of a masked creation evaluates each of its
+  relief's regions, at most 32, and a row costs the kernel's main loop one
+  dispatch that does nothing. Step C of the design measures both.
 
 The step bound is the cost that is not local. It is one constant per scope,
 so the band's slope term widens the narrowing band of the whole creation
@@ -459,38 +415,24 @@ dearest:
 
 #### Steps to build it
 
-- **Step A: the mask, CPU and kernel together.** Built on `NoiseDisplace`
-  (`SdfOp.ReliefWeight`, `SdfProgramBuilder.BeginReliefMask`,
-  `SdfProgram.RequireReliefMasks`, `CreationReliefMaskDocument`); the sync
-  pair is in the [rendering skill](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters).
-  `TerrainRelief` takes over the register's read when it lands. As built, the
-  lowering above differs in five ways the adversarial review called for, all
-  held by one admission door (`SdfProgram.RequireReliefMasks`, whose header
-  names them): the band's endpoints are written in the region field's own
-  units, with the seed, by `AnalyzeLipschitz` alone, in place of a baked
-  1/L; the mask's pop is canonical, all data zero; a region admits rigid
-  point ops, mirrors and elongation only, so its field is continuous; a mask
-  and its relief share one instruction owner; and the relief starts its own
-  chain. Walkers that ask which shapes draw a surface read one table
-  (`SdfProgram.IsSurfaceShape`). Its checks
-  read: outside every band the masked and unmasked fields agree bit for bit,
-  and on and inside a region of inside weight zero the masked field is the
-  unrelieved one (`SdfReliefMaskLawTests`); `puck creation stats` prints the
-  north-west sector's clamp as 3.33×, as B predicts; and the sector's CPU bake
-  measured 8.91 million samples with the mask against 9.45 million without,
-  inside the 1.5× budget, so the sum formula stays. Still open: the `mask`
-  construct and its spelling pair (the generic value path carries the mask
-  meanwhile); the mask's change of form, whose steps and checks are in
-  [the relief mask design](terrain-pass/relief-mask-design.md#migration-steps)
-  and, for the smaller form its step back recommends, in
-  [that section's migration](terrain-pass/relief-mask-design.md#migration-and-checks);
+- **Step A: the mask, CPU and kernel together.** Built in the row form
+  (`SdfOp.ReliefRow`, `SdfReliefMask`, `SdfProgram.DecodeReliefRuns`,
+  `CreationStampEmitter.ReliefMasks`); the sync pair is in the
+  [rendering skill](../../.claude/skills/rendering/references/sync-pairs.md#instruction-semantics-shared-by-both-interpreters).
+  `TerrainRelief` takes over the rows' read when it lands. Its checks read:
+  outside every band the masked and unmasked fields agree bit for bit, on and
+  inside a region of inside weight zero the masked field is the unrelieved one,
+  and removing the rows leaves every analysis output equal while moving the
+  relief's clamp by exactly the masks' charge (`SdfReliefMaskLawTests`);
+  `puck creation stats` prints the north-west sector's clamp as 3.33×. Still
+  open: the `mask` construct and its spelling pair (the generic value path
+  carries the mask meanwhile); the kernel's agreement and cost on both
+  backends ([step C](terrain-pass/relief-mask-design.md#c-kernel-agreement-kernel-cost-and-the-look));
   and a band narrower than the bake's coarse cell or contact's gradient taps,
-  which neither sees. The design closes it with a bake part at a quarter of
-  the band's width (`WorldShapeDetail.PartsOf`) and the band's width in the
-  relief field collider's gradient step (`WorldColliderSet.ReliefField`); the
-  step back closes it by reading the band as one more wavelength in the
-  relief's own spacing (`CreationNoiseDocument.DetailSpacing`) and in that
-  gradient step.
+  which neither sees, closed by reading the band as one more wavelength in the
+  relief's own spacing (`CreationNoiseDocument.DetailSpacing`) and in the
+  relief field collider's gradient step
+  ([step B](terrain-pass/relief-mask-design.md#b-the-band-as-a-wavelength)).
 - **Step B: kernel agreement.** This is step 3's existing target applied to a
   masked sector: a fixed-point CPU bake and a kernel bake agree within the
   bake's tolerance, on Direct3D 12 and on Vulkan. *Check:* `puck mesh audit`

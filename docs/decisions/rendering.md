@@ -161,13 +161,15 @@ price what the mesh pipeline costs instead:
 The illumination research round settled both; the owner ruled the second (a
 style per material, not one look per world).
 
-**Cel shading is parked (the owner's ruling).** It stays off in the debug
-world: no further attempt at the treatment and no step that turns it on and
-judges every place under it, until the owner raises it again. The mechanism
-below stays built and stays an author's to use, and the one piece of work that
-lands on its own is the fix to `world.toon off`. The cel-specific work the
-[illumination plan](../plans/illumination.md#cel-shading) had scheduled waits
-with it.
+**Cel is the debug world's treatment (the owner's ruling, lifting the
+earlier park).** The visual bar requires every place to carry a stylized
+treatment, and the standard package's cel style is how the debug world meets
+it: every place opts in through its materials, and the direction reviews judge
+each place under it. Cel stays a style per material, never an engine default:
+the engine keeps the mechanism, and the standard package chooses the values. A
+cel pixel passes one tone curve (the display pass's `render.tone`), never one
+inside the material as well. The cel work the
+[illumination plan](../plans/illumination.md#cel-shading) had scheduled resumes.
 
 - **Shadow where the response is.** The surface pass queries a light's cascades
   wherever that light's diffuse response is non-zero, a wrapped material's side

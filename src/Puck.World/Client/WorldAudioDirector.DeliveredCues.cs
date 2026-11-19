@@ -11,6 +11,8 @@ public sealed partial class WorldAudioDirector {
     private WorldDefinition? m_bootAudioDefinition;
     private WorldDefinition? m_routedAudioDefinition;
     private WorldSessionMirror? m_routedAudio;
+    // The span of the routed mirror the routed sound was made from: what it plays ends with that span.
+    private WorldStreamSpan m_routedAudioSpan;
 
     internal void PresentLocalCues(WorldDefinition definition, WorldPresentationCueTick tick) {
         lock (m_gate) {
@@ -22,10 +24,16 @@ public sealed partial class WorldAudioDirector {
     }
 
     /// <inheritdoc/>
+    /// <remarks>A routed mirror's sound belongs to the span it was delivered in: a new mirror, or a cut or close of the
+    /// same mirror's stream, drops the delivered score, its layers and every scheduled or sounding transient, as the
+    /// mirror drops what the span delivered, so nothing the ended span carried is heard after it.</remarks>
     public void PresentRoutedAudio(WorldSessionMirror? mirror) {
         lock (m_gate) {
-            if (!ReferenceEquals(mirror, m_routedAudio)) {
+            var span = mirror?.Span ?? default;
+            if (!ReferenceEquals(mirror, m_routedAudio) || (span.Stream != m_routedAudioSpan.Stream) ||
+                (span.Generation != m_routedAudioSpan.Generation) || (span.Closed != m_routedAudioSpan.Closed)) {
                 m_routedAudio = mirror;
+                m_routedAudioSpan = span;
                 m_routedAudioDefinition = null;
                 m_deliveredMusic = null;
                 m_deliveredScoreHash = null;

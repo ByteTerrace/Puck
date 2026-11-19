@@ -54,6 +54,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     private static readonly FixedQ4816 SqrtHalf = FixedQ4816.FromDouble(value: SdfProgram.SqrtHalf);
     private static readonly FixedQ4816 Half = FixedQ4816.FromDouble(value: 0.5);
     private static readonly FixedQ4816 Two = FixedQ4816.FromInteger(value: 2L);
+    // The top of the exponents whose superellipsoid norm is clamped to its certified band, and the band floor's slope,
+    // 7/25 per unit of exponent past two (sdfSuperellipsoidNormFactor in field/sdf-shapes.hlsli).
+    private static readonly FixedQ4816 SuperellipsoidClampedExponent = FixedQ4816.FromInteger(value: 3L);
+    private static readonly FixedQ4816 SuperellipsoidNormSlope = FixedQ4816.FromDouble(value: (7.0 / 25.0));
     // The central-difference probe offset for TryFieldGradient, in RAW world units. Two failure modes
     // bound it from both sides: too small and both TryDistance taps quantize to the SAME raw Q48.16 distance (the
     // format's resolution is 2^-16 ~ 0.0000153, and every supported shape/blend involves at least one Sqrt whose
@@ -429,7 +433,7 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             }
 
             compiled[index] = new CompiledInstruction(
-                Aux: (((instruction.Op == SdfOp.GaussianPush) || SdfProgram.IsReliefMaskPush(instruction: instruction))
+                Aux: ((instruction.Op == SdfOp.GaussianPush)
                 ? FixedQ4816.FromDouble(value: BitConverter.UInt32BitsToSingle(value: instruction.Shape))
                 : FixedQ4816.Zero),
                 Blend: instruction.Blend,
@@ -465,9 +469,63 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                         paths: paths
                     )
                 : null),
+                ReliefMasks: ((instruction.Op == SdfOp.NoiseDisplace) && (program.ReliefMasksAt(instructionIndex: index) is { Count: > 0 } masks)
+                    ? CompileReliefMasks(masks: masks)
+                    : null),
                 ScopeScale: (((instruction.Op == SdfOp.PopField) && !deferred[index])
                     ? CompileScopeScale(scale: instruction.Data1.Y)
                     : 0L)
+            );
+        }
+
+        return compiled;
+    }
+    // A relief's masks in fixed point, each region's primitive compiled as a shape instruction's lanes are compiled, so
+    // EvaluateShape and ShapeBounds read it as they read any shape, and its turn's interval constants built once.
+    private static ReliefMaskFixed[] CompileReliefMasks(IReadOnlyList<SdfReliefMask> masks) {
+        var compiled = new ReliefMaskFixed[masks.Count];
+
+        for (var index = 0; (index < masks.Count); index++) {
+            var mask = masks[index];
+            var regions = new ReliefRegionFixed[mask.Regions.Count];
+
+            for (var at = 0; (at < regions.Length); at++) {
+                var region = mask.Regions[at];
+                var rotation = new FixedQuaternion(
+                    X: FixedQ4816.FromDouble(value: region.Rotation.X),
+                    Y: FixedQ4816.FromDouble(value: region.Rotation.Y),
+                    Z: FixedQ4816.FromDouble(value: region.Rotation.Z),
+                    W: FixedQ4816.FromDouble(value: region.Rotation.W)
+                );
+
+                regions[at] = new ReliefRegionFixed(
+                    Bounds: RotationBounds.Of(quaternion: rotation),
+                    Identity: ((rotation.X == FixedQ4816.Zero) && (rotation.Y == FixedQ4816.Zero) && (rotation.Z == FixedQ4816.Zero) && (FixedQ4816.Abs(value: rotation.W) == FixedQ4816.One)),
+                    Origin: FixedVector3.FromVector3(value: region.Origin),
+                    Primitive: new CompiledInstruction(
+                        Blend: 0u,
+                        Data0W: FixedQ4816.FromDouble(value: region.Data0.W),
+                        Data0X: FixedQ4816.FromDouble(value: region.Data0.X),
+                        Data0Y: FixedQ4816.FromDouble(value: region.Data0.Y),
+                        Data0Z: FixedQ4816.FromDouble(value: region.Data0.Z),
+                        Data1W: FixedQ4816.FromDouble(value: region.Data1.W),
+                        Data1X: FixedQ4816.FromDouble(value: region.Data1.X),
+                        Data1Y: FixedQ4816.FromDouble(value: region.Data1.Y),
+                        Data1Z: FixedQ4816.FromDouble(value: region.Data1.Z),
+                        Material: 0,
+                        Op: SdfOp.ReliefRow,
+                        Shape: ((uint)region.Shape)
+                    ),
+                    Rotation: rotation
+                );
+            }
+
+            compiled[index] = new ReliefMaskFixed(
+                End: FixedQ4816.FromDouble(value: mask.Band.End),
+                Inside: FixedQ4816.FromDouble(value: mask.Band.Inside),
+                Outside: FixedQ4816.FromDouble(value: mask.Band.Outside),
+                Regions: regions,
+                Start: FixedQ4816.FromDouble(value: mask.Band.Start)
             );
         }
 
@@ -562,7 +620,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                 case SdfOp.Dilate:
                 case SdfOp.Displace:
                 case SdfOp.NoiseDisplace:
-                case SdfOp.ReliefWeight:
                 case SdfOp.CellDisplace:
                 case SdfOp.GaussianPush: {
                         ok[at] = false;
@@ -859,8 +916,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return ((outside + inside) - cornerRadius);
     }
-    // The kernel multiplies by the packed 1 / |endpoint|^2 (data1.y) in float; the carrier divides the exact dot products
-    // once instead (SegmentParameter), since a rounded dot of two centimetre vectors keeps a few bits.
+    // dot(p, e) / dot(e, e), clamped to [0, 1]: the kernel's formula, which the carrier divides from the exact dot products
+    // once (SegmentParameter), since a rounded dot of two centimetre vectors keeps a few bits. KEEP IN SYNC with sdfCapsule.
     private static FixedQ4816 SdfCapsule(FixedVector3 p, FixedVector3 endpoint, FixedQ4816 radius) {
         var h = FixedVector3.SegmentParameter(
             point: p,
@@ -895,10 +952,10 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return (inside + outside);
     }
-    // The real-valued scaled gauge is 1-Lipschitz (see SdfProgramBuilder.Superellipsoid's remarks). That proof does not
-    // make this quantized Q48.16 evaluation exact or identical to sdfSuperellipsoid in field/sdf-shapes.hlsli at small
-    // radii; docs/development/hazards.md tracks that CPU/GPU disagreement. The program's Data1.y remains 1.0 for a
-    // scope carrying nothing else non-1-Lipschitz; no additional rounding-error bound is claimed here.
+    // The real-valued scaled gauge is 1-Lipschitz (see SdfProgramBuilder.Superellipsoid's remarks). This is
+    // sdfSuperellipsoid's formula in field/sdf-shapes.hlsli step for step: the radii and the exponent lie on the grid both
+    // carriers hold (SdfDerivedLanes.FixedGrid), so both scale the gauge by one smallest radius, and the two differ only by
+    // each carrier's rounding of the same expression.
     // The l_e gauge in its FACTORED form, m * (sum((q_i/m)^e))^(1/e) with m = max(q): every Pow argument stays in
     // [0, 1] (the sum in [1, 3]), so a far query never saturates the Q48.16 carrier — the plain sum(q_i^e) saturates at
     // |p|/r ~ 60 for e = 8 (FixedQ4816.Pow clamps to MaxValue), collapsing a far field to a few radii and starving
@@ -959,11 +1016,21 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         var sum = ((ux + uy) + uz);
         var inverseExponent = (FixedQ4816.One / exponent);
 
-        return ((m * memo.Pow(
+        var norm = (m * memo.Pow(
             work: ref work,
             x: sum,
             y: inverseExponent
-        )) - minRadius);
+        ));
+
+        // For 2 < e <= 3 the exact norm lies between (1 - (7/25)(e - 2))·|q| and |q|; the kernel clamps its pow to that
+        // band, and so does this carrier (sdfClampSuperellipsoidNorm).
+        if ((exponent > Two) && (exponent <= SuperellipsoidClampedExponent)) {
+            var length = q.Length;
+
+            norm = FixedQ4816.Clamp(maximum: length, minimum: ((FixedQ4816.One - (SuperellipsoidNormSlope * (exponent - Two))) * length), value: norm);
+        }
+
+        return (norm - minRadius);
     }
     // |p_i| / r_i scaled by min(r): one superellipsoid axis's gauge ratio in metres. min(r) <= r_i, so it never exceeds
     // |p_i| and never wraps; it is non-decreasing in |p_i|, which SuperellipsoidScaledRatioBounds relies on.
@@ -1734,8 +1801,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         FixedQ4816 Data1Z,
         FixedQ4816 Data1W,
         bool Detail = false,
-        // Only for SdfOp.GaussianPush: the push's Z component, and for a relief mask's PushField its seed
-        // (SdfProgram.IsReliefMaskPush), each of which the packed instruction carries as float bits in its Shape lane.
+        // Only for SdfOp.GaussianPush: the push's Z component, which the packed instruction carries as float bits in its
+        // Shape lane.
         FixedQ4816 Aux = default,
         // Only for SdfShapeType.ConvexPolygon: the shape's own vertex list, pre-converted once (matching every other
         // baked lane above). Data0X carries no usable value for this shape (the packed program reinterprets it as a
@@ -1751,8 +1818,14 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         // Only for SdfOp.PopField: the scope's candidate scale (Data1.y, its 1/L) on a 2⁻³² grid, floored and never
         // below one tick, so a scale under the Q48.16 grid still scales; zero for an unscaled scope and for one whose
         // scale the certified step scale carries instead (DefersScope).
-        long ScopeScale = 0L
+        long ScopeScale = 0L,
+        // Only for a masked SdfOp.NoiseDisplace: its masks, decoded by the program's door from the rows before it.
+        ReliefMaskFixed[]? ReliefMasks = null
     );
+    // A relief mask in fixed point: its band on the grids both carriers hold exactly (SdfReliefBand), and its regions.
+    private sealed record ReliefMaskFixed(FixedQ4816 Start, FixedQ4816 End, FixedQ4816 Inside, FixedQ4816 Outside, ReliefRegionFixed[] Regions);
+    // One region in fixed point: its pose (the turn's interval constants built once, for the box walk) and its primitive.
+    private sealed record ReliefRegionFixed(FixedVector3 Origin, FixedQuaternion Rotation, bool Identity, RotationBounds Bounds, CompiledInstruction Primitive);
     // The compiled, fixed-point form of one SdfSweepCurve.
     private readonly record struct SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);
 }

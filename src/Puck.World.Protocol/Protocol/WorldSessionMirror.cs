@@ -315,8 +315,6 @@ public sealed class WorldSessionMirror : IClientSink {
     private int m_arrivalCount;
 
     private readonly bool m_unread;
-    // What the mirror holds before any delivery, and again once a span it was showing closes.
-    private readonly WorldDefinition m_placeholder;
     private readonly WorldStreamIngress m_ingress = new();
 
     /// <summary>Gets the stream this mirror is bound to and the span it holds: what its ingress accepts records
@@ -329,7 +327,8 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Initializes the mirror with an empty placeholder definition — <c>Server.WorldServer.AttachSink</c>
     /// always delivers the live definition synchronously before returning its lease, so no caller ever observes this
     /// placeholder.</summary>
-    /// <param name="placeholder">The definition to hold until the first delivery.</param>
+    /// <param name="placeholder">The definition to hold until the first delivery; a span that ends leaves the
+    /// undisclosed document (<see cref="WorldProjection.Undisclosed"/>), never this one.</param>
     /// <param name="unread">Whether nothing will ever read the mirror's poses, field cells or inputs, as in a host
     /// that presents nothing: every snapshot is then dropped on arrival, and only definitions and state stamps are
     /// kept.</param>
@@ -337,7 +336,6 @@ public sealed class WorldSessionMirror : IClientSink {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
 
         m_unread = unread;
-        m_placeholder = placeholder;
         m_document = new WorldDeliveredDocument(
             Definition: placeholder,
             Lifetime: 0,
@@ -664,12 +662,11 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <inheritdoc/>
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         ArgumentNullException.ThrowIfNull(argument: definition);
+        if (!m_ingress.Admit(stream: in stream)) { return; }
         if (version.Activation != Document.Version.Activation) {
             CueFrames.Clear();
             AudioCueFrames.Clear();
         }
-
-        if (!m_ingress.Admit(stream: in stream)) { return; }
         ApplyDefinition(definition: definition, version: version);
     }
     private void ApplyDefinition(WorldDefinition definition, WorldDocumentVersion version) {
@@ -707,24 +704,29 @@ public sealed class WorldSessionMirror : IClientSink {
         // No presentation service of the OBSERVING world is reachable from inside a destination's own delivery.
     }
     /// <inheritdoc/>
-    /// <remarks>A cut of the bound stream moves the span the mirror holds, and the whole document and primer the
-    /// stream owes follow it. A terminal record closes the span: the mirror drops what it held, holding its
-    /// placeholder definition and no body until a stream it was never bound to delivers again, so nothing of the ended
-    /// stream stays showable. A record of any other stream changes nothing.</remarks>
+    /// <remarks>Every cut of the bound stream ends the span the mirror was showing: the mirror drops what it held,
+    /// holding the undisclosed document, no body, no route seed and no queued cue, so nothing of the ended span stays
+    /// showable, and the whole document and primer the stream owes the new generation fill it again from empty (its
+    /// first snapshot seeds both pose endpoints of every body). A terminal record also closes the span, after which only
+    /// a stream that never closed on this mirror binds it. A record of any other stream changes nothing.</remarks>
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
-        if (!m_ingress.Cut(stream: in stream, terminal: terminal) || !terminal) { return; }
-        Withdraw();
+        if (m_ingress.Cut(stream: in stream, terminal: terminal)) { Withdraw(); }
     }
-    /// <summary>Closes the span the mirror holds because its stream can no longer tell it of a cut (its connection was
-    /// lost, past whatever lease its admission granted): the mirror drops what it held, exactly as for a terminal
-    /// record, and takes records again only from a stream it was never bound to.</summary>
-    public void CloseSpan() {
-        if (m_ingress.Close()) { Withdraw(); }
+    /// <inheritdoc/>
+    /// <remarks>The mirror drops what it held exactly as for a terminal record, and takes records again only from a
+    /// stream that never closed on it.</remarks>
+    public void CloseSpan(ulong stream) {
+        if (m_ingress.Close(stream: stream)) { Withdraw(); }
     }
-    // Drops everything a closed span delivered: the placeholder document in place of the delivered one, and an empty
-    // table in place of its bodies, applied through the ordinary delivery paths so every reader follows it.
+    // Drops everything an ended span delivered: the undisclosed document in place of the delivered one, an empty table
+    // in place of its bodies, and no route seed or queued cue, applied through the ordinary delivery paths so every
+    // reader follows it. The undisclosed document, never the construction placeholder, which can be a delivered
+    // document (a route's, or the authority's last).
     private void Withdraw() {
-        ApplyDefinition(definition: m_placeholder, version: default);
+        lock (m_snapshotWriteGate) { m_seededRouteEntity = null; }
+        CueFrames.Clear();
+        AudioCueFrames.Clear();
+        ApplyDefinition(definition: WorldProjection.Undisclosed, version: default);
         if (m_unread) { return; }
         ApplySnapshot(snapshot: new WorldSnapshot(
             Authority: Authority,
@@ -1121,6 +1123,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <summary>Publishes the exact committed head of a traveler route before its observation socket can deliver the
     /// destination's first ordinary snapshot. This is not prediction: the route answer was read under the final
     /// authority's operation gate after commit. The subsequent snapshot replaces the seed normally.</summary>
+    /// <remarks>A seed is not a record of a stream: it comes from a committed transfer read under its authority's gate,
+    /// or from a route record that its observation session's own ingress admitted. It holds only within the span it was
+    /// seeded into, since every cut and close drops it with the rest of what the mirror held.</remarks>
     public void SeedRoute(in WorldAuthorityRouteDescription route) {
         var index = route.Entity.Index;
 

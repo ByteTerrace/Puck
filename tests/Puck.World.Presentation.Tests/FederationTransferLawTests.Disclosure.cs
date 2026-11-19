@@ -407,7 +407,10 @@ public sealed partial class FederationTransferLawTests {
 
         var primed = await RequireFrameAsync(ct: ct, stream: lane);
         Assert.Equal(expected: (byte)WorldFederationResponse.Route, actual: primed.Kind);
-        Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: primed.Body.Span, route: out var primedRoute, failure: out _));
+        // The observation's route record is stamped like every record of its stream.
+        Assert.True(condition: WorldFederationCodec.TryReadStamped(record: primed.Body.Span, stream: out var primedStamp, body: out var primedBody, failure: out _));
+        Assert.Equal(expected: 1L, actual: primedStamp.Ordinal);
+        Assert.True(condition: WorldFederationCodec.TryDecodeRoute(body: primedBody, route: out var primedRoute, failure: out _));
         Assert.Equal(expected: host.ListenEndpoint, actual: primedRoute.Endpoint);
 
         var observed = await FirstProjectionAsync(

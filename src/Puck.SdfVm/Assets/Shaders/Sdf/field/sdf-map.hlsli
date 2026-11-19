@@ -34,6 +34,68 @@ float3 sdfRigidFoldPoint(float3 p, uint extensionOffset, uint dataOffset) {
     }
     return p;
 }
+// A relief mask band's weight at a region distance (KEEP IN SYNC with SdfFieldEvaluator.BandWeight): its outside at or
+// beyond its end, its inside at or below its start, and smoothstep between. band = (start, width, inside, outside), on
+// the grids both carriers hold exactly (SdfReliefBand), so start + width is the fixed-point end to the bit.
+precise float sdfReliefBandWeight(float4 band, float distance) {
+    if (distance >= (band.x + band.y)) { return band.w; }
+    if (distance <= band.x) { return band.z; }
+    float t = clamp(((distance - band.x) / band.y), 0.0, 1.0);
+    return (band.z + ((band.w - band.z) * ((t * t) * (3.0 - (2.0 * t)))));
+}
+// A region's primitive at its local point: the four listed types (SdfReliefRegion.IsListed), each through the primitive
+// function evaluateShape calls for it. A type off the list cannot pass the program's door; one reaching here reads as no
+// region.
+precise float sdfReliefRegionDistance(uint shapeType, float3 p, float4 data0, float4 data1) {
+    switch (shapeType) {
+        case SDF_SHAPE_BOX:            return sdfBox(p, data0.xyz, data0.w);
+        case SDF_SHAPE_SUPERELLIPSOID: return sdfSuperellipsoid(p, data0.xyz, data1.yzw, data0.w);
+        case SDF_SHAPE_CAPSULE:        return sdfCapsule(p, data0.xyz, data0.w);
+        case SDF_SHAPE_PLANE:          return sdfPlane(p, data0.xyz, data0.w);
+        default:                       return SDF_FAR_DISTANCE;
+    }
+}
+// The product of a masked relief's weights at its point q, from the rowCount rows from firstRow (KEEP IN SYNC with
+// SdfFieldEvaluator.MaskProduct): each band row opens a mask, each pose row poses the next primitive row's region, and
+// a mask's distance is the least of its regions' at turn_back(q - origin). A mask whose distance is at or below its
+// start skips its remaining regions, whose weight is its inside whatever they read, and an exactly zero product returns
+// at once. The caller bounds rowCount by SDF_MAX_RELIEF_ROWS and by the rows before the relief in its segment.
+float sdfMaskProduct(uint firstRow, uint rowCount, float3 q, uint dataOffset) {
+    float weight = 1.0;
+    float4 band = float4(0.0, 1.0, 1.0, 1.0);
+    float distance = SDF_FAR_DISTANCE;
+    bool open = false;
+    float3 origin = float3(0.0, 0.0, 0.0);
+    float4 turn = float4(0.0, 0.0, 0.0, 1.0);
+    [loop]
+    for (uint step = 0u; step < SDF_MAX_RELIEF_ROWS; step++) {
+        if (step >= rowCount) { break; }
+        uint row = (firstRow + step);
+        uint4 header = sdfWords[SDF_PROGRAM_HEADER_VECTORS + row];
+        float4 rowData0 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * row)]);
+        float4 rowData1 = asfloat(sdfWords[dataOffset + (SDF_INSTRUCTION_DATA_VECTORS * row) + 1u]);
+        uint kind = SDF_INSTRUCTION_BLEND(header);
+        if (kind == SDF_RELIEF_ROW_KIND_BAND) {
+            if (open) {
+                weight *= sdfReliefBandWeight(band, distance);
+                if (weight <= 0.0) { return 0.0; }
+            }
+            band = rowData0;
+            distance = SDF_FAR_DISTANCE;
+            open = true;
+        } else if (kind == SDF_RELIEF_ROW_KIND_POSE) {
+            origin = rowData0.xyz;
+            turn = rowData1;
+        } else if (distance > band.x) {
+            float3 u = rotatePointByInverseQuaternion((q - origin), turn);
+            distance = min(distance, sdfReliefRegionDistance(SDF_INSTRUCTION_SHAPE(header), u, rowData0, rowData1));
+        }
+    }
+    if (open) {
+        weight *= sdfReliefBandWeight(band, distance);
+    }
+    return weight;
+}
 SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) {
     // Layout offsets/counts — decoded ONCE per invocation by sdfLoadProgramLayout (see the struct above), not
     // re-derived here. The host-baked bounding-sphere tables sit right after the instruction data (2 uint4 per data pair):
@@ -101,10 +163,6 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
     // otherwise, a world-unit additive erosion. Consumed and cleared there; reset with the chain.
     bool laneErodeSkipShape = false;
     float laneErodeAmount = 0.0;
-    // The relief weight the relief masks since the last relief multiplied (KEEP IN SYNC with SdfFieldEvaluator's
-    // reliefWeight): SDF_OP_RELIEF_WEIGHT multiplies it, the next SDF_OP_NOISE_DISPLACE consumes it and resets it to one.
-    // It does not reset with the chain: a mask and its relief stand in different chains.
-    float reliefWeight = 1.0;
     // The texturing half of an active wallpaper fold: the cell key times the fold's material stride, added to the
     // material id of later shape wins in the chain (never to the screen sentinel). Reset with the chain.
     int parityMaterialDelta = 0;
@@ -693,6 +751,13 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                 case SDF_OP_NOISE_DISPLACE: {
                     SDF_VM_LOAD_DATA0;
                     SDF_VM_LOAD_DATA1;
+                    // The relief's mask rows stand directly before it in its segment (the program's door, SdfProgram.
+                    // ReliefRows.cs); malformed words that count past the segment's start or the row cap are refused here.
+                    uint reliefRows = SDF_INSTRUCTION_MATERIAL(instructionHeader);
+                    if ((reliefRows > SDF_MAX_RELIEF_ROWS) || (reliefRows > (index - segmentMeta.z))) { return sdfIsaErrorHit(); }
+                    float maskProduct = ((reliefRows == 0u) ? 1.0 : sdfMaskProduct((index - reliefRows), reliefRows, localPosition, dataOffset));
+                    // A weight of exactly zero adds no relief, so the noise is not evaluated.
+                    if (maskProduct <= 0.0) { break; }
                     // Keep the field continuous, including outside the zero-set neighborhood: the bake's lattice,
                     // material points and gradient taps all consume these values (see SDF_OP_DISPLACE).
                     float3 q = (localPosition * data0.x);
@@ -707,26 +772,12 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                         octaveAmplitude *= data0.z;
                     }
                     // A relief its masks left at weight one adds exactly what an unmasked one adds.
-                    result.distance += (((data0.y * data1.x) * noiseSum) * reliefWeight);
-                    reliefWeight = 1.0;
+                    result.distance += (((data0.y * data1.x) * noiseSum) * maskProduct);
                     break;
                 }
-                // A relief mask's weight (KEEP IN SYNC with SdfProgramBuilder.EndReliefMask and SdfFieldEvaluator's
-                // ReliefMaskWeight). data0 = (start, fade, inside, outside); data1.xy = the band's endpoints in the
-                // region field's units, HOST-DERIVED from the band and the region's bound, data1.y being the scope's seed.
-                // The scope's accumulator is the region's distance, clamped at the seed, where the weight is exactly its
-                // outside; below it the weight follows smoothstep over the band and is exactly its inside at or below its
-                // start. Then the accumulator holds the far distance, so the scope's canonical pop composes nothing.
-                case SDF_OP_RELIEF_WEIGHT: {
-                    SDF_VM_LOAD_DATA0;
-                    SDF_VM_LOAD_DATA1;
-                    float maskWeight = data0.w;
-                    if (result.distance < data1.y) {
-                        float maskStep = smoothstep(data1.x, data1.y, result.distance);
-                        maskWeight = ((maskStep >= 1.0) ? data0.w : ((maskStep <= 0.0) ? data0.z : (data0.z + ((data0.w - data0.z) * maskStep))));
-                    }
-                    reliefWeight *= maskWeight;
-                    result.distance = SDF_FAR_DISTANCE;
+                // A relief mask's data row (KEEP IN SYNC with SdfOp.ReliefRow): the relief after its run reads it
+                // (sdfMaskProduct); it moves no point and writes no field.
+                case SDF_OP_RELIEF_ROW: {
                     break;
                 }
                 case SDF_OP_WALLPAPER_FOLD: {
@@ -828,10 +879,7 @@ SdfHit mapCore(float3 worldPosition, uint instanceMaskBase, bool trackMaterial) 
                     if (fieldDepth >= SDF_MAX_FIELD_SCOPE_DEPTH) { return sdfIsaErrorHit(); }
                     fieldParents[fieldDepth] = result;
                     fieldDepth++;
-                    // A relief mask's push carries its seed's float bits in the Shape lane; every other push reads zero
-                    // there and seeds the far distance.
-                    float pushSeed = asfloat(SDF_INSTRUCTION_SHAPE(instructionHeader));
-                    result.distance = ((pushSeed > 0.0) ? pushSeed : SDF_FAR_DISTANCE);
+                    result.distance = SDF_FAR_DISTANCE;
                     if (trackMaterial) {
                         result.material = 0;
                         result.lanes = float4(0.0, 0.0, 0.0, 0.0);

@@ -118,14 +118,16 @@ public sealed class CreationSkeletonLawTests {
         float[] weights = [1f];
 
         WorldGaitDrivers.ComposeDelta(
-            terms: ClientFixtures.Terms(shape: upper, drivers: document.Drivers),
+            rig: ClientFixtures.ShapeRig(shape: upper, drivers: document.Drivers),
+            shape: 0,
             phases: phases,
             rotation: out var parentRotation,
             translation: out var parentTranslation,
             weights: weights
         );
         WorldGaitDrivers.ComposeDelta(
-            terms: ClientFixtures.Terms(shape: carried, drivers: document.Drivers),
+            rig: ClientFixtures.ShapeRig(shape: carried, drivers: document.Drivers),
+            shape: 0,
             phases: phases,
             rotation: out var childRotation,
             translation: out var childTranslation,
@@ -162,7 +164,8 @@ public sealed class CreationSkeletonLawTests {
         var controlRotation = Quaternion.Identity;
 
         WorldGaitDrivers.ComposeDelta(
-            terms: ClientFixtures.Terms(shape: loose, drivers: document.Drivers),
+            rig: ClientFixtures.ShapeRig(shape: loose, drivers: document.Drivers),
+            shape: 0,
             phases: phases,
             rotation: out var looseRotation,
             translation: out var looseTranslation,
@@ -217,14 +220,16 @@ public sealed class CreationSkeletonLawTests {
         float[] weights = [1f];
 
         WorldGaitDrivers.ComposeDelta(
-            terms: ClientFixtures.Terms(shape: upper, drivers: document.Drivers),
+            rig: ClientFixtures.ShapeRig(shape: upper, drivers: document.Drivers),
+            shape: 0,
             phases: phases,
             rotation: out var parentRotation,
             translation: out var parentTranslation,
             weights: weights
         );
         WorldGaitDrivers.ComposeDelta(
-            terms: ClientFixtures.Terms(shape: fore, drivers: document.Drivers),
+            rig: ClientFixtures.ShapeRig(shape: fore, drivers: document.Drivers),
+            shape: 0,
             phases: phases,
             rotation: out var childRotation,
             translation: out var childTranslation,

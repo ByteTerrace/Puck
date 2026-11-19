@@ -919,6 +919,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
     }
     /// <inheritdoc/>
+    /// <remarks>A client holds no span (see <see cref="DeliverCut"/>), so it has none to close.</remarks>
+    public void CloseSpan(ulong stream) {
+    }
+    /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
         // Already past the server's Mutate check on the lever's folded-into section (see WorldServer.ApplySessionLever),
         // so this only dispatches the write onto the presentation service the lever names.
@@ -1412,8 +1416,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         private float m_remaining;
 
         // Fold the current (smoothstep-eased) offset into an interpolated render pose: the position error adds in and the
-        // orientation error Slerp(identity, E, weight) is applied outermost (world space) to the attitude, so the
-        // on-screen craft glides from where it was to authority. A no-op once the window drains.
+        // orientation error E, its angle scaled by the weight (VectorFunctions.ScaleTurn), is applied outermost (world
+        // space) to the attitude, so the on-screen craft glides from where it was to authority. A no-op once the window
+        // drains.
         public readonly void Apply(ref Vector3 position, ref Quaternion orientation) {
             if (
                 (m_remaining > 0f) &&
@@ -1427,10 +1432,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
                 position += (m_position * weight);
                 // At weight 1 the render attitude is E · interpolated = the old attitude; at weight 0 it is the
                 // interpolated (authoritative) attitude — the angular twin of the position offset's decay.
-                orientation = (Quaternion.Slerp(
-                    quaternion1: Quaternion.Identity,
-                    quaternion2: m_orientation,
-                    amount: weight
+                orientation = (VectorFunctions.ScaleTurn(
+                    fraction: weight,
+                    turn: m_orientation
                 ) * orientation);
             }
         }

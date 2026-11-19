@@ -83,7 +83,7 @@ public static class WorldDisclosureComparison {
         ArgumentNullException.ThrowIfNull(argument: entry);
         if (entry.Text) { return Encoding.UTF8.GetString(bytes: entry.Payload); }
         if ((entry.Door == WorldDisclosureSession.SnapshotDoor) &&
-            WorldFederationCodec.TryReadStamped(body: out var snapshotBody, failure: out _, record: entry.Payload, stream: out var stream) &&
+            WorldFederationCodec.TryReadStamped(body: out var snapshotBody, failure: out _, issuedOnly: false, record: entry.Payload, stream: out var stream) &&
             WorldFederationCodec.TryDecodeSnapshot(body: snapshotBody, failure: out _, snapshot: out var snapshot)) {
             try {
                 return string.Create(provider: CultureInfo.InvariantCulture, handler: $"stream={stream.Stream} generation={stream.Generation} ordinal={stream.Ordinal}\n{RenderSnapshot(snapshot: in snapshot)}");

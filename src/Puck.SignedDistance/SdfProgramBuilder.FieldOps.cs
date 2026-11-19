@@ -69,9 +69,14 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="gain">Per-octave amplitude factor (finite, &gt; 0).</param>
     /// <param name="lacunarity">Per-octave frequency factor (finite, &gt; 0).</param>
     /// <param name="seed">Hash seed folded into every lattice corner.</param>
+    /// <param name="masks">The relief's masks, emitted as data rows directly before it, whose weights multiply its
+    /// displacement (<see cref="SdfReliefMask"/>); <see langword="null"/> or empty for an unmasked relief, whose
+    /// instruction is then the same to the bit.</param>
     /// <exception cref="ArgumentOutOfRangeException">A parameter is not finite or positive where required.</exception>
-    /// <exception cref="ArgumentException"><paramref name="octaves"/> is outside 1..<see cref="MaxNoiseOctaves"/>.</exception>
-    public SdfProgramBuilder NoiseDisplace(float frequency, float amplitude, int octaves = 4, float gain = 0.5f, float lacunarity = 2.0f, uint seed = 0u) {
+    /// <exception cref="ArgumentException"><paramref name="octaves"/> is outside 1..<see cref="MaxNoiseOctaves"/>, or
+    /// <paramref name="masks"/> holds more than <see cref="SdfReliefMask.MaxMasks"/> masks or
+    /// <see cref="SdfReliefMask.MaxRegions"/> regions.</exception>
+    public SdfProgramBuilder NoiseDisplace(float frequency, float amplitude, int octaves = 4, float gain = 0.5f, float lacunarity = 2.0f, uint seed = 0u, IReadOnlyList<SdfReliefMask>? masks = null) {
         RequireFinite(
             value: frequency,
             paramName: nameof(frequency),
@@ -115,80 +120,13 @@ public sealed partial class SdfProgramBuilder {
         );
 
         relief.Validate();
-        m_instructions.Add(item: relief.ToInstruction());
+
+        var rows = SdfReliefMask.RowCount(masks: (masks ?? []));
+
+        SdfReliefMask.AppendRows(masks: (masks ?? []), rows: m_instructions);
+        m_instructions.Add(item: relief.ToInstruction(rows: rows));
 
         return this;
-    }
-    /// <summary>Opens a relief mask: a field scope seeded at its band's end (<paramref name="start"/> +
-    /// <paramref name="fade"/>), into which the caller emits the region's shapes, joined by hard union, before
-    /// <see cref="EndReliefMask"/> closes it with one <see cref="SdfOp.ReliefWeight"/>. The region adds no surface: the
-    /// weight it measures scales the displacement of the next <see cref="NoiseDisplace"/> in the enclosing scope, which
-    /// only further masks and point ops may precede (<see cref="SdfProgram"/> refuses any other stream). Seeding the
-    /// scope at the band's end changes no weight, since the weight is already <paramref name="outside"/> there, and lets
-    /// the per-shape bound test skip every region shape farther than the band.</summary>
-    /// <param name="start">Where the band starts, as a distance in world units from the region's surface; negative
-    /// starts it inside the region.</param>
-    /// <param name="fade">The band's width in world units, above zero.</param>
-    /// <param name="inside">The weight on and inside the region, in [0, 1].</param>
-    /// <param name="outside">The weight past the band, in [0, 1].</param>
-    /// <returns>This builder.</returns>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> is not finite, <paramref name="fade"/> is
-    /// not finite and above zero, the band's end is not above zero, or <paramref name="inside"/> or
-    /// <paramref name="outside"/> lies outside [0, 1].</exception>
-    /// <exception cref="InvalidOperationException">A relief mask is already open, or the scope would nest deeper than
-    /// <see cref="MaxFieldScopeDepth"/>.</exception>
-    public SdfProgramBuilder BeginReliefMask(float start, float fade, float inside = 0f, float outside = 1f) {
-        RequireFinite(value: start, paramName: nameof(start), subject: "A relief mask's band start");
-        RequirePositive(value: fade, paramName: nameof(fade), subject: "A relief mask's band width");
-        RequireUnitWeight(value: inside, paramName: nameof(inside));
-        RequireUnitWeight(value: outside, paramName: nameof(outside));
-
-        var seed = (start + fade);
-
-        if (!(float.IsFinite(f: seed) && (seed > 0f))) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(fade), message: $"A relief mask's band must end beyond the region's surface (start + fade > 0); got {seed}.");
-        }
-        if (m_reliefMask is not null) {
-            throw new InvalidOperationException(message: "BeginReliefMask was called while a relief mask is open; close it with EndReliefMask first.");
-        }
-
-        _ = PushField();
-        // The push carries the seed in its Shape lane as float bits, as GaussianPush carries a component there.
-        m_instructions[^1] = m_instructions[^1] with { Shape = BitConverter.SingleToUInt32Bits(value: seed) };
-        m_reliefMask = (m_fieldScopes!.Count, new Vector4(w: outside, x: start, y: fade, z: inside));
-
-        return this;
-
-        static void RequireUnitWeight(float value, string paramName) {
-            if (!(float.IsFinite(f: value) && (value >= 0f) && (value <= 1f))) {
-                throw new ArgumentOutOfRangeException(paramName: paramName, message: $"A relief mask's weight must lie in [0, 1], so a mask only lowers relief; got {value}.");
-            }
-        }
-    }
-    /// <summary>Closes the relief mask <see cref="BeginReliefMask"/> opened: emits its <see cref="SdfOp.ReliefWeight"/>
-    /// (whose band endpoints in the region's units <c>AnalyzeLipschitz</c> derives) and the scope's union pop, which composes nothing.</summary>
-    /// <returns>This builder.</returns>
-    /// <exception cref="InvalidOperationException">No relief mask is open, a scope opened inside it is still open, or
-    /// the mask holds no shape.</exception>
-    public SdfProgramBuilder EndReliefMask() {
-        if ((m_reliefMask is not { } mask) || (m_fieldScopes is not { } scopes) || (scopes.Count != mask.Depth)) {
-            throw new InvalidOperationException(message: "EndReliefMask was called with no relief mask open at the innermost field scope.");
-        }
-        if (m_shapeCount == scopes.Peek().ShapeCountAtOpen) {
-            throw new InvalidOperationException(message: "A relief mask must hold at least one shape: its region is the shapes' union.");
-        }
-
-        m_instructions.Add(item: new SdfInstruction(
-            Blend: 0u,
-            Data0: mask.Band,
-            Data1: default,
-            Material: 0,
-            Op: SdfOp.ReliefWeight,
-            Shape: 0u
-        ));
-        m_reliefMask = null;
-
-        return PopField();
     }
     /// <summary>Shells the entire field accumulated so far into a hollow skin of the given thickness — a field op:
     /// order it after everything it should shell.</summary>

@@ -5,7 +5,7 @@ namespace Puck.World.Protocol;
 /// change (<see cref="DeliverDefinition"/>, folded into the client's program-rebuild revision) or a value-only
 /// write (<see cref="DeliverState"/>, stored for reads with nothing recompiled). Every member that carries content
 /// carries the <see cref="WorldStreamStamp"/> of the stream it belongs to, and a spanned stream ends a span with
-/// <see cref="DeliverCut"/>.</summary>
+/// <see cref="DeliverCut"/>, or its transport with <see cref="CloseSpan"/>.</summary>
 public interface IClientSink {
     /// <summary>Delivers a tick's authoritative snapshot — the whole entity table's render state plus its revision.</summary>
     /// <param name="snapshot">The tick snapshot.</param>
@@ -43,6 +43,12 @@ public interface IClientSink {
     /// <param name="terminal">Whether the stream ends: it delivers nothing further, and a reader bound to it lets it
     /// go.</param>
     void DeliverCut(in WorldStreamStamp stream, bool terminal);
+    /// <summary>Tells the reader that the transport carrying a spanned stream to it ended (a lost connection, an
+    /// invalidated observation): the stream can no longer tell it of a cut, so a reader holding that stream's span
+    /// open closes it and shows nothing of it. Raised by the reader's own transport, never carried as a record, and a
+    /// sink that holds no span ignores it.</summary>
+    /// <param name="stream">The identity of the stream whose transport ended.</param>
+    void CloseSpan(ulong stream);
     /// <summary>Delivers an accepted LIVE window-composition override for the client to apply to its composer (the
     /// <c>view.override layout</c>/<c>view.override camera</c> path).</summary>
     /// <param name="composition">The composition override.</param>

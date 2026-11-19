@@ -686,8 +686,9 @@ public sealed partial class WorldCreationInstances {
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
             terms += WorldGaitDrivers.ComposeDelta(
                 phases: live.DriverPhase,
+                rig: live.Rig,
                 rotation: out var ownRotation,
-                terms: live.Rig.Terms(shape: shapeIndex),
+                shape: shapeIndex,
                 translation: out var ownTranslation,
                 weights: live.DriverWeight,
                 definition: client.Definition

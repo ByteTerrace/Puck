@@ -226,10 +226,24 @@ public sealed record ShapeDocument(
     /// see <see cref="SdfProgramBuilder.TwistY"/>).</summary>
     public const float MaxTwist = 3.0f;
 }
-/// <summary>One authored entity-part identity exported by a creation look.</summary>
-/// <param name="Id">The ordinal, case-sensitive identifier an entity-part anchor names.</param>
+/// <summary>One named body part of a creation: the anchor shape whose dynamic pose an entity-part anchor or a look's
+/// <c>partDynamics</c> follower reads, and the set of shapes the part covers, which a driver's mask names
+/// (<see cref="CreationPartCompiler"/> computes it, and is the one place that does).</summary>
+/// <param name="Id">The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to
+/// the creation; the engine reserves none.</param>
 /// <param name="ShapeId">The stable <see cref="ShapeDocument.Id"/> whose dynamic pose the part publishes.</param>
-public sealed record CreationPartDocument(string Id, int ShapeId);
+/// <param name="Shapes">The names of the shapes the part covers, each with every shape that hangs from it through
+/// <see cref="ShapeDocument.Parent"/>; null covers the anchor shape and what hangs from it. A subtree rather than a
+/// list, so a hand stays a hand when a finger gains a segment.</param>
+/// <param name="Except">The ids of parts declared earlier whose shapes this part does not cover, so "the trunk without
+/// the arms" is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier
+/// one.</param>
+public sealed record CreationPartDocument(
+    string Id,
+    int ShapeId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Shapes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Except = null
+);
 /// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
 /// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
 /// scope — irregular rock, terrain, bark. A solid placement collides with the relieved surface: the analytic provider
@@ -304,14 +318,17 @@ public sealed record CreationNoiseDocument(
         return ((frequency > 0f) ? (0.25f / frequency) : 0f);
     }
     /// <summary>Returns the derived march step factor of this facet's resolved parameters, its masks' band slopes
-    /// included (<see cref="SdfProgram.ReliefMaskSlope"/>), in creation units.</summary>
+    /// included (<see cref="SdfReliefMask.BandSlope"/>), in creation units: the bound the program charges the
+    /// relief at, through its point factor. A mask whose band describes none adds nothing; validation refuses it.</summary>
     /// <returns>The multiplicative step factor (1 = inert).</returns>
     public float StepFactor() => SdfProgram.NoiseDisplaceStepFactor(
         amplitude: MathF.Abs(x: Amplitude),
         frequency: MathF.Abs(x: Frequency),
         gain: (Gain ?? 0.5f),
         lacunarity: (Lacunarity ?? 2f),
-        maskSlope: (Masks ?? []).Sum(selector: static mask => SdfProgram.ReliefMaskSlope(fade: mask.Fade, inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f))),
+        maskSlope: (Masks ?? []).Sum(selector: static mask => ((SdfReliefBand.TryOf(band: out var band, inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f), start: (mask.Start ?? 0f), width: mask.Fade) is null)
+            ? SdfReliefMask.BandSlope(band: band)
+            : 0f)),
         octaves: (Octaves ?? 4)
     );
 }
@@ -323,13 +340,17 @@ public sealed record CreationNoiseDocument(
 /// With <paramref name="Inside"/> zero the relief is exactly zero on and inside the region, so a carve or pad that is its
 /// own region keeps its authored surface; a band at least <c>9/8 · amplitude · |outside − inside|</c> wide opens no
 /// hidden pocket under a thin carved floor.</summary>
-/// <param name="Shapes">The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding,
-/// chamfer, elongate, a prism's profile and lift), of a type contact admits.</param>
-/// <param name="Fade">The band's width, in creation units, above zero.</param>
+/// <param name="Shapes">The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding), each
+/// a box, a sphere, an ellipsoid, a superellipsoid, a capsule scaled alike in X and Z or a plane
+/// (<see cref="SdfReliefRegion.Lower"/>). A relief's masks hold at most <see cref="SdfReliefMask.MaxRegions"/> shapes in
+/// all.</param>
+/// <param name="Fade">The band's width, in creation units, at least 2⁻¹²; snapped to a multiple of 2⁻¹²
+/// (<see cref="SdfReliefBand"/>).</param>
 /// <param name="Start">Where the band starts, as a distance in creation units from the region's surface; negative starts
-/// it inside the region (null = 0).</param>
-/// <param name="Inside">The weight on and inside the region, in [0, 1] (null = 0).</param>
-/// <param name="Outside">The weight past the band, in [0, 1] (null = 1).</param>
+/// it inside the region (null = 0). Snapped to a multiple of 2⁻¹²; the start, the fade and their sum lie within
+/// <see cref="SdfReliefBand.Limit"/> units.</param>
+/// <param name="Inside">The weight on and inside the region, in [0, 1] (null = 0), snapped to a multiple of 2⁻¹⁶.</param>
+/// <param name="Outside">The weight past the band, in [0, 1] (null = 1), snapped to a multiple of 2⁻¹⁶.</param>
 public sealed record CreationReliefMaskDocument(
     IReadOnlyList<ShapeDocument> Shapes,
     float Fade,
@@ -616,6 +637,8 @@ public sealed record CreationBehaviorDocument(
 /// <param name="SizeBy">Optional numeric state binding (state.row[.key]) whose authority value, clamped to [0, 1],
 /// uniformly scales the creation about its origin. Zero hides it and removes contact. A solid draws the exact size
 /// contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.</param>
+/// <param name="Clips">The pose clips (null = none), each key poses on joints played by one of <see cref="Drivers"/> —
+/// see <see cref="CreationClipDocument"/>. Presentation-only, like the drivers.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -637,7 +660,8 @@ public sealed record CreationDocument(
     IReadOnlyList<CreationEffectorDocument>? Effectors = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<VolumeDocument>? Volumes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipDocument>? Clips = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";
@@ -654,7 +678,7 @@ public sealed record CreationDocument(
     public IDictionary<string, JsonElement>? Extensions { get; set; }
 
     /// <summary>Gets whether this is a rig's lowered document (<see cref="CreationRig.Document"/>): its shapes' swings
-    /// and slides are removed because the rig plays them, so <see cref="CreationRig.Compile"/> refuses it. Only a rig
+    /// and slides and its clips are removed because the rig plays them, so <see cref="CreationRig.Compile"/> refuses it. Only a rig
     /// sets it, and it never crosses the wire.</summary>
     [JsonIgnore]
     public bool Lowered { get; internal init; }

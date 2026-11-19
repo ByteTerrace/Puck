@@ -97,11 +97,17 @@ public static class SdfEncodingProbe {
         Call(name: "dilate", inputs: [0.06f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).Dilate(radius: v[0]));
         Call(name: "displace", inputs: [0.51f, 0.53f, 0.57f, 0.04f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).Displace(amplitude: v[3], frequency: new Vector3(x: v[0], y: v[1], z: v[2])));
         Call(name: "noise-displace", inputs: [0.9f, 0.03f, 3f, 0.45f, 2.25f, 13f], emit: static (b, m, v) => Shape(b: b.ResetPoint(), material: m).NoiseDisplace(amplitude: v[1], frequency: v[0], gain: v[3], lacunarity: v[4], octaves: ((int)v[2]), seed: ((uint)v[5])));
-        // A relief mask: the region (a second unit sphere) inside its seeded scope, then the relief it weights, all inside
-        // the scope that holds the shape it relieves, as CreationStampEmitter.EmitNoise emits it.
-        Call(name: "relief-weight", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.9f, 0.03f], emit: static (b, m, v) => Shape(b: b.ResetPoint().PushField().ResetPoint(), material: m)
-            .BeginReliefMask(fade: v[1], inside: v[2], outside: v[3], start: v[0]).ResetPoint().Sphere(material: m, radius: 1f).EndReliefMask()
-            .ResetPoint().NoiseDisplace(amplitude: v[5], frequency: v[4]).PopField());
+        // A masked relief: its band and one region of each listed type as the rows before it (every row kind), all inside
+        // the scope that holds the shape it relieves, as CreationStampEmitter.EmitNoise emits it. The inputs are the band
+        // (start, width, inside, outside), the region's origin and turn, then the primitive's own.
+        Call(name: "relief-row box", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.31f, 0.37f, 0.41f, 0.1f, 0.2f, 0.3f, 0.9f, 0.6f, 0.7f, 0.8f, 0.05f], emit: static (b, m, v) =>
+            Masked(b: b, material: m, inputs: v, region: SdfReliefRegion.Lower(position: new Vector3(x: v[4], y: v[5], z: v[6]), rotation: new Quaternion(x: v[7], y: v[8], z: v[9], w: v[10]), rounding: v[14], scale: new Vector3(x: v[11], y: v[12], z: v[13]), type: SdfSolidPrimitive.Box)));
+        Call(name: "relief-row superellipsoid", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.31f, 0.37f, 0.41f, 0.1f, 0.2f, 0.3f, 0.9f, 0.6f, 0.7f, 0.8f, 2.5f], emit: static (b, m, v) =>
+            Masked(b: b, material: m, inputs: v, region: SdfReliefRegion.Lower(exponent: v[14], position: new Vector3(x: v[4], y: v[5], z: v[6]), rotation: new Quaternion(x: v[7], y: v[8], z: v[9], w: v[10]), scale: new Vector3(x: v[11], y: v[12], z: v[13]), type: SdfSolidPrimitive.Superellipsoid)));
+        Call(name: "relief-row capsule", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.31f, 0.37f, 0.41f, 0.1f, 0.2f, 0.3f, 0.9f, 0.3f, 0.9f], emit: static (b, m, v) =>
+            Masked(b: b, material: m, inputs: v, region: SdfReliefRegion.Lower(position: new Vector3(x: v[4], y: v[5], z: v[6]), rotation: new Quaternion(x: v[7], y: v[8], z: v[9], w: v[10]), scale: new Vector3(x: v[11], y: v[12], z: v[11]), type: SdfSolidPrimitive.Capsule)));
+        Call(name: "relief-row plane", inputs: [0.25f, 0.5f, 0.2f, 0.9f, 0.31f, 0.37f, 0.41f, 0.1f, 0.2f, 0.3f, 0.9f], emit: static (b, m, v) =>
+            Masked(b: b, material: m, inputs: v, region: SdfReliefRegion.Lower(position: new Vector3(x: v[4], y: v[5], z: v[6]), rotation: new Quaternion(x: v[7], y: v[8], z: v[9], w: v[10]), scale: Vector3.One, type: SdfSolidPrimitive.Plane)));
         foreach (var mode in Enum.GetValues<SdfCellMode>()) {
             Call(name: $"cell-displace {mode}", inputs: [0.95f, 0.02f, 17f, 0.15f], emit: (b, m, v) => Shape(b: b.ResetPoint(), material: m).CellDisplace(amplitude: v[1], frequency: v[0], mode: mode, randomness: v[3], seed: ((uint)v[2])));
         }
@@ -446,4 +452,11 @@ public static class SdfEncodingProbe {
     // A unit sphere after the call's operation, so every call's program ends in a shape.
     private static SdfProgramBuilder Shape(SdfProgramBuilder b, int material) =>
         b.Sphere(material: material, radius: 1f);
+    // A unit sphere relieved under one mask of one region inside its scope; inputs[0..3] are the band.
+    private static SdfProgramBuilder Masked(SdfProgramBuilder b, int material, IReadOnlyList<float> inputs, SdfReliefRegion region) =>
+        Shape(b: b.ResetPoint().PushField().ResetPoint(), material: material).ResetPoint().NoiseDisplace(
+            amplitude: 0.03f,
+            frequency: 0.9f,
+            masks: [new SdfReliefMask(band: SdfReliefBand.Of(inside: inputs[2], outside: inputs[3], start: inputs[0], width: inputs[1]), regions: [region])]
+        ).PopField();
 }

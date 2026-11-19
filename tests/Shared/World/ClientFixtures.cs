@@ -82,12 +82,12 @@ internal static class ClientFixtures {
 
         return WorldGaitDrivers.HoldsGate(facts: facts, gate: rig.Drivers[0].Gate, moving: moving, reads: ((reads is null) ? null : new WorldRigReads(lease: reads, rig: rig)));
     }
-    /// <summary>Returns the terms one shape composes under a creation's drivers.</summary>
+    /// <summary>Returns the rig of a creation holding one shape under a creation's drivers; the shape is index 0.</summary>
     /// <param name="shape">The shape.</param>
     /// <param name="drivers">The creation's drivers.</param>
-    /// <returns>The shape's terms.</returns>
-    public static CreationRigTerm[] Terms(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers) =>
-        CreationRig.Compile(document: new CreationDocument(Drivers: drivers, Frames: null, Name: null, Palette: null, Schema: CreationDocument.CurrentSchema, Shapes: [shape])).Terms(shape: 0).ToArray();
+    /// <returns>The rig.</returns>
+    public static CreationRig ShapeRig(ShapeDocument shape, IReadOnlyList<CreationDriverDocument>? drivers) =>
+        CreationRig.Compile(document: new CreationDocument(Drivers: drivers, Frames: null, Name: null, Palette: null, Schema: CreationDocument.CurrentSchema, Shapes: [shape]));
 }
 /// <summary>The narrowest link a <see cref="PlayerRoster"/> can be built over: it answers nothing and drops
 /// everything.</summary>
