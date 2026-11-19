@@ -310,6 +310,11 @@ selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buf
 never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfWorldTables.CoverMeshRegion` is
 the one place the mesh region's interior backing follows the arena: a chunk no placement or draw record covers is
 unmapped behind its readers, and one a placement needs again is mapped before any landing leases it.
+The region's limit (`SdfResidencyGrant.ReserveGrowth`, stored as `LimitBytes`) is the one number both the arena
+refuses by and the bake's budget is held under (`SdfResidencyGrant.Budget`, at most `SdfMeshTier.BudgetEighths` of
+it), and a refused mesh presses `Retier` on its own, so pressure raises the detail bias before it leaves a hole. The
+selector's pool share alone can pass a region's limit (it counts every residency's reservation as room), and a
+budget read from it lets the arena refuse whole places while the bias stays at zero.
 Uniform construction, growth and descriptor writes share `IGpuBindings.RequireConstantBufferSize`: aligned,
 nonzero and within `IGpuBindings.MaxConstantBufferBytes`, the current backend's view limit.
 

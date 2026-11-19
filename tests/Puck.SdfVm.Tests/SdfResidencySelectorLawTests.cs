@@ -165,6 +165,30 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Contains(expectedSubstring: "growth-refusals=0", actualString: selector.Describe());
     }
     [Fact]
+    public void ABudgetNeverPassesTheShareOfWhatItsRegionMayPlace() {
+        var (account, _, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var valley = selector.Register(name: "valley");
+        using var painting = selector.Register(name: "painting");
+
+        Budget(account: account, localBudget: (4L * Gibibyte), segments: segments, serial: 1UL);
+        valley.Mapped = true;
+        valley.Created(capacityBytes: (16L * Mebibyte));
+        painting.Created(capacityBytes: (16L * Mebibyte));
+        // Before any limit is known the selector's share alone bounds the budget.
+        Assert.Equal(expected: long.MaxValue, actual: valley.LimitBytes);
+        Assert.True(condition: (valley.Budget(filled: Gibibyte, named: Gibibyte) > (16L * Mebibyte)));
+        // Another residency's reservation takes the pool's room: the selector still counts it as the regions' own, but
+        // the valley's region may place only what it holds and its unbacked interior.
+        _ = painting.ReserveGrowth(capacityBytes: (16L * Mebibyte), mostBytes: (64L * Gibibyte));
+
+        var limit = valley.ReserveGrowth(capacityBytes: (16L * Mebibyte), mostBytes: (64L * Gibibyte), unbackedBytes: (8L * Mebibyte));
+
+        Assert.Equal(expected: ((24L * Mebibyte), (24L * Mebibyte)), actual: (limit, valley.LimitBytes));
+        Assert.Equal(expected: ((limit / 8L) * SdfMeshTier.BudgetEighths), actual: valley.Budget(filled: Gibibyte, named: Gibibyte));
+        Assert.Contains(expectedSubstring: $"region-limit={limit}B", actualString: selector.Describe());
+    }
+    [Fact]
     public void TheWorkBudgetIsOneRateOfWallTimeForEveryService() {
         var now = Stopwatch.Frequency;
         var budget = new SdfGpuWorkBudget(clock: () => now);
@@ -423,6 +447,29 @@ public sealed class SdfResidencySelectorLawTests {
         account.SetBudget(bytes: (512L * Mebibyte), pool: PhysicalMemory.Device);
         _ = valley.Decide(report: in fitting);
         Assert.Equal(expected: 2, actual: selector.Bias);
+    }
+    [Fact]
+    public void ASmallerResidencysPressureRaisesTheBiasWhenTheLargerOneDecides() {
+        var (account, _, segments) = Discrete();
+        var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var session = selector.Register(name: "session");
+        using var valley = selector.Register(name: "valley");
+        var pressing = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: true);
+        var fitting = new SdfDetailReport(AnySpare: false, CanLower: false, Elapsed: SdfMeshTier.MeasureFrames, Over: false);
+
+        // The session names more and decides; the valley's region refuses a mesh, so its report presses.
+        Budget(account: account, localBudget: (8L * Gibibyte), segments: segments, serial: 1UL);
+        _ = session.Budget(filled: Gibibyte, named: Gibibyte);
+        _ = valley.Budget(filled: (900L * Mebibyte), named: (900L * Mebibyte));
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: 0, actual: selector.Bias);
+        _ = valley.Decide(report: in pressing);
+        Assert.Equal(expected: 0, actual: selector.Bias);
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: 1, actual: selector.Bias);
+        // The report presses one decision: with no newer report from the valley, the bias stands.
+        _ = session.Decide(report: in fitting);
+        Assert.Equal(expected: (1, (1, 0)), actual: (selector.Bias, selector.BiasSteps));
     }
     [Fact]
     public void AMeshRegionsStagingIsAdmittedOnUnifiedMemoryWhereItsGrowthIsRefused() {

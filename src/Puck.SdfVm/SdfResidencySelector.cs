@@ -9,8 +9,9 @@ using Puck.Hosting.Jobs;
 namespace Puck.SdfVm;
 
 /// <summary>What one residency's bake reports of a detail decision (<see cref="SdfResidencyGrant.Decide"/>).</summary>
-/// <param name="Over">Whether the bytes the residency's draws name pass its budget, or a finer tier waits within one
-/// replacement of it.</param>
+/// <param name="Over">Whether the bytes the residency's draws name pass its budget, a finer tier waits within one
+/// replacement of it, or its mesh region refuses a mesh the draws name. A pressing report presses the one bias at the
+/// next decision, whichever residency makes it, unless the pool's limit has risen since.</param>
 /// <param name="AnySpare">Whether the residency still has a group drawing a finer tier than its demand asks, landing a
 /// coarser one or waiting its hold: detail it can give up before every demand is coarsened.</param>
 /// <param name="CanLower">Whether the residency would stay under its budget with every demand half a rung finer, with
@@ -74,6 +75,10 @@ public sealed class SdfResidencySelector {
     private int m_biasSinceLowered = int.MaxValue;
 
     private long m_growthRefusals;
+    // Every report's serial, and the serial of the report the latest decision was made on: a report counts toward one
+    // decision only (Decide).
+    private long m_reports;
+    private long m_decidedSerial;
 
     /// <summary>Initializes a new instance of the <see cref="SdfResidencySelector"/> class.</summary>
     /// <param name="account">The account the selector reads its pool from and reserves the regions in.</param>
@@ -131,7 +136,7 @@ public sealed class SdfResidencySelector {
     }
     /// <summary>Describes the sum the selector holds: the pool, its limit, held and promised bytes, each class's bytes,
     /// the elastic budget, the one bias with its steps, the growths the account refused, and each residency's grant
-    /// beside what it names, holds and has reserved. The floors and the support class are named and hold nothing until
+    /// beside what it names, the most its region may place, and what the region holds and has reserved. The floors and the support class are named and hold nothing until
     /// residency floors and observed use exist.</summary>
     /// <returns>One line of <c>key=value</c> fields.</returns>
     public string Describe() {
@@ -163,7 +168,7 @@ public sealed class SdfResidencySelector {
                 var share = ((budget == long.MaxValue) ? long.MaxValue : ((budget / SdfMeshTier.BudgetEighths) * 8L));
 
                 if (share != long.MaxValue) { granted += share; }
-                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B region-held={grant.Capacity}B region-reserved={grant.Reserved}B region-retiring={grant.Retiring}B");
+                _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grant {grant.Name}={((share == long.MaxValue) ? "unbounded" : $"{share}B")} named={grant.Named}B filled={grant.Filled}B region-limit={Bytes(bytes: ((grant.LimitBytes == long.MaxValue) ? null : grant.LimitBytes))} region-held={grant.Capacity}B region-reserved={grant.Reserved}B region-retiring={grant.Retiring}B");
             }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" | grants={((usable is null) ? "unbounded" : $"{granted}B")}");
         }
@@ -263,23 +268,30 @@ public sealed class SdfResidencySelector {
         return Math.Max(val1: 0L, val2: (grant.Filled + ((long)((((double)room) * grant.Filled) / Math.Max(val1: 1L, val2: filled)))));
     }
 
-    // Moves the one bias on the report of the residency that names the most among those reporting: it presses when any
-    // residency names more than the budget holds, rises half a rung once the budget has pressed for the hold with no residency holding
+    // Moves the one bias on the report of the residency that names the most among those reporting: it presses when the
+    // residencies together name more than the budget holds or any fresh report presses (its draws past its own budget,
+    // or a mesh its region refuses), rises half a rung once the budget has pressed for the hold with no residency holding
     // detail it can give up, and falls half a rung once every residency has fit a half rung finer for the quiet wait,
     // which doubles when a rise follows a fall closely.
     internal int Decide(SdfResidencyGrant grant, in SdfDetailReport report) {
         var now = Stopwatch.GetTimestamp();
         var bounded = m_account.TryReadTotals(held: out var held, limit: out var limit, pool: Pool, promised: out var promised);
 
+        var limitNow = (bounded ? limit : long.MaxValue);
+
         lock (m_gate) {
             grant.Report = report;
             grant.ReportedAt = now;
+            grant.ReportSerial = ++m_reports;
+            grant.ReportLimit = limitNow;
 
             var primary = grant;
-            // Whether the budget presses is read here, from the limit as it stands and what every residency names, and
-            // from the deciding residency's own report, made a moment ago against that limit. Another residency's
-            // report was made against the limit of its own last decision: one made before a limit was restored would
-            // press on a budget that no longer does.
+            // Whether the budget presses is read from the limit as it stands and what every residency names, from the
+            // deciding residency's own report, and from each other residency's report made since the last decision
+            // under a limit no higher than now: a residency whose own region refuses a mesh, or whose draws pass its own
+            // budget, presses the one bias even when another residency names more and decides. Each such report
+            // presses one decision; one made before the limit was raised (a cap lifted, a budget restored) presses
+            // none, since it judged a budget that no longer stands.
             var over = report.Over;
             var anySpare = false;
             var canLower = true;
@@ -289,11 +301,13 @@ public sealed class SdfResidencySelector {
                 named += other.Named;
                 if ((other.ReportedAt == 0) || ((now - other.ReportedAt) > FreshTicks)) { continue; }
                 if (other.Named > primary.Named) { primary = other; }
+                if ((other.ReportSerial > m_decidedSerial) && (other.ReportLimit >= limitNow)) { over |= other.Report.Over; }
                 anySpare |= other.Report.AnySpare;
                 canLower &= other.Report.CanLower;
             }
             if (bounded) { over |= (named > ((UsableOf(held: held, limit: limit, promised: promised) / 8L) * SdfMeshTier.BudgetEighths)); }
             if (!ReferenceEquals(objA: primary, objB: grant)) { return m_bias; }
+            m_decidedSerial = grant.ReportSerial;
 
             var elapsed = report.Elapsed;
             var bias = m_bias;
@@ -353,6 +367,7 @@ public sealed class SdfResidencyGrant : IDisposable {
     private readonly SdfResidencySelector m_selector;
 
     private long m_capacity;
+    private long m_limit = long.MaxValue;
     private long m_floor;
     private long m_retiring;
     private long m_reserved;
@@ -388,6 +403,9 @@ public sealed class SdfResidencyGrant : IDisposable {
     internal long Filled;
     internal SdfDetailReport Report;
     internal long ReportedAt;
+    // The report's serial among the selector's reports, and the pool limit it was made under (long.MaxValue unbounded).
+    internal long ReportSerial;
+    internal long ReportLimit;
 
     /// <summary>Records the bytes the region's first buffer holds and reserves them with its staging as the
     /// reservation's floor: storage a residency cannot draw without, reserved whatever the pool holds.</summary>
@@ -405,25 +423,40 @@ public sealed class SdfResidencyGrant : IDisposable {
         m_selector.PublishFloors();
     }
     /// <summary>Reserves room for the region to grow before a list is planned into it, and returns the most bytes the
-    /// region may hold once it has: the standing buffer's bytes when the pool has no room for a replacement beside it,
-    /// and otherwise as much as the pool has room for, at most <paramref name="mostBytes"/>. The reservation covers the
-    /// standing buffer and a replacement of the returned size, so the growth that follows is admitted;
-    /// <see cref="Grown"/> or <see cref="Kept"/> then lowers it to what was built.</summary>
-    /// <param name="capacityBytes">The bytes the region's standing buffer holds.</param>
+    /// region may place once it has (<see cref="LimitBytes"/>): the standing buffer's bytes when the pool has no room for
+    /// a replacement beside it, and otherwise as much as the pool has room for, at most <paramref name="mostBytes"/>,
+    /// with the mapped region's unbacked interior beside either. The reservation covers the standing buffer and a
+    /// replacement of the returned size, so the growth that follows is admitted; <see cref="Grown"/> or
+    /// <see cref="Kept"/> then lowers it to what was built.</summary>
+    /// <param name="capacityBytes">The bytes the region's standing buffer holds (a mapped region's backed chunks).</param>
     /// <param name="mostBytes">The most bytes a region holds on any device.</param>
-    /// <returns>The most bytes the region may hold, at least <paramref name="capacityBytes"/>.</returns>
-    public long ReserveGrowth(long capacityBytes, long mostBytes) {
+    /// <param name="unbackedBytes">The bytes inside a mapped region's size that hold no device memory (chunks an earlier
+    /// fit gave back): address range a placement may use, whose backing the ledger admits when a placement needs it.
+    /// Zero for a region that grows by replacement.</param>
+    /// <returns>The most bytes the region may place, at least <paramref name="capacityBytes"/> and at most
+    /// <paramref name="mostBytes"/>.</returns>
+    public long ReserveGrowth(long capacityBytes, long mostBytes, long unbackedBytes = 0L) {
         Volatile.Write(location: ref m_capacity, value: capacityBytes);
 
         var room = m_reservation.Room;
+        var grown = Math.Max(val1: capacityBytes, val2: (mostBytes - unbackedBytes));
         // A mapped region grows by the room alone; any other region's replacement takes the room beside what stands.
-        var limit = Math.Min(val1: mostBytes, val2: ((room == long.MaxValue) ? mostBytes : (Mapped ? (capacityBytes + room) : room)));
+        var limit = Math.Min(val1: grown, val2: ((room == long.MaxValue) ? grown : (Mapped ? (capacityBytes + room) : room)));
 
-        if ((limit > capacityBytes) && Reserve(floor: Standing, peak: Beside(bytes: limit))) { return limit; }
-        ReserveStanding();
+        if (!((limit > capacityBytes) && Reserve(floor: Standing, peak: Beside(bytes: limit)))) {
+            ReserveStanding();
+            limit = capacityBytes;
+        }
+        limit = Math.Min(val1: mostBytes, val2: (limit + unbackedBytes));
+        Volatile.Write(location: ref m_limit, value: limit);
 
-        return capacityBytes;
+        return limit;
     }
+    /// <summary>Gets the most bytes the region may place, as <see cref="ReserveGrowth"/> last answered:
+    /// <see cref="long.MaxValue"/> before the first answer. The region's arena refuses a mesh past it, and the
+    /// residency's budget (<see cref="Budget"/>) never passes <see cref="SdfMeshTier.BudgetEighths"/> of it, so the
+    /// bake coarsens what the views can spare before the arena refuses.</summary>
+    public long LimitBytes => Volatile.Read(location: ref m_limit);
     /// <summary>Records a growth or a shrink by replacement: the region's buffer of <paramref name="oldBytes"/> was
     /// replaced by one of <paramref name="newBytes"/> and waits on its readers. The reservation is lowered to the two
     /// together.</summary>
@@ -463,12 +496,19 @@ public sealed class SdfResidencyGrant : IDisposable {
         ReserveStanding();
     }
     /// <summary>Returns the bytes the residency's bake may fill: what its draws name and its finer tiers in flight are
-    /// expected to add, and its part of the room the selector's budget has left;
-    /// <see cref="long.MaxValue"/> where nothing bounds the pool.</summary>
+    /// expected to add, and its part of the room the selector's budget has left, never past
+    /// <see cref="SdfMeshTier.BudgetEighths"/> of the most its region may place (<see cref="LimitBytes"/>), so a list
+    /// the region would refuse presses the budget and the bake coarsens before a mesh is left out;
+    /// <see cref="long.MaxValue"/> where nothing bounds the pool or the region.</summary>
     /// <param name="named">The bytes the residency's draws name.</param>
     /// <param name="filled">The bytes they are expected to name once every finer replacement in flight has landed.</param>
     /// <returns>The budget, in bytes.</returns>
-    public long Budget(long named, long filled) => m_selector.Budget(filled: filled, grant: this, named: named);
+    public long Budget(long named, long filled) {
+        var budget = m_selector.Budget(filled: filled, grant: this, named: named);
+        var limit = LimitBytes;
+
+        return ((limit == long.MaxValue) ? budget : Math.Min(val1: budget, val2: ((limit / 8L) * SdfMeshTier.BudgetEighths)));
+    }
     /// <summary>Reports a detail decision and returns the bias every demand is coarsened by from now on.</summary>
     /// <param name="report">What the residency's bake decided.</param>
     /// <returns>The selector's bias.</returns>

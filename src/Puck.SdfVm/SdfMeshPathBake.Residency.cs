@@ -371,7 +371,8 @@ public sealed partial class SdfMeshPathBake {
 
     /// <summary>Stamps, on the frame's thread after the frame's mesh region is staged, each group the bake has finished and
     /// each whose mesh's words the region holds, which <see cref="DescribeResidency"/> times from the bake's start,
-    /// reads the region's limit and what the frame's draws ask of it, which the next frame's tiers are budgeted by,
+    /// reads what the frame's draws ask of the region and the meshes it refuses, which the next frame's tiers are
+    /// budgeted by (the region's limit reaches the budget through the grant, <see cref="SdfResidencyGrant.Budget"/>),
     /// names the tables the products that wait ahead of the draws (<see cref="SdfWorldTables.NameMeshesAhead"/>), and
     /// hands the draws to each whose words stand in the region (<see cref="SdfWorldTables.MeshStands"/>).</summary>
     /// <param name="tables">The residency's tables, whose mesh region owes a mesh's words or not
@@ -387,7 +388,6 @@ public sealed partial class SdfMeshPathBake {
                 Volatile.Write(location: ref m_bias, value: m_detail.Bias);
             }
             // The region's account is read every frame: the next frame's tiers are budgeted by it (Retier).
-            m_regionLimitBytes = ((long)tables.MeshRegionLimitBytes);
             m_regionNamedBytes = ((long)tables.MeshRegionNamedBytes);
             m_regionRefused = tables.MeshRegionRefused;
             ServeAhead(tables: tables);
