@@ -1045,14 +1045,21 @@ CAPACITY cpu=<percent> freeRAM=<GB> freeDisk=<GB> reuseNodes=<count>
 
 `--json` writes one JSON object per reading that prints a line instead: `at`,
 `cpuPercent` (the window's mean), `freeRamGb`, `freeDiskGb`, `commitPercent`,
-`commitChargeGb`, `commitLimitGb`, `starts` (PID, kind, private GB, readiness and start ticks),
-`demands` (headroom, free RAM, own peak, growth, total need, commit and RAM coverage by kind),
-`reuseNodes`, `gpuHolder`, `heavyTestHolder` and `admission`. Text readings add the
-same per-kind admission demands and running starts after each transition.
+`commitChargeGb`, `commitLimitGb`, `starts` (PID, kind, private GB, private working set,
+working set, the resident figure admission judged, and readiness), `demands` (headroom, free
+RAM, own peak, growth, total need, private working-set peak, growth and need, working-set
+peak, and commit and RAM coverage by kind), `reuseNodes`, `gpuHolder`, `heavyTestHolder` and
+`admission`; a figure the platform did not report is `null`. Text readings add the same
+per-kind admission demands and running starts after each transition.
 A demand line's `admitted` is the memory decision a start of that kind gets: its private
 bytes (expected peak plus the growth running starts have left) fit the commit headroom
-with the commit reserve left over (`commit-covered`), and its working set (the same sum
-in resident memory) fits free RAM with the pressure floor left over (`ram-covered`). The
+with the commit reserve left over (`commit-covered`), and its private working set (the same
+sum in privately resident memory, `privateResidentNeed`) fits free RAM with the pressure
+floor left over (`ram-covered`). The line also prints the kind's expected whole working set
+(`workingSet`, `unmeasured` before the first observation), which admission reports and never
+judges: the difference is clean mapped-file and image pages the system shares and reclaims,
+so a refusal can be read against both. A `start` line prints each live start's private bytes,
+private working set, working set and the figure admission judged for it (`judged`). The
 capacity lines judge CPU, commit headroom against its reserve and pressure, and device
 admission separately checks GPU ownership.
 
@@ -1092,16 +1099,24 @@ The default thresholds scale with the machine (`HostLoadThresholds.For`).
 The memory threshold is a fraction of the installed memory, rounded up to whole
 gigabytes: pressure begins when free memory is below one eighth of it. No fixed
 amount of free memory or of commit gates a start. A start has two needs. Its
-working set (its expected peak resident memory plus the working-set growth the
-running starts have left) must fit in free memory with the pressure floor left
-over (`HostLoadThresholds.PhysicalCovers`). Its private bytes (its expected commit
+private working set (its expected peak of privately resident memory plus the growth
+the running starts have left in it) must fit in free memory with the pressure floor
+left over (`HostLoadThresholds.PhysicalCovers`). Its private bytes (its expected commit
 peak plus the running starts' private-byte growth) must fit in the commit headroom
 with the commit reserve left over (`HostLoadThresholds.CommitCovers`; the reserve
 is 10% of the commit limit, `--commit-reserve`). The two are not the same
-quantity: private bytes are commit, which includes memory a process has reserved and
-never touched, so a windowed World's 20 GB of private bytes holds about 14 GB
-resident, and judging free memory against private bytes would refuse every start
-on an idle 32 GB machine. Free memory is what the operating system can hand out
+quantity. Private bytes are commit, which includes memory a process has reserved and
+never touched and, on a driver that mirrors device memory into the process (NVIDIA's
+Direct3D 12), a commit byte for every device-local byte with no physical page behind it;
+judging free memory against private bytes would refuse every windowed start on an idle
+32 GB machine. The whole working set overstates the need too: it counts the clean pages of
+mapped files and images (NVIDIA's shader disk cache alone is a few hundred megabytes to a
+gigabyte of a Direct3D 12 process), which other processes share and the system takes back
+under pressure. The private working set (`ProcessInspection.PrivateResidentBytes`: on
+Windows the process's private working set, a driver's write-combined host views included;
+on Linux `RssAnon` plus `RssShmem`) is what a start holds that only paging gives back. A
+reading that cannot split residency judges the whole working set instead, and one with no
+working set the private bytes. Free memory is what the operating system can hand out
 without writing to disk (Windows `ullAvailPhys`, the sum of the standby, free and
 zero lists; Linux `MemAvailable`), so reclaimable cache already counts. Commit is
 the hard limit and physical memory short of a start makes every process page, so
@@ -5023,8 +5038,8 @@ and before the command runs, the one `gate`, `affected` and the MCP server's Wor
 ([`puck host load`](#puck-host-loadadmission-lines-for-the-machine)'s thresholds): free memory
 above the pressure threshold, commit headroom that covers the start's expected peak in private bytes
 (the machine's observed peak for that kind, plus what admitted starts still running have left to grow) and still holds the
-commit reserve (10% of the commit limit), free memory that covers the start's expected working set (measured per kind the same way,
-plus the running starts' working-set growth) and still sits at the pressure floor, free disk
+commit reserve (10% of the commit limit), free memory that covers the start's expected private working set (measured per kind the same way,
+plus the running starts' private working-set growth) and still sits at the pressure floor, free disk
 over the pressure threshold, and, for `gpu`, an idle GPU (for `heavy`, no other process running a
 heavy test suite). The wait is bounded by what `--wait` has left, so `--wait 0` refuses at once
 (exit 2, ticket withdrawn) when the machine has no headroom; wait lines go to standard error
@@ -5040,20 +5055,21 @@ Every `Puck.World` process the CLI starts goes through one launch, `WorldLaunch`
 the unused reserve over one minute without a material allocation (64 MB),
 releasing it entirely at the plateau and restoring it if growth resumes. A World
 that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its kind (a windowed World, a headless World, or a `--test-batch` replica).
-`HostStartTracker` keeps, per kind, the private-byte and working-set peaks of its last ten observed
+`HostStartTracker` keeps, per kind, the private-byte, private working-set and working-set peaks of its last ten observed
 processes (plateaued, or finished after a full plateau window; a shorter run counts only to raise a kind that has
 observations) and expects the high percentile of them (the fourth fifth), so one unusual session raises the
 estimate only until five observations exist and leaves the window after ten newer starts, a rise to a new level
 is learned once three of ten starts reach it, and a fall is learned as readily. A live process above the
 estimate is still counted at its own usage, without clipping real peaks. The windows persist per machine in the
-shared lease root, one file per kind under `host-observations/<HostStartKind>` (a line per process:
-start ticks, process id, private GB, working-set GB). An exclusive sibling guard merges each process's own new
+shared lease root, one file per kind under `HostStartTracker.ObservationDirectory` (a line per process:
+start ticks, process id, private GB, private working-set GB, working-set GB). Every CLI copy on the machine
+rewrites these files, so a change to their lines takes a new directory name and raises `CliLease.Protocol`. An exclusive sibling guard merges each process's own new
 observations into the file, which decides the estimate: a long-lived CLI or MCP session holds nothing the file does not.
-A start whose own expected peak plus the commit reserve exceeds the commit limit, or whose expected working set plus the
+A start whose own expected peak plus the commit reserve exceeds the commit limit, or whose expected private working set plus the
 pressure floor exceeds the installed memory, is refused by name at once (`gate: refused <step>: a windowed World can
 never be admitted on this machine, ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
 provides the private-byte fallback, and `HostLoadThresholds.ResidentFraction` (0.7) of the kind's expected
-private-byte peak is the working-set fallback until the kind's working set is measured. The ordinary host samplers feed this same tracker,
+private-byte peak is the private working-set fallback until the kind's private working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
 Pre-process reservations remain local and expire when a matching process appears
 or after `HostStartTracker.ReservationHold`. The wait is the same bounded, heartbeat-printing one, and a start the bound refuses fails with `HostAdmissionRefusedException`, which a verb reports as it reports any process that would not start. Every World joins a job the operating system ends with the CLI on Windows, so a killed verb leaves no World running. The in-process World boots of `bench` and `determinism` pass the admission through `WorldAdmission.WaitInProcess`.
