@@ -1,6 +1,5 @@
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
-using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
 
@@ -43,5 +42,5 @@ public sealed record PaletteToonSelectDocument(string State, IReadOnlyList<Palet
 /// <param name="Shade">The case's program, or <see langword="null"/> for none.</param>
 public sealed record PaletteToonCaseDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadeReference? Shade = null
 );

@@ -4085,7 +4085,9 @@ selected by its schema, never by its folder or suffix. A world source given
 `--validate` without `--output` is validated and writes nothing; a world source
 has no committed document beside it. With source paths, it
 may report elapsed time, peak process working set, managed allocation and live
-managed bytes with `--measure`; these measurements are observations, not gates. It
+managed bytes with `--measure`, then the five sources that charged the most evaluation work units (the
+`DocumentEvaluationBudget` count that PUCK047 refuses past its 16 million limit), each with its share of that limit;
+these measurements are observations, not gates. It
 compiles only those paths, in the supplied order within one process. Each
 source gets its normal adjacent `.world.json` or
 `.cartridge.json` output; the first failure stops the batch, leaving earlier

@@ -153,8 +153,6 @@ public sealed partial class WorldCreationInstances {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
-        // The presenting seat's guess, decided once a pack: only a source that presents for exactly one seat offers one.
-        var guess = client.SeatGuess;
 
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (slotBase + RootSlotOffset(index: index));
@@ -171,6 +169,8 @@ public sealed partial class WorldCreationInstances {
                 (live is { Row.Attach: { } parked }) &&
                 ((((uint)parked.BodyIndex) >= ((uint)WorldClient.EntityCapacity)) || !client.IsActive(index: parked.BodyIndex))
             ) {
+                // A parked row is drawn nowhere, so it rates no body it reads (ReaderHertz reads PackedRoot).
+                live.PackedRoot = null;
                 live = null;
             }
 
@@ -231,7 +231,6 @@ public sealed partial class WorldCreationInstances {
             if (Wake(
                 client: client,
                 deltaSeconds: deltaSeconds,
-                guess: guess,
                 index: index,
                 live: live,
                 moved: moved,
@@ -249,9 +248,7 @@ public sealed partial class WorldCreationInstances {
                     (transforms[rootSlot].Scale == placementScale) &&
                     // A rig with no finite reach cannot be judged unseen by its sphere, so a changed read poses it in
                     // full: a part the read moves may be the one a view would see.
-                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision)) &&
-                    // A guess in force is the seat's own press answering early, so it is never held.
-                    !live.View.Guessing
+                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision))
                 );
 
                 if (!mayHold) {
@@ -393,6 +390,7 @@ public sealed partial class WorldCreationInstances {
         }
 
         Rigid.Pack(transforms, client, (slotBase + ArticulatedSlotCount), deltaSeconds);
+        PackGuess(client: client, deltaSeconds: deltaSeconds, moved: moved, parkPosition: parkPosition, slotBase: slotBase, transforms: transforms);
         WorldCreationWork.ProcessWork.Count(kind: WorldCreationWork.Packs);
         EndRateCodes();
 
@@ -450,7 +448,7 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.
-    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation, float deltaSeconds, IWorldSeatGuess? guess) {
+    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation, float deltaSeconds) {
         var swapped = !ReferenceEquals(
             objA: m_packedRegistrations[index],
             objB: live
@@ -481,7 +479,6 @@ public sealed partial class WorldCreationInstances {
         live.View.Bind(
             body: (live.BodyIndex ?? -1),
             client: client,
-            guess: guess,
             poses: this
         );
         live.WakeRevision = live.View.Revision;

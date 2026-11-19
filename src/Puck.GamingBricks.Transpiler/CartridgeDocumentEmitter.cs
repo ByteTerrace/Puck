@@ -731,6 +731,6 @@ public static class CartridgeDocumentEmitter {
         return new CompilationResult<JsonObject>(
             ((JsonObject)DocumentLowering.Canonicalize(node: root)!),
             diagnostics
-        );
+        ) { EvaluationWork = scope.Budget.Work };
     }
 }

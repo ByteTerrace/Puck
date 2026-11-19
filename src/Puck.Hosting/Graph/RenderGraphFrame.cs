@@ -86,6 +86,13 @@ public readonly record struct RenderGraphFrame(
 ) {
     /// <summary>Optional current-grid pass pricing, independent of the output extent used by consumers.</summary>
     public IRenderGraphPassCosts? Costs { get; init; }
+    /// <summary>Gets what rewrites <see cref="Roots"/> and <see cref="Footprints"/> in place from the host's composition
+    /// as it stands, or <see langword="null"/> for lists that already do. A host whose captures place the cameras and
+    /// windows its roots and footprints name (a main world's capture, a routed scene's) composes them while the frame is
+    /// produced, so the runtime calls it after the captures it starts and before it reads either list, and again after
+    /// each round of captures the frame's readers start, so the scheduler reads the lists as the frame's last capture
+    /// left them.</summary>
+    public Action? Seal { get; init; }
     /// <summary>Gets the frame's presentation time, in engine ticks: the presented intervals
     /// (<see cref="FrameContext.FrameDeltaTicks"/>) summed since the host's first frame, never decreasing from frame to
     /// frame. A floor refresh (<see cref="RenderGraphRefresh.AtLeast"/>) measures the time since an instance's latest

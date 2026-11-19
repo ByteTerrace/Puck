@@ -202,6 +202,16 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
+        // Every program the uses lowered to a key, once; each world a composition declares inherits the table with the
+        // common document, and canonicalization keeps the rows a document's uses name (WorldDocumentMembers).
+        if (WorldShadeLowering.ProgramsOf(budget: scope.Budget) is { Count: > 0 } programs) {
+            var table = ((root["shades"] as JsonObject) ?? new JsonObject());
+
+            foreach (var (key, program) in programs) {
+                if (!table.ContainsKey(propertyName: key)) { table[key] = scope.Budget.Copy(value: program, span: document.Span); }
+            }
+            if (table.Parent is null) { root["shades"] = table; }
+        }
         discoveredEmbeddings = textsMap;
         // A schema-less document that another imports carries its enums too, so the importer's test names their members.
         if ((composition.Worlds.Count == 0) && WorldSourceDeclaration.Of(document: document).EmitsDocument) {
@@ -229,7 +239,7 @@ public static partial class WorldDocumentEmitter {
                 .. rootTests,
             ];
             if (worldOutputs is null) { diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "This consumer requires one world; compile the composition to its individual documents first.", span: document.Span); }
-            return new CompilationResult<JsonObject>(Diagnostics: diagnostics, Value: root);
+            return new CompilationResult<JsonObject>(Diagnostics: diagnostics, Value: root) { EvaluationWork = scope.Budget.Work };
         }
         if (composition.Links.Count > 0) { diagnostics.ReportError(code: PuckDiagnosticCodes.InvalidValue, message: "A border or door needs declared worlds.", span: document.Span); }
         root.Remove(propertyName: "$composition");
@@ -253,7 +263,7 @@ public static partial class WorldDocumentEmitter {
         return new CompilationResult<JsonObject>(
             Diagnostics: diagnostics,
             Value: canonicalRoot
-        );
+        ) { EvaluationWork = scope.Budget.Work };
     }
 
     /// <summary>Records an embedded text discovered during lowering for a space.</summary>

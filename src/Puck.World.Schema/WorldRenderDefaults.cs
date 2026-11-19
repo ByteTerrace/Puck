@@ -206,7 +206,7 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfShadeDefinition? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.World.Authoring.ShadeReference? Shade = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
     bool RayQueries = false,

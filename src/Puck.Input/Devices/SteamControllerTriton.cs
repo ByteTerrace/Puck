@@ -68,7 +68,7 @@ public sealed class SteamControllerTriton : IGamepadParser, IRumbleParser, ITrac
     private const byte ControllerSettingSize = 3;         // settingNum (u8) + value (u16)
     private const byte FeatureReportId = 0x01;
     private const int GyroOffset = 40;
-    private const float GyroRadiansPerSecondPerLsb = ((2000f / 32768f) * (MathF.PI / 180f));   // ±2000 deg/s (SDL)
+    private static readonly float GyroRadiansPerSecondPerLsb = float.DegreesToRadians(degrees: (2000f / 32768f));   // ±2000 deg/s (SDL)
     private const int HidFeatureReportBytes = 64;
     private const int HidRumbleOutputReportBytes = 10;
     private const ushort ImuModeRaw = 0x0018;             // raw accelerometer (0x08) and raw gyro (0x10)

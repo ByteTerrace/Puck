@@ -197,6 +197,9 @@ public static class WorldDisclosureComparison {
         foreach (var input in snapshot.Inputs.Span) {
             text.Append(provider: invariant, handler: $" | input {input.Owner.Describe()} body={input.Body}.{input.Generation} revision={input.Revision} epoch={input.Epoch} mapping={input.Mapping} sources={input.Sources.Length} seats={input.SeatStates.Length}");
         }
+        foreach (var answer in snapshot.InputAnswers.Span) {
+            text.Append(provider: invariant, handler: $" | answer {answer.Owner.Describe()} epoch={answer.Epoch} sequence={answer.Sequence} tick={answer.Tick}");
+        }
         return text.ToString();
     }
 }

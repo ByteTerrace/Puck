@@ -714,6 +714,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   receive no fade. Vulkan requires `shaderDemoteToHelperInvocation` at device
   creation and capability 5379 in `VulkanShaderCapabilities`; `clip` compiles to
   that feature even when the live opacity is one.
+- **A view can pose one stamp its own way.** `SdfViewSnapshot.PoseOverlay`
+  (`SdfPoseOverlay`: first slot, slot count, first overlay row) makes that view
+  read a stamp's dynamic-transform slots from other rows of the same table: the
+  pass block's `poseOverlay`, applied by `sdfViewPoseSlot` (`frame/sdf-mesh.hlsli`)
+  to every skin member read (`sdfMeshSkinSlotsOf`), to the draw's own frame slot
+  through `sdfViewPoseCarry` in `sdfMeshWorldVertex` and `sdfMeshPreviousPosition`
+  (a draw's matrix is its frame slot's own row), and to a hit's shading frame
+  (`sdfMeshHitFrameSlot`, `sdfMeshSurfaceNormal`). Only a seat's own view carries
+  one, for its guess layer (`WorldCreationInstances.GuessOverlay`); a new reader of
+  a mesh vertex's or a hit's slot goes through `sdfViewPoseSlot`, or that view draws
+  the shared pose there. A light anchored to a slot, a mirror's or portal's own
+  view and the host's anchors read the shared rows, and a rigid draw is culled by
+  its shared pose's box.
 - **Every light answers through one interface,** `shade/sdf-light.hlsli`; a new
   light kind is a branch there and nowhere else. Views and glass visit lights
   through one walk (`sdfLightWalkStart`, `sdfLightNext`) over two masks
@@ -1440,9 +1453,25 @@ by its fence share is GPU back-pressure, not CPU work.
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
   whose `SdfWorldResidency.MeshesArriving` holds: its bake pending, or its region owing words or their upload. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
-  still prepares it and may pack, which moves what its background work binds. In `world.residency`, a residency
+  still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
+  background work binds. In `world.residency`, a residency
   whose `uploads` stand still while `unbound` in its `gpu-work` counts every pump and `owed` stays above zero is one
   nobody renders. `gpu.faults lose` makes every residency land again, a quick check of that path.
+- **A frame captures only what it reads.** `SdfWorldPasses.BeginFrame` serves every held residency's upkeep
+  (`SdfWorldResidency.Upkeep`), captures the host residency, which places the cameras, and prepares residencies that
+  owe their minimum; the runtime then seals its roots and footprints (`RenderGraphFrame.Seal`) and prepares only the
+  instances `RenderGraphScheduler.Readers` marks (`IRenderGraphPackageFactory.PrepareRead`), in rounds until none is
+  new, and asks `IsUnchanged` of those alone. A scheduled render is always among them, since `Readers` follows every
+  edge `Schedule` passes demand along; a new demand edge in the scheduler goes into `Readers` in the same change, or
+  its producer renders from a residency nobody captured this frame. A graph installed mid-frame still stages late
+  (`SdfWorldResidency.Staged`, counted). `world.counters sdf.captures` reads residencies held against captures run.
+- **A dress walks only what moved.** `SdfMeshDresser.Dress` skips its group walk while the bake's product revision and
+  copy layout revision stand; `SdfMeshPathBake.Replace` (the group list's one writer), Restart's clear, the
+  `Group.Mesh` setter, `ShowOwn` and `FinishReplacements` move the product revision, so a new change to what
+  `FrameAccess` exposes (a group's shown mesh, its tier, the list) moves it through one of them. Rigid copies come
+  through the composition source's copy journal (`SdfFrame.MeshCopyChanges`, a `GpuChangedRows` read by a
+  `GpuRowCursor`), which the dresser and the bake's layout check each read. `sdf.instances.dress.groups-visited`,
+  `.groups-stood` and `.copies-visited` count it.
 - **A program's bake plan is made on its build thread.** The composition
   source hands each program its background build finishes to
   `ISdfFrameSource.ObserveBuilds`, the residency plans it there

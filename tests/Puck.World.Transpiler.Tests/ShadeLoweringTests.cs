@@ -20,7 +20,9 @@ public sealed class ShadeLoweringTests {
         var compilation = WorldCompiler.Compile(text, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.True(condition: compilation.Success, userMessage: compilation.Diagnostics.FormatReport());
-        var shade = compilation.Json!["prototypes"]![0]!["document"]!["palette"]![0]!["shade"]!;
+        // A use names its program by key; the document's shades table holds the program once.
+        var key = compilation.Json!["prototypes"]![0]!["document"]!["palette"]![0]!["shade"]!.GetValue<string>();
+        var shade = compilation.Json!["shades"]![key]!;
 
         return SdfShadeProgram.Compile(definition: shade.Deserialize(jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)!);
     }

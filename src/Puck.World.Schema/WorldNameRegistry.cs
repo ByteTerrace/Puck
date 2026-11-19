@@ -524,6 +524,12 @@ public static partial class WorldNameRegistry {
             WorldNameRole.Key
         ),
         new(
+            typeof(WorldEffect.EmitCue),
+            nameof(WorldEffect.EmitCue.Argument),
+            WorldNameKind.State,
+            WorldNameRole.Expression
+        ),
+        new(
             typeof(WorldEffect.SetVerticalVelocity),
             nameof(WorldEffect.SetVerticalVelocity.Key),
             WorldNameKind.State,
@@ -1384,6 +1390,7 @@ public static partial class WorldNameRegistry {
         new(typeof(WorldInputPattern), nameof(WorldInputPattern.Held), "shared logical input channel names"),
         new(typeof(WorldEffect.ConsumeInput), nameof(WorldEffect.ConsumeInput.Pattern), "a shared semantic input-pattern name"),
         new(typeof(WorldScopedReplay), nameof(WorldScopedReplay.Name), "a replay scope identity, local to the replays section"),
+        new(typeof(WorldDeviceProfile), nameof(WorldDeviceProfile.Name), "a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find)"),
         new(typeof(WorldRole), nameof(WorldRole.Name), "a companion role name, which crossing companions carry and destinations declare"),
         new(typeof(WorldConsoleCommand), nameof(WorldConsoleCommand.Name), "a console verb name, in the command registry's namespace"),
         new(typeof(WorldConsoleCommandParameter), nameof(WorldConsoleCommandParameter.Name), "a placeholder local to its command's lines"),
