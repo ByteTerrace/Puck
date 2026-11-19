@@ -12,16 +12,17 @@ namespace Puck.SdfVm;
 // the published scene; until then, and wherever the frame's lever leaves ray queries off, it takes the software walk.
 //
 // Invariant: a structure is disposed only once no job that could read it can still run. Every job is given a serial as
-// TryTake admits it and keeps it in m_flying until it is answered or handed back; a structure leaves service only through
-// Retire, which stamps it with the next serial, and DrainRetired disposes it once no flying serial is below that stamp.
-// A job admitted before the stamp may hold the structure (its query's Top, its build's inputs); one admitted after
+// TryTake admits it and keeps it in m_flying until it is answered or handed back, so every serial below the oldest flying
+// one has landed: that is the client's completion point, the shape GpuRetirementQueue releases by. A structure leaves
+// service only through Retire, which holds it until the last serial admitted so far has landed, and DrainRetired releases
+// it then. A job admitted before Retire may hold the structure (its query's Top, its build's inputs); one admitted after
 // cannot, since Retire runs under the gate after the structure stopped being published. Nothing else disposes a structure
 // while the client lives: Bottom and Top expose none, and Dispose, which frees the rest, runs after the service drained.
 internal sealed partial class SdfMeshProbeGpuWork {
     private readonly IGpuAccelerationStructures? m_structures;
     private readonly nint m_raysPool;
     private readonly Dictionary<SdfMeshIrradianceScene.Geometry, Bottom> m_bottoms = new(ReferenceEqualityComparer.Instance);
-    private readonly List<(IGpuAccelerationStructure Structure, long Stamp)> m_retired = [];
+    private readonly GpuRetirementQueue<IGpuAccelerationStructure> m_retired = new();
     private readonly List<long> m_flying = [];
     // Seconds a structure job takes a triangle (a bottom's build or copy) or an instance (a top's build).
     private readonly SdfGpuWorkRate m_structureRate = new(priorSecondsPerUnit: 2e-8);
@@ -83,20 +84,20 @@ internal sealed partial class SdfMeshProbeGpuWork {
     // Takes a structure out of service: it is disposed once every job admitted before now has landed. Under the gate.
     private void Retire(IGpuAccelerationStructure? structure) {
         if (structure is null) { return; }
-        m_retired.Add(item: (structure, m_nextSerial));
+        m_retired.Retire(after: (ulong)(m_nextSerial - 1L), item: structure);
     }
+    // Releases what every job admitted before its retirement has landed past: every serial below the oldest flying one,
+    // or every serial admitted when none flies. Under the gate.
     private void DrainRetired() {
-        var oldest = long.MaxValue;
+        var oldest = m_nextSerial;
 
         foreach (var serial in m_flying) { oldest = Math.Min(val1: oldest, val2: serial); }
-        for (var index = (m_retired.Count - 1); (index >= 0); index--) {
-            var (structure, stamp) = m_retired[index];
-
-            if (oldest < stamp) { continue; }
-            m_structureBytes -= (long)structure.SizeBytes;
-            structure.Dispose();
-            m_retired.RemoveAt(index: index);
-        }
+        m_retired.Release(completed: (ulong)(oldest - 1L), release: m_releaseStructure ??= ReleaseStructure);
+    }
+    private Action<IGpuAccelerationStructure>? m_releaseStructure;
+    private void ReleaseStructure(IGpuAccelerationStructure structure) {
+        m_structureBytes -= (long)structure.SizeBytes;
+        structure.Dispose();
     }
     private IGpuAccelerationStructure CreateStructure(GpuAccelerationStructureLevel level, ulong bytes, string part) {
         var structure = m_structures!.Create(level: level, name: Name(part: part), sizeBytes: bytes);
@@ -360,8 +361,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
     }
     // Frees every structure the client holds; the service has drained, so no submission reads them.
     private void DisposeStructures() {
-        foreach (var (structure, _) in m_retired) { structure.Dispose(); }
-        m_retired.Clear();
+        m_retired.Release(completed: ulong.MaxValue, release: static structure => structure.Dispose());
         foreach (var bottom in m_bottoms.Values) { bottom.Structure?.Dispose(); bottom.Structure = null; }
         m_bottoms.Clear();
         if (m_top is { } top) {

@@ -523,10 +523,10 @@ words through `sdfProbeSurface`, so it is never a second relight. As built:
   address, `SdfMeshProbeTrace.InstanceBaseWord`). Each is a background job cut
   to the frame's share by its measured rate, and a scene change rebuilds the
   top level and only the bottoms it lacks.
-- *Lifetime.* A structure leaves service only through `Retire`, stamped with
-  the next job serial, and is disposed once every job admitted before the stamp
-  has landed; that is how a bottom retired with its mesh tier outlives every
-  queued trace of it.
+- *Lifetime.* A structure leaves service only through `Retire`, which holds it
+  in a `GpuRetirementQueue` until every job admitted before it has landed (the
+  client's landed job serials are the queue's completion points); that is how a
+  bottom retired with its mesh tier outlives every queued trace of it.
 - *Switch.* `render.rayQueries`, each quality preset's `rayQueries` row and
   `world.rays` turn it on; a query takes the variant only once the top level
   stands for the published scene, and the software walk otherwise.

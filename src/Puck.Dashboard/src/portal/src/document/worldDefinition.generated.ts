@@ -10640,6 +10640,10 @@ export type WorldQualityPreset = {
    * The optical scatter cost gate.
    */
   bloom?: BloomQuality;
+  /**
+   * Whether the preset lets the indirect volume's background rays take the device's ray hardware where it has it (world.rays); the software walk answers the same hits elsewhere.
+   */
+  rayQueries?: boolean;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -10946,6 +10950,10 @@ export type WorldRenderDefaults = {
    * The world's device profiles (WorldDeviceProfile): for each graphics device, the quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name (world.device-profile). Absent authors none, and no cap applies.
    */
   devices?: (WorldDeviceProfile | null)[] | null;
+  /**
+   * Whether the indirect volume's background rays (its probe trace, the relight's shadow rays and the camera sample) boot taking the device's ray hardware where it has it, through the scene's acceleration structures (world.rays). The software walk answers the same hits wherever it is off or the device has none. Absent is off.
+   */
+  rayQueries?: boolean;
 };
 
 export type WorldRenderEnvironment = {
