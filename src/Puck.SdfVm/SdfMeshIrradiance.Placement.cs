@@ -81,7 +81,7 @@ public sealed partial class SdfMeshIrradiance {
                 fresh[i] = trialSlots[i];
             }
             result[i] = new ProbeData(Geometry: geometry, Hits: block, HitIndex: i, Inside: inside[i], Invalid: !valid[i], Offset: offsets[i],
-                GpuSlot: (fresh[i] == NoGpuHits) ? 0u : fresh[i]);
+                GpuSlot: (fresh[i] == NoGpuHits) ? 0u : fresh[i], Reach: FarthestHit(hits: block.Hits(i), limit: layout.Reach));
         }
         return result;
 

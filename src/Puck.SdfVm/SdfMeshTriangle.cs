@@ -2,8 +2,11 @@ using System.Numerics;
 
 namespace Puck.SdfVm;
 
-// Shared nearest-point primitive for the offline bake audit and the retained live scene.
+// Shared nearest-point primitive for the offline bake audit, the retained live scene and the trace judge.
 internal static class SdfMeshTriangle {
+    // A triangle's three corners.
+    public static (Vector3 A, Vector3 B, Vector3 C) Corners(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) =>
+        (positions[((int)indices[(3 * triangle)])], positions[((int)indices[((3 * triangle) + 1)])], positions[((int)indices[((3 * triangle) + 2)])]);
     // The point of a triangle nearest p, by the triangle's Voronoi regions.
     public static Vector3 Closest(Vector3 p, Vector3 a, Vector3 b, Vector3 c) {
         var ab = (b - a);
@@ -42,4 +45,56 @@ internal static class SdfMeshTriangle {
 
         return ((a + (ab * (vb * denominator))) + (ac * (vc * denominator)));
     }
+}
+// A mesh's triangles bucketed by the cells of a uniform grid their boxes overlap, which answers the distance from a point
+// to the nearest triangle within a reach. It keeps triangle numbers only: each query is handed the positions and indices
+// it was built from.
+internal sealed class SdfMeshTriangleGrid {
+    private readonly float m_cellSize;
+    private readonly Dictionary<(int, int, int), List<int>> m_cells = [];
+
+    public SdfMeshTriangleGrid(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cellSize) {
+        m_cellSize = cellSize;
+        for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
+            var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
+            var low = Cell(point: Vector3.Min(value1: a, value2: Vector3.Min(value1: b, value2: c)));
+            var high = Cell(point: Vector3.Max(value1: a, value2: Vector3.Max(value1: b, value2: c)));
+
+            for (var z = low.Z; (z <= high.Z); z++) {
+                for (var y = low.Y; (y <= high.Y); y++) {
+                    for (var x = low.X; (x <= high.X); x++) {
+                        if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) {
+                            held = [];
+                            m_cells.Add(key: (x, y, z), value: held);
+                        }
+                        held.Add(item: triangle);
+                    }
+                }
+            }
+        }
+    }
+
+    // The distance to the nearest triangle within the reach, or the reach when none lies within it.
+    public float Nearest(Vector3 point, float reach, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices) {
+        var low = Cell(point: (point - new Vector3(value: reach)));
+        var high = Cell(point: (point + new Vector3(value: reach)));
+        var nearest = reach;
+
+        for (var z = low.Z; (z <= high.Z); z++) {
+            for (var y = low.Y; (y <= high.Y); y++) {
+                for (var x = low.X; (x <= high.X); x++) {
+                    if (!m_cells.TryGetValue(key: (x, y, z), value: out var held)) { continue; }
+                    foreach (var triangle in held) {
+                        var (a, b, c) = SdfMeshTriangle.Corners(indices: indices, positions: positions, triangle: triangle);
+
+                        nearest = MathF.Min(x: nearest, y: Vector3.Distance(value1: point, value2: SdfMeshTriangle.Closest(a: a, b: b, c: c, p: point)));
+                    }
+                }
+            }
+        }
+
+        return nearest;
+    }
+
+    private (int X, int Y, int Z) Cell(Vector3 point) => SdfMeshLattice.CellOf(cell: new Vector3(value: m_cellSize), point: point);
 }

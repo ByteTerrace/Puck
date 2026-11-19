@@ -14,6 +14,12 @@ namespace Puck.SdfVm;
 // place a replacement keeps its predecessor's floor), and as the product an eviction puts in a refused group's place.
 // Nothing enforces that a group has a floor: one taken whole from the library, or replanned with nothing shown, keeps
 // none until it arrives again, and the floor counts name such groups (DescribeFloors).
+//
+// The floor is also the mesh the irradiance volume traces in the group's place (Group.Trace, read by the dresser through
+// FrameAccess.TraceOf into SdfMeshDraw.Trace): the plan alone chooses it, so a view's retier or the budget's bias leaves
+// the trace scene standing. A kept floor is traced until the trace judge (SdfMeshTraceJudge, run by JudgeFloors on one
+// pool thread) holds it to the group's first finer product and declines it; a declined floor's group traces what it
+// draws, which moves with the view again.
 public sealed partial class SdfMeshPathBake {
     // The groups ObserveResidency found drawing a refused finer tier over a standing kept floor, which the next prepared
     // frame evicts; the evictions made and the bytes of the finer tiers they let go; the groups in reach that drew no
@@ -107,6 +113,85 @@ public sealed partial class SdfMeshPathBake {
         m_holes = holes;
         if (holes > 0) { m_holeFrames++; }
     }
+    // What the trace judge said of a kept floor (Group.FloorVerdict). Written by the judge's task, read on the frame's
+    // thread.
+    private sealed class TraceVerdict {
+        public const int Unjudged = 0;
+        public const int Judging = 1;
+        public const int Admitted = 2;
+        public const int Refused = 3;
+
+        private int m_state;
+
+        public int State { get => Volatile.Read(location: ref m_state); set => Volatile.Write(location: ref m_state, value: value); }
+        public bool Declined => (State == Refused);
+    }
+
+    // The floors queued for the trace judge, each with the finer product it is held to (both claimed until judged) and
+    // its verdict; whether the judge's task runs; the verdicts given; and whether a declined floor waits for the dresser
+    // to read it (the next prepared frame moves the product revision). The product revision the last scan read.
+    private readonly Queue<(SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict)> m_judging = new();
+    private bool m_judgeRunning;
+    private long m_admittedFloors;
+    private long m_declinedFloors;
+    private int m_declinedLanded;
+    private long m_judgedProduct = -1;
+
+    // Queues each kept floor that owes the trace judge a verdict (Group.OwesVerdict), when a group's product moved since
+    // the last scan, and moves the product revision for every floor the judge has declined since the last frame, so the
+    // dresser hands its draws the drawn mesh to trace in its place (FrameAccess.TraceOf). Under the gate, on the frame's
+    // thread.
+    private void JudgeFloors() {
+        if (Interlocked.Exchange(location1: ref m_declinedLanded, value: 0) != 0) { m_productRevision++; }
+        if (m_judgedProduct == m_productRevision) { return; }
+        m_judgedProduct = m_productRevision;
+
+        var queued = false;
+
+        foreach (var group in m_groups) {
+            if (group.Retired || group.Glass || group.Dynamic || !group.OwesVerdict) { continue; }
+            group.FloorVerdict!.State = TraceVerdict.Judging;
+            lock (m_judging) { m_judging.Enqueue(item: (group.CurrentFloor!.Acquire(), group.JudgedAgainst!.Acquire(), group.FloorVerdict)); }
+            queued = true;
+        }
+        if (!queued) { return; }
+        lock (m_judging) {
+            if (m_judgeRunning) { return; }
+            m_judgeRunning = true;
+        }
+        _ = Task.Run(action: Judge);
+    }
+    // The judge's task: one floor after another on one pool thread, so its work never takes more than a core.
+    private void Judge() {
+        while (true) {
+            (SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict) next;
+
+            lock (m_judging) {
+                if (!m_judging.TryDequeue(result: out next)) {
+                    m_judgeRunning = false;
+                    return;
+                }
+            }
+            try {
+                var admitted = SdfMeshTraceJudge.Admits(finer: next.Finer, floor: next.Floor);
+
+                next.Verdict.State = (admitted ? TraceVerdict.Admitted : TraceVerdict.Refused);
+                if (admitted) {
+                    Interlocked.Increment(location: ref m_admittedFloors);
+                } else {
+                    Interlocked.Increment(location: ref m_declinedFloors);
+                    Volatile.Write(location: ref m_declinedLanded, value: 1);
+                }
+            } catch (Exception exception) {
+                // A floor the judge cannot read stays unjudged and traced; the failure is reported, never thrown at a frame.
+                next.Verdict.State = TraceVerdict.Unjudged;
+                Console.Error.WriteLine(value: $"[sdf.mesh-bake] trace judge failed: {exception}");
+            } finally {
+                next.Floor.Release();
+                next.Finer.Release();
+            }
+        }
+    }
     private static bool AnyPiece(SdfMesh mesh, Func<SdfMesh, bool> test) {
         for (var piece = 0; (piece < mesh.PieceCount); piece++) { if (test(arg: mesh.Piece(index: piece))) { return true; } }
         return false;
@@ -127,7 +212,8 @@ public sealed partial class SdfMeshPathBake {
     /// owe their demanded tier and the first details landed; the evictions to a floor and the bytes they let go; the
     /// groups in reach that drew no standing mesh at the latest frame and the frames that had any; and the floors' bytes
     /// in the mesh region by class (glass, lettering, skinned, dynamic, chunked, static), each floor once, logical words
-    /// rather than the region's blocks.</summary>
+    /// rather than the region's blocks; and the static groups whose placements the irradiance volume traces at their floor
+    /// and at their drawn mesh, the floors the trace judge admitted and declined, and those it still owes.</summary>
     /// <returns>One line of <c>key=value</c> pairs.</returns>
     public string DescribeFloors() {
         lock (m_gate) {
@@ -156,7 +242,15 @@ public sealed partial class SdfMeshPathBake {
 
             var line = new StringBuilder();
 
+            int traced = 0, drawn = 0, judging;
+
+            foreach (var group in m_groups) {
+                if (group.Retired || group.Dynamic || group.Glass || (group.Shown is null)) { continue; }
+                if (group.Trace is null) { drawn++; } else { traced++; }
+            }
+            lock (m_judging) { judging = m_judging.Count; }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"floor-shown={shown} floor-pending={pending} floor-empty={empty} floor-failed={failed} floor-kept={kept} floorless={none} first-details-owed={m_firstDetailsOwed} floors-raised={m_floorsRaised} evicted={m_evicted} evicted-bytes={m_evictedBytes}B holes={m_holes} hole-frames={m_holeFrames}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" trace-floor={traced} trace-drawn={drawn} trace-admitted={Interlocked.Read(location: ref m_admittedFloors)} trace-declined={Interlocked.Read(location: ref m_declinedFloors)} trace-judging={judging}");
             for (var kind = 0; (kind < bytes.Length); kind++) {
                 var name = ((FloorClass)kind).ToString().ToLowerInvariant();
 

@@ -564,7 +564,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector3 Reciprocal(Vector3 direction) => (Vector3.One / direction);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool Slab(Vector3 low, Vector3 high, Vector3 origin, Vector3 inverse, float maximum, out float entry) {
+    internal static bool Slab(Vector3 low, Vector3 high, Vector3 origin, Vector3 inverse, float maximum, out float entry) {
         var t0 = ((low - origin) * inverse);
         var t1 = ((high - origin) * inverse);
         var near = Vector3.Min(value1: t0, value2: t1);
@@ -925,8 +925,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // A binned surface-area hierarchy over primitive bounds, its wide ranges' children built in parallel. Its nodes
     // are written into chunks rented as the build reaches them, since the bound a range can need (2n - 1 nodes) is
     // several times what a build of leaves several primitives wide uses; the result is copied out at its size and the
-    // chunks, like the centroids, go back to the pool, so a build leaves only what the scene keeps.
-    private sealed class Hierarchy {
+    // chunks, like the centroids, go back to the pool, so a build leaves only what the scene keeps. The volume's change
+    // trees (SdfMeshIrradiance.ChangeTree) build over the changed draws' boxes with it too.
+    internal sealed class Hierarchy {
         private const int ChunkMask = ((1 << ChunkShift) - 1);
         private const int ChunkShift = 16;
 

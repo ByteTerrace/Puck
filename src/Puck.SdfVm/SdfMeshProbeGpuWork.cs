@@ -35,9 +35,9 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly Queue<Job> m_window = new();
     private readonly uint[]?[] m_partAnswers = new uint[]?[SdfGpuWork.SlotCount];
     private long m_parts;
-    // The selection's changed boxes counted by geometry: each geometry the boxes name, ascending, with the boxes of it
-    // and of every later one.
-    private readonly List<(uint Geometry, int Boxes)> m_selectNewer = [];
+    // The selection's changes by geometry, ascending, each with the hierarchy walks of it and of every later one
+    // (SelectTestsOf).
+    private readonly List<(uint Geometry, int Walks)> m_selectNewer = [];
     private bool m_disposed;
     private bool m_stopping;
     private GpuRegion? m_sceneRegion;
@@ -185,11 +185,16 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // the ones submitted after it, and the tests left are shared evenly among the jobs left, since a short last job would
     // measure its fixed cost as a high rate.
     internal uint[] Select(SdfMeshIrradianceScene scene, Memory<Vector4> centers, ReadOnlyMemory<uint> metadata, Vector4[] changes, uint hitCapacity, uint[]? reuse = null) {
-        var boxes = (int)changes[1].Y;
+        // Each remembered change, oldest first, as SdfMeshIrradiance.WriteChanges packs it: its geometry and the rays'
+        // walks of it a probe older than it pays, one a hierarchy level, summed with every later change's.
+        var count = (int)changes[1].X;
         m_selectNewer.Clear();
-        for (var box = 0; (box < boxes); box++) {
-            var geometry = BitConverter.SingleToUInt32Bits(value: changes[SdfMeshProbeRelight.SelectionHeaderRows + (2 * box)].W);
-            if ((m_selectNewer.Count == 0) || (m_selectNewer[^1].Geometry != geometry)) { m_selectNewer.Add(item: (geometry, (boxes - box))); }
+        var walks = 0;
+        for (var change = (count - 1); (change >= 0); change--) {
+            var head = changes[SdfMeshProbeRelight.SelectionHeaderRows + change];
+            var flags = BitConverter.SingleToUInt32Bits(value: head.W);
+            walks += (((flags & 1u) != 0) || (BitConverter.SingleToUInt32Bits(value: head.Z) == 0)) ? 0 : (int)((flags >> 8) + 1u);
+            m_selectNewer.Insert(index: 0, item: (BitConverter.SingleToUInt32Bits(value: head.X), walks));
         }
         var left = 0L;
         for (var probe = 0; (probe < centers.Length); probe++) {
@@ -215,13 +220,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             };
         });
     }
-    // The tests one probe of a selection costs at most (sdf-probe-select): its own row, and for a probe traced against
-    // an earlier geometry, each of its rays against each changed box of a later one. A probe the kernel finds absent
-    // from the hit cache costs its row alone, so this never counts fewer than the kernel runs.
+    // The tests one probe of a selection is expected to cost (sdf-probe-select): its own row, and for a probe traced
+    // against an earlier geometry, its rays' walk down the hierarchy of each later change. The units are the rate's
+    // only, which the jobs' timestamps measure: a walk that visits more of a change near the probe costs more than this
+    // counts, and the measured rate follows.
     private long SelectTestsOf(ReadOnlySpan<uint> row, Vector4[] changes) {
         if (((row[0] & 1u) == 0) || (row[1] == BitConverter.SingleToUInt32Bits(value: changes[0].Y))) { return 1L; }
         var newer = 0;
-        for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[1])); index--) { newer = m_selectNewer[index].Boxes; }
+        for (var index = (m_selectNewer.Count - 1); ((index >= 0) && (m_selectNewer[index].Geometry > row[1])); index--) { newer = m_selectNewer[index].Walks; }
         return (1L + ((long)newer * SdfMeshProbeDepth.HitCount));
     }
     internal Task<uint[]> CameraSample(SdfMeshIrradianceScene scene, Memory<Vector4> origins, Vector4[] lighting, int words, int geometry, int window) =>
@@ -760,7 +766,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         var query = (Job)job;
         var kind = KindOf(query).ToString().ToLowerInvariant() + ((query.Top is null) ? string.Empty : "-rays");
         var lights = (query.Lighting is not { Length: > 0 } rows) ? string.Empty :
-            query.Selection ? FormattableString.Invariant($" boxes={rows[1].Y} tests={query.Tests}") : FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}");
+            query.Selection ? FormattableString.Invariant($" changes={rows[1].X} change-nodes={rows[1].Y} tests={query.Tests}") : FormattableString.Invariant($" lights={rows[0].Y} points={rows[0].Z}");
         return FormattableString.Invariant($"{kind} origins={query.Origins.Length} destinations={query.Destinations.Length} hit-capacity={query.HitCapacity}{lights}{((kind == "relight") ? DescribeRelight(query) : string.Empty)}");
     }
     // What decides a relight's cost: the probes it shades and, for each, the shadowing point lights in range of its

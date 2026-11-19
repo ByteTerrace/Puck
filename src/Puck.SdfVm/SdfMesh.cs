@@ -340,6 +340,16 @@ public readonly record struct SdfMeshDraw(SdfMesh Mesh, Matrix4x4 ObjectToWorld,
     /// tiered (an authored mesh). It reports only, in the selection counts
     /// (<see cref="SdfWorldTables.DescribeSelection"/>): no staged record or pass reads it.</summary>
     public int Tier { get; init; } = -1;
+    /// <summary>Gets the mesh the irradiance volume's static scene holds in place of the drawn mesh of the draw's
+    /// placement: its bake group's floor where the bake admits the floor as the group's trace mesh
+    /// (<see cref="SdfMeshPathBake"/>), so a draw whose mesh moves from tier to tier with the view or the memory budget
+    /// leaves the scene standing; <see langword="null"/> holds the drawn mesh. Every piece of the placement names it,
+    /// and the scene takes it once, at the placement's first piece (<see cref="Piece"/>). No staged record or pass reads
+    /// it.</summary>
+    public SdfMesh? Trace { get; init; }
+    /// <summary>Gets which piece of its bake group's drawn mesh the draw draws (<see cref="SdfMesh.Piece"/>): zero for
+    /// a whole mesh and for the first piece of a chunked one.</summary>
+    public int Piece { get; init; }
     /// <summary>Gets whether the draw is glass (<see cref="SdfMeshBakeGroup.Glass"/>): the glass pass rasterizes it over
     /// the opaque image, the cascades integrate its authored shadow density, and the opaque mesh pass and the
     /// irradiance volume's static scene leave it out.</summary>

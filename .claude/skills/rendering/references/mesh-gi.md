@@ -228,20 +228,47 @@ read again is refilled and republished whole.
   Compare `puck mesh scene`'s hits, lit hits and mean distance after changing its
   storage or traversal, and walk the settled heap to measure retained arrays;
   working set includes temporary build storage and the mesh arrays as well.
-- Keep `Incoming` and `sdfMeshProbesAt`/`sdfMeshIrradianceAt` together. A sky
+- Keep `TryIncoming` and `sdfMeshProbesAt`/`sdfMeshIrradianceAt` together. A sky
   fallback in the CPU read feeds later bounce sweeps even if the final pixel
   read rejects it.
 - Scene readiness is `SdfMeshPathBake.IrradiancePending`, not the whole bake's
   `Pending`: only opaque static groups enter the scene. An animated rebake,
   glass or a diagnostic slice must not postpone its first measurement or a
-  refresh. While opaque static groups are still pending, a frame without lighting convergence
-  builds the scene from those landed (`ScenePendingDue`: no build running, the
-  previous scene's trace finished, at least `PendingSceneInterval` since the
-  last build began, and at least one static draw: an empty scene would measure
-  open sky where walls have yet to land), so the volume and the camera sample answer
-  during a cold bake instead of after it. Waiting for the whole bake left every
-  view `meter=none source=held` and every shaded face black for the ten minutes
-  of a cold debug-world bake. A lockstep frame still waits for the whole bake.
+  refresh. A frame without lighting convergence builds a scene whenever what it
+  holds for the static draws changed, paced by the trace (`ScenePendingDue`: no
+  build running, the installed scene's traces paid or as many traced since it was
+  installed as the windows hold, at least `PendingSceneInterval` since the last
+  build began), and while opaque static groups are still pending it builds from
+  those landed once one has (an empty scene would measure open sky where walls have
+  yet to land), so the volume and the camera sample answer during a cold bake
+  instead of after it. Waiting for the whole bake left every view
+  `meter=none source=held` and every shaded face black for the ten minutes of a
+  cold debug-world bake. A lockstep frame still waits for the whole bake.
+- The scene holds each static placement's trace mesh, not the tier its view
+  draws (`SdfMeshDraw.Trace`, from `SdfMeshPathBake`'s `Group.Trace` through the
+  dresser): its bake group's floor, which the plan alone chooses, so a view's
+  retier, the floor-to-first-detail swap and the budget's bias leave the scene
+  standing. The key and the snapshot read `TraceDraws`, which takes a traced
+  floor's pieces once a placement, at its first piece (`SdfMeshDraw.Piece`). A
+  kept floor is traced until the trace judge (`SdfMeshTraceJudge`, on one pool
+  thread from `SdfMeshPathBake.JudgeFloors`) holds it to the group's first finer
+  product and declines it: every witness of each mesh must lie within
+  `SdfMeshTraceJudge.Tolerance` (a quarter of the finest probe spacing) of the
+  other, which catches a part the floor lost and a hole it closed or two surfaces
+  it joined at that scale. A declined floor's group traces what it draws, which
+  moves with the view again, and so does a group drawing a stand-in of another
+  shape (an edit before its floor lands). `world.residency`'s floor line counts
+  `trace-floor`, `trace-drawn`, `trace-admitted`, `trace-declined` and
+  `trace-judging`, and each `[sdf.mesh-gi] scene` line its `floors`, the boxes the
+  change named (`changed`, `all` for a change of every probe) and `held`, the
+  seconds the built scene waited for a trace unit. The diagnostics measure the
+  drawn meshes: `DiagnosticScene` returns the trace scene only where it holds
+  them, and otherwise builds a scene of the drawn static draws on the pool.
+- A scene built while the worker runs a listing or a batch (a trace unit,
+  `BeginUnit`/`EndUnit`) waits in `m_pendingInstall` and is installed (`Install`,
+  the one place the trace scene changes) when the unit ends. The batch lands with
+  the geometry it measured, its queued GPU jobs are never cancelled for the
+  scene, and the next listing decides from the change what traces again.
   `world.wait bakes` still waits for all geometry; an initial
   `world.exposure` reading with `meter=none` is not a backend-parity result.
 - The volume has three levels (`SdfMeshIrradianceProbe.Levels`), a table per
@@ -353,7 +380,7 @@ read again is refilled and republished whole.
   lighting capture's sky map, the sky gain applied; the relight's
   `SdfMeshProbeRelight.SkyRow` table on the GPU) into the sky-light cube with
   the same cosine weights as a hit, so the indirect light a receiver reads
-  (`sdfMeshIndirect`, `Incoming`) is the two cubes summed. The sky shares stay
+  (`sdfMeshIndirect`, `TryIncoming`) is the two cubes summed. The sky shares stay
   geometric and weigh only the reflected environment and the meter's open share.
   Never multiply a share by the hemisphere's SH irradiance for diffuse light:
   the sky's radiance and its occlusion are correlated (the horizon is bright,
@@ -403,26 +430,35 @@ read again is refilled and republished whole.
   the sources or the materials change; a relight under a moving sun reuses it
   and traces no shadow ray toward a point light. The directional lights and the
   bounce are shaded every relight. A probe rebased across a scene change (its
-  hits kept) shades its local part again, since its point-light shadow rays may
-  cross the change. `world.probe`'s volume line prints `lighting-version` and
-  `local-version`.
-- A scene build records the world boxes of the static draws it added or
-  removed (`ChangedBoxes`). A probe traced against an earlier geometry is
-  retraced only when one overlaps its placement region (the cell ± 1.5 spacings
-  and the clearance) or meets one of its rays before the hit the ray recorded
-  (`Affected`, with a millimetre margin so a hit on the draw's own face counts);
-  every other probe keeps its hits and is relit. A layout or reach change, a
-  draw with no box, or a probe older than the last `MaxChanges` changes
-  retraces. A change of more than `MaxChangeBoxes` draws names their one
-  union box: the selection kernel walks a probe's rays over every newer box
-  on one GPU thread, so the box count bounds a selection job's length
-  whatever its probe count, and a swap of detail across the world changes
-  two boxes a swapped draw.
+  hits kept) keeps its local part too unless a change since its relight reaches
+  one of its point-light shadow segments (`ReusesLocal`, the one rule for the CPU
+  and the GPU relight): every hit lies within the probe's recorded reach of its
+  origin (`ProbeData.Reach`), so a light's segments lie in the box about that
+  sphere's part inside the light's range, the light and the origin, which is
+  tested against the changes (`MeetsChange`). `sdf.mesh-gi.local-kept` counts the
+  relights that kept it across a change. `world.probe`'s volume line prints
+  `lighting-version` and `local-version`.
+- A scene build records a box hierarchy over the world boxes of the static
+  draws it added or removed (`ChangedBoxes`, `ChangeTree`, built with the scene's
+  own `SdfMeshIrradianceScene.Hierarchy` and laid out depth first with escape
+  indices, so a walk needs no stack). A probe traced against an earlier geometry
+  is retraced only when one overlaps its placement region (the cell ± 1.5
+  spacings and the clearance) or meets one of its rays before the hit the ray
+  recorded (`Affected`, with a millimetre margin so a hit on the draw's own face
+  counts); every other probe keeps its hits and is relit. The walk skips a
+  subtree that neither overlaps the placement region nor comes within the
+  probe's farthest ray (`RayReach`), so a wave of thousands of swaps retraces
+  only the probes its draws reach. Past `MaxChangeLeaves` a change's subtrees
+  below `CutDepth` stand as leaves of their bounds, which name more probes but
+  never fewer. A layout or reach change, a draw with no box, or a probe older
+  than the last `MaxChanges` changes retraces.
 - A selection is cut like a trace (`SdfMeshProbeGpuWork.Select`): jobs of
-  the probes whose box tests (`SelectTestsOf`) fit
-  the live frame allowance (`SdfGpuWorkBudget.FrameAllowanceSeconds`) at the measured rate, each answered before
-  the next is submitted. `most-job` prints a selection's `boxes` and
-  `tests`.
+  the probes whose expected tests (`SelectTestsOf`: a ray walk per hierarchy
+  level of each newer change) fit the live frame allowance
+  (`SdfGpuWorkBudget.FrameAllowanceSeconds`) at the measured rate, each answered
+  before the next is submitted. `sdf-probe-select` reads the rows
+  `SdfMeshIrradiance.WriteChanges` packs: a row a change, then two a node.
+  `most-job` prints a selection's `changes`, `change-nodes` and `tests`.
 - Four reflected angular taps reconstruct local surface patches from first-hit
   positions and signed octahedral normal bytes. Join taps only when their normals
   agree and the symmetric point/normal residual is within `DepthSurfaceJoinGap`:

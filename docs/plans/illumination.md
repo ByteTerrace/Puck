@@ -1014,7 +1014,12 @@ floor qualifies as its trace mesh only when a bake-time lighting check confirms
 its recorded field deviation ([virtual geometry](virtual-geometry.md)) is small
 against that probe spacing and it has lost no part, closed no hole and joined
 no two surfaces (groups failing the check keep a finer trace mesh; the bake
-reports passed, failed and unjudged counts). Passing the floor's coverage test
+reports passed, failed and unjudged counts). Built: the scene traces each
+static group's floor (`SdfMeshDraw.Trace`), and `SdfMeshTraceJudge` holds a
+kept floor to the group's first finer product at a quarter of the finest
+probe spacing both ways, a declined floor's group tracing what it draws;
+`world.residency`'s floor line reports the counts. Owed: the finer trace mesh a
+declined group keeps, and a check against the field rather than a finer tier. Passing the floor's coverage test
 does not qualify it: a floor can cover a wall and still erase a recess, or
 join two surfaces on either side of a probe, and a group near a fine probe
 level may need a third mesh. A check that only asks whether the light stays the

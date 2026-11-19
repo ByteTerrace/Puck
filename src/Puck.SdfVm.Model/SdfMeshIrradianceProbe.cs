@@ -26,6 +26,9 @@ public static class SdfMeshIrradianceProbe {
     public const int OffsetWord = 17;
     /// <summary>The least distance in metres between a probe and any surface.</summary>
     public const float Clearance = 0.1f;
+    /// <summary>The finest probe spacing any indirect tier lays out, in metres along each axis: the High tier's finest
+    /// level (<c>SdfMeshIrradiance.LevelsOf</c>).</summary>
+    public const float FinestSpacing = 1f;
     /// <summary>The share of a probe's rays meeting back faces past which the probe lies inside geometry.</summary>
     public const float InsideShare = 0.25f;
     /// <summary>The exposure meter's sky visibility over the mean open share of a probe's six axes: on open ground the up

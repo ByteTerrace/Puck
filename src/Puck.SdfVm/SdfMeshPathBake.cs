@@ -580,6 +580,7 @@ public sealed partial class SdfMeshPathBake {
             FinishReplacements();
             Evict(frame: frame);
             Retier(frame: frame);
+            JudgeFloors();
             return new FrameAccess(owner: this, scope: scope);
         } catch { scope.Dispose(); throw; }
     }
@@ -603,6 +604,8 @@ public sealed partial class SdfMeshPathBake {
 
         internal SdfMeshBakeGroup GroupAt(int index) => m_owner.m_groups[index];
         internal SdfMesh? MeshOf(SdfMeshBakeGroup group) => ((Group)group).Shown;
+        // The mesh the irradiance volume traces in place of the group's drawn one (Group.Trace), null for the drawn one.
+        internal SdfMesh? TraceOf(SdfMeshBakeGroup group) => ((Group)group).Trace;
         // The tier the mesh a group draws was baked at: the replaced group's while a replacement lands ahead.
         internal int TierOf(SdfMeshBakeGroup group) => (((Group)group).Replaces ?? group).Tier;
         internal IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) => m_owner.CopiesOf(group: group);
@@ -2844,20 +2847,54 @@ public sealed partial class SdfMeshPathBake {
         // when it is planned at its coarsest tier (Floor).
         public SdfMesh? KeptFloor => m_floor;
         public SdfMeshGeometry? FloorGeometry { get; private set; }
+        // The shape (Shape) of the group the kept floor was baked for: a floor of another shape (an edit since, or a
+        // selector another placement now holds) stands in for the group but is not its geometry.
+        private UInt128 m_floorShape;
+        // What the trace judge said of the kept floor (SdfMeshTraceJudge), shared by every group that keeps the same
+        // floor, so a verdict reaching a group the floor has since passed to still counts.
+        public TraceVerdict? FloorVerdict { get; private set; }
         // The group's floor: its own product at its coarsest tier, else the one it keeps.
         public SdfMesh? Floor => ((Tier == CoarsestTier) ? Mesh : m_floor);
+        // The kept floor where it is of the group's own shape.
+        public SdfMesh? CurrentFloor => (((m_floor is { } floor) && (m_floorShape == Shape)) ? floor : null);
+        // The group's own product, once it has landed: not the stand-in it took from the group it replaced.
+        private SdfMesh? OwnProduct => ((Done && (m_mesh is { } mesh) && !ReferenceEquals(objA: mesh, objB: m_standIn)) ? mesh : null);
+
+        // The mesh the irradiance volume traces in place of the one the group draws (SdfMeshDraw.Trace), or null to trace
+        // the drawn one: the group's floor, which the plan alone chooses, so a view's retier or the budget's bias leaves
+        // the trace scene standing. A floor of the group's own shape kept beside a finer tier, unless the trace judge
+        // declined it; at the coarsest tier the group's own floor product once it draws it, and until then what the group
+        // it replaces traces, where that group is of the same shape. Nothing else: a group drawing its stand-in of
+        // another shape, or no floor of its own shape, traces what it draws.
+        public SdfMesh? Trace {
+            get {
+                if (CurrentFloor is { } kept) { return ((FloorVerdict?.Declined ?? false) ? null : kept); }
+                if (Tier != CoarsestTier) { return null; }
+                if (!Ahead && (OwnProduct is { } own)) { return own; }
+                return (((Replaces is { } replaced) && (replaced.Shape == Shape)) ? replaced.Trace : null);
+            }
+        }
+        // Whether the trace judge owes a verdict on the kept floor: it is of the group's shape, unjudged, and the group's
+        // own finer product has landed to hold it to.
+        public bool OwesVerdict => ((CurrentFloor is not null) && (FloorVerdict is { State: TraceVerdict.Unjudged }) && (Tier != CoarsestTier) && (OwnProduct is not null));
+        // The finer product a verdict holds the kept floor to (OwesVerdict).
+        public SdfMesh? JudgedAgainst => OwnProduct;
 
         // Keeps the floor of the group this one replaces: that group's own product at its coarsest tier, or the floor it
-        // kept. A group planned at its coarsest tier keeps none, since its product is its floor. Takes a claim of its own.
+        // kept, with its shape and its verdict. A group planned at its coarsest tier keeps none, since its product is its
+        // floor. Takes a claim of its own.
         public void KeepFloorOf(Group old) {
             if (Tier == CoarsestTier) { return; }
 
-            var (floor, geometry) = ((old.Tier == old.CoarsestTier) ? (old.Mesh, old.Sealed) : (old.m_floor, old.FloorGeometry));
+            var atFloor = (old.Tier == old.CoarsestTier);
+            var (floor, geometry, shape) = (atFloor ? (old.Mesh, old.Sealed, old.Shape) : (old.m_floor, old.FloorGeometry, old.m_floorShape));
 
             if ((floor is null) || ReferenceEquals(objA: floor, objB: m_floor)) { return; }
             m_floor?.Release();
             m_floor = floor.Acquire();
             FloorGeometry = geometry;
+            m_floorShape = shape;
+            FloorVerdict = (atFloor ? new TraceVerdict() : old.FloorVerdict);
             if (Owner is { } owner) { owner.m_floorRevision++; }
         }
 

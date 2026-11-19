@@ -1448,30 +1448,26 @@ The volume's cost and convergence:
   host time goes (a .NET trace of the worker and the frame thread's `Record`
   and `TryTake`, which walks the scene's draws each take through
   `SdfMeshIrradianceScene.HasGpuPlacements`) before bounding the worker.
-- [high] A view-driven retier relights the whole window: a landed retier is a
-  geometry change, every probe's local cube starts again
-  (`SdfMeshIrradiance`'s `reuseLocal`), and a World that converges its
-  lighting owes a drain per retier wave and per step of the day's lighting
-  grid; the walkthrough tour pays it at every exhibit. It also holds back the
-  first fill after a boot: while tiers land the main residency's static scene
-  rebuilds every few seconds, its probes' traces barely advance, and its finest
-  level publishes minutes late, so the gallery hall reads its camera sample's
-  light (`sdfMeshIndirectSeen`) until then. The streaming plan's
-  step 9 decides which tier the lighting traces; the tour's drains per still
-  on the `[sdf.mesh-gi] done` lines measure whichever lands.
-  [The settle-time record](illumination/research-settle-time.md) accounts for
-  the boot's minutes: a boot that sees the lobby's painting stages the shared
-  session residency with its own copy of the world's meshes, the shared
-  detail bias climbs (to 6 on Direct3D 12, 14 on Vulkan), every coarsening
-  wave rebuilds both irradiance scenes past the 64-draw union rule, the
-  batches in flight are dropped, and the session's full volume took most of
-  a 1 ms-a-frame grant first come. It ranks the fixes. Its fixes 1 and 7 are
-  built: the residencies' services divide the one budget by their display
-  share (`SdfGpuWorkBudget.Takes`), a glass's world measures only the volume
-  levels the nested-view table keeps (`SdfFrame.IndirectLevels`), a seen
-  volume's first light takes the owed allowance an arrival's bake work takes
-  (`SdfMeshIrradiance.OwesFirstLight`), and structure compactions are cut to
-  the allowance. The rebuild churn (its fixes 2 to 6 and 8) is still open.
+- [high] The irradiance scene traces each static group's floor
+  (`SdfMeshDraw.Trace`, the mesh-GI reference's scene bullets), keeps the
+  batch in flight across a rebuild, keeps local cubes a change misses, names a
+  change as a box hierarchy and paces every rebuild by trace progress, which
+  the [settle-time record](illumination/research-settle-time.md) ranked as
+  fixes 2, 4 to 6 and 8. Still open: (a) a group whose floor the trace judge
+  declines (`SdfMeshTraceJudge`), and a group that arrived out of view and so
+  keeps no floor (`SdfMeshPathBake.Tiers`), traces what it draws and moves
+  with the view and the bias; the plan's
+  [stable trace mesh](illumination.md#after-the-gpu-trace) gives such a group
+  a trace tier of its own sized by the probe spacing, a third product the bake
+  keeps as it keeps floors, once `world.residency`'s `trace-drawn` and
+  `trace-declined` counts say how many groups need one; (b) a window move still drops the batch in
+  flight (`Stands`, and `KeepsGpuPublication` cancels its commit), though the
+  cache keeps cells by world position; (c) the readings the record asks for on
+  both backends (no `[sdf.mesh-gi] scene` line after the arrivals while the
+  bias moves, `sdf.mesh-gi.local-kept` and the relight units after a forced
+  rebuild, the selection's `change-nodes` and `tests` in `most-job`) are the
+  lead's batched windowed legs. The tour's drains per still on the
+  `[sdf.mesh-gi] done` lines measure the result.
 - [medium] A held frame's hold stops at the instance. A view withheld for its
   lighting records no pass (`IRenderGraphPackageFactory.WithheldOf`), but an
   instance that reads it is only marked stale and still records its passes,
