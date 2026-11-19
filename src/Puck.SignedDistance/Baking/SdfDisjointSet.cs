@@ -1,16 +1,20 @@
+using Puck.Abstractions.Memory;
+
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
 /// A union-find over the elements <c>0</c> to <c>count - 1</c>. Every set's root is its smallest element, so a root
-/// names its set the same way whatever order the unions ran in; a find halves the path it walks.
+/// names its set the same way whatever order the unions ran in; a find halves the path it walks. Its table is rented
+/// (<see cref="RentedArrays"/>) and goes back to the pool when the set is disposed; a set never disposed only leaves its
+/// table to the collector.
 /// </summary>
-public sealed class SdfDisjointSet {
-    private readonly int[] m_parents;
+public sealed class SdfDisjointSet : IDisposable {
+    private int[] m_parents;
 
     /// <summary>Initializes a new instance of the <see cref="SdfDisjointSet"/> class, each element its own set.</summary>
     /// <param name="count">The number of elements; not negative.</param>
     public SdfDisjointSet(int count) {
-        m_parents = new int[count];
+        m_parents = RentedArrays.Rent<int>(minimumLength: count);
 
         for (var element = 0; (element < count); element++) {
             m_parents[element] = element;
@@ -36,5 +40,12 @@ public sealed class SdfDisjointSet {
         var b = Find(element: second);
 
         m_parents[Math.Max(val1: a, val2: b)] = Math.Min(val1: a, val2: b);
+    }
+    /// <summary>Returns the set's table to the pool; the set answers nothing afterward.</summary>
+    public void Dispose() {
+        var parents = m_parents;
+
+        m_parents = [];
+        RentedArrays.Return(array: parents);
     }
 }

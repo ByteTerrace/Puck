@@ -1,16 +1,18 @@
 using System.Numerics;
-using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SignedDistance.Baking;
 
 /// <summary>
 /// A surface extracted from an <see cref="ISdfContourLattice"/>: one vertex per surface patch of each cell the surface crosses,
 /// and one quad per sign-changing lattice edge joining the vertices of the four cells around it. Positions and normals
-/// are world-space doubles; quads list four vertex indices, wound counter-clockwise seen from outside.
+/// are world space, placed in doubles and rounded once to single precision; quads list four vertex indices, wound
+/// counter-clockwise seen from outside.
 /// </summary>
 internal sealed class SdfSurface {
-    public required double[] Normals { get; init; }
-    public required double[] Positions { get; init; }
+    public required float[] Normals { get; init; }
+    public required float[] Positions { get; init; }
     public int QuadCount => (Quads.Length / 4);
     public required int[] Quads { get; init; }
     // Per quad, the lattice corner at the outside end of the sign-changing edge the quad crosses: the field there is
@@ -22,7 +24,7 @@ internal sealed class SdfSurface {
     public required sbyte[] QuadAxes { get; init; }
     // Per vertex, three components: the way the lattice says its patch faces (SdfContourFacing.Patch), a merged vertex's
     // the sum of its fine vertices'.
-    public required double[] Patches { get; init; }
+    public required float[] Patches { get; init; }
     // Per vertex, whether it lies on a crease or corner of the surface (Place's feature): empty where no vertex does.
     public bool[] Features { get; init; } = [];
     // Per vertex, whether its crossings' tangent planes drew it away from their mean (Place), as to a crease or to the
@@ -163,21 +165,23 @@ internal static class SdfDualContouring {
         var cellsY = grid.CellsY;
         var cellsZ = grid.CellsZ;
         var cellCount = ((cellsX * cellsY) * cellsZ);
-        var vertexOfPatch = new int[(cellCount * MaximumPatches)];
-        var maskOfCell = new byte[cellCount];
-        var positions = new List<double>();
-        var normals = new List<double>();
-        var features = new List<bool>();
-        var solveds = new List<bool>();
-        var besides = new List<bool>();
+        // The workspace is rented and returned once the surface, which the result owns, is copied out.
+        using var vertexLease = RentedArrays.Rent<int>(array: out var vertexOfPatch, minimumLength: (cellCount * MaximumPatches));
+        using var maskLease = RentedArrays.Rent<byte>(array: out var maskOfCell, minimumLength: cellCount);
+        using var positions = new RentedList<double>();
+        using var normals = new RentedList<double>();
+        using var features = new RentedList<bool>();
+        using var solveds = new RentedList<bool>();
+        using var besides = new RentedList<bool>();
         // Per vertex, its crossings' mean in world space, where Settle returns a vertex whose quads cannot face out.
-        var anchors = new List<double>();
+        using var anchors = new RentedList<double>();
         // Per vertex, the way the lattice says its patch faces (SdfContourFacing.Patch).
-        var patches = new List<double>();
+        using var patches = new RentedList<double>();
         // Per vertex whose crease lies past its cell, the crease's point in lattice coordinates (HandOff).
-        var handoffs = new List<(int Vertex, double X, double Y, double Z)>();
+        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>();
 
-        Array.Fill(array: vertexOfPatch, value: -1);
+        vertexOfPatch.AsSpan(start: 0, length: (cellCount * MaximumPatches)).Fill(value: -1);
+        maskOfCell.AsSpan(start: 0, length: cellCount).Clear();
 
         for (var z = 0; (z < cellsZ); z++) {
             for (var y = 0; (y < cellsY); y++) {
@@ -242,7 +246,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(besides: CollectionsMarshal.AsSpan(list: besides), features: CollectionsMarshal.AsSpan(list: features), grid: grid, handoffs: handoffs, positions: CollectionsMarshal.AsSpan(list: positions), solveds: CollectionsMarshal.AsSpan(list: solveds), target: (x, y, z) => {
+        HandOff(besides: besides.AsSpan(), features: features.AsSpan(), grid: grid, handoffs: handoffs.AsSpan(), positions: positions.AsSpan(), solveds: solveds.AsSpan(), target: (x, y, z) => {
             var (tx, ty, tz) = (((int)Math.Floor(x)), ((int)Math.Floor(y)), ((int)Math.Floor(z)));
 
             if ((tx < 0) || (ty < 0) || (tz < 0) || (tx >= cellsX) || (ty >= cellsY) || (tz >= cellsZ)) {
@@ -256,15 +260,15 @@ internal static class SdfDualContouring {
 
         var (quads, quadCorners, quadAxes) = Connect(grid: grid, maskOfCell: maskOfCell, vertexOfPatch: vertexOfPatch);
 
-        Settle(anchors: CollectionsMarshal.AsSpan(list: anchors), axes: quadAxes, besides: CollectionsMarshal.AsSpan(list: besides), features: CollectionsMarshal.AsSpan(list: features), patches: CollectionsMarshal.AsSpan(list: patches), positions: CollectionsMarshal.AsSpan(list: positions), quads: quads, solveds: CollectionsMarshal.AsSpan(list: solveds));
+        Settle(anchors: anchors.AsSpan(), axes: quadAxes, besides: besides.AsSpan(), features: features.AsSpan(), patches: patches.AsSpan(), positions: positions.AsSpan(), quads: quads, solveds: solveds.AsSpan());
 
         return new SdfSurface {
-            Beside = [.. besides],
-            Features = [.. features],
-            Solved = [.. solveds],
-            Normals = [.. normals],
-            Patches = [.. patches],
-            Positions = [.. positions],
+            Beside = besides.ToArray(),
+            Features = features.ToArray(),
+            Solved = solveds.ToArray(),
+            Normals = Narrowed(values: normals.AsSpan()),
+            Patches = Narrowed(values: patches.AsSpan()),
+            Positions = Narrowed(values: positions.AsSpan()),
             QuadAxes = quadAxes,
             QuadCorners = quadCorners,
             Quads = quads,
@@ -286,33 +290,39 @@ internal static class SdfDualContouring {
         int[] cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
         int[] coarse = [(cells[0] / factor), (cells[1] / factor), (cells[2] / factor)];
         var coarseCount = ((coarse[0] * coarse[1]) * coarse[2]);
-        var refined = new bool[coarseCount];
-        var coarseMasks = new byte[coarseCount];
-        var coarseVertices = new int[coarseCount];
-        var fineMasks = new Dictionary<long, byte>();
-        var fineVertices = new Dictionary<long, int>();
-        var positions = new List<double>();
-        var normals = new List<double>();
+        // The workspace is rented and returned once the merged surface, which the result owns, is built.
+        using var refinedLease = RentedArrays.Rent<bool>(array: out var refined, minimumLength: coarseCount);
+        using var coarseMaskLease = RentedArrays.Rent<byte>(array: out var coarseMasks, minimumLength: coarseCount);
+        using var coarseVertexLease = RentedArrays.Rent<int>(array: out var coarseVertices, minimumLength: coarseCount);
+        var crossed = grid.CrossedFineCells;
+        // Per crossed fine cell, by its fine key, its corner-sign mask and its first vertex.
+        var fineCells = new Dictionary<long, (byte Mask, int Vertex)>(capacity: crossed.Length);
+        using var positions = new RentedList<double>();
+        using var normals = new RentedList<double>();
         // Per vertex, the block whose fine vertices it merges with (OwnerOf, Block), or -1.
-        var owners = new List<int>();
+        using var owners = new RentedList<int>();
         // Per merging block, its low corner in fine lattice coordinates and its fine cells along each axis: an unmeasured
         // refined coarse cell, numbered by its coarse index, then the stride cells of measured cells of a stride past one,
         // numbered after the coarse cells as they are first met.
         var strideBlocks = new Dictionary<long, int>();
         var blocks = new List<(int X, int Y, int Z, int Size)>();
-        var features = new List<bool>();
-        var solveds = new List<bool>();
-        var besides = new List<bool>();
+        using var features = new RentedList<bool>();
+        using var solveds = new RentedList<bool>();
+        using var besides = new RentedList<bool>();
         // Per vertex, its crossings' mean in world space (Settle).
-        var anchors = new List<double>();
+        using var anchors = new RentedList<double>();
         // Per vertex, the way the lattice says its patch faces (SdfContourFacing.Patch).
-        var patches = new List<double>();
-        // Per merged fine vertex, its crossings' tangent planes in world space (Place's worldPlanes).
-        var vertexPlanes = new Dictionary<int, List<double>>();
+        using var patches = new RentedList<double>();
+        // Every merged fine vertex's crossings' tangent planes in world space (Place's worldPlanes), back to back in vertex
+        // order, and per vertex where its planes start and end there: -1 for a vertex that records none.
+        using var planeData = new RentedList<double>();
+        using var planeStarts = new RentedList<int>();
+        using var planeEnds = new RentedList<int>();
         // Per vertex whose crease lies past its cell, the crease's point in fine lattice coordinates (HandOff).
-        var handoffs = new List<(int Vertex, double X, double Y, double Z)>();
+        using var handoffs = new RentedList<(int Vertex, double X, double Y, double Z)>();
 
-        Array.Fill(array: coarseVertices, value: -1);
+        coarseMasks.AsSpan(start: 0, length: coarseCount).Clear();
+        coarseVertices.AsSpan(start: 0, length: coarseCount).Fill(value: -1);
 
         long FineKey(int x, int y, int z) => (x + (((long)cells[0]) * (y + (((long)cells[1]) * z))));
         int CoarseIndex(int x, int y, int z) => (x + (coarse[0] * (y + (coarse[1] * z))));
@@ -340,8 +350,9 @@ internal static class SdfDualContouring {
                 }
 
                 // A fine vertex its cell merges keeps its crossings' tangent planes for the merged vertex's placement.
-                var planes = (((owner >= 0) && grid.CrossingNormals) ? new List<double>() : null);
-                var (px, py, pz) = Place(anchor: out var anchor, beside: out var beside, beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, stride: stride, worldPlanes: planes, x: x, y: y, z: z);
+                var records = ((owner >= 0) && grid.CrossingNormals);
+                var planeStart = planeData.Count;
+                var (px, py, pz) = Place(anchor: out var anchor, beside: out var beside, beyond: out var beyond, crossingNormal: out var crossingNormal, edges: edges, feature: out var feature, flat: out var flat, grid: grid, solved: out var solved, stride: stride, worldPlanes: (records ? planeData : null), x: x, y: y, z: z);
                 var (wx, wy, wz) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
                 var (ax, ay, az) = grid.World(x: (x + (anchor.X * stride)), y: (y + (anchor.Y * stride)), z: (z + (anchor.Z * stride)));
                 var (tx, ty, tz) = SdfContourFacing.Patch(edges: CellEdges, mask: mask, patch: edges);
@@ -358,9 +369,8 @@ internal static class SdfDualContouring {
                 if ((owner < 0) && (beyond is var (bx, by, bz))) {
                     handoffs.Add(item: ((positions.Count / 3), (x + (bx * stride)), (y + (by * stride)), (z + (bz * stride))));
                 }
-                if (planes is not null) {
-                    vertexPlanes.Add(key: (positions.Count / 3), value: planes);
-                }
+                planeStarts.Add(item: (records ? planeStart : -1));
+                planeEnds.Add(item: planeData.Count);
                 positions.Add(item: wx);
                 positions.Add(item: wy);
                 positions.Add(item: wz);
@@ -374,7 +384,6 @@ internal static class SdfDualContouring {
             }
         }
 
-        var crossed = grid.CrossedFineCells;
         var nextCrossed = 0;
         for (var cz = 0; (cz < coarse[2]); cz++) {
             for (var cy = 0; (cy < coarse[1]); cy++) {
@@ -406,8 +415,7 @@ internal static class SdfDualContouring {
                         if (((fx / factor) != cx) || ((fy / factor) != cy) || ((fz / factor) != cz)) { break; }
                         var key = FineKey(x: fx, y: fy, z: fz);
 
-                        fineMasks.Add(key: key, value: crossedCell.Mask);
-                        fineVertices.Add(key: key, value: (positions.Count / 3));
+                        fineCells.Add(key: key, value: (crossedCell.Mask, (positions.Count / 3)));
                         AddVertices(mask: crossedCell.Mask, owner: OwnerOf(cx: cx, cy: cy, cz: cz, fx: fx, fy: fy, fz: fz, index: index), stride: 1, x: fx, y: fy, z: fz);
                     }
                 }
@@ -461,12 +469,12 @@ internal static class SdfDualContouring {
 
             var key = FineKey(x: fx, y: fy, z: fz);
 
-            return ((fineMasks.TryGetValue(key: key, value: out var mask) && (PatchCount[mask] == 1)) ? fineVertices[key] : -1);
+            return ((fineCells.TryGetValue(key: key, value: out var fine) && (PatchCount[fine.Mask] == 1)) ? fine.Vertex : -1);
         }
 
-        var quads = new List<int>();
-        var quadCorners = new List<int>();
-        var quadAxes = new List<sbyte>();
+        using var quads = new RentedList<int>();
+        using var quadCorners = new RentedList<int>();
+        using var quadAxes = new RentedList<sbyte>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -582,11 +590,11 @@ internal static class SdfDualContouring {
             }
         }
 
-        // The fine edges a refined cell touches: every sign-changing edge of a crossed fine cell, once, in a fixed order.
-        var fineEdges = new List<long>();
-        var seen = new HashSet<long>();
+        // The fine edges a refined cell touches: every sign-changing edge of a crossed fine cell, once, in ascending key
+        // order.
+        using var fineEdgeList = new RentedList<long>();
 
-        foreach (var (key, mask) in fineMasks) {
+        foreach (var (key, (mask, _)) in fineCells) {
             var fx = ((int)(key % cells[0]));
             var fy = ((int)((key / cells[0]) % cells[1]));
             var fz = ((int)(key / (((long)cells[0]) * cells[1])));
@@ -602,13 +610,14 @@ internal static class SdfDualContouring {
                 // An edge's key: its lower sample in fine coordinates and its axis.
                 var edgeKey = ((((((long)(fz + az)) << 21) | ((long)(fy + ay))) << 21) | ((long)(fx + ax))) * 3L + edgeAxis;
 
-                if (seen.Add(item: edgeKey)) {
-                    fineEdges.Add(item: edgeKey);
-                }
+                fineEdgeList.Add(item: edgeKey);
             }
         }
-        fineEdges.Sort();
 
+        var fineEdges = fineEdgeList.AsSpan();
+
+        fineEdges.Sort();
+        fineEdges = fineEdges[..SpanDistinct.Sorted(sorted: fineEdges)];
         foreach (var edgeKey in fineEdges) {
             var axis = ((int)(edgeKey % 3L));
             var packed = (edgeKey / 3L);
@@ -654,10 +663,10 @@ internal static class SdfDualContouring {
                 if (refined[index]) {
                     var key = FineKey(x: cell[0], y: cell[1], z: cell[2]);
 
-                    if (fineMasks.TryGetValue(key: key, value: out var mask)) {
-                        var patch = PatchOfEdge[mask][EdgeIndex(axis: axis, u: (at[u] - cell[u]), v: (at[v] - cell[v]))];
+                    if (fineCells.TryGetValue(key: key, value: out var fine)) {
+                        var patch = PatchOfEdge[fine.Mask][EdgeIndex(axis: axis, u: (at[u] - cell[u]), v: (at[v] - cell[v]))];
 
-                        vertex = ((patch < 0) ? -1 : (fineVertices[key] + patch));
+                        vertex = ((patch < 0) ? -1 : (fine.Vertex + patch));
                     }
                 } else if (coarseVertices[index] >= 0) {
                     var lu = (at[u] - (home[u] * factor));
@@ -697,7 +706,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        return Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, vertexPlanes: vertexPlanes);
+        return Merge(anchors: anchors, besides: besides, block: Block, patches: patches, cellVertex: CellVertex, features: features, grid: grid, handoffs: handoffs, normals: normals, owners: owners, positions: positions, quadAxes: quadAxes, quadCorners: quadCorners, quads: quads, solveds: solveds, planeData: planeData, planeStarts: planeStarts, planeEnds: planeEnds);
     }
     // The point of a merged piece every one of its fine vertices' tangent planes `planes` (world space, nx, ny, nz, d
     // each) passes through, within MergedResidual of a fine cell root mean square, solved toward the piece's mean along the
@@ -775,9 +784,10 @@ internal static class SdfDualContouring {
     // planes meet at (MergedFeature), inside the block where a convex crease lies past it, or at their mean, with their
     // mean normal, and drops the quads that collapse to fewer than three vertices. Two fine vertices of one block are one
     // piece when a quad joins them.
-    private static SdfSurface Merge<TLattice>(TLattice grid, List<double> positions, List<double> normals, List<double> anchors, List<double> patches, List<bool> features, List<bool> solveds, List<int> owners, List<int> quads, List<int> quadCorners, List<sbyte> quadAxes, Dictionary<int, List<double>> vertexPlanes, List<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block) where TLattice : ISdfRefinedContourLattice {
+    // A vertex's planes are planeData[planeStarts[v]..planeEnds[v]], or none where planeStarts[v] is negative.
+    private static SdfSurface Merge<TLattice>(TLattice grid, RentedList<double> positions, RentedList<double> normals, RentedList<double> anchors, RentedList<double> patches, RentedList<bool> features, RentedList<bool> solveds, RentedList<int> owners, RentedList<int> quads, RentedList<int> quadCorners, RentedList<sbyte> quadAxes, RentedList<double> planeData, RentedList<int> planeStarts, RentedList<int> planeEnds, RentedList<bool> besides, RentedList<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> cellVertex, Func<int, (int X, int Y, int Z, int Size)> block) where TLattice : ISdfRefinedContourLattice {
         var vertexCount = owners.Count;
-        var pieceSets = new SdfDisjointSet(count: vertexCount);
+        using var pieceSets = new SdfDisjointSet(count: vertexCount);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
 
@@ -800,58 +810,27 @@ internal static class SdfDualContouring {
             if ((owners[vertex] < 0) || (Root(vertex: vertex) == vertex)) { mergedCount++; }
         }
 
-        var remap = new int[vertexCount];
-        var sums = new Dictionary<int, (double X, double Y, double Z, int Count)>();
-        var normalSums = new Dictionary<int, (double X, double Y, double Z)>();
-        var anchorSums = new Dictionary<int, (double X, double Y, double Z)>();
-        var patchSums = new Dictionary<int, (double X, double Y, double Z)>();
-        // Per piece, its fine vertices' tangent planes in world space (nx, ny, nz, d each).
-        var planeLists = new Dictionary<int, List<double>>();
-        var mergedPositions = new double[(3 * mergedCount)];
-        var mergedNormals = new double[(3 * mergedCount)];
+        using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount);
+        // Per merged vertex, by its index: a piece's sums over its fine vertices, its root and whether any of them lies
+        // on a crease, and where its fine vertices' tangent planes lie in `piecePlanes`. A merged index is numbered as its
+        // piece is first met in vertex order, so walking the indices visits the pieces in that order.
+        using var pieceLease = RentedArrays.Rent<Piece>(array: out var pieces, minimumLength: mergedCount);
+        using var mergedPositionLease = RentedArrays.Rent<double>(array: out var mergedPositions, minimumLength: (3 * mergedCount));
+        using var mergedNormalLease = RentedArrays.Rent<double>(array: out var mergedNormals, minimumLength: (3 * mergedCount));
         var mergedFeatures = new bool[mergedCount];
         var mergedSolved = new bool[mergedCount];
         var mergedBesides = new bool[mergedCount];
         // Per merged vertex, where Settle returns it: an unowned vertex's own crossings' mean, a piece's fine vertices'
         // mean of theirs.
-        var mergedAnchors = new double[(3 * mergedCount)];
-        var mergedPatches = new double[(3 * mergedCount)];
+        using var mergedAnchorLease = RentedArrays.Rent<double>(array: out var mergedAnchors, minimumLength: (3 * mergedCount));
+        using var mergedPatchLease = RentedArrays.Rent<double>(array: out var mergedPatches, minimumLength: (3 * mergedCount));
         var merged = 0;
-        // Per piece, whether any of its fine vertices lies on a crease.
-        var pieceFeatures = new HashSet<int>();
 
-        Array.Fill(array: remap, value: -1);
-
+        remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
+        pieces.AsSpan(start: 0, length: mergedCount).Clear();
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             var root = ((owners[vertex] >= 0) ? Root(vertex: vertex) : vertex);
 
-            if (owners[vertex] >= 0) {
-                var sum = sums.GetValueOrDefault(key: root);
-
-                sums[root] = ((sum.X + positions[(3 * vertex)]), (sum.Y + positions[((3 * vertex) + 1)]), (sum.Z + positions[((3 * vertex) + 2)]), (sum.Count + 1));
-
-                var anchorSum = anchorSums.GetValueOrDefault(key: root);
-
-                anchorSums[root] = ((anchorSum.X + anchors[(3 * vertex)]), (anchorSum.Y + anchors[((3 * vertex) + 1)]), (anchorSum.Z + anchors[((3 * vertex) + 2)]));
-
-                var patchSum = patchSums.GetValueOrDefault(key: root);
-
-                patchSums[root] = ((patchSum.X + patches[(3 * vertex)]), (patchSum.Y + patches[((3 * vertex) + 1)]), (patchSum.Z + patches[((3 * vertex) + 2)]));
-
-                var normalSum = normalSums.GetValueOrDefault(key: root);
-
-                normalSums[root] = ((normalSum.X + normals[(3 * vertex)]), (normalSum.Y + normals[((3 * vertex) + 1)]), (normalSum.Z + normals[((3 * vertex) + 2)]));
-                if (features[vertex]) { _ = pieceFeatures.Add(item: root); }
-
-                // The piece's fine crossings' tangent planes, for its feature point.
-                if (vertexPlanes.TryGetValue(key: vertex, value: out var planes)) {
-                    if (!planeLists.TryGetValue(key: root, value: out var piecePlanes)) {
-                        piecePlanes = [];
-                        planeLists.Add(key: root, value: piecePlanes);
-                    }
-                    piecePlanes.AddRange(collection: planes);
-                }
-            }
             if (remap[root] < 0) {
                 remap[root] = merged;
                 for (var axis = 0; (axis < 3); axis++) {
@@ -866,52 +845,94 @@ internal static class SdfDualContouring {
                 merged++;
             }
             remap[vertex] = remap[root];
+            if (owners[vertex] < 0) { continue; }
+
+            ref var piece = ref pieces[remap[root]];
+
+            piece.Root = root;
+            piece.Count++;
+            (piece.X, piece.Y, piece.Z) = ((piece.X + positions[(3 * vertex)]), (piece.Y + positions[((3 * vertex) + 1)]), (piece.Z + positions[((3 * vertex) + 2)]));
+            (piece.AnchorX, piece.AnchorY, piece.AnchorZ) = ((piece.AnchorX + anchors[(3 * vertex)]), (piece.AnchorY + anchors[((3 * vertex) + 1)]), (piece.AnchorZ + anchors[((3 * vertex) + 2)]));
+            (piece.PatchX, piece.PatchY, piece.PatchZ) = ((piece.PatchX + patches[(3 * vertex)]), (piece.PatchY + patches[((3 * vertex) + 1)]), (piece.PatchZ + patches[((3 * vertex) + 2)]));
+            (piece.NormalX, piece.NormalY, piece.NormalZ) = ((piece.NormalX + normals[(3 * vertex)]), (piece.NormalY + normals[((3 * vertex) + 1)]), (piece.NormalZ + normals[((3 * vertex) + 2)]));
+            piece.Feature |= features[vertex];
+            // The piece's fine crossings' tangent planes, for its feature point, gathered below in vertex order.
+            if (planeStarts[vertex] >= 0) {
+                piece.HasPlanes = true;
+                piece.PlaneEnd += (planeEnds[vertex] - planeStarts[vertex]);
+            }
         }
-        var mergedHandoffs = new List<(int Vertex, double X, double Y, double Z)>();
+
+        // Each piece's planes back to back, in its fine vertices' order: PlaneStart is where its run begins, and PlaneEnd
+        // its end once the gather has filled it.
+        var planeTotal = 0;
+
+        for (var index = 0; (index < merged); index++) {
+            ref var piece = ref pieces[index];
+            var count = piece.PlaneEnd;
+
+            piece.PlaneStart = piece.PlaneEnd = planeTotal;
+            planeTotal += count;
+        }
+
+        using var piecePlaneLease = RentedArrays.Rent<double>(array: out var piecePlanes, minimumLength: planeTotal);
+
+        for (var vertex = 0; (vertex < vertexCount); vertex++) {
+            if ((owners[vertex] < 0) || (planeStarts[vertex] < 0)) { continue; }
+
+            ref var piece = ref pieces[remap[vertex]];
+            var planes = planeData.AsSpan()[planeStarts[vertex]..planeEnds[vertex]];
+
+            planes.CopyTo(destination: piecePlanes.AsSpan(start: piece.PlaneEnd));
+            piece.PlaneEnd += planes.Length;
+        }
+
+        using var mergedHandoffs = new RentedList<(int Vertex, double X, double Y, double Z)>(capacity: handoffs.Count);
         var origin = grid.World(x: 0.0, y: 0.0, z: 0.0);
         var (unitX, unitY, unitZ) = grid.World(x: 1.0, y: 1.0, z: 1.0);
         var unit = (X: (unitX - origin.X), Y: (unitY - origin.Y), Z: (unitZ - origin.Z));
 
-        foreach (var (vertex, x, y, z) in handoffs) {
+        foreach (var (vertex, x, y, z) in handoffs.AsSpan()) {
             mergedHandoffs.Add(item: (remap[vertex], x, y, z));
         }
-        foreach (var (root, sum) in sums) {
-            var at = (3 * remap[root]);
-            var (x, y, z) = ((sum.X / sum.Count), (sum.Y / sum.Count), (sum.Z / sum.Count));
+        for (var index = 0; (index < merged); index++) {
+            var piece = pieces[index];
+
+            if (piece.Count == 0) { continue; }
+
+            var root = piece.Root;
+            var at = (3 * index);
+            var (x, y, z) = ((piece.X / piece.Count), (piece.Y / piece.Count), (piece.Z / piece.Count));
 
             // A lattice whose fine vertices lie on its features (CrossingNormals) keeps a sharp edge or corner through a
             // merged piece: the vertex is the point every fine vertex's tangent plane passes through, where one lies in the
             // coarse cell, and the vertices' mean otherwise.
             // A convex crease past the coarse cell, up to FeatureReach of it, is the neighbour's to hold (HandOff), and the
             // piece's vertex stays inside the cell, as Place keeps a cell's.
-            var piecePlanes = planeLists.GetValueOrDefault(key: root);
-            var meeting = (((sum.Count > 1) && (piecePlanes is not null)) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: CollectionsMarshal.AsSpan(list: piecePlanes)) : null);
+            var meeting = (((piece.Count > 1) && piece.HasPlanes) ? MergedFeature(grid: grid, mean: (x, y, z), block: block(owners[root]), planes: piecePlanes.AsSpan(start: piece.PlaneStart, length: (piece.PlaneEnd - piece.PlaneStart))) : null);
             var feature = ((meeting is var (fx, fy, fz, past, _, _, _) && (past <= 0.0)) ? (fx, fy, fz) : ((double X, double Y, double Z)?)null);
 
-            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && pieceFeatures.Contains(item: root)) {
+            if ((feature is null) && (meeting is (var bx, var by, var bz, _, { } inside, var handOff, var besideCrease)) && piece.Feature) {
                 if (handOff) {
-                    mergedHandoffs.Add(item: (remap[root], ((bx - origin.X) / unit.X), ((by - origin.Y) / unit.Y), ((bz - origin.Z) / unit.Z)));
+                    mergedHandoffs.Add(item: (index, ((bx - origin.X) / unit.X), ((by - origin.Y) / unit.Y), ((bz - origin.Z) / unit.Z)));
                 }
                 feature = inside;
-                mergedBesides[remap[root]] = besideCrease;
+                mergedBesides[index] = besideCrease;
             }
             (x, y, z) = (feature ?? (x, y, z));
-            mergedFeatures[remap[root]] = ((feature is not null) ? pieceFeatures.Contains(item: root) : ((sum.Count == 1) && features[root]));
-            mergedSolved[remap[root]] = true;
+            mergedFeatures[index] = ((feature is not null) ? piece.Feature : ((piece.Count == 1) && features[root]));
+            mergedSolved[index] = true;
 
             mergedPositions[at] = x;
             mergedPositions[(at + 1)] = y;
             mergedPositions[(at + 2)] = z;
-
-            var (anchorX, anchorY, anchorZ) = anchorSums[root];
-
-            mergedAnchors[at] = (anchorX / sum.Count);
-            mergedAnchors[(at + 1)] = (anchorY / sum.Count);
-            mergedAnchors[(at + 2)] = (anchorZ / sum.Count);
-            (mergedPatches[at], mergedPatches[(at + 1)], mergedPatches[(at + 2)]) = patchSums[root];
+            mergedAnchors[at] = (piece.AnchorX / piece.Count);
+            mergedAnchors[(at + 1)] = (piece.AnchorY / piece.Count);
+            mergedAnchors[(at + 2)] = (piece.AnchorZ / piece.Count);
+            (mergedPatches[at], mergedPatches[(at + 1)], mergedPatches[(at + 2)]) = (piece.PatchX, piece.PatchY, piece.PatchZ);
 
             // The merged vertex's normal is its fine vertices' mean normal.
-            var (sx, sy, sz) = normalSums[root];
+            var (sx, sy, sz) = (piece.NormalX, piece.NormalY, piece.NormalZ);
             var length = Math.Sqrt(d: (((sx * sx) + (sy * sy)) + (sz * sz)));
 
             if (length > 1e-12) {
@@ -921,7 +942,7 @@ internal static class SdfDualContouring {
             }
         }
 
-        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs, positions: mergedPositions, solveds: mergedSolved, target: (x, y, z) => {
+        HandOff(besides: mergedBesides, features: mergedFeatures, grid: grid, handoffs: mergedHandoffs.AsSpan(), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), solveds: mergedSolved, target: (x, y, z) => {
             var vertex = cellVertex(x, y, z);
 
             return ((vertex < 0) ? -1 : remap[vertex]);
@@ -970,19 +991,41 @@ internal static class SdfDualContouring {
             keptQuads++;
         }
 
-        Settle(anchors: mergedAnchors, axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches, positions: mergedPositions, quads: mergedQuads, solveds: mergedSolved);
+        Settle(anchors: mergedAnchors.AsSpan(start: 0, length: (3 * mergedCount)), axes: mergedAxes, besides: mergedBesides, features: mergedFeatures, patches: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount)), positions: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount)), quads: mergedQuads, solveds: mergedSolved);
 
         return new SdfSurface {
             Features = mergedFeatures,
             Beside = mergedBesides,
             Solved = mergedSolved,
-            Normals = mergedNormals,
-            Patches = mergedPatches,
-            Positions = mergedPositions,
+            Normals = Narrowed(values: mergedNormals.AsSpan(start: 0, length: (3 * mergedCount))),
+            Patches = Narrowed(values: mergedPatches.AsSpan(start: 0, length: (3 * mergedCount))),
+            Positions = Narrowed(values: mergedPositions.AsSpan(start: 0, length: (3 * mergedCount))),
             QuadAxes = mergedAxes,
             QuadCorners = mergedCorners,
             Quads = mergedQuads,
         };
+    }
+    // The values rounded to single precision, in an array of exactly their count.
+    private static float[] Narrowed(ReadOnlySpan<double> values) {
+        var narrowed = new float[values.Length];
+
+        for (var index = 0; (index < values.Length); index++) { narrowed[index] = ((float)values[index]); }
+        return narrowed;
+    }
+    // One merged vertex's piece, while Merge gathers it: its fine vertices' count and summed positions, crossings' means,
+    // patch facings and normals, its root vertex, whether any fine vertex lies on a crease or records tangent planes, and
+    // its planes' run in the gathered planes.
+    private struct Piece {
+        public int Count;
+        public int Root;
+        public double X, Y, Z;
+        public double AnchorX, AnchorY, AnchorZ;
+        public double PatchX, PatchY, PatchZ;
+        public double NormalX, NormalY, NormalZ;
+        public bool Feature;
+        public bool HasPlanes;
+        public int PlaneStart;
+        public int PlaneEnd;
     }
     // Moves each convex crease a vertex's planes meet past its cell (Place's `beyond`, or a merged piece's past its
     // coarse cell) onto the vertex of the cell that holds it, `target`'s answer for the point in lattice coordinates:
@@ -993,8 +1036,8 @@ internal static class SdfDualContouring {
     // cuts its corner in a notch. A target that holds a crease of its own, a cell of several patches and a cell the
     // surface misses take none. A vertex that hands its crease over stays inside its cell and keeps its
     // crease mark, since its quads turn across the crease.
-    private static void HandOff<TLattice>(TLattice grid, Span<double> positions, Span<bool> features, Span<bool> solveds, Span<bool> besides, List<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
-        if (handoffs.Count == 0) {
+    private static void HandOff<TLattice>(TLattice grid, Span<double> positions, Span<bool> features, Span<bool> solveds, Span<bool> besides, ReadOnlySpan<(int Vertex, double X, double Y, double Z)> handoffs, Func<double, double, double, int> target) where TLattice : ISdfContourLattice {
+        if (handoffs.Length == 0) {
             return;
         }
 
@@ -1107,7 +1150,7 @@ internal static class SdfDualContouring {
     // The patches of a corner-sign mask: the sign-changing cube edges joined by the marching-squares segments of the six
     // faces, each connected piece one patch.
     private static (sbyte[] PatchOfEdge, int Count) Patches(int mask) {
-        var patchSets = new SdfDisjointSet(count: CellEdges.Length);
+        using var patchSets = new SdfDisjointSet(count: CellEdges.Length);
         var changes = new bool[CellEdges.Length];
 
         for (var edge = 0; (edge < CellEdges.Length); edge++) {
@@ -1264,7 +1307,7 @@ internal static class SdfDualContouring {
     // crossings' unit world normals.
     // `worldPlanes`, when given, takes the crossings' tangent planes in world space (nx, ny, nz, d each) for Merge.
     // `anchor` is the crossings' mean, which lies in the cell.
-    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, out (double X, double Y, double Z)? beyond, out bool beside, out (double X, double Y, double Z) anchor, int stride = 1, List<double>? worldPlanes = null) where TLattice : ISdfContourLattice {
+    private static (double X, double Y, double Z) Place<TLattice>(TLattice grid, int edges, int x, int y, int z, out (double X, double Y, double Z) crossingNormal, out bool feature, out bool flat, out bool solved, out (double X, double Y, double Z)? beyond, out bool beside, out (double X, double Y, double Z) anchor, int stride = 1, RentedList<double>? worldPlanes = null) where TLattice : ISdfContourLattice {
         var mean = Mean(edges: edges, grid: grid, stride: stride, x: x, y: y, z: z);
         anchor = mean;
         beyond = null;
@@ -1332,7 +1375,7 @@ internal static class SdfDualContouring {
                 var (onX, onY, onZ) = grid.World(x: (x + (px * stride)), y: (y + (py * stride)), z: (z + (pz * stride)));
                 var distance = (((nx * onX) + (ny * onY)) + (nz * onZ));
 
-                worldPlanes.AddRange(collection: [nx, ny, nz, distance]);
+                worldPlanes.AddRange(items: [nx, ny, nz, distance]);
             }
 
             // The tangent planes are solved in cell coordinates: a world normal there is scaled by each axis's cell size.
@@ -1707,9 +1750,9 @@ internal static class SdfDualContouring {
     // belongs to.
     private static (int[] Quads, int[] QuadCorners, sbyte[] QuadAxes) Connect<TLattice>(TLattice grid, byte[] maskOfCell, int[] vertexOfPatch) where TLattice : ISdfContourLattice {
         Span<int> cells = [grid.CellsX, grid.CellsY, grid.CellsZ];
-        var quads = new List<int>();
-        var quadCorners = new List<int>();
-        var quadAxes = new List<sbyte>();
+        using var quads = new RentedList<int>();
+        using var quadCorners = new RentedList<int>();
+        using var quadAxes = new RentedList<sbyte>();
         Span<int> ring = stackalloc int[4];
         Span<int> at = stackalloc int[3];
         Span<int> cell = stackalloc int[3];
@@ -1775,6 +1818,6 @@ internal static class SdfDualContouring {
             }
         }
 
-        return ([.. quads], [.. quadCorners], [.. quadAxes]);
+        return (quads.ToArray(), quadCorners.ToArray(), quadAxes.ToArray());
     }
 }

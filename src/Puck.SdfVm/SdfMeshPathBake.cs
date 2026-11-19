@@ -9,6 +9,7 @@ using Puck.SignedDistance.Baking;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
+using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 using BakeStage = Puck.SdfVm.SdfMeshBakeReport.Stage;
 
 namespace Puck.SdfVm;
@@ -170,7 +171,7 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     /// <returns>The ticket's state.</returns>
     public SdfMeshBakeTicket StateOf(int lattice) {
         if (Bake is not { } bake) { return States[lattice]; }
-        lock (bake.Gate) { return States[lattice]; }
+        return bake.TicketOf(batch: this, lattice: lattice);
     }
     /// <summary>Returns the runs of the batch's point table: each points lattice's points at its first sample's place in
     /// the dispatch, then each lattice's poses from <see cref="PoseBase"/>, in table rows of one <see cref="Vector4"/>.
@@ -336,10 +337,12 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Lock m_gate = new();
 
-    // The gate a taken batch's tickets are read under (SdfMeshBakeBatch.StateOf).
-    internal Lock Gate => m_gate;
+    // Reads a taken batch's ticket under the gate it is written under (SdfMeshBakeBatch.StateOf).
+    internal SdfMeshBakeTicket TicketOf(SdfMeshBakeBatch batch, int lattice) {
+        using (EnterGate(site: BakeGate.Ticket)) { return batch.States[lattice]; }
+    }
 
-    private readonly List<Group> m_groups = [];
+    private readonly GroupList m_groups = new();
     private readonly List<Group> m_retiredGroups = [];
 
     // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
@@ -380,7 +383,7 @@ public sealed partial class SdfMeshPathBake {
     /// <see langword="null"/> before the first.</summary>
     public SdfProgram? Program {
         get {
-            lock (m_gate) { return m_program; }
+            using (EnterGate(site: BakeGate.Read)) { return m_program; }
         }
     }
 
@@ -390,7 +393,7 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="mesh">The landed mesh, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the group is planned and has landed a mesh.</returns>
     public bool TryLandedMesh(int selector, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out SdfMesh? mesh) {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             foreach (var group in m_groups) {
                 if ((group.Selector == selector) && (group.Mesh is { } landed)) {
                     mesh = landed;
@@ -409,7 +412,7 @@ public sealed partial class SdfMeshPathBake {
     /// of the draws that will name it (<see cref="ObserveResidency"/>).</summary>
     public bool Pending {
         get {
-            lock (m_gate) { return ((m_ahead.Count > 0) || Owes()); }
+            using (EnterGate(site: BakeGate.Read)) { return ((m_ahead.Count > 0) || Owes()); }
         }
     }
     /// <summary>Gets whether the frame's draws still follow the bake: <see cref="Pending"/> less the products landing
@@ -417,7 +420,7 @@ public sealed partial class SdfMeshPathBake {
     /// stands need not render again while only those wait.</summary>
     public bool DrawsPending {
         get {
-            lock (m_gate) { return Owes(); }
+            using (EnterGate(site: BakeGate.Read)) { return Owes(); }
         }
     }
 
@@ -428,7 +431,7 @@ public sealed partial class SdfMeshPathBake {
     /// every group under the bake's lock, so a caller reads it to measure, not every frame.</summary>
     public bool DrawsOwn {
         get {
-            lock (m_gate) {
+            using (EnterGate(site: BakeGate.Read)) {
                 if (m_program is null) { return false; }
                 foreach (var group in m_groups) {
                     if (!group.DrawsOwn) { return false; }
@@ -457,7 +460,7 @@ public sealed partial class SdfMeshPathBake {
     /// not hold its first lighting measurement or a later static-scene refresh behind unrelated work.</summary>
     public bool IrradiancePending {
         get {
-            lock (m_gate) {
+            using (EnterGate(site: BakeGate.Read)) {
                 // A floor planned on arrival stands in for its detail, which the scene would be measured again for.
                 if (((m_program is not null) && (m_dressedRevision != m_productRevision)) || (m_firstDetailsOwed > 0)) { return true; }
                 foreach (var group in m_ahead) {
@@ -483,7 +486,7 @@ public sealed partial class SdfMeshPathBake {
     public bool Probe(SdfFieldSlice slice) {
         ArgumentNullException.ThrowIfNull(argument: slice);
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             if (m_slice is not null) { return false; }
             m_slice = slice;
             return true;
@@ -553,7 +556,7 @@ public sealed partial class SdfMeshPathBake {
     // workers cannot replace/release a landed mesh before the dresser has claimed it. No bake entry calls presentation.
     internal FrameAccess PrepareFrame(SdfFrame frame) {
         ArgumentNullException.ThrowIfNull(frame);
-        using (EnterFrameGate()) {
+        using (EnterFrameGate(site: BakeGate.Frame)) {
             m_preparedFrames++;
             // The copies are indexed before anything plans: a plan measures a shared geometry where they stand (Tiers).
             m_demandTransforms = frame.DynamicTransforms;
@@ -574,7 +577,7 @@ public sealed partial class SdfMeshPathBake {
         }
         // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
         Prioritize();
-        var scope = EnterFrameGate();
+        var scope = EnterFrameGate(site: BakeGate.Retier);
 
         try {
             FinishReplacements();
@@ -588,11 +591,12 @@ public sealed partial class SdfMeshPathBake {
     internal ref struct FrameAccess {
         private readonly SdfMeshPathBake m_owner;
 
-        private Lock.Scope m_scope;
+        private GateScope m_scope;
 
-        internal FrameAccess(SdfMeshPathBake owner, Lock.Scope scope) {
+        internal FrameAccess(SdfMeshPathBake owner, GateScope scope) {
             m_owner = owner;
             m_scope = scope;
+            m_scope.Continue(site: BakeGate.Dress);
             Revision = owner.m_productRevision;
             CopyLayoutRevision = owner.m_copyLayoutRevision;
         }
@@ -763,7 +767,7 @@ public sealed partial class SdfMeshPathBake {
         batch = null;
         heldTaps = 0L;
         mostTaps = Math.Clamp(value: mostTaps, min: (firstFits ? 0L : 1L), max: BatchTaps);
-        using (EnterFrameGate()) {
+        using (EnterFrameGate(site: BakeGate.Take)) {
             if ((field is null) || !ReferenceEquals(objA: field, objB: m_program)) { return false; }
             // Work that finishes from here on offers the next take.
             Volatile.Write(location: ref m_offered, value: 0);
@@ -955,7 +959,7 @@ public sealed partial class SdfMeshPathBake {
     /// <param name="batch">The batch <see cref="TryTake(SdfProgram?, out SdfMeshBakeBatch?, long)"/> took, or <see langword="null"/>.</param>
     public void Abandon(SdfMeshBakeBatch? batch) {
         if (batch is null) { return; }
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Ticket)) {
             for (var index = 0; (index < batch.Tickets.Length); index++) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
         }
     }
@@ -982,11 +986,11 @@ public sealed partial class SdfMeshPathBake {
             // lattice of it before its answer lands. The queued job keeps the group's storage owner open for the
             // decoded answer, which a retired group never takes.
             if (batch.Tickets[index] is Group group) {
-                lock (m_gate) {
+                using (EnterGate(site: BakeGate.Ticket)) {
                     if (batch.States[index] != SdfMeshBakeTicket.Taken) { continue; }
                 }
                 if (!group.QueueWork()) {
-                    lock (m_gate) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
+                    using (EnterGate(site: BakeGate.Ticket)) { _ = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Returned); }
                     continue;
                 }
 
@@ -1001,7 +1005,7 @@ public sealed partial class SdfMeshPathBake {
 
                 bool answered;
 
-                lock (m_gate) { answered = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Answered); }
+                using (EnterGate(site: BakeGate.Ticket)) { answered = MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Answered); }
                 if (!answered) {
                     answer.Dispose();
                     group.EndWork();
@@ -1045,7 +1049,7 @@ public sealed partial class SdfMeshPathBake {
         if (batch.Tickets[index] is SliceTicket sliced) {
             bool done;
 
-            lock (m_gate) {
+            using (EnterGate(site: BakeGate.Slice)) {
                 if (!MoveTicket(batch: batch, index: index, to: SdfMeshBakeTicket.Answered)) { return; }
                 // A slice a new program restarted, or one already finished, takes no answer from an earlier dispatch.
                 if (!ReferenceEquals(objA: sliced.Slice, objB: m_slice) || (sliced.Slice.Generation != sliced.Generation)) { return; }
@@ -1053,7 +1057,7 @@ public sealed partial class SdfMeshPathBake {
             }
             if (done) {
                 sliced.Slice.Complete();
-                lock (m_gate) { m_slice = null; }
+                using (EnterGate(site: BakeGate.Slice)) { m_slice = null; }
             }
         }
     }
@@ -1137,7 +1141,7 @@ public sealed partial class SdfMeshPathBake {
     /// with the wall time from its start to its last mesh.</summary>
     /// <returns>One line.</returns>
     public string Describe() {
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             var meshes = 0;
             var triangles = 0L;
             var vertices = 0L;
@@ -1182,7 +1186,7 @@ public sealed partial class SdfMeshPathBake {
         HashSet<int> drawing;
         HashSet<UInt128> shapes;
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)];
             shapes = [.. m_groups.Select(selector: static group => group.Shape)];
         }
@@ -1201,7 +1205,7 @@ public sealed partial class SdfMeshPathBake {
             if (Library.TryTake(geometry: group.Sealed, identity: identity, materials: group.MaterialOrder, mesh: out var warmed)) { warmed.Release(); }
         }
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Read)) {
             m_prepared = (program, farDistance, groups);
             m_planMilliseconds = Stopwatch.GetElapsedTime(startingTimestamp: planned).TotalMilliseconds;
         }
@@ -1214,7 +1218,7 @@ public sealed partial class SdfMeshPathBake {
         m_floorRevision++;
         m_productRevision++;
         group.Owner = this;
-        m_groups[index] = group;
+        m_groups.Set(group: group, index: index);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
     }
     // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one rigid
@@ -1261,9 +1265,9 @@ public sealed partial class SdfMeshPathBake {
                 tier: tiers,
                 transforms: frame.DynamicTransforms
             );
-            m_groups.AddRange(collection: plan);
+            m_groups.Plan(groups: plan);
         } else {
-            m_groups.AddRange(collection: SdfMeshBakeGroup.Plan(
+            m_groups.Plan(groups: SdfMeshBakeGroup.Plan(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
                 program: program,
@@ -1654,9 +1658,9 @@ public sealed partial class SdfMeshPathBake {
 
         // An empty result is a fact about the geometry, stored whether or not the group is still planned.
         if (empty) { StoreEmpty(group); }
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Refine)) {
             group.InFlight = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             m_accounts.KindSamples[0] += request.Samples;
             if (empty) {
                 group.FoundNoSurface(how: $" after {group.Refinements} refinements");
@@ -1865,9 +1869,9 @@ public sealed partial class SdfMeshPathBake {
 
         FinalLattice? emptied = null;
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Slab)) {
             group.InFlight = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             m_accounts.KindSamples[1] += request.Samples;
             if (!complete) {
                 group.Next = SlabOf(group: group);
@@ -1938,9 +1942,9 @@ public sealed partial class SdfMeshPathBake {
 
         FinalLattice? emptied = null;
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Prepare)) {
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             if (empty) {
                 group.Outcome = ((refusal is null) ? "no crossed cell in the final lattice" : "lattice refused");
                 emptied = group.Final;
@@ -2007,9 +2011,9 @@ public sealed partial class SdfMeshPathBake {
         }
         final.Answered += request.Samples;
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Final)) {
             group.InFlight = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             m_accounts.KindSamples[(2 + ((int)final.Stage))] += request.Samples;
             if (final.Answered < final.Points.Length) {
                 group.Next = FinalChunk(final: final, group: group);
@@ -2042,9 +2046,9 @@ public sealed partial class SdfMeshPathBake {
         Account(detail: new(Count: points.Length, Dims: final.Lattice.Dims, Factor: final.Sampled!.Refinement, Measured: final.Sampled.MeasuredCells), group: group, since: started, stage: BakeStage.Crossings);
         final.Points = points;
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Crossings)) {
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             final.Answered = 0;
             if (refined) { m_accounts.RefinedCells += final.Sampled!.MeasuredCells; }
             group.Next = FinalChunk(final: final, group: group);
@@ -2077,7 +2081,7 @@ public sealed partial class SdfMeshPathBake {
         } else if (contour is not null) {
             creases = CreaseVertices(contour: contour);
             if (creases.Length > 0) {
-                group.Projection = new ContourProjection(contour: contour);
+                group.Projection = new ContourProjection(allocator: group.Allocator, contour: contour, observer: group.Memory);
                 group.CreaseSpacing = lattice.ContourCell;
                 group.CreaseSlope = lattice.SurfaceSlope();
                 group.Points.Resize(creases.Length, clear: false, preserve: false);
@@ -2089,7 +2093,7 @@ public sealed partial class SdfMeshPathBake {
             }
         }
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Contour)) {
             group.Contouring = false;
             group.Final = null;
             if (empty) {
@@ -2112,13 +2116,13 @@ public sealed partial class SdfMeshPathBake {
     }
     // The vertices a contour's field check measures (AnswerCreases): every vertex no crossing pins to the surface.
     private static int[] CreaseVertices(SdfContour contour) {
-        var found = new List<int>();
+        using var found = new RentedList<int>();
 
         for (var vertex = 0; (vertex < contour.VertexCount); vertex++) {
             if (((vertex < contour.Features.Length) && contour.Features[vertex]) || ((vertex < contour.Solved.Length) && contour.Solved[vertex])) { found.Add(item: vertex); }
         }
 
-        return [.. found];
+        return found.ToArray();
     }
     // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
     // material points (values alone), as many as a frame's share of field evaluations takes.
@@ -2163,12 +2167,13 @@ public sealed partial class SdfMeshPathBake {
 
         if (!more) {
             group.Creases = null;
+            group.Projection?.Dispose();
             group.Projection = null;
             group.Points.Resize(0);
         }
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Creases)) {
             group.InFlight = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             m_accounts.KindSamples[5] += request.Samples;
             m_accounts.Softened += softened;
             if (more) {
@@ -2221,9 +2226,9 @@ public sealed partial class SdfMeshPathBake {
         group.Contour = contour;
         group.Cut = cut;
         StagePoints(group: group, points: points);
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Split)) {
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             group.Next = PointsChunk(gradients: false, group: group);
         }
     }
@@ -2239,9 +2244,9 @@ public sealed partial class SdfMeshPathBake {
     private void AnswerPoints(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<int> materials, int kind) {
         materials[..request.Samples].CopyTo(destination: group.PointMaterials.GetSpan()[group.PointsAnswered..]);
         group.PointsAnswered += request.Samples;
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Points)) {
             group.InFlight = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             m_accounts.KindSamples[kind] += request.Samples;
             if (group.PointsAnswered < group.Points!.Length) {
                 group.Next = PointsChunk(gradients: false, group: group);
@@ -2270,9 +2275,9 @@ public sealed partial class SdfMeshPathBake {
         }
 
         StagePoints(group: group, points: points);
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Advance)) {
             group.Contouring = false;
-            if (!m_groups.Contains(item: group)) { return; }
+            if (!GroupList.Holds(group: group)) { return; }
             group.Next = PointsChunk(gradients: false, group: group);
         }
     }
@@ -2303,7 +2308,7 @@ public sealed partial class SdfMeshPathBake {
                 mesh = SdfMeshSkin.Split(skin: skin);
             }
         }
-        lock (m_gate) { m_accounts.CutEdges += edges; }
+        using (EnterGate(site: BakeGate.Land)) { m_accounts.CutEdges += edges; }
         if (mesh is not null) {
             mesh = mesh with { BakeCell = group.DiagnosticCell };
             KeepCheckpoint(group, mesh, simplified: false);
@@ -2339,7 +2344,7 @@ public sealed partial class SdfMeshPathBake {
             Library.StoreEmpty(geometry: group.Sealed, identity: group.Identity, persist: true);
         }
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Land)) {
             m_accounts.Merged += merged;
             group.Contouring = false;
             group.Done = true;
@@ -2357,11 +2362,11 @@ public sealed partial class SdfMeshPathBake {
         var loaded = Library.TryLoad(form: (group.Dynamic ? group.Form : null), geometry: group.Sealed, identity: group.Identity, materials: group.MaterialOrder, mesh: out var mesh, refusal: out var refusal);
 
         if (!loaded && ResumeCheckpoint(group)) {
-            lock (m_gate) { m_loadsDone++; m_loadLast = Stopwatch.GetTimestamp(); }
+            using (EnterGate(site: BakeGate.Load)) { m_loadsDone++; m_loadLast = Stopwatch.GetTimestamp(); }
             return;
         }
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Load)) {
             group.Contouring = false;
             m_loadsDone++;
             m_loadLast = Stopwatch.GetTimestamp();
@@ -2392,9 +2397,7 @@ public sealed partial class SdfMeshPathBake {
     // Records the bake's wall time once its last group finishes, and reports it.
     private void Finish() {
         Follow();
-        foreach (var group in m_groups) {
-            if (!group.Done) { return; }
-        }
+        if (DoneThrough() < m_groups.Count) { return; }
         if (m_reported) { return; }
         m_seconds = m_clock.Elapsed.TotalSeconds;
         m_reported = true;
@@ -2419,19 +2422,34 @@ public sealed partial class SdfMeshPathBake {
     // the same way to the lattice edge its quad crosses (SdfContour.QuadAxes, SdfContourFacing), which the contour's
     // settle left it facing out along: its own facing can turn edge-on to that direction and past it without reversing
     // against where it began.
-    private sealed class ContourProjection {
-        private readonly int[] m_starts;
-        private readonly int[] m_incident;
-        private readonly Triangle[] m_triangles;
+    // It lives across the group's field-check rounds, each a GPU round trip, so its tables are the group's owned storage,
+    // charged to the group's account, never collected garbage: the field check disposes it once its last vertex moves, a
+    // retired group's release once its last job ends.
+    private sealed class ContourProjection : IDisposable {
+        private readonly OwnedBuffer<int> m_starts;
+        private readonly OwnedBuffer<int> m_incident;
+        private readonly OwnedBuffer<Triangle> m_triangles;
+        private int m_triangleCount;
+
+        public void Dispose() {
+            m_starts.Dispose();
+            m_incident.Dispose();
+            m_triangles.Dispose();
+            m_triangleCount = 0;
+        }
 
         // `Axis` is zero where the contour records no lattice edge; `Patches` is the sum of the corners' patch facings
         // (SdfContour.Patches), zero where it records none.
         private readonly record struct Triangle(int A, int B, int C, (double X, double Y, double Z) Reference, sbyte Axis, (double X, double Y, double Z) Patches);
 
-        public ContourProjection(SdfContour contour) {
-            var triangles = new List<Triangle>(capacity: (2 * contour.QuadCount));
+        public ContourProjection(SdfContour contour, IAllocator? allocator = null, IAllocationObserver? observer = null) {
+            m_triangles = new(allocator: allocator, observer: observer);
+            m_starts = new(allocator: allocator, observer: observer);
+            m_incident = new(allocator: allocator, observer: observer);
+            m_triangles.Resize((2 * contour.QuadCount), clear: false, preserve: false);
+            m_starts.Resize((contour.VertexCount + 1), clear: true, preserve: false);
 
-            m_starts = new int[(contour.VertexCount + 1)];
+            var triangles = m_triangles;
 
             double Patch(int vertex, int axis) => ((((3 * vertex) + axis) < contour.Patches.Length) ? contour.Patches[((3 * vertex) + axis)] : 0.0);
             void Add(int a, int b, int c, sbyte axis) {
@@ -2445,7 +2463,7 @@ public sealed partial class SdfMeshPathBake {
                 // A collinear triangle has no orientation to retain. Ignoring it lets a neighbouring move open it
                 // into a valid triangle instead of making one degenerate face immobilize the whole fan.
                 if (!(Dot(a: normal, b: normal) > ((1e-12 * longest) * longest))) { return; }
-                triangles.Add(item: new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(axis: 0, vertex: a) + Patch(axis: 0, vertex: b)) + Patch(axis: 0, vertex: c)), ((Patch(axis: 1, vertex: a) + Patch(axis: 1, vertex: b)) + Patch(axis: 1, vertex: c)), ((Patch(axis: 2, vertex: a) + Patch(axis: 2, vertex: b)) + Patch(axis: 2, vertex: c))), Reference: normal));
+                triangles[m_triangleCount++] = (new Triangle(A: a, Axis: axis, B: b, C: c, Patches: (((Patch(axis: 0, vertex: a) + Patch(axis: 0, vertex: b)) + Patch(axis: 0, vertex: c)), ((Patch(axis: 1, vertex: a) + Patch(axis: 1, vertex: b)) + Patch(axis: 1, vertex: c)), ((Patch(axis: 2, vertex: a) + Patch(axis: 2, vertex: b)) + Patch(axis: 2, vertex: c))), Reference: normal));
                 m_starts[(a + 1)]++;
                 m_starts[(b + 1)]++;
                 m_starts[(c + 1)]++;
@@ -2461,11 +2479,11 @@ public sealed partial class SdfMeshPathBake {
                 Add(a: a, axis: axis, b: c, c: d);
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
-            m_triangles = [.. triangles];
-            m_incident = new int[m_starts[^1]];
-            var filled = new int[contour.VertexCount];
+            m_incident.Resize(m_starts[contour.VertexCount], clear: false, preserve: false);
+            using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount);
 
-            for (var index = 0; (index < m_triangles.Length); index++) {
+            filled.AsSpan(start: 0, length: contour.VertexCount).Clear();
+            for (var index = 0; (index < m_triangleCount); index++) {
                 var triangle = m_triangles[index];
 
                 foreach (var vertex in ((ReadOnlySpan<int>)[triangle.A, triangle.B, triangle.C])) {
@@ -2571,15 +2589,27 @@ public sealed partial class SdfMeshPathBake {
     }
     // One bake group as the plan formed it (SdfMeshBakeGroup), and where its bake stands.
     private sealed class Group(int selector, bool dynamic) : SdfMeshBakeGroup(dynamic: dynamic, selector: selector) {
-        // The mesh whose vertices' winning slots the skin round is asking for, until it lands.
-
         public bool Contouring { get; set; }
+        // Whether the group stands at an index of its bake's group list (GroupList, its one writer).
+        public bool Listed { get; set; }
 
         private bool m_done;
         private bool m_inFlight;
 
         public IAllocator? Allocator { get; set; }
-        public bool Done { get => m_done; set { m_done = value; if (value) { Memory.ReleaseReservation(); EndShare(); } TryRelease(); } }
+        public bool Done {
+            get => m_done;
+            set {
+                m_done = value;
+                if (value) {
+                    Memory.ReleaseReservation();
+                    EndShare();
+                    // Its followers are finished at the next Follow, which visits only the leaders done since it last ran.
+                    if ((m_followers is { Count: > 0 }) && (Owner is { } owner)) { owner.m_followable.Add(item: this); }
+                }
+                TryRelease();
+            }
+        }
         public bool InFlight { get => m_inFlight; set { m_inFlight = value; TryRelease(); } }
 
         public MemoryAccount.Owner Memory { get; } = MemoryAccount.Shared.CreateOwner(memoryClass: MemoryClass.Workspace, name: "mesh-bake-group");
@@ -2777,7 +2807,7 @@ public sealed partial class SdfMeshPathBake {
                     Final?.Dispose(); Final = null;
                     m_points?.Dispose();
                     m_pointMaterials?.Dispose();
-                    Contour = null; Cut = null; Creases = null; Projection = null;
+                    Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
                     Skin?.Release();
                     Memory.Dispose();
@@ -2794,7 +2824,26 @@ public sealed partial class SdfMeshPathBake {
         private void RetireReplaced() { Retired = true; }
 
         // The group of the same bake baking this group's geometry, whose mesh this one takes when it finishes, or null.
-        public Group? Leader { get; set; }
+        // Setting a leader lists the group among the leader's followers, the index Follow reads; a follower that leaves
+        // its leader (null, or another) stays listed and is passed over there.
+        public Group? Leader {
+            get => m_leader;
+            set {
+                m_leader = value;
+                if (value is not null) { (value.m_followers ??= []).Add(item: this); }
+            }
+        }
+
+        private Group? m_leader;
+        private List<Group>? m_followers;
+
+        // Hands over the groups that named this group their leader since the last hand-over.
+        public List<Group> TakeFollowers() {
+            var followers = (m_followers ?? []);
+
+            m_followers = null;
+            return followers;
+        }
         // The plan of this group at its newest frame inputs, while this group still bakes older ones (Revisit): never
         // begun, so it holds nothing, and started in this group's place once this group lands (Promote).
         public Group? Successor { get; set; }

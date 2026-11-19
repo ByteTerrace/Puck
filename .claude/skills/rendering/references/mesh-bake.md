@@ -398,7 +398,14 @@ laws exercise that boundary.
   order, then the stages by group priority. A pool per residency oversubscribes
   the processors three times over on the debug world, and workers below normal
   priority lose them to the irradiance trace and the machines, more than doubling a
-  cold bake. A completed batch's readback is copied and decoded into each
+  cold bake. The workers are threads of the pool's own at normal priority
+  (`SdfMeshPathBake.StartWorkers`), blocking on an operating-system semaphore
+  while idle: held as `Task.Run` items for a whole bake, they kept the process's
+  other thread-pool work (timers, `Parallel.For`, the store's account) waiting
+  5 to 17 seconds while the runtime injected threads. The done line's
+  `tail=` is the seconds from the last moment work was queued behind every
+  worker to the bake's end: the serial tail in which the largest groups finish
+  alone. A completed batch's readback is copied and decoded into each
   group's answer buffers on the pool, ahead of every queued stage
   (`SdfMeshPathBake.RunFirst`, from `SdfMeshBakeGpuWork.Complete`), and its slot
   is released as soon as the copy is taken, so the frame thread reads no
@@ -421,7 +428,27 @@ laws exercise that boundary.
   group's lattice, points and answers on its own job, which only that group's
   one running job touches, and takes the gate only to publish the group's next
   request or stage. The done line's `frame-gate=[max,total,over-1ms]` reads the
-  frame thread's waits on the gate.
+  frame thread's waits on the gate, and `gate=[site:entries/wait/hold/max]`
+  every entry's wait and hold by site (`SdfMeshBakeReport.Gate`, taken through
+  `EnterGate`, the one door to `m_gate`): on a cold debug-world bake the
+  frame thread's entries (`frame`, `retier`, `dress`, `take`, `observe`) hold the
+  gate far longer than the workers' own sections do, so the
+  workers' waits are the frame thread's holds. Whether a group still stands in
+  the bake is its `Listed` flag, which only `GroupList.Set` and `Clear` move,
+  never a search of the list.
+- **A stage's scratch is rented, its result exact.** A CPU stage grows its
+  per-vertex and per-quad workspace in `RentedList<T>` and leases its tables
+  (`RentedArrays.Rent(minimumLength, out array)`), both over
+  `ArrayPool<T>.Shared`, and copies out only the arrays its result keeps; a
+  group's lattices and point tables stay in owned native storage. A rented array
+  is longer than asked for and holds an earlier stage's values: clear or fill
+  the range read before writing it, and never read `.Length` as a count. The
+  done line's `managed=[allocated,gc-pause,collections]` reads the process's
+  allocation and collector pauses over the bake's window. The contour, crossing
+  search, weld and crease split rent theirs; the collapse
+  (`SdfMeshCollapse.Collapser`), planar merge, chunking and material cut still
+  allocate theirs afresh for each mesh
+  ([open](../../../../docs/plans/open-items.md#refactoring-campaign)).
 - **A dispatch fills its samples.** A take takes lattices by priority until
   `MeshBakeMaxSamples`, passing over one too large for what is left and taking
   smaller ones behind it; stopping at the first that did not fit left the debug

@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using Puck.Abstractions;
 using Puck.Abstractions.Memory;
 using Puck.SignedDistance;
+using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
 
@@ -63,13 +64,13 @@ public sealed partial class SdfMeshPathBake {
         var keys = group.Checkpoints!;
 
         if (store.TryReadCheckpoint(keys.Simplification, group.CheckpointGeometry, out var simplified)) {
-            lock (m_gate) { m_accounts.SimplifyHits++; }
+            using (EnterGate(site: BakeGate.Checkpoint)) { m_accounts.SimplifyHits++; }
             if (simplified is not null) { group.DiagnosticCell = simplified.BakeCell; }
             PublishMesh(group, simplified, merged: 0);
             return true;
         }
         var found = store.TryReadCheckpoint(keys.Contouring, group.CheckpointGeometry, out var contour);
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Checkpoint)) {
             group.CheckedCheckpoints = true;
             m_accounts.SimplifyMisses++;
             if (found) { m_accounts.ContourHits++; } else { m_accounts.ContourMisses++; }
@@ -127,8 +128,8 @@ public sealed partial class SdfMeshPathBake {
 
         if (store.TryReadSamples(group.Checkpoints!.Sampling, input, length, samples)) {
             using var answer = Decode(group, in request, samples.GetSpan());
-            lock (m_gate) {
-                if (!m_groups.Contains(group)) { return; }
+            using (EnterGate(site: BakeGate.Checkpoint)) {
+                if (!GroupList.Holds(group: group)) { return; }
                 group.Contouring = false;
                 group.InFlight = true;
                 group.Next = null;
@@ -138,7 +139,7 @@ public sealed partial class SdfMeshPathBake {
             return;
         }
 
-        lock (m_gate) {
+        using (EnterGate(site: BakeGate.Checkpoint)) {
             group.Contouring = false;
             group.SampleProbe = input;
             m_accounts.SampleMisses++;

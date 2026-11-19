@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
 using System.Buffers;
@@ -97,8 +98,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         var positions = Positions;
         var limit = (distance * distance);
-        var candidates = new List<(float Length, int A, int B)>();
-        var seen = new HashSet<long>(comparer: PackedIntPairComparer.Instance);
+        // Every short edge as each quad meets it; sorted, an edge two quads share is one entry, as a set would keep it.
+        using var candidateList = new RentedList<(float Length, int A, int B)>();
         var raw = new int[4];
 
         for (var quad = 0; (quad < quadCount); quad++) {
@@ -108,24 +109,30 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                 var (a, b) = (raw[corner], raw[((corner + 1) % count)]);
                 var length = Vector3.DistanceSquared(value1: At(values: positions, vertex: a), value2: At(values: positions, vertex: b));
 
-                if ((a != b) && (length < limit) && seen.Add(item: PackedIntPair.Pack(high: Math.Min(val1: a, val2: b), low: Math.Max(val1: a, val2: b)))) {
-                    candidates.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
+                if ((a != b) && (length < limit)) {
+                    candidateList.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
                 }
             }
         }
-        if (candidates.Count == 0) { return this; }
-        candidates.Sort();
+        if (candidateList.Count == 0) { return this; }
+        candidateList.AsSpan().Sort();
 
-        positions = (float[])positions.Clone();
+        var candidates = candidateList.AsSpan()[..SpanDistinct.Sorted(sorted: candidateList.AsSpan())];
 
-        var normals = (float[])Normals.Clone();
-        var patches = ((Patches.Length == (3 * vertexCount)) ? (float[])Patches.Clone() : []);
-        var features = Grown(flags: Features, length: vertexCount);
-        var solved = Grown(flags: Solved, length: vertexCount);
-        var beside = Grown(flags: Beside, length: vertexCount);
-        var parent = new int[vertexCount];
-        var starts = new int[(vertexCount + 1)];
+        // The welds work on rented copies, which the welded contour's compacted arrays are copied out of.
+        using var positionLease = RentedArrays.Rent<float>(array: out positions, minimumLength: Positions.Length);
+        using var normalLease = RentedArrays.Rent<float>(array: out var normals, minimumLength: Normals.Length);
+        using var patchLease = RentedArrays.Rent<float>(array: out var patches, minimumLength: ((Patches.Length == (3 * vertexCount)) ? Patches.Length : 0));
+        using var featureLease = Grown(flags: Features, grown: out var features, length: vertexCount);
+        using var solvedLease = Grown(flags: Solved, grown: out var solved, length: vertexCount);
+        using var besideLease = Grown(flags: Beside, grown: out var beside, length: vertexCount);
+        using var parentLease = RentedArrays.Rent<int>(array: out var parent, minimumLength: vertexCount);
+        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1));
 
+        Positions.CopyTo(array: positions, index: 0);
+        Normals.CopyTo(array: normals, index: 0);
+        if (patches.Length > 0) { Patches.CopyTo(array: patches, index: 0); }
+        starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
         for (var vertex = 0; (vertex < vertexCount); vertex++) { parent[vertex] = vertex; }
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = RawCorners(quad: quad, corners: raw);
@@ -134,9 +141,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         }
         for (var vertex = 0; (vertex < vertexCount); vertex++) { starts[(vertex + 1)] += starts[vertex]; }
 
-        var incident = new int[starts[vertexCount]];
-        var filled = new int[vertexCount];
+        using var incidentLease = RentedArrays.Rent<int>(array: out var incident, minimumLength: starts[vertexCount]);
+        using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: vertexCount);
 
+        filled.AsSpan(start: 0, length: vertexCount).Clear();
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = RawCorners(quad: quad, corners: raw);
 
@@ -320,12 +328,12 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         if (!any) { return this; }
 
         // The quads as the welds name them, and the vertices they still reference, renumbered in their original order.
-        var quads = new List<int>(capacity: Quads.Length);
-        var materials = new List<int>(capacity: quadCount);
-        var axes = new List<sbyte>(capacity: QuadAxes.Length);
-        var remap = new int[vertexCount];
+        using var quads = new RentedList<int>(capacity: Quads.Length);
+        using var materials = new RentedList<int>(capacity: quadCount);
+        using var axes = new RentedList<sbyte>(capacity: QuadAxes.Length);
+        using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount);
 
-        Array.Fill(array: remap, value: -1);
+        remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = Corners(quad: quad, into: corners);
 
@@ -376,18 +384,21 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             Normals = Compact(values: normals),
             Patches = ((patches.Length > 0) ? Compact(values: patches) : []),
             Positions = Compact(values: positions),
-            QuadAxes = [.. axes],
-            QuadMaterials = [.. materials],
+            QuadAxes = axes.ToArray(),
+            QuadMaterials = materials.ToArray(),
             Quads = quadArray,
             Solved = CompactFlags(original: Solved, values: solved),
         };
 
-        static bool[] Grown(bool[] flags, int length) {
-            var grown = new bool[length];
+        // Flags rented at a vertex each, false past those given.
+        static RentedArrays.Lease<bool> Grown(bool[] flags, int length, out bool[] grown) {
+            var lease = RentedArrays.Rent<bool>(array: out grown, minimumLength: length);
+            var given = Math.Min(val1: flags.Length, val2: length);
 
-            flags.AsSpan(start: 0, length: Math.Min(val1: flags.Length, val2: length)).CopyTo(destination: grown);
+            flags.AsSpan(start: 0, length: given).CopyTo(destination: grown);
+            grown.AsSpan(start: given, length: (length - given)).Clear();
 
-            return grown;
+            return lease;
         }
     }
     // A quad's corners as its vertex indices name them: three where its last two are one vertex (a triangle), else four.
@@ -424,9 +435,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         // A quad at a crease vertex folded across the crease, its two triangles facing apart by more than the crease
         // angle (one on each face, as where a crease is shorter than a cell), shades as its two triangles: as one quad it
         // takes one side's normal at every corner, and its other triangle shades as a spike of that side on this one.
-        var quadList = new List<int>(capacity: Quads.Length);
-        var materialList = new List<int>(capacity: QuadMaterials.Length);
-        var axisList = new List<sbyte>(capacity: QuadAxes.Length);
+        using var quadList = new RentedList<int>(capacity: Quads.Length);
+        using var materialList = new RentedList<int>(capacity: QuadMaterials.Length);
+        using var axisList = new RentedList<sbyte>(capacity: QuadAxes.Length);
 
         for (var quad = 0; (quad < QuadMaterials.Length); quad++) {
             var (ia, ib, ic, id) = (Quads[(4 * quad)], Quads[((4 * quad) + 1)], Quads[((4 * quad) + 2)], Quads[((4 * quad) + 3)]);
@@ -436,7 +447,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                 var second = Vector3.Cross(vector1: (At(values: positions, vertex: ic) - a), vector2: (At(values: positions, vertex: id) - a));
 
                 if ((first.LengthSquared() > 0f) && (second.LengthSquared() > 0f) && (Vector3.Dot(vector1: Vector3.Normalize(value: first), vector2: Vector3.Normalize(value: second)) < cosine)) {
-                    quadList.AddRange(collection: [ia, ib, ic, ic, ia, ic, id, id]);
+                    quadList.AddRange(items: [ia, ib, ic, ic, ia, ic, id, id]);
                     materialList.Add(item: QuadMaterials[quad]);
                     materialList.Add(item: QuadMaterials[quad]);
                     if (quad < QuadAxes.Length) {
@@ -446,17 +457,17 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     continue;
                 }
             }
-            quadList.AddRange(collection: [ia, ib, ic, id]);
+            quadList.AddRange(items: [ia, ib, ic, id]);
             materialList.Add(item: QuadMaterials[quad]);
             if (quad < QuadAxes.Length) { axisList.Add(item: QuadAxes[quad]); }
         }
 
-        int[] quads = [.. quadList];
+        var quads = quadList.ToArray();
         var quadCount = (quads.Length / 4);
         var folded = (quadCount != QuadMaterials.Length);
 
         // Each quad's area-weighted facing: its two triangles along its first diagonal.
-        var facings = new Vector3[quadCount];
+        using var facingLease = RentedArrays.Rent<Vector3>(array: out var facings, minimumLength: quadCount);
 
         for (var quad = 0; (quad < quadCount); quad++) {
             var a = At(values: positions, vertex: quads[(4 * quad)]);
@@ -474,8 +485,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         }
 
         // The quads around each vertex, as compressed rows.
-        var starts = new int[(vertexCount + 1)];
+        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1));
 
+        starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
             if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
             starts[(quads[corner] + 1)]++;
@@ -484,9 +496,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             starts[(vertex + 1)] += starts[vertex];
         }
 
-        var around = new int[starts[vertexCount]];
-        var filled = new int[vertexCount];
+        using var aroundLease = RentedArrays.Rent<int>(array: out var around, minimumLength: starts[vertexCount]);
+        using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: vertexCount);
 
+        filled.AsSpan(start: 0, length: vertexCount).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
             if (((corner & 3) == 3) && (quads[corner] == quads[(corner - 1)])) { continue; }
             var vertex = quads[corner];
@@ -496,7 +509,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         // Incident faces define the shading crease even when field correction cleared the QEF's feature flag. A normal
         // halfway between a chamfer's faces is less than the split angle from either face and cannot detect that crease.
-        var creased = new bool[vertexCount];
+        using var creasedLease = RentedArrays.Rent<bool>(array: out var creased, minimumLength: vertexCount);
+
+        creased.AsSpan(start: 0, length: vertexCount).Clear();
 
         for (var vertex = 0; (vertex < vertexCount); vertex++) {
             for (var first = starts[vertex]; ((first < starts[(vertex + 1)]) && !creased[vertex]); first++) {
@@ -512,12 +527,15 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             }
         }
 
-        var addedPositions = new List<float>();
-        var addedNormals = new List<float>();
+        using var addedPositions = new RentedList<float>();
+        using var addedNormals = new RentedList<float>();
         // A lowest quad only narrows the search: overlapping normal neighborhoods can share that quad without sharing
-        // their other members, so reuse a split only when its complete neighborhood agrees.
-        var splits = new Dictionary<(int Vertex, int Group), List<(int[] Members, int Vertex)>>();
-        var members = new List<int>();
+        // their other members, so reuse a split only when its complete neighborhood agrees. Each (vertex, lowest quad)
+        // names the first of its splits, each split its members' run in `splitMembers` and the next split of its key.
+        var splits = new Dictionary<(int Vertex, int Group), int>();
+        using var splitList = new RentedList<(int Start, int Count, int Vertex, int Next)>();
+        using var splitMembers = new RentedList<int>();
+        using var members = new RentedList<int>();
 
         for (var quad = 0; (quad < quadCount); quad++) {
             var facing = facings[quad];
@@ -558,15 +576,16 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     members.Add(item: other);
                 }
 
-                if (!splits.TryGetValue(key: (vertex, group), value: out var candidates)) {
-                    candidates = [];
-                    splits.Add(key: (vertex, group), value: candidates);
-                }
+                var head = (splits.TryGetValue(key: (vertex, group), value: out var first) ? first : -1);
                 var split = -1;
+                var last = -1;
 
-                foreach (var candidate in candidates) {
-                    if (CollectionsMarshal.AsSpan(list: members).SequenceEqual(other: candidate.Members)) {
-                        split = candidate.Vertex;
+                for (var candidate = head; (candidate >= 0); candidate = splitList[candidate].Next) {
+                    var (start, count, splitVertex, _) = splitList[candidate];
+
+                    last = candidate;
+                    if (members.AsSpan().SequenceEqual(other: splitMembers.AsSpan().Slice(start: start, length: count))) {
+                        split = splitVertex;
                         break;
                     }
                 }
@@ -574,7 +593,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
                     var normal = Vector3.Normalize(value: sum);
 
                     split = (vertexCount + (addedPositions.Count / 3));
-                    candidates.Add(item: ([.. members], split));
+                    // Appended at the end of its key's chain, so candidates are tried in the order they were made.
+                    if (last < 0) { splits.Add(key: (vertex, group), value: splitList.Count); } else { splitList[last].Next = splitList.Count; }
+                    splitList.Add(item: (splitMembers.Count, members.Count, split, -1));
+                    splitMembers.AddRange(items: members.AsSpan());
                     addedPositions.Add(item: positions[(3 * vertex)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 1)]);
                     addedPositions.Add(item: positions[((3 * vertex) + 2)]);
@@ -588,7 +610,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         return (((addedPositions.Count == 0) && !folded)
             ? this
-            : (this with { Normals = [.. normals, .. addedNormals], Positions = [.. positions, .. addedPositions], QuadAxes = [.. axisList], QuadMaterials = [.. materialList], Quads = quads }));
+            : (this with { Normals = [.. normals, .. addedNormals.AsSpan()], Positions = [.. positions, .. addedPositions.AsSpan()], QuadAxes = axisList.ToArray(), QuadMaterials = materialList.ToArray(), Quads = quads }));
 
         bool Feature(int vertex) => ((vertex < Features.Length) && Features[vertex]);
     }
@@ -702,13 +724,13 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private bool m_crossingsPrepared;
     private bool m_rootsPrepared;
     // Each searched crossing edge's root, in m_crossingKeys' order, and each such edge's index there by its CrossingKey.
-    private CrossingRoot[] m_crossingRoots = [];
+    private readonly OwnedBuffer<CrossingRoot> m_crossingRoots;
 
     private readonly Dictionary<long, int> m_crossingRootIndex = [];
     private readonly OwnedBuffer<long> m_pendingCrossings;
 
     // The indices in m_crossingRoots of m_pendingCrossings' edges, in its order.
-    private int[] m_pendingRoots = [];
+    private readonly OwnedBuffer<int> m_pendingRoots;
 
     // Per crossing edge (CrossingKey), the gradient measured at its crossing and the field's value there.
     private readonly Dictionary<long, Vector4> m_crossingGradients = [];
@@ -778,6 +800,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_crossingKeys = new(allocator: allocator, observer: observer);
         m_crossedFineCells = new(allocator: allocator, observer: observer);
         m_pendingCrossings = new(allocator: allocator, observer: observer);
+        m_pendingRoots = new(allocator: allocator, observer: observer);
+        m_crossingRoots = new(allocator: allocator, observer: observer);
         m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
         m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
         m_signInside = new OwnedBuffer<ulong>(allocator: allocator, observer: observer);
@@ -789,7 +813,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public void Dispose() {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
-        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose();
+        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose(); m_crossingRoots.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
         m_signKnown.Dispose();
@@ -1803,8 +1827,65 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
         CloseSheets();
-        m_crossingKeys.CopyFrom(source: CrossingEdges());
+        PrimeSigns();
+        CrossingEdges();
         m_crossingsPrepared = true;
+    }
+
+    // The fine samples of refined cells past which PrimeSigns reads their signs in parallel, and the refined cells one
+    // partition of it takes.
+    private const long PrimeSamples = 4_000_000;
+    private const int PrimeCells = 64;
+
+    // Reads the sign of every fine sample of every refined cell (FineInside), in parallel across partitions of the cells,
+    // for a lattice whose refined cells hold more than PrimeSamples of them: CrossingEdges reads all of them one cell after
+    // another, and on the largest groups that read, each unmeasured sample interpolated from its stride cell, held one
+    // worker for most of their slowest stage while the rest of the pool stood idle. It runs once CloseSheets has fixed
+    // every value, so a sign read here is the one the serial scan would read (FineValue reads values only), and a sign
+    // already known stays. Two partitions may read a sample on the face they share: both compute the same sign, and the
+    // bits are set atomically, inside before known, so no partition's bit is lost.
+    private void PrimeSigns() {
+        if (m_factor < 2) { return; }
+
+        var factor = m_factor;
+        var cellsX = (m_samplesX - 1);
+        var cellsY = (m_samplesY - 1);
+        var side = (factor + 1);
+        var refined = m_refined.GetSpan();
+        using var cells = new RentedList<int>();
+
+        for (var cell = 0; (cell < refined.Length); cell++) {
+            if (refined[cell]) { cells.Add(item: cell); }
+        }
+        if ((((long)cells.Count) * side * side * side) < PrimeSamples) { return; }
+        _ = FineInside(key: 0);
+
+        var fineX = ((cellsX * factor) + 1);
+        var fineY = ((cellsY * factor) + 1);
+        var listed = cells.AsSpan().ToArray();
+
+        _ = Parallel.For(fromInclusive: 0, toExclusive: ((listed.Length + (PrimeCells - 1)) / PrimeCells), body: partition => {
+            var end = Math.Min(val1: listed.Length, val2: ((partition + 1) * PrimeCells));
+
+            for (var at = (partition * PrimeCells); (at < end); at++) {
+                var cell = listed[at];
+                var (cx, cy, cz) = ((cell % cellsX), ((cell / cellsX) % cellsY), (cell / (cellsX * cellsY)));
+
+                for (var lz = 0; (lz <= factor); lz++) {
+                    for (var ly = 0; (ly <= factor); ly++) {
+                        for (var lx = 0; (lx <= factor); lx++) {
+                            var (x, y, z) = (((cx * factor) + lx), ((cy * factor) + ly), ((cz * factor) + lz));
+                            var key = (x + (fineX * (y + (fineY * z))));
+                            var (word, bit) = ((key >> 6), (1UL << (key & 63)));
+
+                            if ((Volatile.Read(location: ref m_signKnown[word]) & bit) != 0UL) { continue; }
+                            if (FineValue(x: x, y: y, z: z) < 0f) { _ = Interlocked.Or(location1: ref m_signInside[word], value: bit); }
+                            _ = Interlocked.Or(location1: ref m_signKnown[word], value: bit);
+                        }
+                    }
+                }
+            }
+        });
     }
     private int EdgeEnd(int start, int axis, int length) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);
@@ -1828,8 +1909,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
-            var roots = new List<CrossingRoot>(capacity: m_crossingKeys.Length);
-            var keys = new List<long>(capacity: m_crossingKeys.Length);
+            using var roots = new RentedList<CrossingRoot>(capacity: m_crossingKeys.Length);
+            using var keys = new RentedList<long>(capacity: m_crossingKeys.Length);
 
             _ = m_crossingRootIndex.EnsureCapacity(capacity: m_crossingKeys.Length);
             foreach (var key in m_crossingKeys) {
@@ -1850,9 +1931,9 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
             m_rootsPrepared = true;
             // The first round's roots, in the order of their edges; each later round keeps those still searching.
-            m_crossingRoots = [.. roots];
-            m_pendingCrossings.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
-            m_pendingRoots = new int[m_crossingRoots.Length];
+            m_crossingRoots.CopyFrom(source: roots.AsSpan());
+            m_pendingCrossings.CopyFrom(source: keys.AsSpan());
+            m_pendingRoots.Resize(m_crossingRoots.Length, clear: false, preserve: false);
             for (var index = 0; (index < m_pendingRoots.Length); index++) { m_pendingRoots[index] = index; }
         }
 
@@ -1865,7 +1946,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             kept++;
         }
         m_pendingCrossings.Resize(kept);
-        Array.Resize(array: ref m_pendingRoots, newSize: kept);
+        m_pendingRoots.Resize(kept);
 
         // Two trials a root, the root's first then its second.
         m_points.Resize(clear: false, length: (2 * kept), preserve: false);
@@ -1908,19 +1989,26 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     public ReadOnlyMemory<Vector4> GradientPoints() {
         PrepareCrossings();
 
-        var keys = new List<int>();
-        var seen = new HashSet<int>();
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
         var factor = m_factor;
         var fineX = ((cellsX * factor) + 1);
         var fineY = ((cellsY * factor) + 1);
+        var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
+        // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
+        using var keys = new RentedList<int>();
+        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: ((int)((fineSamples + 63L) >> 6)));
+
+        seen.AsSpan(start: 0, length: ((int)((fineSamples + 63L) >> 6))).Clear();
 
         void Add(int fx, int fy, int fz) {
             var key = (fx + (fineX * (fy + (fineY * fz))));
+            ref var word = ref seen[(key >> 6)];
+            var bit = (1UL << (key & 63));
 
-            if (seen.Add(item: key)) {
+            if ((word & bit) == 0UL) {
+                word |= bit;
                 keys.Add(item: key);
             }
         }
@@ -1972,7 +2060,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             }
         }
 
-        m_gradientKeys.CopyFrom(source: CollectionsMarshal.AsSpan(list: keys));
+        m_gradientKeys.CopyFrom(source: keys.AsSpan());
         // Every answer lands in one of the two: size both once rather than growing them answer by answer.
         _ = m_fineGradients.EnsureCapacity(capacity: keys.Count);
         _ = m_crossingGradients.EnsureCapacity(capacity: m_crossingKeys.Length);
@@ -2421,10 +2509,11 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // a coarse cell long, and the fine edges of each crossed fine cell of a refined cell. A crossing's gradient is measured
     // where the edge crosses the surface, since its corners' gradients, inside a solid near a sharp edge, point to the
     // nearer face beyond the edge and tilt the vertex's tangent planes into a chamfer.
-    private long[] CrossingEdges() {
-        var edges = new List<long>();
-        var seen = new HashSet<long>();
-        var crossedFine = new List<SdfCrossedCell>();
+    // Fills the crossing keys and crossed fine cells.
+    private void CrossingEdges() {
+        // Every edge as each cell meets it, repeats included; the distinct ones are kept in the order first met.
+        using var edges = new RentedList<long>();
+        using var crossedFine = new RentedList<SdfCrossedCell>();
         var cellsX = (m_samplesX - 1);
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
@@ -2462,9 +2551,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                         var start = ((x + ((a & 1) * stride)) + (fineX * ((y + (((a >> 1) & 1) * stride)) + (fineY * (z + (((a >> 2) & 1) * stride))))));
                         var key = CrossingKey(axis: axis, length: stride, start: start);
 
-                        if (seen.Add(item: key)) {
-                            edges.Add(item: key);
-                        }
+                        edges.Add(item: key);
                     }
                 }
             }
@@ -2501,9 +2588,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 }
             }
         }
-        m_crossedFineCells.CopyFrom(source: CollectionsMarshal.AsSpan(list: crossedFine));
-
-        return [.. edges];
+        m_crossedFineCells.CopyFrom(source: crossedFine.AsSpan());
+        m_crossingKeys.CopyFrom(source: edges.AsSpan()[..SpanDistinct.InOrder(items: edges.AsSpan())]);
     }
     // A crossing edge's key: its start sample's fine key, its axis and whether it is a coarse cell long.
     private long CrossingKey(int start, int axis, int length) => ((((((long)start) * 3L) + axis) * 2L) + (((length > 1) && (m_factor > 1)) ? 1L : 0L));
@@ -2579,8 +2665,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             materials[quad] = MaterialAt(key: surface.QuadCorners[quad]);
         }
 
-        float[] normals = [.. surface.Normals.Select(selector: static value => ((float)value))];
-        float[] positions = [.. surface.Positions.Select(selector: static value => ((float)value))];
+        var normals = surface.Normals;
+        var positions = surface.Positions;
         var quads = surface.Quads;
         var axes = surface.QuadAxes;
 
@@ -2594,7 +2680,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         ) {
             Beside = surface.Beside,
             Features = surface.Features,
-            Patches = [.. surface.Patches.Select(selector: static value => ((float)value))],
+            Patches = surface.Patches,
             QuadAxes = axes,
             Solved = surface.Solved,
         };
@@ -2744,7 +2830,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private (int[] Quads, int[] Materials, sbyte[] Axes) WithoutSpecks(int[] quads, int[] materials, sbyte[] axes, float[] positions) {
         var quadCount = materials.Length;
         var vertexCount = (positions.Length / 3);
-        var pieceSets = new SdfDisjointSet(count: vertexCount);
+        using var pieceSets = new SdfDisjointSet(count: vertexCount);
 
         int Root(int vertex) => pieceSets.Find(element: vertex);
 

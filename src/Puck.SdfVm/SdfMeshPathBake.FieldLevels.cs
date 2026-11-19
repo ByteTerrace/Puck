@@ -165,7 +165,7 @@ public sealed partial class SdfMeshPathBake {
         var creases = CreaseVertices(contour: contour);
 
         if (creases.Length > 0) {
-            var projection = new ContourProjection(contour: contour);
+            using var projection = new ContourProjection(contour: contour);
             var creaseCell = lattice.ContourCell;
             var tolerance = (CreaseTolerance * MathF.Min(x: creaseCell.X, y: MathF.Min(x: creaseCell.Y, y: creaseCell.Z)));
             var slope = lattice.SurfaceSlope();
