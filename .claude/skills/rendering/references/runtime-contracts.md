@@ -74,7 +74,11 @@ what it guards, never on an earlier fence that happens to share a hand-over.
 Background jobs (`GpuQueueWork.IsBackground`) deferred ahead of frame work take
 a hand-over of their own (`GpuSubmissionBatch.Admit`, cause `job-end`), so
 their fences, and any deferred before them, such as a residency's upload,
-answer before the frame's renders finish. Anything
+answer before the frame's renders finish. Because one batch can reach the queue
+in several hand-overs, code acting for a deferred submission after the flush
+(an export's shared signal and publication) asks that submission's own fence
+whether it reached the queue (`IGpuSubmissionFence.ReachedQueue`), never
+whether the flush succeeded. Anything
 that must see deferred work first splits the batch (the deferred work goes to the
 queue and the batch stays open): a wait on a deferred fence, `SubmitAndWait`, the
 device's wait for idle, an external wait on Direct3D 12, and every other native

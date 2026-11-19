@@ -79,14 +79,14 @@ public sealed unsafe class DirectXGpuQueueSubmitter : IGpuQueueSubmitter {
         var native = ((DirectXGpuSubmissionFence)fence);
 
         if (m_batch.TryDefer(entries: commandBufferHandles, fence: native, lists: commandBufferHandles.Length)) { return; }
-        // An empty fenced submission still completes all work submitted before it.
-        if (commandBufferHandles.IsEmpty) { m_batch.Split(cause: GpuQueueCause.EmptyFence); }
         native.RequireDrained();
         try {
+            // An empty fenced submission still completes all work submitted before it.
+            if (commandBufferHandles.IsEmpty) { m_batch.Split(cause: GpuQueueCause.EmptyFence); }
             Execute(cause: GpuQueueCause.Unbatched, commandBufferHandles: commandBufferHandles);
         } catch {
-            // A refused external wait comes before ExecuteCommandLists, the one call that cannot fail, so nothing of this
-            // submission reached the queue.
+            // A split that failed before the deferred work reached the queue, or a refused external wait, which comes
+            // before ExecuteCommandLists, the one call that cannot fail: nothing of this submission reached the queue.
             native.Abandon();
 
             throw;

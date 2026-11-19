@@ -19,6 +19,9 @@ internal sealed class GpuWorkCountingFence(IGpuSubmissionFence inner, GpuWorkLed
     /// <inheritdoc/>
     public bool IsSignaled =>
         inner.IsSignaled;
+    /// <inheritdoc/>
+    public bool ReachedQueue =>
+        inner.ReachedQueue;
 
     /// <inheritdoc/>
     public void SignalOnCompletion(EventWaitHandle signal) =>

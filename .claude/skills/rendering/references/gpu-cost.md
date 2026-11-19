@@ -492,7 +492,9 @@ Vulkan fence or timeline signal rides its `vkQueueSubmit`, so Vulkan's
   batch, so the runtime completes exports after `FlushBatch`
   (`RenderGraphRuntime.CompleteOwedExports`): `transfer.door` stays zero, and the
   reader's wait ends when the whole batch has run rather than after the exporting
-  node's lists.
+  node's lists. Each export is published only when its own copy's submission
+  reached the queue (`IGpuSubmissionFence.ReachedQueue`), never on the flush's
+  result: the batch may go over in several hand-overs, and any one can fail.
 - **`world.counters render.record`** (`RenderRecordWork`) gives the host time of
   render nodes' record jobs per phase: preparation, recording and commit, the
   serial record sum, and `longest-microseconds`, each frame's longest single

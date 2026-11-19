@@ -137,8 +137,9 @@ public sealed partial class ShaderPipelineRenderNode {
             : null);
     }
 
-    // A written export whose completion waits for the frame's batch to reach the queue.
-    private (IShaderPipelineOutputExport Export, IGpuExportableImage Image)? m_exportOwed;
+    // A written export whose completion waits for the frame's batch to reach the queue, with the fence of the submission
+    // that recorded its copy: the copy ran only if that submission reached the queue.
+    private (IShaderPipelineOutputExport Export, IGpuExportableImage Image, IGpuSubmissionFence Copy)? m_exportOwed;
 
     /// <summary>Gets or sets whether the node leaves a frame's export completion to its caller
     /// (<see cref="CompleteOwedExport"/>) rather than completing it as the frame commits. A caller whose submissions
@@ -151,17 +152,18 @@ public sealed partial class ShaderPipelineRenderNode {
 
     // Takes the image whose submission is deferred to the caller's batch, so its completion and the end of its write wait
     // for CompleteOwedExport.
-    private void OweExportCompletion(IGpuExportableImage image) => m_exportOwed = (m_export!, image);
+    private void OweExportCompletion(IGpuExportableImage image, IGpuSubmissionFence copy) => m_exportOwed = (m_export!, image, copy);
 
-    /// <summary>Completes the write of the export the latest frame owed, queuing its shared fence behind the batch the
-    /// frame's submission joined, and ends the write for the reader, which sees the image published with the fence value
-    /// it waits for on its own device. The fence follows every submission of the batch, not only this node's, so the
-    /// reader's wait ends when the whole batch has run. Does nothing when no completion is owed.</summary>
-    /// <param name="submitted">Whether the batch reached the queue. A batch that did not (a failed flush) ends the write
-    /// as unwritten, publishing nothing.</param>
+    /// <summary>Completes the write of the export the latest frame owed, once the caller has flushed the batch the
+    /// frame's submission joined: when that submission reached the queue it queues the image's shared fence behind it and
+    /// ends the write for the reader, which sees the image published with the fence value it waits for on its own device.
+    /// The fence follows every submission handed over before it, so the reader's wait ends when they have all run. A
+    /// submission that never reached the queue (its hand-over failed, in the flush or in an earlier hand-over of the same
+    /// batch) ends the write as unwritten, publishing nothing, whatever later hand-overs did. Does nothing when no
+    /// completion is owed.</summary>
     /// <exception cref="DeviceLostException">The device was lost.</exception>
-    internal void CompleteOwedExport(bool submitted) {
-        if (m_exportOwed is not var (export, image)) { return; }
+    internal void CompleteOwedExport() {
+        if (m_exportOwed is not var (export, image, copy)) { return; }
 
         m_exportOwed = null;
 
@@ -169,7 +171,7 @@ public sealed partial class ShaderPipelineRenderNode {
         var written = false;
 
         try {
-            if (submitted) {
+            if (copy.ReachedQueue) {
                 value = image.CompleteWrite();
                 written = true;
             }

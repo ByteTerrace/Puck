@@ -8,8 +8,9 @@ namespace Puck.Shaders;
 // (ShaderPipelineRenderNode.CompleteOwedExport), so completing one never hands the open batch to the queue early.
 public sealed partial class RenderGraphRuntime {
     // Hands the frame's batch to the queue, then completes every export the frame wrote. Every write a node began is ended
-    // whatever fails: a batch that did not reach the queue ends its writes unwritten, and a completion that fails does
-    // not leave a later node's write open.
+    // whatever fails: each node asks its own copy's submission whether it reached the queue, since the batch may have
+    // gone over in several hand-overs, any of which can fail apart from the flush, and a completion that fails does not
+    // leave a later node's write open.
     private void CompleteOwedExports(IGpuQueueSubmitter queue) {
         var submitted = false;
 
@@ -21,7 +22,7 @@ public sealed partial class RenderGraphRuntime {
 
             foreach (var node in m_exportsOwed) {
                 try {
-                    node.CompleteOwedExport(submitted: submitted);
+                    node.CompleteOwedExport();
                 } catch (Exception error) {
                     failure ??= ExceptionDispatchInfo.Capture(source: error);
                 }

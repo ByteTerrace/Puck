@@ -1901,7 +1901,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         SubmitTiming(fence: slot.Fence!, slot: slotIndex);
         if (exported is not null) {
             if (DefersExportCompletion) {
-                OweExportCompletion(image: exported);
+                OweExportCompletion(copy: slot.Fence!, image: exported);
             } else {
                 exportValue = exported.CompleteWrite();
                 exportWritten = true;

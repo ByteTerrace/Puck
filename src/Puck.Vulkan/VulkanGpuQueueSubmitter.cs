@@ -29,11 +29,12 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
     );
 
     // Defers a submission to the device's open batch with the waits it carries, spending them; false when no batch is
-    // open or the submission is empty. A defer whose hand-over of earlier work fails spends them too, as a failed
-    // submission does.
+    // open or the submission is empty. A fence with a submission outstanding is refused first and keeps the waits for the
+    // retried submission; a defer whose hand-over of earlier work fails spends them, as a failed submission does.
     private bool Defers(ReadOnlySpan<nint> commandBufferHandles, VulkanGpuSubmissionFence? fence) {
         bool deferred;
 
+        fence?.RequireDrained();
         try {
             deferred = deviceContext.LogicalDevice.Batch.TryDefer(commandBuffers: commandBufferHandles, fence: fence, waitSemaphores: WaitSemaphores, waitValues: WaitValues);
         } catch {
@@ -125,10 +126,11 @@ public sealed class VulkanGpuQueueSubmitter(IVulkanDeviceContext deviceContext, 
         var vkFence = ((VulkanGpuSubmissionFence)fence);
 
         if (Defers(commandBufferHandles: commandBufferHandles, fence: vkFence)) { return; }
-        // An empty fenced submission still completes all work submitted before it.
-        if (commandBufferHandles.IsEmpty) { logicalDevice.Batch.Split(cause: GpuQueueCause.EmptyFence); }
         vkFence.RequireDrained();
         try {
+            // An empty fenced submission still completes all work submitted before it; a split that fails leaves the
+            // fence abandoned below, since the checkpoint it asked for never reached the queue.
+            if (commandBufferHandles.IsEmpty) { logicalDevice.Batch.Split(cause: GpuQueueCause.EmptyFence); }
             queueSubmitter.Submit(
                 commandBufferHandles: commandBufferHandles,
                 device: logicalDevice.Commands,
