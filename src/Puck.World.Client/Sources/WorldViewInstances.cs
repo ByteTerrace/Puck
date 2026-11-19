@@ -61,8 +61,8 @@ public readonly record struct WorldView(string Name, bool FilmsWorld, WorldViewD
 /// The view instances a world renders beside its own: each camera a screen, a HUD frame or a probe export shows, and
 /// each session a screen shows, each an external <c>sdf.world</c> instance, and every session a session's own screens
 /// show, to the presentation's nesting depth. Cameras share the world's <see cref="SdfWorldResidency"/>; a session renders
-/// its destination's endpoint residency when its session discloses everything, which every seat presented there and
-/// every other such session shares, and a residency of its own otherwise. A view filming this world reads every source
+/// its destination's endpoint residency while its session is proved to be handed the whole scene, which every seat presented there and
+/// every other such session shares, a residency shared with the sessions proved to be handed the same scene, and a residency of its own otherwise. A view filming this world reads every source
 /// instance within the frame, as the world's screens show them, and every view a screen of this world shows, its own
 /// included, at its previous frame, so a mirror shows the frame before and two cameras filming each other never read
 /// within one frame. A session reads, within the frame, what its own world's screens show (<see cref="WorldView.Reads"/>):

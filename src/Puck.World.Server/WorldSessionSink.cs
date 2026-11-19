@@ -267,6 +267,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     /// <summary>Releases what the observer's feed holds, its anchor rows included: the observation ended, or its
     /// disclosure is withheld.</summary>
     public void Release() {
+        observation.CloseSceneProof(end: server.DeliveryTime.Tick);
         m_feed.Release();
         m_hydrated = null;
         m_cursor.Release();
@@ -389,6 +390,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
 
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
+                observation.SettleSceneProof(tick: server.DeliveryTime.Tick);
             } else {
                 Project(
                     definition: definition,
@@ -407,6 +409,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
     }
 
     private WorldInputPublication[] m_inputDisclosure = [];
+    private WorldInputAnswer[] m_answerDisclosure = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         if (!Discloses()) {
@@ -458,7 +461,8 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             redacted = redacted with {
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldInputPublication.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
+                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, observation.Session, ref m_inputDisclosure),
+                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, observation.Session, ref m_answerDisclosure),
             };
             // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it: its
             // rows are advanced again against the generation's whole document, so every observation the document owes
@@ -470,6 +474,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             redacted = server.PresentCues(redacted, m_view,
                 fullBodies: server.Definition.Population.ObserverDisclosure.Mode == WorldObserverDisclosureMode.All);
             inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
+            observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);
@@ -525,6 +530,7 @@ internal sealed class WorldSessionSink(WorldServer server, WorldSessionObservati
             } else if (m_cursor.TakeCut()) {
                 Reprime();
             }
+            observation.SettleSceneProof(tick: stamp.Tick);
             FollowObserverDetach();
         } catch (Exception exception) {
             EndAfterFault(exception: exception);

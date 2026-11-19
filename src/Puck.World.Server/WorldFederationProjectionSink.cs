@@ -243,6 +243,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
     private WorldInputPublication[] m_inputDisclosure = [];
+    private WorldInputAnswer[] m_answerDisclosure = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         if (!Current()) {
@@ -295,7 +296,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier, stri
 
         if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; } else if (!cells.IsEmpty) { throw new InvalidOperationException(message: "A state change delivery requires its authority view."); }
         projected = projected with { SolidScales = ((m_view is null) ? default : m_scales.Filter(m_view, projected.SolidScales)) };
-        projected = projected with { Inputs = ((recipient is { } inputOwner) ? WorldInputPublication.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default) };
+        projected = projected with {
+            Inputs = ((recipient is { } inputOwner) ? WorldOwnedRecords.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default),
+            InputAnswers = ((recipient is { } answerOwner) ? WorldOwnedRecords.ForOwner(projected.InputAnswers, answerOwner, ref m_answerDisclosure) : default),
+        };
         if (AnnounceCut()) {
             PrimeAfterCut();
             if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; }

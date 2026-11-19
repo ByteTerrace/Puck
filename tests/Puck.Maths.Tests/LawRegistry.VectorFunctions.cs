@@ -19,6 +19,10 @@ internal static partial class LawRegistry {
             id: "vector-functions.shortest-arc-and-perpendicular"
         ),
         ClaimCase(
+            claim: VectorFunctionsClaims.RestSideArcAndTurns,
+            id: "vector-functions.rest-side-arc-and-turns"
+        ),
+        ClaimCase(
             claim: VectorFunctionsClaims.AttitudeReadbacks,
             id: "vector-functions.attitude-readbacks"
         ),

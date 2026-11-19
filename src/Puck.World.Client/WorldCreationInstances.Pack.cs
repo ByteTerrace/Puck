@@ -153,6 +153,8 @@ public sealed partial class WorldCreationInstances {
         var deltaSeconds = m_pendingDeltaSeconds;
 
         m_pendingDeltaSeconds = 0f;
+        // The presenting seat's guess, decided once a pack: only a source that presents for exactly one seat offers one.
+        var guess = client.SeatGuess;
 
         for (var index = 0; (index < m_pool.Length); index++) {
             var rootSlot = (slotBase + RootSlotOffset(index: index));
@@ -229,6 +231,7 @@ public sealed partial class WorldCreationInstances {
             if (Wake(
                 client: client,
                 deltaSeconds: deltaSeconds,
+                guess: guess,
                 index: index,
                 live: live,
                 moved: moved,
@@ -246,7 +249,9 @@ public sealed partial class WorldCreationInstances {
                     (transforms[rootSlot].Scale == placementScale) &&
                     // A rig with no finite reach cannot be judged unseen by its sphere, so a changed read poses it in
                     // full: a part the read moves may be the one a view would see.
-                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision))
+                    (float.IsFinite(f: live.Rig.Reach) || (live.WakeRevision == live.ReadRevision)) &&
+                    // A guess in force is the seat's own press answering early, so it is never held.
+                    !live.View.Guessing
                 );
 
                 if (!mayHold) {
@@ -445,7 +450,7 @@ public sealed partial class WorldCreationInstances {
         }
     }
     // Decides whether a live registration repacks this frame; one new to its pool entry always does.
-    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation, float deltaSeconds) {
+    private bool Wake(IWorldStampSource client, int index, Registration live, SdfMovedTransforms moved, Vector3 rootPosition, Quaternion rootRotation, float deltaSeconds, IWorldSeatGuess? guess) {
         var swapped = !ReferenceEquals(
             objA: m_packedRegistrations[index],
             objB: live
@@ -476,7 +481,8 @@ public sealed partial class WorldCreationInstances {
         live.View.Bind(
             body: (live.BodyIndex ?? -1),
             client: client,
-            poseSerial: m_poseSerialOf
+            guess: guess,
+            poses: this
         );
         live.WakeRevision = live.View.Revision;
 
@@ -577,8 +583,7 @@ public sealed partial class WorldCreationInstances {
                     live.PartFollower[shapeSlot].Reseed();
                 }
 
-                Array.Clear(array: live.EffectorPlanted);
-                Array.Clear(array: live.EffectorStepping);
+                for (var effector = 0; (effector < live.EffectorPlanted.Length); effector++) { ReleaseLatch(index: effector, live: live); }
                 // The drivers measure travel from the pose they last saw, which a teleport of the same occupant has
                 // left behind: they hold their phases and weights through the jump's frame and relatch there, and
                 // their eased motion and followers restart, so the next frame reads the body's own motion and seeds
@@ -645,7 +650,8 @@ public sealed partial class WorldCreationInstances {
                 weights: live.DriverWeight,
                 reads: live.View,
                 kinematics: live.Kinematics,
-                definition: client.Definition
+                definition: client.Definition,
+                led: live.DriverLed
             );
             var activity = live.DriverActivity;
 
@@ -686,8 +692,9 @@ public sealed partial class WorldCreationInstances {
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
             terms += WorldGaitDrivers.ComposeDelta(
                 phases: live.DriverPhase,
+                rig: live.Rig,
                 rotation: out var ownRotation,
-                terms: live.Rig.Terms(shape: shapeIndex),
+                shape: shapeIndex,
                 translation: out var ownTranslation,
                 weights: live.DriverWeight,
                 definition: client.Definition
@@ -705,6 +712,7 @@ public sealed partial class WorldCreationInstances {
         // The effectors correct the driver-posed chain, then everything downstream of a corrected bone re-chains off
         // the corrected own delta — so a hand parented to a solved forearm rides the solve with no effector of its own.
         if (ApplyEffectors(
+            definition: client.Definition,
             deltaSeconds: deltaSeconds,
             live: live,
             placementScale: placementScale,
@@ -789,6 +797,7 @@ public sealed partial class WorldCreationInstances {
                 Position: (posed.Position - Vector3.Transform((shape.Position.Value * placementScale), turn)),
                 Orientation: turn, Lanes: lanes) { Scale = placementScale });
         }
+        MeasureEffectorErrors(live: live);
 
         return slotsMoved;
     }

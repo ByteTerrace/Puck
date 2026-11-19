@@ -132,6 +132,7 @@ public readonly record struct EntitySnapshot(
 /// <param name="Cues">The one-shot rule effects disclosed to this recipient for this tick.</param>
 /// <param name="MusicBoundary">The score's beat and bar boundary flags for this step.</param>
 /// <param name="MusicSenses">The ambient score conditions disclosed to this recipient.</param>
+/// <param name="InputAnswers">The last input the authority answered for each owner, disclosed only to that owner.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -148,7 +149,8 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<WorldSolidScale> SolidScales = default,
     ReadOnlyMemory<WorldGameplayCue> Cues = default,
     byte MusicBoundary = 0,
-    byte MusicSenses = 0
+    byte MusicSenses = 0,
+    ReadOnlyMemory<WorldInputAnswer> InputAnswers = default
 ) {
     /// <summary>Finds an entity incarnation in this snapshot's own delivered body table.</summary>
     public bool TryFindEntity(int body, int generation, out EntitySnapshot entity) {

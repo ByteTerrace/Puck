@@ -335,6 +335,14 @@ public static class PuckDiagnosticCodes {
     /// neighbours, where a static placement of the same creation draws the blend. Giving the shapes one group keeps
     /// it.</summary>
     public const string UngroupedBlend = "PUCK131";
+    /// <summary>PUCK132: a warning that a creation's driver authors a swing, a slide or a clip pose on a shape its mask
+    /// (<c>parts</c>) does not cover, so the motion never plays. Not an error: narrowing a mask is a way to switch a
+    /// driver off a part.</summary>
+    public const string UnplayedMotion = "PUCK132";
+    /// <summary>PUCK133: a warning that a later effector writes a shape an earlier effector's tip hangs from, so the later
+    /// one, solving last, can carry the earlier tip off its target. Not an error: declaration order is the priority, and
+    /// a later contact that should win is authored this way.</summary>
+    public const string EffectorContest = "PUCK133";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

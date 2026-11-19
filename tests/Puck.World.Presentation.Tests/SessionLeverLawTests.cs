@@ -1,3 +1,5 @@
+using System.Numerics;
+
 using Puck.Commands;
 using Xunit;
 
@@ -350,10 +352,14 @@ public sealed class SessionLeverLawTests {
             WorldSessionLevers.CadenceGate,
             WorldSessionLevers.Cull,
             WorldSessionLevers.Detail,
+            WorldSessionLevers.ExposurePin,
             WorldSessionLevers.Indirect,
             WorldSessionLevers.MasterVolume,
             WorldSessionLevers.Rates,
+            WorldSessionLevers.RayQueries,
             WorldSessionLevers.RenderScale,
+            WorldSessionLevers.ShadeDefault,
+            WorldSessionLevers.ShadePrograms,
             WorldSessionLevers.ShadowSlots,
             WorldSessionLevers.Shadows,
             WorldSessionLevers.SkyMute,

@@ -60,20 +60,51 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
     /// (<see cref="SdfCompositionFrameSource.BuildsInBackground"/>).</param>
     /// <param name="session">The host's live render levers that reach the destination (its cel-shading override and
     /// exposure pin); absent follows the destination's document.</param>
-    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, WorldRenderSettings? session = null) {
+    public WorldRoutedScene(WorldAuthorityEndpoint endpoint, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, WorldRenderSettings? session = null)
+        : this(authority: endpoint?.Identity!, bodyColor: bodyColor, buildsInBackground: buildsInBackground, domains: domains, endpoint: endpoint, hostFrame: hostFrame,
+            key: endpoint!, mirror: endpoint?.Mirror!, name: endpoint?.Identity!, session: session, shadowSettings: shadowSettings, skyLayers: skyLayers) { }
+    /// <summary>Initializes the scene several session screens share: one session's mirror, drawn for every session whose
+    /// stream its authority proved is handed the same scene inputs. It holds no endpoint, so no seat is presented in
+    /// it.</summary>
+    /// <param name="mirror">The mirror of the session whose stream the scene draws.</param>
+    /// <param name="authority">The identity of the world the session observes, whose screens the scene's views
+    /// show.</param>
+    /// <param name="name">The scene's own name, unique among the presentation's scenes, which its views are named by.</param>
+    /// <param name="hostFrame">The frame the boot presentation dressed this frame, whose presentation clock and cadence the
+    /// scene's frame takes; <see langword="null"/> before the first.</param>
+    /// <param name="bodyColor">The color each avatar is painted with by body index.</param>
+    /// <param name="domains">The guard that holds the last valid value of a bound value and reports its transitions.</param>
+    /// <param name="shadowSettings">The presentation's live slot policy.</param>
+    /// <param name="skyLayers">The presentation's session-only layer audition.</param>
+    /// <param name="buildsInBackground">Whether the scene's rebuilt programs build on the thread pool.</param>
+    /// <param name="session">The host's live render levers that reach the destination.</param>
+    /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
+    public WorldRoutedScene(WorldSessionMirror mirror, string authority, string name, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings = null, WorldSkyAudition? skyLayers = null, bool buildsInBackground = false, WorldRenderSettings? session = null)
+        : this(authority: authority, bodyColor: bodyColor, buildsInBackground: buildsInBackground, domains: domains, endpoint: null, hostFrame: hostFrame,
+            key: mirror, mirror: mirror, name: name, session: session, shadowSettings: shadowSettings, skyLayers: skyLayers) { }
+    // The one constructor both scene kinds and the presenter build through: what the scene is keyed by, the endpoint a
+    // seat may be presented through (none for a shared scene), and the mirror it draws.
+    internal WorldRoutedScene(object key, WorldAuthorityEndpoint? endpoint, WorldSessionMirror mirror, string authority, string name, Func<SdfFrame?> hostFrame, Func<int, Vector3> bodyColor, WorldValueDomainGuard domains, Func<WorldShadowSettings>? shadowSettings, WorldSkyAudition? skyLayers, bool buildsInBackground, WorldRenderSettings? session) {
         ArgumentNullException.ThrowIfNull(argument: domains);
-        ArgumentNullException.ThrowIfNull(argument: endpoint);
+        ArgumentNullException.ThrowIfNull(argument: key);
+        ArgumentNullException.ThrowIfNull(argument: mirror);
+        ArgumentException.ThrowIfNullOrEmpty(argument: authority);
+        ArgumentException.ThrowIfNullOrEmpty(argument: name);
         ArgumentNullException.ThrowIfNull(argument: hostFrame);
         ArgumentNullException.ThrowIfNull(argument: bodyColor);
 
+        Key = key;
         Endpoint = endpoint;
+        Mirror = mirror;
+        Authority = authority;
+        Name = name;
         m_hostFrame = hostFrame;
         m_emitter = new WorldSessionSceneEmitter(
             bodyColor: bodyColor,
             shadowSettings: shadowSettings,
             domains: domains,
             effectiveCameraName: null,
-            mirror: endpoint.Mirror
+            mirror: mirror
         ) { SkyLayers = skyLayers, Session = session };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
@@ -81,8 +112,20 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         ) { BuildsInBackground = buildsInBackground };
     }
 
-    /// <summary>Gets the authority the scene draws.</summary>
-    public WorldAuthorityEndpoint Endpoint { get; }
+    /// <summary>Gets what the presentation keys the scene by: its endpoint, or the mirror a shared scene draws.</summary>
+    public object Key { get; }
+    /// <summary>Gets the authority the scene draws, or <see langword="null"/> for a scene several session screens share,
+    /// which no seat is presented in.</summary>
+    public WorldAuthorityEndpoint? Endpoint { get; }
+    /// <summary>Gets the mirror the scene draws from.</summary>
+    public WorldSessionMirror Mirror { get; }
+    /// <summary>Gets the identity of the world the scene draws.</summary>
+    public string Authority { get; }
+    /// <summary>Gets the scene's name, unique among the presentation's scenes: the endpoint's identity, or a shared
+    /// scene's own.</summary>
+    public string Name { get; }
+    /// <summary>Gets the definition the scene's mirror holds.</summary>
+    public WorldDefinition Definition => Mirror.Definition;
     /// <summary>Gets the frame source a residency renders the scene through.</summary>
     public SdfCompositionFrameSource FrameSource { get; }
     /// <inheritdoc/>

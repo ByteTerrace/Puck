@@ -71,9 +71,11 @@ public static class WorldGaitDrivers {
     /// <param name="definition">The live definition whose <c>curves</c> rows a driver's
     /// <see cref="CreationDriverDocument.CadenceBy"/> and <see cref="CreationDriverDocument.WeightBy"/> read, or
     /// <see langword="null"/>, which leaves both unscaled.</param>
+    /// <param name="led">Set, per driver row, to whether a state-cell driver read the presenting seat's guess on its lead
+    /// this frame in place of its cell; empty records nothing.</param>
     /// <returns>The work performed and whether a later positive-time advance remains eligible, independently of
     /// output pose equality.</returns>
-    public static Activity Advance(CreationRig? rig, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldRigReads? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null) {
+    public static Activity Advance(CreationRig? rig, Span<float> phases, Span<float> weights, float deltaSeconds, BodyFacts facts, Vector3 position, Quaternion orientation, ref Vector3 lastPosition, ref Quaternion lastOrientation, ref bool seeded, ref WorldEntityAddress lastAddress, ref float easedSpeed, WorldEntityAddress address, WorldRigReads? reads = null, WorldGaitKinematics? kinematics = null, WorldDefinition? definition = null, Span<bool> led = default) {
         var drivers = rig?.Drivers;
 
         if (
@@ -165,31 +167,17 @@ public static class WorldGaitDrivers {
                 reads: reads
             );
             var level = (holds
-                ? ((compiled.WeightCurve is { } weightCurve)
-                    ? Math.Clamp(
-                        max: 1f,
-                        min: 0f,
-                        value: CurveOf(
-                            curve: weightCurve,
-                            definition: definition,
-                            phase: PhaseOf(driver: compiled.WeightBy, phases: phases)
-                        )
-                    )
-                    : 1f)
+                ? CurveLevel(curve: compiled.WeightCurve, definition: definition, driver: compiled.WeightBy, phases: phases)
                 : 0f
             );
-            var seconds = ((level > weights[index])
-                ? driver.BlendInSeconds
-                : driver.BlendOutSeconds
+            var weight = EaseWeight(
+                blend: out var driverBlend,
+                blendInSeconds: driver.BlendInSeconds,
+                blendOutSeconds: driver.BlendOutSeconds,
+                deltaSeconds: deltaSeconds,
+                level: level,
+                weight: weights[index]
             );
-            var driverBlend = ((seconds is { } authoredSeconds)
-                ? WeightBlend(
-                    deltaSeconds: deltaSeconds,
-                    seconds: authoredSeconds
-                )
-                : blend
-            );
-            var weight = (weights[index] + ((level - weights[index]) * driverBlend));
 
             weights[index] = (((level < RestWeight) && (weight < RestWeight))
                 ? 0f
@@ -221,14 +209,21 @@ public static class WorldGaitDrivers {
             }
             if (compiled.Signal is { } signal) {
                 // A state cell presented at the frame: a cycle-trait clock, a drawn value, an advancing counter —
-                // the phase is the sim's own number, read through the state mirror like every other binding.
-                var stateTarget = (((reads is not null) && reads.TryNumber(
-                    read: signal,
-                    value: out var stateValue
-                ))
-                    ? (cadence * stateValue)
-                    : 0f
-                );
+                // the phase is the sim's own number, read through the state mirror like every other binding. While the
+                // presenting seat's guess on the driver's lead is in force, its own level stands in for the cell.
+                var guessLevel = 0f;
+                var guessed = ((compiled.Lead is { } lead) && (reads is not null) && reads.TryLead(level: out guessLevel, read: lead, seconds: compiled.LeadSeconds));
+                var stateTarget = (guessed
+                    ? (cadence * guessLevel)
+                    : (((reads is not null) && reads.TryNumber(
+                        read: signal,
+                        value: out var stateValue
+                    ))
+                        ? (cadence * stateValue)
+                        : 0f
+                    ));
+
+                if (((uint)index) < ((uint)led.Length)) { led[index] = guessed; }
 
                 phases[index] = (kinematics?.Follow(
                     deltaSeconds: deltaSeconds,
@@ -323,18 +318,21 @@ public static class WorldGaitDrivers {
         ) + parentTranslation);
         rotation = (parentRotation * rotation);
     }
-    /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its
-    /// slides, so a slide reads as an offset along its own axis rather than one the swings have turned.</summary>
-    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>).</param>
+    /// <summary>Composes a shape's terms onto its creation-space rest pose: its swings in authored order, then its clips'
+    /// turns, then its slides, so a slide reads as an offset along its own axis rather than one the turns have
+    /// turned.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="shape">The shape's index.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="position">The shape's position; replaced by the animated position.</param>
     /// <param name="rotation">The shape's orientation; replaced by the animated orientation.</param>
-    public static void Compose(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
+    public static void Compose(CreationRig rig, int shape, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, ref Vector3 position, ref Quaternion rotation) {
         _ = ComposeDelta(
             phases: phases,
+            rig: rig,
             rotation: out var deltaRotation,
-            terms: terms,
+            shape: shape,
             translation: out var deltaTranslation,
             weights: weights
         );
@@ -346,45 +344,70 @@ public static class WorldGaitDrivers {
         );
     }
     /// <summary>Computes the rigid delta (<c>x → R·x + t</c>, engine-frame creation space) a shape's terms produce this
-    /// frame, independent of the shape's own rest pose — what a child shape rides. A term whose driver's weight is zero
-    /// produces exactly nothing and is skipped.</summary>
-    /// <param name="terms">The shape's terms (<see cref="CreationRig.Terms"/>), in the order they compose.</param>
+    /// frame, independent of the shape's own rest pose — what a child shape rides. The terms compose in the shape's own
+    /// order (<see cref="CreationRig.Terms"/>), each scaled by its driver's share on the shape
+    /// (<see cref="CreationRig.Share"/>); a term whose share is zero produces exactly nothing and is skipped.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="shape">The shape's index.</param>
     /// <param name="phases">The per-driver phases.</param>
     /// <param name="weights">The per-driver weights.</param>
     /// <param name="rotation">The delta's rotation (identity when nothing composes).</param>
     /// <param name="translation">The delta's translation (zero when nothing composes).</param>
     /// <param name="definition">The live definition a curve waveform samples, or null when none can.</param>
     /// <returns>The number of terms evaluated.</returns>
-    public static int ComposeDelta(ReadOnlySpan<CreationRigTerm> terms, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
+    public static int ComposeDelta(CreationRig rig, int shape, ReadOnlySpan<float> phases, ReadOnlySpan<float> weights, out Quaternion rotation, out Vector3 translation, WorldDefinition? definition = null) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
+
         rotation = Quaternion.Identity;
         translation = Vector3.Zero;
 
         var evaluated = 0;
 
-        foreach (var term in terms) {
+        foreach (var term in rig.Terms(shape: shape)) {
             var driver = term.DriverIndex;
 
-            if ((((uint)driver) >= ((uint)phases.Length)) || (((uint)driver) >= ((uint)weights.Length)) || (weights[driver] == 0f)) {
+            if (((uint)driver) >= ((uint)phases.Length)) {
                 continue;
             }
 
-            var amount = ((term.Amplitude.Value * Wave(
-                argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
-                definition: definition,
-                wave: term.Wave
-            )) * weights[driver]);
+            var share = rig.Share(driver: driver, shape: shape, weights: weights);
+
+            if (share == 0f) {
+                continue;
+            }
+
+            Quaternion turn;
 
             evaluated++;
-            if (term.Kind == CreationRigTermKind.Slide) {
-                translation += (term.Axis.Value * amount);
+            if (term.Track is { } track) {
+                // A clip's keyed pose: the share scales the interpolated turn's angle about its own axis and the slide's
+                // length.
+                if (term.Kind == CreationRigTermKind.Slide) {
+                    translation += (track.SlideAt(phase: phases[driver]) * share);
 
-                continue;
+                    continue;
+                }
+
+                turn = VectorFunctions.ScaleTurn(fraction: share, turn: track.TurnAt(phase: phases[driver]));
+            } else {
+                var amount = ((term.Amplitude.Value * Wave(
+                    argument: (phases[driver] + (term.Phase?.Value ?? 0f)),
+                    definition: definition,
+                    wave: term.Wave
+                )) * share);
+
+                if (term.Kind == CreationRigTermKind.Slide) {
+                    translation += (term.Axis.Value * amount);
+
+                    continue;
+                }
+
+                turn = Quaternion.CreateFromAxisAngle(
+                    angle: amount,
+                    axis: term.Axis.Value
+                );
             }
 
-            var turn = Quaternion.CreateFromAxisAngle(
-                angle: amount,
-                axis: term.Axis.Value
-            );
             var pivot = term.Pivot!.Value;
 
             Chain(
@@ -438,6 +461,31 @@ public static class WorldGaitDrivers {
 
     // A driver's curve modulator: the height of the rig's curve read at an earlier driver's phase this frame; a row the
     // definition does not declare (refused at boot, missed only mid-swap) leaves the driver unscaled.
+    /// <summary>Returns the level a weight eases toward while its gate holds: the height of a <c>weightBy</c> curve row at
+    /// its driver's phase, clamped to [0, 1], or one with no curve. A driver's weight and an effector's both take it.</summary>
+    /// <param name="curve">The curve read, or <see langword="null"/> for none.</param>
+    /// <param name="driver">The index of the driver whose phase is the curve's X, or -1.</param>
+    /// <param name="phases">The per-driver phases this frame.</param>
+    /// <param name="definition">The live definition whose curve rows are read, or <see langword="null"/>, which reads one.</param>
+    /// <returns>The level in [0, 1].</returns>
+    public static float CurveLevel(CreationRigRead? curve, int driver, ReadOnlySpan<float> phases, WorldDefinition? definition) => ((curve is null)
+        ? 1f
+        : Math.Clamp(max: 1f, min: 0f, value: CurveOf(curve: curve, definition: definition, phase: PhaseOf(driver: driver, phases: phases))));
+    /// <summary>Returns a weight eased one frame toward its level: an exponential approach over the rise's time constant
+    /// while the level is above the weight and the fall's while below, each <see cref="CreationDriverDocument.WeightSeconds"/>
+    /// when not authored. A driver's weight and an effector's both ease through it; each snaps its own ends.</summary>
+    /// <param name="weight">The weight before the frame.</param>
+    /// <param name="level">The level it eases toward.</param>
+    /// <param name="deltaSeconds">The frame's length, seconds.</param>
+    /// <param name="blendInSeconds">The rise's time constant, seconds, or <see langword="null"/> for the default.</param>
+    /// <param name="blendOutSeconds">The fall's time constant, seconds, or <see langword="null"/> for the default.</param>
+    /// <param name="blend">The fraction of the gap the frame closed, in [0, 1].</param>
+    /// <returns>The eased weight.</returns>
+    public static float EaseWeight(float weight, float level, float deltaSeconds, float? blendInSeconds, float? blendOutSeconds, out float blend) {
+        blend = WeightBlend(deltaSeconds: deltaSeconds, seconds: (((level > weight) ? blendInSeconds : blendOutSeconds) ?? CreationDriverDocument.WeightSeconds));
+
+        return (weight + ((level - weight) * blend));
+    }
     private static float CurveOf(CreationRigRead curve, float phase, WorldDefinition? definition) => (((definition is not null) && (WorldDefinitionRows.FindCurve(
         curves: definition.Curves,
         name: curve.Reference!

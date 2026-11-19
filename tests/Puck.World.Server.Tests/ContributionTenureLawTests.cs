@@ -192,7 +192,8 @@ public sealed class ContributionTenureLawTests {
             Grantee: possessor,
             Capability: WorldCapability.Drive,
             Subject: GrantSubject.Body(index: body),
-            Exclusive: false
+            Exclusive: false,
+            Budget: 4
         );
 
         fixture.Server.Grant(

@@ -1372,11 +1372,39 @@
               "properties": {
                 "id": {
                   "type": "string",
-                  "description": "The ordinal, case-sensitive identifier an entity-part anchor names."
+                  "description": "The ordinal, case-sensitive identifier an entity-part anchor or a mask names. Part ids are local to the creation; the engine reserves none."
                 },
                 "shapeId": {
                   "type": "integer",
                   "description": "The stable Id whose dynamic pose the part publishes."
+                },
+                "shapes": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The names of the shapes the part covers, each with every shape that hangs from it through Parent; null covers the anchor shape and what hangs from it. A subtree rather than a list, so a hand stays a hand when a finger gains a segment."
+                },
+                "except": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The ids of parts declared earlier whose shapes this part does not cover, so \u0022the trunk without the arms\u0022 is sayable when the root carries the whole body. Parts may overlap: a later part never narrows an earlier one."
                 }
               },
               "required": [
@@ -1384,7 +1412,7 @@
                 "shapeId"
               ],
               "additionalProperties": false,
-              "description": "One authored entity-part identity exported by a creation look."
+              "description": "One named body part of a creation: the anchor shape whose dynamic pose an entity-part anchor or a look\u0027s partDynamics follower reads, and the set of shapes the part covers, which a driver\u0027s mask names (CreationPartCompiler computes it, and is the one place that does)."
             },
             "default": null
           },
@@ -1573,6 +1601,44 @@
                   "$ref": "./common.schema.json#/$defs/ShapeNullable37",
                   "description": "Sets the level the weight eases toward while the gate holds, from a curve of an earlier driver\u0027s phase clamped to [0, 1], or null for 1. Two drivers reading one stride\u0027s phase through SignalDriverPrefix, one weighted by a falling curve of speed and one by a rising one, cross-fade a walk into a run without their legs ever leaving step.",
                   "default": null
+                },
+                "parts": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "default": null,
+                  "description": "The driver\u0027s mask: ids of the creation\u0027s parts (CreationPartDocument). The driver\u0027s swings, slides and clip poses play only on shapes those parts cover, and a replacing driver reduces earlier drivers only there. Null is the shapes the driver itself poses."
+                },
+                "mode": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "How the driver layers: ModeAdd (null) adds its motion to the drivers before it; ModeReplace also scales every driver declared before it by one minus its weight on the shapes its mask covers, so a stance takes the arms from the gait without the gait knowing (Share)."
+                },
+                "lead": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The name of a world input channel a state-cell signal may be guessed from (null = none). On a client that presents for exactly one seat, which controls the body, while one of that seat\u0027s own edges on the channel has been taken in by a tick and its answer has not yet been presented, and for no longer than LeadSeconds, the phase follows the seat\u0027s own level on the channel in place of the cell. It changes only that seat\u0027s picture, never what the authority computes. The channel must be a button or an axis."
+                },
+                "leadSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "How long, in seconds, an unanswered guess may show (null = DefaultLeadSeconds). Finite and positive; meaningful only with Lead."
                 }
               },
               "required": [
@@ -1620,11 +1686,11 @@
                   "properties": {
                     "kind": {
                       "type": "string",
-                      "description": "One of KindSurface, KindBody, or KindState."
+                      "description": "One of KindSurface, KindBody, KindState or KindShape."
                     },
                     "direction": {
                       "default": null,
-                      "description": "KindSurface: the probe direction in the creation\u0027s author frame (see CreationFrame), so it turns with the body \u2014 [0, -1, 0] is \u0022below the body\u0022, which on a wall-held body points at the wall\u0027s own down. Normalized at canonicalization; zero names no direction and is refused."
+                      "description": "KindSurface: the probe direction in the creation\u0027s author frame (see CreationFrame), so it turns with the body \u2014 [0, -1, 0] is \u0022below the body\u0022, which on a wall-held body points at the wall\u0027s own down. KindShape (optional): the way the tip approaches the point, carried by Shape\u0027s motion; its reverse is the normal an effector\u0027s align turns the tip onto. Normalized at canonicalization; zero names no direction and is refused."
                     },
                     "reach": {
                       "default": null,
@@ -1640,11 +1706,11 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "KindBody: the population entity index whose root pose is the target."
+                      "description": "KindBody: the population entity index whose pose is the target, fixed in the document. A body target names this or Reference, never both."
                     },
                     "offset": {
                       "default": null,
-                      "description": "KindBody: the offset from that body\u0027s root, in the creation\u0027s author frame (null = its root exactly)."
+                      "description": "KindBody: the offset from that body\u0027s root (or its Part), in the creation\u0027s author frame, riding the target\u0027s attitude (null = the point exactly). KindShape: a point in the creation at rest, author frame, that rides Shape\u0027s motion (null = the shape\u0027s own origin)."
                     },
                     "reference": {
                       "type": [
@@ -1652,7 +1718,23 @@
                         "null"
                       ],
                       "default": null,
-                      "description": "KindState: a state.\u003Crow\u003E[.\u003Ckey\u003E] reference to a text cell spelling a world-space [x, y, z], read at the frame\u0027s tick \u2014 a target a rule, a console write, or another system publishes. The containing world refuses a row it does not declare."
+                      "description": "KindState: a state.\u003Crow\u003E[.\u003Ckey\u003E] reference to a text cell spelling a world-space [x, y, z], read at the frame\u0027s tick \u2014 a target a rule, a console write, or another system publishes. KindBody: a reference to a numeric cell holding the target body\u0027s population index, read as stored truth each frame: a whole number naming an active body selects it, and any other value or none selects none, so a rule clears the target by clearing the cell or writing -1. The containing world refuses a row it does not declare."
+                    },
+                    "shape": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "KindShape: the name of a shape of the same creation the point rides. It may not be a bone or the tip of the effector\u0027s own chain, nor hang from one, and no effector declared later may write it or a shape it hangs from, so the solve reads the shape\u0027s final pose for the frame."
+                    },
+                    "part": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "default": null,
+                      "description": "KindBody (optional): a part id the target body\u0027s look publishes; the point is that part\u0027s anchor as last drawn, and the body\u0027s root when its look publishes no such part."
                     }
                   },
                   "required": [
@@ -1677,7 +1759,7 @@
                 },
                 "weight": {
                   "default": null,
-                  "description": "A constant ceiling on the correction, in [0, 1] (null = 1 \u2014 full correction). Multiplied by the gate\u0027s eased weight, so a half-weight effector suggests rather than commands."
+                  "description": "A constant ceiling on the correction, in [0, 1] (null = 1 \u2014 full correction). Multiplied by the eased weight and the layer share, so a half-weight effector suggests rather than commands."
                 },
                 "plant": {
                   "type": [
@@ -1745,6 +1827,27 @@
                   ],
                   "default": null,
                   "description": "How much of the tip\u0027s tilt the contact takes out, in [0, 1] (null = 0: the tip keeps whatever orientation the solved chain hands it). At 1 the tip\u0027s rest orientation is re-aligned to the contact normal: the tip axis that points against the target\u0027s probe Direction at rest (creation up for a target that names none) turns onto the surface normal at the target, latched with the plant, or onto world up when the target reports no surface. The turn is the shortest one, about the tip\u0027s own origin, so the tip stays on its target and keeps the heading the chain gave it. It is weighted by the eased weight the goal blends by, so a tip a plant releases to its swing (SwingWeight 0) keeps its authored swing off the ground. A boot whose sole is flat at rest keeps it flat when the chain bends to reach a target off its rest offset, and a Standoff equal to the tip origin\u0027s rest height then puts the whole sole on the surface."
+                },
+                "weightBy": {
+                  "$ref": "./common.schema.json#/$defs/ShapeNullable37",
+                  "description": "The level the effector\u0027s weight eases toward while its gate holds, from a curve of a driver\u0027s phase clamped to [0, 1], read as a driver\u0027s WeightBy reads one (null = 1). The driver it names owns the effector: the effector\u0027s layer share is that driver\u0027s share over every shape the effector writes (EffectorShare), and a driver with no Parts covers what its effectors write. Any declared driver may own one, since every driver advances before any effector solves.",
+                  "default": null
+                },
+                "blendInSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The exponential time constant the weight rises over, as a driver\u0027s (null = WeightSeconds; zero is immediate)."
+                },
+                "blendOutSeconds": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "The exponential time constant the weight falls over, on the same terms."
                 }
               },
               "required": [
@@ -1960,6 +2063,143 @@
               "string",
               "null"
             ],
+            "default": null
+          },
+          "clips": {
+            "description": "The pose clips (null = none), each key poses on joints played by one of Drivers \u2014 see CreationClipDocument. Presentation-only, like the drivers.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The clip\u0027s name, unique within the creation."
+                },
+                "driver": {
+                  "type": "string",
+                  "description": "The driver that plays the clip; its phase is in the units of At."
+                },
+                "keys": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "at": {
+                        "type": "number",
+                        "description": "The key\u0027s position, in the units of its driver\u0027s phase."
+                      },
+                      "poses": {
+                        "type": "array",
+                        "items": {
+                          "type": [
+                            "object",
+                            "null"
+                          ],
+                          "properties": {
+                            "shape": {
+                              "type": "string",
+                              "description": "The name of the shape posed. A shape carrying domain folds may not be posed."
+                            },
+                            "turn": {
+                              "type": [
+                                "array",
+                                "null"
+                              ],
+                              "items": {
+                                "type": [
+                                  "object",
+                                  "null"
+                                ],
+                                "properties": {
+                                  "axis": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "minItems": 3,
+                                    "maxItems": 3,
+                                    "description": "The axis, non-zero; its length is ignored."
+                                  },
+                                  "angle": {
+                                    "type": "number",
+                                    "description": "The angle in radians, right-handed about Axis."
+                                  }
+                                },
+                                "required": [
+                                  "axis",
+                                  "angle"
+                                ],
+                                "additionalProperties": false,
+                                "description": "One step of a key\u0027s turn, written as a swing is: an axis in the creation\u0027s frame and an angle about it. It crosses the author frame as a swing\u0027s axis does (its axis flips and its angle does not)."
+                              },
+                              "default": null,
+                              "description": "The turn\u0027s steps, composed in the order written, the first turning first; the composed turn is under a half turn. Null is no turn."
+                            },
+                            "slide": {
+                              "default": null,
+                              "description": "The translation, in creation units, added after every turn of the shape. Null is none."
+                            }
+                          },
+                          "required": [
+                            "shape"
+                          ],
+                          "additionalProperties": false,
+                          "description": "One shape\u0027s pose in a key: a turn about the shape\u0027s joint and a slide, both literal and measured from rest. A pose with neither is the rest pose."
+                        },
+                        "description": "The shapes the key poses; a shape the key does not name has no key here, and its track interpolates across this position."
+                      },
+                      "ease": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null,
+                        "description": "How the stretch arriving at this key moves: EaseLinear (null), EaseSmooth or EaseHold."
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "poses"
+                    ],
+                    "additionalProperties": false,
+                    "description": "One key of a pose clip."
+                  },
+                  "description": "The keys, at strictly increasing positions; at least one."
+                },
+                "wrap": {
+                  "type": [
+                    "boolean",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "Whether the clip loops: its position is the driver\u0027s phase modulo Period, counted so a negative phase wraps like a positive one, and the stretch from a track\u0027s last key back to its first interpolates like any other. Null or false holds: the position is the phase, and a track holds its first key before it and its last key after it. A driver whose phase wraps (a travel or time driver, and a driver that follows one) may play only a looping clip whose period divides the span the phase wraps over."
+                },
+                "period": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "default": null,
+                  "description": "A looping clip\u0027s period, in phase units (null = one turn, 2\u03C0); every key lies in [0, period). Refused on a held clip."
+                }
+              },
+              "required": [
+                "name",
+                "driver",
+                "keys"
+              ],
+              "additionalProperties": false,
+              "description": "A pose clip: key poses on a creation\u0027s joints, played by one driver whose phase is the position in the clip and whose share on each shape is the blend. A key turns a shape about its joint (Joint) and may slide it, measured from the shape\u0027s rest pose, so a turn carries the shapes that hang from it and layers on other motion. Presentation-only, like the driver that plays it."
+            },
             "default": null
           }
         },

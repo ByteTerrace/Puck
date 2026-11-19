@@ -182,12 +182,16 @@ public static partial class CreationCommand {
             }
         }
 
+        foreach (var part in CreationPartCompiler.Compile(document: document).Slots) {
+            Console.Out.WriteLine(value: $"  part: {part.PartId} anchor {CreationMotion.NameOf(document: document, index: part.TransformSlot)}, shapes {string.Join(separator: ", ", values: (part.Shapes ?? [part.TransformSlot]).Select(selector: shape => CreationMotion.NameOf(document: document, index: shape)))}");
+        }
+
         var rig = CreationRig.Of(document: document);
 
         if (rig.Animates) {
             var owners = Enumerable.Range(start: 0, count: shapes.Count).Where(predicate: index => (rig.Owner(shape: index) == index)).ToArray();
 
-            Console.Out.WriteLine(value: $"  rig: drivers {rig.Drivers.Count}, effectors {rig.Effectors.Count}, terms {rig.AllTerms.Length} (most on one shape {rig.MostTerms}), moving slots {owners.Length}, reach {(float.IsFinite(f: rig.Reach) ? rig.Reach.ToString(format: "G6", provider: System.Globalization.CultureInfo.InvariantCulture) : $"unbounded: {rig.ReachRefusal}")}, reads {string.Join(separator: ", ", values: rig.Reads.Select(selector: static read => read.ToString()))}");
+            Console.Out.WriteLine(value: $"  rig: drivers {rig.Drivers.Count}, clips {rig.Clips.Count}, effectors {rig.Effectors.Count}, terms {rig.AllTerms.Length} (most on one shape {rig.MostTerms}), moving slots {owners.Length}, reach {(float.IsFinite(f: rig.Reach) ? rig.Reach.ToString(format: "G6", provider: System.Globalization.CultureInfo.InvariantCulture) : $"unbounded: {rig.ReachRefusal}")}, reads {string.Join(separator: ", ", values: rig.Reads.Select(selector: static read => read.ToString()))}");
             foreach (var owner in owners) {
                 Console.Out.WriteLine(value: $"    slot: {CreationMotion.NameOf(document: document, index: owner)} ({rig.Writers(shape: owner).ToString().ToLowerInvariant()})");
             }
@@ -196,6 +200,12 @@ public static partial class CreationCommand {
             var label = (CreationMotion.Creases(blend: blend, rig: rig) ? $"warning {PuckDiagnosticCodes.MovingBlend}" : "skin");
 
             Console.Out.WriteLine(value: $"  {label}: '{id}' {CreationMotion.Describe(blend: blend, rig: rig)}");
+        }
+        foreach (var unplayed in rig.Unplayed) {
+            Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UnplayedMotion}: '{id}' {CreationMotion.DescribeUnplayed(rig: rig, unplayed: unplayed)}");
+        }
+        foreach (var contest in rig.Contests) {
+            Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.EffectorContest}: '{id}' {CreationMotion.DescribeContest(contest: contest, rig: rig)}");
         }
         foreach (var shape in CreationMotion.UngroupedBlends(rig: rig)) {
             Console.Out.WriteLine(value: $"  warning {PuckDiagnosticCodes.UngroupedBlend}: '{id}' {CreationMotion.DescribeUngrouped(document: document, shape: shape)}");

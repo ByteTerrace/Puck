@@ -261,6 +261,28 @@ public static partial class CreationMotion {
 
         return $"joins shape '{NameOf(document: document, index: blend.Shape)}' to group {blend.Group}'s shape '{NameOf(document: document, index: blend.Other)}' by {blend.Blend}: theta={float.RadiansToDegrees(radians: envelope.Rotation):G6} deg (limit 60), D={envelope.Displacement:G6} (limit {(envelope.Smooth / 2f):G6}); {outcome}{((envelope.Refusal is { } reason) ? $" ({reason})" : string.Empty)}.";
     }
+    /// <summary>Describes a motion a driver authors outside its mask (<see cref="CreationRig.Unplayed"/>), naming the
+    /// driver, the member and the shape.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="unplayed">One of the rig's unplayed motions.</param>
+    /// <returns>The sentence, after the creation's name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rig"/> is <see langword="null"/>.</exception>
+    public static string DescribeUnplayed(CreationRig rig, CreationRigUnplayed unplayed) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
+
+        return $"driver '{rig.Drivers[unplayed.Driver].Document.Name}' authors {unplayed.Member} on shape '{NameOf(document: rig.Document, index: unplayed.Shape)}', which its parts do not cover, so it never plays; add a part that covers the shape, or drop the motion.";
+    }
+    /// <summary>Describes a later effector that writes a shape an earlier effector's tip hangs from
+    /// (<see cref="CreationRig.Contests"/>), naming both and the shape.</summary>
+    /// <param name="rig">The creation's rig.</param>
+    /// <param name="contest">One of the rig's contests.</param>
+    /// <returns>The sentence, after the creation's name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rig"/> is <see langword="null"/>.</exception>
+    public static string DescribeContest(CreationRig rig, CreationRigContest contest) {
+        ArgumentNullException.ThrowIfNull(argument: rig);
+
+        return $"effector '{rig.Effectors[contest.Later].Document.Name}' writes shape '{NameOf(document: rig.Document, index: contest.Shape)}', which earlier effector '{rig.Effectors[contest.Earlier].Document.Name}''s tip hangs from; it solves last and holds its own target, so it can carry the earlier tip off its target.";
+    }
     /// <summary>Returns a shape's name, or <c>#index</c> for an unnamed one.</summary>
     /// <param name="document">The creation document.</param>
     /// <param name="index">The shape's index.</param>

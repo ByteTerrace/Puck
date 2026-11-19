@@ -20,7 +20,7 @@ public static partial class CreationCanonicalizer {
 
     private static readonly HashSet<string> KnownMemberNames = new(comparer: StringComparer.OrdinalIgnoreCase) {
         "schema", "name", "palette", "shapes", "frames", "chains", "cameras", "behavior", "textRuns", "parts",
-        "noise", "drivers", "effectors",
+        "noise", "drivers", "effectors", "clips",
     };
 
     // The behavior manifest normalizes to a canonical locomotion member name and drops a face/sound naming a missing
@@ -365,6 +365,7 @@ public static partial class CreationCanonicalizer {
         }
 
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        AuthoredPartTable? parts = null;
 
         for (var i = 0; (i < drivers.Count); i++) {
             var driver = drivers[i];
@@ -428,12 +429,7 @@ public static partial class CreationCanonicalizer {
                     path: $"drivers[{i}].weightBy"
                 );
             }
-            if ((driver.BlendInSeconds is { } blendIn) && (!float.IsFinite(f: blendIn) || (blendIn < 0f))) {
-                errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendInSeconds"));
-            }
-            if ((driver.BlendOutSeconds is { } blendOut) && (!float.IsFinite(f: blendOut) || (blendOut < 0f))) {
-                errors.Add(item: new(Message: "blendOutSeconds must be finite and non-negative.", Path: $"drivers[{i}].blendOutSeconds"));
-            }
+            ValidateBlendSeconds(blendIn: driver.BlendInSeconds, blendOut: driver.BlendOutSeconds, errors: errors, path: $"drivers[{i}]");
             if (
                 (driver.Cadence.Reference is null) &&
                 (!float.IsFinite(f: driver.Cadence.Value) ||
@@ -450,6 +446,32 @@ public static partial class CreationCanonicalizer {
                 gate: driver.When,
                 path: $"drivers[{i}].when"
             );
+            if (driver.Lead is { } lead) {
+                if (string.IsNullOrWhiteSpace(value: lead)) {
+                    errors.Add(item: new(Message: "lead is empty; name a world input channel, or omit it.", Path: $"drivers[{i}].lead"));
+                } else if (!CreationDriverDocument.IsStateSignal(signal: driver.Signal)) {
+                    errors.Add(item: new(Message: $"lead '{lead}' needs a state-cell signal: a guess stands in for the cell the seat's input will change, and signal '{driver.Signal}' reads none.", Path: $"drivers[{i}].lead"));
+                }
+            }
+            if (driver.LeadSeconds is { } leadSeconds) {
+                if (driver.Lead is null) {
+                    errors.Add(item: new(Message: "leadSeconds bounds a guess, and this driver names no lead.", Path: $"drivers[{i}].leadSeconds"));
+                } else if (!float.IsFinite(f: leadSeconds) || (leadSeconds <= 0f)) {
+                    errors.Add(item: new(Message: "leadSeconds must be finite and positive.", Path: $"drivers[{i}].leadSeconds"));
+                }
+            }
+            if (driver.Mode is not (null or CreationDriverDocument.ModeAdd or CreationDriverDocument.ModeReplace)) {
+                errors.Add(item: new(Message: $"mode '{driver.Mode}' is not recognized; the modes are '{CreationDriverDocument.ModeAdd}' and '{CreationDriverDocument.ModeReplace}'.", Path: $"drivers[{i}].mode"));
+            }
+            if (driver.Parts is { } mask) {
+                parts ??= CreationPartCompiler.Resolve(document: document, refuse: static (_, _) => { });
+
+                for (var entry = 0; (entry < mask.Count); entry++) {
+                    if ((mask[entry] is not { } part) || !parts.TryCover(partId: part, shapes: out _)) {
+                        errors.Add(item: new(Message: $"names no part '{mask[entry]}'; a mask names the creation's parts.", Path: $"drivers[{i}].parts[{entry}]"));
+                    }
+                }
+            }
         }
     }
     // A driver reads only drivers declared before it, so one pass in declaration order advances every source before
@@ -557,6 +579,7 @@ public static partial class CreationCanonicalizer {
             );
             ValidateEffectorTarget(
                 errors: errors,
+                lookup: lookup,
                 path: $"{path}.target",
                 target: effector.Target
             );
@@ -566,6 +589,83 @@ public static partial class CreationCanonicalizer {
                 path: $"{path}.plant",
                 plant: effector.Plant
             );
+            ValidateBlendSeconds(blendIn: effector.BlendInSeconds, blendOut: effector.BlendOutSeconds, errors: errors, path: path);
+            if (effector.WeightBy is { } weightBy) {
+                RequireDeclaredDriver(document: document, errors: errors, name: weightBy.Driver, path: $"{path}.weightBy.driver");
+                if (string.IsNullOrWhiteSpace(value: weightBy.Curve)) {
+                    errors.Add(item: new(Message: "curve is empty; name a curves row.", Path: $"{path}.weightBy.curve"));
+                }
+            }
+        }
+
+        ValidateEffectorWrites(document: document, errors: errors, lookup: lookup);
+    }
+    // The refusals stated over each effector's compiled writes (CreationRigEffector.Writes): a target on the creation's
+    // own shape must be final for the effector that reads it, and an owner's mask must cover what its effector writes.
+    private static void ValidateEffectorWrites(CreationDocument document, CreationShapeLookup lookup, List<DocumentValidationError> errors) {
+        var rig = CreationRig.Of(document: document);
+        var effectors = rig.Effectors;
+        var shapes = (document.Shapes ?? []);
+
+        for (var i = 0; (i < effectors.Count); i++) {
+            var effector = effectors[i];
+            var path = $"effectors[{i}]";
+
+            if ((effector.Owner >= 0) && (rig.Drivers[effector.Owner].Document.Parts is not null)) {
+                var mask = rig.Drivers[effector.Owner].Mask;
+
+                foreach (var shape in effector.Writes) {
+                    if (!mask.Contains(value: shape)) {
+                        errors.Add(item: new(Message: $"driver '{rig.Drivers[effector.Owner].Document.Name}' owns this effector, and its parts leave out shape '{CreationMotion.NameOf(document: document, index: shape)}', which the effector writes; a solve may write only inside its owner's layer, so add a part that covers the shape.", Path: $"{path}.weightBy.driver"));
+
+                        break;
+                    }
+                }
+            }
+            if (effector.Document.Target?.Kind is not CreationEffectorTargetDocument.KindShape) {
+                continue;
+            }
+            if (effector.Document.Plant is not null) {
+                errors.Add(item: new(Message: "a plant holds a point in the world, and a point on the creation's own shape is not one; a shape target takes no plant.", Path: $"{path}.plant"));
+            }
+
+            var target = effector.TargetShape;
+
+            if ((target < 0) || (effector.Tip < 0)) {
+                continue;
+            }
+            foreach (var moved in effector.Bones.Append(element: effector.Tip)) {
+                if (DescendsFrom(ancestor: moved, descendant: target, lookup: lookup, shapes: shapes)) {
+                    errors.Add(item: new(Message: $"target shape '{effector.Document.Target.Shape}' is or hangs from '{CreationMotion.NameOf(document: document, index: moved)}', which this effector moves, so the solve would move its own target.", Path: $"{path}.target.shape"));
+
+                    break;
+                }
+            }
+            for (var later = (i + 1); (later < effectors.Count); later++) {
+                for (var at = target; (at >= 0); at = rig.Parents[at]) {
+                    if (effectors[later].Writes.Contains(value: at)) {
+                        errors.Add(item: new(Message: $"effector '{effectors[later].Document.Name}', declared later, writes shape '{CreationMotion.NameOf(document: document, index: at)}', which target shape '{effector.Document.Target.Shape}' is or hangs from, so the target would not be final when this effector reads it; declare this effector after it.", Path: $"{path}.target.shape"));
+                        later = effectors.Count;
+
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    // A driver's or an effector's blend times: finite and non-negative.
+    private static void ValidateBlendSeconds(float? blendIn, float? blendOut, List<DocumentValidationError> errors, string path) {
+        if ((blendIn is { } rise) && (!float.IsFinite(f: rise) || (rise < 0f))) {
+            errors.Add(item: new(Message: "blendInSeconds must be finite and non-negative.", Path: $"{path}.blendInSeconds"));
+        }
+        if ((blendOut is { } fall) && (!float.IsFinite(f: fall) || (fall < 0f))) {
+            errors.Add(item: new(Message: "blendOutSeconds must be finite and non-negative.", Path: $"{path}.blendOutSeconds"));
+        }
+    }
+    // A name an effector reads a driver by: every driver advances before any effector solves, so any declared one serves.
+    private static void RequireDeclaredDriver(CreationDocument document, string? name, List<DocumentValidationError> errors, string path) {
+        if ((document.Drivers ?? []).All(predicate: row => !string.Equals(a: row.Name, b: name, comparisonType: StringComparison.Ordinal))) {
+            errors.Add(item: new(Message: $"names no declared driver '{name}'.", Path: path));
         }
     }
     private static void ValidateEffectorChain(IReadOnlyList<ShapeDocument> shapes, CreationShapeLookup lookup, CreationEffectorDocument effector, List<DocumentValidationError> errors, string path) {
@@ -661,7 +761,7 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    private static void ValidateEffectorTarget(CreationEffectorTargetDocument? target, List<DocumentValidationError> errors, string path) {
+    private static void ValidateEffectorTarget(CreationEffectorTargetDocument? target, CreationShapeLookup lookup, List<DocumentValidationError> errors, string path) {
         if (target is null) {
             errors.Add(item: new(
                 Message: "target is required.",
@@ -672,7 +772,7 @@ public static partial class CreationCanonicalizer {
         }
         if (!CreationEffectorTargetDocument.IsKind(kind: target.Kind)) {
             errors.Add(item: new(
-                Message: $"kind '{target.Kind}' is not recognized; the kinds are '{CreationEffectorTargetDocument.KindSurface}', '{CreationEffectorTargetDocument.KindBody}', and '{CreationEffectorTargetDocument.KindState}'.",
+                Message: $"kind '{target.Kind}' is not recognized; the kinds are '{CreationEffectorTargetDocument.KindSurface}', '{CreationEffectorTargetDocument.KindBody}', '{CreationEffectorTargetDocument.KindState}', and '{CreationEffectorTargetDocument.KindShape}'.",
                 Path: $"{path}.kind"
             ));
 
@@ -728,30 +828,41 @@ public static partial class CreationCanonicalizer {
                     break;
                 }
             case CreationEffectorTargetDocument.KindBody: {
-                    if (target.Index is not { } index) {
+                    if ((target.Index is null) == (target.Reference is null)) {
                         errors.Add(item: new(
-                            Message: "index is required for a body target.",
+                            Message: "a body target names its body by exactly one of index (fixed) and reference (a state cell holding the index).",
                             Path: $"{path}.index"
                         ));
-                    } else if (index < 0) {
+                    } else if (target.Index is < 0) {
                         errors.Add(item: new(
-                            Message: $"index {index} is negative.",
+                            Message: $"index {target.Index} is negative.",
                             Path: $"{path}.index"
+                        ));
+                    } else if ((target.Reference is { } selector) && !CreationDriverDocument.IsStateSignal(signal: selector)) {
+                        errors.Add(item: new(
+                            Message: $"reference '{selector}' is not a '{DocumentIdentifier.ReferencePrefix}<row>[.<key>]' state reference.",
+                            Path: $"{path}.reference"
                         ));
                     }
-                    if (target.Offset is { } offset) {
-                        if (!VectorFunctions.IsFinite(vector: offset)) {
-                            errors.Add(item: new(
-                                Message: "offset is non-finite.",
-                                Path: $"{path}.offset"
-                            ));
-                        } else if (offset.Length() > CreationEffectorTargetDocument.MaxOffset) {
-                            errors.Add(item: new(
-                                Message: $"offset reaches {offset.Length()}, past the {CreationEffectorTargetDocument.MaxOffset}-unit bound.",
-                                Path: $"{path}.offset"
-                            ));
+                    if ((target.Part is { } part) && string.IsNullOrWhiteSpace(value: part)) {
+                        errors.Add(item: new(Message: "part is empty; name a part the target's look publishes, or omit it for the root.", Path: $"{path}.part"));
+                    }
+                    ValidateEffectorOffset(errors: errors, offset: target.Offset, path: path);
+
+                    break;
+                }
+            case CreationEffectorTargetDocument.KindShape: {
+                    if (lookup.Find(name: target.Shape) < 0) {
+                        errors.Add(item: new(Message: $"names no shape '{target.Shape}'.", Path: $"{path}.shape"));
+                    }
+                    if (target.Direction is { } approach) {
+                        if (!VectorFunctions.IsFinite(vector: approach)) {
+                            errors.Add(item: new(Message: "direction is non-finite.", Path: $"{path}.direction"));
+                        } else if (approach.Value == Vector3.Zero) {
+                            errors.Add(item: new(Message: "direction is zero, which names no direction; omit it for none.", Path: $"{path}.direction"));
                         }
                     }
+                    ValidateEffectorOffset(errors: errors, offset: target.Offset, path: path);
 
                     break;
                 }
@@ -765,6 +876,16 @@ public static partial class CreationCanonicalizer {
 
                     break;
                 }
+        }
+    }
+    private static void ValidateEffectorOffset(DocumentVector3? offset, List<DocumentValidationError> errors, string path) {
+        if (offset is null) {
+            return;
+        }
+        if (!VectorFunctions.IsFinite(vector: offset)) {
+            errors.Add(item: new(Message: "offset is non-finite.", Path: $"{path}.offset"));
+        } else if (offset.Length() > CreationEffectorTargetDocument.MaxOffset) {
+            errors.Add(item: new(Message: $"offset reaches {offset.Length()}, past the {CreationEffectorTargetDocument.MaxOffset}-unit bound.", Path: $"{path}.offset"));
         }
     }
     private static void ValidateEffectorPlant(CreationDocument document, CreationPlantDocument? plant, List<DocumentValidationError> errors, string path) {
@@ -785,16 +906,7 @@ public static partial class CreationCanonicalizer {
                 errors.Add(item: new(Message: $"height must be finite and in [0, {CreationReplantDocument.MaxHeight}].", Path: $"{path}.replant.height"));
             }
         }
-        if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
-            a: row.Name,
-            b: plant.Driver,
-            comparisonType: StringComparison.Ordinal
-        ))) {
-            errors.Add(item: new(
-                Message: $"names no declared driver '{plant.Driver}'.",
-                Path: $"{path}.driver"
-            ));
-        }
+        RequireDeclaredDriver(document: document, errors: errors, name: plant.Driver, path: $"{path}.driver");
         if (plant.Window.Reference is not null) {
             return;
         }
@@ -1562,35 +1674,13 @@ public static partial class CreationCanonicalizer {
             ));
         }
     }
-    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors, HashSet<int> shapeIds) {
-        if (document.Parts is not { Count: > 0 } parts) {
+    // The part compiler is the one place a part becomes shapes; validation reports what it refuses.
+    private static void ValidateParts(CreationDocument document, List<DocumentValidationError> errors) {
+        if (document.Parts is not { Count: > 0 }) {
             return;
         }
 
-        var partIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-
-        for (var index = 0; (index < parts.Count); index++) {
-            var part = parts[index];
-
-            if (string.IsNullOrWhiteSpace(value: part.Id)) {
-                errors.Add(item: new(
-                    Message: "a part id is required.",
-                    Path: $"parts[{index}].id"
-                ));
-            } else if (!partIds.Add(item: part.Id)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].id",
-                    Message: $"duplicate part id '{part.Id}'."
-                ));
-            }
-
-            if (!shapeIds.Contains(item: part.ShapeId)) {
-                errors.Add(item: new(
-                    Path: $"parts[{index}].shapeId",
-                    Message: $"references missing shape id {part.ShapeId}."
-                ));
-            }
-        }
+        _ = CreationPartCompiler.Resolve(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
     }
     // The declared sounds: unique names, a finite level/radius, and the INLINE puck.synthesizer-patch.v1 patch validated through
     // the synth family's OWN canonicalizer (the one pipeline — never a re-implementation), its violations re-pathed
@@ -2687,6 +2777,7 @@ public static partial class CreationCanonicalizer {
             document: document,
             errors: errors
         );
+        CreationClipCompiler.Validate(document: document, refuse: (path, message) => errors.Add(item: new(Message: message, Path: path)));
         ValidateEffectors(
             document: document,
             errors: errors,
@@ -2705,8 +2796,7 @@ public static partial class CreationCanonicalizer {
         );
         ValidateParts(
             document: document,
-            errors: errors,
-            shapeIds: shapeIds
+            errors: errors
         );
         ValidateChains(
             document: document,

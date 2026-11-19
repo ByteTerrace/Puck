@@ -164,7 +164,7 @@ public sealed partial class WorldScreenBinder {
             width: ((uint)m_viewDisplayWidth)
         );
 
-        var identity = scene.Endpoint.Identity;
+        var identity = scene.Name;
 
         scene.Film = views => FilmScene(
             scene: scene,
@@ -186,7 +186,7 @@ public sealed partial class WorldScreenBinder {
             transforms: source.MovedTransforms,
             work: residency.Work
         );
-        Console.Error.WriteLine(value: $"[world.view: '{scene.Endpoint.Identity}' is shown here; its seats and windows render that world's scene]");
+        Console.Error.WriteLine(value: ((scene.Endpoint is null) ? $"[world.view: '{scene.Name}' renders '{scene.Authority}' for every session screen its authority proved is handed that scene]" : $"[world.view: '{scene.Name}' is shown here; its seats and windows render that world's scene]"));
 
         return residency;
     }
@@ -211,7 +211,7 @@ public sealed partial class WorldScreenBinder {
                 residency.Dispose();
                 CountRoutedResidency(
                     created: 0,
-                    identity: scene.Endpoint.Identity,
+                    identity: scene.Name,
                     released: 1
                 );
             }
@@ -224,14 +224,14 @@ public sealed partial class WorldScreenBinder {
             residency.Dispose();
             CountRoutedResidency(
                 created: 0,
-                identity: scene.Endpoint.Identity,
+                identity: scene.Name,
                 released: 1
             );
         }
 
         m_routedResidencies.Clear();
     }
-    private static string RoutedViewName(WorldRoutedScene scene) => $"routed${scene.Endpoint.Identity}";
+    private static string RoutedViewName(WorldRoutedScene scene) => $"routed${scene.Name}";
     // Counts residencies made or released for an endpoint's scene.
     private void CountRoutedResidency(string identity, long created, long released) {
         var (made, gone) = m_routedResidencyCounts.GetValueOrDefault(key: identity);

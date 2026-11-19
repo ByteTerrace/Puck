@@ -19,18 +19,20 @@ public sealed class InputPermissionTests {
                 new("a", ["a"], ["a"]), new("b", ["b"], ["b"]),
             ])]),
         };
-        using var fixture = Fixtures.FreshServer(definition: definition);
+        // A network body's occupant holds grants only as an admitted peer; a simulated peer is no session and holds none.
+        var peer = default(Principal);
+        using var fixture = ((bodyIndex == 0) ? Fixtures.FreshServer(definition: definition) : Fixtures.FreshServerWithPeer(definition, out peer));
 
-        if (bodyIndex == 0) { fixture.JoinSeat(); } else { Assert.Equal(1, fixture.Server.Population.SetSimulatedCount(1)); }
+        if (bodyIndex == 0) { fixture.JoinSeat(); } else { bodyIndex = peer.Index; }
         fixture.Step();
         var catalog = fixture.Server.Population.InputCatalog;
 
         Assert.True(condition: catalog.TryGetLogicalId(id: out var a, name: "a"));
-        var occupant = ((bodyIndex == 0) ? Principal.Seat(slot: 0) : fixture.Server.Population.PeerPrincipal(index: bodyIndex));
+        var occupant = ((bodyIndex == 0) ? Principal.Seat(slot: 0) : peer);
         var driver = Principal.Seat(slot: 1);
 
         fixture.Server.Grant(new(occupant, WorldCapability.Drive, GrantSubject.Body(index: bodyIndex), false, Budget: 8, Reach: new(["a", "b"])), Principal.Console);
-        fixture.Server.Grant(new(driver, WorldCapability.Drive, GrantSubject.Body(index: bodyIndex), false), Principal.Console);
+        fixture.Server.Grant(new(driver, WorldCapability.Drive, GrantSubject.Body(index: bodyIndex), false, Budget: 8), Principal.Console);
         WorldInputSource[] sources = [new(0, a, WorldInputContributionKind.Level, "key:a")];
         var primary = fixture.Server.Input.Admit(bodyIndex: bodyIndex, principal: occupant, sources: sources);
         var producer = new WorldInputProducer(catalog, primary.Mapping, sources, 128, primary.Revision, primary.Epoch);
@@ -39,7 +41,9 @@ public sealed class InputPermissionTests {
         Assert.True(condition: producer.Observe(0, FixedQ4816.One.Value, tick, default, 1));
         var body = fixture.Server.Body(index: bodyIndex)!;
 
-        Assert.True(condition: fixture.Server.ApplyIntentSubmission(body: body, submission: new(tick, bodyIndex, default, occupant, Input: producer.Publish(tick))).IsAccepted);
+        var accepted = fixture.Server.ApplyIntentSubmission(body: body, submission: new(tick, bodyIndex, default, occupant, Input: producer.Publish(tick)));
+
+        Assert.True(condition: accepted.IsAccepted, userMessage: accepted.ToString());
         var secondary = fixture.Server.Input.Admit(bodyIndex: bodyIndex, principal: driver, sources: []);
 
         Assert.True(condition: fixture.Server.Input.TrySetSeatState(driver, "focus", "b", 0, out var reason), userMessage: reason);

@@ -1289,6 +1289,39 @@
     ]
   },
   {
+    "Id": "vector-functions.rest-side-arc-and-turns",
+    "Tier": "Default",
+    "Members": [
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "Arc"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "ScaleTurn"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "TurnAngle"
+      },
+      {
+        "Type": "Puck.Maths.VectorFunctions",
+        "Name": "WithPositiveScalar"
+      }
+    ],
+    "Legs": [
+      {
+        "Kind": "Structural",
+        "Flavor": "None",
+        "Subject": "VectorFunctions.Arc over 10,000 seeded pairs of turns up to 179 degrees, each stored by WithPositiveScalar, at 33 positions: it never turns past the larger end by more than 1e-4 rad (the rest-side bound a pose clip's seam bound rests on), is unit within 1e-5, is exactly its start at zero and its end at one, and gives bit-identical results when each end is negated before WithPositiveScalar. A quarter turn about +X to the opposite quarter turn, written about -X, with a negative angle, or negated, reads within 1e-5 rad of rest at the midpoint, while Quaternion.Slerp reads past 3 rad for the negated spelling. TurnAngle is 0 for the identity, pi within 1e-6 for a half turn, and each 15-degree ladder angle within 1e-5 on both signs; ScaleTurn is the identity at 0, the turn at 1, and the turn about the same axis by 1/4, 1/2 and 3/4 of the angle within 1e-5 per component. ENVELOPE: the subject is presentation-only single precision outside the determinism contract; the law pins exact values where the subject returns an input and bands where it is transcendental, and never derives an expectation in the subject's own arithmetic",
+        "Against": "",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
     "Id": "vector-functions.attitude-readbacks",
     "Tier": "Default",
     "Members": [

@@ -176,6 +176,75 @@ public static class VectorFunctions {
             z: axis.Z
         ));
     }
+    /// <summary>Returns the angle a rotation turns through, whichever of its two signs it is written with.</summary>
+    /// <param name="turn">The rotation, unit or nearly so.</param>
+    /// <returns>The angle in radians, in <c>[0, π]</c>: <c>2·atan2(|v|, |w|)</c> of the vector part <c>v</c> and the
+    /// scalar part <c>w</c>, which stays accurate near zero and near a half turn where an arc cosine of <c>|w|</c>
+    /// does not.</returns>
+    public static float TurnAngle(Quaternion turn) => (2f * MathF.Atan2(
+        x: MathF.Abs(x: turn.W),
+        y: new Vector3(x: turn.X, y: turn.Y, z: turn.Z).Length()
+    ));
+    /// <summary>Returns the sign of a rotation whose scalar part is not negative: the same rotation, written so that two
+    /// spellings of one turn under a half turn store one value.</summary>
+    /// <param name="turn">The rotation.</param>
+    /// <returns><paramref name="turn"/>, negated when its scalar part is negative.</returns>
+    public static Quaternion WithPositiveScalar(Quaternion turn) => ((turn.W < 0f) ? Quaternion.Negate(value: turn) : turn);
+    /// <summary>Interpolates along the great arc from one rotation to another as they are written, without choosing
+    /// the shorter of the two arcs by sign as <see cref="Quaternion.Slerp"/> does. Between two rotations whose scalar
+    /// parts are both positive (<see cref="WithPositiveScalar"/>) this is the arc on the rest side: its scalar part is a
+    /// sum of the two ends' scalar parts with non-negative weights adding to at least one, so the angle along it never
+    /// exceeds the larger end's, and a quarter turn to the opposite quarter turn passes through rest.</summary>
+    /// <param name="from">The rotation at <paramref name="amount"/> zero, unit.</param>
+    /// <param name="to">The rotation at <paramref name="amount"/> one, unit, in the same hemisphere's sign convention
+    /// as <paramref name="from"/>; it is not negated.</param>
+    /// <param name="amount">The fraction of the arc, in <c>[0, 1]</c>.</param>
+    /// <returns>The unit rotation at <paramref name="amount"/> along the arc; <paramref name="from"/> at zero and
+    /// <paramref name="to"/> at one.</returns>
+    public static Quaternion Arc(Quaternion from, Quaternion to, float amount) {
+        // Below this arc the sine ratio loses precision, and a normalized straight line is the arc to within float
+        // rounding.
+        const float SmallArc = 1e-4f;
+
+        if (amount <= 0f) { return from; }
+        if (amount >= 1f) { return to; }
+
+        var sum = (from + to);
+        var difference = (to - from);
+        // The angle between the two as 4-vectors, from the half-chord and the half-sum, which neither an arc cosine
+        // near one nor one near minus one would give accurately.
+        var angle = (2f * MathF.Atan2(x: sum.Length(), y: difference.Length()));
+
+        if (angle < SmallArc) { return Quaternion.Normalize(value: Quaternion.Lerp(quaternion1: from, quaternion2: to, amount: amount)); }
+
+        var sine = MathF.Sin(x: angle);
+        var first = (MathF.Sin(x: ((1f - amount) * angle)) / sine);
+        var second = (MathF.Sin(x: (amount * angle)) / sine);
+
+        return Quaternion.Normalize(value: ((from * first) + (to * second)));
+    }
+    /// <summary>Scales a rotation's angle about its own axis: the fraction of the turn a weight of that fraction
+    /// gives.</summary>
+    /// <param name="turn">The rotation, unit.</param>
+    /// <param name="fraction">The fraction of its angle, in <c>[0, 1]</c> for a weight.</param>
+    /// <returns>The rotation about <paramref name="turn"/>'s axis by <paramref name="fraction"/> of its angle, measured
+    /// on the sign whose scalar part is not negative, so the result is at most a half turn;
+    /// <see cref="Quaternion.Identity"/> for a zero fraction or an identity turn, and <paramref name="turn"/> itself at
+    /// one.</returns>
+    public static Quaternion ScaleTurn(Quaternion turn, float fraction) {
+        if (fraction == 1f) { return turn; }
+
+        var positive = WithPositiveScalar(turn: turn);
+        var axis = new Vector3(x: positive.X, y: positive.Y, z: positive.Z);
+        var length = axis.Length();
+
+        if ((fraction == 0f) || (length == 0f)) { return Quaternion.Identity; }
+
+        var half = ((0.5f * fraction) * TurnAngle(turn: positive));
+        var (sine, cosine) = MathF.SinCos(x: half);
+
+        return new Quaternion(vectorPart: (axis * (sine / length)), scalarPart: cosine);
+    }
     /// <summary>Creates the rotation that carries the local axes onto an orthonormal right, up and forward basis: local
     /// +X onto <paramref name="right"/>, +Y onto <paramref name="up"/> and +Z onto <paramref name="forward"/>, under
     /// <see cref="System.Numerics"/>' row-vector <see cref="Vector3.Transform(Vector3, Quaternion)"/>.</summary>

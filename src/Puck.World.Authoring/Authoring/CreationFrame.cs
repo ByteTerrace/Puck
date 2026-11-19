@@ -38,6 +38,10 @@ public static class CreationFrame {
             source: document.Effectors,
             convert: FlipEffector
         ),
+            Clips = ConvertList(
+            source: document.Clips,
+            convert: FlipClip
+        ),
             Cameras = ConvertList(
             source: document.Cameras,
             convert: camera => camera with { Position = Flip(value: camera.Position) }
@@ -140,6 +144,16 @@ public static class CreationFrame {
         ? Flip(value: offset)
         : null),
         },
+    };
+    // A key's turn steps are axes and its slide is a direction, so each takes the same Flip and every angle is unchanged,
+    // as a swing's is: a key written about the author's +X turns by the same angle about the engine's -X.
+    private static CreationClipDocument FlipClip(CreationClipDocument clip) => clip with {
+        Keys = [.. (clip.Keys ?? []).Select(selector: static key => key with {
+            Poses = [.. (key.Poses ?? []).Select(selector: static pose => pose with {
+                Slide = ((pose.Slide is { } slide) ? Flip(value: slide) : null),
+                Turn = ConvertList(source: pose.Turn, convert: static step => step with { Axis = Flip(value: step.Axis) }),
+            })],
+        })],
     };
     private static ShapeSlideDocument FlipSlide(ShapeSlideDocument slide) => slide with { Axis = Flip(value: slide.Axis) };
     // A swing's pivot is a position and its axis is a direction, so both take the same Flip. Yaw180 is a proper

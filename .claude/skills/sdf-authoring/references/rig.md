@@ -68,12 +68,12 @@ outside the delta chain. A `parts` entry may name it: `TryBodyPartPose` and
 Every reader of motion takes the creation's compiled rig (`CreationRig`,
 `WorldPrototype.Rig`), never the document's facets. It lists each shape's
 writers (`CreationRigWriters`): the terms its drivers play (each swing in order,
-then each slide), an effector's solve on every bone of its chain, an effector's
+then each clip's turn in clip order, then each slide and keyed slide), an effector's solve on every bone of its chain, an effector's
 `align` on its tip whether or not the tip is a bone, a timeline frame that poses
 it, and, for a look, a part follower (`CreationRig.Follow`). A shape with any
 writer owns a transform slot (`CreationRig.Owner`), and a creation with none is
 rigid. The document every renderer, collider and anchor reads
-(`WorldPrototype.EngineDocument`) carries no swings or slides, and
+(`WorldPrototype.EngineDocument`) carries no swings, slides or clips, and
 `CreationRig.Compile` refuses it, so no reader can move a shape around the rig.
 
 The rig also lists what the pose reads from outside (`CreationRig.Reads`):
@@ -109,9 +109,32 @@ query padding and the body's contact skin stay in world units. The local mesh st
 baked. The debug glacier is the standard family's example.
 
 `drivers` is any number of named `{ name, signal, cadence, when, blendInSeconds,
-blendOutSeconds, dynamics, cadenceBy, weightBy }`. Everything animated names one.
-They advance in declaration order, and a driver reads only drivers declared
-before it, the rule a shape's `parent` follows.
+blendOutSeconds, dynamics, cadenceBy, weightBy, parts, mode, lead, leadSeconds }`. Everything
+animated names one. They advance in declaration order, and a driver reads only
+drivers declared before it, the rule a shape's `parent` follows.
+
+A driver is a layer. `parts` (part ids) is its mask: its swings, slides and
+clip poses play only on the shapes those parts cover (omitted, the shapes it
+poses), and a motion it authors outside its mask is warned about (PUCK132), not
+refused. `mode` is `add` (default) or `replace`: a replacing driver of weight
+`w` scales every driver declared before it by `1 - w` on its mask's shapes and
+nowhere else, so a stance takes the arms from the gait, the run and the jump
+without editing them. A driver's share on a shape is its weight times `1 - w`
+for each replacing driver declared after it that covers the shape
+(`CreationRig.Share`, the one place a share is formed); every swing, slide and
+clip term uses it, and a term at share zero is skipped. Declaration order sets
+shares only: the order turns compose in on a shape is the shape's own, so a
+driver's row can move above or below a stance without changing how the turns
+interleave. A replacing layer at weight zero leaves every pose bit for bit as it
+was.
+
+A smooth seam's envelope (`CreationMotion.Envelope`) counts each swing and slide
+in full and a shape's clip turns as one turn about its joint
+(`CreationMotion.ClipLimit`): each adding driver's tracks on the shape summed,
+plus the largest such sum among replacing drivers. The seam box is the overlap
+of the two parts' boxes widened by the smooth radius `k` on every side, so the
+reach from any joint inside it is at least `√3·k`, and a clip turn over about
+16.6 degrees at a joint cannot skin whatever `k` is.
 
 | Signal | Behavior |
 |---|---|
@@ -125,6 +148,26 @@ before it, the rule a shape's `parent` follows.
 `dynamics` names a world `dynamics` row a setting driver's phase follows through
 (second-order: trail, overshoot, settle). An integrating driver and a
 `driver.<name>` driver refuse it; the world validator refuses an undeclared row.
+
+`lead` (an input channel's name) and `leadSeconds` (default 0.25) let a
+state-cell driver show the presenting seat's own press before the authority's
+answer is drawn: a guess. While the client presents for exactly one seat
+(`IWorldStampSource.SeatGuess`, null with two seats on one screen and on a session
+view), that seat controls the body, is admitted with no lost capture, the channel
+is live in the mapping the authority last published, an edge the seat sent on it
+(a press, a release or an axis sample) has not had its answer presented, and the
+edge is no older than `leadSeconds`, the phase follows the seat's own folded level
+in place of the cell. The one function is `WorldSeatInput.TryLead`; it writes
+nothing, and the authority never reads `lead`. The answer is
+`WorldInputAnswer` (the epoch, the highest event sequence of the last batch the
+authority took or refused for that owner, and the tick it answered in), delivered
+to that owner alone; the guess ends when that tick is fully presented, at a new
+input epoch, or at `leadSeconds`. A guess is one of the rig's reads
+(`CreationRigReadKind.Lead`): its start, level and end move the wake revision, and
+a registration with a guess in force is never held by a rate tier. `body.rig`
+prints `source=lead` or `source=cell` for a led driver. Refused by name: `lead`
+on a signal that is not a state cell, `leadSeconds` without `lead`, and (world
+validator) a channel that is not declared, or is relative or text.
 
 `cadenceBy` and `weightBy` are each `{ driver, curve }`: the height (Z) of a
 world `curves` row where its X equals that earlier driver's phase, held at the
@@ -150,6 +193,42 @@ non-negative exponential time constants; zero is immediate on a positive render
 delta. They control gate weights independently of phase cadence and the shared
 movement-speed filter (`CreationAnimationLawTests`).
 
+## Pose clips
+
+`clips` is any number of `{ name, driver, keys, wrap, period }`: key poses on
+joints that interpolate, played by one driver whose phase is the position in
+the clip and whose weight is the blend. A key is `{ at, ease, poses }`, and a
+pose is `{ shape, turn, slide }`: `turn` is a list of `{ axis, angle }` steps
+composed in the order written (the first turns first; `angle` takes `deg`), and
+`slide` a translation. Both are literal, measured from the shape's rest pose,
+and turn it about its joint (`joint`, else its first swing's pivot, else its
+position; `CreationRig.Joint`), so a keyed forearm carries the hand. A pose
+with neither is the rest pose: write it at the clip's start, or a track begins
+at its only key. A clip's turn crosses the author frame as a swing does.
+
+A shape's track is the keys that pose it. The compiler stores each key's
+composed turn as the one quaternion with a positive scalar
+(`CreationClipCompiler`), and between keys the turn follows the arc between
+them with no change of sign (`VectorFunctions.Arc`): a quarter turn to the
+opposite quarter turn passes through rest, and the turn never exceeds the
+larger of its two keys, which the seam bound relies on. `ease` (on the key the
+stretch arrives at) is `linear` (default), `smooth` or `hold`. A driver's share
+scales the interpolated turn's angle about its own axis and the slide's length.
+On a shape, swings compose first, then clip turns in clip order, then slides and
+keyed slides.
+
+A held clip (the default) holds a track's first key before it and its last key
+after it. A looping clip (`wrap: true`) reads the phase modulo `period` (one
+turn unless authored, every key inside it), and its last key interpolates back
+to its first. A travel or time driver wraps its phase every turn, and one that
+follows it wraps over one turn times its cadence, so such a phase plays only a
+looping clip whose period divides that span; a held clip is played by a level
+(a state cell, a rate signal or a driver following one). Refused by name: a
+held clip on a wrapping phase, a period that does not divide the span, a
+`cadenceBy` or state-bound cadence on the follower of a wrapping driver, a key
+out of order or outside the period, an unknown driver or shape, a shape with
+domain folds, and a composed turn of a half turn or more.
+
 ## Chains and effectors
 
 When every surface effector reports `target=none`, check the presentation query
@@ -169,16 +248,55 @@ resolves to `limb` when there are exactly three shapes, and a `limb` with any
 other count demotes to `spine`. A chain naming a missing shape id is dropped.
 
 `effectors` is any number of CCD solvers, `{ name, chain, tip, target, when, weight,
-plant, align }`, where `chain` and `tip` name shapes **by name**, 2 to 8 bones, solved
-over 64 iterations.
+plant, align, weightBy, blendInSeconds, blendOutSeconds }`, where `chain` and `tip`
+name shapes **by name**, 2 to 8 bones, solved over 64 iterations. Effectors solve
+after every driver, in declaration order, each on the pose the one before it left:
+a constraint on the final pose, so motion a later layer adds to a constrained chain
+shows above the tip and not at it. An effector writes every bone of its chain and,
+when it aligns, its tip (`CreationRigEffector.Writes`).
 
-A `target` is `{ kind }` of `surface`, `body`, or `state`:
+A `target` is `{ kind }` of `surface`, `body`, `state`, or `shape`:
 
 | Kind | Fields |
 |---|---|
 | `surface` | `direction` (author frame, nonzero), `reach` in (0, 8], `standoff` ≤ 1 |
-| `body` | `index`, `offset` ≤ 16 |
+| `body` | exactly one of `index` (fixed) and `reference` (a numeric `state.<row>[.<key>]` holding the body's index, read as stored truth: a whole number naming an active body selects it, anything else selects none, so zero is body zero and -1 clears it); `part` (optional, a part id the body's look publishes, read as last drawn, the root when it publishes none); `offset` ≤ 16 riding the target's attitude |
 | `state` | `reference` = `state.<row>[.<key>]` holding a world-space point |
+| `shape` | `shape`, a shape of the same creation; `offset` ≤ 16, a rest point in the author frame that rides the shape (omitted, the shape's origin); `direction` (optional), the approach the shape carries, whose reverse is the normal `align` turns the tip onto |
+
+A `shape` target is read on the pose of the same frame, after every driver and
+every earlier effector. Refused by name: a target shape that is, or hangs from, a
+bone or the tip of the effector's own chain; a later effector that writes the
+target shape or a shape it hangs from; and a `plant` on a `shape` target. A later
+effector that writes a shape an earlier effector's tip hangs from is warned about
+(PUCK133, `CreationRig.Contests`): the later one solves last and holds its own
+target.
+
+Each frame an effector first resolves who its target is: the shape, the body's
+`WorldEntityAddress` (slot and occupant generation), the cell holding a point, or
+the field a probe reads. When that differs from the target it last acted on, or
+there is none, it releases its plant latch and its step through one function
+(`ReleaseLatch`), so a reused slot or a cleared cell never keeps the old latch. A
+frame that resolves no target (a lost target, a probe that misses with no latch)
+reports `target=none`, and the solve keeps running toward the last goal it drew,
+held in the creation's own frame, while the weight eases out: nothing about a lost
+target is read again.
+
+The weight the solve and `align` use is three numbers multiplied. The eased level
+eases toward the gate times the contact weight times `weightBy`'s curve height at
+its driver's phase (`{ driver, curve }`, as a driver's), over `blendInSeconds` and
+`blendOutSeconds` (default 0.15), snapping onto its level within a thousandth. The
+authored `weight` is the second. The layer share is the third, read fresh every
+frame and never eased (`CreationRig.EffectorShare`): for each shape the effector
+writes, the owner's share there (the `weightBy` driver's weight times `1 - w` of
+each later replacing driver covering the shape; with no owner, every replacing
+driver counts), the smallest across its writes. A layer that takes any written
+shape at full weight removes the effector in that frame and releases its latch, so
+a foot plants afresh where the body stands when the layer leaves. A driver with no
+`parts` covers what its effectors write; one whose `parts` leave out a shape its
+effector writes is refused, naming the shape. `body.rig` prints each effector's
+`applied` weight and its `error`, the distance from its tip to its target on the
+final pose after every effector and follower.
 
 `reach`, `standoff` and a replant's `distance` and `height` are creation
 lengths: at a look or `bodies.scale` scale other than one they scale with the
@@ -278,7 +396,7 @@ the motion vocabulary scales a shape over time.
 | Section | Shape | Caps and notes |
 |---|---|---|
 | `cameras` | `{ id, shapeId, position, yaw, pitch, fov, focus, feed }` | rides the anchored shape's live pose. `position` converts to the engine frame; `yaw` and `pitch` do not |
-| `parts` | `{ id, shapeId }` | publishes one shape's dynamic transform as a named anchor other things can attach to |
+| `parts` | `{ id, shapeId, shapes, except }` | a named body part: `shapeId` is the anchor whose dynamic transform an anchor or a look's `partDynamics` reads; the part covers each shape `shapes` names and every shape that hangs from it through `parent` (omitted: the anchor's subtree), less the shapes of the earlier parts `except` names. Parts may overlap, and `CreationPartCompiler` is the one place a part becomes shapes; `creation stats` prints each part's shapes. An unknown shape or an `except` naming no earlier part is refused by name |
 | `behavior` | `{ locomotion, faces, sounds }` | a face is `{ name, shapeId, defaultSource }` with a source of `none`, `test`, `camera:<name>`, or `feed:<name>`; a sound carries an inline `puck.synth.v1` patch with `level` capped at 8 |
 | `textRuns` | `{ text, position, rotation, emHeight, depth, mode, material, font, maxWidth, align, tracking, lineSpacing, shapeId }` | local +X advances, +Y is ascent, +Z is the relief normal. `mode` is `emboss` (default) or `engrave`; engrave forces the creation-wide scope. Each non-whitespace glyph adds a field operand to bake. `position` is the first line's baseline; `\n` breaks a line. An embossed run bakes alone, refined toward `min(depth, 0.08 × emHeight / 3)`, a third of a regular weight's thinnest stroke (`SdfProgramBuilder.GlyphDetail`), on a lattice spaced to reach it (`SdfMeshPathBake.OwnFinal`), so each stroke spans three cells; an engraved run refines its own glyphs' box at that detail inside its creation's group (`SdfInstanceRange.Glyphs`); the view's tier floors that at a cell under half a display pixel, so lettering is kept wherever its strokes span a pixel |
 | `noise` | `{ frequency, amplitude, octaves, gain, lacunarity, seed }` | frequency in (0, 8], amplitude in (0, 4] creation units, octaves 1 to 8. Forces the creation-wide scope. Root motion and `sizeBy` carry the baked relief; independently moving parts (frames, shape drivers, effectors or look part followers) refuse it. Static scale changes amplitude and wavelength together in render and contact. |
@@ -289,7 +407,7 @@ the motion vocabulary scales a shape over time.
 Converted on the way to the engine: shape `position`, `rotation`, and `joint`;
 `symmetry` fold normals; swing `pivot` and `axis`; slide `axis`; frame transform
 `position` and `rotation`; camera `position`; effector target `direction` and
-`offset`; a root-parented volume's `position` and `rotation`; and an unridden
+`offset`; a clip key's turn axes and slide; a root-parented volume's `position` and `rotation`; and an unridden
 text run's `position` and `rotation`.
 
 Not converted: scalars, camera `yaw` and `pitch`, chain `goal` and `pole`, a

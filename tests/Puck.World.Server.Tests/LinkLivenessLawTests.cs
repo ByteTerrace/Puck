@@ -397,16 +397,12 @@ public sealed class LinkLivenessLawTests {
     }
     [Fact]
     public void EverySubmittedMutationTapesWithTheEnvelopesOwnActor() {
-        using var fixture = Fixtures.FreshServer();
+        // A peer submits only while its session lives.
+        using var fixture = Fixtures.FreshServerWithPeer(Fixtures.BuildDocument(), out var peer);
 
         var observed = new List<Principal>();
 
         fixture.Server.MutationTap = (_, actor) => observed.Add(item: actor);
-
-        var peer = Principal.Peer(
-            generation: 1,
-            index: 4
-        );
 
         // A submission that never touches the loopback — the shape a forwarded traveller's write and an admitted
         // socket peer's write both take.

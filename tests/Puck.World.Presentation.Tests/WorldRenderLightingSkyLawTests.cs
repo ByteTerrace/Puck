@@ -205,11 +205,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         // A light's colour is scaled to unit luminance, so it gives exactly its illuminance.
         Assert.Equal(
-            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
-                x: (0xFF / 255f),
-                y: (0xD9 / 255f),
-                z: (0xA6 / 255f)
-            )),
+            expected: SdfPhotometry.UnitLuminance(color: Fixtures.SceneLight(red: 0xFF, green: 0xD9, blue: 0xA6)),
             actual: key.Color
         );
         Assert.Equal(
@@ -278,11 +274,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         );
         // Each layer's colours and brightnesses are in units of its luminance, the default sky's here.
         Assert.Equal(
-            expected: (Color: (new Vector3(
-                x: (0xE0 / 255f),
-                y: (0x8F / 255f),
-                z: (0x6B / 255f)
-            ) * SdfSky.DefaultLuminance), Elevation: 0f),
+            expected: (Color: (Fixtures.SceneLight(red: 0xE0, green: 0x8F, blue: 0x6B) * SdfSky.DefaultLuminance), Elevation: 0f),
             actual: resolved.Sky.First<SdfSkyGradient>().Stop(index: 1)
         );
         Assert.Equal(
@@ -951,11 +943,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
             actual: resolved.Lights.Curvature.InkHigh
         );
         Assert.Equal(
-            expected: new Vector3(
-                x: (0x10 / 255f),
-                y: (0x10 / 255f),
-                z: (0x18 / 255f)
-            ),
+            expected: Fixtures.SceneLight(red: 0x10, green: 0x10, blue: 0x18),
             actual: resolved.Lights.Curvature.InkColor
         );
         // Curvature alone leaves the pinned lights in place.
@@ -1003,19 +991,11 @@ public sealed partial class WorldRenderLightingSkyLawTests {
         ).Lights[0].Color;
 
         Assert.Equal(
-            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
-                x: (0xFF / 255f),
-                y: (0xD9 / 255f),
-                z: (0xA6 / 255f)
-            )),
+            expected: SdfPhotometry.UnitLuminance(color: Fixtures.SceneLight(red: 0xFF, green: 0xD9, blue: 0xA6)),
             actual: first
         );
         Assert.Equal(
-            expected: SdfPhotometry.UnitLuminance(color: new Vector3(
-                x: (0x4C / 255f),
-                y: (0x5C / 255f),
-                z: (0x8C / 255f)
-            )),
+            expected: SdfPhotometry.UnitLuminance(color: Fixtures.SceneLight(red: 0x4C, green: 0x5C, blue: 0x8C)),
             actual: second
         );
         Assert.Equal(

@@ -25,7 +25,8 @@ public sealed class AuthorityAdministrationLawTests {
             Grantee: recipient,
             Capability: WorldCapability.Drive,
             Subject: subject,
-            Exclusive: false
+            Exclusive: false,
+            Budget: 4
         );
 
         fixture.Server.Grant(

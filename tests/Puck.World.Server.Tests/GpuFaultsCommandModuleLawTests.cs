@@ -24,7 +24,7 @@ public sealed class GpuFaultsCommandModuleLawTests {
         Assert.True(condition: faults.TryGetArmedLoss(remaining: out _, removes: out var removes));
         Assert.True(condition: removes);
         Assert.StartsWith(expectedStartString: "[gpu.faults: armed=pipeline:2,remove:1 ", actualString: registry.Submit(line: "gpu.faults list").Output);
-        Assert.EndsWith(expectedEndString: " frames=0]", actualString: registry.Submit(line: "gpu.faults disarm").Output);
+        Assert.EndsWith(expectedEndString: " frames=0 recordings=0]", actualString: registry.Submit(line: "gpu.faults disarm").Output);
         Assert.False(condition: faults.TryGetArmedLoss(remaining: out _, removes: out _));
     }
     [InlineData("gpu.faults remove 0", "expected remove [<n>]]")]
@@ -33,7 +33,7 @@ public sealed class GpuFaultsCommandModuleLawTests {
     [InlineData("gpu.faults arm nothing", "expected arm <kind> [<n>]]")]
     [InlineData("gpu.faults arm pipeline 0", "expected arm <kind> [<n>]]")]
     [InlineData("gpu.faults list extra", "expected list]")]
-    [InlineData("gpu.faults wobble", "expected arm <kind> [<n>] | lose [<n>] | remove [<n>] | disarm | list]")]
+    [InlineData("gpu.faults wobble", "expected arm <kind> [<n>] | lose [<n>] | remove [<n>] | record [<n>] | disarm | list]")]
     [Theory]
     public void AMalformedFormAnswersTheNearestForm(string line, string expected) {
         var (registry, _) = Console();

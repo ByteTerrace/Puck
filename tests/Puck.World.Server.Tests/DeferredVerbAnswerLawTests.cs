@@ -124,6 +124,7 @@ public sealed class DeferredVerbAnswerLawTests {
         link.SubmitGrant(
             actor: Principal.Seat(slot: 1),
             grant: new WorldGrant(
+                Budget: 4,
                 Capability: WorldCapability.Drive,
                 Exclusive: false,
                 Grantee: Principal.Seat(slot: 2),
