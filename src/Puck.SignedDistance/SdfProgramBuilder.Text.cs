@@ -162,8 +162,12 @@ public sealed partial class SdfProgramBuilder {
     /// must.</summary>
     public const float GlyphThickenCells = 2.5f;
 
+    /// <summary>The fewest cells the lettering stroke rule lets a widened stroke span before it bakes the glyph as its ink
+    /// box instead: two, so every lattice line across the stroke still holds an inside sample.</summary>
+    public const float GlyphHoldCells = 2f;
+
     /// <summary>The share of a glyph's distance band (half its atlas's distance range, past which the encoded field
-    /// saturates) the lettering stroke rule widens a glyph by before baking it as its ink box instead.</summary>
+    /// saturates) the lettering stroke rule widens a stroke by at most.</summary>
     public const float GlyphWidenShare = 0.9f;
 
     /// <summary>Returns the thinnest stroke an atlas's glyphs are taken to have, in units of a glyph's distance scale as

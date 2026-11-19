@@ -450,14 +450,17 @@ precise float sdfGlyph(float3 p, float4 data0, float4 data1) {
     float widen = 0.0;
 
     // A glyph baked at a cell its strokes or relief are too thin for loses them between samples. Its thinnest stroke
-    // widens to SDF_GLYPH_THICKEN_CELLS cells and its relief to a cell, so the bake drawing it at any tier keeps every
-    // stroke. A widening past what the encoded band measures draws the glyph as its ink box instead: the cell less the
-    // band (the atlas pads each cell by at least the band, so the box holds every stroke), widened to the same cells
-    // inside the cell. The group's box grows by the cell to hold the raised relief (SdfMeshBakeGroup.GlyphCell).
+    // widens toward SDF_GLYPH_THICKEN_CELLS cells, as far as the encoded band measures, and its relief to a cell, so the
+    // bake drawing it at any tier keeps every stroke. Where that widening leaves the stroke under SDF_GLYPH_HOLD_CELLS
+    // cells the glyph bakes as its ink box instead: the cell less the band (the atlas pads each cell by at least the
+    // band, so the box holds every stroke), widened to SDF_GLYPH_THICKEN_CELLS cells inside the cell. The group's box
+    // grows by the cell to hold the raised relief (SdfMeshBakeGroup.GlyphCell).
     if (sdfGlyphCell > 0.0) {
-        widen = max((0.5 * ((SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - (sdfGlyphStroke * distanceScale))), 0.0);
+        float stroke = (sdfGlyphStroke * distanceScale);
+
+        widen = clamp((0.5 * ((SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - stroke)), 0.0, (SDF_GLYPH_WIDEN_SHARE * band));
         halfDepth = max(halfDepth, sdfGlyphCell);
-        if (widen > (SDF_GLYPH_WIDEN_SHARE * band)) {
+        if ((stroke + (2.0 * widen)) < (SDF_GLYPH_HOLD_CELLS * sdfGlyphCell)) {
             float2 ink = max((halfSize - band), 0.0);
             float grow = min(max(((0.5 * SDF_GLYPH_THICKEN_CELLS * sdfGlyphCell) - min(ink.x, ink.y)), 0.0), band);
 

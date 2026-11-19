@@ -646,8 +646,9 @@ laws exercise that boundary.
   depth and leaving a long note a coarser split. The tier floors the detail, so a view that
   resolves no stroke pays for none, and a group baked at a tier coarser than its glyphs
   declare thickens them instead of losing strokes: the lettering stroke rule in `sdfGlyph`
-  widens the thinnest stroke to `GlyphThickenCells` cells and the relief to one cell, or
-  bakes the glyph as its ink box past the atlas's band
+  widens the thinnest stroke toward `GlyphThickenCells` cells within the atlas's band and the
+  relief to one cell, or bakes the glyph as its ink box where the stroke stays under
+  `GlyphHoldCells` cells
   ([text and glyphs](../../../../docs/rendering/sdf/reference/text-and-glyphs.md#the-lettering-stroke-rule)).
   Every lattice of a group takes the group's cell and stroke through one door
   (`SdfMeshPathBake.RequestOf`, `SdfMeshBakeRequest.Glyphs`), so coarse and fine samples

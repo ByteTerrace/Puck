@@ -75,13 +75,16 @@ bake for a third of its thinnest stroke and its half relief
 region's budget raised the detail bias, would otherwise lose strokes and faces
 between samples. The bake kernel thickens each glyph instead (`sdfGlyph`): its
 thinnest stroke, `SdfProgram.GlyphStroke` distance scales wide
-(`GlyphStrokeEms` ems of its atlas), widens to `GlyphThickenCells` cells (two and a half: every lattice line across it holds two inside samples), and
-its relief rises to one cell. Where that widening reaches past what the atlas's
-distance band measures, the glyph bakes as its ink box (the cell less half the
-distance range, which holds every stroke because the atlas pads each cell by at
-least that), widened to the same cells. Text reads bolder as it coarsens and
-becomes bars of letter boxes where letters are a few pixels tall, rather than
-breaking into fragments. At the tier a run declares, or finer, nothing changes.
+(`GlyphStrokeEms` ems of its atlas), widens toward `GlyphThickenCells` cells,
+and its relief rises to one cell. The widening reaches at most
+`GlyphWidenShare` of the atlas's distance band (half its distance range, past
+which the encoded field saturates). Where the stroke still spans fewer than
+`GlyphHoldCells` cells, so a lattice line across it could miss it, the glyph
+bakes as its ink box instead: the cell less half the distance range, which
+holds every stroke because the atlas pads each cell by at least that, widened
+to `GlyphThickenCells` cells. Text reads bolder as it coarsens and becomes bars
+of letter boxes where letters are a few cells tall, rather than breaking into
+fragments. At the tier a run declares, or finer, nothing changes.
 
 Every lattice of a group carries the group's cell and stroke
 (`SdfMeshBakeRequest.Glyphs`, written through the one request door

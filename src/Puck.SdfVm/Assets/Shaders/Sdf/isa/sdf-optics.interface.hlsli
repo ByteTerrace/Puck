@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-optics' (sha256/0645d9e27f3c3cc3269cdca2fe81a3cc350bb3812d91c25f6c8a284af0b6e44f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-optics' (sha256/4b1f0ab3b89165e314bbb856be8d5513719d8594bb1bc71e2434a22448bf41f9). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_OPTICS
 #define PUCK_SHADER_INTERFACE_SDF_OPTICS
 
@@ -32,8 +32,8 @@ struct SdfOpticsPass {
     [[vk::offset(68)]] uint workCounterRow;
     [[vk::offset(72)]] uint workCounterRowDetail;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsaF95710A6 : register(b0, space3);
-#define passGroup passGroupIsaF95710A6
+[[vk::binding(0, 3)]] ConstantBuffer<SdfOpticsPass> passGroupIsa76CF0ACB : register(b0, space3);
+#define passGroup passGroupIsa76CF0ACB
 [[vk::binding(1, 3)]] Texture2D<float4> bloomSource : register(t1, space3);
 [[vk::binding(2, 3)]] Texture2D<float4> bloomFine : register(t2, space3);
 [[vk::binding(3, 3)]] SamplerState bloomSampler : register(s3, space3);
