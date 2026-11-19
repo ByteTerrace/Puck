@@ -132,6 +132,9 @@ public sealed partial class SdfFieldEvaluator {
         var materialDelta = 0;
         var laneErodeSkip = false;
         var laneErodeAmount = FixedQ4816.Zero;
+        // The relief weight the masks since the last relief multiplied (mapCore's reliefWeight), which the next
+        // NoiseDisplace consumes and resets.
+        var reliefWeight = FixedQ4816.One;
         Span<(FixedQ4816 Distance, int Material)> scopes = stackalloc (FixedQ4816, int)[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
@@ -274,9 +277,18 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfOp.Onion:
                 case SdfOp.CellDisplace:
-                case SdfOp.NoiseDisplace:
                 case SdfOp.Dilate: {
                         resultDistance = EditField(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance);
+                        break;
+                    }
+                case SdfOp.NoiseDisplace: {
+                        resultDistance = WeightedRelief(instruction: in instruction, localPosition: localPosition, resultDistance: resultDistance, weight: reliefWeight);
+                        reliefWeight = FixedQ4816.One;
+                        break;
+                    }
+                case SdfOp.ReliefWeight: {
+                        reliefWeight *= ReliefMaskWeight(instruction: in instruction, region: resultDistance);
+                        resultDistance = FarDistance;
                         break;
                     }
                 case SdfOp.Displace: {
@@ -286,7 +298,9 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfOp.PushField: {
                         influence?.Push();
                         scopes[scopeDepth++] = (resultDistance, resultMaterial);
-                        resultDistance = FarDistance;
+                        // A relief mask's scope starts at its seed (SdfProgram.IsReliefMaskPush), every other at the far
+                        // distance; an unseeded push's Aux is zero.
+                        resultDistance = ((instruction.Aux.Value > 0L) ? instruction.Aux : FarDistance);
                         resultMaterial = 0;
                         break;
                     }
@@ -467,12 +481,33 @@ public sealed partial class SdfFieldEvaluator {
             ((SdfCellMode)instruction.Blend),
             instruction.Data0Z
         ) - Half))),
-        // The fBm relief (sdfValueNoise3, field/sdf-noise.hlsli): amplitude times the host-baked 1/Σ gainᵏ times the sum.
-        SdfOp.NoiseDisplace => (resultDistance + ((instruction.Data0Y * instruction.Data1X) * Pcg3dLatticeNoise.Fbm3(
-            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend),
-            q: (localPosition * instruction.Data0X), seed: instruction.Shape))),
         _ => (resultDistance - instruction.Data0X),
     };
+    // The fBm relief (sdfValueNoise3, field/sdf-noise.hlsli): amplitude times the host-baked 1/Σ gainᵏ times the sum,
+    // times the weight its masks left (exactly one, and no product, where no mask lowered it). KEEP IN SYNC with
+    // mapCore's SDF_OP_NOISE_DISPLACE.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static FixedQ4816 WeightedRelief(in CompiledInstruction instruction, FixedVector3 localPosition, FixedQ4816 resultDistance, FixedQ4816 weight) {
+        var relief = ((instruction.Data0Y * instruction.Data1X) * Pcg3dLatticeNoise.Fbm3(
+            gain: instruction.Data0Z, lacunarity: instruction.Data0W, octaves: ((int)instruction.Blend),
+            q: (localPosition * instruction.Data0X), seed: instruction.Shape));
+
+        return (resultDistance + ((weight == FixedQ4816.One) ? relief : (relief * weight)));
+    }
+    // A relief mask's weight at a point whose distance to the region reads `region` in the mask scope's own units, against
+    // the band's endpoints in those units (Data1.x, Data1.y, the latter the scope's seed): its outside weight wherever the
+    // region reads at least the band's end, so no shape of the region came nearer; otherwise
+    // inside + (outside − inside)·smoothstep over the band, exactly inside at or below its start. KEEP IN SYNC with
+    // mapCore's SDF_OP_RELIEF_WEIGHT.
+    private static FixedQ4816 ReliefMaskWeight(in CompiledInstruction instruction, FixedQ4816 region) {
+        if (region >= instruction.Data1Y) {
+            return instruction.Data0W;
+        }
+
+        var step = FixedQ4816.Smoothstep(edge0: instruction.Data1X, edge1: instruction.Data1Y, value: region);
+
+        return (instruction.Data0Z + ((instruction.Data0W - instruction.Data0Z) * step));
+    }
     // A scope's pop: its candidate, scaled by the scope's baked 1/L, joins the field the scope saved. Data1.y is that
     // candidate scale on every pop (read on its finer compiled grid, ScopeScale), and a stairs pop carries its step count in Data1.z, as mapCore's pop and
     // AnalyzeLipschitz read them.

@@ -458,14 +458,24 @@ laws exercise that boundary.
   and contoured their 4 cm bead on 27 mm cells. The finest applies, at
   placement scale, no finer than 2 mm (`WorldShapeDetail.FinestDetail`); a
   part thinner than the floor declares the floor (a 1.2 mm eyelid tube that
-  declared nothing contoured as shards on a 2.4 mm lattice). A scoped creation keeps its tightest shape's spacing, or
-  its noise relief's (`CreationNoiseDocument.DetailSpacing`) where that is
-  finer; text declares half a stroke (`SdfProgramBuilder.GlyphDetail`). Refinement stops at
+  declared nothing contoured as shards on a 2.4 mm lattice). A creation emitted
+  as one scoped instance (static, or a moving root's surface) declares a part
+  a shape and one for its noise relief (`WorldShapeDetail.PartsOf`,
+  `SdfInstanceRange.Parts`): each shape's box at its own detail, and the
+  relief's spacing (`CreationNoiseDocument.DetailSpacing`) over the box its
+  composed surface lies in (`SdfBoundAlgebra.ComposeBox`), so the group bakes on
+  a union's final lattice and a moraine's 9 cm round section refines its own
+  box, not a whole terrain sector. Text declares half a stroke
+  (`SdfProgramBuilder.GlyphDetail`). Refinement stops at
   eight cells a coarse axis (a fitted text group's lattice is spaced to reach
-  its detail instead, below), and a scoped creation's coarse lattice spans its
-  bound sphere about the creation's origin, so a terrain sector centred on its
-  ring's centre bakes at 2.8 m, not its declared 1.56 m
-  (`docs/plans/valley-and-moons.md`). A declaration bounds refinement; the bake
+  its detail instead, below), and the fine-sample budget
+  (`SdfSampledLattice.MaxFineSamples`) takes a coarser split where the cells a
+  region covers would pass it: the debug world's north-west wall, whose relief
+  region covers about 128 thousand 7.5 m cells, splits each in three and bakes
+  at 2.5 m against the 1.56 m its relief declares
+  ([the terrain pass](../../../../docs/plans/terrain-pass.md#what-set-a-sectors-cell)). A surface that large reaches
+  its declared spacing only split across lattices, the streaming plan's source
+  tiles. A declaration bounds refinement; the bake
   decides its cost (next bullets): a detail at or past the lattice's own
   spacing refines nothing, alone (`SdfMeshPathBake.OwnFinal`) or in a union
   (`UnionFinal`). In a static union a member's region is its own world-axis box

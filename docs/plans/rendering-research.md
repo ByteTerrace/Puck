@@ -1552,8 +1552,9 @@ moving parts and terrain than the debug world's meadow. An authored swing
 is interpreted from the document every frame. A gust's phase is a literal
 number for each blade, so every tile is its own prototype and tiles
 cannot share a bake. A scatter is evaluated for the whole world at once,
-under a ceiling of 32,768 colliders. Terrain bakes at 2.8 m cells with
-relief capped at 4 m, and nothing casts a shadow past 120 m.
+under a ceiling of 32,768 colliders. A terrain sector bakes at 2.5 m cells
+in one lattice, coarser than its relief declares, with relief capped at
+4 m, and nothing casts a shadow past 120 m.
 
 **What we propose.** The engine speeds up the authored program and
 derives its bounds. It writes no grass, wind or terrain path in C#.

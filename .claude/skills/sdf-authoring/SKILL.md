@@ -287,6 +287,13 @@ special case. A shape carrying `domain` folds may not also carry a swing or
 slide. Details, caps, every refusal, and the Moth's driver map are in
 `references/rig.md`.
 
+A relief takes `masks`, regions drawn with shapes that scale its displacement down
+(`CreationReliefMaskDocument`: `fade`, `start`, `inside`, `outside`, `shapes`): with `inside: 0` the relief is exactly
+zero on and inside a region, so a carve or pad that is also its own region keeps its authored surface, in the bake and
+in contact alike. Region shapes carry geometry only (no material, blend, group, warp or other facet), and entries'
+weights multiply. They are written through the generic value path (`masks [ { fade: 8, shapes [ { type: "Sphere", … } ] } ]`);
+`worlds/standard/terrain.puck`'s `terrainBasinMask` builds one from the rows `terrainBasin` carves.
+
 Creation `noise` can ride whole-creation motion, including `sizeBy`, attached roots and body looks.
 The relief bakes once over the composed field in the root's units and keeps its amplitude and wavelength
 under root scaling. Parts that move within that frame refuse it (`CreationMotionPlan`, PUCK030): per-part

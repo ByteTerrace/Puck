@@ -71,7 +71,7 @@ let facetRow = [
 let foldRow = [
   "shape-symmetry", "shape-repeat", "shape-repeat-grid", "shape-repeat-even", "shape-repeat-clipped",
   "shape-polar-mirror", "shape-polar-z", "shape-polar-stride", "shape-wallpaper-pmm", "shape-wallpaper-p4m",
-  "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise"
+  "shape-wallpaper-p3m1", "shape-wallpaper-p6m", "shape-wallpaper-stride", "shape-erode", "shape-noise-mask", "shape-noise"
 ]
 let formRow = [
   "shape-superellipsoid-2", "shape-superellipsoid-8", "shape-prism-triangle", "shape-prism-rectangle",
@@ -1067,6 +1067,42 @@ template foldPrototypes() {
   prototype "shape-noise" {
     document {
       exhibit(label: "NOISE", note: "fBm noise lumps the sphere; the plinth stays clean")
+    }
+  }
+  // One prototype under two relief masks, whose weights multiply: the bowl's region is its own carve with an inside
+  // weight of zero, so the bowl keeps its authored surface exactly, and a box about the slab keeps the relief on the slab
+  // alone (inside 1, outside 0), so the plinth and its lettering stay clean in the same creation.
+  prototype "shape-noise-mask" {
+    document {
+      exhibit(label: "RELIEF MASK", note: "the bowl stays smooth; the slab around it stays rough")
+      noise {
+        frequency: 6
+        amplitude: 0.04
+        seed: 13
+        masks [
+          {
+            fade: 0.08
+            shapes [{ type: "Sphere", name: "bowl", position [0, 1.27, 0], scale [0.22, 0.22, 0.22] }]
+          }
+          {
+            fade: 0.06
+            inside: 1
+            outside: 0
+            shapes [{ type: "Box", name: "slab", position [0, 1, 0], scale [0.44, 0.12, 0.44] }]
+          }
+        ]
+      }
+      shape Box "slab" {
+        material: exhibitMaterial
+        position [0, 1, 0]
+        scale [0.4, 0.1, 0.4]
+      }
+      shape Sphere "bowl" {
+        blend: Subtraction
+        material: exhibitMaterial
+        position [0, 1.27, 0]
+        scale [0.22, 0.22, 0.22]
+      }
     }
   }
   prototype "shape-noise-subject" {

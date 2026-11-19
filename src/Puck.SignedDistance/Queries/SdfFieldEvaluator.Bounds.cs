@@ -230,6 +230,8 @@ public sealed partial class SdfFieldEvaluator {
         // eroded by an interval of its reach; cleared by ResetPoint.
         var laneErodeSkip = false;
         var laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
+        // The relief weight's interval (WalkPoints' reliefWeight), which the next relief consumes.
+        var reliefWeight = FixedInterval.FromPoint(value: FixedQ4816.One);
         Span<FixedInterval> scopes = stackalloc FixedInterval[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var cullIndex = (reaches.IsEmpty ? cullBounds.Length : 0);
@@ -374,12 +376,18 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfOp.NoiseDisplace: {
-                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result);
+                        result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: reliefWeight);
+                        reliefWeight = FixedInterval.FromPoint(value: FixedQ4816.One);
+                        break;
+                    }
+                case SdfOp.ReliefWeight: {
+                        reliefWeight = (reliefWeight * ReliefMaskWeightBounds(instruction: in instruction, region: result));
+                        result = FixedInterval.FromPoint(value: FarDistance);
                         break;
                     }
                 case SdfOp.PushField: {
                         scopes[scopeDepth++] = result;
-                        result = FixedInterval.FromPoint(value: FarDistance);
+                        result = FixedInterval.FromPoint(value: ((instruction.Aux.Value > 0L) ? instruction.Aux : FarDistance));
                         break;
                     }
                 case SdfOp.PopField: {
@@ -558,6 +566,7 @@ public sealed partial class SdfFieldEvaluator {
         SdfOp.LaneErode,
         SdfOp.Displace,
         SdfOp.NoiseDisplace,
+        SdfOp.ReliefWeight,
     ];
     /// <summary>Gets the shapes the bounds interpreter has an inclusion rule for. Every shape the point interpreter
     /// accepts must appear here; the sync law holds the two sets equal.</summary>

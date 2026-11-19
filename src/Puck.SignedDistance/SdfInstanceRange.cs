@@ -60,9 +60,10 @@ public readonly record struct SdfInstanceRange(
     /// spacing their strokes ask, which the mesh bake refines inside that box alone, whatever the rest of the instance
     /// declares (<see cref="Detail"/>). <see langword="null"/> for an instance with no glyph, or a dynamic one.</summary>
     public SdfGlyphSpan? Glyphs { get; init; }
-    /// <summary>Gets the shapes a dynamic instance holds, each the box it occupies in its own slot's frame and the detail it
-    /// declares (<see cref="SdfInstancePart"/>): the members its group's union lattice refines one by one, as a static union
-    /// refines each instance's box. Empty where the instance's bound alone describes it.</summary>
+    /// <summary>Gets the shapes the instance holds, each the box it occupies (a dynamic instance's in its own slot's frame,
+    /// a static instance's in world axes) and the detail it declares (<see cref="SdfInstancePart"/>): the members its
+    /// group's union lattice refines one by one, as a static union refines each instance's box, in place of the
+    /// instance's bound. Empty where the instance's bound alone describes it.</summary>
     public IReadOnlyList<SdfInstancePart> Parts { get; init; } = [];
     /// <summary>Gets the cutters a dynamic instance holds that ride a slot of their own against the surface they cut, each
     /// the box the cutter occupies in its slot's frame (<see cref="SdfInstancePart"/>): an operand of the instance's group.

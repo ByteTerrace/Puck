@@ -131,6 +131,14 @@ public sealed partial class SdfFieldEvaluator {
                         continue;
                     }
                 case SdfOp.PushField: {
+                        // A relief mask's scope composes nothing into the scope it stands in (its ReliefWeight leaves the
+                        // far distance), and the weight it measures only lowers the relief the scope's slack is already
+                        // charged at its whole reach, so the certificate passes over it. SdfProgram admits only point
+                        // ops, union shapes and the closing weight inside one, never a nested scope.
+                        if ((depth == 1) && SdfProgram.IsReliefMaskPush(op: instruction.Op, shape: instruction.Shape)) {
+                            while (compiled[index].Op != SdfOp.PopField) { index++; }
+                            continue;
+                        }
                         if (depth != 0) {
                             return false;
                         }
@@ -373,6 +381,7 @@ public sealed partial class SdfFieldEvaluator {
                 case SdfOp.Dilate:
                 case SdfOp.CellDisplace:
                 case SdfOp.Displace:
+                case SdfOp.ReliefWeight:
                 case SdfOp.NoiseDisplace: {
                         if (depth == 0) {
                             return false;

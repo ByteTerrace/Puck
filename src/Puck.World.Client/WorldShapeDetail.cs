@@ -142,6 +142,82 @@ internal static class WorldShapeDetail {
             liftAmount: size.Z
         );
     }
+    /// <summary>Returns one shape's part of the instance it is emitted in (<see cref="SdfInstancePart"/>): its box where it
+    /// sits under <paramref name="transform"/>, widened by its smooth blend's reach so the seam it blends refines with it
+    /// and by <paramref name="grow"/>, and its detail (<see cref="Of"/>). The box is the stamper's own
+    /// (<see cref="CreationStampEmitter.ShapeStampBox"/>) where it holds the shape, else the cube of the shape's tight bound
+    /// (<see cref="CreationStampEmitter.ShapeStampBound"/>); a shape carrying domain folds, whose copies leave any
+    /// shape-local box, takes the cube about the stamp's origin its copies reach.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="index">The shape's index in <see cref="CreationDocument.Shapes"/>.</param>
+    /// <param name="transform">The stamp transform: the world stamp for a static instance's part, or the identity at the
+    /// creation's scale for a part in its slot's frame.</param>
+    /// <param name="slot">The part's slot, or <see cref="SdfInstancePart.StaticSlot"/> for a static instance's part.</param>
+    /// <param name="grow">How far, in world units, the composed surface may move past the shape's own: a relief's
+    /// amplitude; zero for none.</param>
+    /// <returns>The part.</returns>
+    internal static SdfInstancePart PartOf(CreationDocument document, int index, CreationStampTransform transform, int slot, float grow = 0f) {
+        var (low, high) = BoxOf(document: document, index: index, transform: transform);
+        var halo = new Vector3(value: (((document.Shapes![index].Smooth ?? 0f) * transform.Scale) + grow));
+
+        return new SdfInstancePart(Detail: Of(scale: transform.Scale, shape: document.Shapes[index]), High: (high + halo), Low: (low - halo), Slot: slot);
+    }
+    /// <summary>Returns the parts of a creation emitted as one instance (<see cref="SdfInstanceRange.Parts"/>): each shown
+    /// shape's (<see cref="PartOf"/>), and its relief's over the box its composed surface lies in at the relief's own
+    /// spacing (<see cref="CreationNoiseDocument.DetailSpacing"/>), so each shape refines its own box at its own detail and
+    /// the relief refines the creation's surface, never one detail spread over the creation's whole bound.</summary>
+    /// <param name="document">The creation document.</param>
+    /// <param name="hidden">The shapes left out, indexed like <see cref="CreationDocument.Shapes"/>; <see langword="null"/>
+    /// for none.</param>
+    /// <param name="transform">The stamp transform (<see cref="PartOf"/>).</param>
+    /// <param name="slot">The parts' slot, or <see cref="SdfInstancePart.StaticSlot"/> for a static instance's parts.</param>
+    /// <param name="relief">The relief the instance applies to its composed field; <see langword="null"/> for none.</param>
+    /// <param name="reliefBounds">A box the relieved surface lies in when the shapes' composition does not hold all of
+    /// it (text composed with them), in the parts' frame; <see langword="null"/> to compose the shapes' boxes.</param>
+    /// <returns>The parts.</returns>
+    internal static List<SdfInstancePart> PartsOf(CreationDocument document, bool[]? hidden, CreationStampTransform transform, int slot, CreationNoiseDocument? relief, (Vector3 Low, Vector3 High)? reliefBounds = null) {
+        var shapes = (document.Shapes ?? []);
+        var parts = new List<SdfInstancePart>(capacity: (shapes.Count + 1));
+        var grow = ((relief?.Amplitude ?? 0f) * transform.Scale);
+        var surface = (Low: new Vector3(value: float.PositiveInfinity), High: new Vector3(value: float.NegativeInfinity));
+
+        for (var index = 0; (index < shapes.Count); index++) {
+            if ((hidden is not null) && hidden[index]) { continue; }
+
+            var shape = shapes[index];
+
+            parts.Add(item: PartOf(document: document, index: index, transform: transform, slot: slot, grow: grow));
+            surface = SdfBoundAlgebra.ComposeBox(accumulated: surface, blend: (shape.Blend ?? SdfBlendOp.Union), operand: BoxOf(document: document, index: index, transform: transform), radius: ((shape.Smooth ?? 0f) * transform.Scale));
+        }
+
+        if ((relief is not null) && (relief.DetailSpacing() is > 0f and var spacing)) {
+            var (low, high) = (reliefBounds ?? surface);
+
+            if ((low.X <= high.X) && (low.Y <= high.Y) && (low.Z <= high.Z)) {
+                parts.Add(item: new SdfInstancePart(Detail: (spacing * transform.Scale), High: (high + new Vector3(value: grow)), Low: (low - new Vector3(value: grow)), Slot: slot));
+            }
+        }
+
+        return parts;
+    }
+    // A shape's box under a stamp transform, before any halo (PartOf).
+    private static (Vector3 Low, Vector3 High) BoxOf(CreationDocument document, int index, CreationStampTransform transform) {
+        var shape = document.Shapes![index];
+
+        if (shape.Domain is { Count: > 0 } domain) {
+            var reach = ((((shape.Position?.Length() ?? 0f) + ShapeDomainOps.Reach(domain: domain)) * transform.Scale) +
+                SdfSolidGeometry.Reach(type: shape.Type, scale: ((shape.Scale ?? Vector3.One) * transform.Scale), lift: (shape.Lift ?? SdfLift.Extrude)));
+
+            return ((transform.Origin - new Vector3(value: reach)), (transform.Origin + new Vector3(value: reach)));
+        }
+        if (CreationStampEmitter.ShapeStampBox(document: document, shapeIndex: index, transform: transform) is { } box) {
+            return box;
+        }
+
+        var (center, radius) = CreationStampEmitter.ShapeStampBound(document: document, shapeIndex: index, transform: transform);
+
+        return ((center - new Vector3(value: radius)), (center + new Vector3(value: radius)));
+    }
     // A shape's smallest and largest half extents along its own axes, in creation units (SdfSolidGeometry.HalfExtent: a
     // revolve's scale Z is an offset and may be zero while its radial extent remains positive).
     private static (float Smallest, float Largest) HalfExtents(ShapeDocument shape, Vector3 size) {

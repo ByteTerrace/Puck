@@ -254,13 +254,17 @@ public sealed record CreationPartDocument(string Id, int ShapeId);
 /// <param name="Lacunarity">The per-octave frequency factor (null = 2; clamped to
 /// [<see cref="MinLacunarity"/>, <see cref="MaxLacunarity"/>]).</param>
 /// <param name="Seed">The hash seed folded into every lattice corner (null = 0).</param>
+/// <param name="Masks">The regions that scale the relief's displacement down (null = none), in authored order: each
+/// entry's weight multiplies the relief, so a basin, a pad or a path stands where its shapes put it
+/// (<see cref="CreationReliefMaskDocument"/>).</param>
 public sealed record CreationNoiseDocument(
     float Frequency,
     float Amplitude,
     int? Octaves = null,
     float? Gain = null,
     float? Lacunarity = null,
-    uint? Seed = null
+    uint? Seed = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationReliefMaskDocument>? Masks = null
 ) {
     /// <summary>The largest authored amplitude, in creation units.</summary>
     public const float MaxAmplitude = 4f;
@@ -306,16 +310,40 @@ public sealed record CreationNoiseDocument(
 
         return ((frequency > 0f) ? (0.25f / frequency) : 0f);
     }
-    /// <summary>Returns the derived march step factor of this facet's resolved parameters.</summary>
+    /// <summary>Returns the derived march step factor of this facet's resolved parameters, its masks' band slopes
+    /// included (<see cref="SdfProgram.ReliefMaskSlope"/>), in creation units.</summary>
     /// <returns>The multiplicative step factor (1 = inert).</returns>
     public float StepFactor() => SdfProgram.NoiseDisplaceStepFactor(
         amplitude: MathF.Abs(x: Amplitude),
         frequency: MathF.Abs(x: Frequency),
         gain: (Gain ?? 0.5f),
         lacunarity: (Lacunarity ?? 2f),
+        maskSlope: (Masks ?? []).Sum(selector: static mask => SdfProgram.ReliefMaskSlope(fade: mask.Fade, inside: (mask.Inside ?? 0f), outside: (mask.Outside ?? 1f))),
         octaves: (Octaves ?? 4)
     );
 }
+/// <summary>One region of a creation's relief mask (<see cref="CreationNoiseDocument.Masks"/>): shapes in the creation's
+/// frame, joined by hard union, whose distance <c>m</c> sets a weight
+/// <c>inside + (outside − inside)·smoothstep(start, start + fade, m)</c> on the relief's displacement. The shapes only
+/// measure distance to the region: they add no surface, take no material and never join the composed solid, and the
+/// same field reaches drawing and contact (<see cref="CreationStampEmitter.EmitNoise(SdfProgramBuilder, CreationNoiseDocument, CreationStampTransform)"/>).
+/// With <paramref name="Inside"/> zero the relief is exactly zero on and inside the region, so a carve or pad that is its
+/// own region keeps its authored surface; a band at least <c>9/8 · amplitude · |outside − inside|</c> wide opens no
+/// hidden pocket under a thin carved floor.</summary>
+/// <param name="Shapes">The region's shapes, at least one: geometry only (type, name, pose, scale, exponent, rounding,
+/// chamfer, elongate, a prism's profile and lift), of a type contact admits.</param>
+/// <param name="Fade">The band's width, in creation units, above zero.</param>
+/// <param name="Start">Where the band starts, as a distance in creation units from the region's surface; negative starts
+/// it inside the region (null = 0).</param>
+/// <param name="Inside">The weight on and inside the region, in [0, 1] (null = 0).</param>
+/// <param name="Outside">The weight past the band, in [0, 1] (null = 1).</param>
+public sealed record CreationReliefMaskDocument(
+    IReadOnlyList<ShapeDocument> Shapes,
+    float Fade,
+    float? Start = null,
+    float? Inside = null,
+    float? Outside = null
+);
 /// <summary>
 /// One engraved/embossed text run a creation carries — a string laid onto one of the creation's own surfaces (a shop
 /// facade, a marquee band), stored as text-plus-placement and expanded at world-emission time into

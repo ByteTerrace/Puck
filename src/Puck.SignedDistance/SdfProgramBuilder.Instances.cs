@@ -158,10 +158,13 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="box">The instance's world-axis box where it is tighter than the sphere's cube
     /// (<see cref="SdfInstanceRange.Box"/>); <see langword="null"/> for none. A box with a non-finite or inverted corner
     /// reads as none.</param>
+    /// <param name="parts">The shapes the instance holds, each its world-axis box and its detail, with
+    /// <see cref="SdfInstancePart.StaticSlot"/> for a slot (<see cref="SdfInstanceRange.Parts"/>); <see langword="null"/>
+    /// or empty for none. A part that is not valid (<see cref="SdfInstancePart.IsValid"/>) or names a slot is left out.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="boundCenter"/> is not finite, or
     /// <paramref name="boundRadius"/> is not finite and non-negative.</exception>
     /// <exception cref="InvalidOperationException">An instance is already open.</exception>
-    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false, float detail = 0f, (Vector3 Low, Vector3 High)? box = null) {
+    public SdfProgramBuilder BeginInstance(Vector3 boundCenter, float boundRadius, bool bakesWithPrevious = false, float detail = 0f, (Vector3 Low, Vector3 High)? box = null, IReadOnlyList<SdfInstancePart>? parts = null) {
         RequireInstanceBound(
             center: boundCenter,
             centerParamName: nameof(boundCenter),
@@ -177,6 +180,7 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceBakesWithPrevious = bakesWithPrevious;
         m_openInstanceDetail = ((float.IsFinite(f: detail) && (detail > 0f)) ? detail : 0f);
         m_openInstanceBox = (((box is { } value) && float.IsFinite(f: value.Low.X) && float.IsFinite(f: value.Low.Y) && float.IsFinite(f: value.Low.Z) && float.IsFinite(f: value.High.X) && float.IsFinite(f: value.High.Y) && float.IsFinite(f: value.High.Z) && (value.Low.X <= value.High.X) && (value.Low.Y <= value.High.Y) && (value.Low.Z <= value.High.Z)) ? box : null);
+        m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => (part.IsValid && (part.Slot == SdfInstancePart.StaticSlot)))] : []);
 
         return this;
     }
@@ -200,12 +204,12 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="boundInSlotFrame">Rotate the bound offset with its slot, for geometry authored in that slot's frame.</param>
     /// <param name="parts">The shapes the instance holds, each its box in its own slot's frame and its detail
     /// (<see cref="SdfInstanceRange.Parts"/>); <see langword="null"/> or empty for none. A part that is not valid
-    /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
+    /// (<see cref="SdfInstancePart.IsValid"/>) or names no slot is left out.</param>
     /// <param name="restPoseSkin">Referenced slots carry rigid deltas from authored rest; bake them at identity.</param>
     /// <param name="operands">The cutters the instance holds on slots of their own, each its box in its slot's frame
     /// (<see cref="SdfInstanceRange.Operands"/>): the bake reads each where its slot stands rather than at rest, and plans
     /// the group again as it moves; <see langword="null"/> or empty for none. An entry that is not valid
-    /// (<see cref="SdfInstancePart.IsValid"/>) is left out.</param>
+    /// (<see cref="SdfInstancePart.IsValid"/>) or names no slot is left out.</param>
     public SdfProgramBuilder BeginInstanceDynamic(int slot, Vector3 boundOffset, float boundRadius, bool active = true, float detail = 0f, bool separateBake = false, bool boundInSlotFrame = false, IReadOnlyList<SdfInstancePart>? parts = null, bool restPoseSkin = false, IReadOnlyList<SdfInstancePart>? operands = null) {
         RequireInstanceBound(
             center: boundOffset,
@@ -224,8 +228,8 @@ public sealed partial class SdfProgramBuilder {
         m_openInstanceBakesSeparately = separateBake;
         m_openInstanceBoundInSlotFrame = boundInSlotFrame;
         m_openInstanceRestPoseSkin = restPoseSkin;
-        m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => part.IsValid)] : []);
-        m_openInstanceOperands = ((operands is { Count: > 0 }) ? [.. operands.Where(predicate: static part => part.IsValid)] : []);
+        m_openInstanceParts = ((parts is { Count: > 0 }) ? [.. parts.Where(predicate: static part => (part.IsValid && (part.Slot >= 0)))] : []);
+        m_openInstanceOperands = ((operands is { Count: > 0 }) ? [.. operands.Where(predicate: static part => (part.IsValid && (part.Slot >= 0)))] : []);
 
         return this;
     }

@@ -23,6 +23,8 @@ public sealed partial class SdfFieldEvaluator {
             // Creation relief: inside the scope that holds it, the pop's 1/L makes the relieved field a lower bound on
             // the distance to the drawn surface, which a solid's contact reads (a collider follows the drawn solid).
             SdfOp.NoiseDisplace or
+            // A relief mask's weight lowers that relief and adds no surface, so contact reads the masked relief drawn.
+            SdfOp.ReliefWeight or
             SdfOp.SymmetryPlane or
             SdfOp.PushField or
             SdfOp.PopField => true,

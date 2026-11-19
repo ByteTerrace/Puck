@@ -60,6 +60,7 @@ public sealed partial class SdfProgram {
                 case SdfOp.Dilate:
                 case SdfOp.Displace:
                 case SdfOp.NoiseDisplace:
+                case SdfOp.ReliefWeight:
                 case SdfOp.LaneErode:
                 case SdfOp.PushField:
                 case SdfOp.PopField:

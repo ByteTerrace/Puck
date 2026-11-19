@@ -510,7 +510,36 @@ public static partial class CreationStampEmitter {
         EmitNoise(builder: builder, frame: StampFrame.Of(transform: transform), noise: noise);
     }
 
+    // The relief's masks, then the relief. Each mask is a seeded scope of its region's shapes under the same stamp
+    // (SdfProgramBuilder.BeginReliefMask), its band in world units, so a mirrored, scaled or slot-carried copy carries
+    // its mask with the shapes it masks. Render and contact both reach this one emission, so a body stands on the masked
+    // relief the bake draws. A region shape takes material 0: its scope composes nothing, so no material of it wins.
     private static void EmitNoise(SdfProgramBuilder builder, in StampFrame frame, CreationNoiseDocument noise) {
+        foreach (var mask in (noise.Masks ?? [])) {
+            _ = builder.BeginReliefMask(
+                fade: (mask.Fade * frame.FacetScale),
+                inside: (mask.Inside ?? 0f),
+                outside: (mask.Outside ?? 1f),
+                start: ((mask.Start ?? 0f) * frame.FacetScale)
+            );
+
+            foreach (var shape in mask.Shapes) {
+                var (position, rotation) = ReflectedShapeTransformFixed(normal: null, shape: shape);
+                var posed = StampPrefix(builder: builder, frame: frame)
+                    .Translate(offset: position.ToVector3())
+                    .Rotate(rotation: rotation.ToQuaternion());
+
+                _ = ShapeEmission.AppendPrimitive(
+                    chain: ShapePointOps.Apply(chain: posed, elongate: shape.Elongate),
+                    material: 0,
+                    scale: EffectiveScale(value: shape.Scale).ToVector3(),
+                    shape: shape
+                );
+            }
+
+            _ = builder.EndReliefMask();
+        }
+
         _ = StampPrefix(
             builder: builder,
             frame: frame

@@ -734,11 +734,12 @@ public sealed partial class SdfProgram {
     private static float CellDisplaceLipschitz(SdfInstruction instruction) =>
         new SdfCellDisplacement(instruction.Data0.X, instruction.Data0.Y, instruction.Shape,
             ((SdfCellMode)instruction.Blend), instruction.Data0.Z).StepFactor;
-    private static float NoiseDisplaceLipschitz(SdfInstruction instruction) => NoiseDisplaceStepFactor(
+    private static float NoiseDisplaceLipschitz(SdfInstruction instruction, float maskSlope) => NoiseDisplaceStepFactor(
         amplitude: MathF.Abs(x: instruction.Data0.Y),
         frequency: MathF.Abs(x: instruction.Data0.X),
         gain: MathF.Abs(x: instruction.Data0.Z),
         lacunarity: MathF.Abs(x: instruction.Data0.W),
+        maskSlope: maskSlope,
         octaves: ((int)instruction.Blend)
     );
 
@@ -751,8 +752,11 @@ public sealed partial class SdfProgram {
     /// <param name="octaves">The octave count (1..<see cref="SdfProgramBuilder.MaxNoiseOctaves"/>).</param>
     /// <param name="gain">The per-octave amplitude factor.</param>
     /// <param name="lacunarity">The per-octave frequency factor.</param>
+    /// <param name="maskSlope">The summed band slopes, per world unit, of the relief masks that weight the relief
+    /// (<see cref="ReliefMaskSlope"/>); zero for an unmasked relief. A masked relief's gradient is
+    /// <c>a·(w∇n + n∇w)</c> with <c>|n| ≤ 1</c> and <c>0 ≤ w ≤ 1</c>, so the masks add <c>|a|</c> times their slope.</param>
     /// <returns>The multiplicative step factor (≥ 1 for non-negative inputs).</returns>
-    public static float NoiseDisplaceStepFactor(float frequency, float amplitude, int octaves, float gain, float lacunarity) {
+    public static float NoiseDisplaceStepFactor(float frequency, float amplitude, int octaves, float gain, float lacunarity, float maskSlope = 0f) {
         if (amplitude == 0.0f) {
             return 1.0f;
         }
@@ -774,7 +778,9 @@ public sealed partial class SdfProgram {
         // accumulation loop over the same floats), so this form and the instruction form agree exactly.
         const float NoiseGradientBound = 6.49519053f;
 
-        return (1.0f + (((amplitude * (1.0f / gainSum)) * frequency) * (NoiseGradientBound * gradientSum)));
+        var unmasked = (1.0f + (((amplitude * (1.0f / gainSum)) * frequency) * (NoiseGradientBound * gradientSum)));
+
+        return ((maskSlope > 0.0f) ? (unmasked + (amplitude * maskSlope)) : unmasked);
     }
 
     private static float DisplaceWarpLipschitz(SdfInstruction instruction) {

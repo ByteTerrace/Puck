@@ -30,6 +30,7 @@
 #define SDF_OP_GAUSSIAN_PUSH     24u
 #define SDF_OP_LANE_ERODE        25u
 #define SDF_OP_CELL_DISPLACE     26u
+#define SDF_OP_RELIEF_WEIGHT     27u
 
 // Puck.SignedDistance.SdfShapeType.
 #define SDF_SHAPE_BOX                 0u

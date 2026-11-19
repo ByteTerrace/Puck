@@ -755,12 +755,25 @@ public static partial class WorldPlacementStamper {
             var textApart = (hasText && (!anyOpaque || ((creation.Noise is null) && !(creation.TextRuns ?? []).Any(predicate: static run => run.Engraves))));
 
             if (anyOpaque) {
+                var stampTransform = new CreationStampTransform(
+                    Origin: instance.Origin,
+                    Rotation: rotation,
+                    Scale: placement.Scale,
+                    ReflectionNormal: instance.ReflectionNormal
+                );
+                var bound = (instance.Origin - new Vector3(value: reach), instance.Origin + new Vector3(value: reach));
+
                 // Text that stays among the shapes declares its detail through its glyphs (SdfInstanceRange.Glyphs), so it
-                // refines its own box and not the whole creation.
+                // refines its own box and not the whole creation. A scoped creation's shapes and relief each declare a part
+                // (WorldShapeDetail.PartsOf), so each refines its own box at its own detail rather than the finest of them
+                // spreading over the creation's whole bound.
                 _ = builder.BeginInstance(
                     boundCenter: instance.Origin,
                     boundRadius: (reach + PlacementBoundMargin),
-                    detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale)
+                    detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale),
+                    parts: (scoped
+                        ? WorldShapeDetail.PartsOf(document: creation, hidden: hiddenOpaque, relief: creation.Noise, reliefBounds: ((hasText && !textApart) ? bound : null), slot: SdfInstancePart.StaticSlot, transform: stampTransform)
+                        : null)
                 );
                 if (scoped) {
                     _ = builder.PushField(compose: SdfBlendOp.Union);
@@ -786,12 +799,7 @@ public static partial class WorldPlacementStamper {
                     CreationStampEmitter.EmitNoise(
                         builder: builder,
                         noise: noise,
-                        transform: new CreationStampTransform(
-                            Origin: instance.Origin,
-                            Rotation: rotation,
-                            Scale: placement.Scale,
-                            ReflectionNormal: instance.ReflectionNormal
-                        )
+                        transform: stampTransform
                     );
                 }
                 if (scoped) {
