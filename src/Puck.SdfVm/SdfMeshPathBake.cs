@@ -557,7 +557,7 @@ public sealed partial class SdfMeshPathBake {
         }
         // Measured with the gate open, so the workers keep publishing meanwhile (Prioritize).
         Prioritize();
-        var scope = EnterFrameGate(site: BakeGate.Frame);
+        var scope = EnterFrameGate(site: BakeGate.Retier);
 
         try {
             FinishReplacements();
@@ -575,6 +575,7 @@ public sealed partial class SdfMeshPathBake {
         internal FrameAccess(SdfMeshPathBake owner, GateScope scope) {
             m_owner = owner;
             m_scope = scope;
+            m_scope.Continue(site: BakeGate.Dress);
             Revision = owner.m_productRevision;
             CopyLayoutRevision = owner.m_copyLayoutRevision;
         }

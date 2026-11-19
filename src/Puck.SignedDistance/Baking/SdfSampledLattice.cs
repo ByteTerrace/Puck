@@ -1826,8 +1826,65 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     private void PrepareCrossings() {
         if (m_crossingsPrepared) { return; }
         CloseSheets();
+        PrimeSigns();
         CrossingEdges();
         m_crossingsPrepared = true;
+    }
+
+    // The fine samples of refined cells past which PrimeSigns reads their signs in parallel, and the refined cells one
+    // partition of it takes.
+    private const long PrimeSamples = 4_000_000;
+    private const int PrimeCells = 64;
+
+    // Reads the sign of every fine sample of every refined cell (FineInside), in parallel across partitions of the cells,
+    // for a lattice whose refined cells hold more than PrimeSamples of them: CrossingEdges reads all of them one cell after
+    // another, and on the largest groups that read, each unmeasured sample interpolated from its stride cell, held one
+    // worker for most of their slowest stage while the rest of the pool stood idle. It runs once CloseSheets has fixed
+    // every value, so a sign read here is the one the serial scan would read (FineValue reads values only), and a sign
+    // already known stays. Two partitions may read a sample on the face they share: both compute the same sign, and the
+    // bits are set atomically, inside before known, so no partition's bit is lost.
+    private void PrimeSigns() {
+        if (m_factor < 2) { return; }
+
+        var factor = m_factor;
+        var cellsX = (m_samplesX - 1);
+        var cellsY = (m_samplesY - 1);
+        var side = (factor + 1);
+        var refined = m_refined.GetSpan();
+        using var cells = new RentedList<int>();
+
+        for (var cell = 0; (cell < refined.Length); cell++) {
+            if (refined[cell]) { cells.Add(item: cell); }
+        }
+        if ((((long)cells.Count) * side * side * side) < PrimeSamples) { return; }
+        _ = FineInside(key: 0);
+
+        var fineX = ((cellsX * factor) + 1);
+        var fineY = ((cellsY * factor) + 1);
+        var listed = cells.AsSpan().ToArray();
+
+        _ = Parallel.For(fromInclusive: 0, toExclusive: ((listed.Length + (PrimeCells - 1)) / PrimeCells), body: partition => {
+            var end = Math.Min(val1: listed.Length, val2: ((partition + 1) * PrimeCells));
+
+            for (var at = (partition * PrimeCells); (at < end); at++) {
+                var cell = listed[at];
+                var (cx, cy, cz) = ((cell % cellsX), ((cell / cellsX) % cellsY), (cell / (cellsX * cellsY)));
+
+                for (var lz = 0; (lz <= factor); lz++) {
+                    for (var ly = 0; (ly <= factor); ly++) {
+                        for (var lx = 0; (lx <= factor); lx++) {
+                            var (x, y, z) = (((cx * factor) + lx), ((cy * factor) + ly), ((cz * factor) + lz));
+                            var key = (x + (fineX * (y + (fineY * z))));
+                            var (word, bit) = ((key >> 6), (1UL << (key & 63)));
+
+                            if ((Volatile.Read(location: ref m_signKnown[word]) & bit) != 0UL) { continue; }
+                            if (FineValue(x: x, y: y, z: z) < 0f) { _ = Interlocked.Or(location1: ref m_signInside[word], value: bit); }
+                            _ = Interlocked.Or(location1: ref m_signKnown[word], value: bit);
+                        }
+                    }
+                }
+            }
+        });
     }
     private int EdgeEnd(int start, int axis, int length) {
         var fineX = (((m_samplesX - 1) * m_factor) + 1);

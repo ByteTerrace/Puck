@@ -39,6 +39,8 @@ internal static class SdfMeshBakeReport {
     /// gate because a section holds it long, or because many sections take it, reads per site.</summary>
     public enum Gate {
         Frame,
+        Retier,
+        Dress,
         Take,
         Observe,
         Read,

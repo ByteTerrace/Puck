@@ -104,9 +104,9 @@ public sealed partial class SdfMeshPathBake {
     // A hold of the bake's gate, which counts its wait and hold into the bake's accounts as it leaves the gate.
     internal ref struct GateScope {
         private readonly SdfMeshPathBake m_owner;
-        private readonly SdfMeshBakeReport.Gate m_site;
-        private readonly long m_entered;
 
+        private SdfMeshBakeReport.Gate m_site;
+        private long m_entered;
         private Lock.Scope m_scope;
 
         public GateScope(SdfMeshPathBake owner, Lock.Scope scope, SdfMeshBakeReport.Gate site, long waited) {
@@ -118,8 +118,16 @@ public sealed partial class SdfMeshPathBake {
         }
 
         // The Stopwatch ticks the entry waited for the gate.
-        public long Waited { get; }
+        public long Waited { get; private set; }
 
+        // Counts the hold so far under its site and the rest under another, still holding the gate: one entry that does
+        // several things in turn reads each apart.
+        public void Continue(SdfMeshBakeReport.Gate site) {
+            var now = Stopwatch.GetTimestamp();
+
+            m_owner.m_accounts.GateHeld(held: (now - m_entered), site: m_site, waited: Waited);
+            (m_site, m_entered, Waited) = (site, now, 0L);
+        }
         public void Dispose() {
             m_owner.m_accounts.GateHeld(held: (Stopwatch.GetTimestamp() - m_entered), site: m_site, waited: Waited);
             m_scope.Dispose();
