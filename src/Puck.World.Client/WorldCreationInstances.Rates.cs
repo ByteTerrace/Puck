@@ -99,6 +99,37 @@ public sealed partial class WorldCreationInstances {
             m_rateShadows.AddRange(collection: shadows);
         }
     }
+    /// <summary>Records the shadow cascades a dressed frame's views render, fitted with that frame's own lights and far
+    /// distance (<see cref="SdfMeshShadowCascades.Fit"/>), each as the renderer's own caster cull: the next
+    /// <see cref="PackTransforms"/> holds no body one of them may draw. Every view of the frame counts, shown on the
+    /// display or not. The one fit every presentation that rates a pool shares: the boot presentation's and each routed
+    /// scene's.</summary>
+    /// <param name="frame">The frame just dressed, whose views the pool's next pack is rated by.</param>
+    /// <param name="width">The frame's width in pixels, which each view's region divides.</param>
+    /// <param name="height">The frame's height in pixels, which each view's region divides.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
+    public void ShadowBy(SdfFrame frame, uint width, uint height) {
+        ArgumentNullException.ThrowIfNull(argument: frame);
+
+        m_rateShadows.Clear();
+        m_rateShadowsKnown = true;
+
+        for (var view = 0; (view < frame.Views.Count); view++) {
+            var cascades = SdfMeshShadowCascades.Fit(frame: frame, view: view);
+
+            if (cascades.Count == 0) {
+                continue;
+            }
+
+            var snapshot = frame.Views[view];
+            var viewWidth = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Width * width)));
+            var viewHeight = ((uint)Math.Max(val1: 1f, val2: (snapshot.Region.Height * height)));
+
+            for (var cascade = 0; (cascade < cascades.Count); cascade++) {
+                m_rateShadows.Add(item: (view, SdfMeshCull.Of(camera: snapshot.Camera, cascade: cascades[cascade], far: frame.FarDistance, height: viewHeight, texels: cascades.Texels, width: viewWidth)));
+            }
+        }
+    }
 
     // The one rate decision, made once a pack per registration: the tier it updates at and the pixels per metre it was
     // rated by. A registration takes its largest pixels per metre over the views that may see the sphere it reaches, is
